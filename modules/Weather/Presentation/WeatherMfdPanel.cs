@@ -780,7 +780,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             {
                 if (weather.IsManualOverride)
                 {
-                    shell.Status.text = $"MANUAL DEBUG OVERRIDE ACTIVE // {regime.Name.ToUpperInvariant()} FROZEN";
+                    shell.Status.text = $"HELD BY WEATHER CONSOLE (CTRL+O) // {regime.Name.ToUpperInvariant()}";
                 }
                 else if (dynamicField)
                 {

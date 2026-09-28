@@ -139,9 +139,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (shell != null && shell.Page == TabServer)
                 return HostAuthority()
-                    ? (serverPage == 1 && serverScrolls[1]
+                    ? (serverPage != ServerTasking && serverScrolls[serverPage]
                         ? "Host controls are saved automatically. Scroll for more."
-                        : serverPage == 0 ? "Host tasking board. Refreshes while visible."
+                        : serverPage == ServerTasking ? "Host tasking board. Refreshes while visible."
                         : "Host controls are saved automatically.")
                     : "Host only. The host's values apply to this server.";
             if (DisplayIndex == 2) return MfdMapDeck.WallpaperStatus;
@@ -210,7 +210,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 AvTokens.PanelWidth, height, page =>
                 {
                     shell.DataBar.State.text = page == TabServer
-                        ? (serverPage == 0 ? "FACTION TASKING" : "HOST SETTINGS")
+                        ? ServerPageTitle()
                         : ClientPageTitle();
                     nextTick = 0f;
                     RefreshPanel();
@@ -618,52 +618,29 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Cockpit-side presentation: the third-person HUD and cameras published by Hud
-        /// through <see cref="IThirdPersonHud"/>, the common HUD element published by the Hud
-        /// module through <see cref="IHudBoard"/>, plus Command's own radial preset page.
-        /// Every row here writes live state; the camera rows wait for the HUD they belong to.
+        /// Cockpit-side presentation: the native target camera inset published by the Hud
+        /// module through <see cref="IHudBoard"/>, plus Command's own radial preset page. Every
+        /// row here writes live state.
         /// </summary>
         private void BuildViewPage(RectTransform parent, Rect body)
         {
-            ModServices.TryGet(out IThirdPersonHud hud);
-            parent = Page(3, parent, body, 21, 4, out var area);
+            ModServices.TryGet(out IHudBoard board);
+            parent = Page(3, parent, body, 2, 2, out var area);
 
-            Heading(parent, ref area, "01", "HUD", "THIRD PERSON");
-            Toggle(parent, TakeRow(ref area), "THIRD-PERSON HUD",
-                "Show mod-owned HUD panels in external orbit and chase views.",
-                () => hud != null && hud.IsEnabled, v => { if (hud != null && hud.IsEnabled != v) hud.Toggle(); },
-                () => hud != null, () => "HUD service unavailable in this scene.");
-            Toggle(parent, TakeRow(ref area), "MODIFY VANILLA HUD",
-                "Opt in to replacement flight instruments, native visibility changes and marker reprojection. Off by default.",
-                () => hud != null && hud.ModifyVanillaHud, v => { if (hud != null) hud.ModifyVanillaHud = v; },
-                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
-            Toggle(parent, TakeRow(ref area), "HIDE PITCH LADDER",
-                "Hide the independent attitude ladder. Flight readouts, reticle, ammo and radar stay visible.",
-                () => hud != null && hud.HidePitchLadder, v => { if (hud != null) hud.HidePitchLadder = v; },
-                () => hud != null && hud.IsEnabled && hud.ModifyVanillaHud, () => "Enable MODIFY VANILLA HUD first.");
-
-            BuildFlightStyleRows(parent, ref area, hud);
-
-            Heading(parent, ref area, "02", "CAMERA", "CHASE");
+            Heading(parent, ref area, "01", "CAMERA", "TARGET");
             Toggle(parent, TakeRow(ref area), "TARGET CAMERA",
-                "Show the native target camera feed in third person while contacts are selected.",
-                () => hud != null && hud.CameraFeedEnabled, v => { if (hud != null) hud.CameraFeedEnabled = v; },
-                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
-            Toggle(parent, TakeRow(ref area), "FLIGHT CAMERA",
-                "Smooth aircraft-relative orbit and rear chase framing with a steady horizon.",
-                () => hud != null && hud.FlightCameraEnabled, v => { if (hud != null) hud.FlightCameraEnabled = v; },
-                () => hud != null && hud.IsEnabled, () => "Turn on third-person HUD first.");
-            Heading(parent, ref area, "03", "TARGETING", "RADIAL");
+                "Show the native target camera feed inset on the status panel while a target is selected.",
+                () => board != null && board.CameraFeedEnabled, v => { if (board != null) board.CameraFeedEnabled = v; },
+                () => board != null, () => "HUD service unavailable in this scene.");
+
+            Heading(parent, ref area, "02", "TARGETING", "RADIAL");
             Toggle(parent, TakeRow(ref area), "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
-
-            Heading(parent, ref area, "04", "INSTRUMENT BOARD", "EXTERNAL VIEW");
-            BuildInstrumentRows(parent, ref area, hud);
         }
 
         /// <summary>Element-wide rows, before one row per declared feed.</summary>
-        private const int HudSettingRows = 12;
+        private const int HudSettingRows = 11;
 
         /// <summary>
         /// The common HUD element's own rows. Everything here is client-local presentation and
@@ -678,13 +655,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Toggle(parent, TakeRow(ref area), "HUD ELEMENT",
                 "Draw the one cockpit HUD element every feature shares for status lines and notices.",
                 () => on(), v => { if (board != null) board.Enabled = v; });
-
-            Stepper(parent, TakeRow(ref area), "POSITION",
-                () => board != null ? HudLayout.AnchorName((int)board.Anchor) : "--",
-                d => { if (board != null) board.Anchor = (HudAnchor)HudLayout.Cycle((int)board.Anchor, HudLayout.AnchorCount, d); },
-                () => board != null, () => board != null,
-                "Where the element hangs and which way it stacks. Keep it clear of the pitch ladder.",
-                on, off);
 
             Stepper(parent, TakeRow(ref area), "SIZE",
                 () => board != null ? HudLayout.ScaleName(board.ScaleStep) : "--",

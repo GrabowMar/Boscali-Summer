@@ -30,7 +30,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private readonly Cell[] cells;
             private readonly bool readOnly;
-            private readonly bool exclusive;
+
             private readonly Image[] rowRules;
             private readonly float rowHeight;
             private readonly float cellWidth;
@@ -57,12 +57,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Func<int, string> sub;
 
             public MfdPagingGrid(RectTransform parent, float y, float width, int columns, int rows,
-                                  bool pager = true, bool readOnly = false, float rowHeight = 0f,
-                                  bool exclusive = false)
+                                  bool pager = true, bool readOnly = false, float rowHeight = 0f)
+
             {
                 if (rowHeight <= 0f) rowHeight = AvTokens.RowHeight;
                 this.readOnly = readOnly;
-                this.exclusive = exclusive;
+
                 this.rowHeight = rowHeight;
                 this.columns = Mathf.Max(1, columns);
                 rows = Mathf.Max(1, rows);
@@ -280,12 +280,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     }
                     else if (on)
                     {
-                        cell.State.text = exclusive ? "SET" : "ON";
+                        cell.State.text = "ON";
                         cell.State.color = AvTheme.Accent;
                     }
                     else
                     {
-                        cell.State.text = exclusive ? "—" : "OFF";
+                        cell.State.text = "OFF";
                         cell.State.color = AvTheme.Dim;
                     }
 

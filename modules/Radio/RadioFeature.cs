@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Features.Radio.Patches;
 using BoscaliSummer.Features.Radio.Runtime;
+using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 
 namespace BoscaliSummer.Features.Radio
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Features.Radio
             RadioManager radio = context.AddSceneService<RadioManager>(40);
             radio.Configure(context.Settings.Radio, context.Logger, context.Services);
             context.AddClientEffect(radio.ClientFx);
+            context.AddService<IRadioRemote>(radio);
             context.AddSceneService<Presentation.RadioHudLine>(41).Configure(radio);
         }
     }

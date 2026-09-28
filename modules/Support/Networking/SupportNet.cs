@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Networking
         /// sent before each ops snapshot, and its three orders.
         /// Older peers must not interpret fleet, hack, team or node ids.
         /// </summary>
-        internal const byte ProtocolVersion = 23;
+        internal const byte ProtocolVersion = 24;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -427,6 +427,12 @@ namespace BoscaliSummer.Features.Support.Networking
                     w.WriteByte(v.PlatformNotice);
                     w.WriteByte(v.PlatformNoticeCell);
                     w.WriteByte(v.PlatformNoticeSerial);
+                    w.WriteByte(v.PlatformFocus);
+                    w.WriteSingle(v.PlatformRetaskIn);
+                    w.WriteSingle(v.PlatformSolutionX);
+                    w.WriteSingle(v.PlatformSolutionZ);
+                    w.WriteSingle(v.PlatformSolutionRadius);
+                    w.WriteSingle(v.PlatformSolutionIn);
                 }
                 int foreignCount = Math.Max(0, Math.Min((int)v.ForeignCount, Math.Min(SpaceOperations.MaximumForeign,
                     Math.Min(v.ForeignRegimes?.Length ?? 0, Math.Min(v.ForeignSeeds?.Length ?? 0,
@@ -479,6 +485,12 @@ namespace BoscaliSummer.Features.Support.Networking
                     message.PlatformNotice = r.ReadByte();
                     message.PlatformNoticeCell = r.ReadByte();
                     message.PlatformNoticeSerial = r.ReadByte();
+                    message.PlatformFocus = r.ReadByte();
+                    message.PlatformRetaskIn = r.ReadSingle();
+                    message.PlatformSolutionX = r.ReadSingle();
+                    message.PlatformSolutionZ = r.ReadSingle();
+                    message.PlatformSolutionRadius = r.ReadSingle();
+                    message.PlatformSolutionIn = r.ReadSingle();
                 }
                 int foreignCount = r.ReadByte();
                 if (foreignCount > SpaceOperations.MaximumForeign) return new OpsStateMessage { Protocol = 0 };
@@ -559,13 +571,18 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(s.TeamMission[i]);
                 w.WriteByte(s.TeamChance[i]);
                 w.WriteByte(s.TeamLoss[i]);
+                w.WriteByte(s.TeamThreat[i]);
+                w.WriteByte(s.TeamRadars[i]);
                 w.WriteByte(s.TeamLast[i]);
                 w.WritePackedInt32(s.TeamAnchor[i]);
                 w.WriteSingle(s.TeamX[i]);
                 w.WriteSingle(s.TeamZ[i]);
-                w.WriteSingle(s.TeamRemaining[i]);
-                w.WriteSingle(s.TeamDuration[i]);
-                w.WriteString(SpecOpsDetachment.Clip(s.TeamTarget[i]));
+                WriteFieldClock(w, s.TeamRemaining[i]);
+                WriteFieldClock(w, s.TeamDuration[i]);
+                w.WriteString(ClipWireLabel(s.TeamTarget[i], SpecOpsDetachment.NameLength));
+                w.WriteSingle(s.TeamOriginX[i]);
+                w.WriteSingle(s.TeamOriginZ[i]);
+                w.WriteString(ClipWireLabel(s.TeamOrigin[i], SpecOpsDetachment.NameLength));
             }
             int objectives = Math.Min((int)s.ObjectiveCount, SpecOpsDetachment.ObjectiveSlots);
             w.WriteByte((byte)objectives);
@@ -579,8 +596,8 @@ namespace BoscaliSummer.Features.Support.Networking
                 w.WriteByte(s.ObjectiveRadars[i]);
                 w.WriteByte(s.ObjectiveHostile[i] ? (byte)1 : (byte)0);
                 w.WriteByte(s.ObjectiveFriendly[i] ? (byte)1 : (byte)0);
-                w.WriteSingle(s.ObjectiveScout[i]);
-                w.WriteString(SpecOpsDetachment.Clip(s.ObjectiveName[i]));
+                WriteFieldClock(w, s.ObjectiveScout[i]);
+                w.WriteString(ClipWireLabel(s.ObjectiveName[i], SpecOpsDetachment.NameLength));
             }
             for (int a = 0; a < FieldCatalog.AbilityCount; a++) w.WriteSingle(s.AbilityRecharge[a]);
             w.WritePackedInt32(s.NoticeSerial);
@@ -607,13 +624,18 @@ namespace BoscaliSummer.Features.Support.Networking
                 s.TeamMission[i] = r.ReadByte();
                 s.TeamChance[i] = r.ReadByte();
                 s.TeamLoss[i] = r.ReadByte();
+                s.TeamThreat[i] = r.ReadByte();
+                s.TeamRadars[i] = r.ReadByte();
                 s.TeamLast[i] = r.ReadByte();
                 s.TeamAnchor[i] = r.ReadPackedInt32();
                 s.TeamX[i] = r.ReadSingle();
                 s.TeamZ[i] = r.ReadSingle();
-                s.TeamRemaining[i] = r.ReadSingle();
-                s.TeamDuration[i] = r.ReadSingle();
+                s.TeamRemaining[i] = ReadFieldClock(r);
+                s.TeamDuration[i] = ReadFieldClock(r);
                 s.TeamTarget[i] = SpecOpsDetachment.Clip(r.ReadString());
+                s.TeamOriginX[i] = r.ReadSingle();
+                s.TeamOriginZ[i] = r.ReadSingle();
+                s.TeamOrigin[i] = SpecOpsDetachment.Clip(r.ReadString());
             }
             int objectives = r.ReadByte();
             if (objectives > SpecOpsDetachment.ObjectiveSlots) return false;
@@ -628,7 +650,7 @@ namespace BoscaliSummer.Features.Support.Networking
                 s.ObjectiveRadars[i] = r.ReadByte();
                 s.ObjectiveHostile[i] = r.ReadByte() != 0;
                 s.ObjectiveFriendly[i] = r.ReadByte() != 0;
-                s.ObjectiveScout[i] = r.ReadSingle();
+                s.ObjectiveScout[i] = ReadFieldClock(r);
                 s.ObjectiveName[i] = SpecOpsDetachment.Clip(r.ReadString());
             }
             for (int a = 0; a < FieldCatalog.AbilityCount; a++) s.AbilityRecharge[a] = r.ReadSingle();
@@ -644,6 +666,19 @@ namespace BoscaliSummer.Features.Support.Networking
             }
             return true;
         }
+
+        // Decisecond clocks keep four origins and live pressure in one bounded packet.
+        // The host owns the exact clock; clients only display these relative countdowns.
+        private static void WriteFieldClock(NetworkWriter writer, float seconds)
+        {
+            int ticks = float.IsNaN(seconds) || float.IsInfinity(seconds) ? 0 :
+                (int)Math.Round(Math.Max(0f, Math.Min(6553.5f, seconds)) * 10.0);
+            writer.WriteByte((byte)ticks);
+            writer.WriteByte((byte)(ticks >> 8));
+        }
+
+        private static float ReadFieldClock(NetworkReader reader) =>
+            (reader.ReadByte() | reader.ReadByte() << 8) * 0.1f;
 
         /// <summary>The CYBER block of a snapshot. Counts are clamped to their bounds on write.</summary>
         private static void WriteCyber(NetworkWriter w, CyberSnapshot c, byte originCount, string[] origins)
@@ -673,6 +708,9 @@ namespace BoscaliSummer.Features.Support.Networking
             w.WriteSingle(c.BreachTrace);
             w.WriteSingle(c.BreachIn);
             w.WriteSingle(c.SpoofIn);
+            w.WriteByte(c.AccessSlot);
+            w.WriteSingle(c.AccessIn);
+            w.WriteSingle(c.AccessRecoveryIn);
             for (int i = 0; i < c.CapstoneIn.Length; i++) w.WriteSingle(c.CapstoneIn[i]);
             w.WritePackedInt32(c.Defended);
             w.WritePackedInt32(c.Breached);            for (int v = 0; v < CyberNetwork.VerbCount; v++) w.WriteSingle(c.Recharge[v]);
@@ -712,11 +750,27 @@ namespace BoscaliSummer.Features.Support.Networking
             w.WriteByte((byte)names);
             for (int i = 0; i < names; i++)
             {
-                string name = origins[i] ?? string.Empty;
-                w.WriteString(name.Length > OpsStateMessageBuffers.MaximumOriginLength
-                    ? name.Substring(0, OpsStateMessageBuffers.MaximumOriginLength)
-                    : name);
+                w.WriteString(ClipWireLabel(origins[i], OpsStateMessageBuffers.MaximumOriginLength));
             }
+        }
+
+        // These are display labels, never faction identities. Budget encoded bytes so
+        // localized names cannot make a bounded snapshot exceed its datagram allowance.
+        private static string ClipWireLabel(string value, int maximumBytes)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            int length = 0, bytes = 0;
+            while (length < value.Length)
+            {
+                char c = value[length];
+                bool pair = char.IsHighSurrogate(c) && length + 1 < value.Length &&
+                    char.IsLowSurrogate(value[length + 1]);
+                int cost = pair ? 4 : c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
+                if (bytes + cost > maximumBytes) break;
+                bytes += cost;
+                length += pair ? 2 : 1;
+            }
+            return length == value.Length ? value : value.Substring(0, length);
         }
 
         /// <summary>False for a count past its bound: the rest of the message cannot be trusted.</summary>
@@ -748,6 +802,9 @@ namespace BoscaliSummer.Features.Support.Networking
             c.BreachTrace = r.ReadSingle();
             c.BreachIn = r.ReadSingle();
             c.SpoofIn = r.ReadSingle();
+            c.AccessSlot = r.ReadByte();
+            c.AccessIn = r.ReadSingle();
+            c.AccessRecoveryIn = r.ReadSingle();
             for (int i = 0; i < c.CapstoneIn.Length; i++) c.CapstoneIn[i] = r.ReadSingle();
             c.Defended = r.ReadPackedInt32();
             c.Breached = r.ReadPackedInt32();

@@ -120,9 +120,7 @@ public static class SettingsUnityCheck
     private static void CheckPanel(int height)
     {
         var hud = new HudFixture();
-        var external = new ExternalFixture();
         ModServices.Services[typeof(IHudBoard)] = hud;
-        ModServices.Services[typeof(IThirdPersonHud)] = external;
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -191,9 +189,9 @@ public static class SettingsUnityCheck
         Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "FACTION TASKING"),
             "SERVER tasking must have its own populated page");
         Render(camera, canvas, height, 16);
-        Invoke(panel, "SetServerPage", 1);
+        Invoke(panel, "SetServerPage", 2);
         Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "MAX FIRE SITES"),
-            "SERVER host settings must have a dedicated populated page");
+            "SERVER effects (fire, weather) must have a dedicated populated page");
         Refresh(panel);
         shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
         Render(camera, canvas, height, 17);
@@ -241,9 +239,10 @@ public static class SettingsUnityCheck
         Check(hud.Enabled && hud.Resets == 1, "HUD reset must remain usable while the overlay is disabled");
         Invoke(panel, "SetClientPage", 3); Refresh(panel);
         Click(Find(canvas, "ON"));
-        Check(!external.IsEnabled, "External HUD switch must write through the HUD module seam");
-        Click(Find(canvas, "RESET INSTRUMENT LAYOUT"));
-        Check(external.Resets == 1, "Instrument reset must be wired on the scrollable cockpit page");
+        Check(!hud.CameraFeedEnabled, "TARGET CAMERA must write through the HUD board seam");
+        Refresh(panel);
+        Click(Find(canvas, "ON"));
+        Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
         Invoke(panel, "SetClientPage", 5); Refresh(panel);
         Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "NO RESTART"),
             "Performance rows must state their restart requirement");
@@ -305,6 +304,7 @@ public static class SettingsUnityCheck
         };
 
         public string Section => "FIRE AND DESTRUCTION";
+        public HostSettingsPage Page => HostSettingsPage.Effects;
         public System.Collections.Generic.IReadOnlyList<HostSettingView> Rows => rows;
         public void Refresh()
         {
@@ -320,7 +320,6 @@ public static class SettingsUnityCheck
     {
         public int Resets;
         public bool Enabled { get; set; } = true;
-        public HudAnchor Anchor { get; set; }
         public int ScaleStep { get; set; } = 1;
         public int OpacityStep { get; set; }
         public int MaxRows { get; set; } = 4;
@@ -334,32 +333,8 @@ public static class SettingsUnityCheck
         public void DeclareChannel(string key, string label) { }
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
-        public void ResetLayout() { Enabled = true; Resets++; }
-    }
-    private sealed class ExternalFixture : IThirdPersonHud
-    {
-        public int Resets;
-        public bool IsEnabled { get; private set; } = true;
-        public bool ModifyVanillaHud { get; set; }
-        public HudBounds InstrumentBounds => default;
-        public void Toggle() => IsEnabled = !IsEnabled;
-        public bool HidePitchLadder { get; set; } = true;
         public bool CameraFeedEnabled { get; set; } = true;
-        public bool FlightCameraEnabled { get; set; } = true;
-        public bool BoardEnabled { get; set; } = true;
-        public bool AirframeEnabled { get; set; } = true;
-        public bool ShotsEnabled { get; set; } = true;
-        public bool MarkEnabled { get; set; } = true;
-        public int BoardCorner { get; set; }
-        public int FlightScaleStep { get; set; } = 1;
-        public int FlightOpacityStep { get; set; }
-        public int FlightContrast { get; set; } = 1;
-        public int BoardScaleStep { get; set; } = 1;
-        public int BoardOpacityStep { get; set; }
-        public int BoardContrast { get; set; } = 1;
-        public int BoardInsetX { get; set; }
-        public int BoardInsetY { get; set; }
-        public void ResetLayout() { Resets++; }
+        public void ResetLayout() { Enabled = true; Resets++; }
     }
 }
 #endif

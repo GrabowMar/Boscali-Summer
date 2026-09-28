@@ -29,9 +29,7 @@ public static class PresentationUnityCheck
 
     public static void RunSqdOnly() => Execute(false, true);
 
-    public static void RunMfdOnly() => Execute(false, false, true);
-
-    private static void Execute(bool eventAlertOnly, bool sqdOnly, bool mfdOnly = false)
+    private static void Execute(bool eventAlertOnly, bool sqdOnly)
     {
         try
         {
@@ -39,7 +37,7 @@ public static class PresentationUnityCheck
             {
                 var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
                 AssetDatabase.importPackageCompleted += _ =>
-                    EditorApplication.delayCall += () => Execute(eventAlertOnly, sqdOnly, mfdOnly);
+                    EditorApplication.delayCall += () => Execute(eventAlertOnly, sqdOnly);
                 AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath,
                     "Package Resources/TMP Essential Resources.unitypackage"), false);
                 return;
@@ -69,7 +67,6 @@ public static class PresentationUnityCheck
                 }
             }
             if (!sqdOnly) RenderEventAlert();
-            if (!eventAlertOnly && !sqdOnly && !mfdOnly) RenderTargetBoard();
             File.WriteAllText("result.txt", "PASS: " + captures +
                 " production-builder renders; " + assertions +
                 " compact scroll/readability assertions. Offline fixture text only; no live game, input, audio or networking claim.");
@@ -608,174 +605,6 @@ public static class PresentationUnityCheck
         ValidateReadable((RectTransform)root.transform, "EVN compact alert");
         Capture(root, 1920f, 1080f, "evn-alert-compact.png");
         Object.DestroyImmediate(root); Object.DestroyImmediate(componentObject);
-    }
-
-    private static void RenderTargetBoard()
-    {
-        // The external-view dock from modules/Hud, built from the shipped DLL. Hud/HudUnityCheck
-        // pins its geometry against game stubs; this pins what the pilot reads off it: both shot
-        // directions counted and drawn, every word legible, nothing past the safe area.
-        var owner = new GameObject("BoardOwner");
-        object board = Activator.CreateInstance(
-            TypeOf("BoscaliSummer.Features.Hud.Presentation.ThirdPersonTargetBoard"), owner.transform);
-        object settings = NewSettings("BoscaliSummer.Features.Hud.Configuration.HudSettings",
-            "hud-board-fixture.cfg");
-        object systems = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.SystemsReading"));
-        Set(systems, "Valid", true);
-        Set(systems, "FaultsAvailable", true);
-        Set(systems, "Parts", 24);
-        Set(systems, "Damaged", 2);
-        Set(systems, "Failures", 1);
-        object missiles = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.MissileTelemetry"));
-        // A 3:2 picture in the 16:9 camera slot, so the letterboxed feed is part of what must fit.
-        var picture = new RenderTexture(336, 224, 0);
-        picture.Create();
-
-        // Three out, two in, interleaved: uneven counts catch swapped IN/OUT labels, the mixed
-        // order checks that lanes follow direction rather than list position, and three rows is
-        // the tallest the dock gets. Tracks come from ShotMath the way the reader starts them.
-        var shots = new (bool Outbound, string Seeker, string Range, float First, float Now, string Eta)[]
-        {
-            (true, "ARH", "4.2 km", 4200f, 3800f, "10s"),
-            (false, "IR", "1.8 km", 2000f, 1500f, "3s"),
-            (true, "SARH", "6.8 km", 7000f, 6800f, "34s"),
-            (false, "ARH", "9.6 km", 10000f, 9600f, "24s"),
-            (true, "IR", "2.1 km", 2400f, 2100f, "7s"),
-        };
-        Type shotEntry = TypeOf("BoscaliSummer.Features.Hud.Runtime.MissileTelemetry+ShotEntry");
-        Type shotMath = TypeOf("BoscaliSummer.Features.Hud.Domain.ShotMath");
-        var shown = (IList)Get(missiles, "shown");
-        foreach (var shot in shots)
-            shown.Add(ShotFixture(shotEntry, shotMath, shot.Outbound, shot.Seeker, shot.Range, shot.First, shot.Now));
-        Set(missiles, "shownOutbound", 3);
-        Set(missiles, "shownInbound", 2);
-        Call(board, "Present", settings, systems, missiles, picture, "FORWARD", "MARK 1.2 km  34s");
-
-        object surface = Get(board, "surface");
-        var canvas = (Canvas)Get(surface, "Canvas");
-        var panel = (RectTransform)Get(board, "panel");
-        var inbound = (TMP_Text)Get(board, "inbound");
-        var outbound = (TMP_Text)Get(board, "outbound");
-        var rows = (IList)Get(board, "shotRows");
-        Check(((GameObject)Get(surface, "Root")).activeSelf,
-            "Target board must present at the editor's " + Screen.width + "x" + Screen.height + " screen.");
-        Check(inbound.text == "IN 02" && outbound.text == "OUT 03",
-            "Target board must count both shot directions, got " + inbound.text + " / " + outbound.text + ".");
-        Check(inbound.color != outbound.color,
-            "Inbound shots must set the IN count apart from the OUT count.");
-        int inboundSlot = 0, outboundSlot = 3;
-        foreach (var shot in shots)
-        {
-            object row = rows[shot.Outbound ? outboundSlot++ : inboundSlot++];
-            string lane = "Target board " + (shot.Outbound ? "OUT " : "IN ") + shot.Seeker + " row";
-            Check(((RectTransform)Get(row, "Rect")).gameObject.activeSelf &&
-                  ((TMP_Text)Get(row, "seeker")).text == shot.Seeker &&
-                  ((TMP_Text)Get(row, "range")).text == shot.Range &&
-                  ((TMP_Text)Get(row, "eta")).text == shot.Eta,
-                lane + " must show its seeker, range and countdown in its direction's lane.");
-            // The tip sits the remaining share of first-seen range away from the row's endpoint:
-            // the left end for an inbound shot, the right end for an outbound one.
-            float remaining = shot.Now / shot.First;
-            float tip = ((Image)Get(row, "tip")).rectTransform.anchoredPosition.x;
-            Check(Mathf.Abs(tip - (3f + 132f * (shot.Outbound ? 1f - remaining : remaining))) < .5f,
-                lane + " must drain against its first-seen range.");
-        }
-        Check(!((RectTransform)Get(rows[2], "Rect")).gameObject.activeSelf,
-            "The unused third IN lane row must stay empty.");
-        ValidateBoard(canvas, panel, "Target board shots");
-        CaptureBoard(canvas, "target-board-shots.png");
-
-        // The usual state: nothing in the air, no target camera, no mark. The counts still
-        // answer for both directions, and the standby copy must be as legible as the rest.
-        shown.Clear();
-        Set(missiles, "shownOutbound", 0);
-        Set(missiles, "shownInbound", 0);
-        Call(board, "Present", settings, systems, missiles, null, "FORWARD", null);
-        Check(inbound.text == "IN --" && outbound.text == "OUT --" && inbound.color == outbound.color,
-            "With no shots both directions must read empty and IN must drop its warning tone.");
-        foreach (object row in rows)
-            Check(!((RectTransform)Get(row, "Rect")).gameObject.activeSelf,
-                "With no shots no lane row may stay drawn.");
-        ValidateBoard(canvas, panel, "Target board idle");
-        CaptureBoard(canvas, "target-board-idle.png");
-
-        Call(board, "Hide");
-        Object.DestroyImmediate(owner);
-        picture.Release(); Object.DestroyImmediate(picture);
-    }
-
-    private static object ShotFixture(Type shotEntry, Type shotMath, bool outbound, string seeker,
-        string rangeText, float first, float range)
-    {
-        object track = CallStatic(shotMath, "Start", first, 0f);
-        track = CallStatic(shotMath, "Update", track, range, 1f);
-        object entry = Activator.CreateInstance(shotEntry, true);
-        Set(entry, "Outbound", outbound);
-        Set(entry, "Seeker", seeker);
-        Set(entry, "RangeText", rangeText);
-        Set(entry, "Track", track);
-        return entry;
-    }
-
-    private static void ValidateBoard(Canvas canvas, RectTransform panel, string name)
-    {
-        ValidateReadable(panel, name);
-        // On screen: the panel is placed in canvas units from the canvas's bottom-left, which a
-        // screen-space canvas pins to the screen's, so its pixels are its placement times the scale.
-        // Then every drawn piece, text, lines, backing and picture, stays inside that panel.
-        Rect screen = Screen.safeArea;
-        if (screen.width < 1 || screen.height < 1) screen = new Rect(0, 0, Screen.width, Screen.height);
-        Vector2 min = panel.anchoredPosition * canvas.scaleFactor;
-        Vector2 max = (panel.anchoredPosition + panel.sizeDelta) * canvas.scaleFactor;
-        Check(min.x >= screen.xMin - .5f && min.y >= screen.yMin - .5f &&
-              max.x <= screen.xMax + .5f && max.y <= screen.yMax + .5f,
-            name + " must stay inside the screen's safe area.");
-        foreach (Graphic graphic in panel.GetComponentsInChildren<Graphic>())
-        {
-            if (!graphic.enabled) continue;
-            Rect rect = PanelRect(panel, graphic.rectTransform);
-            Check(rect.xMin >= -.5f && rect.yMin >= -.5f &&
-                  rect.xMax <= panel.rect.width + .5f && rect.yMax <= panel.rect.height + .5f,
-                name + " draws " + graphic.name + " outside its own panel.");
-        }
-        // Legible: no line ellipsized by its own box, and no two lines drawn over each other.
-        var labels = new List<TMP_Text>();
-        foreach (TMP_Text label in panel.GetComponentsInChildren<TMP_Text>())
-            if (!string.IsNullOrWhiteSpace(label.text)) labels.Add(label);
-        for (int i = 0; i < labels.Count; i++)
-        {
-            Check(labels[i].preferredWidth <= labels[i].rectTransform.rect.width + .5f,
-                name + " cuts \"" + labels[i].text + "\" short.");
-            Rect own = PanelRect(panel, labels[i].rectTransform);
-            own = new Rect(own.x + .5f, own.y + .5f, own.width - 1f, own.height - 1f);
-            for (int j = i + 1; j < labels.Count; j++)
-                Check(!own.Overlaps(PanelRect(panel, labels[j].rectTransform)),
-                    name + " draws \"" + labels[i].text + "\" over \"" + labels[j].text + "\".");
-        }
-    }
-
-    private static Rect PanelRect(RectTransform panel, RectTransform child)
-    {
-        var corners = new Vector3[4];
-        child.GetWorldCorners(corners);
-        Vector2 min = panel.InverseTransformPoint(corners[0]), max = min;
-        for (int i = 1; i < 4; i++)
-        {
-            Vector2 corner = panel.InverseTransformPoint(corners[i]);
-            min = Vector2.Min(min, corner);
-            max = Vector2.Max(max, corner);
-        }
-        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-    }
-
-    private static void CaptureBoard(Canvas canvas, string file)
-    {
-        // Frame the whole screen in canvas units so the corner placement shows, then hand the
-        // canvas back to screen space for the next Present.
-        float width = Screen.width / canvas.scaleFactor, height = Screen.height / canvas.scaleFactor;
-        PrepareWorldCanvas(canvas, width, height);
-        Capture(canvas.gameObject, width, height, file);
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
     }
 
     private static void ValidateSkillRows(object panel)

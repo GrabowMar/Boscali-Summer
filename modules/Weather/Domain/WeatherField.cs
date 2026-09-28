@@ -84,6 +84,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         private readonly StormCell[] cells = new StormCell[StormCells.MaxCells];
         private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
         private readonly DryCloudCluster[] cloudClusters = new DryCloudCluster[DryCloudCluster.MaxCount];
+        private readonly Superstructure[] superstructures = new Superstructure[Superstructures.MaxCount];
 
         public WeatherKey Key { get; private set; }
         public float Time { get; private set; }
@@ -91,10 +92,14 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float HalfZ { get; private set; }
         public float HourOfDay { get; private set; }
         public TimelineState Timeline { get; private set; }
+        /// <summary>The frontal boundary across the map in BROKEN and worse skies.</summary>
+        public SkySplit Split { get; private set; }
         public StateParams Params { get; private set; }
         public int CellCount { get; private set; }
         public int FrontCount { get; private set; }
         public int CloudClusterCount { get; private set; }
+        /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
+        public int SuperstructureCount { get; private set; }
 
         /// <summary>Multiplier on haze visibility (1 = clear air; smoke from fires lowers it).</summary>
         public float HazeScale { get; private set; } = 1f;
@@ -106,6 +111,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         public StormCell Cell(int index) => cells[index];
         public FrontState Front(int index) => fronts[index];
         public DryCloudCluster CloudCluster(int index) => cloudClusters[index];
+        public Superstructure SuperstructureAt(int index) => superstructures[index];
 
         public void Build(WeatherKey key, float time, float halfX, float halfZ, float hourOfDay = 12f, float hazeScale = 1f)
         {
@@ -123,13 +129,16 @@ namespace BoscaliSummer.Features.Weather.Domain
             PrevailingHeading = WeatherMath.Hash01(key.Seed, 41) * 360f;
             WeatherMath.HeadingToVector(PrevailingHeading, out float driftX, out float driftZ);
 
-            FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading);
+            Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, key.FrontTurn);
+            FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
             StateParams convection = StateTable.At(timeline.GrowthLevel);
             CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ);
             CloudClusterCount = 0;
             for (int i = 0; i < cloudClusters.Length; i++)
                 if (DryCloudCluster.TryResolve(timeline.Layout, i, convection, HalfX, HalfZ, out DryCloudCluster cloud))
                     cloudClusters[CloudClusterCount++] = cloud;
+            SuperstructureCount = Superstructures.Fill(superstructures, timeline.Layout, convection,
+                HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
         }
 
         public WeatherPoint Sample(float x, float z)
@@ -140,8 +149,10 @@ namespace BoscaliSummer.Features.Weather.Domain
             // Area (stratiform) rain and the sheet, broken up by the static patch field so a
             // thinning deck opens in patches instead of fading uniformly.
             float patch = Patch(x, z);
-            float areaRain = p.AreaRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch);
-            float sheet = p.Overcast;
+            // Behind the frontal boundary the full deck; ahead of it the sky opens.
+            float split = Split.Cover(x, z);
+            float areaRain = p.AreaRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch) * split;
+            float sheet = p.Overcast * split;
             float coverBase = WeatherMath.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
             point.BackgroundCover = coverBase;
 

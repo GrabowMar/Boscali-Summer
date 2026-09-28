@@ -37,7 +37,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         {
             int hash = count;
             for (int i = 0; i < count && segments != null; i++)
-                hash = hash * 31 + (int)(segments[i].Start * 1000f) * 7 + (int)(segments[i].End * 1000f) + (int)segments[i].Kind;
+                hash = hash * 31 + (int)(segments[i].Start * 1000f) * 7 + (int)(segments[i].End * 1000f) +
+                    (int)segments[i].Kind * 2 + (segments[i].Projected ? 1 : 0);
             if (hash != signature)
             {
                 signature = hash;

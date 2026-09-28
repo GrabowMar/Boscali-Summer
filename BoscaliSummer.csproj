@@ -130,6 +130,12 @@
     <EmbeddedResource Include="modules\Command\Assets\terrain2_intel.png">
       <LogicalName>BoscaliSummer.Command.terrain2_intel.png</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="modules\Command\Assets\terrain_naval_map.bmap">
+      <LogicalName>BoscaliSummer.Command.terrain_naval_map.bmap</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Command\Assets\terrain_naval_intel.png">
+      <LogicalName>BoscaliSummer.Command.terrain_naval_intel.png</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Campaign mission">

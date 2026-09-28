@@ -7,9 +7,8 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Presentation.Views
 {
     /// <summary>
-    /// SPACE › IMAGER, the sensor operator: no panels, the feed fills the room, symbology is drawn
-    /// straight on it in targeting-pod style — monochrome high-contrast ink with a dark halo. The feed
-    /// acquires with a brief scan line. Colours come from the <c>.room-imager-*</c> classes.
+    /// SPACE › IMAGER. A framed SAR sensor product, persistent task rail and compact camera controls
+    /// use monochrome symbology with a dark halo. Colours come from the <c>.room-imager-*</c> classes.
     /// </summary>
     internal static class ImagerStyle
     {

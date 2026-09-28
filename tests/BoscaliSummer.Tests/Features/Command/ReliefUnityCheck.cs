@@ -15,6 +15,9 @@ public static class ReliefUnityCheck
         try
         {
             const int side = 900;
+            string assetName = Environment.GetEnvironmentVariable("BOSCALI_ASSET_NAME") ?? "terrain2_map";
+            float mapWidth = float.Parse(Environment.GetEnvironmentVariable("BOSCALI_MAP_WIDTH") ?? "81920",
+                System.Globalization.CultureInfo.InvariantCulture);
             var screen = new GameObject("ScreenCamera", typeof(Camera)).GetComponent<Camera>();
             screen.orthographic = true;
             screen.orthographicSize = side * 0.5f;
@@ -28,10 +31,18 @@ public static class ReliefUnityCheck
             ((RectTransform)canvas.transform).sizeDelta = Vector2.one * side;
             var image = new GameObject("MapImage", typeof(RectTransform), typeof(Image));
             var background = new GameObject("MapBackground", typeof(RectTransform), typeof(Image));
-            background.transform.SetParent(canvas.transform, false);
+            var nativeScale = new GameObject("NativeUiScale", typeof(RectTransform));
+            nativeScale.transform.SetParent(canvas.transform, false);
+            nativeScale.transform.localScale = Vector3.one * .7f;
+            background.transform.SetParent(nativeScale.transform, false);
             ((RectTransform)background.transform).sizeDelta = new Vector2(1250f, side);
+            background.AddComponent<RectMask2D>();
+            var scaleCenter = new GameObject("MapScaleCenter", typeof(RectTransform));
+            scaleCenter.transform.SetParent(background.transform, false);
+            var scaleProxy = new GameObject("MapScaleProxy", typeof(RectTransform));
+            scaleProxy.transform.SetParent(background.transform, false);
             image.transform.SetParent(background.transform, false);
-            ((RectTransform)image.transform).sizeDelta = Vector2.one * side;
+            ((RectTransform)image.transform).sizeDelta = new Vector2(side * mapWidth / 81920f, side);
             image.GetComponent<Image>().sprite = MakeSprite();
             var control = new GameObject("ComSectorGridOverlay", typeof(RectTransform), typeof(RawImage))
                 .GetComponent<RawImage>();
@@ -44,12 +55,15 @@ public static class ReliefUnityCheck
             var map = new GameObject("DynamicMap", typeof(DynamicMap)).GetComponent<DynamicMap>();
             map.mapImage = image;
             map.mapBackground = background.GetComponent<Image>();
+            map.mapScaleCenter = scaleCenter.transform;
+            map.mapScaleProxy = scaleProxy.transform;
             map.maximizedMapCanvas = canvas;
             map.gridLabels = new GameObject("GridLabels", typeof(GridLabels)).GetComponent<GridLabels>();
             var flatLabels = new GameObject("MajorParent");
             flatLabels.transform.SetParent(map.gridLabels.transform, false);
             SceneSingleton<DynamicMap>.i = map;
-            new GameObject("Settings", typeof(MapSettings));
+            new GameObject("Settings", typeof(MapSettings)).GetComponent<MapSettings>().MapSize =
+                new Vector2(mapWidth, 81920f);
             string bakedPath = Environment.GetEnvironmentVariable("BOSCALI_HEIGHT_PREVIEW");
             if (string.IsNullOrEmpty(bakedPath) || !File.Exists(bakedPath))
                 throw new Exception("BOSCALI_HEIGHT_PREVIEW must point to the baked game heightfield.");
@@ -59,18 +73,24 @@ public static class ReliefUnityCheck
             Paths.ConfigPath = Directory.GetCurrentDirectory();
             string maps = Path.Combine(Paths.ConfigPath, "BoscaliSummer", "Maps");
             Directory.CreateDirectory(maps);
-            File.Copy(bakedPath, Path.Combine(maps, "terrain2_map.bmap"), true);
-            File.Copy(stylePath, Path.Combine(maps, "terrain2_map_intel.png"), true);
+            File.Copy(bakedPath, Path.Combine(maps, assetName + ".bmap"), true);
+            File.Copy(stylePath, Path.Combine(maps, assetName + "_intel.png"), true);
+            if (assetName == "terrain_naval_map")
+                AssertNavalChartAlignment(image.GetComponent<Image>().sprite.texture, stylePath);
+            Canvas.ForceUpdateCanvases();
             MfdTerrainRelief.Tick();
             if (!MfdTerrainRelief.IsDrawing) throw new Exception("Terrain model did not mount.");
+            AssertViewportTerrain(map, "initial open");
             float fittedZoom = map.GetZoomLevel();
-            if (fittedZoom < 1.35f || map.mapImage.transform.localScale.x < 1.35f)
-                throw new Exception("Terrain remained confined to the native 900-unit image box.");
             map.SetZoomLevel(1f);
             MfdTerrainRelief.Tick();
+            AssertViewportTerrain(map, "minimum zoom");
+            AssertWholeMap(map);
             if (Mathf.Abs(map.GetZoomLevel() - 1f) > .01f)
                 throw new Exception("Viewport fit overrode the player's zoom choice.");
             map.SetZoomLevel(fittedZoom);
+            MfdTerrainRelief.Tick();
+            AssertViewportTerrain(map, "zoom restored");
             if (flatLabels.activeSelf) throw new Exception("Flat coordinates remained on oblique terrain.");
             if (control.enabled || threat.enabled)
                 throw new Exception("A flat tactical field remained over the model.");
@@ -81,15 +101,7 @@ public static class ReliefUnityCheck
                 throw new Exception("Rendered ground did not invert to the clicked world position.");
             MfdTerrainRelief.Rotate(45f, 0f);
             MfdTerrainRelief.Tick();
-            Rect terrainRect = ((RectTransform)image.transform).rect;
-            float halfX = ((RectTransform)background.transform).rect.width /
-                (2f * image.transform.localScale.x);
-            float halfY = ((RectTransform)background.transform).rect.height /
-                (2f * image.transform.localScale.y);
-            foreach (float x in new[] { -halfX, halfX })
-            foreach (float y in new[] { -halfY, halfY })
-                if (!MfdTerrainRelief.TryUnproject(new Vector2(x, y), terrainRect, out _))
-                    throw new Exception("Rotated terrain left an empty corner inside the map viewport.");
+            AssertViewportTerrain(map, "45 degree orbit");
             Canvas.ForceUpdateCanvases();
             var rotatedTarget = new RenderTexture(1250, side, 24);
             screen.targetTexture = rotatedTarget;
@@ -107,11 +119,28 @@ public static class ReliefUnityCheck
                 MfdTerrainRelief.Rotate(testYaw - MfdTerrainRelief.Yaw,
                     testPitch - MfdTerrainRelief.Pitch);
                 MfdTerrainRelief.Tick();
-                foreach (float x in new[] { -halfX, halfX })
-                foreach (float y in new[] { -halfY, halfY })
-                    if (!MfdTerrainRelief.TryUnproject(new Vector2(x, y), terrainRect, out _))
-                        throw new Exception($"Terrain edge entered the viewport at yaw {testYaw}, pitch {testPitch}.");
+                AssertViewportTerrain(map, $"yaw {testYaw}, pitch {testPitch}");
+                AssertWholeMap(map);
             }
+            MfdTerrainRelief.Rig.ZoomAt(2f, .5f, .5f, 0f);
+            MfdTerrainRelief.Tick();
+            Vector2 beforePan = ProjectInViewport(map, 0f, 0f);
+            image.transform.localPosition += new Vector3(90f, -60f, 0f);
+            Canvas.ForceUpdateCanvases();
+            MfdTerrainRelief.Tick();
+            AssertViewportTerrain(map, "native pan");
+            if (Vector2.Distance(beforePan, ProjectInViewport(map, 0f, 0f)) > 1f)
+                throw new Exception("Native pan moved the relief view it no longer owns.");
+            image.transform.localPosition -= new Vector3(90f, -60f, 0f);
+            if (!MfdTerrainRelief.TryGround(.4f, .6f, out Vector3 grabbed))
+                throw new Exception("No terrain under the grab point.");
+            MfdTerrainRelief.Rig.Grab(grabbed.x, grabbed.y, grabbed.z, .6f, .4f);
+            MfdTerrainRelief.Tick();
+            AssertViewportTerrain(map, "ground grab");
+            if (!MfdTerrainRelief.TryGround(.6f, .4f, out Vector3 held) ||
+                Vector3.Distance(held, grabbed) > 1f)
+                throw new Exception("Grabbed terrain did not stay under the cursor.");
+            MfdTerrainRelief.Rig.Reset();
             MfdTerrainRelief.ResetOrbit();
             MfdTerrainRelief.Tick();
             UnitMapIcon cachedTrack = Track(image.transform, map, -21000f, 13000f);
@@ -148,12 +177,34 @@ public static class ReliefUnityCheck
                     headingTrack.iconImage.transform.eulerAngles.z)) > .1f)
                 throw new Exception("A stale native heading drifted after reprojection.");
             MfdTerrainRelief.ResetOrbit();
+            MfdTerrainRelief.Tick();
+            if (!MfdTerrainRelief.TryProject(0f, 0f, ((RectTransform)image.transform).rect,
+                    out center))
+                throw new Exception("Terrain center projection unavailable after orbit reset.");
             var icon = new GameObject("Unit", typeof(UnitMapIcon)).GetComponent<UnitMapIcon>();
+            icon.transform.SetParent(image.transform, false);
             icon.iconImage = new GameObject("Glyph", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
             icon.iconImage.transform.SetParent(icon.transform, false);
             MfdTerrainRelief.ProjectIcon(icon, 1f);
             if (Vector2.Distance(icon.iconImage.transform.localPosition, center) > 1f)
                 throw new Exception("Marker and terrain use different projections.");
+            FieldInfo nativeTrackPosition = typeof(MapIcon).GetField("globalPosition",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            if (nativeTrackPosition == null)
+                throw new Exception("Native faction-known altitude is unavailable.");
+            icon.unit = new Aircraft();
+            nativeTrackPosition.SetValue(icon, new Vector3(0f, 5000f, 0f));
+            icon.iconImage.transform.localPosition = Vector3.zero;
+            MfdTerrainRelief.ProjectIcon(icon, 1f);
+            if (Vector2.Distance(icon.iconImage.transform.localPosition, center) < 5f ||
+                icon.transform.Find("NOAvionics.MapStem") == null)
+                throw new Exception("Aircraft altitude did not raise its map symbol above the terrain.");
+            icon.unit = new Missile();
+            nativeTrackPosition.SetValue(icon, new Vector3(0f, 3000f, 0f));
+            icon.iconImage.transform.localPosition = Vector3.zero;
+            MfdTerrainRelief.ProjectIcon(icon, 1f);
+            if (Vector2.Distance(icon.iconImage.transform.localPosition, center) < 5f)
+                throw new Exception("Missile altitude did not raise its map symbol above the terrain.");
             var objective = new GameObject("Objective", typeof(RectTransform), typeof(ObjectiveMarker))
                 .GetComponent<ObjectiveMarker>();
             objective.transform.SetParent(image.transform, false);
@@ -239,8 +290,9 @@ public static class ReliefUnityCheck
             terrainCamera.orthographicSize = 250f;
             terrainCamera.Render();
             RenderTexture.active = terrainCamera.targetTexture;
-            var close = new Texture2D(1536, 1536, TextureFormat.RGB24, false);
-            close.ReadPixels(new Rect(0, 0, 1536, 1536), 0, 0);
+            var close = new Texture2D(terrainCamera.targetTexture.width,
+                terrainCamera.targetTexture.height, TextureFormat.RGB24, false);
+            close.ReadPixels(new Rect(0, 0, close.width, close.height), 0, 0);
             close.Apply();
             File.WriteAllBytes("terrain-close-preview.png", close.EncodeToPNG());
             MfdTerrainRelief.Restore();
@@ -248,14 +300,14 @@ public static class ReliefUnityCheck
                 !secondTrack.iconImage.enabled || MfdTerrainRelief.IsDrawing)
                 throw new Exception("Closing the terrain model did not restore native overlay state.");
             MfdTerrainRelief.Reset();
-            string heightSidecar = Path.Combine(maps, "terrain2_map.bmap");
+            string heightSidecar = Path.Combine(maps, assetName + ".bmap");
             byte[] invalid = File.ReadAllBytes(heightSidecar);
             invalid[0] = 0;
             File.WriteAllBytes(heightSidecar, invalid);
             MfdTerrainRelief.Tick();
             if (MfdTerrainRelief.IsDrawing || image.GetComponent<Image>().color.a < .99f)
                 throw new Exception("Invalid terrain data did not leave the native map visible.");
-            File.WriteAllText("result.txt", "PASS: viewport and rotated terrain coverage, projection, box selection, context lifecycle, native restoration, and invalid-asset fallback.");
+            File.WriteAllText("result.txt", "PASS: native zoom hierarchy and full-viewport terrain coverage through pan/zoom/orbit, altitude projection, box selection, context lifecycle, native restoration, and invalid-asset fallback.");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -264,6 +316,71 @@ public static class ReliefUnityCheck
             Debug.LogException(error);
             EditorApplication.Exit(1);
         }
+    }
+
+    private static void AssertViewportTerrain(DynamicMap map, string state)
+    {
+        Canvas.ForceUpdateCanvases();
+        RectTransform viewport = map.mapBackground.rectTransform;
+        Transform terrain = viewport.Find("NOAvionics.IntelligenceTerrain");
+        if (terrain == null || terrain.parent != viewport ||
+            !(terrain is RectTransform terrainRect))
+            throw new Exception($"Terrain is still confined to the native map-image box at {state}.");
+        var viewportCorners = new Vector3[4];
+        viewport.GetWorldCorners(viewportCorners);
+        Rect visible = terrainRect.rect;
+        for (int i = 0; i < viewportCorners.Length; i++)
+        {
+            Vector3 localCorner = terrainRect.InverseTransformPoint(viewportCorners[i]);
+            if (localCorner.x < visible.xMin - 2f || localCorner.x > visible.xMax + 2f ||
+                localCorner.y < visible.yMin - 2f || localCorner.y > visible.yMax + 2f)
+                throw new Exception($"Terrain leaves an uncovered viewport corner {i} at {state}.");
+
+        }
+    }
+
+    private static Vector2 ProjectInViewport(DynamicMap map, float x, float z)
+    {
+        RectTransform image = map.mapImage.GetComponent<RectTransform>();
+        if (!MfdTerrainRelief.TryProject(x, z, image.rect, out Vector2 local))
+            throw new Exception("Terrain projection unavailable.");
+        Vector3 point = map.mapBackground.rectTransform.InverseTransformPoint(
+            image.TransformPoint(local));
+        return new Vector2(point.x, point.y);
+    }
+
+    private static void AssertWholeMap(DynamicMap map)
+    {
+        Rect bounds = map.mapBackground.rectTransform.rect;
+        float halfX = (Environment.GetEnvironmentVariable("BOSCALI_ASSET_NAME") ==
+            "terrain_naval_map" ? 163840f : 81920f) * .5f;
+        const float halfZ = 40960f;
+        foreach (float x in new[] { -halfX, halfX })
+        foreach (float z in new[] { -halfZ, halfZ })
+        {
+            Vector2 at = ProjectInViewport(map, x, z);
+            if (at.x < bounds.xMin || at.x > bounds.xMax ||
+                at.y < bounds.yMin || at.y > bounds.yMax)
+                throw new Exception($"Minimum zoom cannot show the entire theater: {x}, {z} -> {at}.");
+        }
+    }
+
+    private static void AssertNavalChartAlignment(Texture2D chart, string stylePath)
+    {
+        var style = new Texture2D(2, 2);
+        style.LoadImage(File.ReadAllBytes(stylePath));
+        int ocean = 0, polluted = 0;
+        for (int y = 1; y < 12; y++)
+        for (int x = 1; x < 24; x++)
+        {
+            float u = x / 24f, v = y / 12f;
+            if (chart.GetPixelBilinear(u, v).grayscale > .01f) continue;
+            ocean++;
+            if (style.GetPixelBilinear(u, v).g > .09f) polluted++;
+        }
+        if (ocean < 100 || polluted > 3)
+            throw new Exception($"Naval style uses island-atlas detail over {polluted} chart ocean samples.");
+        UnityEngine.Object.DestroyImmediate(style);
     }
 
     private static void Airbase(Transform parent, float x, float z)
@@ -367,7 +484,7 @@ public static class ReliefUnityCheck
         {
             var captured = new Texture2D(2, 2);
             captured.LoadImage(File.ReadAllBytes(reference));
-            captured.name = "terrain2_map";
+            captured.name = Environment.GetEnvironmentVariable("BOSCALI_ASSET_NAME") ?? "terrain2_map";
             return Sprite.Create(captured, new Rect(0, 0, captured.width, captured.height), Vector2.one * 0.5f);
         }
         const int side = 512;

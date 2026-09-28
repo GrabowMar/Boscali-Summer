@@ -43,6 +43,10 @@ namespace BoscaliSummer.Features.Support.Presentation
             public Image[] Pips;
             public string LastLine;
             public bool Compact;
+            public bool Grid;
+            public bool ShowingDecision;
+            public Rect NormalLine, DecisionLine;
+            public AvButton Execute, Extract;
         }
 
         private readonly GameObject[] specSubPages = new GameObject[2];
@@ -182,14 +186,14 @@ namespace BoscaliSummer.Features.Support.Presentation
         /// One lane: callsign and rank pips, the team's line, its rank, and a clock bar underneath. A
         /// tall lane gives the full line its own row; a 420 lane keeps one row with the headline.
         /// </summary>
-        private static TeamRow BuildTeamRow(RectTransform parent, int team, float x, float y, float width, float height)
+    private TeamRow BuildTeamRow(RectTransform parent, int team, float x, float y, float width, float height)
         {
             bool grid = width < 300f;
-            var row = new TeamRow { Compact = height < 40f || grid };
+            var row = new TeamRow { Compact = height < 40f || grid, Grid = grid };
             AvKit.Panel(parent, new Rect(x, y, width, height - 3f), AvTheme.SurfaceInert);
             AvKit.Rule(parent, new Rect(x + 3f, y, width - 3f, 1f), AvTheme.RailInfo.WithAlpha(0.55f));
             row.Rail = AvKit.Rule(parent, new Rect(x, y, 3f, height - 3f), AvTheme.RailInert);
-            float top = row.Compact ? -(height - 3f - 18f) * 0.5f : -3f;
+            float top = grid ? -2f : row.Compact ? -(height - 3f - 18f) * 0.5f : -3f;
             Image insignia = AvKit.Panel(parent, new Rect(x + 7f, y + top - 1f, 18f, 18f), AvTheme.RailInfo,
                 OpsSprites.Glyph(OpsSprites.G.Team));
             insignia.raycastTarget = false;
@@ -208,8 +212,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                 row.Rank.fontSizeMin = AvTokens.FontMicro;
                 row.Rank.fontSizeMax = row.Rank.fontSize;
             }
+            row.NormalLine = grid ? new Rect(x + 30f, y - 22f, width - 40f, 18f) : default;
+            row.DecisionLine = grid ? new Rect(x + 100f, y + top, width - 106f, 18f) : default;
             row.Line = grid
-                ? SingleLine(AvStyled.Label(parent, new Rect(x + 100f, y + top, width - 106f, 18f), "", "row-sub"))
+                ? SingleLine(AvStyled.Label(parent, row.NormalLine, "", "row-sub"))
                 : row.Compact
                 ? SingleLine(AvStyled.Label(parent, new Rect(x + 84f, y + top, width - 84f - 162f, 18f), "", "row-sub"))
                 : SingleLine(AvStyled.Label(parent, new Rect(x + 84f, y + top - 17f, width - 92f, 16f), "", "row-sub"));
@@ -218,7 +224,30 @@ namespace BoscaliSummer.Features.Support.Presentation
             row.Line.fontSizeMax = row.Line.fontSize;
             if (!grid)
                 row.Bar = AvKit.ProgressBar(parent, new Rect(x + 84f, y - height + 8f, width - 92f, 4f), 0f, AvTheme.RailInfo);
+            float buttonGap = grid ? 4f : 3f;
+            float buttonWidth = grid ? (width - 40f - buttonGap) * 0.5f : 84f;
+            float buttonX = grid ? x + 30f : x + width - buttonWidth * 2f - buttonGap - 8f;
+            float buttonY = grid ? y - 22f : y + top - 1f;
+            float buttonHeight = grid ? 18f : 20f;
+            row.Execute = AvStyled.Button(parent, new Rect(buttonX, buttonY, buttonWidth, buttonHeight), "EXECUTE",
+                "btn", () => RequestSpecOpsDirective(team, SpecOpsDirective.Execute), AvButtonStyle.Primary)
+                .WithTooltip("Execute at the site using the latest host threat forecast.");
+            row.Extract = AvStyled.Button(parent, new Rect(buttonX + buttonWidth + buttonGap, buttonY, buttonWidth, buttonHeight),
+                "EXTRACT", "btn", () => RequestSpecOpsDirective(team, SpecOpsDirective.Extract), AvButtonStyle.Danger)
+                .WithTooltip("Extract safely now; no task roll. A held post ends but earned rank stays.");
+            row.Execute.gameObject.SetActive(false);
+            row.Extract.gameObject.SetActive(false);
             return row;
+        }
+
+        private void RequestSpecOpsDirective(int team, SpecOpsDirective directive)
+        {
+            SpecOpsDetachment detachment = support.LocalDetachment;
+            if (detachment == null || support.CommandPending || !support.OpsStateFresh ||
+                (directive == SpecOpsDirective.Execute && !support.SpecOpsEnabled)) return;
+            if (detachment.CheckDirective(team, directive) != SpecOpsDenial.None) return;
+            support.RequestSpecOpsDirective(team, directive);
+            nextRefresh = 0f;
         }
 
         private void BuildSpecActions(RectTransform root, Rect body)
@@ -376,7 +405,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             else
             {
                 int ready = detachment.Count(TeamState.Ready);
-                int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.OnTask) + detachment.Count(TeamState.Holding);
+                int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.Deciding) +
+                    detachment.Count(TeamState.OnTask) + detachment.Count(TeamState.Holding);
                 int posts = detachment.Posts();
                 PaintTile(specTiles[0], ready + (ready == 1 ? " TEAM" : " TEAMS"), ready > 0 ? Tone.Ready : Tone.Pending);
                 PaintTile(specTiles[1], field > 0 ? field + " DEPLOYED" : "NONE", field > 0 ? Tone.Pending : Tone.Locked);
@@ -406,15 +436,22 @@ namespace BoscaliSummer.Features.Support.Presentation
             return text;
         }
 
-        private static void PaintTeamRow(TeamRow row, SpecOpsDetachment detachment, int index, double now)
+        private void PaintTeamRow(TeamRow row, SpecOpsDetachment detachment, int index, double now)
         {
             if (row == null) return;
             FieldTeam team = detachment != null ? detachment.Team(index) : default;
             bool formed = detachment != null && team.Formed;
+            bool deciding = formed && team.State == TeamState.Deciding;
             string line = detachment == null ? "AWAITING THEATER DATA"
+                : deciding ? (row.Grid ? "AT SITE · " : "ARRIVED · ") + FieldWords.Clock(detachment.Remaining(index, now))
                 : row.Compact ? FieldWords.TeamHeadline(team, detachment.Remaining(index, now))
-                : FieldWords.TeamLine(team, detachment.Remaining(index, now));
+                : TeamGlance(team, detachment.Remaining(index, now));
             if (row.LastLine != line) row.Line.text = row.LastLine = line;
+            if (row.Grid && row.ShowingDecision != deciding)
+            {
+                AvKit.Place(row.Line.rectTransform, deciding ? row.DecisionLine : row.NormalLine);
+                row.ShowingDecision = deciding;
+            }
             Color colour = formed ? FieldTones.State(team.State)
                 : team.Last == MissionOutcome.Lost ? AvTheme.RailDanger : AvTheme.RailInert;
             row.Rail.color = colour;
@@ -422,8 +459,19 @@ namespace BoscaliSummer.Features.Support.Presentation
                 : team.Last == MissionOutcome.Lost ? AvTheme.RailDanger : AvTheme.Dim;
             row.Name.color = formed ? AvTheme.TextPrimary : AvTheme.Dim;
             if (row.Rank != null)
+            {
+                row.Rank.gameObject.SetActive(!deciding);
                 row.Rank.text = !formed ? "—" : FieldWords.Rank(team.Rank) +
                     (team.Rank < FieldCatalog.MaxRank ? " · " + FieldCatalog.WinsToNext(team.Wins) + " TO NEXT" : "");
+            }
+            if (row.Execute != null)
+            {
+                row.Execute.gameObject.SetActive(deciding);
+                row.Extract.gameObject.SetActive(deciding);
+                bool canOrder = deciding && detachment != null && !support.CommandPending && support.OpsStateFresh;
+                row.Execute.SetEnabled(canOrder && support.SpecOpsEnabled);
+                row.Extract.SetEnabled(canOrder);
+            }
             for (int pip = 0; pip < row.Pips.Length; pip++)
                 row.Pips[pip].color = formed && pip < team.Rank ? AvTheme.RailReady : AvTheme.RailInert;
             float progress = detachment != null ? detachment.Progress(index, now) : 0f;
@@ -432,6 +480,14 @@ namespace BoscaliSummer.Features.Support.Presentation
                 row.Bar.fillAmount = team.State == TeamState.Holding ? 1f - progress : progress;
                 row.Bar.color = colour;
             }
+        }
+
+        private static string TeamGlance(in FieldTeam team, double remaining)
+        {
+            if (team.State != TeamState.EnRoute && team.State != TeamState.OnTask)
+                return FieldWords.TeamLine(team, remaining);
+            return FieldWords.State(team.State) + " · " + FieldWords.Mission(team.Mission) + " · " +
+                PlaceNames.Shorten(team.Target, 28) + " · " + FieldWords.Clock(remaining);
         }
 
         private void RefreshSpecActions(SpecOpsDetachment detachment)

@@ -780,7 +780,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 int ready = detachment.Count(TeamState.Ready);
                 int posts = detachment.Posts();
-                int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.OnTask);
+                int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.Deciding) +
+                    detachment.Count(TeamState.OnTask) + detachment.Count(TeamState.Holding);
                 reserveMetric.Set(ready + "/" + detachment.Formed,
                                   posts > 0 ? posts + (posts == 1 ? " POST" : " POSTS")
                                   : field > 0 ? field + " OUT" : "STANDBY",

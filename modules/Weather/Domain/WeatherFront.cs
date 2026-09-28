@@ -86,10 +86,10 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         /// <summary>
         /// The layout's frontal bands. They never move: the state's frontal level strengthens
-        /// the first band from BROKEN and adds a second, parallel one in RAIN SQUALL and STORM.
+        /// the first band from OVERCAST and adds a second, parallel one in RAIN SQUALL and STORM.
         /// </summary>
         public static int Fill(FrontState[] fronts, uint layout, StateParams sky, float halfX, float halfZ,
-            float prevailingHeading)
+            float prevailingHeading, SkySplit split)
         {
             int count = 0;
             float half = Math.Max(halfX, halfZ);
@@ -107,7 +107,14 @@ namespace BoscaliSummer.Features.Weather.Domain
                 WeatherMath.HeadingToVector(heading, out float nx, out float nz);
                 float offset = i == 0 ? firstOffset
                     : firstOffset - WeatherMath.HashRange(layout, id, 36, 0, 45000f, 70000f);
-                fronts[count++] = new FrontState
+                // The first band lies on the frontal boundary, so the deck ends where the front is.
+                if (i == 0 && split.Amount > 0f)
+                {
+                    nx = split.NormalX;
+                    nz = split.NormalZ;
+                    offset = split.Offset;
+                }
+                var state = new FrontState
                 {
                     Kind = kind,
                     NormalX = nx,
@@ -121,6 +128,13 @@ namespace BoscaliSummer.Features.Weather.Domain
                     MeanderWavelength = WeatherMath.HashRange(layout, id, 34, 0, 42000f, 85000f),
                     MeanderPhase = WeatherMath.HashRange(layout, id, 35, 0, -3.14f, 3.14f),
                 };
+                if (i == 0 && split.Amount > 0f)
+                {
+                    state.MeanderAmplitude = split.MeanderAmplitude;
+                    state.MeanderWavelength = split.MeanderWavelength;
+                    state.MeanderPhase = split.MeanderPhase;
+                }
+                fronts[count++] = state;
             }
             return count;
         }

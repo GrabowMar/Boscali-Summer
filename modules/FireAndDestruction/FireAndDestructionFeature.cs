@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.FireAndDestruction
             context.AddService<IFireSuppressionService>(fires);
             context.AddService<IFoliageCover>(fires);
 
-            context.AddHostSettings(new HostSettingsTable("FIRE AND DESTRUCTION")
+            context.AddHostSettings(new HostSettingsTable("FIRE AND DESTRUCTION", HostSettingsPage.Effects)
                 .Toggle(1, context.Settings.FireAndDestruction.FiresEnabled, "FIRE IGNITION",
                     "Impacts on forests and buildings can start fires that then spread on their own.")
                 .Number(2, context.Settings.FireAndDestruction.FireIntensity, "FIRE INTENSITY",

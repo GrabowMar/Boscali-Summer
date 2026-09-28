@@ -24,7 +24,10 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckCoveringBestRank();
             CheckNoticeRing();
             CheckScoutRefresh();
-            CheckRecallForfeitsWin();
+            CheckRecallKeepsWin();
+            CheckDecisionAndLivePressure();
+            CheckRadarSuppressionPressure();
+            CheckHeldPostLimit();
         }
 
         private static SpecOpsDetachment Listed()
@@ -54,6 +57,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
             // Lose the team, raise the slot again: the replacement is a stranger.
             detachment.Tick(30.0, () => 0.0, r => true);
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(60.0, () => 0.999, r => true);
             TestAssert.That(detachment.Team(0).State == TeamState.Unformed, "the lost team vacates its slot");
             TestAssert.That(detachment.TryRaise(0), "a lost slot can be raised again");
@@ -75,6 +79,9 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(detachment.CheckRaise(2) == SpecOpsDenial.Disabled &&
                 detachment.CheckLaunch(1, FieldMission.Recon, Sam) == SpecOpsDenial.Disabled,
                 "a switched-off detachment refuses raise and launch");
+            TestAssert.That(detachment.CheckDirective(0, SpecOpsDirective.Execute) == SpecOpsDenial.Disabled &&
+                detachment.CheckDirective(0, SpecOpsDirective.Extract) == SpecOpsDenial.None,
+                "disabling a team blocks execution while preserving the safe extract order");
             TestAssert.That(detachment.CheckRecall(0) == SpecOpsDenial.None && detachment.TryRecall(0, 5.0) &&
                 detachment.Team(0).State == TeamState.Recovering,
                 "recall still stands a deployed team down while SPEC OPS is off");
@@ -82,7 +89,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void CheckRankBasis()
         {
-            // D-2: the world effect lands at the rank the team fought with; the longer post is the reward.
+            // The world effect lands at the rank the team fought with; success alone promotes it.
             SpecOpsDetachment detachment = Listed();
             FieldResult second = default;
             int wins = 0;
@@ -93,6 +100,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, now);
                 now += FieldCatalog.TravelSeconds(0f);
                 detachment.Tick(now, () => 0.0, apply);
+                detachment.TryDirective(0, SpecOpsDirective.Execute, now);
                 now += FieldCatalog.TaskSeconds(FieldMission.Recon);
                 detachment.Tick(now, () => 0.0, apply);
                 now += FieldCatalog.HoldSeconds(detachment.Team(0).Rank);
@@ -105,8 +113,8 @@ namespace BoscaliSummer.Tests.Features.Support
                 "two successes promote ALPHA to rank one");
             TestAssert.That(second.Rank == 0,
                 "the second success hits the world at the pre-promotion rank");
-            TestAssert.That(Math.Abs(FieldCatalog.HoldSeconds(1) - 360f) < 0.001f,
-                "the longer hold is the promotion's reward");
+            TestAssert.That(Math.Abs(FieldCatalog.HoldSeconds(1) - 120f) < 0.001f,
+                "post lifetime stays bounded at every rank");
         }
 
         private static void CheckTimerSemantics()
@@ -114,6 +122,12 @@ namespace BoscaliSummer.Tests.Features.Support
             SpecOpsDetachment detachment = Listed();
             detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             detachment.Tick(10000.0, () => 0.0, r => true);
+            FieldTeam arrived = detachment.Team(0);
+            TestAssert.That(arrived.State == TeamState.Deciding &&
+                Math.Abs(detachment.Remaining(0, 10000.0) - FieldCatalog.DecisionSeconds) < 0.001,
+                "arrival opens a bounded decision window");
+            TestAssert.That(detachment.TryDirective(0, SpecOpsDirective.Execute, 10000.0),
+                "the team can execute within the arrival window");
             FieldTeam alpha = detachment.Team(0);
             TestAssert.That(alpha.State == TeamState.OnTask &&
                 Math.Abs(alpha.PhaseStart - 10000.0) < 0.001 &&
@@ -137,14 +151,15 @@ namespace BoscaliSummer.Tests.Features.Support
             detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             int applied = 0;
             detachment.Tick(30.0, () => 0.0, r => { applied++; return true; });
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(60.0, () => 0.0, r => { applied++; return true; });
             TestAssert.That(applied == 1 && detachment.Team(0).State == TeamState.Holding,
                 "success pays the world effect once");
             detachment.Tick(100.0, () => 0.0, r => { applied++; return true; });
             TestAssert.That(applied == 1, "holding ticks never re-apply");
-            TestAssert.That(detachment.TryRecall(0, 120.0) && applied == 1 &&
-                detachment.Team(0).Last == MissionOutcome.Recalled && detachment.Team(0).Wins == 0,
-                "recalling a held post abandons it with no win and no second payout");
+            TestAssert.That(detachment.TryDirective(0, SpecOpsDirective.Extract, 120.0) && applied == 1 &&
+                detachment.Team(0).Last == MissionOutcome.Extracted && detachment.Team(0).Wins == 1,
+                "extracting a held post preserves the earned win and never pays twice");
             detachment.Tick(120.0 + FieldCatalog.RecoverSeconds, () => 0.0, r => { applied++; return true; });
             TestAssert.That(detachment.Team(0).State == TeamState.Ready && applied == 1,
                 "recovery returns READY with the single payout intact");
@@ -252,6 +267,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, now);
                 now += FieldCatalog.TravelSeconds(0f);
                 detachment.Tick(now, () => 0.0, r => true);
+                detachment.TryDirective(0, SpecOpsDirective.Execute, now);
                 now += FieldCatalog.TaskSeconds(FieldMission.Recon);
                 detachment.Tick(now, () => 0.0, r => true);
                 if (mission == 0) first = now; else second = now;
@@ -268,17 +284,18 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(first < second, "the two missions ran in order");
         }
 
-        private static void CheckRecallForfeitsWin()
+        private static void CheckRecallKeepsWin()
         {
             SpecOpsDetachment detachment = Listed();
             detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             detachment.Tick(30.0, () => 0.0, r => true);
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             detachment.Tick(60.0, () => 0.0, r => true);
             TestAssert.That(detachment.Team(0).Wins == 1, "success banks the win first");
             TestAssert.That(detachment.TryRecall(0, 61.0), "the post is abandoned the moment it is won");
             FieldTeam alpha = detachment.Team(0);
-            TestAssert.That(alpha.State == TeamState.Recovering && alpha.Wins == 0 && alpha.Rank == 0 &&
-                detachment.Posts(FieldMission.Recon) == 0, "instant recall forfeits the win and the post");
+            TestAssert.That(alpha.State == TeamState.Recovering && alpha.Wins == 1 && alpha.Rank == 0 &&
+                detachment.Posts(FieldMission.Recon) == 0, "extract ends the post while keeping its earned win");
             TestAssert.That(detachment.NoticeKind(0) == FieldNotice.Recalled &&
                 detachment.NoticeKind(1) == FieldNotice.PostEnded,
                 "abandoning a post logs the recall above the post's end");
@@ -287,6 +304,7 @@ namespace BoscaliSummer.Tests.Features.Support
             SpecOpsDetachment patient = Listed();
             patient.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
             patient.Tick(30.0, () => 0.0, r => true);
+            patient.TryDirective(0, SpecOpsDirective.Execute, 30.0);
             patient.Tick(60.0, () => 0.0, r => true);
             patient.Tick(60.0 + FieldCatalog.HoldSeconds(0), () => 0.0, r => true);
             TestAssert.That(patient.Team(0).Wins == 1 && patient.Team(0).State == TeamState.Recovering,
@@ -312,6 +330,95 @@ namespace BoscaliSummer.Tests.Features.Support
             capped.TryRecall(0, 501.0);
             TestAssert.That(capped.Team(0).Wins == byte.MaxValue && capped.Team(0).Rank == FieldCatalog.MaxRank,
                 "a capped legend recalled from its post stays capped");
+        }
+
+        private static void CheckDecisionAndLivePressure()
+        {
+            SpecOpsDetachment detachment = Listed();
+            detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
+            TestAssert.That(detachment.CheckDirective(0, SpecOpsDirective.Execute) == SpecOpsDenial.NotAtDecision &&
+                detachment.CheckDirective(0, (SpecOpsDirective)2) == SpecOpsDenial.BadDirective,
+                "execute is gated until arrival and unknown directives are refused");
+            detachment.Tick(30.0, () => 0.0, r => true);
+            TestAssert.That(detachment.Team(0).State == TeamState.Deciding &&
+                detachment.CheckDirective(0, SpecOpsDirective.Extract) == SpecOpsDenial.None,
+                "arrival permits execute or extract");
+            TestAssert.That(detachment.CheckLaunch(1, FieldMission.Seize, Town) == SpecOpsDenial.ObjectiveTaken,
+                "a team in its arrival window still reserves the objective");
+            byte forecast = detachment.Team(0).Chance;
+            detachment.BeginObjectives();
+            detachment.ReportObjective(ObjectiveKind.Town, Town, 10000f, 0f, 0, 0, true, "KERSEY");
+            detachment.ReportObjective(ObjectiveKind.AirDefence, Sam, 20000f, 5000f, 3, 2, true, "AIR DEFENCE 20/5");
+            detachment.EndObjectives(31.0);
+            TestAssert.That(detachment.Team(0).CurrentThreat == 0 && detachment.Team(0).Chance > forecast,
+                "live threat removal improves the host forecast before execution");
+            TestAssert.That(detachment.TryDirective(0, SpecOpsDirective.Extract, 31.0) &&
+                detachment.Team(0).Last == MissionOutcome.Extracted && detachment.Team(0).State == TeamState.Recovering,
+                "an arrival extraction returns safely without rolling");
+
+            SpecOpsDetachment missed = Listed();
+            missed.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
+            missed.Tick(30.0, () => 0.0, r => true);
+            TestAssert.That(!missed.TryDirective(0, SpecOpsDirective.Execute, 60.0) &&
+                missed.Team(0).State == TeamState.Deciding,
+                "an execute request at the expired deadline cannot race the host timer");
+            missed.Tick(60.0, () => 0.0, r => true);
+            TestAssert.That(missed.Team(0).State == TeamState.Recovering && missed.Team(0).Last == MissionOutcome.Extracted,
+                "an unanswered decision window defaults to safe extraction");
+        }
+
+        private static void CheckRadarSuppressionPressure()
+        {
+            SpecOpsDetachment detachment = new SpecOpsDetachment();
+            detachment.BeginObjectives();
+            detachment.ReportObjective(ObjectiveKind.Town, Town, 10000f, 0f, 5, 2, true, "KERSEY");
+            detachment.ReportObjective(ObjectiveKind.AirDefence, Sam, 20000f, 5000f, 3, 2, true, "AIR DEFENCE 20/5");
+            detachment.EndObjectives(0.0);
+            TestAssert.That(detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0) == SpecOpsDenial.None &&
+                detachment.Team(0).Chance == 66 && detachment.Team(0).Loss == 16,
+                "the launch forecast separates physical garrison count from active radar pressure");
+
+            detachment.BeginObjectives();
+            detachment.ReportObjective(ObjectiveKind.Town, Town, 10000f, 0f, 5, 0, true, "KERSEY");
+            detachment.ReportObjective(ObjectiveKind.AirDefence, Sam, 20000f, 5000f, 3, 2, true, "AIR DEFENCE 20/5");
+            detachment.EndObjectives(10.0);
+            TestAssert.That(detachment.Team(0).CurrentThreat == 5 && detachment.Team(0).CurrentRadars == 0 &&
+                detachment.Team(0).Chance == 70 && detachment.Team(0).Loss == 14,
+                "a jammed radar lifts odds while the five actual ground units remain in the garrison count");
+
+            detachment.Tick(30.0, () => 0.0, r => true);
+            TestAssert.That(detachment.Team(0).State == TeamState.Deciding &&
+                detachment.Team(0).Chance == 70 && detachment.Team(0).Loss == 14,
+                "the changed host forecast is still visible at arrival");
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
+            detachment.BeginObjectives();
+            detachment.ReportObjective(ObjectiveKind.Town, Town, 10000f, 0f, 5, 1, true, "KERSEY");
+            detachment.ReportObjective(ObjectiveKind.AirDefence, Sam, 20000f, 5000f, 3, 2, true, "AIR DEFENCE 20/5");
+            detachment.EndObjectives(31.0);
+            TestAssert.That(detachment.Team(0).State == TeamState.OnTask && detachment.Team(0).Chance == 68 &&
+                detachment.Team(0).Loss == 15,
+                "newly emitting radar pressure also updates the in-progress forecast before its roll");
+        }
+
+        private static void CheckHeldPostLimit()
+        {
+            SpecOpsDetachment detachment = Listed();
+            detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, 0.0);
+            detachment.TryLaunch(1, FieldMission.Sabotage, Sam, 0f, 0.0);
+            detachment.Tick(30.0, () => 0.0, r => true);
+            detachment.TryDirective(0, SpecOpsDirective.Execute, 30.0);
+            detachment.TryDirective(1, SpecOpsDirective.Execute, 30.0);
+            detachment.Tick(75.0, () => 0.0, r => true);
+            TestAssert.That(detachment.Posts() == FieldCatalog.MaximumHeldPosts, "two successful teams establish the held-post ceiling");
+
+            detachment.TryRaise(2);
+            detachment.TryLaunch(2, FieldMission.Recon, Town, 0f, 75.0);
+            detachment.Tick(105.0, () => 0.0, r => true);
+            detachment.TryDirective(2, SpecOpsDirective.Execute, 105.0);
+            detachment.Tick(135.0, () => 0.0, r => true);
+            TestAssert.That(detachment.Team(2).State == TeamState.Recovering && detachment.Team(2).Wins == 1 &&
+                detachment.Posts() == FieldCatalog.MaximumHeldPosts && detachment.NoticeKind(0) == FieldNotice.PostLimit,
+                "a third success still lands and earns rank, then extracts instead of exceeding the cap");
         }
     }
 }

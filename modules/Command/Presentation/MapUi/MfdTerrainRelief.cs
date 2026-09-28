@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using BepInEx;
 using HarmonyLib;
+using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics.Ui;
 using UnityEngine;
@@ -15,28 +16,33 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     /// <summary>
     /// A client-local display of baked, real mission elevation. DynamicMap still owns the
-    /// map image, pan/zoom, symbols and every game action. A missing or mismatched asset
-    /// leaves the native map untouched.
+    /// symbols, selection and every game action; while the relief draws, its own
+    /// <see cref="ReliefRig"/> owns pan, zoom and orbit and the native sheet is pinned.
+    /// A missing or mismatched asset leaves the native map untouched.
     /// </summary>
     internal static class MfdTerrainRelief
     {
         private const string HeightResource = "BoscaliSummer.Command.terrain2_map.bmap";
         private const string StyleResource = "BoscaliSummer.Command.terrain2_intel.png";
         private const string SupportedMap = "terrain2_map";
+        private const string NavalHeightResource = "BoscaliSummer.Command.terrain_naval_map.bmap";
+        private const string NavalStyleResource = "BoscaliSummer.Command.terrain_naval_intel.png";
+        private const string NavalMap = "terrain_naval_map";
         private const int Samples = 513;
         private const int TileCells = 128;
         private const int TerrainLayer = 31;
         private const int TextureSize = 1536;
         private const float SeaLevel = -200f;
+        private const float CutOutRimRise = 5f;
         private const float ModelWidth = 900f;
         private const float VerticalScale = 3.6f;
+        private const float MaximumAirLift = 120f;
         private const float RenderInterval = 0.2f;
         private const int MaximumStems = 64;
         private const int MaximumClusters = 64;
         private const int MaximumClusteredIcons = 2048;
         private const int MinimumStack = 5;
-        private const float DefaultYaw = 0f;
-        private const float DefaultPitch = 40f;
+        private const float CameraRadius = 1122f;
 
         private static DynamicMap owner;
         private static MapSettings source;
@@ -44,6 +50,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static string mapAssetName;
         private static float[] heights;
         private static bool[] land;
+        private static float seaLevel = SeaLevel;
+        private static float highestModelPoint;
         private static bool ready;
         private static bool unavailable;
         private static float nextRender;
@@ -58,7 +66,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private sealed class HeadingMark { internal float Native, Projected; }
         private static readonly Dictionary<UnitMapIcon, HeadingMark> headings =
             new Dictionary<UnitMapIcon, HeadingMark>();
-        private sealed class IconFix { internal float X, Z, Depth; internal Vector3 NativeScale; }
+        private sealed class IconFix
+        {
+            internal float X, Z, Depth, Altitude;
+            internal bool Airborne;
+            internal Vector3 NativeScale;
+        }
+        private static readonly FieldInfo NativeIconPosition =
+            typeof(MapIcon).GetField("globalPosition",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         private static readonly Dictionary<MapIcon, IconFix> iconFixes =
             new Dictionary<MapIcon, IconFix>();
         private static readonly List<MapIcon> staleIconFixes = new List<MapIcon>(64);
@@ -86,46 +102,109 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static bool controlWasEnabled;
         private static RawImage threatImage;
         private static bool threatWasEnabled;
-        private static float yaw = DefaultYaw;
-        private static float pitch = DefaultPitch;
+        private static readonly ReliefRig rig = new ReliefRig();
         private static int viewRevision;
         private static int hoveredStackCount;
-        private static Vector2 fittedViewport;
-        private static float coverageScale;
+        private static Vector3 lastCameraPosition;
+        private static float lastCameraSize;
+        private static float lastCameraAspect;
+        private static float ModelSpanX => ModelWidth * source.MapSize.x / 81920f;
+        private static float ModelSpanZ => ModelWidth * source.MapSize.y / 81920f;
 
         private static bool Requested => DynamicMap.mapMaximized && MfdRailPatch.IsApplied &&
             Plugin.Settings?.Command?.MapRelief3D?.Value == true &&
             Plugin.Settings?.Command?.MapTerrainImage?.Value == true;
 
         internal static bool IsDrawing => ready && camera != null && view != null && view.isActiveAndEnabled;
-        internal static float Yaw => yaw;
-        internal static float Pitch => pitch;
+        internal static ReliefRig Rig => rig;
+        internal static float Yaw => rig.Yaw;
+        internal static float Pitch => rig.Pitch;
+        internal static float Zoom => rig.Zoom;
         internal static int ViewRevision => viewRevision;
         internal static int HoveredStackCount => hoveredStackCount;
 
+        /// <summary>Instant turn and tilt about the view centre; buttons ease through the navigator.</summary>
         internal static void Rotate(float yawDelta, float pitchDelta)
         {
-            float nextYaw = Mathf.Repeat(yaw + yawDelta + 180f, 360f) - 180f;
-            float nextPitch = Mathf.Clamp(pitch + pitchDelta, 25f, 70f);
-            if (Mathf.Abs(Mathf.DeltaAngle(yaw, nextYaw)) < .01f &&
-                Mathf.Abs(pitch - nextPitch) < .01f) return;
-            yaw = nextYaw;
-            pitch = nextPitch;
+            rig.Unproject(.5f, .5f, 0f, out float x, out float z);
+            rig.OrbitAbout(yawDelta, pitchDelta, x, 0f, z);
             PlaceCamera();
             viewRevision++;
             nextRender = 0f;
         }
 
-        internal static void ResetOrbit() => Rotate(-yaw, DefaultPitch - pitch);
+        internal static void ResetOrbit() => Rotate(-rig.Yaw, ReliefRig.DefaultPitch - rig.Pitch);
 
+        /// <summary>Camera from the rig: fixed orbit radius around the focus, rig's ortho size.</summary>
         private static void PlaceCamera()
         {
             if (camera == null || sceneRoot == null) return;
-            const float radius = 1122f;
-            float angle = pitch * Mathf.Deg2Rad;
-            camera.transform.localPosition = Quaternion.Euler(0f, yaw, 0f) *
-                new Vector3(0f, Mathf.Sin(angle) * radius, -Mathf.Cos(angle) * radius);
-            camera.transform.LookAt(sceneRoot.transform.position);
+            float angle = rig.Pitch * Mathf.Deg2Rad;
+            Vector3 focus = new Vector3(rig.FocusX, 0f, rig.FocusZ);
+            camera.transform.localPosition = focus + Quaternion.Euler(0f, rig.Yaw, 0f) *
+                new Vector3(0f, Mathf.Sin(angle) * CameraRadius, -Mathf.Cos(angle) * CameraRadius);
+            camera.transform.LookAt(sceneRoot.transform.position + focus);
+            camera.orthographicSize = rig.Size;
+        }
+
+        /// <summary>Screen point to the expanded map viewport's 0..1 coordinates; false outside it.</summary>
+        internal static bool ViewportPoint(Vector2 screen, out float vx, out float vy)
+        {
+            vx = vy = .5f;
+            if (owner?.mapBackground == null) return false;
+            RectTransform viewport = owner.mapBackground.rectTransform;
+            Rect bounds = viewport.rect;
+            if (bounds.width <= 0f || bounds.height <= 0f) return false;
+            Canvas canvas = viewport.GetComponentInParent<Canvas>();
+            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera : null;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, screen,
+                    uiCamera, out Vector2 local)) return false;
+            vx = (local.x - bounds.xMin) / bounds.width;
+            vy = (local.y - bounds.yMin) / bounds.height;
+            return vx >= 0f && vx <= 1f && vy >= 0f && vy <= 1f;
+        }
+
+        /// <summary>The terrain under a viewport point, in model space relative to the scene root.</summary>
+        internal static bool TryGround(float vx, float vy, out Vector3 ground)
+        {
+            ground = default;
+            if (!ready || camera == null || sceneRoot == null) return false;
+            PlaceCamera();
+            Ray ray = camera.ViewportPointToRay(new Vector3(vx, vy, 0f));
+            float nearest = float.MaxValue;
+            bool found = false;
+            foreach (MeshCollider collider in colliders)
+            {
+                if (collider == null || !collider.Raycast(ray, out RaycastHit hit, camera.farClipPlane) ||
+                    hit.distance >= nearest) continue;
+                nearest = hit.distance;
+                ground = hit.point - sceneRoot.transform.position;
+                found = true;
+            }
+            return found;
+        }
+
+        internal static bool WorldToModel(GlobalPosition world, out float x, out float z)
+        {
+            x = z = 0f;
+            if (source == null || source.MapSize.x <= 0f || source.MapSize.y <= 0f) return false;
+            x = world.x / source.MapSize.x * ModelSpanX;
+            z = world.z / source.MapSize.y * ModelSpanZ;
+            return true;
+        }
+
+        /// <summary>
+        /// While the relief draws, the invisible native sheet stays at zoom 1 and centred, so
+        /// native pan, wheel zoom and aircraft follow cannot drift it or resize its icons.
+        /// Projection stays transform-exact whatever the sheet does; this only keeps it still.
+        /// </summary>
+        internal static void PinNative(DynamicMap map)
+        {
+            if (!IsDrawing || map != owner || map?.mapImage == null) return;
+            if (Mathf.Abs(map.GetZoomLevel() - 1f) > 1e-4f) map.SetZoomLevel(1f);
+            if (map.mapImage.transform.localPosition != Vector3.zero)
+                map.mapImage.transform.localPosition = Vector3.zero;
         }
 
         internal static void Tick()
@@ -151,10 +230,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (!ready && !LoadHeightfield()) return;
             if (sceneRoot == null && !BuildScene()) return;
-            if (view == null || view.transform.parent != map.mapImage.transform)
+            if (view == null || view.transform.parent != map.mapBackground.transform)
             {
+                if (view != null) Object.Destroy(view.gameObject);
                 var ui = new GameObject("NOAvionics.IntelligenceTerrain", typeof(RectTransform), typeof(RawImage));
-                ui.transform.SetParent(map.mapImage.transform, false);
+                ui.transform.SetParent(map.mapBackground.transform, false);
                 view = ui.GetComponent<RawImage>();
                 AvKit.Stretch(view.rectTransform);
                 view.raycastTarget = false;
@@ -171,67 +251,80 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Mathf.Clamp01(Plugin.Settings.Command.MapTerrainOpacity.Value));
             if (view.transform.GetSiblingIndex() != 0) view.transform.SetAsFirstSibling();
 
-            FitToViewport(map);
-            FitTerrainCoverage(map);
+            bool cameraMoved = UpdateViewportCamera(map);
             HideNativeGrid();
             MfdMapOrbitControls.Tick(map);
             CaptureFieldLayers();
             ReprojectCachedIcons();
             DeclutterIcons();
-            if (Time.unscaledTime < nextRender) return;
+            // A moving view renders every frame so the terrain never lags the icons.
+            if (!cameraMoved && Time.unscaledTime < nextRender) return;
             nextRender = Time.unscaledTime + RenderInterval;
-            camera.Render();
+            // The scene's exponential fog would wash out a relief a kilometre from its camera.
+            bool fog = RenderSettings.fog;
+            RenderSettings.fog = false;
+            try { camera.Render(); }
+            finally { RenderSettings.fog = fog; }
         }
 
-        private static void FitToViewport(DynamicMap map)
+        private static bool UpdateViewportCamera(DynamicMap map)
         {
-            if (map?.mapBackground == null || map.mapImage == null) return;
+            if (camera == null || map?.mapBackground == null || map.mapImage == null)
+                return false;
             RectTransform viewport = map.mapBackground.rectTransform;
             RectTransform imageRect = map.mapImage.GetComponent<RectTransform>();
-            if (imageRect == null || imageRect.rect.width <= 0f || imageRect.rect.height <= 0f) return;
-            Vector2 size = viewport.rect.size;
-            if (size.x <= 0f || size.y <= 0f ||
-                (size - fittedViewport).sqrMagnitude < 64f) return;
-            fittedViewport = size;
+            Rect bounds = viewport.rect;
+            if (imageRect == null || bounds.width <= 0f || bounds.height <= 0f ||
+                imageRect.rect.width <= 0f || imageRect.rect.height <= 0f) return false;
 
-            // The expanded frame is wider than the native 900-unit image. Zoom that image
-            // through DynamicMap so the relief, icons and native cursor keep one transform.
-            // Only fit on mount or a real viewport resize; player zoom remains free afterward.
-            float cover = Mathf.Max((size.x - 20f) / imageRect.rect.width,
-                (size.y - 20f) / imageRect.rect.height) * 1.04f;
-            float currentImageScale = map.mapImage.transform.localScale.x;
-            if (cover > 1.05f && currentImageScale > 0f &&
-                currentImageScale < cover - 0.01f)
+            float aspect = bounds.width / bounds.height;
+            int renderWidth = aspect > 1.6f ? 2048 : TextureSize;
+            int renderHeight = Mathf.RoundToInt(renderWidth / aspect);
+            if (renderHeight > 2048)
             {
-                float target = Mathf.Clamp(map.GetZoomLevel() * cover / currentImageScale, 1f, 4f);
-                map.SetZoomLevel(target);
+                renderHeight = 2048;
+                renderWidth = Mathf.RoundToInt(renderHeight * aspect);
             }
-            coverageScale = map.mapImage.transform.localScale.x;
-        }
+            else if (renderHeight < 768)
+            {
+                renderWidth = Mathf.Min(2048, Mathf.RoundToInt(768f * aspect));
+                renderHeight = Mathf.RoundToInt(renderWidth / aspect);
+            }
+            if (texture == null || texture.width != renderWidth || texture.height != renderHeight)
+            {
+                if (texture != null) { texture.Release(); Object.Destroy(texture); }
+                texture = new RenderTexture(renderWidth, renderHeight, 24, RenderTextureFormat.ARGB32)
+                {
+                    name = "NOAvionics.IntelligenceTerrain",
+                    filterMode = FilterMode.Bilinear
+                };
+                camera.targetTexture = texture;
+                view.texture = texture;
+                nextRender = 0f;
+            }
+            camera.aspect = aspect;
 
-        private static void FitTerrainCoverage(DynamicMap map)
-        {
-            if (camera == null || coverageScale <= 0f || map?.mapBackground == null) return;
-            RectTransform imageRect = map.mapImage.GetComponent<RectTransform>();
-            if (imageRect == null || imageRect.rect.width <= 0f || imageRect.rect.height <= 0f) return;
-
-            // A rotated square of terrain otherwise leaves sharp empty wedges inside the
-            // expanded map. Frame the projected ground so its four viewport corners land
-            // on terrain. Keep the initial image scale as the reference so later player
-            // zoom is not cancelled by the relief camera.
-            float visibleX = map.mapBackground.rectTransform.rect.width /
-                (imageRect.rect.width * coverageScale);
-            float visibleY = map.mapBackground.rectTransform.rect.height /
-                (imageRect.rect.height * coverageScale * Mathf.Sin(pitch * Mathf.Deg2Rad));
-            float c = Mathf.Abs(Mathf.Cos(yaw * Mathf.Deg2Rad));
-            float s = Mathf.Abs(Mathf.Sin(yaw * Mathf.Deg2Rad));
-            float span = Mathf.Max(visibleX * c + visibleY * s,
-                visibleX * s + visibleY * c);
-            float size = Mathf.Clamp((ModelWidth * .5f - 12f) / span, 180f, 440f);
-            if (Mathf.Abs(camera.orthographicSize - size) < .25f) return;
-            camera.orthographicSize = size;
-            viewRevision++;
-            nextRender = 0f;
+            // The relief owns its view: zoom 1 fits the whole sheet including high terrain,
+            // and the navigator moves the rig in model space. Ocean beyond the sheet is the
+            // same color as the chart.
+            rig.HalfX = ModelSpanX * .5f;
+            rig.HalfZ = ModelSpanZ * .5f;
+            rig.Top = highestModelPoint;
+            rig.Aspect = aspect;
+            ReliefNavigator.Tick(rig);
+            PlaceCamera();
+            bool changed = (camera.transform.position - lastCameraPosition).sqrMagnitude > .01f ||
+                Mathf.Abs(camera.orthographicSize - lastCameraSize) > .01f ||
+                Mathf.Abs(camera.aspect - lastCameraAspect) > .001f;
+            if (changed)
+            {
+                lastCameraPosition = camera.transform.position;
+                lastCameraSize = camera.orthographicSize;
+                lastCameraAspect = camera.aspect;
+                viewRevision++;
+                nextRender = Mathf.Min(nextRender, Time.unscaledTime + 1f / 30f);
+            }
+            return changed;
         }
 
         private static bool LoadHeightfield()
@@ -239,34 +332,40 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             source = Object.FindObjectOfType<MapSettings>();
             string textureName = sprite.texture != null ? sprite.texture.name : null;
             mapAssetName = string.Equals(textureName, SupportedMap, StringComparison.OrdinalIgnoreCase)
-                ? SupportedMap : SafeAssetName(sprite.name) ? sprite.name :
+                ? SupportedMap : string.Equals(textureName, NavalMap, StringComparison.OrdinalIgnoreCase)
+                ? NavalMap : SafeAssetName(sprite.name) ? sprite.name :
                 SafeAssetName(textureName) ? textureName : null;
             if (source == null || source.MapSize.x <= 0f || source.MapSize.y <= 0f ||
                 mapAssetName == null)
                 return Unavailable("No matching baked terrain; using the native map.");
             string external = MapAssetPath(mapAssetName + ".bmap");
             bool custom = File.Exists(external);
-            bool bundled = string.Equals(mapAssetName, SupportedMap, StringComparison.OrdinalIgnoreCase);
+            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap;
             if (!custom && !bundled)
                 return Unavailable("No matching baked terrain; using the native map.");
             try
             {
+                string resource = mapAssetName == NavalMap ? NavalHeightResource : HeightResource;
                 using (Stream stream = custom ? File.OpenRead(external) :
-                    typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(HeightResource))
+                    typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(resource))
                 {
-                    if (stream == null || stream.Length != 16 + Samples * Samples * 2)
+                    if (stream == null || stream.Length < 16 + Samples * Samples * 2)
                         return Unavailable("Terrain asset missing or invalid; using the native map.");
                     using (var input = new BinaryReader(stream))
                     {
                         uint magic = input.ReadUInt32();
                         ushort version = input.ReadUInt16(), side = input.ReadUInt16();
                         float width = input.ReadSingle(), height = input.ReadSingle();
-                        if (magic != 0x50414D42 || version != 1 || side != Samples ||
+                        if (magic != 0x50414D42 || (version != 1 && version != 2) || side != Samples ||
                             float.IsNaN(width) || float.IsInfinity(width) ||
                             float.IsNaN(height) || float.IsInfinity(height) ||
                             Mathf.Abs(width - source.MapSize.x) > 1f ||
                             Mathf.Abs(height - source.MapSize.y) > 1f)
                             return Unavailable("Terrain asset map size differs; using the native map.");
+                        seaLevel = version == 2 ? input.ReadSingle() : SeaLevel;
+                        if (float.IsNaN(seaLevel) || float.IsInfinity(seaLevel) ||
+                            stream.Length != (version == 2 ? 20 : 16) + Samples * Samples * 2)
+                            return Unavailable("Terrain asset header invalid; using the native map.");
                         heights = new float[Samples * Samples];
                         land = new bool[heights.Length];
                         int landCount = 0;
@@ -274,10 +373,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         {
                             ushort encoded = input.ReadUInt16();
                             land[i] = encoded != 0;
-                            heights[i] = encoded == 0 ? SeaLevel : SeaLevel + (encoded - 1) * 0.25f;
+                            heights[i] = encoded == 0 ? seaLevel : seaLevel + (encoded - 1) * 0.25f;
+                            highestModelPoint = Mathf.Max(highestModelPoint,
+                                (heights[i] - seaLevel) * VerticalScale * ModelWidth / 81920f);
                             if (land[i]) landCount++;
                         }
-                        if (landCount < 10000) return Unavailable("Terrain asset has too little land.");
+                        if (landCount < 1024) return Unavailable("Terrain asset has too little land.");
+                        ReliefHoles.FillRaised(heights, land, Samples, seaLevel, CutOutRimRise);
                     }
                 }
             }
@@ -315,8 +417,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             sceneRoot.transform.position = new Vector3(0f, -100000f, 0f);
             sceneRoot.layer = TerrainLayer;
 
-            groundMaterial = new Material(shader) { mainTexture = styleTexture != null ? styleTexture : sprite.texture,
+            // The ground must write depth: Sprites/Default does not, so far slopes and tiles drew
+            // over near ones and the grid survived only where it sorted after the tiles. The URP
+            // particle unlit shader ships its opaque variant and keeps texture x vertex shade.
+            Shader opaque = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            groundMaterial = new Material(opaque != null ? opaque : shader) {
+                mainTexture = styleTexture != null ? styleTexture : sprite.texture,
                 color = new Color(1.25f, 1.28f, 1.27f, 1f) };
+            if (opaque != null)
+            {
+                groundMaterial.SetFloat("_Cull", 0f);
+                groundMaterial.renderQueue = 2000;
+            }
             controlMaterial = new Material(shader) { color = new Color(1f, 1f, 1f, 0.22f) };
             threatMaterial = new Material(shader) { color = new Color(1f, 1f, 1f, 0.35f) };
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
@@ -356,28 +468,25 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             camera.orthographicSize = 440f;
             camera.cullingMask = 1 << TerrainLayer;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(0.015f, 0.029f, 0.039f, 1f);
+            camera.backgroundColor = mapAssetName == NavalMap
+                ? new Color(5f / 255f, 12f / 255f, 18f / 255f, 1f)
+                : new Color(17f / 255f, 28f / 255f, 36f / 255f, 1f);
             camera.nearClipPlane = 0.3f;
             camera.farClipPlane = 3000f;
             camera.allowHDR = false;
             camera.allowMSAA = false;
-            texture = new RenderTexture(TextureSize, TextureSize, 16, RenderTextureFormat.ARGB32)
-            {
-                name = "NOAvionics.IntelligenceTerrain",
-                filterMode = FilterMode.Bilinear
-            };
-            camera.targetTexture = texture;
             return true;
         }
 
         private static void LoadStyle()
         {
             string custom = mapAssetName != null ? MapAssetPath(mapAssetName + "_intel.png") : null;
-            bool bundled = string.Equals(mapAssetName, SupportedMap, StringComparison.OrdinalIgnoreCase);
+            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap;
             try
             {
                 using (Stream stream = custom != null && File.Exists(custom) ? File.OpenRead(custom) :
-                    bundled ? typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(StyleResource) : null)
+                    bundled ? typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(
+                        mapAssetName == NavalMap ? NavalStyleResource : StyleResource) : null)
                 {
                     if (stream == null || stream.Length <= 0 || stream.Length > 8 * 1024 * 1024) return;
                     var bytes = new byte[stream.Length];
@@ -416,7 +525,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static Mesh MakeTile(int tileX, int tileZ)
         {
             const int side = TileCells + 1;
-            float cell = ModelWidth / (Samples - 1);
+            float cellX = ModelSpanX / (Samples - 1);
+            float cellZ = ModelSpanZ / (Samples - 1);
             Vector4 atlas = styleTexture != null ? new Vector4(0f, 0f, 1f, 1f) :
                 DataUtility.GetOuterUV(sprite);
             var vertices = new Vector3[side * side];
@@ -429,12 +539,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 int gx = tileX * TileCells + x, gz = tileZ * TileCells + z;
                 int at = z * side + x;
-                vertices[at] = new Vector3(-ModelWidth * .5f + gx * cell,
-                    ModelHeight(gx, gz), -ModelWidth * .5f + gz * cell);
+                vertices[at] = new Vector3(-ModelSpanX * .5f + gx * cellX,
+                    ModelHeight(gx, gz), -ModelSpanZ * .5f + gz * cellZ);
                 uv[at] = new Vector2(Mathf.Lerp(atlas.x, atlas.z, gx / (float)(Samples - 1)),
                     Mathf.Lerp(atlas.y, atlas.w, gz / (float)(Samples - 1)));
-                float dx = (ModelHeight(gx + 1, gz) - ModelHeight(gx - 1, gz)) / (2f * cell);
-                float dz = (ModelHeight(gx, gz + 1) - ModelHeight(gx, gz - 1)) / (2f * cell);
+                float dx = (ModelHeight(gx + 1, gz) - ModelHeight(gx - 1, gz)) / (2f * cellX);
+                float dz = (ModelHeight(gx, gz + 1) - ModelHeight(gx, gz - 1)) / (2f * cellZ);
                 Vector3 normal = new Vector3(-dx, 1f, -dz).normalized;
                 byte shade = (byte)Mathf.Clamp(165f + 55f * Vector3.Dot(normal, light), 100f, 230f);
                 colors[at] = new Color32(shade, shade, shade, 255);
@@ -459,15 +569,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static Mesh MakeGroundGrid()
         {
-            var vertices = new List<Vector3>(3000);
-            var indices = new List<int>(3000);
+            // One segment per sample follows the mesh edges exactly, so the depth-tested
+            // lines never dip under a ridge between samples.
+            var vertices = new List<Vector3>(18 * 2 * (Samples - 1));
+            var indices = new List<int>(vertices.Capacity);
             for (int grid = -4; grid <= 4; grid++)
             {
                 int fixedSample = Mathf.Clamp(Samples / 2 + grid * 56, 0, Samples - 1);
-                for (int i = 0; i < Samples - 1; i += 4)
+                for (int i = 0; i < Samples - 1; i++)
                 {
-                    Add(fixedSample, i, fixedSample, i + 4);
-                    Add(i, fixedSample, i + 4, fixedSample);
+                    Add(fixedSample, i, fixedSample, i + 1);
+                    Add(i, fixedSample, i + 1, fixedSample);
                 }
             }
             var mesh = new Mesh { name = "NOAvionics.TerrainGrid" };
@@ -486,14 +598,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static Vector3 GridPoint(int x, int z) => new Vector3(
-            (x / (float)(Samples - 1) - .5f) * ModelWidth,
+            (x / (float)(Samples - 1) - .5f) * ModelSpanX,
             ModelHeight(x, z) + .35f,
-            (z / (float)(Samples - 1) - .5f) * ModelWidth);
+            (z / (float)(Samples - 1) - .5f) * ModelSpanZ);
 
         private static float ModelHeight(int x, int z) =>
             (heights[Mathf.Clamp(z, 0, Samples - 1) * Samples +
-                Mathf.Clamp(x, 0, Samples - 1)] - SeaLevel) *
-            VerticalScale * ModelWidth / source.MapSize.x;
+                Mathf.Clamp(x, 0, Samples - 1)] - seaLevel) *
+            VerticalScale * ModelWidth / 81920f;
 
         private static float GroundHeight(float worldX, float worldZ)
         {
@@ -508,16 +620,32 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         internal static bool TryProject(float worldX, float worldZ, Rect rect, out Vector2 point)
         {
+            if (!IsDrawing || source == null)
+            {
+                point = default;
+                return false;
+            }
+            return TryProjectAtHeight(worldX, worldZ, GroundHeight(worldX, worldZ) + 1f,
+                rect, out point);
+        }
+
+        private static bool TryProjectAtHeight(float worldX, float worldZ, float modelY,
+            Rect rect, out Vector2 point)
+        {
             point = default;
-            if (!IsDrawing || source == null) return false;
+            if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
             Vector3 world = sceneRoot.transform.position + new Vector3(
-                worldX / source.MapSize.x * ModelWidth,
-                GroundHeight(worldX, worldZ) + 1f,
-                worldZ / source.MapSize.y * ModelWidth);
+                worldX / source.MapSize.x * ModelSpanX, modelY,
+                worldZ / source.MapSize.y * ModelSpanZ);
             Vector3 screen = camera.WorldToViewportPoint(world);
             if (screen.z <= 0f) return false;
-            point = new Vector2(rect.xMin + screen.x * rect.width,
-                rect.yMin + screen.y * rect.height);
+            RectTransform viewport = owner.mapBackground.rectTransform;
+            Rect bounds = viewport.rect;
+            Vector3 uiWorld = viewport.TransformPoint(new Vector3(
+                bounds.xMin + screen.x * bounds.width,
+                bounds.yMin + screen.y * bounds.height));
+            Vector3 imageLocal = owner.mapImage.transform.InverseTransformPoint(uiWorld);
+            point = new Vector2(imageLocal.x, imageLocal.y);
             return true;
         }
 
@@ -536,6 +664,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             fix.Z = native.y / mapDisplayFactor;
             fix.Depth = native.z;
             fix.NativeScale = symbol.localScale;
+            fix.Airborne = false;
+            if (icon is UnitMapIcon trackedIcon &&
+                (trackedIcon.unit is Aircraft || trackedIcon.unit is Missile) &&
+                NativeIconPosition != null)
+            {
+                // The native map has already chosen the faction-visible track position.
+                // Its Y value is the observed altitude, not the unit's hidden true position.
+                fix.Altitude = ((Vector3)NativeIconPosition.GetValue(icon)).y / mapDisplayFactor;
+                fix.Airborne = true;
+            }
             if (icon is UnitMapIcon unitIcon && unitIcon.unit?.definition?.mapOrient == true)
             {
                 // Rotate the native, faction-known heading through the same terrain view.
@@ -583,10 +721,24 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect)
         {
-            if (!TryProject(fix.X, fix.Z, rect, out Vector2 point)) return;
+            float groundHeight = GroundHeight(fix.X, fix.Z);
+            if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f,
+                    rect, out Vector2 point)) return;
             Transform symbol = icon.iconImage.transform;
             Vector3 screenPoint = owner.mapImage.transform.TransformPoint(new Vector3(point.x, point.y, 0f));
-            Vector3 parentPoint = symbol.parent.InverseTransformPoint(screenPoint);
+            Vector3 groundPoint = symbol.parent.InverseTransformPoint(screenPoint);
+            float lift = fix.Airborne ? Mathf.Clamp(
+                (fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f -
+                groundHeight, 0f, MaximumAirLift) : 0f;
+            Vector3 parentPoint = groundPoint;
+            Vector2 iconPoint = point;
+            if (lift > .5f && TryProjectAtHeight(fix.X, fix.Z,
+                    groundHeight + 1f + lift, rect, out iconPoint))
+            {
+                Vector3 raised = owner.mapImage.transform.TransformPoint(
+                    new Vector3(iconPoint.x, iconPoint.y, 0f));
+                parentPoint = symbol.parent.InverseTransformPoint(raised);
+            }
             symbol.localPosition = new Vector3(parentPoint.x, parentPoint.y, fix.Depth);
             symbol.localScale = fix.NativeScale;
             RectTransform symbolRect = symbol as RectTransform;
@@ -612,7 +764,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     }
                 }
             }
-            PlaceStem(icon, symbol, parentPoint);
+            PlaceStem(icon, symbol, groundPoint, parentPoint, lift > .5f);
         }
 
         internal static void ProjectMarker(Transform marker, float mapDisplayFactor)
@@ -634,9 +786,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             marker.transform.position = marker.Icon.iconImage.transform.position;
         }
 
-        private static void PlaceStem(MapIcon icon, Transform symbol, Vector3 ground)
+        private static void PlaceStem(MapIcon icon, Transform symbol, Vector3 ground,
+            Vector3 projected, bool airborne)
         {
-            bool show = icon is AirbaseMapIcon || owner.selectedIcons.Contains(icon);
+            bool show = airborne || icon is AirbaseMapIcon || owner.selectedIcons.Contains(icon);
             if (!stems.TryGetValue(icon, out StemMark mark))
             {
                 if (!show || stems.Count >= MaximumStems) return;
@@ -649,11 +802,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             mark.Foot.gameObject.SetActive(show);
             if (!show) return;
             float scale = Mathf.Max(.001f, Mathf.Abs(symbol.parent.lossyScale.x));
-            float lift = 12f / scale;
-            symbol.localPosition = ground + Vector3.up * lift;
+            Vector3 tip = airborne ? projected : ground + Vector3.up * (12f / scale);
+            Vector3 span = tip - ground;
+            float length = Mathf.Max(1f / scale, span.magnitude);
+            symbol.localPosition = new Vector3(tip.x, tip.y, symbol.localPosition.z);
             RectTransform line = mark.Line.rectTransform;
-            line.localPosition = ground + Vector3.up * (lift * .5f);
-            line.sizeDelta = new Vector2(1.25f / scale, lift);
+            line.localPosition = ground + span * .5f;
+            line.localEulerAngles = new Vector3(0f, 0f,
+                -Mathf.Atan2(span.x, span.y) * Mathf.Rad2Deg);
+            line.sizeDelta = new Vector2(1.25f / scale, length);
             RectTransform foot = mark.Foot.rectTransform;
             foot.localPosition = ground;
             foot.sizeDelta = Vector2.one * (3.5f / scale);
@@ -684,9 +841,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         internal static bool TryUnproject(Vector2 local, Rect rect, out GlobalPosition position)
         {
             position = default;
-            if (!IsDrawing || source == null || rect.width <= 0f || rect.height <= 0f) return false;
-            float u = (local.x - rect.xMin) / rect.width;
-            float v = (local.y - rect.yMin) / rect.height;
+            if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
+            RectTransform viewport = owner.mapBackground.rectTransform;
+            Rect bounds = viewport.rect;
+            if (bounds.width <= 0f || bounds.height <= 0f) return false;
+            Vector3 uiWorld = owner.mapImage.transform.TransformPoint(local);
+            Vector3 viewportLocal = viewport.InverseTransformPoint(uiWorld);
+            float u = (viewportLocal.x - bounds.xMin) / bounds.width;
+            float v = (viewportLocal.y - bounds.yMin) / bounds.height;
             if (u < 0f || u > 1f || v < 0f || v > 1f) return false;
             Ray ray = camera.ViewportPointToRay(new Vector3(u, v, 0f));
             bool found = false;
@@ -702,8 +864,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
             if (!found) return false;
             Vector3 point = hitPoint - sceneRoot.transform.position;
-            position = new GlobalPosition(point.x / ModelWidth * source.MapSize.x, 0f,
-                point.z / ModelWidth * source.MapSize.y);
+            position = new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
+                point.z / ModelSpanZ * source.MapSize.y);
             return true;
         }
 
@@ -717,8 +879,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             elevation = 0f;
             if (owner == null || MapUiPointer.OverControls() || !TryCursor(owner, out position))
                 return false;
-            elevation = SeaLevel + GroundHeight(position.x, position.z) *
-                source.MapSize.x / (VerticalScale * ModelWidth);
+            elevation = seaLevel + GroundHeight(position.x, position.z) *
+                81920f / (VerticalScale * ModelWidth);
             return true;
         }
 
@@ -744,8 +906,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             clusterIndex.Clear();
             hoveredStackCount = 0;
             if (owner?.mapBackground == null || owner.mapIcons == null) return;
-            float zoom = owner.mapImage.transform.localScale.x;
-            if (zoom >= 2.4f) return;
+            if (rig.Zoom >= 2.4f) return;
             RectTransform viewport = owner.mapBackground.rectTransform;
             Canvas canvas = viewport.GetComponentInParent<Canvas>();
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
@@ -922,8 +1083,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             texture = null;
             camera = null;
             nextRender = 0f;
-            fittedViewport = Vector2.zero;
-            coverageScale = 0f;
+            ReliefNavigator.Release();
+            lastCameraPosition = Vector3.zero;
+            lastCameraSize = lastCameraAspect = 0f;
         }
 
         internal static void Reset()
@@ -935,12 +1097,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             mapAssetName = null;
             heights = null;
             land = null;
+            seaLevel = SeaLevel;
+            highestModelPoint = 0f;
             if (styleTexture != null) Object.Destroy(styleTexture);
             styleTexture = null;
             ready = false;
             unavailable = false;
-            yaw = DefaultYaw;
-            pitch = DefaultPitch;
+            rig.Reset();
+            ReliefNavigator.Reset();
             viewRevision = 0;
         }
     }

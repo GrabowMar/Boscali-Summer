@@ -42,27 +42,21 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         /// <summary>
         /// The presentation ladder the settings page labels and the board applies. Every step is
-        /// reachable from both directions, every value is inside its bound, and every anchor
-        /// resolves to the screen edge it names.
+        /// reachable from both directions and every value is inside its bound. The element hangs
+        /// at one fixed dock below the native weapon panel since the 2026-09-28 minimal rebuild,
+        /// so there is no anchor preset to test any more.
         /// </summary>
         private static void Layout()
         {
-            TestAssert.That(HudLayout.AnchorCount == 8, "Eight anchor presets, no more and no less");
-            TestAssert.That(HudLayout.AnchorName(0) == "UNDER WEAPONS",
-                "The default anchor is the one under the vanilla weapon column");
-            for (int i = 0; i < HudLayout.AnchorCount; i++)
+            for (int i = 0; i < HudLayout.ScaleCount; i++)
             {
-                TestAssert.That(HudLayout.Cycle(i, HudLayout.AnchorCount, 1) == (i + 1) % HudLayout.AnchorCount,
-                    "Next from anchor " + i + " is reachable");
-                TestAssert.That(HudLayout.Cycle(i, HudLayout.AnchorCount, -1) ==
-                    (i + HudLayout.AnchorCount - 1) % HudLayout.AnchorCount,
-                    "Previous from anchor " + i + " is reachable");
-                TestAssert.That(!string.IsNullOrEmpty(HudLayout.AnchorName(i)),
-                    "Every anchor has a label the pilot can read");
+                TestAssert.That(HudLayout.Cycle(i, HudLayout.ScaleCount, 1) == (i + 1) % HudLayout.ScaleCount,
+                    "Next from scale step " + i + " is reachable");
+                TestAssert.That(HudLayout.Cycle(i, HudLayout.ScaleCount, -1) ==
+                    (i + HudLayout.ScaleCount - 1) % HudLayout.ScaleCount,
+                    "Previous from scale step " + i + " is reachable");
             }
 
-            TestAssert.That(HudLayout.ClampAnchor(-1) == 0 && HudLayout.ClampAnchor(99) == HudLayout.AnchorCount - 1,
-                "An out-of-range anchor clamps instead of throwing");
             TestAssert.That(HudLayout.ClampScale(-5) == 0 && HudLayout.ClampScale(99) == HudLayout.ScaleCount - 1,
                 "An out-of-range size step clamps");
             TestAssert.That(HudLayout.ClampOpacity(99) == HudLayout.OpacityCount - 1,
@@ -87,26 +81,6 @@ namespace BoscaliSummer.Tests.Features.Hud
                 "The last opacity step is OFF, which hides the element");
             TestAssert.That(HudLayout.Opacity(0) <= 1f && HudLayout.Opacity(0) > 0f,
                 "FULL is fully solid but never over-bright");
-
-            TestAssert.That(HudLayout.Place(HudAnchor.TopCentre).AnchorY > 0.9f,
-                "A top anchor sits at the top of the screen");
-            TestAssert.That(HudLayout.Place(HudAnchor.BottomRight).AnchorY < 0.1f,
-                "A bottom anchor sits at the bottom of the screen");
-            TestAssert.That(HudLayout.Place(HudAnchor.UnderWeapons).AnchorX == 1f &&
-                HudLayout.Place(HudAnchor.UnderWeapons).AnchorY == 1f,
-                "The under-weapons anchor starts from the top-right corner the weapon column occupies");
-            TestAssert.That(HudLayout.Place(HudAnchor.MiddleLeft).AnchorX == 0f &&
-                HudLayout.Place(HudAnchor.MiddleLeft).AnchorY == 0.5f,
-                "A middle anchor is centred vertically on its edge");
-
-            for (int i = 0; i < HudLayout.AnchorCount; i++)
-            {
-                HudAnchor anchor = (HudAnchor)i;
-                HudPlacement place = HudLayout.Place(anchor);
-                TestAssert.That(place.AnchorX >= 0f && place.AnchorX <= 1f &&
-                    place.AnchorY >= 0f && place.AnchorY <= 1f,
-                    "Anchor " + HudLayout.AnchorName(i) + " resolves to a normalised screen anchor");
-            }
         }
 
         /// <summary>

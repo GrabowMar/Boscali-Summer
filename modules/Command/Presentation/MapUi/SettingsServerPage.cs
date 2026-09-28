@@ -14,7 +14,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// <summary>Faction tasking and live host controls, read-only for remote clients.</summary>
     internal sealed partial class SettingsMfdPanel
     {
-        private const int ServerPageCount = 2;
+        private const int ServerPageCount = 3;
+        private const int ServerTasking = 0, ServerSettings = 1, ServerEffects = 2;
         private const int TaskRowCount = 3;
         private const float TaskingRefreshSeconds = 2f;
         private ISecondaryObjectivesView tasking;
@@ -34,14 +35,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             const float gap = 6f;
             AvNode bar = AvBox.Row("server-tabs").Height(barHeight)
                 .Add(AvBox.Cell("tasking").Grow())
-                .Add(AvBox.Cell("settings").Grow());
+                .Add(AvBox.Cell("settings").Grow())
+                .Add(AvBox.Cell("effects").Grow());
             bar.Arrange(new Rect(body.x, body.y, body.width, barHeight));
             serverTabs = new[]
             {
                 AvStyled.Button(parent, bar.At("tasking"), "TASKING", "tab",
                     () => SetServerPage(0), AvButtonStyle.Tab),
                 AvStyled.Button(parent, bar.At("settings"), "HOST SETTINGS", "tab",
-                    () => SetServerPage(1), AvButtonStyle.Tab)
+                    () => SetServerPage(ServerSettings), AvButtonStyle.Tab),
+                AvStyled.Button(parent, bar.At("effects"), "EFFECTS", "tab",
+                    () => SetServerPage(ServerEffects), AvButtonStyle.Tab)
             };
             serverPages = new GameObject[ServerPageCount];
             for (int i = 0; i < ServerPageCount; i++)
@@ -55,7 +59,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var content = new Rect(body.x, body.y - barHeight - gap,
                 body.width, body.height - barHeight - gap);
             BuildTaskingPage((RectTransform)serverPages[0].transform, content);
-            BuildHostSettingsPage((RectTransform)serverPages[1].transform, content);
+            BuildHostSettingsPage((RectTransform)serverPages[ServerSettings].transform, content,
+                ServerSettings, HostSettingsPage.Settings, "HOST SETTINGS");
+            BuildHostSettingsPage((RectTransform)serverPages[ServerEffects].transform, content,
+                ServerEffects, HostSettingsPage.Effects, "EFFECTS");
             SetServerPage(0);
         }
 
@@ -70,10 +77,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             pageScrolls[ServerDisplay] = serverScrolls[serverPage];
             AvButton.ClearTooltip();
             if (shell != null && shell.Page == TabServer)
-                shell.DataBar.State.text = serverPage == 0 ? "FACTION TASKING" : "HOST SETTINGS";
+                shell.DataBar.State.text = ServerPageTitle();
             nextTick = 0f;
             RefreshPanel();
         }
+
+        private string ServerPageTitle() =>
+            serverPage == ServerTasking ? "FACTION TASKING" : serverPage == ServerEffects ? "WORLD EFFECTS" : "HOST SETTINGS";
 
         private void BuildTaskingPage(RectTransform parent, Rect body)
         {
@@ -98,39 +108,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 taskRows[i] = new ListRow(parent, x, area.y - i * ListRow.Pitch, width);
         }
 
-        private void BuildHostSettingsPage(RectTransform parent, Rect body)
+        private void BuildHostSettingsPage(RectTransform parent, Rect body, int page,
+            HostSettingsPage kind, string title)
         {
+            var views = new List<IHostSettingsView>();
             int settingRows = 0;
-            int sections = 0;
             if (hostSettings != null)
             {
                 for (int i = 0; i < hostSettings.Views.Count; i++)
                 {
-                    sections++;
+                    if (hostSettings.Views[i].Page != kind) continue;
+                    views.Add(hostSettings.Views[i]);
                     settingRows += hostSettings.Views[i].Rows.Count;
                 }
             }
 
-            parent = Page(ServerDisplay, parent, body, settingRows, Math.Max(1, sections), out Rect area);
-            serverScrolls[1] = pageScrolls[ServerDisplay];
-            if (hostSettings != null)
+            parent = Page(ServerDisplay, parent, body, settingRows, Math.Max(1, views.Count), out Rect area);
+            serverScrolls[page] = pageScrolls[ServerDisplay];
+            if (views.Count > 0)
                 refreshers.Add(() =>
                 {
-                    if (serverPage != 1) return;
-                    for (int i = 0; i < hostSettings.Views.Count; i++) hostSettings.Views[i].Refresh();
+                    if (serverPage != page) return;
+                    for (int i = 0; i < views.Count; i++) views[i].Refresh();
                 });
 
-            if (hostSettings == null || hostSettings.Views.Count == 0)
+            if (views.Count == 0)
             {
-                Heading(parent, ref area, "01", "HOST SETTINGS", "NO MODULE CONTROLS");
+                Heading(parent, ref area, "01", title, "NO MODULE CONTROLS");
                 AvStyled.Label(parent, TakeRow(ref area), "No host settings are available.", "row-sub");
                 return;
             }
 
             int section = 1;
-            for (int v = 0; v < hostSettings.Views.Count; v++)
+            for (int v = 0; v < views.Count; v++)
             {
-                IHostSettingsView view = hostSettings.Views[v];
+                IHostSettingsView view = views[v];
                 Heading(parent, ref area, section.ToString("00", CultureInfo.InvariantCulture), view.Section, null);
 
                 for (int r = 0; r < view.Rows.Count; r++)

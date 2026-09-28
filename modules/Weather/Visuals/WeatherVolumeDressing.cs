@@ -17,7 +17,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
     {
         private const int MapSize = 256;
         private const int FarMapSize = 128;
-        private const int NoiseSize = 64;
+        internal const int NoiseSize = 64;
+        internal const int NoiseTexels = NoiseSize * NoiseSize * NoiseSize;
         private const float VolumeTop = 16000f;
         private const float FarSpanScale = 3f;
         private const float MinFarHalf = 240000f;
@@ -36,6 +37,17 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private bool blendUnavailable;
         private WeatherKey mapKey;
         private float volumeBottom, volumeTop = VolumeTop;
+        private float horizonCover, previousHorizonCover;
+        private readonly Vector4[] heroA = new Vector4[Superstructures.MaxCount];
+        private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
+        // Set-pieces build and decay on screen over ~20 s, so a console change never pops.
+        private readonly float[] heroShown = new float[Superstructures.MaxCount];
+        private readonly Vector2[] heroSite = new Vector2[Superstructures.MaxCount];
+        private float cameraInCloud;
+        private float fogShown;
+
+        /// <summary>0..1 how deep the camera is inside cloud, smoothed; read by the atmosphere.</summary>
+        internal float CameraInCloud => cameraInCloud;
         private float previousBottom, previousTop;
         private int mapUpdates;
         private GameObject root;
@@ -68,6 +80,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
         internal bool Usable => !failed;
 
         internal WeatherVolumeDressing(ManualLogSource log) { logger = log; shadows = new WeatherCloudShadows(); }
+
+        /// <summary>The shared detail-noise bytes (RGBA per texel), or null until generated.</summary>
+        internal static byte[] NoiseData => Volatile.Read(ref sharedNoise);
 
         internal static void WarmNoise()
         {
@@ -154,9 +169,30 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetFloat("_CloudHeightShift", cloudShift);
             material.SetVector("_CloudWorldOffset", offset);
             material.SetVector("_CloudCameraForward", camera.transform.forward);
-            material.SetVector("_CloudAltitudeBounds", new Vector2(
-                (mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom) + cloudShift,
-                (mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop) + cloudShift));
+            float boundsBottom = (mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom) + cloudShift;
+            float boundsTop = (mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop) + cloudShift;
+            // Scenery storms: static set-pieces the state builds up; they widen the march bounds.
+            int heroes = field.SuperstructureCount;
+            for (int i = 0; i < heroA.Length; i++)
+            {
+                if (i >= heroes) { heroA[i] = Vector4.zero; heroB[i] = Vector4.zero; heroShown[i] = 0f; continue; }
+                Superstructure s = field.SuperstructureAt(i);
+                var site = new Vector2(s.X, s.Z);
+                if (site != heroSite[i]) { heroSite[i] = site; heroShown[i] = 0f; }
+                heroShown[i] = Mathf.MoveTowards(heroShown[i], s.Strength, Time.deltaTime / 20f);
+                heroA[i] = new Vector4(s.X, s.Z, s.Heading, (float)s.Kind);
+                heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
+                boundsBottom = Mathf.Min(boundsBottom, 350f);
+                boundsTop = Mathf.Max(boundsTop, s.Top + 1500f);
+            }
+            // The console fog bank eases in and out like the set-pieces.
+            fogShown = Mathf.MoveTowards(fogShown, (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f,
+                Time.deltaTime / 20f);
+            material.SetFloat("_FogBank", fogShown);
+            material.SetVectorArray("_HeroA", heroA);
+            material.SetVectorArray("_HeroB", heroB);
+            material.SetFloat("_HeroCount", heroes);
+            material.SetVector("_CloudAltitudeBounds", new Vector2(boundsBottom, boundsTop));
             // Static weather: the detail texture does not crawl either.
             material.SetVector("_CloudWindOffset", Vector2.zero);
             Vector3 sunDirection = level.sun != null ? -level.sun.transform.forward : Vector3.up;
@@ -177,26 +213,51 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float extinction = RenderSettings.fog ? Mathf.Clamp(RenderSettings.fogDensity, 0.000008f, 0.00055f) : 0.000008f;
             material.SetFloat("_CloudAirExtinction", extinction);
             material.SetFloat("_CloudStorm", field.Params.Severity);
+            // Cloud genera for the current state (they fade with it).
+            StateParams sky = field.Params;
+            material.SetFloat("_LayerDepth", sky.LayerDepth);
+            material.SetFloat("_LayerSmooth", sky.LayerSmooth);
+            material.SetFloat("_MidCover", sky.MidCover);
+            material.SetFloat("_MidSheet", sky.MidSheet);
+            material.SetFloat("_HighCover", sky.HighCover);
+            material.SetFloat("_HighVeil", sky.HighVeil);
+            WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
+            material.SetVector("_CloudWindDir", new Vector2(windX, windZ));
+            // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
+            float ring = Mathf.Lerp(previousHorizonCover, horizonCover, mapBlend);
+            material.SetFloat("_HorizonCover", Mathf.Clamp01(Mathf.Max(ring, sky.Cumulus * 0.3f + sky.Convective * 0.2f)));
+            material.SetFloat("_HorizonDeck", sky.CloudBase + cloudShift + Mathf.Max(300f, sky.LayerDepth) * 0.4f);
+            material.SetFloat("_HorizonDepth", Mathf.Max(300f, sky.LayerDepth));
+            // The frontal boundary: one side of the map under the deck, the other opening up.
+            SkySplit split = field.Split;
+            material.SetVector("_SplitA", new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));
+            material.SetVector("_SplitB", new Vector4(split.Amount, split.MeanderAmplitude,
+                Mathf.Max(1000f, split.MeanderWavelength), split.MeanderPhase));
+            // Inside cloud: near-field density and wisps, eased so crossing an edge never pops.
+            float depthHere = CloudDensityAt((float)global.x, (float)global.y, (float)global.z);
+            cameraInCloud = Mathf.MoveTowards(cameraInCloud, Mathf.Clamp01((depthHere - 0.02f) * 5f), Time.deltaTime * 1.5f);
+            material.SetFloat("_CameraInCloud", cameraInCloud);
+            material.SetFloat("_CloudPixelAngle",
+                2f * Mathf.Tan(camera.fieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, camera.pixelHeight));
             bool lowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f;
             material.SetFloat("_CloudSteps", lowDetail ? 64f : 96f);
             material.SetFloat("_CloudFarSteps", lowDetail ? 12f : 20f);
             renderer.enabled = true;
             HideReason = null;
             ReplaceSkyClouds(level);
-            shadows.Update(level, field, currentCloudHeight);
+            shadows.Update(level, field, currentCloudHeight, camera);
         }
 
-        internal bool InCloud(float x, float y, float z)
+        internal bool InCloud(float x, float y, float z) => Active && CloudDensityAt(x, y, z) > 0.08f;
+
+        /// <summary>The same bodies the shader draws, at one point: the gaps of a broken deck are clear air.</summary>
+        private float CloudDensityAt(float x, float y, float z)
         {
-            if (!Active || activeField == null) return false;
-            WeatherPoint point = activeField.Sample(x, z);
-            float height = y - cloudShift;
-            if (point.FrontCover > 0.48f && height > point.FrontBase + 80f && height < point.FrontTop - 80f)
-                return true;
-            if (height < point.CloudBase + 80f || height > point.CloudTop - 80f) return false;
-            float h = Mathf.Clamp01((height - point.CloudBase) / Mathf.Max(1f, point.CloudTop - point.CloudBase));
-            return (point.BackgroundCover > 0.34f && height < point.CloudBase + 1400f) ||
-                (point.CellShape > 0.25f + 0.43f * h * h && h < 0.94f);
+            if (activeField == null) return 0f;
+            byte[] data = NoiseData;
+            if (data == null || data.Length != NoiseTexels * 4) return 0f;
+            return new CloudBodies(data, NoiseSize, activeField.Params, activeField.PrevailingHeading, activeField.Split, fogShown)
+                .Density(activeField.Sample(x, z), x, y, z, cloudShift);
         }
 
         internal void Restore()
@@ -246,7 +307,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
             {
                 previousBottom = first ? result.Bottom : volumeBottom;
                 previousTop = first ? result.Top : volumeTop;
+                previousHorizonCover = first ? result.HorizonCover : horizonCover;
             }
+            horizonCover = result.HorizonCover;
             volumeBottom = result.Bottom;
             volumeTop = result.Top;
             fadeStart = missionTime;
@@ -303,6 +366,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float bottom = VolumeTop, top = 0f;
             Fill(snapshot, nearHalf, MapSize, result.Pixels, result.Profiles, ref bottom, ref top);
             Fill(snapshot, outerHalf, FarMapSize, result.FarPixels, result.FarProfiles, ref bottom, ref top);
+            result.HorizonCover = RingCover(result.FarPixels, FarMapSize);
             result.Bottom = Math.Max(0f, bottom - 500f);
             result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
             return result;
@@ -327,6 +391,25 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     top = Math.Max(top, Math.Max(p.CloudTop, p.FrontTop));
                 }
             }
+        }
+
+        /// <summary>Mean sheet and front cover on the far map's outer ring: what the horizon deck
+        /// continues with, so the two agree where they meet.</summary>
+        private static float RingCover(Color32[] pixels, int size)
+        {
+            float sum = 0f;
+            int n = 0;
+            int ring = size / 10;
+            for (int z = 0; z < size; z++)
+            for (int x = 0; x < size; x++)
+            {
+                if (x >= ring && x < size - ring && z >= ring && z < size - ring) continue;
+                Color32 c = pixels[z * size + x];
+                float sheet = c.r / 255f, front = c.g / 255f;
+                sum += 1f - (1f - sheet) * (1f - front);
+                n++;
+            }
+            return n > 0 ? sum / n : 0f;
         }
 
         private static byte Byte(float v) => (byte)(Math.Max(0f, Math.Min(1f, v)) * 255f + 0.5f);
@@ -370,7 +453,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     failed = true;
                     return false;
                 }
-                material = new Material(shader) { name = "Boscali Weather Volume", renderQueue = 3000 };
+                // Before vanilla smoke (2998-3001): a missile trail in front of a cloud draws over
+                // it instead of vanishing behind the volume. Vanilla cloud puffs sat at 2996-2997.
+                material = new Material(shader) { name = "Boscali Weather Volume", renderQueue = 2997 };
             }
             if (noise == null)
             {
@@ -543,6 +628,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             internal readonly float SettledAt;
             internal readonly Color32[] Pixels, Profiles, FarPixels, FarProfiles;
             internal float Bottom, Top;
+            internal float HorizonCover;
 
             internal MapResult(float settledAt, int size, int farSize)
             {

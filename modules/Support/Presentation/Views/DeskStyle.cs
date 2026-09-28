@@ -24,11 +24,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // Geometry.
         public const float Gutter = 16f;
-        public const float BannerHeight = 22f;
-        public const float HeaderHeight = 48f;
-        public const float TagGap = 12f;
-        public const float FolderWidth = 488f;
-        public const float TimelineHeight = 138f;
+        public const float BannerHeight = 20f;
+        public const float HeaderHeight = 50f;
+        public const float TagGap = 8f;
+        public const float FolderWidth = 404f;
+        public const float TimelineHeight = 100f;
         public const float TokenSize = 36f;
 
         public static Color Map { get; private set; }

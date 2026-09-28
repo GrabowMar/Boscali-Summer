@@ -2,8 +2,7 @@ param(
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
     [string]$PreviewDirectory = (Join-Path $env:TEMP ('BoscaliPresentationCheck-' + [guid]::NewGuid().ToString('N'))),
     [switch]$EventAlertOnly,
-    [switch]$SqdOnly,
-    [switch]$MfdOnly
+    [switch]$SqdOnly
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
@@ -22,7 +21,7 @@ Copy-Item -LiteralPath "$PSScriptRoot/PresentationUnityCheck.cs", "$PSScriptRoot
 Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.avss" -Destination "$PreviewDirectory/NOAvionics/"
 # SuperEventAlert deliberately refuses Application.isBatchMode. Keep the Editor window hidden,
 # but run a normal Editor process so the production overlay builder and camera path are exercised.
-$method = if ($SqdOnly) { 'PresentationUnityCheck.RunSqdOnly' } elseif ($EventAlertOnly) { 'PresentationUnityCheck.RunEventAlertOnly' } elseif ($MfdOnly) { 'PresentationUnityCheck.RunMfdOnly' } else { 'PresentationUnityCheck.Run' }
+$method = if ($SqdOnly) { 'PresentationUnityCheck.RunSqdOnly' } elseif ($EventAlertOnly) { 'PresentationUnityCheck.RunEventAlertOnly' } else { 'PresentationUnityCheck.Run' }
 $arguments = @('-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $method, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
 $process.WaitForExit()

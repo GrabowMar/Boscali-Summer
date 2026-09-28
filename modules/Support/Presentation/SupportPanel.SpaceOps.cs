@@ -72,7 +72,7 @@ namespace BoscaliSummer.Features.Support.Presentation
 
             Rect content = PageFrame(root, body, OpsDomain.Space, "STATION ABILITIES", SubActions, SelectSpaceSub, StationTips, out _);
             spaceBanner = BuildArmedBanner(root, new Rect(content.x, content.y, content.width, BannerRowHeight),
-                "OPEN WALL", OpenStationConsole, "Open station control to launch or fit the orbital station.");
+                "OPEN TASKING", OpenStationConsole, "Open the station task map. Engineering builds and fits the orbital platform.");
             var list = new Rect(content.x, content.y - BannerRowHeight - 8f, content.width, content.height - BannerRowHeight - 8f);
 
             int rows = 1 + strikes.Count + 1;
@@ -205,7 +205,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             Color tone;
             if (!station)
             {
-                hint = "NO STATION · LAUNCH A CORE FROM THE STATION WALL";
+                hint = "NO STATION · LAUNCH A CORE IN ENGINEERING";
                 overhead = "CAPABILITIES · NO STATION";
                 tone = AvTheme.Dim;
             }
@@ -282,7 +282,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     cost = PlatformWords.Whole(info.Fuel) + " FUEL PER RELOCATION";
                     enabled = true;
                     word = !station ? "OPEN STATION CONTROL · LAUNCH A CORE"
-                        : platform.FittedOnline(ModuleKind.Propulsion, now) ? "CHOOSE DESTINATION ON THE STATION WALL"
+                        : platform.FittedOnline(ModuleKind.Propulsion, now) ? "CHOOSE DESTINATION ON THE TASK MAP"
                         : "OPEN STATION CONTROL · FIT PROPULSION TO MOVE";
                     tone = AvTheme.RailInfo;
                     verb = "OPEN";

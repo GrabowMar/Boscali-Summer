@@ -2,22 +2,53 @@
 using BepInEx.Logging;
 using BoscaliSummer.Features.Hud.Configuration;
 using BoscaliSummer.Features.Hud.Domain;
+using BoscaliSummer.Features.Hud.Runtime;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Framework.Features;
 using UnityEngine;
 namespace BoscaliSummer.Features.Hud.Presentation
 {
-    // Service and lifecycle only. Feed handles contain data; the view owns a fixed widget pool.
+    // Service and lifecycle only. Feed handles contain data; the panel owns a fixed widget pool
+    // parented directly under the native weapons panel (see StatusPanel).
     internal sealed class HudBoard : MonoBehaviour, ISceneService, IHudBoard
     {
+        /// <summary>The one HudBoard alive this scene, reached statically from
+        /// <c>Patches/WingviewCameraPatch.cs</c> the same way other Boscali patches reach their
+        /// owning controller (see <c>AutopilotLandController.Instance</c>).</summary>
+        public static HudBoard Instance { get; private set; }
+
         private readonly HudFeedStore store = new HudFeedStore(() => Time.unscaledTime);
         private readonly List<Channel> channels = new List<Channel>(HudLayout.MaxChannels);
         private readonly HudMessage[] snapshot = new HudMessage[HudLayout.MaxRows];
+        private readonly ExternalHudEnabler externalHud = new ExternalHudEnabler();
+        private readonly WingviewCameraState wingview = new WingviewCameraState();
+        private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
+        private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
         private HudSettings settings;
-        private StatusFeedView view;
+        private StatusPanel panel;
+        private ThirdPersonHudCluster cluster;
         private float nextRead;
-        public void Configure(HudSettings config, ManualLogSource logger) => settings = config;
+
+        private void Awake() => Instance = this;
+
+        public void Configure(HudSettings config, ManualLogSource logger)
+        {
+            settings = config;
+            hudCenterProjection.Subscribe(
+                () => settings != null && Enabled && settings.ExternalHud.Value &&
+                    ExternalHudEnabler.IsOwnAircraftExternalView(out _),
+                () => ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft aircraft) ? aircraft : null);
+        }
+
+        /// <summary>Called from <c>Patches/WingviewCameraPatch.cs</c>'s postfix every
+        /// <c>CameraOrbitState.UpdateState</c> while installed.</summary>
+        public void TickWingview(CameraStateManager cam, ref float panView, ref float tiltView,
+            float viewDistAdjust, float lookAtTargetLerp)
+        {
+            bool enabled = settings != null && !Application.isBatchMode && settings.Wingview.Value;
+            bool lookAhead = settings != null && settings.WingviewLookAhead.Value;
+            wingview.Tick(enabled, lookAhead, cam, ref panView, ref tiltView, viewDistAdjust, lookAtTargetLerp);
+        }
         public IReadOnlyList<IHudChannel> Channels => channels;
         public void DeclareChannel(string key, string label)
         {
@@ -37,16 +68,6 @@ namespace BoscaliSummer.Features.Hud.Presentation
             set
             {
                 if (settings != null) settings.Enabled.Value = value;
-            }
-        }
-
-        public HudAnchor Anchor
-        {
-            get => settings != null ? settings.ResolvedAnchor() : HudAnchor.UnderWeapons;
-            set
-            {
-                if (settings == null) return;
-                settings.Anchor.Value = HudLayout.ClampAnchor((int)value);
             }
         }
 
@@ -107,43 +128,134 @@ namespace BoscaliSummer.Features.Hud.Presentation
         public bool ShowDetails { get => settings == null || settings.ShowDetails.Value; set { if (settings != null) settings.ShowDetails.Value = value; } }
         public int OffsetX { get => settings?.OffsetX.Value ?? 0; set { if (settings != null) settings.OffsetX.Value = Mathf.Clamp(value, -600, 600); } }
         public int OffsetY { get => settings?.OffsetY.Value ?? 0; set { if (settings != null) settings.OffsetY.Value = Mathf.Clamp(value, -600, 600); } }
+
+        public bool CameraFeedEnabled
+        {
+            get => settings == null || settings.ThirdPersonCameraEnabled.Value;
+            set { if (settings != null) settings.ThirdPersonCameraEnabled.Value = value; }
+        }
+
         public void ResetLayout()
         {
             Enabled = ShowDetails = NoticesEnabled = true;
-            Anchor = HudAnchor.UnderWeapons;
             ScaleStep = Contrast = 1;
-            OpacityStep = 0;
+            OpacityStep = 1;
             MaxRows = 4;
             OffsetX = OffsetY = 0;
             NoticeSeconds = HudLayout.DefaultNoticeSeconds;
         }
 
-
         private void LateUpdate()
         {
-            if (settings == null) return;
-            // Visibility is frame-driven; a paused/map-open frame never waits for the data tick.
-            if (!Enabled || !CanShow() || HudLayout.Opacity(OpacityStep) <= 0) { view?.Hide(); return; }
+            if (settings == null || Application.isBatchMode) return;
+
+            // Re-checked every tick regardless of Enabled/below: vanilla re-disables FlightHud's
+            // canvas on every orbit/chase state entry, and a forced canvas must be released the
+            // instant the condition ends even if the board itself just got switched off.
+            bool viewingOwnExternally = ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft ownAircraft);
+            externalHud.Tick(Enabled && settings.ExternalHud.Value, viewingOwnExternally);
+
+            // Same gate as the forced-canvas condition above: the third-person HUD (hidden
+            // native numbers, screen-fixed cluster, releveled HUDCenter) only ever shows where
+            // the native HUDCanvas is actually up.
+            bool thirdPerson = Enabled && settings.ExternalHud.Value && viewingOwnExternally;
+            flightNumberHider.Tick(thirdPerson, ownAircraft);
+
+            if (!Enabled)
+            {
+                panel?.Hide();
+                cluster?.Hide();
+                return;
+            }
+
+            if (panel == null) panel = new StatusPanel();
+            if (!panel.Ensure()) return;
+            if (cluster == null) cluster = new ThirdPersonHudCluster();
+            cluster.Ensure();
+
             if (Time.unscaledTime < nextRead) return;
             nextRead = Time.unscaledTime + .1f;
+
             foreach (Channel channel in channels) if (!channel.Enabled) store.Mute(channel.Key);
             int count = store.Snapshot(snapshot, MaxRows, ChannelEnabled, NoticesEnabled);
-            if (count == 0) { view?.Hide(); return; }
-            if (view == null) view = new StatusFeedView(transform);
-            HudBounds avoid = ModServices.TryGet(out IThirdPersonHud external) ? external.InstrumentBounds : default;
-            view.Present(snapshot, count, settings, avoid);
+            panel.Present(snapshot, count, ShowDetails, Contrast, OpacityStep, HudLayout.Scale(ScaleStep), OffsetX, OffsetY);
+
+            // The cockpit already has its own native tac screen for this feed; the card only
+            // earns its space in the external views this module can force the HUD into.
+            Texture cameraTexture = null;
+            string cameraCode = null;
+            string cameraRange = null;
+            if (CameraFeedEnabled && viewingOwnExternally && ownAircraft != null && ownAircraft.targetCam != null &&
+                BoscaliSummer.Runtime.NativeCamera.ReadMode(ownAircraft.targetCam) != TargetCam.CamMode.landingMode &&
+                BoscaliSummer.Runtime.NativeCamera.TryGet(ownAircraft, out Camera camera, out string mode) &&
+                camera.targetTexture != null && camera.targetTexture.IsCreated())
+            {
+                cameraTexture = camera.targetTexture;
+                cameraCode = mode;
+                cameraRange = RangeToSelectedTarget(ownAircraft);
+            }
+
+            if (thirdPerson && ownAircraft != null)
+            {
+                Rigidbody rb = ownAircraft.rb;
+                float speed = ownAircraft.speed;
+                float altitude = ownAircraft.transform.position.y;
+                float climb = rb != null ? rb.velocity.y : 0f;
+                float heading = ownAircraft.transform.eulerAngles.y;
+                float soundSpeed = LevelInfo.GetSpeedOfSound(altitude);
+                float mach = soundSpeed > 0.01f ? speed / soundSpeed : 0f;
+                float fuel = Mathf.Clamp01(ownAircraft.fuelLevel);
+                float throttle = Mathf.Clamp01(ownAircraft.GetInputs()?.throttle ?? 0f);
+
+                cluster.Present(true, AvUnitsOf((int)PlayerSettings.unitSystem),
+                    speed, altitude, climb, heading, mach, ownAircraft.gForce, fuel, throttle,
+                    cameraTexture != null, cameraTexture, cameraCode, cameraRange);
+            }
+            else
+            {
+                cluster.Present(false, NOAvionics.AvUnits.Metric, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, false, null, null, null);
+            }
         }
-        private static bool CanShow()
+
+        private readonly char[] rangeBuf = new char[24];
+
+        private string RangeToSelectedTarget(Aircraft aircraft)
         {
-            if (Application.isBatchMode || DynamicMap.mapMaximized || GameplayUI.GameIsPaused || PlayerSettings.cinematicMode) return false;
-            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled || aircraft.HasEjected()) return false;
-            CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
-            return camera != null && camera.followingUnit == aircraft &&
-                (camera.currentState == camera.cockpitState || camera.currentState == camera.orbitState || camera.currentState == camera.chaseState);
+            if (aircraft.weaponManager == null) return null;
+            var targets = aircraft.weaponManager.GetTargetList();
+            if (targets == null || targets.Count == 0 || targets[0] == null) return null;
+            float distance = Vector3.Distance(aircraft.transform.position, targets[0].transform.position);
+            NOAvionics.AvUnits units = AvUnitsOf((int)PlayerSettings.unitSystem);
+            int len = NOAvionics.AvUnitTable.DistanceReading(rangeBuf, 0, distance, units);
+            return new string(rangeBuf, 0, len);
         }
-        public void ResetForScene() { store.Reset(); view?.Destroy(); view = null; nextRead = 0; }
-        private void OnDisable() => view?.Hide();
-        private void OnDestroy() => ResetForScene();
+
+        private static NOAvionics.AvUnits AvUnitsOf(int unitSystem) =>
+            unitSystem == (int)NOAvionics.AvUnits.Imperial ? NOAvionics.AvUnits.Imperial : NOAvionics.AvUnits.Metric;
+
+        public void ResetForScene()
+        {
+            store.Reset();
+            panel?.Destroy();
+            panel = null;
+            cluster?.Destroy();
+            cluster = null;
+            nextRead = 0;
+            externalHud.Release();
+            wingview.Reset();
+            flightNumberHider.Dispose();
+        }
+        private void OnDisable()
+        {
+            panel?.Hide();
+            cluster?.Hide();
+        }
+        private void OnDestroy()
+        {
+            ResetForScene();
+            hudCenterProjection.Unsubscribe();
+            if (Instance == this) Instance = null;
+        }
         private sealed class Channel : IHudChannel
         {
             private readonly HudBoard board;

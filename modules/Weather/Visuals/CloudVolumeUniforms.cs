@@ -1,0 +1,193 @@
+using BoscaliSummer.Features.Weather.Domain;
+using UnityEngine;
+
+namespace BoscaliSummer.Features.Weather.Visuals
+{
+    /// <summary>What the cloud material needs from the game for one frame. Local (floating
+    /// origin) camera values; WorldOffset turns them into the global frame the maps use.</summary>
+    internal struct CloudFrame
+    {
+        public Vector3 WorldOffset;
+        public Vector3 CameraPosition, CameraForward;
+        public float FieldOfView;
+        public int PixelHeight;
+        public float CloudShift;
+        /// <summary>Altitude range of the weather cloud (before set-pieces), shift not applied.</summary>
+        public float Bottom, Top;
+        public float HorizonCover;
+        public Vector3 SunDirection;
+        public Color SunColor, Ambient, Ground, Fog;
+        public float Extinction;
+        public bool LowDetail;
+        public float CameraInCloud;
+        public float DeltaTime;
+    }
+
+    /// <summary>Writes one frame of cloud uniforms. Owns the smoothing of set-pieces and the fog
+    /// bank, so a console change builds up on screen instead of popping. Unity-only (no game
+    /// types), so the offline bench drives exactly the game's uniforms.</summary>
+    internal sealed class CloudVolumeUniforms
+    {
+        private static readonly int NoiseId = Shader.PropertyToID("_CloudNoiseTex");
+        private static readonly int MapSpanId = Shader.PropertyToID("_WeatherMapSpan");
+        private static readonly int FarSpanId = Shader.PropertyToID("_WeatherFarSpan");
+        private static readonly int BaseId = Shader.PropertyToID("_CloudBase");
+        private static readonly int ShiftId = Shader.PropertyToID("_CloudHeightShift");
+        private static readonly int OffsetId = Shader.PropertyToID("_CloudWorldOffset");
+        private static readonly int ForwardId = Shader.PropertyToID("_CloudCameraForward");
+        private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
+        private static readonly int FogBankId = Shader.PropertyToID("_FogBank");
+        private static readonly int HeroAId = Shader.PropertyToID("_HeroA");
+        private static readonly int HeroBId = Shader.PropertyToID("_HeroB");
+        private static readonly int HeroCountId = Shader.PropertyToID("_HeroCount");
+        private static readonly int BoundsId = Shader.PropertyToID("_CloudAltitudeBounds");
+        private static readonly int HeroBoundsId = Shader.PropertyToID("_CloudHeroBounds");
+        private static readonly int WindOffsetId = Shader.PropertyToID("_CloudWindOffset");
+        private static readonly int SunDirId = Shader.PropertyToID("_CloudSunDirection");
+        private static readonly int SunColorId = Shader.PropertyToID("_CloudSunColor");
+        private static readonly int AmbientId = Shader.PropertyToID("_CloudAmbientColor");
+        private static readonly int GroundId = Shader.PropertyToID("_CloudGroundColor");
+        private static readonly int FogId = Shader.PropertyToID("_CloudFogColor");
+        private static readonly int ExtinctionId = Shader.PropertyToID("_CloudAirExtinction");
+        private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
+        private static readonly int LayerDepthId = Shader.PropertyToID("_LayerDepth");
+        private static readonly int LayerSmoothId = Shader.PropertyToID("_LayerSmooth");
+        private static readonly int MidCoverId = Shader.PropertyToID("_MidCover");
+        private static readonly int MidSheetId = Shader.PropertyToID("_MidSheet");
+        private static readonly int HighCoverId = Shader.PropertyToID("_HighCover");
+        private static readonly int HighVeilId = Shader.PropertyToID("_HighVeil");
+        private static readonly int WindDirId = Shader.PropertyToID("_CloudWindDir");
+        private static readonly int HorizonCoverId = Shader.PropertyToID("_HorizonCover");
+        private static readonly int HorizonDeckId = Shader.PropertyToID("_HorizonDeck");
+        private static readonly int HorizonDepthId = Shader.PropertyToID("_HorizonDepth");
+        private static readonly int SplitAId = Shader.PropertyToID("_SplitA");
+        private static readonly int SplitBId = Shader.PropertyToID("_SplitB");
+        private static readonly int InCloudId = Shader.PropertyToID("_CameraInCloud");
+        private static readonly int PixelAngleId = Shader.PropertyToID("_CloudPixelAngle");
+        private static readonly int StepsId = Shader.PropertyToID("_CloudSteps");
+        private static readonly int FarStepsId = Shader.PropertyToID("_CloudFarSteps");
+        private static readonly int FrustumId = Shader.PropertyToID("_CloudFrustum");
+
+        private readonly Vector4[] heroA = new Vector4[Superstructures.MaxCount];
+        private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
+        private readonly float[] heroShown = new float[Superstructures.MaxCount];
+        private readonly Vector2[] heroSite = new Vector2[Superstructures.MaxCount];
+        private readonly Vector3[] corners = new Vector3[4];
+        private float fogShown;
+
+        /// <summary>0..1 how far the console fog bank has built up.</summary>
+        internal float FogShown => fogShown;
+
+        internal void Reset()
+        {
+            for (int i = 0; i < heroShown.Length; i++) { heroShown[i] = 0f; heroSite[i] = Vector2.zero; }
+            fogShown = 0f;
+        }
+
+        /// <summary>Jump set-pieces and fog to their targets (the bench, or a preload).</summary>
+        internal void Settle(WeatherField field)
+        {
+            for (int i = 0; i < heroShown.Length; i++)
+            {
+                if (i >= field.SuperstructureCount) { heroShown[i] = 0f; continue; }
+                Superstructure s = field.SuperstructureAt(i);
+                heroSite[i] = new Vector2(s.X, s.Z);
+                heroShown[i] = s.Strength;
+            }
+            fogShown = (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f;
+        }
+
+        internal void Apply(Material material, WeatherField field, in CloudFrame frame, Texture noise)
+        {
+            StateParams sky = field.Params;
+            material.SetTexture(NoiseId, noise);
+            material.SetFloat(BaseId, sky.CloudBase + frame.CloudShift);
+            material.SetFloat(ShiftId, frame.CloudShift);
+            material.SetVector(OffsetId, frame.WorldOffset);
+            material.SetVector(ForwardId, frame.CameraForward);
+            material.SetVector(CameraPosId, frame.CameraPosition);
+
+            // Scenery storms: static set-pieces the state builds up. They keep their own altitude
+            // range, so rays that miss them keep the weather's tight march bounds.
+            int heroes = field.SuperstructureCount;
+            float heroBottom = 1e6f, heroTop = -1e6f;
+            for (int i = 0; i < heroA.Length; i++)
+            {
+                if (i >= heroes) { heroA[i] = Vector4.zero; heroB[i] = Vector4.zero; heroShown[i] = 0f; continue; }
+                Superstructure s = field.SuperstructureAt(i);
+                var site = new Vector2(s.X, s.Z);
+                if (site != heroSite[i]) { heroSite[i] = site; heroShown[i] = 0f; }
+                heroShown[i] = Mathf.MoveTowards(heroShown[i], s.Strength, frame.DeltaTime / 20f);
+                heroA[i] = new Vector4(s.X, s.Z, s.Heading, (float)s.Kind);
+                heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
+                heroBottom = Mathf.Min(heroBottom, 300f + frame.CloudShift);
+                heroTop = Mathf.Max(heroTop, s.Top + 1500f + frame.CloudShift);
+            }
+            // The console fog bank eases in and out like the set-pieces.
+            fogShown = Mathf.MoveTowards(fogShown, (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f,
+                frame.DeltaTime / 20f);
+            material.SetFloat(FogBankId, fogShown);
+            material.SetVectorArray(HeroAId, heroA);
+            material.SetVectorArray(HeroBId, heroB);
+            material.SetFloat(HeroCountId, heroes);
+            material.SetVector(BoundsId, new Vector2(frame.Bottom + frame.CloudShift, frame.Top + frame.CloudShift));
+            material.SetVector(HeroBoundsId, heroes > 0 ? new Vector2(heroBottom, heroTop) : Vector2.zero);
+            // Static weather: the detail texture does not crawl either.
+            material.SetVector(WindOffsetId, Vector2.zero);
+
+            material.SetVector(SunDirId, frame.SunDirection.normalized);
+            material.SetColor(SunColorId, frame.SunColor * 0.75f);
+            material.SetColor(AmbientId, frame.Ambient);
+            material.SetColor(GroundId, frame.Ground);
+            material.SetColor(FogId, frame.Fog);
+            material.SetFloat(ExtinctionId, frame.Extinction);
+            material.SetFloat(StormId, sky.Severity);
+            // Cloud genera for the current state (they fade with it).
+            material.SetFloat(LayerDepthId, sky.LayerDepth);
+            material.SetFloat(LayerSmoothId, sky.LayerSmooth);
+            material.SetFloat(MidCoverId, sky.MidCover);
+            material.SetFloat(MidSheetId, sky.MidSheet);
+            material.SetFloat(HighCoverId, sky.HighCover);
+            material.SetFloat(HighVeilId, sky.HighVeil);
+            WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
+            material.SetVector(WindDirId, new Vector2(windX, windZ));
+            // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
+            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.Cumulus * 0.3f + sky.Convective * 0.2f)));
+            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + Mathf.Max(300f, sky.LayerDepth) * 0.4f);
+            material.SetFloat(HorizonDepthId, Mathf.Max(300f, sky.LayerDepth));
+            // The frontal boundary: one side of the map under the deck, the other opening up.
+            SkySplit split = field.Split;
+            material.SetVector(SplitAId, new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));
+            material.SetVector(SplitBId, new Vector4(split.Amount, split.MeanderAmplitude,
+                Mathf.Max(1000f, split.MeanderWavelength), split.MeanderPhase));
+            material.SetFloat(InCloudId, frame.CameraInCloud);
+            material.SetFloat(PixelAngleId,
+                2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
+            material.SetFloat(StepsId, frame.LowDetail ? 64f : 96f);
+            material.SetFloat(FarStepsId, frame.LowDetail ? 16f : 24f);
+        }
+
+        internal static void ApplySpans(Material material, float mapHalf, float farHalf)
+        {
+            material.SetFloat(MapSpanId, mapHalf * 2f);
+            material.SetFloat(FarSpanId, farHalf * 2f);
+        }
+
+        /// <summary>World-space view rays through the four screen corners (bottom-left,
+        /// bottom-right, top-left, top-right, as texture uv), for the reduced-resolution march.</summary>
+        internal void ApplyFrustum(Material material, Camera camera)
+        {
+            camera.CalculateFrustumCorners(new Rect(0f, 0f, 1f, 1f), 1f, Camera.MonoOrStereoscopicEye.Mono, corners);
+            // CalculateFrustumCorners: bottom-left, top-left, top-right, bottom-right (view space).
+            Transform t = camera.transform;
+            Vector3 bl = t.TransformVector(corners[0]), tl = t.TransformVector(corners[1]);
+            Vector3 tr = t.TransformVector(corners[2]), br = t.TransformVector(corners[3]);
+            var m = new Matrix4x4();
+            m.SetRow(0, bl);
+            m.SetRow(1, br);
+            m.SetRow(2, tl);
+            m.SetRow(3, tr);
+            material.SetMatrix(FrustumId, m);
+        }
+    }
+}

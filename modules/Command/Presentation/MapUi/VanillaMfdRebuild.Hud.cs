@@ -136,7 +136,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 y -= brief + AvTokens.Space2;
 
                 y = Heading(root, y, width, "ENGAGEMENT MODE", "SELECT ONE");
-                modes = new MfdPagingGrid(root, y, width, 2, 3, pager: false, rowHeight: cell, exclusive: true);
+                modes = new MfdPagingGrid(root, y, width, 2, 3, pager: false, rowHeight: cell);
                 y -= cell * 3f + AvTokens.Space2;
 
                 y = Heading(root, y, width, "PRIORITY GATES", "MAXIMISE TRACKS");
@@ -272,7 +272,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     default: brief = "LOGISTICS"; break;
                 }
 
-                modeReadoutValues[0].text = brief + " (" + options.currentMode + ")";
+                modeReadoutValues[0].text = brief;
                 modeReadoutValues[1].text = activeGates + " OF " + options.listCategories.Count + " GATES";
                 modeReadoutValues[2].text = activeVeh + " VEH · " + activeBld + " BLD";
 

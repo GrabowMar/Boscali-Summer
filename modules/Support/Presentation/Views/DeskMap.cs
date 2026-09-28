@@ -117,6 +117,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             // Geographic overlays use room coordinates inside the clipped viewport.
             AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
             terrain = new BoardTerrain(layer, Board);
+            Image terrainVeil = AvKit.Panel(layer, view, DeskStyle.Map.WithAlpha(0.50f));
+            terrainVeil.raycastTarget = false;
             for (int i = 0; i < GridLines; i++)
             {
                 gridX[i] = AvKit.Rule(layer, new Rect(view.x, view.y, 1f, view.height), DeskStyle.MapInk.WithAlpha(0.13f));
@@ -151,6 +153,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             scaleBar = AvKit.Rule(scalePaper.rectTransform, new Rect(10f, -17f, 60f, 3f), DeskStyle.Ink);
             scaleText = DeskStyle.Body(scalePaper.rectTransform, new Rect(76f, 0f, 70f, 26f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
             terrainStatus = DeskStyle.Body(room, new Rect(focus.x + 170f, focus.y - focus.height + 34f, focus.width - 394f, 26f), 10f, DeskStyle.Ink);
+            var titlePlate = AvKit.Panel(room, new Rect(view.x + 8f, view.y - 8f, 244f, 28f), DeskStyle.Paper.WithAlpha(0.94f));
+            titlePlate.raycastTarget = false;
+            DeskStyle.Title(room, "THEATER / OBJECTIVES", new Rect(view.x + 18f, view.y - 12f, 228f, 20f), 12f, DeskStyle.Ink);
+            var legendPlate = AvKit.Panel(room, new Rect(view.x + view.width - 338f, view.y - 8f, 330f, 28f),
+                DeskStyle.Paper.WithAlpha(0.94f));
+            legendPlate.raycastTarget = false;
+            DeskStyle.Body(room, new Rect(view.x + view.width - 328f, view.y - 12f, 312f, 20f), 11f, DeskStyle.Ink)
+                .text = "FRIENDLY / HOSTILE / NEUTRAL · CLICK TO BRIEF";
             MapButton(room, new Rect(focus.x + focus.width - 204f, focus.y - focus.height + 36f, 84f, 30f), "FIT / F", () => Board.ResetFraming());
             MapButton(room, new Rect(focus.x + focus.width - 112f, focus.y - focus.height + 36f, 48f, 30f), "−", () => Zoom(1f / 1.4f));
             MapButton(room, new Rect(focus.x + focus.width - 56f, focus.y - focus.height + 36f, 48f, 30f), "+", () => Zoom(1.4f));
@@ -255,8 +265,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         /// <summary>Panels lying over the map (AvKit rects); labels keep off them. At most eight.</summary>
         public void SetObstacles(params Rect[] rects)
         {
-            obstacleCount = Math.Min(rects.Length, obstacleRects.Length);
+            obstacleCount = Math.Min(rects.Length, obstacleRects.Length - 1);
             for (int i = 0; i < obstacleCount; i++) obstacleRects[i] = rects[i];
+            Rect view = Board.View;
+            obstacleRects[obstacleCount++] = new Rect(view.x, view.y, view.width, 42f);
             Board.SetObstacles(obstacleRects, obstacleCount);
         }
 
@@ -314,7 +326,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
             for (int i = 0; i < Homes; i++)
             {
-                bool show = i < homeCount;
+                // A friendly airbase already has an objective token at this exact location.
+                // Drawing a second home pin makes one geographic point look like two sites.
+                bool show = i < homeCount && !HomeRepresented(detachment, count, i);
                 if (homes[i].gameObject.activeSelf != show) homes[i].gameObject.SetActive(show);
                 if (!show) continue;
                 Vector2 p = Board.Project(homeX[i], homeZ[i]);
@@ -338,6 +352,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 token.Glyph.sprite = OpsSprites.Glyph(Glyph(o.Kind));
                 token.Glyph.color = held ? FieldTones.Post(detachment.Team(holder).Mission)
                     : o.Hostile ? DeskStyle.Stamp : o.Friendly ? AvTheme.RailReady : DeskStyle.Khaki;
+                token.Disc.color = o.Friendly ? DeskStyle.Paper : o.Hostile ? DeskStyle.Tape : DeskStyle.Map;
                 float threatDiameter = Mathf.Max(DeskStyle.TokenSize + 12f, Board.Pixels(FieldCatalog.ThreatRadius) * 2f);
                 token.Threat.gameObject.SetActive(o.Hostile && o.Threat > 0);
                 Lines.Centre(token.Threat.rectTransform, p.x, p.y, threatDiameter);
@@ -369,8 +384,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FieldObjective o = detachment.Objective(i);
                 int team = detachment.TeamOn(o.Anchor);
                 string sub = team >= 0
-                    ? FieldWords.Callsign(team) + " " + FieldWords.State(detachment.Team(team).State)
-                    : FieldWords.KindCode(o.Kind) + " · " + FieldWords.Threat(o.Threat) +
+                    ? "POST · " + FieldWords.Callsign(team) + " " + FieldWords.State(detachment.Team(team).State)
+                    : o.Friendly ? (IsHomeObjective(o) ? "FRIENDLY · HOME BASE" : "FRIENDLY · STAGING")
+                    : (o.Hostile ? "HOSTILE · " : "NEUTRAL · ") + FieldWords.Threat(o.Threat) +
                       (detachment.Scouted(o.Anchor, now) ? " · SCOUTED" : "");
                 Write(tags[n], PlaceNames.Shorten(o.Name, 16), sub);
                 anchors[n] = Board.Project(o.X, o.Z);
@@ -382,6 +398,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             for (int i = 0; i < homeCount && n < Labels; i++)
             {
+                if (HomeRepresented(detachment, count, i)) continue;
                 Write(tags[n], PlaceNames.Shorten(string.IsNullOrEmpty(homeName[i]) ? "HOME BASE" : homeName[i], 14), "HOME BASE");
                 anchors[n] = Board.Project(homeX[i], homeZ[i]);
                 sizes[n] = new Vector2(tags[n].Width, 30f);
@@ -419,6 +436,30 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 tag.Paper.color = hot ? DeskStyle.Tape : DeskStyle.Paper;
             }
         }
+
+        private bool HomeRepresented(SpecOpsDetachment detachment, int count, int home)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                FieldObjective objective = detachment.Objective(i);
+                if (objective.Friendly && (objective.Kind == ObjectiveKind.Airfield || objective.Kind == ObjectiveKind.Outpost) &&
+                    SameSite(objective.X, objective.Z, homeX[home], homeZ[home]))
+                    return true;
+            }
+            return false;
+        }
+
+        private bool IsHomeObjective(FieldObjective objective)
+        {
+            if (!objective.Friendly || (objective.Kind != ObjectiveKind.Airfield && objective.Kind != ObjectiveKind.Outpost))
+                return false;
+            for (int i = 0; i < homeCount; i++)
+                if (SameSite(objective.X, objective.Z, homeX[i], homeZ[i])) return true;
+            return false;
+        }
+
+        private static bool SameSite(float ax, float az, float bx, float bz) =>
+            Mathf.Abs(ax - bx) < 1f && Mathf.Abs(az - bz) < 1f;
 
         private static void Write(Tag tag, string name, string sub)
         {
@@ -511,9 +552,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FieldTeam value = detachment != null && detachment.Enabled ? detachment.Team(t) : default;
                 bool deployed = value.Deployed;
                 if (team.Token.gameObject.activeSelf != deployed) team.Token.gameObject.SetActive(deployed);
-                bool hasHome = NearestHome(value.X, value.Z, out float hx, out float hz);
+                // The host chooses and replicates the launch base. Local ownership may change
+                // while a team is travelling, so a fresh nearest-base lookup bends its route.
+                bool hasHome = deployed && !string.IsNullOrEmpty(value.Origin);
                 Vector2 target = Board.Project(value.X, value.Z);
-                Vector2 home = hasHome ? Board.Project(hx, hz) : target;
+                Vector2 home = hasHome ? Board.Project(value.OriginX, value.OriginZ) : target;
                 if (!deployed)
                 {
                     team.Route.enabled = false;

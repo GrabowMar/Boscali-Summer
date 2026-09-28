@@ -38,6 +38,8 @@
     <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />
     <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
     <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
@@ -47,6 +49,9 @@
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMath.cs" Link="Features\Autopilot\AceRadialMath.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialAction.cs" Link="Features\Autopilot\AceRadialAction.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialStyle.cs" Link="Features\Autopilot\AceRadialStyle.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMenuTree.cs" Link="Features\Autopilot\AceRadialMenuTree.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\StrongpointHitPolicy.cs" Link="Features\UrbanCombat\StrongpointHitPolicy.cs" />
@@ -76,7 +81,6 @@
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionLabels.cs" Link="Features\Command\MfdMissionLabels.cs" />
-    <Compile Include="..\..\modules\Hud\Runtime\ThirdPersonCameraPolicy.cs" Link="Features\Hud\ThirdPersonCameraPolicy.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\GridLabelsMath.cs" Link="Features\Command\GridLabelsMath.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
@@ -165,9 +169,9 @@
     <Compile Include="..\..\modules\Support\Domain\SupportHudCopy.cs" Link="Features\Support\SupportHudCopy.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
     <Compile Include="..\..\modules\QoL\Domain\FuelHudCopy.cs" Link="Features\QoL\FuelHudCopy.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\TargetBoardLayout.cs" Link="Features\Hud\TargetBoardLayout.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\ShotMath.cs" Link="Features\Hud\ShotMath.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\ShotCopy.cs" Link="Features\Hud\ShotCopy.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\ChannelFilter.cs" Link="Features\Hud\ChannelFilter.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\WingviewMath.cs" Link="Features\Hud\WingviewMath.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\TheaterOpsHudCopy.cs" Link="Features\TheaterOps\TheaterOpsHudCopy.cs" />
@@ -179,6 +183,8 @@
     <Compile Include="..\..\modules\Weather\Domain\RainSkyMath.cs" Link="Features\Weather\RainSkyMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\LightningMath.cs" Link="Features\Weather\LightningMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherTimeline.cs" Link="Features\Weather\WeatherTimeline.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\Superstructures.cs" Link="Features\Weather\Superstructures.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\SkySplit.cs" Link="Features\Weather\SkySplit.cs" />
     <Compile Include="..\..\modules\Weather\Domain\StormCell.cs" Link="Features\Weather\StormCell.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherField.cs" Link="Features\Weather\WeatherField.cs" />
     <Compile Include="..\..\modules\Weather\Domain\FlightWeatherAirMass.cs" Link="Features\Weather\FlightWeatherAirMass.cs" />
@@ -188,6 +194,7 @@
     <Compile Include="..\..\modules\Weather\Domain\WeatherMath.cs" Link="Features\Weather\WeatherMath.cs" />
     <Compile Include="..\..\modules\Weather\Domain\WeatherWords.cs" Link="Features\Weather\WeatherWords.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
+    <Compile Include="..\..\modules\Weather\Visuals\CloudBodies.cs" Link="Features\Weather\CloudBodies.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
     <Compile Include="..\..\Infrastructure\GameInterop\WingApiVersions.cs" Link="Infrastructure\WingApiVersions.cs" />
     <Compile Include="..\..\modules\Comms\Domain\*.cs" LinkBase="Features\Comms" />

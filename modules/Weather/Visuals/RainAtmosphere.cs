@@ -54,10 +54,16 @@ namespace BoscaliSummer.Features.Weather.Visuals
         internal bool Applied => applied;
         internal float LastFogMultiplier { get; private set; } = 1f;
 
-        internal void Apply(float rain, bool underwater)
+        /// <param name="shade">0..1 how much cloud deck hangs overhead; dims and greys the air
+        /// under overcast even when it is dry.</param>
+        /// <param name="inCloud">0..1 how deep the camera is inside cloud: droplets cut
+        /// visibility to a few hundred metres and the air turns cloud-lit white.</param>
+        internal void Apply(float rain, bool underwater, float shade = 0f, float inCloud = 0f)
         {
             rain = Mathf.Clamp01(rain);
-            if (underwater || rain <= 0.001f) { Restore(); return; }
+            shade = Mathf.Clamp01(shade);
+            inCloud = Mathf.Clamp01(inCloud);
+            if (underwater || (rain <= 0.001f && shade <= 0.001f && inCloud <= 0.001f)) { Restore(); return; }
 
             fog.Track(RenderSettings.fogDensity, applied);
             ambient.Track(RenderSettings.ambientIntensity, applied);
@@ -69,13 +75,22 @@ namespace BoscaliSummer.Features.Weather.Visuals
             // Vanilla storm fog peaks near 0.0014; the underwater preset is 0.05. Never amplify the latter.
             if (fog.Base > 0.02f) { Restore(); return; }
 
-            LastFogMultiplier = RainSkyMath.FogMultiplier(rain);
-            float dim = RainSkyMath.AmbientMultiplier(rain);
+            LastFogMultiplier = RainSkyMath.FogMultiplier(rain) * RainSkyMath.ShadeFog(shade);
+            float dim = RainSkyMath.AmbientMultiplier(rain) * RainSkyMath.ShadeAmbient(shade);
             // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
             // must still be able to navigate by. Heavy rain keeps several km of contrast.
             fog.Written = Mathf.Min(fog.Base * LastFogMultiplier, 0.00055f);
+            // Cloud droplets: extinction of ~0.01 /m, a few hundred metres of visibility.
+            fog.Written = Mathf.Lerp(fog.Written, 0.011f, inCloud * inCloud);
             ambient.Written = ambient.Base * dim;
-            fogColor.Written = Tint(fogColor.Base, rain);
+            fogColor.Written = Tint(fogColor.Base, Mathf.Max(rain, 0.4f * shade));
+            if (inCloud > 0f)
+            {
+                // Multiple scattering inside cloud: a bright, nearly neutral white-grey.
+                Color sky = skyColor.Base;
+                float lum = Mathf.Clamp(0.2126f * sky.r + 0.7152f * sky.g + 0.0722f * sky.b, 0.25f, 1.2f) * 1.25f;
+                fogColor.Written = Color.Lerp(fogColor.Written, new Color(lum * 0.94f, lum * 0.96f, lum, fogColor.Base.a), inCloud * 0.85f);
+            }
             skyColor.Written = Dim(skyColor.Base, dim);
             equatorColor.Written = Dim(equatorColor.Base, dim);
             groundColor.Written = Dim(groundColor.Base, dim);
