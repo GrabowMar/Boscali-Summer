@@ -26,6 +26,8 @@ namespace NOAvionics.Ui
         public AvTicker Ticker { get; }
         public AvFlow Body { get; }
         public AvFooter Footer { get; }
+        /// <summary>The title-bar close control (set its Help to name the hotkey, e.g. "Close (Esc)").</summary>
+        public AvControl CloseControl { get; private set; }
         public bool Visible => visible;
         public event Action Closed;
 
@@ -73,6 +75,8 @@ namespace NOAvionics.Ui
             AvText.Fit(titleText, false);
             AvLay.Place(titleText.rectTransform, AvGridTokens.Pad, 0f, w - 2f * AvGridTokens.Pad - 36f, TitleH);
             AvControl close = AvControl.Make(Root, new AvControl.Spec("", Hide, AvButtonStyle.Quiet, AvIcon.X));
+            close.Help = "Close this window.";
+            CloseControl = close;
             AvLay.Place(close.Rect, w - 34f, 3f, 30f, 24f);
             var drag = titleBack.gameObject.AddComponent<DragHandle>(); drag.Target = Root; titleBack.raycastTarget = true;
 
