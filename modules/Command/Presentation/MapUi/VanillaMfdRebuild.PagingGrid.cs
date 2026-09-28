@@ -15,6 +15,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// ON/OFF/N-A word. Everything mutates in place, so a changing mission inventory cannot create or lay
         /// out an unbounded widget tree. An <see cref="AvFlow"/> page adds one with <c>page.Add(grid)</c>.
         /// </summary>
+        /// <summary>Add <paramref name="grid"/> to <paramref name="flow"/> and let it request a relayout when its
+        /// content height changes (a grid sizes to the rows it shows).</summary>
+        private static MfdPagingGrid AddGrid(AvFlow flow, MfdPagingGrid grid)
+        {
+            flow.Add(grid);
+            grid.SizeChanged = flow.RequestRelayout;
+            return grid;
+        }
+
         private sealed class MfdPagingGrid : AvPart
         {
             private readonly MfdIconCell[] cells;
@@ -32,6 +41,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Action<int> clicked;
             private Func<int, Sprite> iconFn;
             private Func<int, string> subFn;
+            private Func<int, string> detailFn;
+            private int lastSizeKey = -1;
+
+            /// <summary>Raised when the grid's measured height changes (rows shown, pager shown), so the
+            /// owning <see cref="AvFlow"/> can relayout. Wired by <see cref="AddGrid"/>.</summary>
+            public Action SizeChanged;
 
             public MfdPagingGrid(RectTransform parent, int columns, int rows, bool pager = true,
                 bool readOnly = false, float rowHeight = 0f)
@@ -69,10 +84,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private int PageCount => Mathf.Max(1, Mathf.CeilToInt(count / (float)perPage));
 
+            private bool PagerShown => pagerEnabled && PageCount > 1;
+
+            /// <summary>Rows the grid occupies: one line for the empty message, a full page on every page of a
+            /// multi-page grid (so the pager stays put), and only the rows holding items on a single page.</summary>
+            private int ShownRows()
+            {
+                if (count == 0) return 1;
+                if (PageCount > 1) return rows;
+                return Mathf.Max(1, Mathf.CeilToInt(Mathf.Min(perPage, count) / (float)columns));
+            }
+
+            private float GridHeight(int shown) => rowHeight * shown + AvGridTokens.Gap * (shown - 1);
+
             /// <summary>
-            /// <paramref name="details"/> was the v1 hover-tooltip text; kit v2 has no tooltip seam on
-            /// AvCell/AvControl yet, so it is accepted for source compatibility and otherwise unused
-            /// (kit gap — see the slice report).
+            /// <paramref name="details"/> is the hover help for a cell (shown in the console footer);
+            /// when it is null the cell's own label is shown instead.
             /// </summary>
             public void SetData(int newCount, Func<int, string> labels, Func<int, bool> isSelected,
                 Action<int> onClick, Func<int, bool> isEnabled = null, Func<int, Sprite> icons = null,
@@ -85,6 +112,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 enabledFn = isEnabled;
                 iconFn = icons;
                 subFn = subs;
+                detailFn = details;
                 int maxPage = Mathf.Max(0, PageCount - 1);
                 if (page > maxPage) page = maxPage;
                 Refresh();
@@ -122,20 +150,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void Refresh()
             {
-                int shownRows = Mathf.CeilToInt(Mathf.Min(perPage, Mathf.Max(0, count - page * perPage)) / (float)columns);
-                int activeSlots = shownRows * columns;
                 for (int i = 0; i < cells.Length; i++)
                 {
                     int index = CurrentIndex(i);
                     bool exists = index >= 0 && index < count;
                     MfdIconCell cell = cells[i];
-                    cell.Rect.gameObject.SetActive(exists || (count > 0 && i < activeSlots));
+                    cell.Rect.gameObject.SetActive(exists);
                     if (!exists) continue;
 
                     bool canUse = enabledFn == null || enabledFn(index);
-                    cell.SetTitle(label != null ? label(index) : "", subFn != null ? subFn(index) : "");
+                    string text = label != null ? label(index) : "";
+                    cell.SetTitle(text, subFn != null ? subFn(index) : "");
                     cell.SetIcon(iconFn != null ? iconFn(index) : null);
                     cell.Interactable = canUse && !readOnly;
+                    // A fenced cell still publishes its "why" to the footer; Click() gates the action.
+                    cell.Help = detailFn != null ? detailFn(index) : text;
                     cell.Refresh();
                 }
 
@@ -144,15 +173,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     pageLabel.text = count == 0 ? "NO ENTRIES"
                         : "PAGE " + AvNum.Fixed(page + 1, 0) + " / " + AvNum.Fixed(PageCount, 0) +
                           "  ·  " + AvNum.Fixed(count, 0) + " ITEMS";
-                if (prev != null) { prev.gameObject.SetActive(count > 0); prev.Interactable = page > 0; }
-                if (next != null) { next.gameObject.SetActive(count > 0); next.Interactable = page < PageCount - 1; }
-                if (pageLabel != null) pageLabel.gameObject.SetActive(count > 0);
+                bool pager = PagerShown;
+                if (prev != null) { prev.gameObject.SetActive(pager); prev.Interactable = page > 0; }
+                if (next != null) { next.gameObject.SetActive(pager); next.Interactable = page < PageCount - 1; }
+                if (pageLabel != null) pageLabel.gameObject.SetActive(pager);
+
+                int sizeKey = ShownRows() * 2 + (pager ? 1 : 0);
+                if (sizeKey != lastSizeKey)
+                {
+                    lastSizeKey = sizeKey;
+                    SizeChanged?.Invoke();
+                }
             }
 
             public override float Measure(float width)
             {
-                float h = rowHeight * rows + AvGridTokens.Gap * (rows - 1);
-                if (pagerEnabled) h += AvGridTokens.Gap + AvGridTokens.Row;
+                float h = GridHeight(ShownRows());
+                if (PagerShown) h += AvGridTokens.Gap + AvGridTokens.Row;
                 return h;
             }
 
@@ -165,9 +202,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     int row = i / columns, col = i % columns;
                     cells[i].Place(new AvSlot(col * (colW + AvGridTokens.Gap), row * (rowHeight + AvGridTokens.Gap), colW, rowHeight));
                 }
-                float gridH = rowHeight * rows + AvGridTokens.Gap * (rows - 1);
+                float gridH = GridHeight(ShownRows());
                 AvLay.Place(empty.rectTransform, 0f, 0f, s.W, gridH);
-                if (pagerEnabled)
+                if (PagerShown)
                 {
                     float y = gridH + AvGridTokens.Gap;
                     AvLay.Place(prev.Rect, 0f, y, 96f, AvGridTokens.Row);

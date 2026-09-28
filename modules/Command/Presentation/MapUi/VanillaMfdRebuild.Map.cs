@@ -56,7 +56,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private ComMapOverlay overlay;
             private ThreatMapOverlay threats;
             private MfdPagingGrid layers, overlays, hover, sizes;
-            private AvControl presetAll, presetNone;
+            private AvControl presetAll, presetNone, presetDefaults;
             private ProseNote overlayNote, detailSummary, previewCaption;
             private AvMetric[] metrics;
             private AvChip[] chips;
@@ -118,11 +118,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 page.Section(AvIcon.Filter, "GAME SYMBOLOGY", NativeLayerCount + " NATIVE LAYERS");
                 layers = new MfdPagingGrid(page.Content, 2, 3, pager: false);
-                page.Add(layers);
+                AddGrid(page, layers);
 
                 page.Section(AvIcon.Scale, "THEATER OVERLAYS", "TACTICAL RASTER");
                 overlays = new MfdPagingGrid(page.Content, 2, 2, pager: false);
-                page.Add(overlays);
+                AddGrid(page, overlays);
 
                 overlayNote = new ProseNote(page.Content, "");
                 page.Add(overlayNote);
@@ -133,6 +133,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new AvControl.Spec("DEFAULTS", ApplyDefaults, AvButtonStyle.Default, AvIcon.Refresh));
                 presetAll = presetRow.Controls[0];
                 presetNone = presetRow.Controls[1];
+                presetDefaults = presetRow.Controls[2];
             }
 
             private bool NativeLayer(int index)
@@ -240,14 +241,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Eye, "CONTACT HOVER", "CHOOSE ONE");
                 hover = new MfdPagingGrid(page.Content, 2, 2, pager: false);
-                page.Add(hover);
+                AddGrid(page, hover);
 
                 detailSummary = new ProseNote(page.Content, "");
                 page.Add(detailSummary);
 
                 page.Section(AvIcon.Focus2, "SYMBOL SIZE", "CHOOSE ONE");
                 sizes = new MfdPagingGrid(page.Content, 1, 3, pager: false);
-                page.Add(sizes);
+                AddGrid(page, sizes);
 
                 page.Section(AvIcon.Map2, "MAP LEGEND", "BOSCALI OVERLAYS");
                 page.Add(new LegendCard(page.Content));
@@ -402,16 +403,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     i => available && options.tooltipType == HoverModes[i],
                     i => { if (ToggleReady()) options.SetToolTipType((int)HoverModes[i]); RequestRefresh(); },
                     i => available,
+                    details: i => available ? "Hover a map unit: " + HoverNotes[i].ToLowerInvariant() + "." :
+                        "Map options are not available yet.",
                     subs: i => available ? HoverNotes[i] : null);
                 sizes.SetData(SizeNames.Length, i => SizeNames[i] + " " + AvNum.Percent((60 + 20 * i) / 100f, 0),
                     i => available && Mathf.Approximately(options.iconSize, .6f + .2f * i),
                     i => { if (ToggleReady()) options.SetIconSize(i); RequestRefresh(); }, i => available,
+                    details: i => available ? "Draw map symbols at " + AvNum.Percent((60 + 20 * i) / 100f, 0) +
+                        " (" + SizeSubtitles[i] + ")." : "Map options are not available yet.",
                     subs: i => available ? SizeSubtitles[i] : null);
 
                 bool anyLayer = available && visibleLayers > 0;
                 bool everyLayer = available && visibleLayers == ShownLayerTarget();
                 presetAll.Interactable = available && !everyLayer;
                 presetNone.Interactable = anyLayer;
+                presetAll.Help = !available ? "Map is not available yet." : everyLayer
+                    ? "Every layer is already shown." : "Show every game layer and every Boscali overlay.";
+                presetNone.Help = !available ? "Map is not available yet." : !anyLayer
+                    ? "Every layer is already hidden." : "Hide every map layer. Panels and symbols stay as they are.";
+                presetDefaults.Help = available
+                    ? "Restore the game's defaults: every layer on, unit tooltips and full-size symbols."
+                    : "Map is not available yet.";
 
                 overlayNote.Set(overlaysReady
                     ? (source.HasControlData

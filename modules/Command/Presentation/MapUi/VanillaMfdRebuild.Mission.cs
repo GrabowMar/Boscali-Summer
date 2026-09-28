@@ -43,6 +43,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // Secondary/contracts page.
             private AvSection boardSection;
             private AvControl[] secondaryFilterControls;
+            private AvControl browseContracts;
+            private const string BrowseHelp = "Open the contract board and browse optional missions.";
             private AvRow boardSummaryRow;
             private AvList secondaryList;
             private readonly Dictionary<AvRow, int> secondaryRowIndex = new Dictionary<AvRow, int>();
@@ -124,8 +126,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 page.Section(MfdChromeIcon.For("FACTION"), "FACTION CONTRACTS", "SECONDARY MISSIONS");
                 contractPreviewRow = page.Add(new AvRow(page.Content, () => SetSelectedTab(2)));
-                page.Buttons(new AvControl.Spec("BROWSE CONTRACTS", () => SetSelectedTab(2),
-                    AvButtonStyle.Default, AvIcon.ArrowUpRight));
+                browseContracts = page.Buttons(new AvControl.Spec("BROWSE CONTRACTS", () => SetSelectedTab(2),
+                    AvButtonStyle.Default, AvIcon.ArrowUpRight)).Controls[0];
+                browseContracts.Help = BrowseHelp;
             }
 
             private void RefreshMissionCopy(Mission mission, MissionManager manager)
@@ -227,6 +230,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (objective == null)
                 {
                     row.Set("OBJECTIVE LINK LOST", "", "—", AvState.Caution);
+                    row.Help = null;
                     return;
                 }
 
@@ -245,6 +249,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 row.Set(AvIcons.Glyph(ObjectiveIcon(type)) + " " + title, detail,
                     complete ? "DONE" : AvNum.Percent(fraction), state);
+                row.Help = string.IsNullOrEmpty(detail) ? title : title + "  —  " + detail;
             }
 
             // ------------------------------------------------------- SECONDARY page
@@ -258,10 +263,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     new AvControl.Spec("ACTIVE", () => { secondaryFilter = MfdSecondaryObjectives.FilterActive; RequestRefresh(); }),
                     new AvControl.Spec("CLOSED", () => { secondaryFilter = MfdSecondaryObjectives.FilterResults; RequestRefresh(); }));
                 secondaryFilterControls = filters.Controls;
+                string[] filterNames = { "available", "active", "closed" };
+                string[] filterHelp =
+                {
+                    "offers the host has not answered yet",
+                    "contracts this faction has accepted",
+                    "completed, lapsed and aborted contracts",
+                };
+                for (int i = 0; i < secondaryFilterControls.Length; i++)
+                    secondaryFilterControls[i].Help = "Show " + filterNames[i] + " contracts — " + filterHelp[i] + ".";
 
                 boardSummaryRow = page.Add(new AvRow(page.Content));
-                boardSummaryRow.AddTrailing(new AvControl.Spec("OPEN DESK", OpenContractDesk,
+                AvControl openDesk = boardSummaryRow.AddTrailing(new AvControl.Spec("OPEN DESK", OpenContractDesk,
                     AvButtonStyle.Default, MfdChromeIcon.For("LEDGER")));
+                if (openDesk != null) openDesk.Help = "Open the shared faction contract record.";
 
                 secondaryList = page.Add(new AvList(page.Content, page.Ticker, SecondaryPageSize, BindSecondaryRow));
             }
@@ -342,11 +357,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         (preview.IsActive ? "IN FIELD" : preview.Target) +
                         (string.IsNullOrWhiteSpace(preview.AcceptedBy) ? "" : "  ·  TAKEN BY " + preview.AcceptedBy),
                         MfdSecondaryObjectives.PayoutLabel(preview), preview.IsActive ? AvState.Ready : AvState.Info);
+                    string previewHelp = MfdSecondaryObjectives.TitleLine(preview.Id, preview.Title) +
+                        "  ·  " + (preview.IsActive ? "IN FIELD" : preview.Target) +
+                        (string.IsNullOrWhiteSpace(preview.AcceptedBy) ? "" : "  ·  TAKEN BY " + preview.AcceptedBy);
+                    contractPreviewRow.Help = previewHelp;
+                    browseContracts.Help = previewHelp;
                 }
                 else
                 {
                     contractPreviewRow.Set(available + secondaryActive > 0 ? "REVIEW CONTRACTS" : "NO ACTIVE CONTRACTS",
                         "Open the contract board to review optional faction missions.", "", AvState.Inert);
+                    contractPreviewRow.Help = BrowseHelp;
+                    browseContracts.Help = BrowseHelp;
                 }
 
                 secondaryList.SetCount(secondaryCount);
@@ -369,6 +391,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         AvButtonStyle.Primary, AvIcon.CircleCheck));
                     AvControl dismiss = row.AddTrailing(new AvControl.Spec("DISMISS", () => DismissSecondary(row),
                         AvButtonStyle.Danger, AvIcon.X));
+                    accept.Help = "Accept this contract for the faction.";
+                    dismiss.Help = "Dismiss this offer; aborting an active contract asks for confirmation first.";
                     secondaryControls[row] = (accept, dismiss);
                 }
                 (AvControl accept2, AvControl dismiss2) = secondaryControls[row];
@@ -377,6 +401,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (objective == null)
                 {
                     row.Set("OBJECTIVE LINK LOST", "", "", AvState.Caution);
+                    row.Help = null;
                     accept2.Interactable = false; accept2.Label = "ACCEPT";
                     dismiss2.Interactable = false; dismiss2.Label = "DISMISS";
                     return;
@@ -399,6 +424,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 row.Set(AvIcons.Glyph(ContractIcon(objective.Title)) + " " +
                     MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title),
                     sub, complete ? "PAID" : MfdSecondaryObjectives.PayoutLabel(objective), state);
+                row.Help = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title) + " · " +
+                    objective.Description + " · " + objective.Target + " · " + objective.Reward +
+                    (string.IsNullOrWhiteSpace(objective.AcceptedBy) ? "" : " · ACCEPTED BY " + objective.AcceptedBy);
 
                 bool acceptAllowed = MfdSecondaryObjectives.CanAccept(objective, secondaryHasCapacity);
                 accept2.Interactable = acceptAllowed;

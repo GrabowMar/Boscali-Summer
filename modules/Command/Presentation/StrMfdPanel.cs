@@ -227,10 +227,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             // Position is deliberately not copied; see the same note on the OPS screen.
             // VirtualMFD.showPos is zero and MFDScreen.ShowScreen assigns it straight to
             // localPosition, so a screen is placed by its parent and anchors.
-            float height = ResolveHeight(
+            float height = AvLay.ResolveHeight(
                 templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
             rootRect.sizeDelta = new Vector2(Width, height);
-            ClampPanelIntoCanvas(rootRect);
+            AvLay.ClampIntoCanvas(rootRect);
 
             ModServices.TryGet(out baseAlarm);
             ModServices.TryGet(out highCommand);
@@ -238,10 +238,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             ModServices.TryGet(out threatPicture);
 
             console = AvConsole.Build(rootRect, "STR", "STRATEGY", 3, Width, height);
-            console.Tabs(
+            AvTabBar tabBar = console.Tabs(
                 (AvIcon.Radar2, "SITUATION"),
                 (AvIcon.UsersGroup, "COMMAND"),
                 (AvIcon.Flag, "OPERATIONS"));
+            TabHelp.Apply(tabBar,
+                "Air picture, sortie board and sector control.",
+                "Chain of command: posts, personnel files and the staff log.",
+                "Theater operations: offensives, main effort and reinforcement calls.");
             chips = console.Chips(3);
             metrics = console.Metrics("THEATER CONTROL", "AIR DOMINANCE", "COMMAND");
             console.PageChanged += _ => nextRefresh = 0f;
@@ -277,57 +281,6 @@ namespace BoscaliSummer.Features.Command.Presentation
                 if (images[i].gameObject != button.gameObject) return images[i];
             }
             return button.GetComponent<Image>();
-        }
-
-        /// <summary>Same clamp the v1 kit's canvas-clamp helper performed, kept local: a bezel near a screen edge must not overhang it.</summary>
-        private static void ClampPanelIntoCanvas(RectTransform panel, float margin = 8f)
-        {
-            if (panel == null) return;
-            Canvas canvas = panel.GetComponentInParent<Canvas>();
-            if (canvas == null) return;
-            var canvasRt = canvas.rootCanvas.transform as RectTransform;
-            if (canvasRt == null || panel.parent == null) return;
-
-            var corners = new Vector3[4];
-            panel.GetWorldCorners(corners);
-            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 local = canvasRt.InverseTransformPoint(corners[i]);
-                if (local.x < minX) minX = local.x;
-                if (local.x > maxX) maxX = local.x;
-                if (local.y < minY) minY = local.y;
-                if (local.y > maxY) maxY = local.y;
-            }
-
-            Rect bounds = canvasRt.rect;
-            float dx = 0f;
-            if (minX < bounds.xMin + margin) dx = bounds.xMin + margin - minX;
-            else if (maxX > bounds.xMax - margin) dx = bounds.xMax - margin - maxX;
-            float dy = 0f;
-            if (maxY > bounds.yMax - margin) dy = bounds.yMax - margin - maxY;
-            else if (minY < bounds.yMin + margin) dy = bounds.yMin + margin - minY;
-            if (Mathf.Approximately(dx, 0f) && Mathf.Approximately(dy, 0f)) return;
-
-            Vector3 world = canvasRt.TransformVector(new Vector3(dx, dy, 0f));
-            Vector3 local2 = panel.parent.InverseTransformVector(world);
-            panel.anchoredPosition += new Vector2(local2.x, local2.y);
-        }
-
-        /// <summary>Same bounded resolution the v1 kit's screen-height resolver performed, kept local.</summary>
-        internal static float ResolveHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
         // ---- Shared state mapping ----------------------------------------------------------
@@ -382,7 +335,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BindNodeRow(int index, AvRow row)
         {
-            if (index < 0 || index >= rankedCount) { row.Set("—", "", "", AvState.Inert); return; }
+            if (index < 0 || index >= rankedCount) { row.Set("—", "", "", AvState.Inert); row.Help = null; return; }
             TacticalSectorGrid.TacticalNode node = ranked[index];
             bool friendly = node.Faction == SectorControl.Friendly;
             // Pressure on ground we hold is bad news; pressure on ground they hold is progress.
@@ -396,6 +349,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " + pressureState,
                 figure,
                 RailState(TheaterReadout.NodeRail(friendly, node.IsContested)));
+            row.Help = name + " — " + (friendly ? "allied held" : "hostile held") + ", " +
+                       pressureState.ToLowerInvariant() + ".";
         }
 
         private void RefreshSa(TacticalTheaterState state)

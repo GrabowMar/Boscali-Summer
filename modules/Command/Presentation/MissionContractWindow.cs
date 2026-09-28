@@ -23,7 +23,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private AvWindow window;
         private AvSegmented filterControl;
         private AvSection rosterSection;
-        private AvClickList list;
+        private AvList list;
         private AvSection detailSection;
         private AvRow detailHeaderRow, detailTargetRow, detailAcceptedRow, detailRewardRow, detailStatusRow, detailProgressRow;
         private ProseText detailDescription;
@@ -113,7 +113,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             rosterSection = body.Section(AvIcon.Bookmark, "CONTRACT ROSTER", "—");
             filterControl = body.Add(new AvSegmented(body.Content, "FILTER",
                 new[] { "ALL", "OFFERS", "ACTIVE", "CLOSED" }, () => filter, i => { filter = i; selectedId = -1; Refresh(); }));
-            list = body.Add(new AvClickList(body.Content, window.Ticker, Rows, BindRow, SelectRow));
+            list = body.Add(new AvList(body.Content, window.Ticker, Rows, BindRow));
+            list.RowClicked = SelectRow;
 
             detailSection = body.Section(AvIcon.User, "TASK FILE", "—");
             detailHeaderRow = body.Add(new AvRow(body.Content));
@@ -124,6 +125,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             detailProgressRow = body.Add(new AvRow(body.Content));
             detailDescription = body.Add(new ProseText(body.Content));
 
+            AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
+            if (closeButton != null) closeButton.Help = "Close the contract desk (Esc).";
             window.Footer.Set("Faction-wide tasking · accept and cancel from the MIS bezel.");
         }
 
@@ -136,6 +139,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             string owner = string.IsNullOrWhiteSpace(entry.AcceptedBy) ? "" : "  ·  " + entry.AcceptedBy;
             row.Set(MfdSecondaryObjectives.TitleLine(entry.Id, entry.Title),
                 Phase(entry) + "  ·  " + MfdSecondaryObjectives.ChipLabel(entry) + owner, "", state);
+            row.Help = "Inspect this faction contract.";
         }
 
         private void SelectRow(int index)
@@ -186,10 +190,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                 : roster.Count + " IN VIEW"));
             filterControl.Refresh();
 
-            list.SetCount(roster.Count);
             if (selectedId < 0 || !roster.Exists(entry => entry.Id == selectedId))
                 selectedId = roster.Count > 0 ? roster[0].Id : -1;
-            list.Refresh();
+            list.SetCount(roster.Count);
 
             SecondaryObjectiveView current = null;
             for (int i = 0; i < roster.Count; i++)

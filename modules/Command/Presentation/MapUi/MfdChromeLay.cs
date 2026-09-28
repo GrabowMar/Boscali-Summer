@@ -62,19 +62,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Restores a TMP field to a size captured before the rail skinned a borrowed vanilla
-        /// control, so teardown can put back the exact value it found. Never for kit-authored
-        /// chrome sizing — that goes through <see cref="AvTextRole"/> / <see cref="AvText.Fit"/>,
-        /// which never touches this property directly. Reached through reflection, deliberately:
-        /// this is the one place in the slice that writes a captured vanilla value rather than an
-        /// authored one, and it should look different from every other size in this file.
+        /// Restores a TMP field to the size <see cref="MfdRail"/> captured before it skinned a borrowed
+        /// vanilla control, so teardown puts back the exact value it found. This is the one place in
+        /// the slice that writes a captured vanilla value rather than an authored one; kit-authored
+        /// chrome sizing goes through <see cref="AvTextRole"/> / <see cref="AvText.Fit"/> instead.
+        /// The plain assignment is deliberate (a vanilla text that was not auto-sized has no other
+        /// public way back to its exact size), so this file is an exemption from the kit-v2
+        /// "no direct size assignment" rule.
         /// </summary>
-        private static readonly System.Reflection.PropertyInfo CapturedSizeProperty =
-            typeof(TMPro.TMP_Text).GetProperty("font" + "Size");
-
         public static void RestoreCapturedSize(TMPro.TMP_Text text, float size)
         {
-            if (text != null) CapturedSizeProperty?.SetValue(text, size);
+            if (text != null) text.fontSize = size;
         }
 
         /// <summary>Zero-padded integer through the digit writer <see cref="AvNum"/> is built on, culture-invariant like <c>AvConsole</c>'s own page index (spec §5.2).</summary>

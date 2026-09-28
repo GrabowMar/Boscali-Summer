@@ -77,7 +77,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             HudOffset(flow, page, "VERTICAL", () => board?.OffsetY ?? 0,
                 v => { if (board != null) board.OffsetY = v; }, -600, on, off);
             flow.Buttons(new AvControl.Spec("RESET STATUS LAYOUT", () =>
-            { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); }));
+            { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); }))
+                .Controls[0].Help = "Restore the status layout. Feed preferences are kept.";
 
             if (board == null)
             {

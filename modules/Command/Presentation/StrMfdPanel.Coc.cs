@@ -72,6 +72,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             cocSection = p.Section(AvIcon.UsersGroup, "CHAIN OF COMMAND", "");
             cocSideControl = p.Add(new AvSegmented(p.Content, "SIDE", new[] { "ALLIED", "HOSTILE" },
                 () => cocShowHostile ? 1 : 0, i => { cocShowHostile = i == 1; nextRefresh = 0f; }));
+            cocSideControl.Options[0].Help = "Show the allied chain of command.";
+            cocSideControl.Options[1].Help =
+                "Show the opposing chain of command. A post stays unconfirmed until local intel has seen it.";
             cocRoster = p.Add(new AvRowStack(p.Content, CocRosterRows, RosterClicked));
 
             cocFileSection = p.Section(AvIcon.User, "PERSONNEL FILE", "SELECT A POST");
@@ -167,6 +170,15 @@ namespace BoscaliSummer.Features.Command.Presentation
                 // a trunk line: each level under the theater commander adds one bullet.
                 string indent = view.Tier > 0 ? new string('›', view.Tier) + " " : "";
                 cocRoster.Row(i).Set(indent + name, view.Rank + " · " + view.Role, StatusOf(view), state);
+                // The row's copy is the office; the bonus its post carries rides the help line.
+                string bonus = !view.IsFriendly && !view.IsKnown ? "" : FirstBonus(view.Bonus);
+                cocRoster.Row(i).Help = (view.IsFriendly
+                    ? "Open the card for " + view.Name + "  ·  " + view.Role
+                    : view.IsKnown
+                        ? "Confirmed contact: " + view.Name + "  ·  " + view.Role
+                        : "Unconfirmed post: " + view.Name + " — no local intel.") +
+                    (string.IsNullOrEmpty(bonus) ? "" : "  ·  " + bonus) +
+                    (view.Id == cocSelectedId ? "  ·  Bracketed on the map." : "");
             }
             for (int i = ordered; i < CocRosterRows; i++) { cocRoster.Hide(i); cocRowIds[i] = -1; }
 
@@ -202,6 +214,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 AvRow row = cocLogRows.Row(shown);
                 row.Set(line.Text, null, TheaterReadout.Age(line.Age), LogState(line.Tone));
                 row.Interactable = clickable;
+                row.Help = clickable ? "Open this post's card." : "Post is not on this side.";
                 cocLogTargetIds[shown] = clickable ? line.TargetId : -1;
                 shown++;
             }
@@ -281,6 +294,14 @@ namespace BoscaliSummer.Features.Command.Presentation
                 start = end + 3;
             }
             for (int i = used; i < cocBonusRows.Count; i++) cocBonusRows.Hide(i);
+        }
+
+        /// <summary>The first entry of the bonus line, for the roster row's help.</summary>
+        private static string FirstBonus(string bonus)
+        {
+            if (string.IsNullOrEmpty(bonus)) return "";
+            int at = bonus.IndexOf(" · ", StringComparison.Ordinal);
+            return at < 0 ? bonus : bonus.Substring(0, at);
         }
 
         /// <summary>Base names arrive off the wire as identifiers; a file prints words.</summary>
