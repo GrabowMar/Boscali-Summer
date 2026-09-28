@@ -20,13 +20,24 @@ namespace NOAvionics.Ui
             Rect = AvLay.Child(parent, "List");
             bind = binder;
             rows = new AvRow[Mathf.Clamp(pageSize, 1, MaxPageSize)];
-            for (int i = 0; i < rows.Length; i++) { rows[i] = new AvRow(Rect); ticker?.Register(rows[i]); }
+            for (int i = 0; i < rows.Length; i++)
+            {
+                int slot = i;
+                rows[i] = new AvRow(Rect, () => RowClicked?.Invoke(Page * rows.Length + slot));
+                if (ticker != null) ticker.Register(rows[i]);
+            }
             prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
             next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
             range = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
         }
 
         public int Page { get; private set; }
+
+        /// <summary>Item index of a clicked row (rows are clickable only when this is set).</summary>
+        public System.Action<int> RowClicked;
+
+        /// <summary>Jump to the page holding <paramref name="item"/>.</summary>
+        public void Reveal(int item) => Go(item / rows.Length);
         private int Pages => Math.Max(1, (count + rows.Length - 1) / rows.Length);
 
         public void SetCount(int n) { count = Math.Max(0, n); Go(Page); }

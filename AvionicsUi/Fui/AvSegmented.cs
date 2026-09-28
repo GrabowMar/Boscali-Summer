@@ -9,6 +9,7 @@ namespace NOAvionics.Ui
     {
         private readonly TMP_Text label;
         private readonly AvControl[] options;
+        public AvControl[] Options => options;
         private readonly Func<int> get;
 
         public AvSegmented(RectTransform parent, string labelText, string[] choices, Func<int> getter, Action<int> set)

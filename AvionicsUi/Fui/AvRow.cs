@@ -14,6 +14,8 @@ namespace NOAvionics.Ui
         private readonly AvFrame frame;
         private readonly Image rail;
         private readonly TMP_Text name, sub, value;
+        private RawImage badge;
+        private const float BadgeW = 22f;
         private readonly List<AvControl> trailing = new List<AvControl>(3);
         private AvState state = AvState.Info;
         private bool hover, armed, interactable = true;
@@ -57,7 +59,22 @@ namespace NOAvionics.Ui
             return c;
         }
 
-        private float TextWidth(float width) => width - 2f * PadX - 4f - (value.text.Length > 0 ? ValueW : 0f) - trailing.Count * (TrailW + 4f);
+        private float BadgeSpace => badge != null && badge.enabled ? BadgeW + 6f : 0f;
+
+        /// <summary>Optional small image before the name (station logos, portraits). Null hides it.</summary>
+        public void SetBadge(Texture texture)
+        {
+            if (texture == null) { if (badge != null) badge.enabled = false; return; }
+            if (badge == null)
+            {
+                badge = new GameObject("Badge", typeof(RectTransform), typeof(CanvasRenderer)).AddComponent<RawImage>();
+                badge.transform.SetParent(Rect, false);
+                badge.raycastTarget = false;
+            }
+            badge.texture = texture; badge.enabled = true;
+        }
+
+        private float TextWidth(float width) => width - 2f * PadX - 4f - BadgeSpace - (value.text.Length > 0 ? ValueW : 0f) - trailing.Count * (TrailW + 4f);
 
         public override float Measure(float width)
         {
@@ -71,8 +88,10 @@ namespace NOAvionics.Ui
             base.Place(s);
             float w = TextWidth(s.W), nh = AvText.Height(name, w);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-            AvLay.Place(name.rectTransform, PadX + 4f, PadY, w, nh);
-            AvLay.Place(sub.rectTransform, PadX + 4f, PadY + nh + 2f, w, AvText.Height(sub, w));
+            float x0 = PadX + 4f + BadgeSpace;
+            if (BadgeSpace > 0f) AvLay.Place(badge.rectTransform, PadX + 4f, (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
+            AvLay.Place(name.rectTransform, x0, PadY, w, nh);
+            AvLay.Place(sub.rectTransform, x0, PadY + nh + 2f, w, AvText.Height(sub, w));
             float x = s.W - PadX;
             for (int i = trailing.Count - 1; i >= 0; i--) { x -= TrailW; AvLay.Place(trailing[i].Rect, x, (s.H - 24f) * 0.5f, TrailW, 24f); x -= 4f; }
             if (value.text.Length > 0) AvLay.Place(value.rectTransform, x - ValueW, PadY, ValueW, 18f);

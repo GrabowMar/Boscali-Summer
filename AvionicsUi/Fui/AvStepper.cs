@@ -9,6 +9,8 @@ namespace NOAvionics.Ui
     {
         private readonly TMP_Text label, value;
         private readonly AvControl minus, plus;
+        public AvControl Minus => minus;
+        public AvControl Plus => plus;
         private readonly Func<string> read;
 
         public AvStepper(RectTransform parent, string labelText, Func<string> valueText, Action onMinus, Action onPlus)

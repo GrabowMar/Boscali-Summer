@@ -36,6 +36,16 @@ namespace NOAvionics.Ui
             Root.SetParent(uiRoot, false);
             var canvas = go.AddComponent<Canvas>();
             canvas.overrideSorting = true; canvas.sortingOrder = order;
+            if (uiRoot == null || uiRoot.GetComponentInParent<Canvas>() == null)
+            {
+                // Not under an existing UI canvas: become a scaled overlay canvas ourselves.
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                var scaler = go.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+                w = Mathf.Min(w, 1880f); h = Mathf.Min(h, 1040f);
+            }
             canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
             go.AddComponent<GraphicRaycaster>();
             Root.anchorMin = Root.anchorMax = Root.pivot = new Vector2(0.5f, 0.5f);
