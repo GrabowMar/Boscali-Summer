@@ -193,12 +193,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             window = AvWindow.Build(uiRoot, "WeatherConsole", "WEATHER CONSOLE", Width, Height, SortOrder);
             // uiRoot is a plain scene transform (not an existing scaled UI canvas), so the window's
             // own root canvas needs an explicit scaler the way the v1 build gave it one.
-            Canvas canvas = window.Root.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            CanvasScaler scaler = window.Root.gameObject.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            // AvWindow scales itself when its root is not under a UI canvas (WeatherManager.transform is not).
             window.Closed += OnWindowClosed;
 
             AvFlow body = window.Body;
