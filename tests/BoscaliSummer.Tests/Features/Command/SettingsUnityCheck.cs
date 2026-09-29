@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
@@ -7,6 +8,7 @@ using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.Command.Presentation.MapUi;
+using BoscaliSummer.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -18,6 +20,9 @@ using Object = UnityEngine.Object;
 
 public static class SettingsUnityCheck
 {
+    private static readonly List<string> Failures = new List<string>();
+    private static int checkedTexts;
+
     public static void Run()
     {
         try
@@ -36,14 +41,17 @@ public static class SettingsUnityCheck
             for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
-            AvionicsUnityCheck.Check();
             CheckMfdLookup();
             CheckLayoutCanvas();
             CheckScreenSpaceSizing();
-            foreach (int height in new[] { 596, 420 }) CheckPanel(height);
-            File.WriteAllText("result.txt", "PASS: SET renders six CLIENT pages including live performance toggles and separate SERVER tasking/host settings at 596 and 420 units; toggles, background replacement, disabled dependencies, +/- bounds, scrolling and cached page trees checked. Game adapters are stubbed; in-game acceptance remains required.");
+            foreach (int height in new[] { 896, 596, 420 }) CheckPanel(height);
+            if (Failures.Count > 0)
+                throw new Exception(Failures.Count + " layout failure(s) over " + checkedTexts + " texts:\n" + string.Join("\n", Failures.GetRange(0, Math.Min(40, Failures.Count))));
+            File.WriteAllText("result.txt", "PASS: SET (kit v2) renders THIS PILOT (DISPLAY/MAP/COCKPIT/PERFORMANCE) and SERVER (WORLD/FORCES/EFFECTS/TASKING) " +
+                "consoles as client and host at 896, 596 and 420 units (" + checkedTexts + " texts gated for overflow, overlap, gutter and 11 px floor); " +
+                "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
+                "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -117,12 +125,16 @@ public static class SettingsUnityCheck
         Object.DestroyImmediate(root);
     }
 
+    // Page indices per console, matching SettingsMfdPanel's private constants.
+    private const int CDisplay = 0, CMap = 1, CCockpit = 2, CPerf = 3;
+    private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
+
     private static void CheckPanel(int height)
     {
+        GameAccess.ForceServer = false;
+        ModServices.Services.Remove(typeof(ISecondaryObjectivesView));
         var hud = new HudFixture();
-        var external = new ExternalFixture();
         ModServices.Services[typeof(IHudBoard)] = hud;
-        ModServices.Services[typeof(IThirdPersonHud)] = external;
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -138,7 +150,23 @@ public static class SettingsUnityCheck
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(480, height);
         var panel = canvas.gameObject.AddComponent<SettingsMfdPanel>();
         var hostBoard = new HostSettingsBoard();
-        hostBoard.Add(new HostFixture());
+        var fire = new HostFixture("FIRE AND DESTRUCTION", HostSettingsPage.Effects,
+            "T:FIRE IGNITION:1", "S:MAX FIRE SITES:24", "S:BURN TIME:90 s");
+        var events = new HostFixture("WORLD EVENTS", HostSettingsPage.Settings, "T:SUPEREVENTS:1", "S:EVENT PACE:1.00x");
+        hostBoard.Add(new HostFixture("COMMS", HostSettingsPage.Settings, "T:ALL CHANNEL:0"));
+        hostBoard.Add(new HostFixture("DYNAMIC OPERATIONS", HostSettingsPage.Settings,
+            "S:REWARD SCALE:1.00x", "S:CONTRACT LIMIT:3", "T:TIMED CONTRACTS:1"));
+        hostBoard.Add(events);
+        hostBoard.Add(new HostFixture("HIGH COMMAND", HostSettingsPage.Settings,
+            "T:STIPENDS AND KILL PAY:1", "S:STAFF STIPEND:120", "T:ESCROW HOLD:0"));
+        hostBoard.Add(new HostFixture("PROGRESSION", HostSettingsPage.Settings, "S:SCORE PER GRADE:100", "S:GRADE CEILING:12"));
+        hostBoard.Add(new HostFixture("SQUAD AND ACES", HostSettingsPage.Settings, "S:PILOT CAREER:RESPAWN", "T:ACE HUNTS:1"));
+        hostBoard.Add(new HostFixture("SUPPORT CALL-INS", HostSettingsPage.Settings,
+            "T:RADAR SCAN:1", "T:ZONE FORTIFICATION:1", "T:ROD FROM GOD:0", "T:EMP SHOCK:1", "T:ELINT SWEEP:1"));
+        hostBoard.Add(new HostFixture("TRENCHES", HostSettingsPage.Settings, "S:MAX NETWORKS:8"));
+        hostBoard.Add(new HostFixture("URBAN COMBAT", HostSettingsPage.Settings, "T:ZONE GARRISONS:1", "S:MAX GARRISONS:12"));
+        hostBoard.Add(fire);
+        hostBoard.Add(new HostFixture("WEATHER", HostSettingsPage.Effects, "T:CHANGING WEATHER:1", "S:CHANGE INTERVAL:20 min"));
         var clientBoard = new ClientSettingsBoard();
         var performance = config.ExpandedMapUi.ConfigFile.Bind("Performance", "Enabled", false, "Live adaptive FX");
         var rain = config.ExpandedMapUi.ConfigFile.Bind("Weather", "RainVisualsEnabled", true, "Live rain particles");
@@ -149,141 +177,318 @@ public static class SettingsUnityCheck
         clientBoard.Add("RAIN VISUALS", "CANOPY DROPLETS", "Live; no restart.", canopy);
         clientBoard.Add("RAIN VISUALS", "TERRAIN WET PASS", "Live; no restart.", terrain);
         panel.Configure(config, null, null, hostBoard, clientBoard);
-        var shell = AvScreen.Build((RectTransform)canvas.transform, "SET", new[] { "CLIENT", "SERVER" }, null, 2, 480, height, null);
-        shell.DataBar.SetChip(0, "SAVED", true);
-        shell.DataBar.State.text = "TACTICAL DISPLAY";
-        typeof(SettingsMfdPanel).GetField("shell", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(panel, shell);
-        Invoke(panel, "BuildClientArea", (RectTransform)shell.CreatePage(0, "ClientPage").transform, shell.Body);
-        Invoke(panel, "BuildServerPage", (RectTransform)shell.CreatePage(1, "ServerPage").transform, shell.Body);
+        typeof(SettingsMfdPanel).GetField("lastServerMode", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, false);
+
+        // Install() needs a real bezel claim (stubbed to always fail offline), so the consoles are built
+        // through the same BuildConsoles() Install() calls, with the content bound after Finish().
+        Invoke(panel, "BuildConsoles", (RectTransform)canvas.transform, (float)height);
+        var clientCon = (AvConsole)Field(panel, "clientCon");
+        var serverCon = (AvConsole)Field(panel, "serverCon");
+        Check(clientCon != null && serverCon != null, "Both consoles must be built");
+        Check(clientCon.PageCount == 4 && serverCon.PageCount == 4, "Each mode carries at most four tabs");
+        Check(clientCon.Root.gameObject.activeSelf && !serverCon.Root.gameObject.activeSelf, "THIS PILOT is the default mode");
+        clientCon.Ticker.TickNow();
+
         int objects = canvas.GetComponentsInChildren<Transform>(true).Length;
-        shell.SetPage(0);
-        for (int page = 0; page < 6; page++)
+
+        // ---- every page of both modes, as a remote client and as the host
+        foreach (bool host in new[] { false, true })
         {
-            Invoke(panel, "SetClientPage", page);
-            Refresh(panel);
-            shell.WriteStatus(null, null, "Saved automatically. Hover a control for help.");
-            Render(camera, canvas, height, page);
-            if (page == 1 && height == 596)
+            GameAccess.ForceServer = host;
+            foreach (bool server in new[] { false, true })
             {
-                Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
-                for (int color = 1; color <= 4; color++)
+                ShowMode(panel, clientCon, serverCon, server);
+                AvConsole con = server ? serverCon : clientCon;
+                for (int page = 0; page < con.PageCount; page++)
                 {
-                    config.DisplayTint.Value = color;
-                    config.DisplayTintStrength.Value = .7f;
-                    config.DisplayScanlines.Value = .5f;
-                    config.DisplayVignette.Value = .4f;
-                    Invoke(panel, "ApplyDisplayEffects");
-                    foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
-                    Refresh(panel);
-                    Render(camera, canvas, height, 10 + color);
+                    con.SetPage(page);
+                    Settle(con);
+                    string tag = (server ? "server" : "client") + "-" + (host ? "host" : "remote") + "-" + page;
+                    Render(camera, canvas, height, tag);
+                    if (height == 596 && !server && page == CDisplay && !host)
+                    {
+                        Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
+                        for (int color = 1; color <= 4; color++)
+                        {
+                            config.DisplayTint.Value = color;
+                            config.DisplayTintStrength.Value = .7f;
+                            config.DisplayScanlines.Value = .5f;
+                            config.DisplayVignette.Value = .4f;
+                            Invoke(panel, "ApplyDisplayEffects");
+                            foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
+                            Render(camera, canvas, height, "tint-" + color);
+                        }
+                        Object.DestroyImmediate(finish.gameObject);
+                        config.DisplayTint.Value = 0;
+                        config.DisplayTintStrength.Value = .25f;
+                        config.DisplayScanlines.Value = 0f;
+                        config.DisplayVignette.Value = 0f;
+                        Invoke(panel, "ApplyDisplayEffects");
+                        foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
+                    }
                 }
-                Object.DestroyImmediate(finish.gameObject);
-                config.DisplayTint.Value = 0;
-                config.DisplayTintStrength.Value = .25f;
-                config.DisplayScanlines.Value = 0f;
-                config.DisplayVignette.Value = 0f;
-                Invoke(panel, "ApplyDisplayEffects");
-                foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
             }
         }
-        shell.SetPage(1);
-        Refresh(panel);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "FACTION TASKING"),
-            "SERVER tasking must have its own populated page");
-        Render(camera, canvas, height, 16);
-        Invoke(panel, "SetServerPage", 1);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "MAX FIRE SITES"),
-            "SERVER host settings must have a dedicated populated page");
-        Refresh(panel);
-        shell.WriteStatus(null, null, "Host only. These settings are read-only on a remote client.");
-        Render(camera, canvas, height, 17);
-        shell.SetPage(0);
-        Invoke(panel, "SetClientPage", 0);
-        Refresh(panel);
-        Click(Find(canvas, "ON"));
+        GameAccess.ForceServer = false;
+
+        // ---- the mode switch itself: real clicks, remembered across opens
+        ShowMode(panel, clientCon, serverCon, false);
+        Check(clientCon.Root.gameObject.activeSelf && !serverCon.Root.gameObject.activeSelf, "Client mode shows only the client console");
+        Click(FindControl(clientCon.Root, "SERVER"));
+        Check(!clientCon.Root.gameObject.activeSelf && serverCon.Root.gameObject.activeSelf, "SERVER click must swap the consoles");
+        Check((bool)typeof(SettingsMfdPanel).GetField("lastServerMode", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null),
+            "The chosen mode is remembered for the next open");
+        Settle(serverCon);
+        Check(serverCon.Root.GetComponentsInChildren<Transform>(true).Length > 0 &&
+              serverCon.Root.Find("Mode") != null, "SERVER console carries its own mode switch");
+        if (AvIcons.Available)
+            Check(ServerGlyph(serverCon) == AvIcons.Glyph(AvIcon.Lock), "A remote client sees a lock on the SERVER segment");
+        Click(FindControl(serverCon.Root, "THIS PILOT"));
+        Check(clientCon.Root.gameObject.activeSelf && !serverCon.Root.gameObject.activeSelf, "THIS PILOT click must swap back");
+
+        // ---- SERVER: categorisation, lock for a remote client, live for the host
+        ShowMode(panel, clientCon, serverCon, true);
+        RectTransform world = serverCon.Page(SWorld).Content, forces = serverCon.Page(SForces).Content,
+            effects = serverCon.Page(SEffects).Content;
+        foreach (string s in new[] { "DYNAMIC OPERATIONS", "WORLD EVENTS", "TRENCHES", "URBAN COMBAT" })
+            Check(HasText(world, s), "WORLD lists " + s);
+        foreach (string s in new[] { "HIGH COMMAND", "SUPPORT CALL-INS", "SQUAD AND ACES", "PROGRESSION", "COMMS" })
+            Check(HasText(forces, s), "FORCES lists " + s);
+        foreach (string s in new[] { "FIRE AND DESTRUCTION", "WEATHER", "MAX FIRE SITES" })
+            Check(HasText(effects, s), "EFFECTS lists " + s);
+        Check(!HasText(world, "HIGH COMMAND") && !HasText(forces, "WEATHER") && !HasText(effects, "TRENCHES"),
+            "Sections appear on exactly one tab");
+        serverCon.SetPage(SEffects);
+        Settle(serverCon);
+        Check(HasText(effects, "LOCKED. Only the host can change this; you are seeing the host's value.") ||
+              HasSubText(effects, "LOCKED"), "A remote client sees why a SERVER row is locked");
+        Click(Plus(effects, "MAX FIRE SITES"));
+        Check(fire.Steps == 0, "A remote client cannot step a host setting");
+        serverCon.SetPage(SWorld);
+        Click(FindRowByName(world, "SUPEREVENTS"));
+        Check(events.Toggles == 0, "A remote client cannot toggle a host setting");
+        GameAccess.ForceServer = true;
+        Settle(serverCon);
+        serverCon.SetPage(SEffects);
+        Settle(serverCon);
+        Click(Plus(effects, "MAX FIRE SITES"));
+        Check(fire.Steps == 1, "The host steps a host setting");
+        serverCon.SetPage(SWorld);
+        Settle(serverCon);
+        Click(FindRowByName(world, "SUPEREVENTS"));
+        Check(events.Toggles == 1, "The host toggles a host setting");
+        if (AvIcons.Available)
+            Check(ServerGlyph(serverCon) == AvIcons.Glyph(AvIcon.Database), "The host's SERVER segment carries no lock");
+
+        // populated tasking board
+        var board = new TaskingFixture();
+        ModServices.Services[typeof(ISecondaryObjectivesView)] = board;
+        serverCon.SetPage(STasking);
+        Settle(serverCon);
+        Settle(serverCon);
+        Check(HasText(serverCon.Page(STasking).Content, "RELAY STRIKE"), "SERVER tasking lists the host's contracts");
+        Render(camera, canvas, height, "server-host-tasking-populated");
+        GameAccess.ForceServer = false;
+        Settle(serverCon);
+        Render(camera, canvas, height, "server-remote-tasking-populated");
+        ModServices.Services.Remove(typeof(ISecondaryObjectivesView));
+        ShowMode(panel, clientCon, serverCon, false);
+
+        // ---- THIS PILOT: rows write their saved entries
+        RectTransform mapContent = clientCon.Page(CMap).Content;
+        RectTransform displayContent = clientCon.Page(CDisplay).Content;
+        RectTransform cockpitContent = clientCon.Page(CCockpit).Content;
+        RectTransform perfContent = clientCon.Page(CPerf).Content;
+
+        clientCon.SetPage(CMap);
+        Settle(clientCon);
+        Check(!IsShown(mapContent, "IMAGE FILE") || config.BackgroundImagePreset.Value == 3,
+            "IMAGE FILE only appears for the custom background");
+        Click(FindRowByName(mapContent, "EXPANDED LAYOUT"));
         Check(!config.ExpandedMapUi.Value, "Expanded toggle must change persisted config");
-        Invoke(panel, "SetClientPage", 1);
-        Refresh(panel);
-        var plus = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(), b => b.GetComponentInChildren<TMP_Text>().text == "+");
-        for (int i = 0; i < 20; i++) Click(plus[0]);
+        float before = config.DeckOpacity.Value;
+        Click(Plus(mapContent, "CONSOLE OPACITY"));
+        Check(config.DeckOpacity.Value == before, "Disabled controls must reject clicks");
+        config.ExpandedMapUi.Value = true;
+        Settle(clientCon);
+        for (int i = 0; i < 30; i++) Click(Plus(mapContent, "CONSOLE OPACITY"));
+        Check(Mathf.Approximately(config.DeckOpacity.Value, 1f), "Stepper must stop at its upper limit");
+        Click(Plus(mapContent, "BACKGROUND"));
+        Check(!config.DeckGrid.Value && !config.CheckerboardOverlay.Value && !config.BackgroundImage.Value,
+            "Selecting plain replaces all old layers");
+        Settle(clientCon);
+        Check(!IsShown(mapContent, "IMAGE FILE") && !IsShown(mapContent, "CHECKER STRENGTH"),
+            "A plain background hides the image and checker rows");
+        Click(Plus(mapContent, "BACKGROUND"));
+        Click(Plus(mapContent, "BACKGROUND"));
+        Settle(clientCon);
+        Check(config.CheckerboardOverlay.Value && IsShown(mapContent, "CHECKER STRENGTH"), "CHECKER reveals its strength row");
+        Render(camera, canvas, height, "client-map-checker");
+        for (int i = 0; i < 4; i++) Click(Plus(mapContent, "BACKGROUND"));
+        Settle(clientCon);
+        Check(config.BackgroundImage.Value && config.BackgroundImagePreset.Value == 3 && !config.DeckGrid.Value,
+            "Custom image choice is mutually exclusive");
+        Check(IsShown(mapContent, "IMAGE FILE") && IsShown(mapContent, "IMAGE FIT") && IsShown(mapContent, "IMAGE STRENGTH") &&
+              FindControl(mapContent, "RESCAN LOCAL FILES").gameObject.activeInHierarchy,
+            "CUSTOM reveals the image rows and the rescan button");
+        Render(camera, canvas, height, "client-map-custom");
+        var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
+            "Settings survive reloading the saved configuration");
+        Click(FindRowByName(mapContent, "NEWS TICKER"));
+
+        clientCon.SetPage(CDisplay);
+        Settle(clientCon);
+        for (int i = 0; i < 20; i++) Click(Plus(displayContent, "GLASS REFLECTION"));
         Check(Mathf.Approximately(config.DisplayGlass.Value, 1f), "Glass stepper must clamp at full strength");
-        Click(plus[1]);
-        Click(plus[3]);
+        Click(Plus(displayContent, "CRT SCANLINES"));
+        Click(Plus(displayContent, "COLOR TINT"));
         Check(config.DisplayScanlines.Value > 0f && config.DisplayTint.Value == 1,
             "CRT and tint controls must write their saved entries");
         var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
         Check(saved.DisplayScanlines.Value == config.DisplayScanlines.Value && saved.DisplayTint.Value == 1,
             "Display effects survive config reload");
-        Click(Find(canvas, "RESET DISPLAY FILTER"));
+        Click(FindControl(displayContent, "RESET DISPLAY FILTER"));
         Check(config.DisplayScanlines.Value == 0f && config.DisplayTint.Value == 0 &&
             Mathf.Approximately(config.DisplayGlass.Value, .6f), "Reset restores the default filter");
-        var disabled = plus[5];
-        float before = config.DeckOpacity.Value;
-        Click(disabled);
-        Check(config.DeckOpacity.Value == before, "Disabled controls must reject clicks");
-        config.ExpandedMapUi.Value = true;
-        Refresh(panel);
-        for (int i = 0; i < 30; i++) Click(plus[5]);
-        Check(Mathf.Approximately(config.DeckOpacity.Value, 1f), "Stepper must stop at its upper limit");
-        Click(plus[6]);
-        Check(!config.DeckGrid.Value && !config.CheckerboardOverlay.Value && !config.BackgroundImage.Value,
-            "Selecting plain replaces all old layers");
-        for (int i = 0; i < 6; i++) Click(plus[6]);
-        Check(config.BackgroundImage.Value && config.BackgroundImagePreset.Value == 3 && !config.DeckGrid.Value,
-            "Custom image choice is mutually exclusive");
-        var reloaded = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
-        Check(reloaded.BackgroundImagePreset.Value == 3 && reloaded.BackgroundImage.Value && !reloaded.DeckGrid.Value,
-            "Settings survive reloading the saved configuration");
-        Invoke(panel, "SetClientPage", 4); Refresh(panel);
-        Click(Find(canvas, "ON"));
+        Check(config.AvionicsTheme.Value == AvThemeId.Steel, "Theme defaults to Steel");
+        Click(FindControl(displayContent, "ACE"));
+        Check(config.AvionicsTheme.Value == AvThemeId.Ace, "THEME segmented control must write AvionicsTheme");
+        Click(FindCellState(displayContent, "REDUCED MOTION"));
+        Check(config.AvionicsReducedMotion.Value, "REDUCED MOTION cell must write AvionicsReducedMotion");
+
+        clientCon.SetPage(CCockpit);
+        Settle(clientCon);
+        Click(FindRowByName(cockpitContent, "HUD ELEMENT"));
         Check(!hud.Enabled, "HUD switch must write through its public settings seam");
-        Click(Find(canvas, "RESET STATUS LAYOUT"));
+        Click(FindControl(cockpitContent, "RESET STATUS LAYOUT"));
         Check(hud.Enabled && hud.Resets == 1, "HUD reset must remain usable while the overlay is disabled");
-        Invoke(panel, "SetClientPage", 3); Refresh(panel);
-        Click(Find(canvas, "ON"));
-        Check(!external.IsEnabled, "External HUD switch must write through the HUD module seam");
-        Click(Find(canvas, "RESET INSTRUMENT LAYOUT"));
-        Check(external.Resets == 1, "Instrument reset must be wired on the scrollable cockpit page");
-        Invoke(panel, "SetClientPage", 5); Refresh(panel);
-        Check(Array.Exists(canvas.GetComponentsInChildren<TMP_Text>(), t => t.text == "NO RESTART"),
+        Click(FindRowByName(cockpitContent, "TARGET CAMERA"));
+        Check(!hud.CameraFeedEnabled, "TARGET CAMERA must write through the HUD board seam");
+        Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
+        Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
+
+        clientCon.SetPage(CPerf);
+        Settle(clientCon);
+        Check(Array.Exists(perfContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "NO RESTART"),
             "Performance rows must state their restart requirement");
-        Click(Find(canvas, "OFF"));
+        Click(FindRow(perfContent, "OFF"));
         Check(performance.Value, "Performance toggle must update its owning config entry");
-        var onButtons = Array.FindAll(canvas.GetComponentsInChildren<AvButton>(),
-            b => b.GetComponentInChildren<TMP_Text>().text == "ON");
-        Check(onButtons.Length == 4, "Performance page must expose four live switches");
-        Click(onButtons[1]);
+        var onRows = FindRows(perfContent, "ON");
+        Check(onRows.Length == 4, "Performance page must expose four live switches");
+        Click(onRows[1]);
         Check(!rain.Value, "Weather performance toggle must update its owning config entry");
-        Click(onButtons[2]);
-        Click(onButtons[3]);
+        Click(onRows[2]);
+        Click(onRows[3]);
         Check(!canopy.Value && !terrain.Value, "Canopy and terrain switches must update their owning entries");
+        Check(config.AvionicsFxTier.Value == AvFxTier.Full, "FX tier defaults to Full");
+        Click(FindControl(perfContent, "OFF"));
+        Check(config.AvionicsFxTier.Value == AvFxTier.Off, "FX TIER segmented control must write AvionicsFxTier");
+        Click(FindCellState(perfContent, "BLUR BEHIND"));
+        Check(config.AvionicsBlurBehind.Value, "BLUR BEHIND cell must write AvionicsBlurBehind");
+
         for (int i = 0; i < 20; i++)
         {
-            shell.SetPage(i % 2);
-            Invoke(panel, "SetClientPage", i % 6);
-            Refresh(panel);
+            ShowMode(panel, clientCon, serverCon, i % 3 == 0);
+            (i % 3 == 0 ? serverCon : clientCon).SetPage(i % 4);
         }
-        Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Tab changes must reuse the same tree");
-        if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Short panels must scroll");
+        Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Page and mode changes must reuse the same tree");
+        if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Every page keeps its scroll viewport");
+        ModServices.Services.Remove(typeof(ISecondaryObjectivesView));
         Object.DestroyImmediate(canvas.gameObject);
         Object.DestroyImmediate(camera.gameObject);
     }
+
+    /// <summary>Show one console through the panel's own switch (no click), then run its ticks as the game would.</summary>
+    private static void ShowMode(SettingsMfdPanel panel, AvConsole clientCon, AvConsole serverCon, bool server)
+    {
+        Invoke(panel, "ApplyMode", server);
+        Settle(server ? serverCon : clientCon);
+    }
+
+    /// <summary>Offline time does not advance: run the console's ticks now so parts re-measure and re-lay their page.</summary>
+    private static void Settle(AvConsole con)
+    {
+        con.Ticker.TickNow();
+        con.Ticker.TickNow();
+    }
+
+    /// <summary>The glyph currently drawn on the SERVER segment (its icon object keeps its build-time name).</summary>
+    private static string ServerGlyph(AvConsole con) =>
+        FindControl(con.Root, "SERVER").transform.Find("Icon " + AvIcon.Database).GetComponent<TMP_Text>().text;
+
+    private static object Field(SettingsMfdPanel panel, string name) =>
+        typeof(SettingsMfdPanel).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(panel);
 
     private static void Invoke(SettingsMfdPanel panel, string method, params object[] args) =>
         typeof(SettingsMfdPanel).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(panel, args);
 
-    private static void Refresh(SettingsMfdPanel panel) => typeof(SettingsMfdPanel)
-        .GetMethod("RefreshPanel", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(panel, null);
-    private static AvButton Find(Canvas canvas, string label) => Array.Find(canvas.GetComponentsInChildren<AvButton>(),
-        b => b.GetComponentInChildren<TMP_Text>().text == label);
-    private static void Click(AvButton button) => button.OnPointerClick(new PointerEventData(EventSystem.current)
+    /// <summary>The AvRow whose ON/OFF (or numeric) badge reads exactly this text, inside one page's content.</summary>
+    private static Transform FindRow(RectTransform scope, string valueText)
+    {
+        var rows = FindRows(scope, valueText);
+        return rows.Length > 0 ? rows[0] : null;
+    }
+
+    private static Transform[] FindRows(RectTransform scope, string valueText)
+    {
+        var found = new List<Transform>();
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(true))
+            if (t.gameObject.name == "Value" && t.text == valueText) found.Add(t.transform.parent);
+        return found.ToArray();
+    }
+
+    /// <summary>The AvRow with exactly this name text.</summary>
+    private static Transform FindRowByName(RectTransform scope, string name)
+    {
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(true))
+            if (t.gameObject.name == "Name" && t.text == name) return t.transform.parent;
+        throw new Exception("No row named " + name);
+    }
+
+    private static bool IsShown(RectTransform scope, string name) => FindRowByName(scope, name).gameObject.activeInHierarchy;
+
+    /// <summary>The trailing + control of the named stepper row.</summary>
+    private static AvControl Plus(RectTransform scope, string name)
+    {
+        AvControl c = Array.Find(FindRowByName(scope, name).GetComponentsInChildren<AvControl>(true),
+            x => x.transform.Find("Icon " + AvIcon.Plus) != null);
+        if (c == null) throw new Exception("Row " + name + " has no + control");
+        return c;
+    }
+
+    private static bool HasText(RectTransform scope, string text) =>
+        Array.Exists(scope.GetComponentsInChildren<TMP_Text>(true), t => t.text == text);
+
+    private static bool HasSubText(RectTransform scope, string part) =>
+        Array.Exists(scope.GetComponentsInChildren<TMP_Text>(true), t => t.text.Contains(part));
+
+    /// <summary>A standalone AvControl (a plain button, or one option of an AvSegmented) by its visible label.</summary>
+    private static AvControl FindControl(RectTransform scope, string label) =>
+        Array.Find(scope.GetComponentsInChildren<AvControl>(true), c => c.Label == label);
+
+    /// <summary>An AvCell's own click surface (its Frame, found by the cell's title text), by title.</summary>
+    private static Transform FindCellState(RectTransform scope, string title)
+    {
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(true))
+            if (t.gameObject.name == "Title" && t.text == title) return t.transform.parent;
+        return null;
+    }
+
+    private static void Click(Transform target) =>
+        target.GetComponentInChildren<AvHit>(true).OnPointerClick(new PointerEventData(EventSystem.current)
         { button = PointerEventData.InputButton.Left });
+
+    private static void Click(AvControl control) => Click(control.transform);
+
     private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
-    private static void Render(Camera camera, Canvas canvas, int height, int page)
+
+    private static void Render(Camera camera, Canvas canvas, int height, string tag)
     {
         Canvas.ForceUpdateCanvases();
         foreach (var text in canvas.GetComponentsInChildren<TMP_Text>()) text.ForceMeshUpdate();
+        Gate(canvas, height + "/" + tag);
         var target = new RenderTexture(480, height, 24);
         camera.targetTexture = target;
         camera.Render();
@@ -291,36 +496,168 @@ public static class SettingsUnityCheck
         var image = new Texture2D(480, height, TextureFormat.RGB24, false);
         image.ReadPixels(new Rect(0, 0, 480, height), 0, 0);
         image.Apply();
-        File.WriteAllBytes("SET-" + height + "-" + page + ".png", image.EncodeToPNG());
+        File.WriteAllBytes("SET-" + height + "-" + tag + ".png", image.EncodeToPNG());
         RenderTexture.active = null;
         camera.targetTexture = null;
         Object.DestroyImmediate(target);
         Object.DestroyImmediate(image);
     }
+
+    /// <summary>
+    /// The gallery gate's checks (text overflowing its rect, entering the scroll gutter, below the 11 px floor,
+    /// tabs and sections without an icon) plus one for this console: no two visible texts may overlap.
+    /// </summary>
+    private static void Gate(Canvas canvas, string where)
+    {
+        float gutterLeft = AvTokens.PanelWidth - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
+        var rects = new List<KeyValuePair<TMP_Text, Rect>>();
+        foreach (TMP_Text t in canvas.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (!t.isActiveAndEnabled || t.text.Length == 0 || !CanvasOn(t)) continue;
+            checkedTexts++;
+            t.ForceMeshUpdate();
+            Rect r = t.rectTransform.rect;
+            bool icon = t.name.StartsWith("Icon");
+            if (!icon)
+            {
+                Bounds b = t.textBounds;
+                if (b.size.x > r.width + 1.5f)
+                    Failures.Add(where + ": overflows width (" + b.size.x.ToString("0") + " > " + r.width.ToString("0") + ") '" + t.text + "'");
+                if (b.size.y > r.height + 1.5f)
+                    Failures.Add(where + ": overflows height (" + b.size.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
+                if (t.fontSize < AvTypeScale.Floor - 0.01f)
+                    Failures.Add(where + ": below the 11 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
+                Rect ink = InkRect(t, canvas);
+                ScrollRect scroll = t.GetComponentInParent<ScrollRect>();
+                if (scroll != null && scroll.viewport != null)
+                {
+                    // Rows scrolled out of view are clipped by the viewport; they cannot overlap the footer.
+                    var vc = new Vector3[4];
+                    scroll.viewport.GetWorldCorners(vc);
+                    Vector3 lo = canvas.transform.InverseTransformPoint(vc[0]), hi = canvas.transform.InverseTransformPoint(vc[2]);
+                    float x0 = Mathf.Max(ink.xMin, lo.x), x1 = Mathf.Min(ink.xMax, hi.x);
+                    float y0 = Mathf.Max(ink.yMin, lo.y), y1 = Mathf.Min(ink.yMax, hi.y);
+                    if (x1 <= x0 || y1 <= y0) continue;
+                    ink = Rect.MinMaxRect(x0, y0, x1, y1);
+                }
+                rects.Add(new KeyValuePair<TMP_Text, Rect>(t, ink));
+            }
+            if (t.GetComponentInParent<ScrollRect>() != null)
+            {
+                var corners = new Vector3[4];
+                t.rectTransform.GetWorldCorners(corners);
+                float right = canvas.transform.InverseTransformPoint(corners[2]).x + AvTokens.PanelWidth * 0.5f;
+                if (right > gutterLeft) Failures.Add(where + ": enters the gutter (" + right.ToString("0") + ") '" + t.text + "'");
+            }
+        }
+        for (int i = 0; i < rects.Count; i++)
+            for (int j = i + 1; j < rects.Count; j++)
+            {
+                Rect a = rects[i].Value, c = rects[j].Value;
+                float ox = Mathf.Min(a.xMax, c.xMax) - Mathf.Max(a.xMin, c.xMin);
+                float oy = Mathf.Min(a.yMax, c.yMax) - Mathf.Max(a.yMin, c.yMin);
+                if (ox > 1.5f && oy > 3f)
+                    Failures.Add(where + ": text overlaps '" + rects[i].Key.text + "' / '" + rects[j].Key.text + "'");
+            }
+        foreach (AvControl tab in canvas.GetComponentsInChildren<AvControl>(false))
+            if (tab.transform.parent != null && tab.transform.parent.name == "Tabs" && tab.transform.Find("Label") != null
+                && tab.GetComponentsInChildren<TMP_Text>(true).Length < 2)
+                Failures.Add(where + ": tab without icon " + tab.name);
+        foreach (Transform s in canvas.GetComponentsInChildren<Transform>(false))
+            if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
+                Failures.Add(where + ": section without icon " + s.name);
+    }
+
+    /// <summary>Where the text really drew, in canvas space, clipped to its rect.</summary>
+    private static Rect InkRect(TMP_Text t, Canvas canvas)
+    {
+        Bounds b = t.textBounds;
+        Vector3 min = canvas.transform.InverseTransformPoint(t.transform.TransformPoint(b.min));
+        Vector3 max = canvas.transform.InverseTransformPoint(t.transform.TransformPoint(b.max));
+        return Rect.MinMaxRect(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y), Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y));
+    }
+
+    // Hidden pages keep their GameObjects active; only their canvas is off.
+    private static bool CanvasOn(TMP_Text t)
+    {
+        for (Transform x = t.transform; x != null; x = x.parent)
+        {
+            var c = x.GetComponent<Canvas>();
+            if (c != null && !c.enabled) return false;
+        }
+        return true;
+    }
+
     private sealed class HostFixture : IHostSettingsView
     {
-        private readonly HostSettingView[] rows =
-        {
-            new HostSettingView(1, HostSettingKind.Stepper, "MAX FIRE SITES", "New ignitions only.")
-        };
+        private readonly HostSettingView[] rows;
+        private readonly bool[] on;
+        private readonly string[] text;
+        public int Toggles, Steps;
 
-        public string Section => "FIRE AND DESTRUCTION";
-        public System.Collections.Generic.IReadOnlyList<HostSettingView> Rows => rows;
+        /// <summary>Row specs: "T:LABEL:1" is a toggle (1 = on), "S:LABEL:1.00x" a stepper with that value text.</summary>
+        public HostFixture(string section, HostSettingsPage page, params string[] spec)
+        {
+            Section = section;
+            Page = page;
+            rows = new HostSettingView[spec.Length];
+            on = new bool[spec.Length];
+            text = new string[spec.Length];
+            for (int i = 0; i < spec.Length; i++)
+            {
+                string[] p = spec[i].Split(':');
+                bool toggle = p[0] == "T";
+                rows[i] = new HostSettingView(i + 1, toggle ? HostSettingKind.Toggle : HostSettingKind.Stepper, p[1],
+                    "Live host setting: " + p[1].ToLowerInvariant() + ". Applies to everyone on this server.");
+                on[i] = toggle && p[2] == "1";
+                text[i] = p[2];
+            }
+            Refresh();
+        }
+
+        public string Section { get; }
+        public HostSettingsPage Page { get; }
+        public IReadOnlyList<HostSettingView> Rows => rows;
+
         public void Refresh()
         {
-            rows[0].ValueText = "24";
-            rows[0].CanDecrease = true;
-            rows[0].CanIncrease = true;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                rows[i].Value = on[i];
+                rows[i].ValueText = rows[i].Kind == HostSettingKind.Toggle ? (on[i] ? "ON" : "OFF") : text[i];
+                rows[i].CanDecrease = true;
+                rows[i].CanIncrease = true;
+            }
         }
-        public void Toggle(int id) { }
-        public void Step(int id, int direction) { }
+
+        public void Toggle(int id) { on[id - 1] = !on[id - 1]; Toggles++; Refresh(); }
+        public void Step(int id, int direction) { Steps++; }
+    }
+
+    private sealed class TaskingFixture : ISecondaryObjectivesView
+    {
+        private readonly SecondaryObjectiveView[] cards =
+        {
+            new SecondaryObjectiveView(1, "RELAY STRIKE", "Destroy the relay.", "RADAR RELAY NORTH", "IN PROGRESS", "$14,000 · 300 XP",
+                .45f, 420f, 14000, 300, false, false, true, true, 100f, 100f, 400f, "MARCI"),
+            new SecondaryObjectiveView(2, "CONVOY INTERDICTION", "Stop the convoy.", "ROUTE 7", "OFFERED", "$9,500 · 200 XP",
+                0f, 900f, 9500, 200, false, true, false, true, 300f, 200f, 300f),
+            new SecondaryObjectiveView(3, "AIRFIELD DENIAL", "Crater the runway.", "PORT AIRFIELD", "COMPLETE", "$20,000 · 450 XP",
+                1f, 0f, 20000, 450, true),
+        };
+
+        public IReadOnlyList<SecondaryObjectiveView> Objectives => cards;
+        public string Status => "3 CONTRACTS · HOST BOARD";
+        public int ActiveLimit => 2;
+        public void Refresh() { }
+        public void RequestAccept(int id) { }
+        public void RequestCancel(int id) { }
     }
 
     private sealed class HudFixture : IHudBoard
     {
         public int Resets;
         public bool Enabled { get; set; } = true;
-        public HudAnchor Anchor { get; set; }
         public int ScaleStep { get; set; } = 1;
         public int OpacityStep { get; set; }
         public int MaxRows { get; set; } = 4;
@@ -334,32 +671,8 @@ public static class SettingsUnityCheck
         public void DeclareChannel(string key, string label) { }
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
-        public void ResetLayout() { Enabled = true; Resets++; }
-    }
-    private sealed class ExternalFixture : IThirdPersonHud
-    {
-        public int Resets;
-        public bool IsEnabled { get; private set; } = true;
-        public bool ModifyVanillaHud { get; set; }
-        public HudBounds InstrumentBounds => default;
-        public void Toggle() => IsEnabled = !IsEnabled;
-        public bool HidePitchLadder { get; set; } = true;
         public bool CameraFeedEnabled { get; set; } = true;
-        public bool FlightCameraEnabled { get; set; } = true;
-        public bool BoardEnabled { get; set; } = true;
-        public bool AirframeEnabled { get; set; } = true;
-        public bool ShotsEnabled { get; set; } = true;
-        public bool MarkEnabled { get; set; } = true;
-        public int BoardCorner { get; set; }
-        public int FlightScaleStep { get; set; } = 1;
-        public int FlightOpacityStep { get; set; }
-        public int FlightContrast { get; set; } = 1;
-        public int BoardScaleStep { get; set; } = 1;
-        public int BoardOpacityStep { get; set; }
-        public int BoardContrast { get; set; } = 1;
-        public int BoardInsetX { get; set; }
-        public int BoardInsetY { get; set; }
-        public void ResetLayout() { Resets++; }
+        public void ResetLayout() { Enabled = true; Resets++; }
     }
 }
 #endif

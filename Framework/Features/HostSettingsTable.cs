@@ -22,9 +22,14 @@ namespace BoscaliSummer.Framework.Features
         private readonly Dictionary<int, Action> toggles = new Dictionary<int, Action>();
         private readonly Dictionary<int, Action<int>> steps = new Dictionary<int, Action<int>>();
 
-        public HostSettingsTable(string section) => Section = section ?? "";
+        public HostSettingsTable(string section, HostSettingsPage page = HostSettingsPage.Settings)
+        {
+            Section = section ?? "";
+            Page = page;
+        }
 
         public string Section { get; }
+        public HostSettingsPage Page { get; }
         public IReadOnlyList<HostSettingView> Rows => rows;
 
         public HostSettingsTable Toggle(

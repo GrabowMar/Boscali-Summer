@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -23,7 +24,7 @@ public static class OpsWindowUnityCheck
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
     private const BindingFlags Static = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
-    private static readonly Assembly Mod = typeof(AvScreen).Assembly;
+    private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static readonly float[] LegacyRails = { 24f, 320f, 1616f };
 
     private static readonly (string Name, int PixelW, int PixelH, float CanvasW, float CanvasH)[] Screens =
@@ -52,9 +53,11 @@ public static class OpsWindowUnityCheck
         RenderPrimitiveSheet();
         RenderRootOnly();
         CheckBoardDrag();
+        CheckTerrainProjection();
         CheckDeskMapInput();
         RenderDesk(detachmentFixture);
         RenderCyber(cyberFixture);
+        RenderTasking(stationFixture);
         RenderStation(stationFixture);
         RenderImager(stationFixture);
         CheckUniqueness();
@@ -70,6 +73,9 @@ public static class OpsWindowUnityCheck
         Func<bool> reduce = () => true;
         var window = (Component)type.GetMethod("Create", Static).Invoke(null, new object[] { reduce });
         ((Behaviour)window).enabled = false;
+        var helpScope = window.GetComponentInChildren<AvHelpScope>(true);
+        Check(helpScope != null && helpScope.GetType().GetField("Footer", Hidden).GetValue(helpScope) != null,
+            "The OPS window must host a hover-help footer scope for its controls.");
         var canvas = window.GetComponent<Canvas>();
         canvas.GetComponent<CanvasScaler>().enabled = false;
         canvas.renderMode = RenderMode.WorldSpace;
@@ -100,10 +106,22 @@ public static class OpsWindowUnityCheck
         rect.position = new Vector3(0f, 0f, 5f);
         var image = new GameObject("Terrain", typeof(RectTransform), typeof(RawImage));
         image.transform.SetParent(rect, false);
-        AvKit.Stretch((RectTransform)image.transform);
+        AvLay.Fill((RectTransform)image.transform);
         image.GetComponent<RawImage>().texture = BusyTexture(480, 270);
-        AvKit.Label(rect, "THEATRE WIRE · BRAVO HOLDS NORTH RIDGE · SAM SITE DESTROYED AT 26/-4 · INTERCEPT VECTOR 045",
-            new Rect(0f, 0f, w, 36f), Color.white, 14f, FontStyles.Bold, TextAlignmentOptions.Center);
+        Label(rect, "THEATRE WIRE · BRAVO HOLDS NORTH RIDGE · SAM SITE DESTROYED AT 26/-4 · INTERCEPT VECTOR 045",
+            new Rect(0f, 0f, w, 36f), Color.white, AvTextRole.Head, TextAlignmentOptions.Center);
+    }
+
+    /// <summary>A filled rect placed from its top-left (y is a downward offset), the harness's stand-in for the retired v1 panel call.</summary>
+    private static void Panel(RectTransform parent, Rect area, Color color) =>
+        AvLay.Place(AvLay.Solid(parent, "Panel", color).rectTransform, area.x, -area.y, area.width, area.height);
+
+    private static void Label(RectTransform parent, string text, Rect area, Color color, AvTextRole role,
+        TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
+    {
+        TMP_Text label = AvText.Make(parent, "Label", role, text, align);
+        label.color = color;
+        AvLay.Place(label.rectTransform, area.x, -area.y, area.width, area.height);
     }
 
     private static Texture2D busy;
@@ -168,11 +186,11 @@ public static class OpsWindowUnityCheck
             object skin = style.GetMethod(rooms[r].Skin, Static).Invoke(null, null);
             var surface = (Color)style.GetProperty(rooms[r].Surface, Static).GetValue(null);
             float x = r * columnW;
-            AvKit.Panel(root, new Rect(x, 0f, columnW, sheetH), surface.WithAlpha(1f));
+            Panel(root, new Rect(x, 0f, columnW, sheetH), surface.WithAlpha(1f));
             inks.Add((Color)skin.GetType().GetField("Ink").GetValue(skin));
             glyphs.Add((Sprite)skin.GetType().GetField("Glyph").GetValue(skin));
-            AvKit.Label(root, rooms[r].Style.Replace("Style", "").ToUpperInvariant() + " SKIN", new Rect(x + 16f, -10f, columnW - 32f, 18f),
-                inks[r], 12f, FontStyles.Bold);
+            Label(root, rooms[r].Style.Replace("Style", "").ToUpperInvariant() + " SKIN", new Rect(x + 16f, 10f, columnW - 32f, 18f),
+                inks[r], AvTextRole.Label);
             Primitive("ArcGauge", root, new Rect(x + 16f, -40f, 110f, 126f), skin, g => Call(g, "Set", 0.62f, "62%", "FITTED"));
             Primitive("PipTrack", root, new Rect(x + 150f, -48f, columnW - 170f, 40f), skin, g => Call(g, "Set", 3, 2, "3 OF 6 · 2 PLANNED"),
                 6);
@@ -326,10 +344,85 @@ public static class OpsWindowUnityCheck
         Component roomControl = child.AddComponent(control);
         int clicks = 0;
         Call(roomControl, "SetAction", (Action)(() => clicks++));
+        Call(roomControl, "WithTooltip", "Hover help text");
+        Check(roomControl.GetComponent<AvHelpTip>() != null && roomControl.GetComponent<AvHelpTip>().Text == "Hover help text",
+            "A room control's tooltip must reach the footer through AvHelpTip.");
         Call(roomControl, "OnPointerClick", pointer);
         Check(clicks == 0, "Dragging across a map marker must not select it.");
         Object.DestroyImmediate(go);
         Object.DestroyImmediate(events);
+    }
+
+    private static void CheckTerrainProjection()
+    {
+        var root = new GameObject("TerrainProjectionFixture", typeof(RectTransform), typeof(Canvas));
+        var parent = (RectTransform)root.transform;
+        parent.sizeDelta = new Vector2(900f, 650f);
+        var view = new Rect(130f, -90f, 640f, 420f);
+        var focus = new Rect(210f, -140f, 400f, 270f);
+        Type boardType = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Board.BoardSurface", true);
+        object board = Activator.CreateInstance(boardType, Hidden, null,
+            new object[] { parent, view, focus, false, false }, null);
+        Call(board, "Fit", new[] { -18000f, 16000f }, new[] { -9000f, 12000f }, 2, 18000f, 0f, 24f);
+        Type terrainType = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Board.BoardTerrain", true);
+        object terrain = Activator.CreateInstance(terrainType, Hidden, null, new[] { parent, board }, null);
+        var texture = new Texture2D(32, 24, TextureFormat.RGBA32, false);
+        var pixels = new Color32[32 * 24];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, 255);
+        texture.SetPixels32(pixels);
+        texture.Apply();
+        // A cropped, non-square sprite with an off-centre pivot must still cover the
+        // non-square world map; UI Image uses the sprite rect UVs, not its texture extent.
+        Sprite sprite = Sprite.Create(texture, new Rect(3f, 5f, 18f, 12f), new Vector2(0.17f, 0.83f));
+        Call(terrain, "SetSource", sprite, new Vector2(80000f, 60000f));
+        AssertTerrainProjection(board, terrain, sprite, texture);
+        Call(board, "ZoomAt", new Vector2(380f, -260f), 1.8f);
+        Call(board, "PanBy", new Vector2(27f, -19f));
+        AssertTerrainProjection(board, terrain, sprite, texture);
+        Object.DestroyImmediate(root);
+        Object.DestroyImmediate(sprite);
+        Object.DestroyImmediate(texture);
+    }
+
+    private static void AssertTerrainProjection(object board, object terrain, Sprite sprite, Texture2D texture)
+    {
+        Call(terrain, "Refresh");
+        Image image = (Image)terrain.GetType().GetField("image", Hidden).GetValue(terrain);
+        Vector2 nw = (Vector2)Call(board, "Project", -40000f, 30000f);
+        Vector2 se = (Vector2)Call(board, "Project", 40000f, -30000f);
+        RectTransform rect = image.rectTransform;
+        Check(Mathf.Abs(rect.anchoredPosition.x - nw.x) < 0.1f &&
+              Mathf.Abs(rect.anchoredPosition.y - nw.y) < 0.1f &&
+              Mathf.Abs(rect.rect.width - (se.x - nw.x)) < 0.1f &&
+              Mathf.Abs(rect.rect.height - (nw.y - se.y)) < 0.1f,
+            "Terrain rectangle must use the same projected world corners as the markers.");
+
+        var mesh = new VertexHelper();
+        typeof(Image).GetMethod("OnPopulateMesh", Hidden, null, new[] { typeof(VertexHelper) }, null)
+            .Invoke(image, new object[] { mesh });
+        float minU = 1f, minV = 1f, maxU = 0f, maxV = 0f;
+        for (int i = 0; i < mesh.currentVertCount; i++)
+        {
+            UIVertex vertex = default;
+            mesh.PopulateUIVertex(ref vertex, i);
+            minU = Mathf.Min(minU, vertex.uv0.x);
+            minV = Mathf.Min(minV, vertex.uv0.y);
+            maxU = Mathf.Max(maxU, vertex.uv0.x);
+            maxV = Mathf.Max(maxV, vertex.uv0.y);
+        }
+        Rect source = sprite.textureRect;
+        Check(mesh.currentVertCount == 4 && Mathf.Abs(minU - source.xMin / texture.width) < 0.001f &&
+              Mathf.Abs(maxU - source.xMax / texture.width) < 0.001f &&
+              Mathf.Abs(minV - source.yMin / texture.height) < 0.001f &&
+              Mathf.Abs(maxV - source.yMax / texture.height) < 0.001f,
+            "The rendered Image mesh must sample the sprite rect, including its cropped texture origin.");
+        mesh.Dispose();
+
+        Vector2 node = (Vector2)Call(board, "Project", 12000f, -15000f);
+        float mapU = (node.x - nw.x) / (se.x - nw.x);
+        float mapV = (node.y - se.y) / (nw.y - se.y);
+        Check(Mathf.Abs(mapU - 0.65f) < 0.001f && Mathf.Abs(mapV - 0.25f) < 0.001f,
+            "A geographic node must hit the same sprite UV before and after cursor zoom/pan.");
     }
 
     private static void CheckDeskMapInput()
@@ -412,6 +505,29 @@ public static class OpsWindowUnityCheck
         events.GetComponent<EventSystem>().RaycastAll(pointer, hits);
         Check(!hits.Exists(hit => hit.gameObject == label.gameObject),
             "A label outside the terrain viewport must not leave an invisible clickable hit area.");
+
+        // The host lists friendly airbases as objectives. One location must yield one
+        // selectable objective token and one label, not a second decorative home pin.
+        object friendly = Activator.CreateInstance(detachmentType);
+        Type kind = Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.ObjectiveKind", true);
+        Call(friendly, "BeginObjectives");
+        Call(friendly, "ReportObjective", Enum.Parse(kind, "Airfield"), 777, 12000f, 8000f,
+            0, 0, false, "MARIS AIRPORT", true);
+        Call(friendly, "EndObjectives", now);
+        Call(map, "SetHomes", new[] { 12000f }, new[] { 8000f }, new[] { "MARIS AIRPORT" }, 1);
+        Call(map, "Layout", friendly, now, 0, Vector2.zero, false);
+        var homes = (Image[])mapType.GetField("homes", Hidden).GetValue(map);
+        Check(!homes[0].gameObject.activeSelf, "A home objective must not get a second geographic marker.");
+        int visibleTags = 0;
+        bool labelledHome = false;
+        foreach (object tag in tags)
+        {
+            var control = (Component)tag.GetType().GetField("Control", Hidden).GetValue(tag);
+            if (!control.gameObject.activeSelf) continue;
+            visibleTags++;
+            labelledHome |= ((string)tag.GetType().GetField("ShownSub", Hidden).GetValue(tag)).Contains("HOME BASE");
+        }
+        Check(visibleTags == 1 && labelledHome, "A friendly home objective needs one selectable HOME BASE label.");
         typeof(BaseRaycaster).GetMethod("OnDisable", Hidden).Invoke(raycaster, null);
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(events);
@@ -464,6 +580,7 @@ public static class OpsWindowUnityCheck
         PaintDesk(desk, detachment, now);
         RoomChecks(window, desk, "desk-teams-out", 1920f, 1080f, true);
         CheckClusterFill(desk, detachment);
+        CheckRecordedTeamOrigin(desk, detachment);
         foreach (var screen in Screens)
         {
             SizeCanvas(window, screen.CanvasW, screen.CanvasH);
@@ -484,7 +601,7 @@ public static class OpsWindowUnityCheck
         Type viewType = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Views.CyberView", true);
         var log = new[]
         {
-            "000:25:10  INTRUSION DETECTED AT BAS-BRAVO · ISOLATE IT", "000:24:02  CTY-LIMA TAKEN · STAGE 2 CONTROL",
+            "000:25:10  INTRUSION DETECTED AT BAS-BRAVO · ISOLATE IT", "000:24:02  CTY-LIMA ACCESS OPEN · 75S · ONE EFFECT",
             "000:22:40  BREACH OPEN ON CTY-LIMA · QUIET", "000:20:00  WATCH FLOOR ONLINE", "", ""
         };
         object view = Activator.CreateInstance(viewType, Hidden, null, new[] { support, log }, null);
@@ -526,6 +643,44 @@ public static class OpsWindowUnityCheck
         Shoot(window, "ops-cyber-incident", Screens[0]);
         signatures["cyber"] = Sections(view);
         Object.DestroyImmediate(window.gameObject);
+    }
+
+    private static void RenderTasking(Func<object[]> stationFixture)
+    {
+        Component window = CreateWindow();
+        Type viewType = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Views.StationTaskingView", true);
+        object view = Activator.CreateInstance(viewType, Hidden, null,
+            new object[] { support, null, null, null }, null);
+        SizeCanvas(window, 1920f, 1080f);
+        Present(window, view);
+        TaskingTerrainFixture(view);
+        Call(view, "Paint", null, 0.0, true);
+        RoomChecks(window, view, "tasking-empty", 1920f, 1080f, false);
+        Shoot(window, "ops-tasking-empty", Screens[0]);
+
+        object[] fixture = stationFixture();
+        object platform = fixture[0];
+        double now = (double)fixture[1];
+        foreach (var screen in Screens)
+        {
+            SizeCanvas(window, screen.CanvasW, screen.CanvasH);
+            Present(window, view);
+            TaskingTerrainFixture(view);
+            SetField(support, "opsReceived", Time.unscaledTime);
+            Call(view, "Paint", platform, now, true);
+            RoomChecks(window, view, "tasking-fitted-" + screen.Name, screen.CanvasW, screen.CanvasH, true);
+            Shoot(window, "ops-tasking-fitted", screen);
+        }
+        signatures["tasking"] = Sections(view);
+        Object.DestroyImmediate(window.gameObject);
+    }
+
+    private static void TaskingTerrainFixture(object tasking)
+    {
+        if (terrainFixture == null) return;
+        object terrain = tasking.GetType().GetField("terrain", Hidden).GetValue(tasking);
+        Call(terrain, "SetSource", terrainFixture, new Vector2(81920f, 81920f));
+        Call(terrain, "Refresh");
     }
 
     private static void RenderStation(Func<object[]> stationFixture)
@@ -670,6 +825,26 @@ public static class OpsWindowUnityCheck
         Check(fill >= 0.6f, "The objective cluster fills only " + (fill * 100f).ToString("0") + "% of the desk's map focus.");
     }
 
+    private static void CheckRecordedTeamOrigin(object desk, object detachment)
+    {
+        object map = desk.GetType().GetProperty("Map", Hidden).GetValue(desk);
+        object board = map.GetType().GetProperty("Board", Hidden).GetValue(map);
+        object team = detachment.GetType().GetMethod("Team", Hidden).Invoke(detachment, new object[] { 1 });
+        float x = (float)team.GetType().GetField("OriginX").GetValue(team);
+        float z = (float)team.GetType().GetField("OriginZ").GetValue(team);
+        string origin = (string)team.GetType().GetField("Origin").GetValue(team);
+        Check(!string.IsNullOrEmpty(origin), "The en-route fixture must carry a host-selected launch base.");
+        MethodInfo project = board.GetType().GetMethod("Project", Hidden);
+        Vector2 expected = (Vector2)project.Invoke(board, new object[] { x, z });
+        Vector2 nearestLocal = (Vector2)project.Invoke(board, new object[] { -6000f, -2000f });
+        Check(Vector2.Distance(expected, nearestLocal) > 1f,
+            "The route fixture must distinguish the host's launch base from the nearest local base.");
+        Array teams = (Array)map.GetType().GetField("teams", Hidden).GetValue(map);
+        Image route = (Image)teams.GetValue(1).GetType().GetField("Route", Hidden).GetValue(teams.GetValue(1));
+        Check(route.enabled && Vector2.Distance(route.rectTransform.anchoredPosition, expected) < 0.5f,
+            "A deployed team route must start at its recorded host launch base.");
+    }
+
     private static object PlanningFixture(Type detachmentType, out double now)
     {
         Type kindType = Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.ObjectiveKind", true);
@@ -689,7 +864,7 @@ public static class OpsWindowUnityCheck
         };
         foreach (var o in fixture)
             Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name, false);
-        Call(detachment, "EndObjectives");
+        Call(detachment, "EndObjectives", 30.0);
         now = 30.0;
         return detachment;
     }
@@ -704,7 +879,15 @@ public static class OpsWindowUnityCheck
         var frame = (RectTransform)window.GetType().GetProperty("FrameRect", Hidden).GetValue(window);
         Check(Mathf.Approximately(group.alpha, 1f) && Mathf.Approximately(frame.localScale.x, 1f),
             "Reduced motion must open on the final frame (alpha " + group.alpha + ", scale " + frame.localScale.x + ").");
-        Check(Mathf.Approximately((float)Get(room, "entrance"), 1f), "Reduced motion must hand the room its final entrance state.");
+        if (room.GetType().Name == "StationTaskingView")
+        {
+            var fade = (CanvasGroup)Get(room, "contentFade");
+            Check(fade != null && Mathf.Approximately(fade.alpha, 1f),
+                "Reduced motion must hand the tasking room its final entrance alpha.");
+        }
+        else
+            Check(Mathf.Approximately((float)Get(room, "entrance"), 1f),
+                "Reduced motion must hand the room its final entrance state.");
     }
 
     private static void Frontline(object desk)

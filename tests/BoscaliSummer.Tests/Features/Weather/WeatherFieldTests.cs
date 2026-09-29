@@ -26,6 +26,9 @@ namespace BoscaliSummer.Tests.Features.Weather
             StatesBuildRealisticSkies();
             CoverGrowsUpTheLadder();
             FairCloudGroupsHaveSeparateCores();
+            SuperstructuresAreStaticScenery();
+            FrontSplitsTheSky();
+            ConsoleFormationsFollowTheKey();
             FrontCloudProfilesHaveVerticalStructure();
             FieldIsDeterministic();
             ForecastEqualsLiveField();
@@ -238,6 +241,106 @@ namespace BoscaliSummer.Tests.Features.Weather
                 found = true;
             }
             TestAssert.That(found, "scattered sky forms cumulus groups");
+        }
+
+        private static void SuperstructuresAreStaticScenery()
+        {
+            var field = new WeatherField();
+            field.Build(Held(WeatherRegimeType.Clear), 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureCount == 0, "a clear sky has no storm set-pieces");
+            field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureCount == 1 &&
+                field.SuperstructureAt(0).Kind == SuperstructureKind.Supercell,
+                "a convective sky shows one distant cumulonimbus");
+
+            field.Build(Held(WeatherRegimeType.Storm), 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureCount == 3, "a storm shows a squall line and two cells");
+            TestAssert.That(field.SuperstructureAt(0).Kind == SuperstructureKind.ShelfLine, "the squall line comes first");
+            var first = new Superstructure[Superstructures.MaxCount];
+            for (int i = 0; i < field.SuperstructureCount; i++)
+            {
+                Superstructure s = field.SuperstructureAt(i);
+                first[i] = s;
+                float distance = (float)Math.Sqrt(s.X * s.X + s.Z * s.Z);
+                TestAssert.That(distance > Math.Max(HalfX, HalfZ) + 25000f && distance < 220000f,
+                    $"set-piece {i} sits outside the theater and inside the march ({distance / 1000f:F0} km)");
+                TestAssert.That(s.Top > 8000f && s.Top < 16000f && s.Strength > 0.99f, "a storm set-piece is built and tall");
+            }
+            field.Build(Held(WeatherRegimeType.Storm), 3000f, HalfX, HalfZ);
+            for (int i = 0; i < field.SuperstructureCount; i++)
+                TestAssert.That(field.SuperstructureAt(i).X == first[i].X && field.SuperstructureAt(i).Z == first[i].Z,
+                    "set-pieces never move");
+
+            // The console can force any set-piece into a clear sky, and re-roll where they sit.
+            WeatherKey forced = Held(WeatherRegimeType.Clear).WithSets(Superstructures.SquallLineSet);
+            field.Build(forced, 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureCount == 1 && field.SuperstructureAt(0).Set == Superstructures.SquallLineSet &&
+                field.SuperstructureAt(0).Strength == 1f, "a forced squall line stands in a clear sky");
+            float x0 = field.SuperstructureAt(0).X;
+            field.Build(forced.WithLayoutSalt(1), 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureCount == 1 && field.SuperstructureAt(0).X != x0, "a re-roll moves the set-piece");
+            TestAssert.That(WeatherTimeline.Evaluate(forced.WithLayoutSalt(1), 600f).To == WeatherRegimeType.Clear,
+                "a re-roll leaves the weather state alone");
+            TestAssert.That(!forced.Equals(forced.WithLayoutSalt(1)) && !forced.Equals(Held(WeatherRegimeType.Clear)),
+                "set-pieces and layout are part of the synced key");
+        }
+
+        private static void FrontSplitsTheSky()
+        {
+            var field = new WeatherField();
+            field.Build(Held(WeatherRegimeType.Scattered, 11u), 600f, HalfX, HalfZ);
+            TestAssert.That(field.Split.Amount == 0f, "fair-weather skies have no frontal boundary");
+
+            field.Build(Held(WeatherRegimeType.Overcast, 11u), 600f, HalfX, HalfZ);
+            SkySplit split = field.Split;
+            TestAssert.That(split.Amount > 0.5f, "an overcast sky is a front passing over the map");
+            // Walk across the boundary along its normal: open ahead, full deck behind.
+            float ahead = 0f, behind = 0f;
+            for (int i = -2; i <= 2; i++)
+            {
+                float along = i * 12000f;
+                float bx = -split.NormalZ * along, bz = split.NormalX * along;
+                float line = split.Offset;
+                ahead += field.Sample(bx + split.NormalX * (line + 60000f), bz + split.NormalZ * (line + 60000f)).BackgroundCover;
+                behind += field.Sample(bx + split.NormalX * (line - 60000f), bz + split.NormalZ * (line - 60000f)).BackgroundCover;
+            }
+            TestAssert.That(behind > ahead * 2f && behind / 5f > 0.5f,
+                $"the deck lies behind the front ({behind / 5f:F2}) and opens ahead of it ({ahead / 5f:F2})");
+            FrontState band = field.Front(0);
+            TestAssert.That(Math.Abs(band.NormalX - split.NormalX) < 1e-5f && Math.Abs(band.Offset - split.Offset) < 1e-3f,
+                "the main front band lies on the boundary");
+        }
+
+        private static void ConsoleFormationsFollowTheKey()
+        {
+            var field = new WeatherField();
+            WeatherKey key = Held(WeatherRegimeType.Clear)
+                .WithSets(Superstructures.StormEyeSet | Superstructures.LenticularSet | Superstructures.FogBankSet)
+                .WithAnchor(12000f, -8000f);
+            field.Build(key, 600f, HalfX, HalfZ);
+            Superstructure eye = default, lens = default;
+            for (int i = 0; i < field.SuperstructureCount; i++)
+            {
+                Superstructure s = field.SuperstructureAt(i);
+                if (s.Kind == SuperstructureKind.StormEye) eye = s;
+                if (s.Kind == SuperstructureKind.Lenticulars) lens = s;
+            }
+            TestAssert.That(eye.Strength == 1f && eye.X == 12000f && eye.Z == -8000f, "the storm eye stands on its anchor");
+            float apart = (float)Math.Sqrt((lens.X - eye.X) * (lens.X - eye.X) + (lens.Z - eye.Z) * (lens.Z - eye.Z));
+            TestAssert.That(lens.Strength == 1f && Math.Abs(apart - 30000f) < 1f, "lenticulars stand beside the eye, not in it");
+            TestAssert.That(eye.Top > 12000f && eye.Size > 8000f, "an eyewall is tall around a wide eye");
+
+            field.Build(key.WithoutAnchor(), 600f, HalfX, HalfZ);
+            TestAssert.That(field.SuperstructureAt(0).X != 12000f, "without an anchor set-pieces take their default spot");
+
+            field.Build(Held(WeatherRegimeType.Overcast, 11u), 600f, HalfX, HalfZ);
+            float heading = field.Split.Heading;
+            field.Build(Held(WeatherRegimeType.Overcast, 11u).WithFrontTurn(2), 600f, HalfX, HalfZ);
+            TestAssert.That(Math.Abs(field.Split.Heading - heading - 90f) < 0.01f, "the console turns the front by 45 degree steps");
+            TestAssert.That(Held(WeatherRegimeType.Clear).WithFrontTurn(9).FrontTurn == 1 &&
+                Held(WeatherRegimeType.Clear).WithFrontTurn(-1).FrontTurn == 7, "front turns wrap around");
+            TestAssert.That(!key.Equals(key.WithoutAnchor()) && !key.Equals(key.WithFrontTurn(1)),
+                "placement and front turn are part of the synced key");
         }
 
         private static void FieldIsDeterministic()

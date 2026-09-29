@@ -9,7 +9,8 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
         EnRoute = 1,
         OnTask = 2,
         Holding = 3,
-        Recovering = 4
+        Recovering = 4,
+        Deciding = 5
     }
 
     internal struct LaneSegment
@@ -21,8 +22,8 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
     }
 
     /// <summary>
-    /// Team lanes use <see cref="FieldCatalog"/> durations. A phase that has not happened yet is
-    /// projected, because holding and recovery both assume the mission succeeds.
+    /// Team lanes use <see cref="FieldCatalog"/> durations. Later phases are projected until
+    /// the arrival decision, task order and outcome actually happen.
     /// </summary>
     internal static class TimelineMath
     {
@@ -30,7 +31,7 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
             LaneSegment[] into)
         {
             if (into == null || into.Length == 0 || !(window > 0f)) return 0;
-            if (state != TeamState.EnRoute && state != TeamState.OnTask &&
+            if (state != TeamState.EnRoute && state != TeamState.Deciding && state != TeamState.OnTask &&
                 state != TeamState.Holding && state != TeamState.Recovering)
             {
                 into[0] = Segment(0f, 1f, LaneKind.Empty, false);
@@ -41,10 +42,17 @@ namespace BoscaliSummer.Features.Support.Domain.Layout
             int count = 0;
             if (state == TeamState.EnRoute)
                 count = Add(into, count, ref cursor, remaining, LaneKind.EnRoute, false, window);
-            if (cursor < window && (state == TeamState.EnRoute || state == TeamState.OnTask))
+            if (cursor < window && (state == TeamState.EnRoute || state == TeamState.Deciding))
+            {
+                float decision = state == TeamState.Deciding ? remaining : FieldCatalog.DecisionSeconds;
+                count = Add(into, count, ref cursor, decision, LaneKind.Deciding,
+                    state != TeamState.Deciding, window);
+            }
+            if (cursor < window && (state == TeamState.EnRoute || state == TeamState.Deciding || state == TeamState.OnTask))
             {
                 float task = state == TeamState.OnTask ? remaining : FieldCatalog.TaskSeconds(mission);
-                count = Add(into, count, ref cursor, task, LaneKind.OnTask, false, window);
+                count = Add(into, count, ref cursor, task, LaneKind.OnTask,
+                    state != TeamState.OnTask, window);
             }
             if (cursor < window && state != TeamState.Recovering)
             {

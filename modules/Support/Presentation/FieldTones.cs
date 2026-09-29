@@ -21,6 +21,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 case TeamState.Ready: return AvTheme.RailReady;
                 case TeamState.EnRoute: return AvTheme.RailInfo;
+                case TeamState.Deciding: return AvTheme.RailCaution;
                 case TeamState.OnTask: return AvTheme.RailCaution;
                 case TeamState.Holding: return AvTheme.RailReady;
                 case TeamState.Recovering: return AvTheme.Dim;

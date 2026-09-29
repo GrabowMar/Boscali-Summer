@@ -18,6 +18,9 @@ namespace BoscaliSummer.Tests
         private static int Main()
         {
             FrameworkTests.Run();
+            NOAvionics.Tests.AvHudKitTests.Run(TestAssert.That);
+            Avionics.AvBundleManifestTests.Run();
+            NOAvionics.Tests.AvFuiTests.Run(TestAssert.That);
             Features.Session.SessionTests.Run();
             WingApiVersionTests.Run();
             FxBusTests.Run();
@@ -32,6 +35,7 @@ namespace BoscaliSummer.Tests
             ForestIndexTests.Run();
             TroopDeploymentTests.Run();
             GarrisonMarkerInfoTests.Run();
+            GarrisonCompositionTests.Run();
             StrongpointHitPolicyTests.Run();
             SiegeMathTests.Run();
             UrbanRuinMathTests.Run();
@@ -51,13 +55,13 @@ namespace BoscaliSummer.Tests
             OpsLayoutTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.PlayerSpawnPriority.PlayerSpawnPriorityTests.Run();
-            Features.Hud.TargetBoardTests.Run();
-            Features.Hud.ShotTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();
             Features.Autopilot.AceRadialMathTests.Run();
-            Features.Hud.CameraTests.Run();
+            Features.Hud.HudShellTests.Run();
             CommandTests.Run();
             ThreatEnvelopeTests.Run();
+            ReliefRigTests.Run();
+            ReliefHolesTests.Run();
             MfdNewsTickerTests.Run();
             MfdSecondaryObjectivesTests.Run();
             MfdMissionOverviewTests.Run();
@@ -91,6 +95,8 @@ namespace BoscaliSummer.Tests
             Features.Comms.CommsTests.Run();
             Features.Campaign.MissionInstallPlanTests.Run();
             HudTests.Run();
+            WingviewMathTests.Run();
+            ThirdPersonHudLayoutTests.Run();
             Features.Support.SupportHudCopyTests.Run();
             Features.Autopilot.AutopilotHudCopyTests.Run();
             Features.QoL.FuelHudCopyTests.Run();
@@ -102,6 +108,7 @@ namespace BoscaliSummer.Tests
             Features.Weather.WeatherForecastTests.Run();
             Features.Weather.WeatherFieldTests.Run();
             Features.Weather.CloudNoiseTests.Run();
+            Features.Weather.CloudBodiesTests.Run();
             Features.Weather.WeatherDebugTests.Run();
             Features.Weather.RainVisualMathTests.Run();
             Features.Weather.CanopyScoringTests.Run();

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
     /// <summary>
     /// The CYBER netmap, drawn in the terminal's own language on a <see cref="BoardSurface"/>: a dotted
     /// grid and the map edge, the frontline as a thin trace, nodes as hex glyphs by kind with a
-    /// four-segment stage ring, links as orthogonal circuit traces from Cyber Command, in-reach
+    /// short access timer ring, links as orthogonal circuit traces from Cyber Command, in-reach
     /// targets with dashed pulsing outlines, the selected node's reach bubble, a packet stream on the
     /// breach link and incidents walking toward their targets. Pooled at build; repositioned only when
     /// the frame or the network changes; packets, pulses and incidents move every frame.
@@ -77,6 +77,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private Vector2 packetFrom, packetTo;
         private bool packetsOn;
         private Action<int> select;
+        private float nextAnimation;
 
         internal Rect[] PlacedRects { get; } = new Rect[LabelPlacer.Maximum];
         internal int PlacedCount { get; private set; }
@@ -89,9 +90,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var layerObject = new GameObject("Wire", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             layer = (RectTransform)layerObject.transform;
             layer.SetParent(Board.InputLayer, false);
-            AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
+            Chrome.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
             terrain = new BoardTerrain(layer, Board);
-            terrain.SetTint(CyberStyle.Surface.WithAlpha(0.64f));
+            // Terrain is the navigation substrate; keep the room tint light enough that
+            // roads, coastlines and objective texture remain legible beneath the network.
+            terrain.SetTint(CyberStyle.Surface.WithAlpha(0.18f));
             for (int i = 0; i < GridLines; i++)
             {
                 gridX[i] = Stroke(layer, CyberStyle.Lattice.WithAlpha(0.35f), OpsSprites.Dash);
@@ -110,7 +113,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             breachB = Stroke(layer, CyberStyle.Accent, OpsSprites.Dash);
             for (int i = 0; i < Packets; i++)
             {
-                packets[i] = AvKit.Panel(layer, new Rect(0f, 0f, 7f, 7f), CyberStyle.Accent, OpsSprites.Dot);
+                packets[i] = Chrome.Panel(layer, new Rect(0f, 0f, 7f, 7f), CyberStyle.Accent, OpsSprites.Dot);
                 packets[i].type = Image.Type.Simple;
                 packets[i].enabled = false;
             }
@@ -120,7 +123,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 var threat = new Threat
                 {
                     Line = Lines.Make(layer, AvTheme.RailDanger.WithAlpha(0.8f), null, "IncidentPath"),
-                    Mark = AvKit.Panel(layer, new Rect(0f, 0f, 20f, 20f), AvTheme.RailDanger)
+                    Mark = Chrome.Panel(layer, new Rect(0f, 0f, 20f, 20f), AvTheme.RailDanger)
                 };
                 threat.Mark.sprite = OpsSprites.Glyph(OpsSprites.G.Alert);
                 threat.Sector = new RingLine(layer, 48, AvTheme.RailDanger, true);
@@ -146,16 +149,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildNode(Node node, int slot)
         {
-            node.Reach = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), CyberStyle.Title, OpsSprites.DottedRing);
+            node.Reach = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), CyberStyle.Title, OpsSprites.DottedRing);
             node.Reach.type = Image.Type.Simple;
             node.Control = RoomControl.Create(layer, new Rect(0f, 0f, Hex + 12f, Hex + 12f), () => select?.Invoke(slot), "Node");
             RectTransform host = node.Control.Rect;
-            node.Select = AvKit.Panel(host, new Rect(-6f, 6f, Hex + 24f, Hex + 24f), CyberStyle.Accent, OpsSprites.HexLine);
+            node.Select = Chrome.Panel(host, new Rect(-6f, 6f, Hex + 24f, Hex + 24f), CyberStyle.Accent, OpsSprites.HexLine);
             node.Select.type = Image.Type.Simple;
             node.Ring = new Image[4];
             for (int i = 0; i < 4; i++)
             {
-                Image ring = AvKit.Panel(host, new Rect(0f, 0f, Hex + 12f, Hex + 12f), CyberStyle.Lattice, OpsSprites.Arc);
+                Image ring = Chrome.Panel(host, new Rect(0f, 0f, Hex + 12f, Hex + 12f), CyberStyle.Lattice, OpsSprites.Arc);
                 ring.type = Image.Type.Filled;
                 ring.fillMethod = Image.FillMethod.Radial360;
                 ring.fillOrigin = (int)Image.Origin360.Top;
@@ -164,11 +167,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 ring.rectTransform.localEulerAngles = new Vector3(0f, 0f, -90f * i - 4f);
                 node.Ring[i] = ring;
             }
-            node.Fill = AvKit.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Pane, OpsSprites.HexFill);
+            node.Fill = Chrome.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Pane, OpsSprites.HexFill);
             node.Fill.type = Image.Type.Simple;
-            node.Line = AvKit.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Ink, OpsSprites.HexLine);
+            node.Line = Chrome.Panel(host, new Rect(6f, -6f, Hex, Hex), CyberStyle.Ink, OpsSprites.HexLine);
             node.Line.type = Image.Type.Simple;
-            node.Glyph = AvKit.Panel(host, new Rect(10f, -10f, Hex - 8f, Hex - 8f), CyberStyle.Ink);
+            node.Glyph = Chrome.Panel(host, new Rect(10f, -10f, Hex - 8f, Hex - 8f), CyberStyle.Ink);
             node.Control.Changed = c => node.Line.rectTransform.localScale = c.Hovered ? new Vector3(1.15f, 1.15f, 1f) : Vector3.one;
             node.Control.gameObject.SetActive(false);
             node.Reach.gameObject.SetActive(false);
@@ -176,7 +179,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildTag(Node node)
         {
-            node.Tag = AvKit.Panel(layer, new Rect(0f, 0f, 80f, 16f), CyberStyle.Surface.WithAlpha(0.92f));
+            node.Tag = Chrome.Panel(layer, new Rect(0f, 0f, 80f, 16f), CyberStyle.Surface.WithAlpha(0.92f));
             node.Name = CyberStyle.Line(node.Tag.rectTransform, new Rect(4f, 0f, 76f, 16f), CyberStyle.Micro, CyberStyle.Ink);
             node.Tag.gameObject.SetActive(false);
         }
@@ -231,15 +234,16 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 node.Glyph.color = ink;
                 node.Glyph.sprite = OpsSprites.Glyph(Glyph(n.Kind));
                 node.Fill.color = mine ? CyberStyle.Pane : CyberStyle.Surface;
-                int stage = network.Stage(i);
+                float lease = network.AccessSlot == i ? network.AccessRemaining(now) : 0f;
                 for (int s = 0; s < 4; s++)
                 {
-                    node.Ring[s].enabled = !home;
-                    node.Ring[s].color = s < stage ? CyberStyle.Accent : CyberStyle.Lattice;
+                    node.Ring[s].enabled = !home && s == 0 && lease > 0f;
+                    node.Ring[s].color = CyberStyle.Accent;
+                    if (s == 0) node.Ring[s].fillAmount = 0.92f * Mathf.Clamp01(lease / CyberLocations.AccessSeconds);
                 }
                 node.Select.enabled = i == selected;
                 // Reach is geography, not affordability or whether another session occupies the console.
-                inReach[i] = !home && stage < CyberLocations.StageCount && network.ReachCovers(n.X, n.Z);
+                inReach[i] = !home && !n.Hacked && network.ReachCovers(n.X, n.Z);
                 bool reach = inReach[i];
                 if (node.Reach.gameObject.activeSelf != reach) node.Reach.gameObject.SetActive(reach);
                 if (reach) Lines.Centre(node.Reach.rectTransform, p.x, p.y, Hex + 26f);
@@ -329,7 +333,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                     if (show)
                     {
                         var rect = new Rect(placed[k].X, placed[k].Y, placed[k].Width, placed[k].Height);
-                        AvKit.Place(node.Tag.rectTransform, rect);
+                        Chrome.Place(node.Tag.rectTransform, rect);
                         PlacedRects[PlacedCount++] = rect;
                         node.Name.color = i == selected ? CyberStyle.Accent : CyberStyle.Ink;
                     }
@@ -408,12 +412,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // ---- Motion -----------------------------------------------------------------------------
 
-        /// <summary>Pulses, packets and incidents; every frame, transforms only.</summary>
+        /// <summary>Updates the active packet and incident overlays at a bounded cadence.</summary>
         public void Animate(CyberNetwork network, double now, float time)
         {
-            float pulse = 0.45f + 0.55f * Mathf.PingPong(time * 1.6f, 1f);
-            for (int i = 0; i < Slots; i++)
-                if (inReach[i]) nodes[i].Reach.color = CyberStyle.Title.WithAlpha(pulse);
+            // Moving packets and incident geometry are decoration; ten updates per second is enough.
+            if (time < nextAnimation) return;
+            nextAnimation = time + 0.1f;
             for (int i = 0; i < Packets; i++)
             {
                 if (!packetsOn) { packets[i].enabled = false; continue; }
@@ -442,7 +446,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Vector2 at = Board.Project(incident.X, incident.Z);
                 // Beside the node it sits on, so both stay readable.
                 Lines.Centre(threat.Mark.rectTransform, at.x + 16f, at.y + 16f, 20f);
-                threat.Mark.color = AvTheme.RailDanger.WithAlpha(0.75f + 0.25f * pulse);
+                threat.Mark.color = AvTheme.RailDanger.WithAlpha(0.88f);
                 int command = network.CommandSlot;
                 if (incident.Kind == IncidentKind.Intrusion && command >= 0 && incident.Site != command)
                 {

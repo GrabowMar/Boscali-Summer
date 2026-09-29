@@ -62,3 +62,4 @@ Thumbs.db
 # Patch / merge cruft
 *.orig
 *.rej
+__pycache__/

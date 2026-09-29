@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Features.Command.Configuration;
 using BoscaliSummer.Features.Command.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -38,7 +39,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static TMP_Text labelB;
         private static TMP_Text badgeLabel;
         private static TMP_Text deskLabel;
-        private static MfdGlyph badgeDot;
+        private static TMP_Text badgeIcon;
         private static Image alertRail;
         private static Vector2 builtSize;
         private static float builtBadgeWidth;
@@ -160,7 +161,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             labelB = null;
             badgeLabel = null;
             deskLabel = null;
-            badgeDot = null;
+            badgeIcon = null;
             alertRail = null;
             builtSize = Vector2.zero;
             builtBadgeWidth = 0f;
@@ -205,17 +206,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             if (root == null)
             {
-                var go = new GameObject(RootName, typeof(RectTransform), typeof(Image));
+                var go = new GameObject(RootName, typeof(RectTransform));
                 root = go.GetComponent<RectTransform>();
                 root.SetParent(canvas.transform, worldPositionStays: false);
             }
-
-            Image background = root.GetComponent<Image>();
-            if (background == null) background = root.gameObject.AddComponent<Image>();
-            background.sprite = AvSprites.Panel;
-            background.type = Image.Type.Sliced;
-            background.color = AvTheme.Ground.WithAlpha(0.94f);
-            background.raycastTarget = false;
+            // The chrome child (built in Rebuild) carries the one background/frame mesh;
+            // root itself is a plain layout node.
         }
 
         private static void PlaceRoot(Rect area)
@@ -235,53 +231,43 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             for (int i = root.childCount - 1; i >= 0; i--)
                 UnityEngine.Object.Destroy(root.GetChild(i).gameObject);
 
-            // 1. Chrome / Borders
+            // 1. Chrome / Borders — one AvFrame mesh for the backing fill and the frame stroke.
             var chromeGo = new GameObject(ChromeName, typeof(RectTransform));
             chrome = chromeGo.GetComponent<RectTransform>();
             chrome.SetParent(root, worldPositionStays: false);
-            AvKit.Stretch(chrome);
+            AvLay.Fill(chrome, 0f);
 
             var area = new Rect(0f, 0f, size.x, size.y);
-            AvKit.Panel(chrome, area, new Color32(10, 14, 18, 235));
-            AvKit.Outline(chrome, area, AvTheme.Frame.WithAlpha(0.55f));
-            alertRail = AvKit.Rule(chrome, new Rect(badgeWidth, -size.y + 2f, size.x - badgeWidth, 2f), AvTheme.Accent.WithAlpha(0.30f));
+            MfdChromeLay.Panel(chrome, "Backing", area,
+                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.94f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f),
+                AvChamfer.Diagonal(6f));
+            alertRail = MfdChromeLay.Rule(chrome, "AlertRail",
+                new Rect(badgeWidth, -size.y + 2f, size.x - badgeWidth, 2f),
+                AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.30f));
 
             // Align the wire's left bay with the Field Log directly beneath it.
-            AvKit.Rule(chrome, new Rect(badgeWidth, 0f, 1f, size.y), AvTheme.Frame.WithAlpha(0.60f));
+            MfdChromeLay.Rule(chrome, "BadgeDivider", new Rect(badgeWidth, 0f, 1f, size.y),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.60f));
 
             // 2. Left Badge
             var badgeGo = new GameObject("Badge", typeof(RectTransform));
             var badgeRt = badgeGo.GetComponent<RectTransform>();
             badgeRt.SetParent(root, worldPositionStays: false);
-            AvKit.Place(badgeRt, new Rect(8f, 0f, badgeWidth - 12f, size.y));
+            MfdChromeLay.Place(badgeRt, new Rect(8f, 0f, badgeWidth - 12f, size.y));
 
-            var dotObject = new GameObject("Dot", typeof(RectTransform), typeof(MfdGlyph));
-            var dotRect = dotObject.GetComponent<RectTransform>();
-            dotRect.SetParent(badgeRt, worldPositionStays: false);
-            AvKit.Place(dotRect, new Rect(2f, -(size.y - 10f) * 0.5f, 10f, 10f));
-            badgeDot = dotObject.GetComponent<MfdGlyph>();
-            badgeDot.raycastTarget = false;
-            badgeDot.SetKind("dot", AvTheme.Accent);
+            badgeIcon = AvIcons.Make(badgeRt, AvIcon.Antenna, 10f, AvStyleHost.FuiColor("select", AvTheme.Accent));
+            MfdChromeLay.Place(badgeIcon.rectTransform, new Rect(2f, -(size.y - 10f) * 0.5f, 10f, 10f));
 
-            badgeLabel = AvStyled.Label(
-                badgeRt,
-                new Rect(18f, 0f, 112f, size.y),
-                "<b>THEATER WIRE</b>",
-                "row-sub",
-                align: TextAlignmentOptions.MidlineLeft);
-            badgeLabel.fontSize = 11f;
-            badgeLabel.characterSpacing = 1f;
-            badgeLabel.richText = true;
+            badgeLabel = AvText.Make(badgeRt, "Badge", AvTextRole.Label, "THEATER WIRE", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(badgeLabel.rectTransform, new Rect(18f, 0f, 112f, size.y));
+            badgeLabel.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
 
             lastLogLive = MfdLogPanel.HasTraffic;
-            deskLabel = AvStyled.Label(
-                badgeRt,
-                new Rect(badgeWidth - 145f, 0f, 112f, size.y),
-                lastLogLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY",
-                "row-sub",
-                align: TextAlignmentOptions.MidlineRight);
-            deskLabel.fontSize = 10f;
-            deskLabel.color = AvTheme.Dim;
+            deskLabel = AvText.Make(badgeRt, "Desk", AvTextRole.Micro,
+                lastLogLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY", TextAlignmentOptions.MidlineRight);
+            MfdChromeLay.Place(deskLabel.rectTransform, new Rect(badgeWidth - 145f, 0f, 112f, size.y));
+            deskLabel.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
 
             // 3. Masked Viewport
             float viewportX = badgeWidth + 10f;
@@ -290,7 +276,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var viewportGo = new GameObject(ViewportName, typeof(RectTransform), typeof(Image), typeof(RectMask2D));
             viewport = viewportGo.GetComponent<RectTransform>();
             viewport.SetParent(root, worldPositionStays: false);
-            AvKit.Place(viewport, new Rect(viewportX, 0f, viewportWidth, size.y));
+            MfdChromeLay.Place(viewport, new Rect(viewportX, 0f, viewportWidth, size.y));
 
             Image viewImg = viewportGo.GetComponent<Image>();
             viewImg.color = Color.clear;
@@ -304,16 +290,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             contentA.sizeDelta = new Vector2(4000f, size.y);
             contentA.anchoredPosition = Vector2.zero;
 
-            labelA = AvStyled.Label(
-                contentA,
-                new Rect(0f, 0f, 4000f, size.y),
-                "",
-                "row-sub",
-                align: TextAlignmentOptions.MidlineLeft);
-            labelA.fontSize = 13f;
-            labelA.color = AvTheme.TextPrimary;
-            labelA.characterSpacing = 0f;
-            labelA.richText = true;
+            // Rich, domain-authored copy — Prose keeps its case (spec §5.2) rather than
+            // being forced upper like the chrome roles around it.
+            labelA = AvText.Make(contentA, "MarqueeTextA", AvTextRole.Prose, "", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(labelA.rectTransform, new Rect(0f, 0f, 4000f, size.y));
+            labelA.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             labelA.enableWordWrapping = false;
             labelA.overflowMode = TextOverflowModes.Overflow;
 
@@ -324,16 +305,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             contentB.sizeDelta = new Vector2(4000f, size.y);
             contentB.anchoredPosition = Vector2.zero;
 
-            labelB = AvStyled.Label(
-                contentB,
-                new Rect(0f, 0f, 4000f, size.y),
-                "",
-                "row-sub",
-                align: TextAlignmentOptions.MidlineLeft);
-            labelB.fontSize = 13f;
-            labelB.color = AvTheme.TextPrimary;
-            labelB.characterSpacing = 0f;
-            labelB.richText = true;
+            labelB = AvText.Make(contentB, "MarqueeTextB", AvTextRole.Prose, "", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(labelB.rectTransform, new Rect(0f, 0f, 4000f, size.y));
+            labelB.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             labelB.enableWordWrapping = false;
             labelB.overflowMode = TextOverflowModes.Overflow;
 
@@ -382,26 +356,31 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static void UpdateAlertVisuals(float now)
         {
             bool alert = now < alertUntil;
+            Color ready = AvStyleHost.FuiColor("select", AvTheme.Accent);
             if (!alert)
             {
                 if (alertVisualsClear) return;
                 alertVisualsClear = true;
-                if (badgeDot != null) badgeDot.color = AvTheme.Accent;
-                if (alertRail != null) alertRail.color = AvTheme.Accent.WithAlpha(0.30f);
+                if (badgeIcon != null) badgeIcon.color = ready;
+                if (alertRail != null) alertRail.color = ready.WithAlpha(0.30f);
+                if (badgeLabel != null) badgeLabel.text = "THEATER WIRE";
                 return;
             }
 
             alertVisualsClear = false;
             float pulse = 0.5f + 0.5f * Mathf.Sin(now * 7f);
-            if (badgeDot != null)
+            Color danger = AvStyleHost.FuiColor("danger", AvTheme.Alert);
+            if (badgeIcon != null)
             {
-                badgeDot.color = Color.Lerp(AvTheme.Accent, AvTheme.Alert, 0.35f + 0.65f * pulse);
+                badgeIcon.color = Color.Lerp(ready, danger, 0.35f + 0.65f * pulse);
             }
             if (alertRail != null)
             {
-                alertRail.color = Color.Lerp(AvTheme.Frame, AvTheme.Alert, 0.45f + 0.55f * pulse)
+                alertRail.color = Color.Lerp(AvStyleHost.FuiColor("frame", AvTheme.Frame), danger, 0.45f + 0.55f * pulse)
                     .WithAlpha(0.55f + 0.45f * pulse);
             }
+            // R1: the colour pulse never carries the alert alone — the badge also gets the word/glyph.
+            if (badgeLabel != null) badgeLabel.text = AvStates.Glyph(AvState.Danger) + "THEATER WIRE";
         }
 
         private static void PollTheaterState()

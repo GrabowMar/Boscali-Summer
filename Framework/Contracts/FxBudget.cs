@@ -2,14 +2,18 @@ using System;
 
 namespace BoscaliSummer.Framework.Contracts
 {
+    /// <summary>
+    /// Hard ceilings one client effect promises to stay under. The bus ledgers render-target
+    /// bytes and voices globally; passes are counted by the effect itself in DescribeFx.
+    /// </summary>
     internal readonly struct FxBudget
     {
-        public long MaxRtBytes { get; }
+        public int MaxRtBytes { get; }
         public int MaxPasses { get; }
         public int MaxVoices { get; }
         public bool ScalesWithQuality { get; }
 
-        public FxBudget(long maxRtBytes, int maxPasses, int maxVoices, bool scalesWithQuality)
+        public FxBudget(int maxRtBytes, int maxPasses, int maxVoices, bool scalesWithQuality)
         {
             MaxRtBytes = Math.Max(0, maxRtBytes);
             MaxPasses = Math.Max(0, maxPasses);
@@ -17,22 +21,22 @@ namespace BoscaliSummer.Framework.Contracts
             ScalesWithQuality = scalesWithQuality;
         }
 
-        public static long RtBytes(int width, int height, int colourBits, int depthBits)
+        /// <summary>Bytes one render target costs the ledger (colour + depth, no mips).</summary>
+        public static long RtBytes(int width, int height, int colourBitsPerPixel, int depthBits)
         {
             if (width <= 0 || height <= 0) return 0;
-            return (long)width * height *
-                ((Math.Max(0, colourBits) + 7) / 8 + (Math.Max(0, depthBits) + 7) / 8);
+            long pixels = (long)width * height;
+            return pixels * Math.Max(8, colourBitsPerPixel) / 8 + pixels * Math.Max(0, depthBits) / 8;
         }
 
-        public static int ColourBits(string format)
+        /// <summary>Colour bits for the formats effects actually allocate; unknown defaults to 32.</summary>
+        public static int ColourBits(string formatName)
         {
-            switch (format)
-            {
-                case "ARGBHalf": return 64;
-                case "ARGBFloat": return 128;
-                case "R8": return 8;
-                default: return 32;
-            }
+            if (string.IsNullOrEmpty(formatName)) return 32;
+            if (formatName.IndexOf("R8", StringComparison.Ordinal) >= 0) return 8;
+            if (formatName.IndexOf("Half", StringComparison.Ordinal) >= 0) return 64;
+            if (formatName.IndexOf("Float", StringComparison.Ordinal) >= 0) return 128;
+            return 32;
         }
     }
 }

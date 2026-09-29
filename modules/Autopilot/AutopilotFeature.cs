@@ -29,9 +29,12 @@ namespace BoscaliSummer.Features.Autopilot
             context.AddSceneService<Presentation.AutopilotHudLine>(49).Configure(controller);
             context.AddSceneService<Presentation.IlsHudLine>(49).Configure(settings);
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
+            context.AddSceneService<LandingLight>(51);
+            CockpitStateProbe.Initialise();
             RadialMenuAccess.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +
-                (RadialMenuAccess.Available ? "native wheel entry + ACE3 radial menu" : "unavailable"));
+                (RadialMenuAccess.Available ? "native wheel entry" : "native wheel unavailable") +
+                "; interaction menu key=" + settings.AceRadialKey.Value);
         }
     }
 }

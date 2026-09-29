@@ -1,54 +1,85 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Features.Events.Domain;
+using NOAvionics;
 using NOAvionics.Ui;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Events.Presentation
 {
-    /// <summary>A local reading room. Native encyclopedia data is read only when opened.</summary>
+    /// <summary>
+    /// A local reading room, floating over the map on kit v2's <see cref="AvWindow"/> chrome. The window is
+    /// two panes under one tab bar: a paged index on the left (about 40%) and the detail of the selected
+    /// record on the right. Four sections (aircraft / events / world / manual) share both panes; native
+    /// encyclopedia data is read only while open. The window is sized to the screen and each pane scrolls
+    /// on its own, so nothing is ever taller than the window.
+    /// </summary>
     internal sealed class EventDeskArchive : MonoBehaviour
     {
-        private const float Width = 1160f;
-        private const float Height = 820f;
-        private const int Rows = 8;
-        private Canvas canvas;
-        private RectTransform frame, list, detail;
-        private GameObject surface;
-        private readonly List<AircraftDefinition> aircraft = new List<AircraftDefinition>();
-        private readonly AvButton[] tabs = new AvButton[4];
+        private const float MaxWidth = 1040f;
+        private const float MaxHeight = 960f;
+        private const float ScreenMargin = 40f;
+        private const int IndexRows = 14;
+        private const int SortingOrder = 30003;
+
+        // AvWindow chrome the pane height is carved out of.
+        private const float TitleHeight = 30f;
+
+        private AvWindow window;
+        private readonly List<AircraftDefinition> aircraft = new List<AircraftDefinition>(128);
+        private AvControl[] tabs;
+        private ArchivePanesPart panes;
+        private AvSection indexSection;
+        private AvList index;
+        private EventDetailPart detail;
         private EventAircraftPreview preview;
-        private Vector2 fitted;
-        private int section, page, selected;
+        private int section, selected;
         private bool open, keyboardTouched, keyboardWas, pauseWas;
 
         internal bool IsOpen => open;
+        internal AvWindow Window => window;
 
-        internal static EventDeskArchive Create()
+        /// <summary>The canvas-unit size of the screen the window is scaled to (1920x1080 reference, Expand).</summary>
+        internal static Vector2 ScreenUnits()
         {
-            var go = new GameObject("BoscaliFieldArchive", typeof(RectTransform), typeof(Canvas),
-                typeof(CanvasScaler), typeof(GraphicRaycaster));
+            float scale = Mathf.Min(Screen.width / 1920f, Screen.height / 1080f);
+            if (scale <= 0.001f) return new Vector2(1920f, 1080f);
+            return new Vector2(Screen.width / scale, Screen.height / scale);
+        }
+
+        internal static EventDeskArchive Create() => Create(null, ScreenUnits());
+
+        /// <summary>
+        /// Creates the archive under its own scaled overlay canvas, or, for the offline harness, under
+        /// <paramref name="parent"/> (an existing canvas) at the given screen size.
+        /// </summary>
+        internal static EventDeskArchive Create(Transform parent, Vector2 screenUnits)
+        {
+            var go = new GameObject("BoscaliFieldArchive", typeof(RectTransform));
+            if (parent == null)
+            {
+                Canvas canvas = go.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = SortingOrder;
+                CanvasScaler scaler = go.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+                go.AddComponent<GraphicRaycaster>();
+            }
+            else
+            {
+                go.transform.SetParent(parent, false);
+                AvLay.Fill((RectTransform)go.transform);
+            }
             var archive = go.AddComponent<EventDeskArchive>();
-            archive.canvas = go.GetComponent<Canvas>();
-            archive.canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            archive.canvas.sortingOrder = 30003;
-            var scaler = go.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-            archive.Build();
-            archive.canvas.enabled = false;
-            archive.surface.SetActive(false);
+            archive.Build(screenUnits);
             return archive;
         }
 
-        internal void Show(int initialSection)
+        internal void Show(int initialSection, int record = 0)
         {
-            Fit();
-            canvas.enabled = true;
-            surface.SetActive(true);
             if (!open)
             {
                 pauseWas = GameplayUI.AllowPauseKeybind;
@@ -63,7 +94,8 @@ namespace BoscaliSummer.Features.Events.Presentation
                 open = true;
             }
             LoadAircraft();
-            SelectSection(initialSection);
+            window.Show();
+            SelectSection(initialSection, record);
         }
 
         internal void Close()
@@ -77,7 +109,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 Rewired.ReInput.controllers.Keyboard != null)
                 Rewired.ReInput.controllers.Keyboard.enabled = keyboardWas;
             keyboardTouched = false;
-            AvButton.ClearTooltip();
+            window?.Hide();
             Destroy(gameObject);
         }
 
@@ -86,8 +118,9 @@ namespace BoscaliSummer.Features.Events.Presentation
         private void Update()
         {
             if (!open) return;
-            Fit();
             if (Input.GetKeyDown(KeyCode.Escape)) Close();
+            else if (Input.GetKeyDown(KeyCode.DownArrow)) Step(1);
+            else if (Input.GetKeyDown(KeyCode.UpArrow)) Step(-1);
         }
 
         private void LoadAircraft()
@@ -100,193 +133,155 @@ namespace BoscaliSummer.Features.Events.Presentation
             aircraft.Sort((a, b) => string.Compare(a.unitName, b.unitName, StringComparison.OrdinalIgnoreCase));
         }
 
-        private void Build()
+        private void Build(Vector2 screenUnits)
         {
-            var root = (RectTransform)transform;
-            surface = new GameObject("FieldArchiveSurface", typeof(RectTransform));
-            var full = (RectTransform)surface.transform;
-            full.SetParent(root, false);
-            AvKit.Stretch(full);
-            Image backdrop = AvRoomFrame.CreateBackdrop(full, .78f);
-            backdrop.gameObject.AddComponent<Button>().onClick.AddListener(Close);
-            CanvasGroup group;
-            frame = AvRoomFrame.CreateFrame(full, "FieldArchiveFrame", out group);
-            frame.sizeDelta = new Vector2(Width, Height);
-            AvKit.Panel(frame, new Rect(0, 0, Width, Height), AvTheme.Ground, AvSprites.Panel).raycastTarget = true;
-            Edge(new Rect(0, 0, Width, 1));
-            Edge(new Rect(0, -Height + 1, Width, 1));
-            Edge(new Rect(0, 0, 1, Height));
-            Edge(new Rect(Width - 1, 0, 1, Height));
-            Label(frame, "DIRECTORATE / FIELD ARCHIVE", new Rect(28, -24, 700, 28), 24, AvTheme.TextPrimary);
-            Label(frame, "LOCAL READING ROOM  •  NO SIGNAL LEAVES THIS COCKPIT",
-                new Rect(30, -57, 720, 20), 12, AvTheme.Dim);
-            AvKit.Button(frame, "× CLOSE", new Rect(Width - 152, -25, 122, 34), Close);
-            AvKit.Rule(frame, new Rect(26, -91, Width - 52, 2), AvTheme.RailInfo);
+            float width = Mathf.Clamp(screenUnits.x - 2f * ScreenMargin, 760f, MaxWidth);
+            float height = Mathf.Clamp(screenUnits.y - 2f * ScreenMargin, 480f, MaxHeight);
+            // The host is a proper canvas, so the window builds under it instead of becoming a root canvas.
+            window = AvWindow.Build(transform, "field-archive", "DIRECTORATE / FIELD ARCHIVE", width, height, SortingOrder);
+            window.Closed += Close;
+            AvFlow p = window.Body;
+
             string[] names = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
+            AvIcon[] icons = { AvIcon.Plane, AvIcon.AlertTriangle, AvIcon.Map2, AvIcon.Bookmark };
+            var specs = new AvControl.Spec[names.Length];
             for (int i = 0; i < names.Length; i++)
             {
                 int target = i;
-                tabs[i] = AvKit.Button(frame, names[i], new Rect(26 + i * 278, -108, 269, 36),
-                    () => SelectSection(target));
+                specs[i] = new AvControl.Spec(names[i], () => SelectSection(target), AvButtonStyle.Default, icons[i]);
             }
-            list = Panel("Index", new Rect(26, -157, 295, 627));
-            detail = Panel("Detail", new Rect(333, -157, 801, 627));
-            Fit();
+            tabs = p.Buttons(specs).Controls;
+            for (int i = 0; i < tabs.Length; i++) tabs[i].SingleLine();
+
+            // Pane height: the body minus the tab row, the flow's top/bottom pad and the gaps.
+            float bodyHeight = height - TitleHeight - AvGridTokens.Footer;
+            float paneHeight = Mathf.Max(200f, bodyHeight - 2f * AvGridTokens.Pad - AvGridTokens.Tab - AvGridTokens.Gap);
+            panes = p.Add(new ArchivePanesPart(p.Content, window.Ticker, p.Inner, paneHeight));
+
+            indexSection = panes.Left.Flow.Section(AvIcon.ListDetails, "INDEX", "0 RECORDS");
+            index = panes.Left.Flow.Add(new AvList(panes.Left.Content, window.Ticker, IndexRows, BindIndexRow));
+            index.RowClicked = Select;
+
+            detail = panes.Right.Flow.Add(new EventDetailPart(panes.Right.Content));
+            detail.Rotate = degrees => preview?.Rotate(degrees);
+
+            window.Footer.Set("Local reading room · no signal leaves this cockpit · Esc closes, Up and Down step the index.");
         }
 
-        private void Edge(Rect rect) => AvRoomFrame.CreateEdge(frame, rect, AvTheme.Frame);
-
-        private RectTransform Panel(string name, Rect rect)
+        private void Step(int delta)
         {
-            var image = AvKit.Panel(frame, rect, AvTheme.SurfaceInert);
-            image.gameObject.name = name;
-            return image.rectTransform;
+            if (Count == 0) return;
+            Select(((selected + delta) % Count + Count) % Count);
         }
 
-        private static TMP_Text Label(RectTransform parent, string text, Rect rect, float size,
-            Color color, bool wrap = false) => AvKit.Label(parent, text, rect, color, size,
-                FontStyles.Normal, TextAlignmentOptions.TopLeft, wrap);
-
-        private void Fit()
+        private void Select(int item)
         {
-            if (frame == null) return;
-            Rect canvasRect = ((RectTransform)transform).rect;
-            float w = canvasRect.width > 0 ? canvasRect.width : 1920;
-            float h = canvasRect.height > 0 ? canvasRect.height : 1080;
-            if (Mathf.Abs(fitted.x - w) < .5f && Mathf.Abs(fitted.y - h) < .5f) return;
-            fitted = new Vector2(w, h);
-            Rect fit = AvRoomFrame.WindowRect(w, h);
-            float scale = Mathf.Min(1f, Mathf.Min(fit.width / Width, fit.height / Height));
-            frame.localScale = new Vector3(scale, scale, 1);
-            frame.anchoredPosition = new Vector2(w * .5f, -h * .5f);
-        }
-
-        private void SelectSection(int target)
-        {
-            section = Mathf.Clamp(target, 0, 3);
-            for (int i = 0; i < tabs.Length; i++) tabs[i].SetLatched(i == section);
-            page = selected = 0;
+            if (item < 0 || item >= Count) return;
+            selected = item;
             Populate();
+        }
+
+        private string RowTitle(int item) => section == 0 ? aircraft[item].unitName :
+            section == 1 ? EventCatalog.All[item].Title :
+            section == 2 ? EventDocs.World[item].Title : EventDocs.Guide[item].Title;
+
+        private void BindIndexRow(int item, AvRow row)
+        {
+            bool chosen = item == selected;
+            string value = section == 0 ? aircraft[item].code ?? "" :
+                section == 1 ? EventCatalog.TierLabel(EventCatalog.All[item].Tier) :
+                AvNum.Fixed(item + 1, 0).PadLeft(2, '0');
+            AvState state = section == 1 ? EventsMfdPanel.TierState(EventCatalog.TierLabel(EventCatalog.All[item].Tier))
+                : AvState.Info;
+            row.Set(RowTitle(item).ToUpperInvariant(), "", value, state);
+            row.Armed = chosen;
         }
 
         private int Count => section == 0 ? aircraft.Count : section == 1 ? EventCatalog.All.Length :
             section == 2 ? EventDocs.World.Length : EventDocs.Guide.Length;
 
-        private string RowTitle(int index) => section == 0 ? aircraft[index].unitName :
-            section == 1 ? EventCatalog.All[index].Title :
-            section == 2 ? EventDocs.World[index].Title : EventDocs.Guide[index].Title;
+        private void SelectSection(int target, int record = 0)
+        {
+            section = Mathf.Clamp(target, 0, 3);
+            for (int i = 0; i < tabs.Length; i++) tabs[i].Latched = i == section;
+            selected = Mathf.Clamp(record, 0, Mathf.Max(0, Count - 1));
+            Populate();
+        }
 
         private void Populate()
         {
             preview?.Dispose();
             preview = null;
-            for (int i = list.childCount - 1; i >= 0; i--)
-            {
-                GameObject old = list.GetChild(i).gameObject;
-                old.SetActive(false);
-                Destroy(old);
-            }
-            for (int i = detail.childCount - 1; i >= 0; i--)
-            {
-                GameObject old = detail.GetChild(i).gameObject;
-                old.SetActive(false);
-                Destroy(old);
-            }
-            string[] sections = { "AIRFRAME REGISTRY", "EVENT DOSSIERS", "WORLD FILES", "FIELD MANUAL" };
-            Label(list, sections[section], new Rect(16, -16, 260, 26), 16, AvTheme.TextPrimary);
-            Label(list, Count + " RECORDS  /  SELECT ONE", new Rect(16, -45, 260, 20), 11, AvTheme.Dim);
-            AvKit.Rule(list, new Rect(16, -70, 263, 1), AvTheme.Frame);
-            for (int row = 0; row < Rows; row++)
-            {
-                int index = page * Rows + row;
-                if (index >= Count) break;
-                float y = -82 - row * 60;
-                AvKit.Panel(list, new Rect(14, y, 267, 53), index == selected ? AvTheme.Surface : AvTheme.Ground);
-                AvKit.Panel(list, new Rect(14, y, 3, 53), index == selected ? AvTheme.RailReady : AvTheme.RailInert);
-                Label(list, (index + 1).ToString("00") + "  " + RowTitle(index).ToUpperInvariant(),
-                    new Rect(25, y - 9, 244, 34), 12, index == selected ? AvTheme.TextPrimary : AvTheme.Dim, true);
-                int choice = index;
-                AvKit.HitButton(list, new Rect(14, y, 267, 53), () => { selected = choice; Populate(); });
-            }
-            AvKit.Button(list, "‹", new Rect(15, -566, 70, 32), () => ChangePage(-1));
-            Label(list, (page + 1) + " / " + Mathf.Max(1, Mathf.CeilToInt(Count / (float)Rows)),
-                new Rect(94, -571, 105, 25), 13, AvTheme.Dim);
-            AvKit.Button(list, "›", new Rect(208, -566, 70, 32), () => ChangePage(1));
+            indexSection.SetCaption(AvNum.Fixed(Count, 0) + " RECORDS");
+            index.SetCount(Count);
             if (Count == 0)
             {
-                Label(detail, section == 0 ? "AIRCRAFT INDEX UNAVAILABLE" : "NO RECORDS",
-                    new Rect(28, -35, 700, 30), 20, AvTheme.TextPrimary);
-                Label(detail, "The native encyclopedia has not loaded in this scene.",
-                    new Rect(28, -85, 700, 50), 14, AvTheme.Dim, true);
+                detail.ShowEmpty(section == 0 ? "AIRCRAFT INDEX UNAVAILABLE" : "NO RECORDS",
+                    "The native encyclopedia has not loaded in this scene.");
+                panes.Right.ScrollToTop();
                 return;
             }
             selected = Mathf.Clamp(selected, 0, Count - 1);
+            index.Reveal(selected);
             if (section == 0) AircraftDetail(aircraft[selected]);
             else if (section == 1) EventDetail(EventCatalog.All[selected]);
             else DocDetail(section == 2 ? EventDocs.World[selected] : EventDocs.Guide[selected]);
+            panes.Right.ScrollToTop();
         }
 
-        private void ChangePage(int step)
+        private void AircraftDetail(AircraftDefinition definition)
         {
-            page = Mathf.Clamp(page + step, 0, Mathf.Max(0, Mathf.CeilToInt(Count / (float)Rows) - 1));
-            selected = Mathf.Min(Count - 1, page * Rows);
-            Populate();
-        }
-
-        private void AircraftDetail(AircraftDefinition aircraftDefinition)
-        {
-            Label(detail, "NATIVE AIRCRAFT / " + aircraftDefinition.code, new Rect(26, -19, 740, 20), 12, AvTheme.RailInfo);
-            Label(detail, aircraftDefinition.unitName.ToUpperInvariant(), new Rect(26, -46, 740, 34), 24, AvTheme.TextPrimary);
-            var view = new GameObject("AirframeModel", typeof(RectTransform), typeof(RawImage));
-            var rect = (RectTransform)view.transform;
-            rect.SetParent(detail, false);
-            AvKit.Place(rect, new Rect(26, -92, 749, 282));
-            RawImage output = view.GetComponent<RawImage>();
-            output.color = Color.white;
-            output.raycastTarget = false;
+            var info = definition.aircraftInfo;
+            var figures = new List<DetailFigure>(3);
+            if (info != null)
+            {
+                figures.Add(new DetailFigure("MAX SPEED", AvNum.Fixed(info.maxSpeed, 0) + " M/S"));
+                figures.Add(new DetailFigure("STALL SPEED", AvNum.Fixed(info.stallSpeed, 0) + " M/S"));
+                figures.Add(new DetailFigure("EMPTY WEIGHT", AvNum.Thousands(info.emptyWeight) + " KG"));
+            }
+            RawImage output = detail.ShowAircraft("NATIVE AIRCRAFT / " + (definition.code ?? ""),
+                definition.unitName.ToUpperInvariant(), figures,
+                definition.description ?? "No briefing is recorded for this aircraft.",
+                info == null ? "Performance file unavailable." : null);
             bool hasModel = false;
-            try { preview = new EventAircraftPreview(output); hasModel = preview.Load(aircraftDefinition); }
+            try { preview = new EventAircraftPreview(output); hasModel = preview.Load(definition); }
             catch (Exception) { preview?.Dispose(); preview = null; }
-            if (!hasModel) Label(detail, "MODEL PREVIEW UNAVAILABLE", new Rect(40, -210, 700, 32), 16, AvTheme.Dim);
-            AvKit.Button(detail, "LEFT 30", new Rect(26, -386, 90, 30), () => preview?.Rotate(-30));
-            AvKit.Button(detail, "RIGHT 30", new Rect(124, -386, 90, 30), () => preview?.Rotate(30));
-            var info = aircraftDefinition.aircraftInfo;
-            string figures = info != null ? "MAX SPEED  " + info.maxSpeed.ToString("0") + " m/s    •    STALL  " +
-                info.stallSpeed.ToString("0") + " m/s    •    EMPTY  " + info.emptyWeight.ToString("0") + " kg" :
-                "PERFORMANCE FILE UNAVAILABLE";
-            Label(detail, figures, new Rect(26, -431, 750, 22), 13, AvTheme.RailInfo);
-            Label(detail, aircraftDefinition.description ?? "No briefing is recorded for this aircraft.",
-                new Rect(26, -470, 748, 135), 14, AvTheme.TextPrimary, true);
+            detail.SetPreviewAvailable(hasModel);
         }
 
         private void EventDetail(EventDefinition definition)
         {
-            Label(detail, EventCatalog.TierLabel(definition.Tier).ToUpperInvariant() + " / " +
-                EventCatalog.CategoryLabel(definition.Category).ToUpperInvariant(),
-                new Rect(26, -18, 740, 20), 12, AvTheme.RailInfo);
-            Label(detail, definition.Title.ToUpperInvariant(), new Rect(26, -47, 740, 38), 25, AvTheme.TextPrimary);
-            Image art = AvKit.Panel(detail, new Rect(26, -100, 749, 255), Color.white);
-            art.sprite = EventArtCache.Get(definition.IconKey,
-                definition.IsSuper ? "tier_super" : "tier_medium");
-            art.type = Image.Type.Simple;
-            art.preserveAspect = false;
-            Label(detail, "THEATER SCENARIO  /  " + EventCatalog.TargetLabel(definition.Target).ToUpperInvariant(),
-                new Rect(26, -377, 740, 22), 12, AvTheme.RailInfo);
-            Label(detail, definition.FlavorText, new Rect(26, -416, 742, 160), 15, AvTheme.TextPrimary, true);
-            Label(detail, "PRICE ×" + definition.SupportCostMultiplier.ToString("0.00") +
-                "   •   RESET ×" + definition.SupportCooldownMultiplier.ToString("0.00") +
-                "   •   WINDOW " + definition.DurationMinSeconds / 60 + "–" +
-                definition.DurationMaxSeconds / 60 + " MIN",
-                new Rect(26, -574, 742, 22), 12, AvTheme.RailInfo);
+            var figures = new List<DetailFigure>(6)
+            {
+                new DetailFigure("SUPPORT PRICE", "x" + AvNum.Fixed(definition.SupportCostMultiplier, 2),
+                    definition.SupportCostMultiplier < 0.999f ? "COST DOWN" : definition.SupportCostMultiplier > 1.001f ? "COST UP" : "UNCHANGED",
+                    definition.SupportCostMultiplier < 0.999f ? AvState.Ready : definition.SupportCostMultiplier > 1.001f ? AvState.Caution : AvState.Inert),
+                new DetailFigure("RESET CLOCK", "x" + AvNum.Fixed(definition.SupportCooldownMultiplier, 2),
+                    definition.SupportCooldownMultiplier < 0.999f ? "FASTER" : definition.SupportCooldownMultiplier > 1.001f ? "SLOWER" : "UNCHANGED",
+                    definition.SupportCooldownMultiplier < 0.999f ? AvState.Ready : definition.SupportCooldownMultiplier > 1.001f ? AvState.Caution : AvState.Inert),
+                new DetailFigure("WINDOW", AvNum.Fixed(definition.DurationMinSeconds / 60, 0) + "–" +
+                    AvNum.Fixed(definition.DurationMaxSeconds / 60, 0) + " MIN"),
+                new DetailFigure("TIER", EventCatalog.TierLabel(definition.Tier),
+                    null, EventsMfdPanel.TierState(EventCatalog.TierLabel(definition.Tier))),
+                new DetailFigure("TARGET", EventCatalog.TargetLabel(definition.Target)),
+                new DetailFigure("STORY", EventCatalog.CategoryLabel(definition.Category)),
+            };
+            string orders = null;
+            if (definition.Script.Length > 0)
+            {
+                var lines = new string[definition.Script.Length];
+                for (int i = 0; i < lines.Length; i++)
+                    lines[i] = "T+" + AvNum.Clock(definition.Script[i].AtSeconds) + "  " + definition.Script[i].Label;
+                orders = string.Join("\n", lines);
+            }
+            Sprite art = EventArtCache.Get(definition.IconKey, definition.IsSuper ? "tier_super" : "tier_medium");
+            detail.ShowEvent(EventCatalog.TierLabel(definition.Tier) + " / " +
+                EventCatalog.CategoryLabel(definition.Category) + " · " + EventCatalog.TargetLabel(definition.Target),
+                definition.Title.ToUpperInvariant(), art, EventsMfdPanel.CategoryIcon(EventCatalog.CategoryLabel(definition.Category)),
+                figures, definition.FlavorText, orders);
         }
 
-        private void DocDetail(EventDocEntry entry)
-        {
-            Label(detail, entry.Code, new Rect(28, -24, 740, 20), 12, AvTheme.RailInfo);
-            Label(detail, entry.Title.ToUpperInvariant(), new Rect(28, -62, 740, 40), 26, AvTheme.TextPrimary);
-            AvKit.Rule(detail, new Rect(28, -123, 742, 2), AvTheme.RailInfo);
-            Label(detail, entry.Body, new Rect(28, -153, 740, 350), 18, AvTheme.TextPrimary, true);
-            Label(detail, "DIRECTORATE ARCHIVE  /  LOCAL COPY", new Rect(28, -566, 740, 20), 11, AvTheme.Dim);
-        }
+        private void DocDetail(EventDocEntry entry) =>
+            detail.ShowDoc(entry.Code, entry.Title.ToUpperInvariant(), entry.Body);
     }
 }

@@ -13,38 +13,26 @@ namespace HarmonyLib
     public sealed class HarmonyPostfix : System.Attribute { }
 }
 
-namespace NOAvionics.Ui
+namespace NuclearOption.UIStyleSystem
 {
-    public static class AvTheme
+    public static class ThemeManager { public static Theme Active => throw new System.InvalidOperationException(); }
+    public class Theme { public Palette ColorTheme; public TacticalScreenTheme TacScreenTheme; }
+    public class TacticalScreenTheme { public System.Collections.Generic.List<TacticalTextStyle> TextStyles; }
+    public class TacticalTextStyle { public TacticalStyle Style; }
+    public class TacticalStyle { public TMPro.TMP_FontAsset Font; }
+    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, HudUnitNeutral, HudUnitHostile, HudUnitSelected, Warning, Alert; }
+}
+namespace Rewired
+{
+    public sealed class Keyboard { public bool enabled; }
+    public sealed class Controllers { public Keyboard Keyboard => null; }
+    public static class ReInput
     {
-        public static Color TextPrimary => Color.white;
-        public static Color Accent => Color.cyan;
-        public static Color RailInfo => Color.cyan;
-    }
-    public static class AvKit
-    {
-        public static void Panel(RectTransform parent, Rect rect, Color color) { }
-        public static void Label(RectTransform parent, string text, Rect rect, Color color, float size) { }
-        public static void Button(RectTransform parent, string text, Rect rect, System.Action action, float size) { }
-        public static void Stretch(RectTransform rt)
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-        }
+        public static bool isReady => false;
+        public static Controllers controllers => null;
     }
 }
-namespace NOAvionics
-{
-    public static class AvTokens
-    {
-        public const float FontMicro = 10f;
-        public const float FontSmall = 11f;
-        public const float FontBody = 12f;
-    }
-    public static class MapPicker { public static bool IsBusy; }
-}
+public class MFDScreen : MonoBehaviour { public TMPro.TextMeshProUGUI label; }
 namespace BoscaliSummer.Framework.Features
 {
     internal static class ModServices
@@ -60,10 +48,17 @@ namespace BoscaliSummer.Framework.Features
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     internal static class MfdRailPatch { internal static bool IsApplied => true; }
-    internal static class MfdMapOrbitControls
+    internal static class ReliefNavigator
     {
-        internal static void Tick(DynamicMap map) { }
-        internal static void Restore() { }
+        internal static void Tick(BoscaliSummer.Features.Command.Domain.ReliefRig rig) { }
+        internal static void Release() { }
+        internal static void Reset() { }
+        internal static bool Following => false;
+        internal static void Turn(float degrees) { }
+        internal static void Tilt(float degrees) { }
+        internal static void North() { }
+        internal static void Fit() { }
+        internal static void ToggleFollow() { }
     }
     internal static class MapUiPointer
     {
@@ -76,7 +71,10 @@ public sealed class DynamicMap : MonoBehaviour
 {
     public static bool mapMaximized = true;
     public GameObject mapImage;
+    public GameObject iconLayer;
     public UnityEngine.UI.Image mapBackground;
+    public Transform mapScaleCenter;
+    public Transform mapScaleProxy;
     public Canvas maximizedMapCanvas;
     public GridLabels gridLabels;
     public System.Collections.Generic.List<MapIcon> selectedIcons = new System.Collections.Generic.List<MapIcon>();
@@ -87,7 +85,16 @@ public sealed class DynamicMap : MonoBehaviour
     public float GetZoomLevel() => zoom;
     public void SetZoomLevel(float value)
     {
-        mapImage.transform.localScale *= value / zoom;
+        // Match the game's proxy/reparent zoom path. A direct image-scale stub hid
+        // the cropped terrain seen in the expanded live map.
+        mapScaleCenter.position = mapBackground.transform.position;
+        mapScaleProxy.localScale = mapScaleCenter.localScale;
+        mapScaleProxy.position = mapImage.transform.position;
+        mapScaleProxy.SetParent(mapScaleCenter);
+        mapScaleCenter.localScale = Vector3.one * value;
+        mapScaleProxy.SetParent(mapBackground.transform);
+        mapImage.transform.localScale = mapScaleProxy.localScale;
+        mapImage.transform.position = mapScaleProxy.position;
         zoom = value;
     }
     public GlobalPosition GetCursorCoordinates() => default;
@@ -99,8 +106,8 @@ public sealed class DynamicMap : MonoBehaviour
             if (icon is UnitMapIcon track && track.unit == unit && !selectedIcons.Contains(icon))
                 selectedIcons.Add(icon);
     }
-    public static FactionMode GetFactionMode(FactionHQ hq) =>
-        hq != null && hq.Friendly ? FactionMode.Friendly : FactionMode.Enemy;
+    public static FactionMode GetFactionMode(FactionHQ hq = null, bool checkNoFactionBeforeSpectator = false) =>
+        hq == null ? FactionMode.NoFaction : hq.Friendly ? FactionMode.Friendly : FactionMode.Enemy;
     public bool IsCursorInMapRectangle() => true;
     private void JumptoTarget() { }
 }
@@ -108,17 +115,27 @@ public sealed class DynamicMap : MonoBehaviour
 public sealed class GridLabels : MonoBehaviour { }
 
 public sealed class MapSettings : MonoBehaviour { public Vector2 MapSize = new Vector2(81920f, 81920f); }
-public class MapIcon : MonoBehaviour { public UnityEngine.UI.Image iconImage; }
-public enum FactionMode { Friendly, Enemy }
+public class MapIcon : MonoBehaviour
+{
+    public UnityEngine.UI.Image iconImage;
+    protected Vector3 globalPosition;
+}
+public enum FactionMode { NoFaction = 0, Spectator = 1, Friendly = 2, Enemy = 4 }
+public sealed class MapOptions : MonoBehaviour { public float iconSize = .8f; }
 public sealed class FactionHQ { public bool Friendly; }
 public sealed class TargetListSelector { public bool CheckExclusions(Unit unit) => false; }
 public class Unit
 {
-    public TestDefinition definition;
+    public UnitDefinition definition;
     public bool disabled;
     public FactionHQ NetworkHQ;
 }
 public sealed class Aircraft : Unit { }
+public sealed class Ship : Unit { }
+public sealed class GroundVehicle : Unit { }
+public enum VehicleType { TRUCK, UGV, LCV, AFV, MBT, ART, AAA, IR_SAM, R_SAM, RDR }
+public class VehicleDefinition : UnitDefinition { public VehicleType vehicleType; }
+public sealed class Missile : Unit { }
 public static class GameManager
 {
     public static Aircraft LocalAircraft;
@@ -135,7 +152,8 @@ public sealed class UnitMapIcon : MapIcon
     public string GetInfoText() => "TEST TRACK";
 }
 public sealed class TestUnit : Unit { }
-public sealed class TestDefinition { public bool mapOrient; }
+public class UnitDefinition { public bool mapOrient; public float mapIconSize = 1f; public Sprite mapIcon; }
+public sealed class TestDefinition : UnitDefinition { }
 public sealed class AirbaseMapIcon : MapIcon { public void UpdateIcon(float factor, float inverse, Transform parent, bool large) { } }
 public sealed class ObjectiveMarker : MonoBehaviour { public void UpdateMarker() { } }
 public sealed class TargetMarker : MonoBehaviour { public UnitMapIcon Icon; private void Update() { } }
@@ -157,6 +175,7 @@ public sealed class TestEntry<T> { public T Value; public TestEntry(T value) { V
 public sealed class TestCommandSettings
 {
     public TestEntry<bool> MapRelief3D = new TestEntry<bool>(true);
+    public TestEntry<bool> MapSymbology = new TestEntry<bool>(true);
     public TestEntry<bool> MapTerrainImage = new TestEntry<bool>(true);
     public TestEntry<bool> FrontlinesOverlay = new TestEntry<bool>(true);
     public TestEntry<bool> ThreatHeat = new TestEntry<bool>(true);

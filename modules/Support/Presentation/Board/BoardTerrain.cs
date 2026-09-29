@@ -1,3 +1,4 @@
+using BoscaliSummer.Features.Support.Presentation.Window;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,7 +18,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
         public BoardTerrain(RectTransform parent, BoardSurface board)
         {
             this.board = board;
-            image = AvKit.Panel(parent, new Rect(0f, 0f, 1f, 1f), Color.white);
+            image = Chrome.Panel(parent, new Rect(0f, 0f, 1f, 1f), Color.white);
             image.name = "TheatreTerrain";
             image.type = Image.Type.Simple;
             image.raycastTarget = false;
@@ -36,7 +37,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
             if (!Available) return;
             Vector2 a = board.Project(-size.x * 0.5f, size.y * 0.5f);
             Vector2 b = board.Project(size.x * 0.5f, -size.y * 0.5f);
-            AvKit.Place(image.rectTransform, new Rect(a.x, a.y, b.x - a.x, a.y - b.y));
+            Chrome.Place(image.rectTransform, new Rect(a.x, a.y, b.x - a.x, a.y - b.y));
         }
 
         internal void SetTint(Color tint) => image.color = tint;

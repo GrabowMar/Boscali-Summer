@@ -7,6 +7,7 @@ using BoscaliSummer.Features.Support.Domain.Orbital;
 using BoscaliSummer.Features.Support.Presentation.Viz;
 using BoscaliSummer.Features.Support.Presentation.Window;
 using BoscaliSummer.Features.Support.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -16,11 +17,9 @@ using LayoutMotion = BoscaliSummer.Features.Support.Domain.Layout.Motion;
 namespace BoscaliSummer.Features.Support.Presentation.Views
 {
     /// <summary>
-    /// SPACE › STATION — the flight-control front wall. A header band (station callsign, the GET
-    /// clock, orbit and pass state), a full-width pass track over the next thirty minutes, the station
-    /// blueprint in the centre (the hero) flanked by vertical telemetry strip charts, the module rack
-    /// beside it, the launch rail with one next-step control and the loadout rings along the bottom,
-    /// and the flight loop as a radio transcript in the footer.
+    /// SPACE › STATION — the faction infrastructure planner. The station plan stays in the centre;
+    /// the left and right instrument columns make resource and power effects legible, while the lower
+    /// command rail keeps the next launch, shared reserve, and host reply together.
     ///
     /// <para>Every launch, jettison and resupply is an existing host command (<c>Request*</c>); the
     /// room pre-checks only what the host re-checks (placement, one launch at a time, allocation).
@@ -28,7 +27,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
     /// </summary>
     internal sealed class StationView : IOpsView
     {
-        private const int LoopShown = 5;
+        private const int LoopShown = 3;
         private const float ConfirmSeconds = 3f;
         private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
         private static readonly string[] SectorLabels = { "NW", "N", "NE", "W", "CENTRE", "E", "SW", "S", "SE" };
@@ -39,6 +38,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private readonly PlatformPlan plan;
         private readonly string[] loop;
         private readonly Action openImager;
+        private readonly Action openTasking;
 
         private sealed class Strip
         {
@@ -90,8 +90,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private CanvasGroup headerFade, passFade, leftFade, rightFade, rackFade, railFade, loadoutFade, loopFade;
         private TMP_Text subtitle, getLabel, getClock, passWord, passClock, passBand;
         private TMP_Text coverage, mobility, moduleDetail, inspector, emptyTitle, emptyCost, emptySteps, rackTitle, rackCollapsed;
-        private TMP_Text railStatus, eta, brief;
-        private Button primary, cargo, jettison, imagerSwitch, relocate;
+        private TMP_Text railStatus, eta, brief, reserve;
+        private Button primary, cargo, jettison, imagerSwitch, taskingSwitch, relocate;
         private RectTransform emptyGroup;
 
         private ModuleKind hover = ModuleKind.None;
@@ -107,11 +107,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private bool dirty = true;
 
         public StationView(SupportManager support, PlatformPlan plan, string[] loop, Action openImager)
+            : this(support, plan, loop, openImager, null) { }
+
+        public StationView(SupportManager support, PlatformPlan plan, string[] loop, Action openImager, Action openTasking)
         {
             this.support = support;
             this.plan = plan;
             this.loop = loop;
             this.openImager = openImager;
+            this.openTasking = openTasking;
         }
 
         public OpsDomain Domain => OpsDomain.Space;
@@ -126,42 +130,51 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             StationStyle.Resolve();
             OpsSprites.Ensure();
             homes.Clear();
-            float w = area.width, h = area.height, g = 24f;
+            float w = area.width, h = area.height, g = Mathf.Clamp(area.width * 0.018f, 18f, 30f);
             BuildSurface(room, w, h);
+            // Layout stays anchored to the window's top-left coordinate system and expands with the
+            // available canvas. The central drawing never competes with its controls for width.
+            float headerH = 72f, passTop = 84f, passH = 82f, midTop = 180f;
+            float railH = 104f, loadoutH = 98f, loopH = 68f, gap = 8f;
+            float bottom = railH + loadoutH + loopH + gap * 2f + 12f;
+            float midH = Mathf.Max(188f, h - midTop - bottom);
+            float railTop = midTop + midH + gap;
+            float loadoutTop = railTop + railH + gap;
+            float loopTop = loadoutTop + loadoutH + gap;
+            float stripW = Mathf.Clamp(w * 0.145f, 176f, 220f);
+            float rackW = Mathf.Clamp(w * 0.32f, 390f, 500f);
+            float bpX = g + stripW + 12f;
+            float rightX = w - g - stripW - 32f;
+            float rackX = rightX - 12f - rackW;
+            float bpW = Mathf.Max(250f, rackX - 12f - bpX);
 
-            float headerH = 76f, passTop = 84f, passH = 78f, midTop = 172f, midH = h - midTop - 234f;
-            float railTop = midTop + midH + 10f, railH = 104f, loopTop = railTop + railH + 8f, loopH = h - loopTop - 10f;
-            float stripW = 188f, rackW = 436f;
-            float bpX = g + stripW + 14f;
-            float rightX = w - g - stripW;
-            float rackX = rightX - 14f - rackW;
-            float bpW = rackX - 14f - bpX;
-
-            headerGroup = Group(room, "Header", new Rect(0f, 0f, w, headerH), out headerFade);
+            headerGroup = Group(room, "CommandHeader", new Rect(0f, 0f, w, headerH), out headerFade);
             BuildHeader(headerGroup, w, headerH);
-            passGroup = Group(room, "PassTrack", new Rect(g, -passTop, w - g * 2f, passH), out passFade);
+            passGroup = Group(room, "SectorCommand", new Rect(g, -passTop, w - g * 2f, passH), out passFade);
             BuildPassTrack(passGroup, w - g * 2f, passH);
-            leftGroup = Group(room, "StripsLeft", new Rect(g, -midTop, stripW, midH), out leftFade);
-            rightGroup = Group(room, "StripsRight", new Rect(rightX, -midTop, stripW, midH), out rightFade);
+            leftGroup = Group(room, "PowerBalance", new Rect(g, -midTop, stripW, midH), out leftFade);
+            rightGroup = Group(room, "PlatformReserves", new Rect(rightX, -midTop, stripW, midH), out rightFade);
+            Chrome.Lead(StationStyle.Text(leftGroup, "POWER / STORAGE", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Bolt);
+            Chrome.Lead(StationStyle.Text(rightGroup, "SUPPLIES / MASS", new Rect(0f, -6f, stripW, 16f), 10f, StationStyle.Dim, 4f), AvIcon.Database);
             string[] names = { "ENERGY", "SUN", "DARK", "FUEL", "RODS", "MASS" };
             for (int i = 0; i < 6; i++)
             {
                 RectTransform parent = i < 3 ? leftGroup : rightGroup;
-                strips[i] = BuildStrip(parent, (i % 3) * 66f, midH, names[i], i == 1 || i == 2);
+                strips[i] = BuildStrip(parent, (i % 3) * 60f, midH - 18f, names[i], i == 1 || i == 2, 20f);
             }
             var bpObject = new GameObject("Blueprint", typeof(RectTransform));
             blueprintGroup = (RectTransform)bpObject.transform;
             blueprintGroup.SetParent(room, false);
-            AvKit.Place(blueprintGroup, new Rect(0f, 0f, w, h));
+            Chrome.Place(blueprintGroup, new Rect(0f, 0f, w, h));
             var bpRect = new Rect(bpX, -midTop, bpW, midH);
             BuildBlueprint(blueprintGroup, bpRect);
-            rackGroup = Group(room, "Rack", new Rect(rackX, -midTop, rackW, midH), out rackFade);
+            rackGroup = Group(room, "BuildChoices", new Rect(rackX, -midTop, rackW, midH), out rackFade);
             BuildRack(rackGroup, rackW, midH);
-            railGroup = Group(room, "LaunchRail", new Rect(g, -railTop, rackX - 14f - g, railH), out railFade);
-            BuildRail(railGroup, rackX - 14f - g, railH);
-            loadoutGroup = Group(room, "Loadout", new Rect(rackX, -railTop, w - g - rackX, railH), out loadoutFade);
-            BuildLoadout(loadoutGroup, w - g - rackX, railH);
-            loopGroup = Group(room, "FlightLoop", new Rect(g, -loopTop, w - g * 2f, loopH), out loopFade);
+            railGroup = Group(room, "OrderAndAuthority", new Rect(g, -railTop, w - g * 2f, railH), out railFade);
+            BuildRail(railGroup, w - g * 2f, railH);
+            loadoutGroup = Group(room, "MissionPackages", new Rect(g, -loadoutTop, w - g * 2f, loadoutH), out loadoutFade);
+            BuildLoadout(loadoutGroup, w - g * 2f, loadoutH);
+            loopGroup = Group(room, "OperationsLog", new Rect(g, -loopTop, w - g * 2f, loopH), out loopFade);
             BuildLoop(loopGroup, w - g * 2f, loopH);
 
             hero = new Rect(bpX, midTop, bpW, midH);
@@ -171,8 +184,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             sections[3] = hero;
             sections[4] = new Rect(rackX, midTop, rackW, midH);
             sections[5] = new Rect(rightX, midTop, stripW, midH);
-            sections[6] = new Rect(g, railTop, rackX - 14f - g, railH);
-            sections[7] = new Rect(rackX, railTop, w - g - rackX, railH);
+            sections[6] = new Rect(g, railTop, w - g * 2f, railH);
+            sections[7] = new Rect(g, loadoutTop, w - g * 2f, loadoutH);
             sections[8] = new Rect(g, loopTop, w - g * 2f, loopH);
             dirty = true;
         }
@@ -182,55 +195,55 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
             var rect = (RectTransform)go.transform;
             rect.SetParent(parent, false);
-            AvKit.Place(rect, at);
+            Chrome.Place(rect, at);
             fade = go.GetComponent<CanvasGroup>();
             return rect;
         }
 
         private static void BuildSurface(RectTransform room, float w, float h)
         {
-            Image surface = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface.WithAlpha(1f));
+            Image surface = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Surface.WithAlpha(1f));
             surface.raycastTarget = true;
-            Image stars = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Ink.WithAlpha(0.18f));
+            Image stars = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Ink.WithAlpha(0.18f));
             stars.sprite = OpsSprites.Stars;
             stars.type = Image.Type.Tiled;
-            Image grid = AvKit.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Line.WithAlpha(0.05f));
+            Image grid = Chrome.Panel(room, new Rect(0f, 0f, w, h), StationStyle.Line.WithAlpha(0.05f));
             grid.sprite = OpsSprites.Blueprint;
             grid.type = Image.Type.Tiled;
-            Image sky = AvKit.Panel(room, new Rect(-w * 0.1f, -h + 240f, w * 1.2f, 240f), StationStyle.LimbSky.WithAlpha(0.85f));
+            Image sky = Chrome.Panel(room, new Rect(-w * 0.1f, -h + 240f, w * 1.2f, 240f), StationStyle.LimbSky.WithAlpha(0.85f));
             sky.sprite = OpsSprites.Limb;
             sky.type = Image.Type.Simple;
-            Image limb = AvKit.Panel(room, new Rect(-w * 0.05f, -h + 190f, w * 1.1f, 190f), StationStyle.Limb.WithAlpha(0.35f));
+            Image limb = Chrome.Panel(room, new Rect(-w * 0.05f, -h + 190f, w * 1.1f, 190f), StationStyle.Limb.WithAlpha(0.35f));
             limb.sprite = OpsSprites.Limb;
             limb.type = Image.Type.Simple;
         }
 
         private void BuildHeader(RectTransform parent, float w, float h)
         {
-            AvKit.Rule(parent, new Rect(24f, -h + 1f, w - 48f, 1f), StationStyle.Line.WithAlpha(0.5f));
-            StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -10f, 420f, 34f), StationStyle.Callsign,
-                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true);
-            subtitle = StationStyle.Text(parent, "", new Rect(26f, -46f, 520f, 18f), StationStyle.Label, StationStyle.Dim,
+            Chrome.Rule(parent, new Rect(24f, -h + 1f, w - 48f, 1f), StationStyle.Line.WithAlpha(0.5f));
+            Chrome.Lead(StationStyle.Text(parent, OrbitalPlatform.Callsign, new Rect(24f, -8f, 420f, 32f), StationStyle.Callsign,
+                StationStyle.Ink, 16f, TextAlignmentOptions.MidlineLeft, true), AvIcon.Satellite, 24f);
+            subtitle = StationStyle.Text(parent, "", new Rect(26f, -42f, 390f, 18f), StationStyle.Label, StationStyle.Dim,
                 StationStyle.LabelTracking);
-            getLabel = StationStyle.Text(parent, "STATION CONTROL", new Rect(w * 0.5f - 300f, -4f, 600f, 16f), 12f,
-                StationStyle.Dim, 8f, TextAlignmentOptions.Center);
-            getClock = StationStyle.Text(parent, "", new Rect(w * 0.5f - 360f, -18f, 720f, 54f), StationStyle.Display,
-                StationStyle.Ink, StationStyle.DisplayTracking, TextAlignmentOptions.Center);
-            passWord = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -8f, 380f, 30f), 22f, StationStyle.Ink, 10f,
+            getLabel = Chrome.Lead(StationStyle.Text(parent, "STATION COMMAND", new Rect(w * 0.5f - 150f, -10f, 300f, 14f), 10f,
+                StationStyle.Dim, 5f, TextAlignmentOptions.Center), AvIcon.Satellite);
+            getClock = StationStyle.Text(parent, "", new Rect(w * 0.5f - 150f, -28f, 300f, 30f), 16f,
+                StationStyle.Ink, 1f, TextAlignmentOptions.Center);
+            passWord = StationStyle.Text(parent, "", new Rect(w - 480f, -5f, 300f, 26f), 18f, StationStyle.Ink, 4f,
                 TextAlignmentOptions.MidlineRight, true);
-            passClock = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -40f, 380f, 20f), 14f, StationStyle.Ink, 6f,
+            passClock = StationStyle.Text(parent, "", new Rect(w - 480f, -34f, 300f, 16f), 12f, StationStyle.Ink, 2f,
                 TextAlignmentOptions.MidlineRight);
-            passBand = StationStyle.Text(parent, "", new Rect(w - 24f - 560f, -58f, 380f, 16f), 12f, StationStyle.Dim, 5f,
+            passBand = StationStyle.Text(parent, "", new Rect(w - 480f, -52f, 300f, 14f), 10f, StationStyle.Dim, 1f,
                 TextAlignmentOptions.MidlineRight);
-            imagerSwitch = BuildButton(parent, new Rect(w - 24f - 160f, -16f, 160f, 44f), () => openImager?.Invoke(), false, 11f);
-            SetButton(imagerSwitch, "SENSOR FEED  [TAB]", true, "Switch to the imager: the station's sensor feed, slewed and tasked at the crosshair.");
+            imagerSwitch = BuildButton(parent, new Rect(w - 174f, -14f, 150f, 38f), () => openImager?.Invoke(), false, 10f);
+            SetButton(imagerSwitch, "SENSOR FEED", true, "Switch to the imager: the station's sensor feed, slewed and tasked at the crosshair.");
         }
 
         private void BuildPassTrack(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
-            AvKit.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
-            StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.85f));
+            Chrome.Rule(parent, new Rect(0f, 0f, 3f, h), StationStyle.Limb);
+            Chrome.Lead(StationStyle.Text(parent, "POSITION / COVERAGE", new Rect(16f, -8f, w * 0.46f, 16f), 12f, StationStyle.Dim, 3f), AvIcon.CurrentLocation);
             coverage = StationStyle.Text(parent, "", new Rect(16f, -29f, w * 0.36f, 38f), 16f, StationStyle.Ink, 2f);
             coverage.enableWordWrapping = true;
             mobility = StationStyle.Text(parent, "", new Rect(w * 0.37f, -12f, w * 0.63f - 530f, 54f), 13f, StationStyle.Ink, 1f);
@@ -253,23 +266,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Sent("RELOCATION ORDER SENT");
         }
 
-        private Strip BuildStrip(RectTransform parent, float x, float h, string label, bool signed)
+        private Strip BuildStrip(RectTransform parent, float x, float h, string label, bool signed, float top = 0f)
         {
             var strip = new Strip { X = x, Signed = signed };
-            StationStyle.Text(parent, label, new Rect(x, 0f, 56f, 14f), 10f, StationStyle.Dim, 3f,
+            StationStyle.Text(parent, label, new Rect(x, -top, 56f, 14f), 10f, StationStyle.Dim, 3f,
                 TextAlignmentOptions.Center);
-            strip.Value = StationStyle.Text(parent, "", new Rect(x - 4f, -16f, 64f, 16f), 12f, StationStyle.Ink, 1f,
+            strip.Value = StationStyle.Text(parent, "", new Rect(x - 4f, -16f - top, 64f, 16f), 12f, StationStyle.Ink, 1f,
                 TextAlignmentOptions.Center);
-            strip.Top = -40f;
-            strip.Height = h - 50f;
-            AvKit.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
-            AvKit.Outline(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.45f));
+            strip.Top = -40f - top;
+            strip.Height = h - 50f - top;
+            Chrome.Panel(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.12f));
+            Chrome.Outline(parent, new Rect(x + 18f, strip.Top, 20f, strip.Height), StationStyle.Line.WithAlpha(0.45f));
             for (int t = 1; t < 10; t++)
-                AvKit.Rule(parent, new Rect(x + 12f, strip.Top - strip.Height * t / 10f, 6f, 1f), StationStyle.Line.WithAlpha(0.5f));
-            strip.Fill = AvKit.Panel(parent, new Rect(x + 19f, strip.Top, 18f, 0f), StationStyle.Line);
-            strip.Ghost = AvKit.Panel(parent, new Rect(x + 12f, strip.Top, 32f, 3f), StationStyle.Limb);
+                Chrome.Rule(parent, new Rect(x + 12f, strip.Top - strip.Height * t / 10f, 6f, 1f), StationStyle.Line.WithAlpha(0.5f));
+            strip.Fill = Chrome.Panel(parent, new Rect(x + 19f, strip.Top, 18f, 0f), StationStyle.Line);
+            strip.Ghost = Chrome.Panel(parent, new Rect(x + 12f, strip.Top, 32f, 3f), StationStyle.Limb);
             strip.Ghost.enabled = false;
-            strip.Mid = AvKit.Rule(parent, new Rect(x + 14f, strip.Top - strip.Height * 0.5f, 28f, 1f), StationStyle.Ink.WithAlpha(0.8f));
+            strip.Mid = Chrome.Rule(parent, new Rect(x + 14f, strip.Top - strip.Height * 0.5f, 28f, 1f), StationStyle.Ink.WithAlpha(0.8f));
             strip.Mid.enabled = signed;
             return strip;
         }
@@ -280,7 +293,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 4f);
             jettison = BuildButton(parent, new Rect(at.x + at.width - 190f, at.y + 2f, 190f, 26f), OnJettison, false, 10f);
             jettison.Danger = true;
-            jettison.Guard = AvKit.Panel(jettison.Control.Rect, new Rect(0f, 0f, 190f, 26f), AvTheme.RailCaution.WithAlpha(0.25f));
+            jettison.Guard = Chrome.Panel(jettison.Control.Rect, new Rect(0f, 0f, 190f, 26f), AvTheme.RailCaution.WithAlpha(0.25f));
             jettison.Guard.sprite = OpsSprites.Guard;
             jettison.Guard.type = Image.Type.Tiled;
             jettison.Guard.rectTransform.SetSiblingIndex(1);
@@ -288,9 +301,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
             emptyGroup = (RectTransform)new GameObject("Empty", typeof(RectTransform)).transform;
             emptyGroup.SetParent(parent, false);
-            AvKit.Place(emptyGroup, new Rect(at.x, at.y, at.width, at.height));
-            StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
-                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center);
+            Chrome.Place(emptyGroup, new Rect(at.x, at.y, at.width, at.height));
+            Chrome.Lead(StationStyle.Text(emptyGroup, "PRELAUNCH / ORBITAL CONTROL", new Rect(0f, -8f, at.width, 16f),
+                10f, StationStyle.Limb, 6f, TextAlignmentOptions.Center), AvIcon.Satellite);
             emptyTitle = StationStyle.Text(emptyGroup, "", new Rect(0f, -34f, at.width, 34f), 24f, StationStyle.Ink, 10f,
                 TextAlignmentOptions.Center, true);
             emptyCost = StationStyle.Text(emptyGroup, "", new Rect(0f, -72f, at.width, 22f), 13f, StationStyle.Limb, 4f,
@@ -303,9 +316,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildRack(RectTransform parent, float w, float h)
         {
-            AvKit.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
-            AvKit.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
-            rackTitle = StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.72f));
+            Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
+            rackTitle = Chrome.Lead(StationStyle.Text(parent, "", new Rect(12f, -8f, w - 24f, 16f), 12f, StationStyle.Dim, 6f), AvIcon.Stack2);
             float pitch = Mathf.Min(42f, (h - 130f) / rack.Length);
             int r = 0;
             for (int i = 0; i < PlatformModules.Designs.Length && r < rack.Length; i++)
@@ -314,7 +327,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 if (info.Kind == ModuleKind.Core || info.Kind == ModuleKind.None) continue;
                 rack[r++] = BuildRackRow(parent, info, new Rect(8f, -32f - (r - 1) * pitch, w - 16f, pitch - 4f));
             }
-            AvKit.Rule(parent, new Rect(12f, -h + 86f, w - 24f, 1f), StationStyle.ConsoleEdge);
+            Chrome.Rule(parent, new Rect(12f, -h + 86f, w - 24f, 1f), StationStyle.ConsoleEdge);
             moduleDetail = StationStyle.Text(parent, "", new Rect(14f, -h + 78f, w - 28f, 70f), 13f, StationStyle.Ink, 1f, TextAlignmentOptions.TopLeft);
             moduleDetail.enableWordWrapping = true;
             rackCollapsed = StationStyle.Text(parent, "", new Rect(14f, -36f, w - 28f, h - 50f), 13f, StationStyle.Ink, 3f,
@@ -328,15 +341,17 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             ModuleKind kind = info.Kind;
             row.Control = RoomControl.Create(parent, at, () => SelectModule(kind), "RackRow");
             RectTransform host = row.Control.Rect;
-            row.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
-            row.Glyph = AvKit.Panel(host, new Rect(6f, -(at.height - 26f) * 0.5f, 26f, 26f), StationStyle.Ink);
+            row.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
+            row.Glyph = Chrome.Panel(host, new Rect(6f, -(at.height - 26f) * 0.5f, 26f, 26f), StationStyle.Ink);
             row.Glyph.sprite = OpsSprites.Glyph((int)info.Kind);
             StationStyle.Text(host, info.Code, new Rect(40f, 0f, 60f, at.height), 13f, StationStyle.Ink, 6f,
                 TextAlignmentOptions.MidlineLeft, true);
-            StationStyle.Text(host, info.Name, new Rect(100f, 1f, 170f, at.height * 0.5f), 12f, StationStyle.Dim, 2f,
-                TextAlignmentOptions.BottomLeft);
-            StationStyle.Text(host, Stat(info), new Rect(100f, -at.height * 0.5f, 170f, at.height * 0.5f), 12f,
-                StationStyle.Ink, 2f, TextAlignmentOptions.TopLeft);
+            TMP_Text moduleName = StationStyle.Text(host, info.Name,
+                new Rect(100f, 0f, Mathf.Max(70f, at.width - 236f), at.height),
+                12f, StationStyle.Dim, 2f, TextAlignmentOptions.MidlineLeft);
+            moduleName.enableAutoSizing = true;
+            moduleName.fontSizeMin = 10f;
+            moduleName.fontSizeMax = 12f;
             row.Price = StationStyle.Text(host, "", new Rect(at.width - 130f, 0f, 122f, at.height), 13f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.MidlineRight);
             row.Control.WithTooltip(info.Name + " — " + info.Summary + " Hover to see where it would dock; click to queue it.");
@@ -351,61 +366,70 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildRail(RectTransform parent, float w, float h)
         {
-            StationStyle.Text(parent, "LAUNCH RAIL", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 8f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.76f));
+            Chrome.Outline(parent, new Rect(0f, 0f, w, h), StationStyle.ConsoleEdge);
+            Chrome.Lead(StationStyle.Text(parent, "NEXT AUTHORIZED ORDER", new Rect(0f, 0f, 300f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.ArrowRight);
             float left = 20f, right = 470f;
-            AvKit.Rule(parent, new Rect(left, -30f, right - left, 2f), StationStyle.Line.WithAlpha(0.6f));
+            Chrome.Rule(parent, new Rect(left, -30f, right - left, 2f), StationStyle.Line.WithAlpha(0.6f));
             for (int i = 0; i < 4; i++)
             {
                 float x = left + (right - left) * i / 3f;
-                stageDots[i] = AvKit.Panel(parent, new Rect(x - 7f, -24f, 14f, 14f), StationStyle.Line, OpsSprites.Dot);
+                stageDots[i] = Chrome.Panel(parent, new Rect(x - 7f, -24f, 14f, 14f), StationStyle.Line, OpsSprites.Dot);
                 stageDots[i].type = Image.Type.Simple;
                 stageText[i] = StationStyle.Text(parent, StageNames[i], new Rect(x - 60f, -42f, 120f, 14f), 10f, StationStyle.Dim, 4f,
                     TextAlignmentOptions.Center);
             }
             eta = StationStyle.Text(parent, "", new Rect(0f, -62f, 500f, 16f), 12f, StationStyle.Ink, 3f,
                 TextAlignmentOptions.MidlineLeft);
-            primary = BuildButton(parent, new Rect(500f, -6f, w - 500f, 46f), OnPrimary, true, 13f);
-            cargo = BuildButton(parent, new Rect(500f, -58f, (w - 500f) * 0.5f - 6f, 26f), OnCargo, false, 10f);
-            railStatus = StationStyle.Text(parent, "", new Rect(500f + (w - 500f) * 0.5f + 6f, -58f, (w - 500f) * 0.5f - 6f, 26f), 12f,
-                StationStyle.Dim, 2f, TextAlignmentOptions.MidlineLeft);
+            primary = BuildButton(parent, new Rect(500f, -4f, w - 650f, 44f), OnPrimary, true, 12f);
+            taskingSwitch = BuildButton(parent, new Rect(w - 142f, -4f, 138f, 44f),
+                () => openTasking?.Invoke(), false, 10f);
+            SetButton(taskingSwitch, "TASKING", openTasking != null,
+                "Return to the satellite task map and shared power focus.");
+            reserve = StationStyle.Text(parent, "", new Rect(506f, -52f, w - 512f, 16f), 11f,
+                StationStyle.Limb, 2f, TextAlignmentOptions.MidlineLeft);
+            cargo = BuildButton(parent, new Rect(500f, -72f, 210f, 25f), OnCargo, false, 10f);
+            railStatus = StationStyle.Text(parent, "", new Rect(720f, -70f, w - 720f, 26f), 11f,
+                StationStyle.Dim, 1f, TextAlignmentOptions.MidlineLeft);
             railStatus.enableWordWrapping = true;
             railStatus.fontSizeMin = 10f;
-            AvKit.Rule(parent, new Rect(0f, -h + 1f, w, 1f), StationStyle.Line.WithAlpha(0.3f));
+            Chrome.Rule(parent, new Rect(0f, -h + 1f, w, 1f), StationStyle.Line.WithAlpha(0.3f));
         }
 
         private void BuildLoadout(RectTransform parent, float w, float h)
         {
-            StationStyle.Text(parent, "LOADOUT · 1 2 3", new Rect(0f, 0f, 260f, 14f), 10f, StationStyle.Dim, 8f);
+            Chrome.Panel(parent, new Rect(0f, 0f, w, h), StationStyle.Console.WithAlpha(0.52f));
+            Chrome.Lead(StationStyle.Text(parent, "MISSION PACKAGE · SELECT TO PREVIEW", new Rect(0f, 0f, 360f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Bookmark);
             float cw = (w - 16f) / missions.Length;
             for (int i = 0; i < missions.Length; i++)
             {
                 var mission = (PlatformMission)i;
                 var card = new Mission();
-                card.Control = RoomControl.Create(parent, new Rect(i * (cw + 8f), -18f, cw, 64f), () => SelectMission(mission), "Loadout");
+                card.Control = RoomControl.Create(parent, new Rect(i * (cw + 8f), -18f, cw, 54f), () => SelectMission(mission), "Loadout");
                 RectTransform host = card.Control.Rect;
-                card.Edge = AvKit.Outline(host, new Rect(0f, 0f, cw, 64f), StationStyle.ConsoleEdge);
+                card.Edge = Chrome.Outline(host, new Rect(0f, 0f, cw, 54f), StationStyle.ConsoleEdge);
                 card.Ring = new ArcGauge();
-                card.Ring.Build(host, new Rect(6f, -4f, 60f, 74f), StationStyle.Telemetry());
-                card.Name = StationStyle.Text(host, PlatformMissions.Name(mission), new Rect(70f, -8f, cw - 76f, 44f), 12f,
+                card.Ring.Build(host, new Rect(2f, 1f, 48f, 50f), StationStyle.Telemetry());
+                card.Name = StationStyle.Text(host, PlatformMissions.Name(mission), new Rect(56f, -5f, cw - 62f, 43f), 11f,
                     StationStyle.Ink, 5f, TextAlignmentOptions.TopLeft, true);
                 card.Name.enableWordWrapping = true;
                 card.Control.WithTooltip(PlatformMissions.Name(mission) + " — " + PlatformMissions.Brief(mission));
                 missions[i] = card;
             }
-            brief = StationStyle.Text(parent, "", new Rect(0f, -86f, w, 16f), 12f, StationStyle.Dim, 2f);
+            brief = StationStyle.Text(parent, "", new Rect(0f, -76f, w, 16f), 11f, StationStyle.Dim, 2f);
         }
 
         private void BuildLoop(RectTransform parent, float w, float h)
         {
-            StationStyle.Text(parent, "FLIGHT LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 8f);
+            Chrome.Lead(StationStyle.Text(parent, "OPS LOOP", new Rect(0f, 0f, 200f, 14f), 10f, StationStyle.Dim, 5f), AvIcon.Radio);
             float pitch = Mathf.Min(18f, (h - 16f) / LoopShown);
             for (int i = 0; i < LoopShown; i++)
             {
                 float y = -16f - i * pitch;
-                loopGet[i] = StationStyle.Text(parent, "", new Rect(0f, y, 110f, pitch), 11f, StationStyle.Dim, 2f);
-                loopWho[i] = StationStyle.Text(parent, "", new Rect(118f, y, 90f, pitch), 11f, StationStyle.Limb, 5f,
+                loopGet[i] = StationStyle.Text(parent, "", new Rect(0f, y, 100f, pitch), 10f, StationStyle.Dim, 1f);
+                loopWho[i] = StationStyle.Text(parent, "", new Rect(106f, y, 82f, pitch), 10f, StationStyle.Limb, 3f,
                     TextAlignmentOptions.MidlineLeft, true);
-                loopLine[i] = StationStyle.Text(parent, "", new Rect(214f, y, w - 214f, pitch), 11f, StationStyle.Ink, 3f);
+                loopLine[i] = StationStyle.Text(parent, "", new Rect(194f, y, w - 194f, pitch), 10f, StationStyle.Ink, 1f);
             }
         }
 
@@ -414,8 +438,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var button = new Button { Primary = primaryStyle };
             button.Control = RoomControl.Create(parent, at, click, "Control");
             RectTransform host = button.Control.Rect;
-            button.Fill = AvKit.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
-            button.Edge = AvKit.Outline(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Line);
+            button.Fill = Chrome.Panel(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Console);
+            button.Edge = Chrome.Outline(host, new Rect(0f, 0f, at.width, at.height), StationStyle.Line);
             button.Text = StationStyle.Text(host, "", new Rect(8f, 0f, at.width - 16f, at.height), size, StationStyle.Ink, 5f,
                 TextAlignmentOptions.Center, primaryStyle);
             button.Text.enableAutoSizing = true;
@@ -462,7 +486,6 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public void Hide()
         {
             hover = ModuleKind.None;
-            AvButton.ClearTooltip();
         }
 
         public void Entrance(float progress)
@@ -558,7 +581,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             if (Input.GetKeyDown(KeyCode.J)) { OnJettison(); return true; }
             if (Input.GetKeyDown(KeyCode.Q)) { CycleCell(platform, -1); return true; }
             if (Input.GetKeyDown(KeyCode.E)) { CycleCell(platform, 1); return true; }
-            if (Input.GetKeyDown(KeyCode.Tab)) { openImager?.Invoke(); return true; }
+            if (Input.GetKeyDown(KeyCode.Tab)) { (openTasking ?? openImager)?.Invoke(); return true; }
             return false;
         }
 
@@ -772,7 +795,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 : "ORBITAL PLATFORM · NOT LAUNCHED");
             subtitle.color = station && platform.Brownout ? AvTheme.RailDanger : StationStyle.Dim;
             // No elapsed time before there is a flight to time (P7).
-            Set(getClock, station ? "BUILD / SUSTAIN / TASK" : "ESTABLISH YOUR PLATFORM");
+            Set(getClock, !station ? "ESTABLISH PLATFORM" : platform.Brownout ? "POWER DEFICIT · REVIEW LOAD" :
+                support != null && support.CommandPending ? "ORDER AWAITING HOST" : "BUILD · SUSTAIN · TASK");
             getLabel.gameObject.SetActive(station);
             string word, clockText;
             Color tone;
@@ -860,13 +884,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 float f = Mathf.Clamp(float.IsNaN(fraction) ? 0f : fraction, -1f, 1f) * 0.5f;
                 float mid = strip.Top - strip.Height * 0.5f;
                 float h = Mathf.Abs(f) * strip.Height;
-                AvKit.Place(strip.Fill.rectTransform, new Rect(x, f >= 0f ? mid + h : mid, 18f, h));
+                Chrome.Place(strip.Fill.rectTransform, new Rect(x, f >= 0f ? mid + h : mid, 18f, h));
             }
             else
             {
                 float f = Mathf.Clamp01(float.IsNaN(fraction) ? 0f : fraction);
                 float h = f * strip.Height;
-                AvKit.Place(strip.Fill.rectTransform, new Rect(x, strip.Top - strip.Height + h, 18f, h));
+                Chrome.Place(strip.Fill.rectTransform, new Rect(x, strip.Top - strip.Height + h, 18f, h));
             }
             strip.Fill.color = tone;
             strip.Value.color = tone == StationStyle.Line ? StationStyle.Ink : tone;
@@ -875,7 +899,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             float level = strip.Signed
                 ? strip.Top - strip.Height * 0.5f + Mathf.Clamp(ghost, -1f, 1f) * 0.5f * strip.Height
                 : strip.Top - strip.Height + Mathf.Clamp01(ghost) * strip.Height;
-            AvKit.Place(strip.Ghost.rectTransform, new Rect(strip.X + 12f, level + 1.5f, 32f, 3f));
+            Chrome.Place(strip.Ghost.rectTransform, new Rect(strip.X + 12f, level + 1.5f, 32f, 3f));
         }
 
         private void WriteInspector(OrbitalPlatform platform, bool station, double now)
@@ -1028,6 +1052,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             string label, tip;
             bool enabled;
             bool pending = support != null && support.CommandPending;
+            float sharedReserve = support != null ? support.LocalOpsReserve : 0f;
             if (!station)
             {
                 float cost = support != null ? support.LaunchCost(ModuleKind.Core) : PlatformModules.LaunchPrice(ModuleKind.Core);
@@ -1066,13 +1091,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 }
             }
             SetButton(primary, label, enabled, tip);
+            Set(reserve, "FACTION OPS RESERVE  " + Figure(sharedReserve) +
+                (pending ? "  ·  COMMAND PENDING HOST REPLY" : "  ·  COST DEDUCTED ONLY ON HOST ACCEPTANCE"));
 
             string cargoWhy = CargoRefusal(platform, now);
             float cargoCost = support != null ? support.LaunchCost(ModuleKind.Cargo) : PlatformModules.LaunchPrice(ModuleKind.Cargo);
             SetButton(cargo, "[R]  CARGO RESUPPLY · " + Figure(cargoCost), cargoWhy == null,
                 cargoWhy == null ? "Uncrewed freighter: refills every fuel tank and rod magazine when it docks." : cargoWhy);
             // The line beside cargo is the host's word on this room's last order, else why cargo waits.
-            string line = railNote ?? (cargoWhy != null ? "CARGO · " + cargoWhy : "");
+            string line = railNote ?? (cargoWhy != null ? "CARGO · " + cargoWhy : "HOST VALIDATES TARGET, PLACEMENT AND COST");
             Set(railStatus, line);
             railStatus.color = railNote != null ? (railBad ? AvTheme.RailDanger : StationStyle.Ink) : StationStyle.Dim;
         }

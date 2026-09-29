@@ -1,6 +1,7 @@
 using System;
 using NOAvionics;
 using NOAvionics.Ui;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -21,7 +22,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private readonly Color32[] pixels;
         private readonly Color32[] palette = new Color32[PaletteSteps];
         private Texture2D texture;
-        private Image ground;
+        private AvFrame ground;
 
         private const int PaletteSteps = 32;
 
@@ -32,21 +33,22 @@ namespace BoscaliSummer.Features.Radio.Presentation
             pixels = new Color32[this.bins * this.rows];
             BuildPalette();
 
-            ground = AvKit.Panel(parent, area, AvTheme.Unity(AvTokens.Ground));
-            AvKit.Outline(parent, area, AvTheme.Unity(AvTokens.Hairline));
+            Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
+            ground = AvFrame.Add(parent, "Waterfall Ground", AvChamfer.All(0f));
+            PlaceAt(ground.rectTransform, area);
+            ground.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground), hairline);
 
             var viewObject = new GameObject("Waterfall", typeof(RectTransform), typeof(RawImage));
             var viewRect = (RectTransform)viewObject.transform;
             viewRect.SetParent(ground.rectTransform, false);
-            AvKit.Place(viewRect, new Rect(1f, -1f, area.width - 2f, area.height - 2f));
+            AvLay.Place(viewRect, 1f, 1f, area.width - 2f, area.height - 2f);
 
             // Reticle dB reference markers for 6th/7th-gen SIGINT scope
             for (int r = 1; r <= 3; r++)
             {
                 float yFrac = r * 0.25f;
-                AvKit.Rule(ground.rectTransform,
-                    new Rect(1f, -(area.height * yFrac), area.width - 2f, 1f),
-                    AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.28f)));
+                Image rule = AvLay.Solid(ground.rectTransform, "Reference " + r, hairline.WithAlpha(0.28f));
+                AvLay.Place(rule.rectTransform, 1f, area.height * yFrac, area.width - 2f, 1f);
             }
 
             texture = new Texture2D(this.bins, this.rows, TextureFormat.RGBA32, false)
@@ -77,18 +79,31 @@ namespace BoscaliSummer.Features.Radio.Presentation
             const float step = 10f;
             float x = area.x + AvTokens.Space2;
             float y = area.y - area.height + 16f;
-            AvKit.Panel(parent, new Rect(x - 4f, y + 2f, 148f, 16f),
-                AvTheme.Ground.WithAlpha(.82f));
+            Image plate = AvLay.Solid(parent, "Legend Plate", AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.82f));
+            PlaceAt(plate.rectTransform, new Rect(x - 4f, y + 2f, 148f, 16f));
 
-            AvStyled.Label(parent, new Rect(x, y, 50f, 12f), "NOISE", "row-sub");
+            LegendLabel(parent, "Noise", "NOISE", new Rect(x, y, 50f, 12f));
             x += 50f;
             for (int i = 0; i < 3; i++)
             {
-                AvKit.Panel(parent, new Rect(x, y + 1f, swatch, swatch), Ramp(0.10f + i * 0.40f));
+                Image chip = AvLay.Solid(parent, "Swatch " + i, Ramp(0.10f + i * 0.40f));
+                PlaceAt(chip.rectTransform, new Rect(x, y + 1f, swatch, swatch));
                 x += step;
             }
-            AvStyled.Label(parent, new Rect(x + 2f, y, 64f, 12f), "CARRIER", "row-sub");
+            LegendLabel(parent, "Carrier", "CARRIER", new Rect(x + 2f, y, 64f, 12f));
         }
+
+        private static void LegendLabel(RectTransform parent, string name, string text, Rect area)
+        {
+            TMP_Text label = AvText.Make(parent, name, AvTextRole.Micro, text, TextAlignmentOptions.MidlineLeft);
+            PlaceAt(label.rectTransform, area);
+            label.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            AvText.Fit(label, false);
+        }
+
+        /// <summary>The display rects are top-anchored with y already assigned directly (y up), so undo AvLay's flow-down sign.</summary>
+        private static void PlaceAt(RectTransform target, Rect area) =>
+            AvLay.Place(target, area.x, -area.y, area.width, area.height);
 
         /// <summary>Push the newest row at the top and scroll the history down by one.</summary>
         public void Push(float[] magnitudes)
@@ -132,9 +147,9 @@ namespace BoscaliSummer.Features.Radio.Presentation
         /// </summary>
         internal static Color Ramp(float t)
         {
-            Color floor = AvTheme.Ground;
-            Color low = new Color(0.00f, 0.55f, 0.70f, 1f);
-            Color mid = AvTheme.RailReady;
+            Color floor = AvStyleHost.FuiColor("ground", AvTheme.Ground);
+            Color low = new Color(0.00f, 0.55f, 0.70f, 1f);   // spectrum data colour: datalink cyan
+            Color mid = AvStyleHost.FuiColor("ready", AvTheme.RailReady);
             Color hot = Color.white;
             t = Mathf.Clamp01(t);
             return t < 0.35f

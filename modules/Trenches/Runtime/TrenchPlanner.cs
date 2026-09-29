@@ -19,8 +19,6 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public const float AnchorSpacing = 60f;
         public const float CorridorWidth = 80f;
         private const int MaximumRuns = 8;
-        private const int MaximumLinks = 3;
-        private const int MaximumSaps = 2;
 
         private static readonly float[] traceX = new float[FrontlineTraceLimits.MaximumPoints];
         private static readonly float[] traceZ = new float[FrontlineTraceLimits.MaximumPoints];
@@ -225,8 +223,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     // The chosen depth must stay on the faction's own side of the front, so a
                     // ragged trace leaves a gap instead of digging into the enemy's ground.
                     if (TrenchTraceMath.NearAirfield(groundX, groundZ, airfieldX, airfieldZ, airfieldCount) ||
-                        !TrenchTerrain.TryGround(groundX, groundZ, out Vector3 ground) ||
-                        !Diggable(territory, faction, ground))
+                        !Diggable(territory, faction, groundX, groundZ) ||
+                        !TrenchTerrain.TryGround(groundX, groundZ, out Vector3 ground))
                     {
                         height[s, k] = float.NaN;
                         cost[s, k] = float.NaN;
@@ -289,14 +287,20 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// control field, which still separates the sides inside the wide contested band a
         /// real front digs its fieldworks in.
         /// </summary>
+        private static ITerritoryIngress inwardTerritory;
+        private static int inwardFaction;
+        private static readonly Func<float, float, float> inwardProbe = ProbeInwardHold;
+
+        private static float ProbeInwardHold(float px, float pz)
+            => inwardTerritory.TryGetHoldStrength(inwardFaction, px, pz, out float hold)
+                ? hold : float.NaN;
+
         private static bool TryInward(ITerritoryIngress territory, FactionHQ owner, float x, float z,
             float nx, float nz, out float ix, out float iz)
         {
-            int faction = owner.GetInstanceID();
-            return TrenchTraceMath.TryResolveInward(x, z, nx, nz,
-                (px, pz) => territory.TryGetHoldStrength(faction, px, pz, out float hold)
-                    ? hold : float.NaN,
-                out ix, out iz);
+            inwardTerritory = territory;
+            inwardFaction = owner.GetInstanceID();
+            return TrenchTraceMath.TryResolveInward(x, z, nx, nz, inwardProbe, out ix, out iz);
         }
 
         /// <summary>
@@ -304,9 +308,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// Firmer than the floor a dug line survives at (<see cref="TrenchTraceMath.HoldsOwnSide"/>),
         /// so a fresh position is not abandoned by the next sample of a moving front.
         /// </summary>
-        private static bool Diggable(ITerritoryIngress territory, int faction, Vector3 ground)
-            => territory.TryGetHoldStrength(faction, ground.x, ground.z, out float hold) &&
+        private static bool Diggable(ITerritoryIngress territory, int faction, float x, float z)
+            => territory.TryGetHoldStrength(faction, x, z, out float hold) &&
                 TrenchTraceMath.CanDig(hold);
+
+        private static bool Diggable(ITerritoryIngress territory, int faction, Vector3 ground)
+            => Diggable(territory, faction, ground.x, ground.z);
 
         /// <summary>Height of the terrain at a point, or NaN where the probe refuses (water, cliff).</summary>
         private static float ProbeHeight(float x, float z)
@@ -428,12 +435,12 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         /// <summary>Short communication trenches joining the fire and support traces.</summary>
         private static void BuildLinks(TrenchLine line)
         {
-            var links = new List<Vector3[]>(MaximumLinks);
+            var links = new List<Vector3[]>(TrenchTraceMath.MaximumLinkTraces);
             if (line.Support != null && line.Support.Length > 1)
             {
-                for (int k = 1; k <= MaximumLinks; k++)
+                for (int k = 1; k <= TrenchTraceMath.MaximumLinkTraces; k++)
                 {
-                    int i = Mathf.Clamp(line.Curve.Length * k / (MaximumLinks + 1), 0, line.Curve.Length - 1);
+                    int i = Mathf.Clamp(line.Curve.Length * k / (TrenchTraceMath.MaximumLinkTraces + 1), 0, line.Curve.Length - 1);
                     int j = Nearest(line.Support, line.Curve[i]);
                     Vector3 a = line.Curve[i];
                     Vector3 b = line.Support[j];
@@ -451,11 +458,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private static bool TryBuildSaps(TrenchLine line, ITerritoryIngress territory,
             float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
-            var spurs = new List<Vector3[]>(MaximumSaps);
+            var spurs = new List<Vector3[]>(TrenchTraceMath.MaximumSpurTraces);
             int faction = line.OwnerHq != null ? line.OwnerHq.GetInstanceID() : 0;
-            for (int k = 0; k < MaximumSaps; k++)
+            for (int k = 0; k < TrenchTraceMath.MaximumSpurTraces; k++)
             {
-                float fraction = 0.5f + (k - (MaximumSaps - 1) * 0.5f) * TrenchTraceMath.SapLateralFraction;
+                float fraction = 0.5f + (k - (TrenchTraceMath.MaximumSpurTraces - 1) * 0.5f) * TrenchTraceMath.SapLateralFraction;
                 int i = Mathf.Clamp(Mathf.RoundToInt(fraction * (line.Curve.Length - 1)), 0,
                     line.Curve.Length - 1);
                 Vector3 anchor = line.Curve[i];

@@ -15,7 +15,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestStagesAndIncome();
             TestUpgradesAndReach();
             TestBaseReach();
-            TestBreachPhasesAndLoot();
+            TestBreachPhasesAndLease();
             TestRealDefenderResistance();
             TestSpoofAndBacktrace();
             TestCapstone();
@@ -184,7 +184,7 @@ namespace BoscaliSummer.Tests.Features.Support
             return true;
         }
 
-        private static void TestBreachPhasesAndLoot()
+        private static void TestBreachPhasesAndLease()
         {
             CyberNetwork network = Fresh(out _, out int city);
             Tick(network, 30.0);
@@ -202,22 +202,59 @@ namespace BoscaliSummer.Tests.Features.Support
                 now += 0.25;
             }
             TestAssert.That(!network.BreachActive, "the quiet session completes");
-            TestAssert.That(network.IsHacked(city) && network.Stage(city) == 1, "the city is taken at stage 1");
-            TestAssert.That(network.Tier(city) == 0 && !network.AnyTier(1), "stage 1 unlocks no ability");
-            TestAssert.That(network.Intel > intelBefore, "the stage pays intel loot");
-            TestAssert.That(network.ComputingIncome() > 1f, "the taken city earns computing");
-            TestAssert.That(network.RadiusOf(city, now) > 0f, "the taken city covers a radius");
-            TestAssert.That(network.AbilityCovers(1, 8000f, 0f, now) == false, "stage 1 has no ability tier");
-
-            // Stage 2 opens the basic tier and intel income.
-            TestAssert.That(Breach(network, city, true, now, out now), "the second breach runs");
-            TestAssert.That(network.Stage(city) == 2, "the city reaches stage 2");
-            TestAssert.That(network.AnyTier(1) && network.Tier(city) == 1, "stage 2 opens the basic tier");
-            TestAssert.That(network.AbilityCovers(1, 8000f, 0f, now), "the radius covers the city itself");
+            TestAssert.That(network.IsHacked(city) && network.Stage(city) == 3, "one breach opens compatibility stage 3");
+            TestAssert.That(network.AccessSlot == city && network.AccessRemaining(now) > 70f, "the site has one short lease");
+            TestAssert.That(network.Tier(city) == 2 && network.AnyTier(1, now) && network.AnyTier(2, now) &&
+                !network.AnyTier(3, now), "the lease opens basic and mid effects, not capstones");
+            TestAssert.That(network.Intel == intelBefore + CyberLocations.AccessIntel &&
+                network.Intel >= CyberCatalog.Intel(HackKind.Scan) && network.Intel < CyberCatalog.Intel(HackKind.Blackout),
+                "a fresh operation funds one basic use, while expensive effects need earned intelligence");
+            TestAssert.That(network.ComputingIncome() == 1f, "temporary access never adds passive computing income");
+            TestAssert.That(network.RadiusOf(city, now) > 0f, "the leased site covers a radius");
+            TestAssert.That(network.AbilityCovers(1, 8000f, 0f, now) && network.AbilityCovers(2, 8000f, 0f, now),
+                "the target site covers its supported effect tiers");
             TestAssert.That(!network.AbilityCovers(1, 8000f + network.RadiusOf(city, now) + 5000f, 0f, now),
-                "coverage ends at the radius");
-            TestAssert.That(network.IntelIncome() > 0f, "stage 2 earns intel");
-            TestAssert.That(network.Stats().StageTotal == 2, "stage total counts every stage");
+                "coverage ends at the lease radius");
+            TestAssert.That(network.IntelIncome() == 0f && network.Stats().StageTotal == 3,
+                "access stage is a compatibility view, not income progression");
+            TestAssert.That(network.CheckBreach(city, now) == BreachDenial.AccessActive,
+                "an active lease blocks another breach");
+            TestAssert.That(!network.ConsumeAccess(60000f, 0f, now), "a remote effect cannot consume the lease");
+            TestAssert.That(network.ConsumeAccess(8000f, 0f, now), "an accepted effect consumes the lease");
+            TestAssert.That(network.SpendIntel(CyberCatalog.Intel(HackKind.Scan)), "the one-use budget pays for a useful sortie effect");
+            TestAssert.That(network.AccessRemaining(now) == 0f && !network.AnyTier(1, now),
+                "consumption closes access immediately");
+            TestAssert.That(network.CheckBreach(city, now) == BreachDenial.Recharging &&
+                network.AccessRecoveryRemaining(now) == CyberLocations.AccessRecoverySeconds,
+                "successful use starts a bounded 30-second recovery delay");
+            var recoverySnapshot = new CyberSnapshot();
+            network.Export(now, recoverySnapshot);
+            var recoveryMirror = new CyberNetwork();
+            recoveryMirror.Mirror(recoverySnapshot, now + 1000.0);
+            TestAssert.That(System.Math.Abs(recoveryMirror.AccessRecoveryRemaining(now + 1000.0) -
+                network.AccessRecoveryRemaining(now)) < 0.01f,
+                "the one-use recovery clock rebases on the client");
+            TestAssert.That(!network.IsHacked(city) && network.Stage(city) == 0,
+                "a disconnected follow-up leaves no persistent capture");
+            now += CyberLocations.AccessRecoverySeconds + 0.1;
+            network.Tick(now, 0.25f, 0f);
+            TestAssert.That(network.AccessRecoveryRemaining(now) == 0f &&
+                network.CheckBreach(city, now) != BreachDenial.Recharging,
+                "the recovery gate ends after 30 seconds");
+            for (int i = 0; i < 180 && network.CheckBreach(city, now) != BreachDenial.None; i++)
+            {
+                now += 1.0;
+                network.Tick(now, 1f, 0f);
+            }
+            TestAssert.That(network.CheckBreach(city, now) == BreachDenial.None,
+                "after resources recover the site is available for the next operation");
+
+            TestAssert.That(Breach(network, city, true, now, out now), "a second operation opens a fresh lease");
+            network.Tick(now + CyberLocations.AccessSeconds + 1.0, 0.25f, 0f);
+            TestAssert.That(!network.IsHacked(city) && network.AccessRemaining(now + CyberLocations.AccessSeconds + 1.0) == 0f,
+                "the lease expires without leaving a captured node");
+            TestAssert.That(network.AccessRecoveryRemaining(now + CyberLocations.AccessSeconds + 1.0) == 0f,
+                "expiry without an accepted effect adds no recovery penalty");
         }
 
         private static void TestSpoofAndBacktrace()
@@ -255,10 +292,9 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             CyberNetwork network = Fresh(out _, out int city);
             double now = 0.0;
-            for (int stage = 1; stage <= CyberLocations.StageCount; stage++)
-                TestAssert.That(Breach(network, city, true, now, out now), "the quiet stage " + stage + " runs");
-            TestAssert.That(network.Stage(city) == 4, "the city is mastered");
-            TestAssert.That(network.BreachAwaitingChoice, "a mastered location waits for its capstone");
+            TestAssert.That(Breach(network, city, true, now, out now), "one quiet operation opens access");
+            TestAssert.That(network.Stage(city) == 3, "the lease presents compatibility stage 3");
+            TestAssert.That(network.BreachAwaitingChoice, "a lease offers a bounded optional payload choice");
             TestAssert.That(network.CapstoneCount(Capstone.None) == 0, "no capstone before the choice");
             TestAssert.That(network.TryChooseCapstone(Capstone.Jammer, now), "the capstone applies");
             TestAssert.That(network.CapstoneCount(Capstone.Jammer) == 1 && network.AnyCapstone(Capstone.Jammer),
@@ -267,14 +303,18 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(network.TryUseCapstone(Capstone.Jammer, now), "the first use is free");
             TestAssert.That(!network.TryUseCapstone(Capstone.Jammer, now), "the second waits for the recharge");
             TestAssert.That(network.CapstoneRechargeRemaining(Capstone.Jammer, now) > 0f, "the recharge is counting");
+            TestAssert.That(network.ConsumeAccess(8000f, 0f, now) && !network.AnyCapstone(Capstone.Jammer, now),
+                "the capstone payload is also limited to the one live access lease");
         }
 
         private static void TestCapstoneRechargeCoversEveryCapstone()
         {
-            CyberNetwork network = Fresh(out _, out _);
-            double now = 10.0;
             foreach (Capstone capstone in new[] { Capstone.Reveal, Capstone.Jammer, Capstone.Sabotage })
             {
+                CyberNetwork network = Fresh(out _, out int city);
+                double now = 0.0;
+                TestAssert.That(Breach(network, city, true, now, out now), "one access opens for " + capstone);
+                TestAssert.That(network.TryChooseCapstone(capstone, now), "select " + capstone + " for the current lease");
                 TestAssert.That(network.CapstoneRechargeRemaining(capstone, now) == 0f,
                     capstone + " starts ready");
                 TestAssert.That(network.TryUseCapstone(capstone, now), "the first " + capstone + " use lands");
@@ -282,8 +322,9 @@ namespace BoscaliSummer.Tests.Features.Support
                 TestAssert.That(network.CapstoneRechargeRemaining(capstone, now) > 0f,
                     capstone + " is recharging");
             }
-            TestAssert.That(network.CapstoneRechargeRemaining(Capstone.None, now) == 0f, "None stays ready");
-            TestAssert.That(!network.TryUseCapstone(Capstone.None, now), "None is not usable");
+            CyberNetwork empty = Fresh(out _, out _);
+            TestAssert.That(empty.CapstoneRechargeRemaining(Capstone.None, 0.0) == 0f, "None stays ready");
+            TestAssert.That(!empty.TryUseCapstone(Capstone.None, 0.0), "None is not usable");
         }
 
         private static void TestVerbs()
@@ -320,7 +361,7 @@ namespace BoscaliSummer.Tests.Features.Support
             double now = 0.0;
             TestAssert.That(!network.IncidentActive(0), "no incident before the campaign runs");
             TestAssert.That(Breach(network, city, true, now, out now), "take the first location");
-            double end = now + 200.0;
+            double end = now + 45.0;
             while (now < end)
             {
                 network.Tick(now, 0.25f, 1f);
@@ -426,8 +467,10 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void TestCapstoneRechargeReplicates()
         {
-            CyberNetwork host = Fresh(out _, out _);
-            double now = 10.0;
+            CyberNetwork host = Fresh(out _, out int city);
+            double now = 0.0;
+            TestAssert.That(Breach(host, city, true, now, out now), "open access before a capstone action");
+            TestAssert.That(host.TryChooseCapstone(Capstone.Jammer, now), "select the lease payload");
             TestAssert.That(host.TryUseCapstone(Capstone.Jammer, now), "the host spends the capstone");
             var snapshot = new CyberSnapshot();
             host.Export(now, snapshot);
@@ -445,23 +488,24 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             CyberNetwork host = Fresh(out _, out int city);
             double now = 0.0;
-            for (int stage = 1; stage <= CyberLocations.StageCount; stage++)
-                TestAssert.That(Breach(host, city, true, now, out now), "master location for remote choice");
+            TestAssert.That(Breach(host, city, true, now, out now), "open a remote temporary lease");
             var snapshot = new CyberSnapshot();
             host.Export(now, snapshot);
+            TestAssert.That(snapshot.AccessSlot == city && snapshot.AccessIn > 70f,
+                "snapshot carries one live target and bounded access time");
             var client = new CyberNetwork();
             client.Mirror(snapshot, now + 1000.0);
             TestAssert.That(client.BreachAwaitingChoice && !client.BreachActive,
-                "remote mirror preserves capstone choice after breach ends");
+                "remote mirror preserves payload choice after breach ends");
             TestAssert.That(System.Math.Abs(client.ChoiceRemaining(now + 1000.0) - host.ChoiceRemaining(now)) < 0.01f,
                 "capstone deadline rebases to the client clock");
             TestAssert.That(client.TryChooseCapstone(Capstone.Jammer, now + 1000.0) && client.Node(city).Capstone == Capstone.Jammer,
-                "mirrored capstone applies to the mastered target");
+                "mirrored payload applies to the leased target");
 
             host.BeginLocations();
             host.ReportLocation(200, LocationKind.Airfield, 4000f, 0f, now);
             TestAssert.That(host.ReportLocation(100, LocationKind.City, 8000f, 0f, now) == city,
-                "changed discovery order preserves the mastered anchor slot");
+                "changed discovery order preserves the leased anchor slot");
             host.EndLocations(now);
             TestAssert.That(host.BreachAwaitingChoice, "relisting the same anchor preserves its pending choice");
             host.BeginLocations();
@@ -471,11 +515,15 @@ namespace BoscaliSummer.Tests.Features.Support
             host.EndLocations(now);
             TestAssert.That(replacement == city && !host.BreachAwaitingChoice && !host.TryChooseCapstone(Capstone.Jammer, now),
                 "removing and recycling the target slot cannot retarget a capstone choice");
-            TestAssert.That(host.Node(replacement).Capstone == Capstone.None, "replacement never inherits the old capstone");
+            TestAssert.That(host.Node(replacement).Capstone == Capstone.None, "replacement never inherits the old payload");
 
             snapshot.BreachTarget = 255;
             client.Mirror(snapshot, now);
             TestAssert.That(!client.BreachAwaitingChoice && !client.BreachActive, "invalid choice target fails closed");
+            snapshot.AccessSlot = (byte)city;
+            snapshot.AccessIn = float.NaN;
+            client.Mirror(snapshot, now);
+            TestAssert.That(client.AccessSlot < 0 && !client.AnyTier(1, now), "a garbage lease timer fails closed");
         }
 
         private static void TestWords()
@@ -484,7 +532,7 @@ namespace BoscaliSummer.Tests.Features.Support
             double now = 0.0;
             TestAssert.That(CyberWords.NodeState(network, city, now) == "UNTAKEN", "an untaken location says so");
             TestAssert.That(Breach(network, city, true, now, out now), "take a location for the words");
-            TestAssert.That(CyberWords.NodeState(network, city, now).StartsWith("ONLINE"), "a taken location reads online");
+            TestAssert.That(CyberWords.NodeState(network, city, now).StartsWith("ACCESS"), "a leased location shows its short access timer");
             TestAssert.That(CyberWords.Stage(1) == "FOOTHOLD" && CyberWords.Stage(4) == "MASTERY", "stage names");
             TestAssert.That(CyberWords.Callsign(network, network.CommandSlot).StartsWith("C2N"),
                 "the command has its own call sign prefix");

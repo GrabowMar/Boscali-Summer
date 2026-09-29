@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force "$fixture/Assets/Resources", "$fixture/Asset
 Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022.3.62f3'
 Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
 Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
-    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs') } |
+    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs') } |
     Copy-Item -Destination "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Audio/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudDressingStubs.cs" "$fixture/Assets/Code/"

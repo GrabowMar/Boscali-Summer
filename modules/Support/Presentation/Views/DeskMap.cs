@@ -91,7 +91,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private int shownRevision = -1;
         private Action<int> select;
 
-        /// <summary>Placed label rects (AvKit), for the harness overlap check.</summary>
+        /// <summary>Placed label rects (top-left, negative-down), for the harness overlap check.</summary>
         internal Rect[] PlacedRects { get; } = new Rect[Labels];
         internal int PlacedCount { get; private set; }
 
@@ -103,24 +103,26 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             var surfaceObject = new GameObject("Table", typeof(RectTransform), typeof(CanvasGroup));
             surface = (RectTransform)surfaceObject.transform;
             surface.SetParent(room, false);
-            AvKit.Place(surface, view);
+            Chrome.Place(surface, view);
             surface.pivot = new Vector2(0.5f, 0.5f);
             surface.anchoredPosition = new Vector2(view.x + view.width * 0.5f, view.y - view.height * 0.5f);
             surfaceGroup = surfaceObject.GetComponent<CanvasGroup>();
             var local = new Rect(0f, 0f, view.width, view.height);
-            AvKit.Panel(surface, local, DeskStyle.Map);
+            Chrome.Panel(surface, local, DeskStyle.Map);
 
             Board = new BoardSurface(room, view, focus, true, true);
             var layerObject = new GameObject("Pieces", typeof(RectTransform));
             layer = (RectTransform)layerObject.transform;
             layer.SetParent(Board.InputLayer, false);
             // Geographic overlays use room coordinates inside the clipped viewport.
-            AvKit.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
+            Chrome.Place(layer, new Rect(-view.x, -view.y, view.x + view.width, view.height - view.y));
             terrain = new BoardTerrain(layer, Board);
+            Image terrainVeil = Chrome.Panel(layer, view, DeskStyle.Map.WithAlpha(0.50f));
+            terrainVeil.raycastTarget = false;
             for (int i = 0; i < GridLines; i++)
             {
-                gridX[i] = AvKit.Rule(layer, new Rect(view.x, view.y, 1f, view.height), DeskStyle.MapInk.WithAlpha(0.13f));
-                gridZ[i] = AvKit.Rule(layer, new Rect(view.x, view.y, view.width, 1f), DeskStyle.MapInk.WithAlpha(0.13f));
+                gridX[i] = Chrome.Rule(layer, new Rect(view.x, view.y, 1f, view.height), DeskStyle.MapInk.WithAlpha(0.13f));
+                gridZ[i] = Chrome.Rule(layer, new Rect(view.x, view.y, view.width, 1f), DeskStyle.MapInk.WithAlpha(0.13f));
                 gridX[i].enabled = gridZ[i].enabled = false;
             }
             for (int i = 0; i < Strokes; i++)
@@ -130,7 +132,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             for (int i = 0; i < Homes; i++)
             {
-                homes[i] = AvKit.Panel(layer, new Rect(0f, 0f, 12f, 12f), AvTheme.RailInfo);
+                homes[i] = Chrome.Panel(layer, new Rect(0f, 0f, 12f, 12f), AvTheme.RailInfo);
                 homes[i].gameObject.SetActive(false);
             }
             for (int t = 0; t < Teams; t++) teams[t] = BuildTeamUnderlay();
@@ -141,16 +143,24 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             previewRoute = Lines.Make(layer, DeskStyle.Ink, OpsSprites.Dash, "Preview");
             previewRoute.enabled = false;
             for (int i = 0; i < Labels; i++) tags[i] = BuildTag(i);
-            previewPaper = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 22f), DeskStyle.Paper);
+            previewPaper = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 22f), DeskStyle.Paper);
             previewText = DeskStyle.Body(previewPaper.rectTransform, new Rect(6f, 0f, 10f, 22f), DeskStyle.TypewriterSmall,
                 DeskStyle.Ink, TextAlignmentOptions.Center);
-            AvKit.Stretch(previewText.rectTransform);
+            Chrome.Stretch(previewText.rectTransform);
             previewPaper.gameObject.SetActive(false);
 
-            scalePaper = AvKit.Panel(room, new Rect(focus.x + 8f, focus.y - focus.height + 34f, 150f, 26f), DeskStyle.Paper);
-            scaleBar = AvKit.Rule(scalePaper.rectTransform, new Rect(10f, -17f, 60f, 3f), DeskStyle.Ink);
+            scalePaper = Chrome.Panel(room, new Rect(focus.x + 8f, focus.y - focus.height + 34f, 150f, 26f), DeskStyle.Paper);
+            scaleBar = Chrome.Rule(scalePaper.rectTransform, new Rect(10f, -17f, 60f, 3f), DeskStyle.Ink);
             scaleText = DeskStyle.Body(scalePaper.rectTransform, new Rect(76f, 0f, 70f, 26f), DeskStyle.TypewriterSmall, DeskStyle.Ink);
             terrainStatus = DeskStyle.Body(room, new Rect(focus.x + 170f, focus.y - focus.height + 34f, focus.width - 394f, 26f), 10f, DeskStyle.Ink);
+            var titlePlate = Chrome.Panel(room, new Rect(view.x + 8f, view.y - 8f, 244f, 28f), DeskStyle.Paper.WithAlpha(0.94f));
+            titlePlate.raycastTarget = false;
+            DeskStyle.Title(room, "THEATER / OBJECTIVES", new Rect(view.x + 18f, view.y - 12f, 228f, 20f), 12f, DeskStyle.Ink);
+            var legendPlate = Chrome.Panel(room, new Rect(view.x + view.width - 338f, view.y - 8f, 330f, 28f),
+                DeskStyle.Paper.WithAlpha(0.94f));
+            legendPlate.raycastTarget = false;
+            DeskStyle.Body(room, new Rect(view.x + view.width - 328f, view.y - 12f, 312f, 20f), 11f, DeskStyle.Ink)
+                .text = "FRIENDLY / HOSTILE / NEUTRAL · CLICK TO BRIEF";
             MapButton(room, new Rect(focus.x + focus.width - 204f, focus.y - focus.height + 36f, 84f, 30f), "FIT / F", () => Board.ResetFraming());
             MapButton(room, new Rect(focus.x + focus.width - 112f, focus.y - focus.height + 36f, 48f, 30f), "−", () => Zoom(1f / 1.4f));
             MapButton(room, new Rect(focus.x + focus.width - 56f, focus.y - focus.height + 36f, 48f, 30f), "+", () => Zoom(1.4f));
@@ -162,8 +172,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private static void MapButton(RectTransform parent, Rect area, string text, Action click)
         {
             RoomControl control = RoomControl.Create(parent, area, click, "MapControl");
-            Image fill = AvKit.Panel(control.Rect, new Rect(0f, 0f, area.width, area.height), DeskStyle.Paper);
-            AvKit.Outline(control.Rect, new Rect(0f, 0f, area.width, area.height), DeskStyle.Khaki);
+            Image fill = Chrome.Panel(control.Rect, new Rect(0f, 0f, area.width, area.height), DeskStyle.Paper);
+            Chrome.Outline(control.Rect, new Rect(0f, 0f, area.width, area.height), DeskStyle.Khaki);
             DeskStyle.Title(control.Rect, text, new Rect(0f, 0f, area.width, area.height), 12f, DeskStyle.Ink, TextAlignmentOptions.Center);
             control.Changed = c => fill.color = c.Hovered ? DeskStyle.Tape : DeskStyle.Paper;
         }
@@ -171,23 +181,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private Token BuildToken(int slot)
         {
             var token = new Token();
-            token.Threat = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), DeskStyle.Stamp, OpsSprites.Ring);
+            token.Threat = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), DeskStyle.Stamp, OpsSprites.Ring);
             token.Threat.type = Image.Type.Simple;
-            token.Ring = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), DeskStyle.Ink, OpsSprites.Ring);
+            token.Ring = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), DeskStyle.Ink, OpsSprites.Ring);
             token.Ring.type = Image.Type.Simple;
             int captured = slot;
             token.Control = RoomControl.Create(layer, new Rect(0f, 0f, DeskStyle.TokenSize, DeskStyle.TokenSize),
                 () => select?.Invoke(captured), "Objective");
             RectTransform host = token.Control.Rect;
-            token.Disc = AvKit.Panel(host, new Rect(0f, 0f, DeskStyle.TokenSize, DeskStyle.TokenSize), DeskStyle.Paper, OpsSprites.Dot);
+            token.Disc = Chrome.Panel(host, new Rect(0f, 0f, DeskStyle.TokenSize, DeskStyle.TokenSize), DeskStyle.Paper, OpsSprites.Dot);
             token.Disc.type = Image.Type.Simple;
-            AvKit.Stretch(token.Disc.rectTransform);
-            token.Glyph = AvKit.Panel(host, new Rect(4f, -4f, DeskStyle.TokenSize - 8f, DeskStyle.TokenSize - 8f), DeskStyle.Stamp);
-            token.Badge = AvKit.Panel(host, new Rect(DeskStyle.TokenSize - 10f, 6f, 14f, 14f), AvTheme.RailReady, OpsSprites.Dot);
+            Chrome.Stretch(token.Disc.rectTransform);
+            token.Glyph = Chrome.Panel(host, new Rect(4f, -4f, DeskStyle.TokenSize - 8f, DeskStyle.TokenSize - 8f), DeskStyle.Stamp);
+            token.Badge = Chrome.Panel(host, new Rect(DeskStyle.TokenSize - 10f, 6f, 14f, 14f), AvTheme.RailReady, OpsSprites.Dot);
             token.Badge.type = Image.Type.Simple;
-            Image tick = AvKit.Panel(token.Badge.rectTransform, new Rect(1f, -1f, 12f, 12f), DeskStyle.Paper);
+            Image tick = Chrome.Panel(token.Badge.rectTransform, new Rect(1f, -1f, 12f, 12f), DeskStyle.Paper);
             tick.sprite = OpsSprites.Glyph(OpsSprites.G.Check);
-            token.Pin = AvKit.Panel(host, new Rect(DeskStyle.TokenSize * 0.5f - 7f, 20f, 14f, 14f), DeskStyle.Stamp);
+            token.Pin = Chrome.Panel(host, new Rect(DeskStyle.TokenSize * 0.5f - 7f, 20f, 14f, 14f), DeskStyle.Stamp);
             token.Pin.sprite = OpsSprites.Glyph(OpsSprites.G.Pin);
             token.Control.Changed = c => token.Disc.color = c.Hovered ? DeskStyle.Tape : DeskStyle.Paper;
             SetVisible(token, false);
@@ -198,7 +208,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         {
             var team = new Team
             {
-                Reach = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), AvTheme.RailReady, OpsSprites.DottedRing),
+                Reach = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), AvTheme.RailReady, OpsSprites.DottedRing),
                 Route = Lines.Make(layer, AvTheme.RailInfo, OpsSprites.Dash, "Route")
             };
             team.Reach.type = Image.Type.Simple;
@@ -209,13 +219,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         private void BuildTeamToken(Team team, int index)
         {
-            team.Pulse = AvKit.Panel(layer, new Rect(0f, 0f, 10f, 10f), AvTheme.RailCaution, OpsSprites.Ring);
+            team.Pulse = Chrome.Panel(layer, new Rect(0f, 0f, 10f, 10f), AvTheme.RailCaution, OpsSprites.Ring);
             team.Pulse.type = Image.Type.Simple;
-            team.Token = AvKit.Panel(layer, new Rect(0f, 0f, 22f, 22f), DeskStyle.Ink, OpsSprites.Dot);
+            team.Token = Chrome.Panel(layer, new Rect(0f, 0f, 22f, 22f), DeskStyle.Ink, OpsSprites.Dot);
             team.Token.type = Image.Type.Simple;
-            team.Letter = AvKit.Label(team.Token.rectTransform, FieldWords.Callsign(index).Substring(0, 1),
+            team.Letter = Chrome.Label(team.Token.rectTransform, FieldWords.Callsign(index).Substring(0, 1),
                 new Rect(0f, 0f, 22f, 22f), DeskStyle.Paper, 12f, FontStyles.Bold, TextAlignmentOptions.Center);
-            AvKit.Stretch(team.Letter.rectTransform);
+            Chrome.Stretch(team.Letter.rectTransform);
             team.Pulse.gameObject.SetActive(false);
             team.Token.gameObject.SetActive(false);
         }
@@ -228,10 +238,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Control = RoomControl.Create(layer, new Rect(0f, 0f, 100f, 30f),
                     () => { if (labelSlot[index] >= 0) select?.Invoke(labelSlot[index]); }, "ObjectiveLabel")
             };
-            tag.Paper = AvKit.Panel(tag.Control.Rect, new Rect(0f, 0f, 100f, 30f), DeskStyle.Paper);
-            AvKit.Stretch(tag.Paper.rectTransform);
+            tag.Paper = Chrome.Panel(tag.Control.Rect, new Rect(0f, 0f, 100f, 30f), DeskStyle.Paper);
+            Chrome.Stretch(tag.Paper.rectTransform);
             tag.Leader.enabled = false;
-            tag.Name = AvKit.Label(tag.Paper.rectTransform, "", new Rect(6f, -2f, 90f, 15f), DeskStyle.Ink, 11f,
+            tag.Name = Chrome.Label(tag.Paper.rectTransform, "", new Rect(6f, -2f, 90f, 15f), DeskStyle.Ink, 11f,
                 FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
             tag.Name.characterSpacing = 2f;
             tag.Sub = DeskStyle.Body(tag.Paper.rectTransform, new Rect(6f, -15f, 90f, 13f), 10f, DeskStyle.Khaki);
@@ -252,11 +262,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
         }
 
-        /// <summary>Panels lying over the map (AvKit rects); labels keep off them. At most eight.</summary>
+        /// <summary>Panels lying over the map (top-left, negative-down rects); labels keep off them. At most eight.</summary>
         public void SetObstacles(params Rect[] rects)
         {
-            obstacleCount = Math.Min(rects.Length, obstacleRects.Length);
+            obstacleCount = Math.Min(rects.Length, obstacleRects.Length - 1);
             for (int i = 0; i < obstacleCount; i++) obstacleRects[i] = rects[i];
+            Rect view = Board.View;
+            obstacleRects[obstacleCount++] = new Rect(view.x, view.y, view.width, 42f);
             Board.SetObstacles(obstacleRects, obstacleCount);
         }
 
@@ -314,7 +326,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
             for (int i = 0; i < Homes; i++)
             {
-                bool show = i < homeCount;
+                // A friendly airbase already has an objective token at this exact location.
+                // Drawing a second home pin makes one geographic point look like two sites.
+                bool show = i < homeCount && !HomeRepresented(detachment, count, i);
                 if (homes[i].gameObject.activeSelf != show) homes[i].gameObject.SetActive(show);
                 if (!show) continue;
                 Vector2 p = Board.Project(homeX[i], homeZ[i]);
@@ -338,6 +352,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 token.Glyph.sprite = OpsSprites.Glyph(Glyph(o.Kind));
                 token.Glyph.color = held ? FieldTones.Post(detachment.Team(holder).Mission)
                     : o.Hostile ? DeskStyle.Stamp : o.Friendly ? AvTheme.RailReady : DeskStyle.Khaki;
+                token.Disc.color = o.Friendly ? DeskStyle.Paper : o.Hostile ? DeskStyle.Tape : DeskStyle.Map;
                 float threatDiameter = Mathf.Max(DeskStyle.TokenSize + 12f, Board.Pixels(FieldCatalog.ThreatRadius) * 2f);
                 token.Threat.gameObject.SetActive(o.Hostile && o.Threat > 0);
                 Lines.Centre(token.Threat.rectTransform, p.x, p.y, threatDiameter);
@@ -369,8 +384,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FieldObjective o = detachment.Objective(i);
                 int team = detachment.TeamOn(o.Anchor);
                 string sub = team >= 0
-                    ? FieldWords.Callsign(team) + " " + FieldWords.State(detachment.Team(team).State)
-                    : FieldWords.KindCode(o.Kind) + " · " + FieldWords.Threat(o.Threat) +
+                    ? "POST · " + FieldWords.Callsign(team) + " " + FieldWords.State(detachment.Team(team).State)
+                    : o.Friendly ? (IsHomeObjective(o) ? "FRIENDLY · HOME BASE" : "FRIENDLY · STAGING")
+                    : (o.Hostile ? "HOSTILE · " : "NEUTRAL · ") + FieldWords.Threat(o.Threat) +
                       (detachment.Scouted(o.Anchor, now) ? " · SCOUTED" : "");
                 Write(tags[n], PlaceNames.Shorten(o.Name, 16), sub);
                 anchors[n] = Board.Project(o.X, o.Z);
@@ -382,6 +398,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             for (int i = 0; i < homeCount && n < Labels; i++)
             {
+                if (HomeRepresented(detachment, count, i)) continue;
                 Write(tags[n], PlaceNames.Shorten(string.IsNullOrEmpty(homeName[i]) ? "HOME BASE" : homeName[i], 14), "HOME BASE");
                 anchors[n] = Board.Project(homeX[i], homeZ[i]);
                 sizes[n] = new Vector2(tags[n].Width, 30f);
@@ -404,7 +421,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 }
                 PlacedLabel p = placed[i];
                 var rect = new Rect(p.X, p.Y, p.Width, p.Height);
-                AvKit.Place(tag.Control.Rect, rect);
+                Chrome.Place(tag.Control.Rect, rect);
                 tag.Control.SetEnabled(labelSlot[i] >= 0);
                 tag.Control.WithTooltip(labelSlot[i] >= 0 ? "Select objective / " + tag.ShownName : tag.ShownName);
                 PlacedRects[PlacedCount++] = rect;
@@ -419,6 +436,30 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 tag.Paper.color = hot ? DeskStyle.Tape : DeskStyle.Paper;
             }
         }
+
+        private bool HomeRepresented(SpecOpsDetachment detachment, int count, int home)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                FieldObjective objective = detachment.Objective(i);
+                if (objective.Friendly && (objective.Kind == ObjectiveKind.Airfield || objective.Kind == ObjectiveKind.Outpost) &&
+                    SameSite(objective.X, objective.Z, homeX[home], homeZ[home]))
+                    return true;
+            }
+            return false;
+        }
+
+        private bool IsHomeObjective(FieldObjective objective)
+        {
+            if (!objective.Friendly || (objective.Kind != ObjectiveKind.Airfield && objective.Kind != ObjectiveKind.Outpost))
+                return false;
+            for (int i = 0; i < homeCount; i++)
+                if (SameSite(objective.X, objective.Z, homeX[i], homeZ[i])) return true;
+            return false;
+        }
+
+        private static bool SameSite(float ax, float az, float bx, float bz) =>
+            Mathf.Abs(ax - bx) < 1f && Mathf.Abs(az - bz) < 1f;
 
         private static void Write(Tag tag, string name, string sub)
         {
@@ -452,7 +493,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Vector2 p = Board.Project(first + i * step, 0f);
                 bool show = p.x < view.x + view.width;
                 gridX[i].enabled = show;
-                if (show) AvKit.Place(gridX[i].rectTransform, new Rect(p.x, view.y, 1f, view.height));
+                if (show) Chrome.Place(gridX[i].rectTransform, new Rect(p.x, view.y, 1f, view.height));
             }
             float firstZ = Mathf.Floor(top / step) * step;
             for (int i = 0; i < GridLines; i++)
@@ -460,7 +501,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 Vector2 p = Board.Project(0f, firstZ - i * step);
                 bool show = p.y > view.y - view.height;
                 gridZ[i].enabled = show;
-                if (show) AvKit.Place(gridZ[i].rectTransform, new Rect(view.x, p.y, view.width, 1f));
+                if (show) Chrome.Place(gridZ[i].rectTransform, new Rect(view.x, p.y, view.width, 1f));
             }
             float length = step / mpp;
             scaleBar.rectTransform.sizeDelta = new Vector2(Mathf.Min(length, 60f), 3f);
@@ -511,9 +552,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FieldTeam value = detachment != null && detachment.Enabled ? detachment.Team(t) : default;
                 bool deployed = value.Deployed;
                 if (team.Token.gameObject.activeSelf != deployed) team.Token.gameObject.SetActive(deployed);
-                bool hasHome = NearestHome(value.X, value.Z, out float hx, out float hz);
+                // The host chooses and replicates the launch base. Local ownership may change
+                // while a team is travelling, so a fresh nearest-base lookup bends its route.
+                bool hasHome = deployed && !string.IsNullOrEmpty(value.Origin);
                 Vector2 target = Board.Project(value.X, value.Z);
-                Vector2 home = hasHome ? Board.Project(hx, hz) : target;
+                Vector2 home = hasHome ? Board.Project(value.OriginX, value.OriginZ) : target;
                 if (!deployed)
                 {
                     team.Route.enabled = false;
@@ -564,7 +607,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             DeskStyle.Type(previewText, timing);
             float width = previewText.GetPreferredValues(previewText.text).x + 16f;
             Vector2 mid = (a + b) * 0.5f;
-            AvKit.Place(previewPaper.rectTransform, new Rect(mid.x - width * 0.5f, mid.y + 30f, width, 22f));
+            Chrome.Place(previewPaper.rectTransform, new Rect(mid.x - width * 0.5f, mid.y + 30f, width, 22f));
             if (!previewPaper.gameObject.activeSelf) previewPaper.gameObject.SetActive(true);
         }
 

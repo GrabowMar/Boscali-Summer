@@ -26,6 +26,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
                     context.Settings.ElintRadius.Value * platform.ElintScale(now), context.Logger, RevealFilter.Emitters);
                 platform.Consume(PlatformAbility.Elint, now);
+                if (contacts > 0) platform.RecordSolution(context.Target.x, context.Target.z,
+                    context.Settings.ElintRadius.Value * platform.ElintScale(now), now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }

@@ -20,7 +20,7 @@ namespace BoscaliSummer.Features.Radio.Runtime
     /// programs so the vanilla soundtrack is held by whichever of them is live, and so a
     /// measured reception figure can drive the meter, the waterfall and the squelch.
     /// </summary>
-    internal sealed class RadioManager : MonoBehaviour, ISceneService
+    internal sealed class RadioManager : MonoBehaviour, ISceneService, IRadioRemote
     {
         private const int TerrainLayerMask = 8256;
         private const float BulletinSeconds = 90f;
@@ -732,6 +732,26 @@ namespace BoscaliSummer.Features.Radio.Runtime
             int count = DeckTrackCount;
             if (count == 0) return;
             DeckPlay((DeckTrackIndex - 1 + count) % count);
+        }
+
+        // ------------------------------------------------------------------ remote face
+
+        bool IRadioRemote.DeckAvailable => DeckTrackCount > 0;
+        bool IRadioRemote.DeckPlaying => DeckPlaying;
+        string IRadioRemote.DeckTitle => DeckCurrentTitle;
+        void IRadioRemote.DeckTogglePlayback() => DeckTogglePlayback();
+        void IRadioRemote.DeckNext() => DeckNext();
+        void IRadioRemote.DeckPrevious() => DeckPrevious();
+        bool IRadioRemote.ReceiverAvailable => HasChannels;
+        bool IRadioRemote.ReceiverOn => IsEngaged;
+        string IRadioRemote.ReceiverStation => CurrentChannelName;
+        void IRadioRemote.ReceiverSeek(int direction) => SeekStation(direction);
+        void IRadioRemote.StopAll() => StopAll();
+
+        void IRadioRemote.ReceiverToggle()
+        {
+            if (IsEngaged) Stop();
+            else TogglePlayback();
         }
 
         public void DeckToggleShuffle() => ToggleShuffle();

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Features.Trenches.Configuration;
 using BoscaliSummer.Features.Trenches.Domain;
+using BoscaliSummer.Features.Trenches.Networking;
 using BoscaliSummer.Features.Trenches.Visuals;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
@@ -17,8 +18,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
     /// Server-authoritative field positions. Command's front traces arrive as ordered
     /// contour polylines — a beachhead ring, a diagonal front, a whole frontier — and each
     /// becomes a natural Bezier line offset onto its owner's side, trimmed to the ground
-    /// that accepts it and matured into a belt. Placement and ditch geometry are host-local;
-    /// native defenders and scenery replicate through vanilla Mirage spawning.
+    /// that accepts it and matured into a belt. Placement is host-side; ditch curves
+    /// replicate to clients, who carve the same geometry locally, while native defenders
+    /// and scenery replicate through vanilla Mirage spawning.
     /// </summary>
     internal sealed class TrenchManager : MonoBehaviour, ISceneService, IFieldworksReadiness
     {
@@ -42,6 +44,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         private readonly Dictionary<int, TrenchVisualChunk> visualChunks = new Dictionary<int, TrenchVisualChunk>(MaximumActiveLines);
         private readonly Dictionary<int, TrenchGarrison> garrisons = new Dictionary<int, TrenchGarrison>(MaximumActiveLines);
         private readonly Dictionary<int, TrenchWorks> works = new Dictionary<int, TrenchWorks>(MaximumActiveLines);
+        private readonly Dictionary<int, TrenchLine> clientLines = new Dictionary<int, TrenchLine>(MaximumActiveLines);
+        private readonly List<TrenchLine> clientLineList = new List<TrenchLine>(MaximumActiveLines);
 
         private readonly FrontlineTracePoint[] tracePoints = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] traceLengths = new int[FrontlineTraceLimits.MaximumTraces];
@@ -83,6 +87,9 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         public IReadOnlyList<TrenchLine> Lines => lines;
 
+        /// <summary>Server lines on the host, replicated curves on clients: what to draw.</summary>
+        internal IReadOnlyList<TrenchLine> DisplayLines => GameAccess.IsServer() ? Lines : clientLineList;
+
         public void CountNear(FactionHQ observer, float x, float z, float radius,
             out int friendlyDefenders, out int observedHostileDefenders, out int suppressedFriendly)
         {
@@ -118,6 +125,80 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             }
         }
 
+        /// <summary>Client-side: a committed or grown curve arrives; carve the same ditch.</summary>
+        internal void ReceiveGeometry(int id, int ownerHash, TrenchStage stage,
+            Vector3[] curve, Vector3[] threat, Vector3[] support, Vector3[] redoubt,
+            Vector3[][] links, Vector3[][] spurs)
+        {
+            if (GameAccess.IsServer()) return;
+            // Threat vectors stay unit XZ: only ditch traces snap height to local terrain.
+            SnapHeights(curve);
+            SnapHeights(support);
+            SnapHeights(redoubt);
+            SnapHeights(links);
+            SnapHeights(spurs);
+            var line = TrenchLine.FromNetwork(id, ownerHash, stage, curve, threat, support, redoubt, links, spurs);
+            if (clientLines.ContainsKey(id))
+            {
+                clientLines[id] = line;
+                for (int i = 0; i < clientLineList.Count; i++)
+                    if (clientLineList[i].Id == id) { clientLineList[i] = line; break; }
+            }
+            else
+            {
+                if (clientLines.Count >= MaximumActiveLines) return;
+                clientLines.Add(id, line);
+                clientLineList.Add(line);
+            }
+            if (visualChunks.TryGetValue(id, out TrenchVisualChunk chunk) && chunk != null)
+                chunk.Initialize(line);
+            else
+                visualChunks[id] = CreateVisualChunk(line);
+            OnLinesChanged?.Invoke();
+        }
+
+        /// <summary>Client-side: a transition arrives; restate the line and its map marks.</summary>
+        internal void ReceiveState(int id, TrenchStage stage, int defenders, bool suppressed, bool overrun)
+        {
+            if (GameAccess.IsServer()) return;
+            if (!clientLines.TryGetValue(id, out TrenchLine line)) return;
+            bool widthChanged = line.Stage != stage;
+            line.Stage = stage;
+            line.DefenderCount = defenders;
+            line.Suppressed = suppressed;
+            line.Overrun = overrun;
+            if (widthChanged && visualChunks.TryGetValue(id, out TrenchVisualChunk chunk) && chunk != null)
+                chunk.Rebuild();
+            OnLinesChanged?.Invoke();
+        }
+
+        /// <summary>Client-side: a retired line leaves; its ditch fills back in.</summary>
+        internal void ReceiveRemoved(int lineId)
+        {
+            if (GameAccess.IsServer()) return;
+            if (!clientLines.Remove(lineId)) return;
+            for (int i = 0; i < clientLineList.Count; i++)
+                if (clientLineList[i].Id == lineId) { clientLineList.RemoveAt(i); break; }
+            if (visualChunks.TryGetValue(lineId, out TrenchVisualChunk chunk) && chunk != null)
+                Destroy(chunk.gameObject);
+            visualChunks.Remove(lineId);
+            OnLinesChanged?.Invoke();
+        }
+
+        private static void SnapHeights(Vector3[] trace)
+        {
+            if (trace == null) return;
+            for (int i = 0; i < trace.Length; i++)
+                if (TrenchTerrain.TryGround(trace[i].x, trace[i].z, out Vector3 ground))
+                    trace[i].y = ground.y;
+        }
+
+        private static void SnapHeights(Vector3[][] traces)
+        {
+            if (traces == null) return;
+            for (int i = 0; i < traces.Length; i++) SnapHeights(traces[i]);
+        }
+
         public void Configure(TrenchesSettings config, ManualLogSource log, ITerritoryIngress control)
         {
             settings = config;
@@ -136,6 +217,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 if (chunk != null) Destroy(chunk.gameObject);
             }
             visualChunks.Clear();
+            clientLines.Clear();
+            clientLineList.Clear();
             lines.Clear();
 
             TrenchMaterialResolver.ResetForScene();
@@ -175,7 +258,11 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             if (settings == null || !GameAccess.IsServer()) return;
             if (!settings.Enabled.Value)
             {
-                if (lines.Count > 0) ResetForScene();
+                if (lines.Count > 0)
+                {
+                    for (int i = 0; i < lines.Count; i++) TrenchNet.BroadcastRemoved(lines[i].Id);
+                    ResetForScene();
+                }
                 return;
             }
             if (Datum.origin == null) return;
@@ -480,12 +567,15 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             garrisons.Add(line.Id, garrison);
             works.Add(line.Id, lineWorks);
             visualChunks.Add(line.Id, chunk);
+            line.OwnerHash = TrenchWire.OwnerHashFor(line.OwnerHq != null ? line.OwnerHq.name : null);
             line.DefenderCount = garrison.Alive;
             line.DugAt = Time.time;
             line.HostileSince = -1f;
             line.NextGrowthAt = Time.time + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
             line.NextBarrageAt = Time.time + TrenchTraceMath.BarrageDelay(settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value, line.Pressure, UnityEngine.Random.value);
             logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
+            TrenchNet.BroadcastGeometry(line);
+            TrenchNet.BroadcastState(line);
             OnLinesChanged?.Invoke();
             return true;
         }
@@ -553,6 +643,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                     works.Remove(line.Id);
                     garrison.Remove();
                     garrisons.Remove(line.Id);
+                    TrenchNet.BroadcastRemoved(line.Id);
                     lines.RemoveAt(i);
                     anyChanged = true;
                     continue;
@@ -571,8 +662,10 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                         if (missing != null)
                             logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
                         if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk chunk) && chunk != null) chunk.Rebuild();
+                        garrison.ResetAttempts();
                         garrison.Reinforce();
                         garrison.Poll(now);
+                        TrenchNet.BroadcastGeometry(line);
                         line.DefenderCount = garrison.Alive;
                     }
                     else if (line.Stage != TrenchStage.Saps && Time.unscaledTime >= nextGrowthWarning)
@@ -586,6 +679,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
                 {
                     anyChanged = true;
                     logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
+                    TrenchNet.BroadcastState(line);
                 }
             }
 

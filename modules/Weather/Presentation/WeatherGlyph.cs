@@ -27,7 +27,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             var obj = new GameObject("WeatherGlyph", typeof(RectTransform), typeof(CanvasRenderer), typeof(WeatherGlyph));
             var glyph = obj.GetComponent<WeatherGlyph>();
             glyph.transform.SetParent(parent, false);
-            AvKit.Place((RectTransform)glyph.transform, area);
+            AvLay.Place((RectTransform)glyph.transform, area.x, area.y, area.width, area.height);
             return glyph;
         }
 

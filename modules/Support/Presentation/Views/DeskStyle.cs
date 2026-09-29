@@ -24,11 +24,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
 
         // Geometry.
         public const float Gutter = 16f;
-        public const float BannerHeight = 22f;
-        public const float HeaderHeight = 48f;
-        public const float TagGap = 12f;
-        public const float FolderWidth = 488f;
-        public const float TimelineHeight = 138f;
+        public const float BannerHeight = 20f;
+        public const float HeaderHeight = 50f;
+        public const float TagGap = 8f;
+        public const float FolderWidth = 404f;
+        public const float TimelineHeight = 100f;
         public const float TokenSize = 36f;
 
         public static Color Map { get; private set; }
@@ -59,7 +59,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Title(RectTransform parent, string text, Rect area, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
         {
-            TMP_Text label = AvKit.Label(parent, text, area, color, size, FontStyles.Bold | FontStyles.UpperCase, align);
+            TMP_Text label = Chrome.Label(parent, text, area, color, size, FontStyles.Bold | FontStyles.UpperCase, align);
             label.characterSpacing = StencilTracking;
             return label;
         }
@@ -68,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         public static TMP_Text Body(RectTransform parent, Rect area, float size, Color color,
             TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool wrap = false)
         {
-            TMP_Text label = AvKit.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
+            TMP_Text label = Chrome.Label(parent, "", area, color, size, FontStyles.Normal, align, wrap);
             label.richText = true;
             return label;
         }

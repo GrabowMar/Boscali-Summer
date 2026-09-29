@@ -55,7 +55,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             float intel = Intel(action);
             bool armed = support.ArmedAction.HasValue && support.ArmedAction.Value == action.Id;
             bool gateOpen = Gate(support, action, out string gate);
-            return Describe(action, cyber, cost, intel, armed, support.RequestPending, support.IsAuthorised(action),
+            return Describe(action, cyber, cost, intel, armed, support.RequestPending || support.CommandPending, support.IsAuthorised(action),
                 support.LocalAllocation, support.LocalCooldownRemaining, bypass,
                 support.LocalCyber != null ? support.LocalCyber.Intel : 0f, gateOpen, gate);
         }
@@ -108,17 +108,17 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                     return false;
                 }
                 bool any = action.Hack.HasValue
-                    ? cyber.AnyTier(CyberCatalog.RequiredStage(action.Hack.Value) - 1)
-                    : cyber.AnyCapstone(action.Cap.Value);
+                    ? cyber.AnyTier(CyberCatalog.RequiredStage(action.Hack.Value) - 1, support.OrbitNow)
+                    : cyber.AnyCapstone(action.Cap.Value, support.OrbitNow);
                 if (!any)
                 {
                     reason = action.IsHack
-                        ? "NEEDS A STAGE-" + CyberCatalog.RequiredStage(action.Hack.Value) + " LOCATION"
-                        : "NEEDS A MASTERED LOCATION";
+                        ? "PREPARE A FRESH ACCESS WINDOW"
+                        : "CHOOSE A PAYLOAD IN AN OPEN WINDOW";
                     return false;
                 }
                 // The host still re-checks that a location's radius covers the point.
-                reason = "TARGET MUST BE INSIDE A LOCATION'S RADIUS";
+                reason = "ONE USE · " + CyberWords.Seconds(cyber.AccessRemaining(support.OrbitNow)) + " · INSIDE ACCESS RADIUS";
                 return true;
             }
             TeamGate? gate = action.Id == SupportActionId.FlareMissile ? TeamGate.FlareBarrage :
@@ -177,7 +177,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         private static string Locked(SupportActionDefinition action)
         {
             if (action.IsField) return "LOCKED · " + FieldWords.AbilityLocked(action.Field.Value);
-            if (action.IsHack) return "LOCKED · BREACH A LOCATION TO STAGE " + CyberCatalog.RequiredStage(action.Hack.Value);
+            if (action.IsHack) return "LOCKED · PREPARE ACCESS IN CYBER";
             if (action.IsCapstone) return "LOCKED · MASTER A LOCATION (STAGE 4)";
             if (action.Id == SupportActionId.FlareMissile) return "LOCKED · SHARES RADAR SCAN PERK";
             if (action.Id == SupportActionId.Fortify) return "LOCKED · UNLOCK FORTIFY IN SQD ABILITIES";

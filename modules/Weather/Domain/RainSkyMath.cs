@@ -36,6 +36,12 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         public static float AmbientMultiplier(float rain) => 1f - (1f - MinAmbientMultiplier) * Clamp01(rain);
 
+        /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 28 %.</summary>
+        public static float ShadeAmbient(float shade) => 1f - 0.28f * Clamp01(shade);
+
+        /// <summary>Extra low haze under a cloud deck: up to 35 % thicker.</summary>
+        public static float ShadeFog(float shade) => 1f + 0.35f * Clamp01(shade);
+
         /// <summary>
         /// True when a value read back equals the one we last wrote (float re-read noise
         /// tolerated); false means vanilla or someone else rewrote it since.

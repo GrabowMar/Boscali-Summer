@@ -45,8 +45,14 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         Recharging = 9,
         Expended = 10,
         NoFuel = 11,
-        SameOrbit = 12
+        SameOrbit = 12,
+        WrongFocus = 13,
+        Retasking = 14,
+        NoSolution = 15,
+        OutsideSector = 16
     }
+
+    internal enum PlatformFocus : byte { Survey = 0, Strike = 1, Screen = 2 }
 
     /// <summary>The last station event worth a voice-loop line. Wire-stable.</summary>
     internal enum PlatformNotice : byte
@@ -122,6 +128,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public byte Notice;
         public byte NoticeCell;
         public byte NoticeSerial;
+        public byte Focus;
+        public float RetaskIn, SolutionX, SolutionZ, SolutionRadius, SolutionIn;
 
         public void Clear()
         {
@@ -132,6 +140,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Regime = Hold = Rods = Pending = PendingCell = Notice = NoticeCell = NoticeSerial = 0;
             Seed = 0;
             CycleClock = Energy = Fuel = DockIn = Elapsed = 0f;
+            Focus = 0;
+            RetaskIn = SolutionX = SolutionZ = SolutionRadius = SolutionIn = 0f;
         }
     }
 
@@ -159,6 +169,54 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public const float GyroScatterFactor = 0.5f;
         public const float StepLimitSeconds = 5f;
         public const string Callsign = "BASTION";
+        public const float SolutionSeconds = 75f;
+        public const float RetaskSeconds = 12f;
+        public const float MaximumSolutionRadius = 6000f;
+
+        public PlatformFocus Focus { get; private set; }
+        public double RetaskUntil { get; private set; }
+        public float SolutionX { get; private set; }
+        public float SolutionZ { get; private set; }
+        public float SolutionRadius { get; private set; }
+        private double solutionUntil;
+        public double SolutionRemaining(double now) => Math.Max(0.0, solutionUntil - now);
+
+        public bool TryFocus(PlatformFocus focus, double now)
+        {
+            if (!Exists || (byte)focus > (byte)PlatformFocus.Screen || focus == Focus || now < RetaskUntil) return false;
+            Focus = focus;
+            RetaskUntil = now + RetaskSeconds;
+            return true;
+        }
+
+        /// <summary>A host-confirmed scan or field observer supplies one shared, expiring target area.
+        /// A heavy effect consumes it; repeated callers cannot turn one sighting into a salvo.</summary>
+        public void RecordSolution(float x, float z, float radius, double now)
+        {
+            if (!Exists || !Finite(x) || !Finite(z) || !Finite(radius) || radius <= 0f) return;
+            SolutionX = x;
+            SolutionZ = z;
+            SolutionRadius = Math.Min(MaximumSolutionRadius, radius);
+            solutionUntil = now + SolutionSeconds;
+        }
+
+        public PlatformDenial CheckTarget(PlatformAbility ability, float x, float z, double now)
+        {
+            PlatformDenial denial = Check(ability, now);
+            if (denial != PlatformDenial.None) return denial;
+            if (!Finite(x) || !Finite(z)) return PlatformDenial.OutsideSector;
+            if (ability != PlatformAbility.Uplink && ability != PlatformAbility.Rephase && ability != PlatformAbility.OrbitShift)
+            {
+                OrbitState state = State(now);
+                double reachX = x - state.SubX, reachZ = z - state.SubZ;
+                float reach = CoverageRadius(now);
+                if (reachX * reachX + reachZ * reachZ > reach * reach) return PlatformDenial.OutsideSector;
+            }
+            if (ability != PlatformAbility.RodStrike && ability != PlatformAbility.EmpBurst) return denial;
+            double dx = x - SolutionX, dz = z - SolutionZ;
+            return !Finite(x) || !Finite(z) || dx * dx + dz * dz > SolutionRadius * SolutionRadius
+                ? PlatformDenial.NoSolution : PlatformDenial.None;
+        }
 
         private readonly ModuleKind[] cells = new ModuleKind[CellCount];
         private readonly double[] offlineUntil = new double[CellCount];
@@ -615,6 +673,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (!FittedOnline(info.Module, now)) return PlatformDenial.Offline;
             if (Brownout) return PlatformDenial.Brownout;
             if (now < CycleStart) return PlatformDenial.Holding;
+            if (ability != PlatformAbility.Uplink && ability != PlatformAbility.Rephase &&
+                ability != PlatformAbility.OrbitShift && now < RetaskUntil) return PlatformDenial.Retasking;
             if (info.Window != AbilityWindow.Any)
             {
                 bool overhead = State(now).InPass;
@@ -625,6 +685,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (now < readyAt[(int)ability]) return PlatformDenial.Recharging;
             if (ability == PlatformAbility.RodStrike && Rods <= 0) return PlatformDenial.Expended;
             if (ability != PlatformAbility.OrbitShift && Fuel + 0.001f < info.Fuel) return PlatformDenial.NoFuel;
+            if (ability == PlatformAbility.RodStrike && Focus != PlatformFocus.Strike ||
+                ability == PlatformAbility.EmpBurst && Focus != PlatformFocus.Screen) return PlatformDenial.WrongFocus;
+            if ((ability == PlatformAbility.RodStrike || ability == PlatformAbility.EmpBurst) &&
+                SolutionRemaining(now) <= 0.0) return PlatformDenial.NoSolution;
             return PlatformDenial.None;
         }
 
@@ -643,6 +707,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         {
             AbilityInfo info = PlatformAbilities.Info(ability);
             float seconds = info.RechargeSeconds;
+            if (ability == PlatformAbility.RadarScan || ability == PlatformAbility.Elint)
+                seconds *= Focus == PlatformFocus.Survey ? 0.75f : 1.25f;
             if (Stats(now).Crewed) seconds *= CrewRechargeFactor;
             if (RunsHot(info.Module, now)) seconds *= HotRechargePenalty;
             return seconds;
@@ -658,6 +724,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Energy = Math.Max(0f, Energy - info.EnergyKj);
             if (ability != PlatformAbility.OrbitShift) Fuel = Math.Max(0f, Fuel - info.Fuel);
             if (ability == PlatformAbility.RodStrike) Rods = Math.Max(0, Rods - Math.Max(1, rodShots));
+            if (ability == PlatformAbility.RodStrike || ability == PlatformAbility.EmpBurst) solutionUntil = 0.0;
             if (info.RechargeSeconds > 0f) readyAt[(int)ability] = now + RechargeSeconds(ability, now);
         }
 
@@ -689,10 +756,22 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         }
 
         public float ScanScale(double now) =>
-            Orbit.ScanScale * (SensorBoosted(ModuleKind.Imager, now) ? RelayBoost : 1f);
+            Orbit.ScanScale * (SensorBoosted(ModuleKind.Imager, now) ? RelayBoost : 1f) *
+            (Focus == PlatformFocus.Survey ? 1.2f : 0.8f);
 
         public float ElintScale(double now) =>
-            Orbit.ScanScale * (SensorBoosted(ModuleKind.Sigint, now) ? RelayBoost : 1f);
+            Orbit.ScanScale * (SensorBoosted(ModuleKind.Sigint, now) ? RelayBoost : 1f) *
+            (Focus == PlatformFocus.Survey ? 1.2f : 0.8f);
+
+        /// <summary>Tasking reach from the station's current sector. Online relays extend it;
+        /// routing power into a weapon trades wide surveillance for a smaller operating area.</summary>
+        public float CoverageRadius(double now)
+        {
+            int relays = 0;
+            for (int i = 0; i < CellCount && relays < 2; i++)
+                if (cells[i] == ModuleKind.Relay && IsOnline(i, now)) relays++;
+            return (42000f + relays * 10000f) * (Focus == PlatformFocus.Survey ? 1.2f : 0.8f);
+        }
 
         public float RodScatter(double now) =>
             Orbit.RodScatter * (Stats(now).Stabilised ? GyroScatterFactor : 1f);
@@ -735,6 +814,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             into.Notice = (byte)Notice;
             into.NoticeCell = (byte)(InGrid(NoticeCell) ? NoticeCell : 0);
             into.NoticeSerial = noticeSerial;
+            into.Focus = (byte)Focus;
+            into.RetaskIn = (float)Math.Max(0.0, RetaskUntil - now);
+            into.SolutionX = SolutionX;
+            into.SolutionZ = SolutionZ;
+            into.SolutionRadius = SolutionRadius;
+            into.SolutionIn = (float)SolutionRemaining(now);
         }
 
         /// <summary>
@@ -780,6 +865,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Notice = (PlatformNotice)from.Notice;
             NoticeCell = from.NoticeCell;
             noticeSerial = from.NoticeSerial;
+            Focus = (PlatformFocus)from.Focus;
+            RetaskUntil = Rebase(RetaskUntil, now + from.RetaskIn, true);
+            SolutionX = from.SolutionX;
+            SolutionZ = from.SolutionZ;
+            SolutionRadius = from.SolutionRadius;
+            solutionUntil = from.SolutionIn > 0f ? Rebase(solutionUntil, now + from.SolutionIn, true) : 0.0;
         }
 
         private static double Rebase(double known, double reported, bool keep) =>
@@ -802,6 +893,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (!InGrid(from.PendingCell)) return false;
             if (!Finite(from.CycleClock) || !Finite(from.Energy) || !Finite(from.Fuel) ||
                 !Finite(from.DockIn) || !Finite(from.Elapsed)) return false;
+            if (from.Focus > (byte)PlatformFocus.Screen || !Finite(from.RetaskIn) || from.RetaskIn < 0f ||
+                from.RetaskIn > RetaskSeconds || !Finite(from.SolutionX) || !Finite(from.SolutionZ) ||
+                !Finite(from.SolutionRadius) || from.SolutionRadius < 0f || from.SolutionRadius > MaximumSolutionRadius ||
+                !Finite(from.SolutionIn) || from.SolutionIn < 0f || from.SolutionIn > SolutionSeconds) return false;
             for (int i = 0; i < from.Recharge.Length; i++)
                 if (!Finite(from.Recharge[i])) return false;
             return true;
@@ -832,6 +927,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Notice = PlatformNotice.None;
             NoticeCell = 0;
             NextDebris = 0.0;
+            Focus = PlatformFocus.Survey;
+            RetaskUntil = solutionUntil = 0.0;
+            SolutionX = SolutionZ = SolutionRadius = 0f;
         }
 
         public void Reset() => Clear();

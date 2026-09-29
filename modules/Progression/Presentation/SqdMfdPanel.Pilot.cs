@@ -13,309 +13,78 @@ namespace BoscaliSummer.Features.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
-        private Image pilotPortraitImage;
-        private GameObject pilotPortraitFallback;
-        private TMP_Text pilotCallsign;
-        private TMP_Text pilotProfileTag;
-        private TMP_Text pilotName;
-        private TMP_Text pilotRankLine;
-        private TMP_Text pilotStatusLine;
-        private TMP_Text pilotBackground;
-        private Image pilotEmblemImage;
-        private TMP_Text pilotEmblemFallback;
-        private TMP_Text pilotSquadron;
-        private Image pilotProgressFill;
-        private Image pilotStateFill;
-        private TMP_Text pilotStateBadge;
-        private TMP_Text pilotPhotoCaption;
+        private const int PilotChipColumns = 2; // two columns: the longest grade name (SPECTRUM EFFICIENCY) shrinks into one chip
 
-        private TMP_Text tileSortie;
-        private TMP_Text tileTime;
-        private TMP_Text tileFuel;
-        private TMP_Text tileDeaths;
-
-        private TMP_Text pilotMode;
-        private TMP_Text pilotStatus;
-        private TMP_Text pilotDeaths;
-        private TMP_Text pilotGeneration;
-        private TMP_Text runAirframeValue;
-        private TMP_Text runTimeValue;
-        private TMP_Text runFlightStatusValue;
-        private TMP_Text runFuelValue;
-        private TMP_Text runSortieScoreValue;
-        private TMP_Text runRankValue;
-        private TMP_Text runMissionScoreValue;
-        private TMP_Text pilotScoreValue;
-        private TMP_Text aceBonusValue;
-        private TMP_Text runNextPerkValue;
-        private TMP_Text earnedValue;
-        private TMP_Text spentValue;
-        private TMP_Text availableValue;
-        private Image[] budgetPips;
-        private GameObject[] budgetPipSlots;
-        private TMP_Text committedSkillsEmpty;
-        private readonly SqdGlyph[] committedIcons = new SqdGlyph[PerkCatalog.All.Length];
-        private readonly TMP_Text[] committedLabels = new TMP_Text[PerkCatalog.All.Length];
+        private PilotIdCard pilotIdentity;
+        private AvStatTile tileSortie, tileTime, tileFuel, tileDeaths;
+        private SqdQuote pilotBackground;
+        private SqdStatGrid sortieGrid, careerGrid;
+        private int sortieAirframe, sortieCondition, sortieLife, sortieMission;
+        private int careerPilot, careerBonus, careerNext, careerEarned, careerSpent, careerUnspent;
+        private SqdEmptyCard committedSkillsEmpty;
+        private AvSection committedSection;
+        private readonly AvChip[] committedChips = new AvChip[PerkCatalog.All.Length];
 
         private void ResetPilotPage()
         {
-            pilotPortraitImage = null;
-            pilotPortraitFallback = null;
-            pilotCallsign = pilotProfileTag = pilotName = pilotRankLine = pilotStatusLine = pilotBackground = null;
-            pilotEmblemImage = null;
-            pilotEmblemFallback = pilotSquadron = null;
-            pilotProgressFill = null;
-            pilotStateFill = null;
-            pilotStateBadge = pilotPhotoCaption = null;
+            pilotIdentity = null;
             tileSortie = tileTime = tileFuel = tileDeaths = null;
-            pilotMode = pilotStatus = pilotDeaths = pilotGeneration = null;
-            runAirframeValue = runTimeValue = runFlightStatusValue = runFuelValue = runSortieScoreValue = null;
-            runRankValue = runMissionScoreValue = pilotScoreValue = aceBonusValue = runNextPerkValue = null;
-            earnedValue = spentValue = availableValue = null;
-            budgetPips = null;
-            budgetPipSlots = null;
+            pilotBackground = null;
+            sortieGrid = careerGrid = null;
             committedSkillsEmpty = null;
-            Array.Clear(committedIcons, 0, committedIcons.Length);
-            Array.Clear(committedLabels, 0, committedLabels.Length);
+            committedSection = null;
+            Array.Clear(committedChips, 0, committedChips.Length);
         }
 
-        private const float PilotCardHeight = 150f;
-        private const float PilotTileHeight = 46f;
-        private const float PilotParaHeight = 42f;
-        private const float PilotChipPitch = 36f;
-        private const float PilotPipsHeight = 42f;
-
-        /// <summary>
-        /// The record body is two columns: the pilot's own service on the left, the career
-        /// ledger on the right. They are cut to one shared height, and each column spreads
-        /// its rows over it, so the lower half of the page can never draw a short column
-        /// beside a tall one or pool blank glass under the last field.
-        /// </summary>
-        private const float PilotRecordRegion = 200f;
-
-        private const float PilotServiceBlock = SheetHeadingHeight + PilotParaHeight;
-        /// <summary>Chips per row in the committed-skills block.</summary>
-        private const int PilotChipColumns = 6;
-        /// <summary>
-        /// Heading, the whole chip pool (icon over its label) and the 8px lead-in. The debug
-        /// bypass can light every grade, so the block reserves all four rows; a normal career
-        /// only ever fills two.
-        /// </summary>
-        private static readonly int PilotChipRows =
-            (PerkCatalog.All.Length + PilotChipColumns - 1) / PilotChipColumns;
-        private static readonly float PilotCommittedBlock =
-            SheetHeadingHeight + PilotChipRows * PilotChipPitch + 6f;
-
-        private void BuildPilotPage(RectTransform page, Rect body)
+        private void BuildPilotPage(AvFlow p)
         {
-            float content = PilotMinContentHeight();
-            RectTransform parent = AvScreen.Scroll(page, body, content, out body);
-            PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
-            float x = body.x + SpineInset;
-            float width = body.width - SpineInset;
-            float y = body.y;
+            p.Section(AvIcon.User, "PILOT RECORD", "LOCAL + HOST DATA");
+            pilotIdentity = p.Add(new PilotIdCard(p.Content));
 
-            y = DrawPageHeader(parent, x, y, width, "PILOT RECORD",
-                "LOCAL + HOST DATA", SqdMark.Recon);
+            tileSortie = new AvStatTile(p.Content, "SORTIE");
+            tileTime = new AvStatTile(p.Content, "MISSION");
+            tileFuel = new AvStatTile(p.Content, "FUEL");
+            tileDeaths = new AvStatTile(p.Content, "DEATHS");
+            p.Row(tileSortie, tileTime, tileFuel, tileDeaths);
 
-            // The spare glass is shared on the page's one rhythm first, then into the
-            // identity card — the block that can grow without opening a dead band.
-            float slack = Mathf.Max(0f, body.height - content);
-            float gap = SheetGap(body.height, content, 4);
-            float cardHeight = PilotCardHeight + Mathf.Max(0f, Mathf.Min(slack - (gap - SheetBaseGap) * 4f, 24f));
+            p.Section(AvIcon.Typography, "SERVICE NOTE", "LOCAL PROFILE");
+            pilotBackground = p.Add(new SqdQuote(p.Content));
+            pilotBackground.Set("No service background on file.");
 
-            y = BuildPilotIdentity(parent, x, y, width, cardHeight);
-            y -= gap;
+            p.Section(AvIcon.Plane, "CURRENT SORTIE", null);
+            sortieGrid = p.Add(new SqdStatGrid(p.Content));
+            sortieAirframe = sortieGrid.Add("AIRFRAME");
+            sortieCondition = sortieGrid.Add("CONDITION");
+            sortieLife = sortieGrid.Add("LIFE MODE");
+            sortieMission = sortieGrid.Add("MISSION SCORE");
 
-            float tileWidth = (width - AvTokens.Space2 * 3f) / 4f;
-            tileSortie = StatTile(parent, x, y, tileWidth, "SORTIE", "—");
-            tileTime = StatTile(parent, x + (tileWidth + AvTokens.Space2), y, tileWidth, "MISSION", "00:00");
-            tileFuel = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 2f, y, tileWidth, "FUEL", "—");
-            tileDeaths = StatTile(parent, x + (tileWidth + AvTokens.Space2) * 3f, y, tileWidth, "DEATHS", "0");
-            y -= PilotTileHeight + gap;
+            p.Section(AvIcon.ChartLine, "CAREER", "THIS PILOT");
+            careerGrid = p.Add(new SqdStatGrid(p.Content));
+            careerPilot = careerGrid.Add("PILOT SCORE");
+            careerBonus = careerGrid.Add("ACE BONUS");
+            careerNext = careerGrid.Add("NEXT PICK IN");
+            careerEarned = careerGrid.Add("PICKS EARNED");
+            careerSpent = careerGrid.Add("SPENT");
+            careerUnspent = careerGrid.Add("UNSPENT");
 
-            y = DrawSectionTitle(parent, x, y, width, "SERVICE NOTE", "LOCAL PROFILE", band: false);
-            pilotBackground = AvStyled.Label(parent, new Rect(x, y, width, PilotParaHeight),
-                "No service background on file.", "row-sub");
-            // DrawSectionTitle already consumed the heading height.
-            y -= PilotParaHeight + gap;
-
-            // ---- Record body: service on the left, career ledger on the right -----------
-            float gutter = AvTokens.Space3;
-            float leftWidth = Mathf.Floor((width - gutter) * 0.52f);
-            float rightX = x + leftWidth + gutter;
-            float rightWidth = width - leftWidth - gutter;
-            float leftPitch = (PilotRecordRegion - 2f * SheetHeadingHeight - AvTokens.Space2) / 9f;
-            float rightPitch = (PilotRecordRegion - SheetHeadingHeight - PilotPipsHeight) / 8f;
-
-            float leftY = y;
-            leftY = DrawSectionTitle(parent, x, leftY, leftWidth, "CURRENT LIFE", null, band: false);
-            pilotMode = Field(parent, leftPitch, x, ref leftY, leftWidth, "LIFE MODE");
-            pilotStatus = Field(parent, leftPitch, x, ref leftY, leftWidth, "STATUS");
-            pilotDeaths = Field(parent, leftPitch, x, ref leftY, leftWidth, "DEATHS");
-            pilotGeneration = Field(parent, leftPitch, x, ref leftY, leftWidth, "GENERATION");
-            leftY -= AvTokens.Space2;
-            // Column-width headings: "SORTIE PERFORMANCE" and "CAREER STANDING" at the
-            // this width would ellipsise in a half-width column, so the short names
-            // carry the same meaning and the fields underneath say the rest.
-            leftY = DrawSectionTitle(parent, x, leftY, leftWidth, "SORTIE", null, band: false);
-            runAirframeValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "AIRFRAME");
-            runTimeValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "ELAPSED");
-            runFlightStatusValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "CONDITION");
-            runFuelValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "FUEL");
-            runSortieScoreValue = Field(parent, leftPitch, x, ref leftY, leftWidth, "SORTIE SCORE");
-
-            float rightY = DrawSectionTitle(parent, rightX, y, rightWidth, "CAREER TOTALS", null, band: true);
-            runRankValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "RANK");
-            runMissionScoreValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "MISSION");
-            pilotScoreValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "THIS PILOT");
-            aceBonusValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "ACE BONUS");
-            runNextPerkValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "NEXT PICK");
-            earnedValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "EARNED");
-            spentValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "SPENT");
-            availableValue = Field(parent, rightPitch, rightX, ref rightY, rightWidth, "UNSPENT");
-
-            budgetPips = new Image[MaximumBudgetPips];
-            budgetPipSlots = new GameObject[MaximumBudgetPips];
-            for (int i = 0; i < MaximumBudgetPips; i++)
+            committedSection = p.Section(AvIcon.Star, "COMMITTED SKILLS", null);
+            committedSkillsEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Star, "NO SKILLS COMMITTED",
+                "Spend a pick on the qualification board to fly with a tool or a passive grade.",
+                "OPEN SKILLS", () => console.SetPage(TabSkills), AvIcon.ChevronRight));
+            AvCellGrid grid = p.Grid(PilotChipColumns);
+            for (int i = 0; i < committedChips.Length; i++)
             {
-                var slot = new GameObject("BudgetPoint_" + i, typeof(RectTransform));
-                var rect = (RectTransform)slot.transform;
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(rightX + (i % 10) * 18f, rightY - 2f - (i / 10) * 14f, 11f, 11f));
-                AvKit.Outline(rect, new Rect(0f, 0f, 11f, 11f), AvTheme.Hairline);
-                budgetPips[i] = AvKit.Panel(rect, new Rect(2f, -2f, 7f, 7f), Color.clear, AvSprites.Led);
-                budgetPipSlots[i] = slot;
+                committedChips[i] = new AvChip(p.Content);
+                committedChips[i].SetShown(false);
+                grid.Add(committedChips[i]);
             }
-            // Three pip states, three captions: two greens a shade apart are not a key.
-            BudgetKey(parent, rightX, rightY - 30f, AvTheme.Dim, "SPENT");
-            BudgetKey(parent, rightX + 64f, rightY - 30f, AvTheme.Accent, "UNSPENT");
-            BudgetKey(parent, rightX + 132f, rightY - 30f, AvTheme.Hairline, "OPEN");
-            y -= PilotRecordRegion + gap;
-
-            y = DrawSectionTitle(parent, x, y, width, "COMMITTED SKILLS", null, band: false);
-            committedSkillsEmpty = AvStyled.Label(parent, new Rect(x, y, width, 28f),
-                "No skills committed yet. Open SKILLS to choose one.", "row-sub");
-            float chipWidth = (width - AvTokens.Space2 * (PilotChipColumns - 1)) / PilotChipColumns;
-            for (int i = 0; i < committedIcons.Length; i++)
-            {
-                float chipX = x + (chipWidth + AvTokens.Space2) * (i % PilotChipColumns);
-                float chipY = y - 8f - (i / PilotChipColumns) * PilotChipPitch;
-                float iconX = chipX + (chipWidth - 18f) * 0.5f;
-                committedIcons[i] = SqdGlyph.Create(parent, new Rect(iconX, chipY, 18f, 18f), SqdMarks.FromKey("combat"));
-                committedLabels[i] = Fitted(PlainLabel(parent,
-                    new Rect(chipX - 2f, chipY - 18f, chipWidth + 4f, 16f), "", "row-sub"));
-                // This width would ellipsise a word like SURVEILLANCE in a chip
-                // this narrow; the tile is the mark, so the caption only has to name it.
-                committedLabels[i].characterSpacing = 0f;
-                committedLabels[i].alignment = TextAlignmentOptions.Center;
-                committedIcons[i].gameObject.SetActive(false);
-                committedLabels[i].gameObject.SetActive(false);
-            }
-        }
-
-        /// <summary>One budget-pip key: a swatch and its state word, so the pips are a key and not a shade.</summary>
-        private static void BudgetKey(RectTransform parent, float x, float y, Color colour, string word)
-        {
-            AvKit.Panel(parent, new Rect(x, y + 1f, 9f, 9f), colour, AvSprites.Led);
-            TMP_Text label = PlainLabel(parent, new Rect(x + 12f, y, 64f, 12f), word, "section-title-note");
-            label.enableWordWrapping = false;
-        }
-
-        /// <summary>
-        /// The content floor the pilot page declares: identity, tiles, service block, the
-        /// record body and the full committed-skill pool. The pool is reserved whole because
-        /// the debug bypass lights every grade, so no committed chip is ever drawn outside
-        /// the height the page scrolled to.
-        /// </summary>
-        private static float PilotMinContentHeight() =>
-            SheetHeaderHeight + PilotCardHeight + PilotTileHeight + PilotServiceBlock +
-            PilotRecordRegion + PilotCommittedBlock + SheetBaseGap * 4f;
-
-        /// <summary>The pilot identity card: portrait, identity, readiness and squadron mark.</summary>
-        private float BuildPilotIdentity(RectTransform parent, float x, float y, float width, float cardHeight)
-        {
-            AvKit.Panel(parent, new Rect(x, y, width, cardHeight), AvTheme.SurfaceInert);
-            AvKit.Outline(parent, new Rect(x, y, width, cardHeight), AvTheme.Frame.WithAlpha(0.7f));
-            AvKit.Rule(parent, new Rect(x, y, 3f, cardHeight), AvTheme.RailInfo);
-
-            Rect portraitFrame = new Rect(x + 10f, y - 8f, 82f, cardHeight - 16f);
-            AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
-            AvKit.Outline(parent, portraitFrame, AvTheme.Frame);
-            pilotPortraitFallback = VisualPlaceholder(parent,
-                new Rect(portraitFrame.x + 12f, portraitFrame.y - 30f, portraitFrame.width - 24f, 46f));
-            pilotPortraitImage = AvKit.Panel(parent,
-                new Rect(portraitFrame.x + 3f, portraitFrame.y - 3f, portraitFrame.width - 6f, portraitFrame.height - 6f),
-                Color.white);
-            pilotPortraitImage.type = Image.Type.Simple;
-            pilotPortraitImage.preserveAspect = true;
-            pilotPortraitImage.raycastTarget = false;
-            pilotPortraitImage.enabled = false;
-            AvKit.Panel(parent, new Rect(portraitFrame.x + 3f, portraitFrame.y - portraitFrame.height + 19f,
-                portraitFrame.width - 6f, 16f), AvTheme.Ground.WithAlpha(0.88f));
-            pilotPhotoCaption = PlainLabel(parent,
-                new Rect(portraitFrame.x + 4f, portraitFrame.y - portraitFrame.height + 17f,
-                         portraitFrame.width - 8f, 14f),
-                "PILOT FILE", "photo-cap");
-            pilotPhotoCaption.alignment = TextAlignmentOptions.Center;
-
-            float textX = portraitFrame.x + portraitFrame.width + 12f;
-            const float emblemWidth = 58f;
-            float textWidth = width - (textX - x) - emblemWidth - 12f;
-            pilotProfileTag = PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 16f), "", "section-title-note");
-            pilotCallsign = PlainLabel(parent, new Rect(textX, y - 28f, textWidth, 24f), "PILOT RECORD PENDING", "section-title");
-            pilotName = PlainLabel(parent, new Rect(textX, y - 54f, textWidth, 16f), "", "kv-value");
-            pilotName.alignment = TextAlignmentOptions.MidlineLeft;
-            pilotRankLine = PlainLabel(parent, new Rect(textX, y - 73f, textWidth, 15f), "", "row-sub");
-            // The title suffix grows and shrinks with the pilot's career score, so this line
-            // shrinks to fit instead of overflowing the card.
-            pilotRankLine.enableAutoSizing = true;
-            pilotRankLine.fontSizeMin = AvTokens.FontMicro;
-            pilotRankLine.fontSizeMax = pilotRankLine.fontSize;
-            pilotStatusLine = PlainLabel(parent, new Rect(textX, y - 92f, textWidth, 15f), "", "row-sub");
-            pilotProgressFill = AvKit.ProgressBar(parent,
-                new Rect(textX, y - cardHeight + 36f, textWidth, 5f), 0f, AvTheme.RailReady);
-
-            float emblemX = x + width - emblemWidth + 2f;
-            pilotEmblemFallback = PlainLabel(parent, new Rect(emblemX, y - 30f, 48f, 20f), "NO ART", "row-sub");
-            pilotEmblemFallback.alignment = TextAlignmentOptions.Center;
-            pilotEmblemImage = AvKit.Panel(parent, new Rect(emblemX, y - 8f, 48f, 48f), Color.white);
-            pilotEmblemImage.type = Image.Type.Simple;
-            pilotEmblemImage.preserveAspect = true;
-            pilotEmblemImage.raycastTarget = false;
-            pilotEmblemImage.enabled = false;
-            // Two lines: a 24-character squadron name does not fit one 78px line, and the
-            // name is the reader's own, so it shrinks and wraps rather than being cut.
-            pilotSquadron = PlainLabel(parent, new Rect(emblemX - 8f, y - 62f, 62f, 36f), "", "row-sub");
-            pilotSquadron.alignment = TextAlignmentOptions.Center;
-            pilotSquadron.enableAutoSizing = true;
-            pilotSquadron.fontSizeMin = AvTokens.FontMicro;
-            pilotSquadron.fontSizeMax = pilotSquadron.fontSize;
-
-            (_, pilotStateFill, pilotStateBadge) = StatusBadge(
-                parent, new Rect(x + width - 88f, y - cardHeight + 8f, 84f, 18f), "ACTIVE", "ok");
-            return y - cardHeight;
-        }
-
-        private static TMP_Text StatTile(
-            RectTransform parent, float x, float y, float width, string caption, string value)
-        {
-            AvKit.Panel(parent, new Rect(x, y, width, PilotTileHeight), AvTheme.SurfaceInert);
-            AvKit.Rule(parent, new Rect(x, y, width, 2f), AvTheme.RailInfo.WithAlpha(0.6f));
-            PlainLabel(parent, new Rect(x + 6f, y - 3f, width - 12f, 12f), caption, "section-title-note");
-            TMP_Text label = PlainLabel(parent, new Rect(x + 6f, y - 19f, width - 12f, 24f), value, "row-main");
-            label.enableAutoSizing = true;
-            label.fontSizeMin = AvTokens.FontMicro;
-            label.fontSizeMax = label.fontSize;
-            label.overflowMode = TextOverflowModes.Overflow;
-            return label;
         }
 
         // ---- PILOT refresh ---------------------------------------------------------------
 
         private void RefreshPilotPage(bool bypass, int pilotScore, int bonus)
         {
-            if (runAirframeValue == null) return;
+            if (pilotIdentity == null) return;
             PilotView pilot = squad != null ? squad.Pilot : default;
             bool profile = hasLocalProfile && !string.IsNullOrEmpty(localProfile.Callsign);
             string callsign = profile ? localProfile.Callsign : pilot.Callsign;
@@ -323,116 +92,74 @@ namespace BoscaliSummer.Features.Progression.Presentation
             string background = profile && !string.IsNullOrEmpty(localProfile.Background)
                 ? localProfile.Background : pilot.Background;
 
-            pilotCallsign.text = string.IsNullOrEmpty(callsign) ? "PILOT RECORD PENDING" : callsign;
-            pilotProfileTag.text = profile ? "LOCAL PROFILE" : "PILOT DOSSIER";
-            pilotProfileTag.color = profile ? AvTheme.Accent : AvTheme.Dim;
-            pilotName.text = string.IsNullOrEmpty(name) ? "—" : name;
-            string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
-            pilotRankLine.text = "RANK " + Progress.Rank + "   ·   GENERATION " + pilot.Generation +
-                                  "   ·   " + pilotTitle;
-            pilotStatusLine.text = pilot.Status;
-            bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
-            pilotStatusLine.color = kia ? AvTheme.Alert : AvTheme.RailReady;
-            pilotBackground.text = string.IsNullOrEmpty(background) ? "No service background on file." : background;
-
-            if (pilotPhotoCaption != null)
-            {
-                pilotPhotoCaption.text = string.IsNullOrEmpty(callsign)
-                    ? "PILOT FILE" : callsign.ToUpperInvariant();
-            }
-            if (pilotStateBadge != null)
-            {
-                PaintStatusBadge(pilotStateFill, pilotStateBadge,
-                    bypass ? "warn" : kia ? "bad" : "ok",
-                    bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
-            }
-
-            SetPortrait(pilotPortraitImage, pilotPortraitFallback, PlayerPortrait(name, callsign));
-
-            if (pilotEmblemImage != null)
-            {
-                pilotEmblemImage.sprite = emblemSprite;
-                pilotEmblemImage.enabled = emblemSprite != null;
-                pilotEmblemFallback.gameObject.SetActive(emblemSprite == null);
-                pilotSquadron.text = string.IsNullOrEmpty(squadronName) ? "NO SQUADRON NAME" : squadronName;
-            }
-
             IProgressionView view = Progress;
+            Player localPlayer;
             Aircraft playerAircraft = null;
-            Player localPlayer = null;
             if (GameManager.GetLocalPlayer<Player>(out localPlayer) && localPlayer != null)
                 playerAircraft = localPlayer.Aircraft;
+
+            pilotBackground.Set(string.IsNullOrEmpty(background) ? "No service background on file." : background);
+            string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
+            bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
+            pilotIdentity.Set(
+                profile ? "LOCAL PROFILE" : "PILOT DOSSIER",
+                string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
+                string.IsNullOrEmpty(name) ? "—" : name,
+                AvNum.Thousands(Progress.Rank), pilotTitle,
+                "GEN " + AvNum.Thousands(pilot.Generation),
+                string.IsNullOrEmpty(pilot.Status) ? "NO STATUS ON FILE" : pilot.Status,
+                kia ? AvState.Danger : playerAircraft != null ? AvState.Ready : AvState.Info,
+                PlayerPortrait(name, callsign), emblemSprite,
+                string.IsNullOrEmpty(squadronName) ? "NO SQUADRON NAME" : squadronName,
+                bypass ? AvState.Caution : kia ? AvState.Danger : AvState.Ready,
+                bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
 
             if (playerAircraft != null)
             {
                 string airframe = playerAircraft.definition != null
                     ? playerAircraft.definition.unitName : playerAircraft.unitName;
-                runAirframeValue.text = string.IsNullOrEmpty(airframe) ? "AIRCRAFT" : airframe.ToUpperInvariant();
-                runSortieScoreValue.text = playerAircraft.sortieScore.ToString("N0");
-                runFlightStatusValue.text = playerAircraft.disabled ? "DISABLED"
-                    : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE";
-                runFlightStatusValue.color = playerAircraft.disabled ? AvTheme.Alert : AvTheme.RailReady;
-                runFuelValue.text = $"{playerAircraft.fuelLevel * 100f:0}%";
-                if (tileFuel != null) tileFuel.text = $"{playerAircraft.fuelLevel * 100f:0}%";
-                if (tileSortie != null) tileSortie.text = playerAircraft.sortieScore.ToString("N0");
+                sortieGrid.Set(sortieAirframe, string.IsNullOrEmpty(airframe) ? "AIRCRAFT" : airframe.ToUpperInvariant());
+                bool disabled = playerAircraft.disabled;
+                sortieGrid.Set(sortieCondition, disabled ? "DISABLED" : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE",
+                    disabled ? AvState.Danger : AvState.Ready);
+                float fuel = Mathf.Clamp01(playerAircraft.fuelLevel);
+                tileFuel.Set(AvNum.Percent(fuel), fuel <= .15f ? AvState.Caution : AvState.Inert);
+                tileSortie.Set(AvNum.Thousands(playerAircraft.sortieScore));
             }
             else
             {
-                runAirframeValue.text = "NO AIRCRAFT";
-                runSortieScoreValue.text = "—";
-                runFlightStatusValue.text = "GROUND";
-                runFlightStatusValue.color = AvTheme.Dim;
-                runFuelValue.text = "—";
-                if (tileFuel != null) tileFuel.text = "—";
-                if (tileSortie != null) tileSortie.text = "—";
+                sortieGrid.Set(sortieAirframe, "NO AIRCRAFT");
+                sortieGrid.Set(sortieCondition, "GROUND", AvState.Inert);
+                tileFuel.Set(null);
+                tileSortie.Set(null);
             }
 
             int minutes = Mathf.FloorToInt(Time.timeSinceLevelLoad / 60f);
             int seconds = Mathf.FloorToInt(Time.timeSinceLevelLoad % 60f);
-            runTimeValue.text = $"{minutes:00}:{seconds:00}";
-            if (tileTime != null) tileTime.text = runTimeValue.text;
+            tileTime.Set(AvNum.Clock(minutes * 60 + seconds));
+            tileDeaths.Set(AvNum.Thousands(pilot.Deaths), pilot.Deaths > 0 ? AvState.Caution : AvState.Inert);
 
-            pilotMode.text = pilot.Respawns ? "RESPAWNING" : "ONE LIFE";
-            pilotMode.color = pilot.Respawns ? AvTheme.RailInfo : AvTheme.RailCaution;
-            pilotStatus.text = pilot.Status;
-            pilotDeaths.text = pilot.Deaths.ToString();
-            pilotGeneration.text = pilot.Generation.ToString();
-            if (tileDeaths != null) tileDeaths.text = pilot.Deaths.ToString();
+            sortieGrid.Set(sortieLife, pilot.Respawns ? "RESPAWNING" : "ONE LIFE",
+                pilot.Respawns ? AvState.Info : AvState.Caution);
+            sortieGrid.Set(sortieMission, AvNum.Thousands(view.Score));
 
-            runRankValue.text = view.Rank.ToString();
-            runMissionScoreValue.text = view.Score.ToString("N0");
-            pilotScoreValue.text = pilotScore.ToString("N0");
-            aceBonusValue.text = "+" + bonus + "P";
+            careerGrid.Set(careerPilot, AvNum.Thousands(pilotScore));
+            careerGrid.Set(careerBonus, "+" + AvNum.Thousands(bonus) + "P");
 
             int perPoint = Math.Max(1, view.ScorePerPoint);
             int toNext = perPoint - (pilotScore % perPoint);
-            runNextPerkValue.text = bypass ? "BYPASS ACTIVE"
-                : view.EarnedPoints >= view.MaximumPoints ? "BUDGET COMPLETE" : toNext.ToString("N0");
-            if (pilotProgressFill != null)
-                pilotProgressFill.fillAmount = bypass || view.EarnedPoints >= view.MaximumPoints
-                    ? 1f : (pilotScore % perPoint) / (float)perPoint;
+            careerGrid.Set(careerNext, bypass ? "BYPASS"
+                : view.EarnedPoints >= view.MaximumPoints ? "COMPLETE" : AvNum.Thousands(toNext));
 
             int earned = view.EarnedPoints;
             int available = view.AvailablePoints;
             int spent = Math.Max(0, earned - available);
             int ceiling = Math.Max(1, view.MaximumPoints);
 
-            earnedValue.text = bypass ? "BYPASS" : $"{earned} / {ceiling}";
-            spentValue.text = bypass ? "—" : spent.ToString();
-            availableValue.text = bypass ? "UNLIMITED" : available.ToString();
-            availableValue.color = !bypass && available > 0 ? AvTheme.RailReady : AvTheme.TextPrimary;
-
-            if (budgetPips != null)
-            {
-                for (int i = 0; i < budgetPips.Length; i++)
-                {
-                    budgetPipSlots[i].SetActive(i < ceiling);
-                    budgetPips[i].color = bypass ? AvTheme.Accent
-                                        : i < spent ? AvTheme.Dim
-                                        : i < earned ? AvTheme.Accent
-                                        : Color.clear;
-                }
-            }
+            careerGrid.Set(careerEarned, bypass ? "BYPASS" : earned + "/" + ceiling);
+            careerGrid.Set(careerSpent, bypass ? null : AvNum.Thousands(spent));
+            careerGrid.Set(careerUnspent, bypass ? "UNLIMITED" : AvNum.Thousands(available),
+                !bypass && available > 0 ? AvState.Ready : AvState.Inert);
 
             RefreshCommittedSkills(view.GetPerks());
         }
@@ -450,27 +177,160 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     unlocked = perks[j].Unlocked;
                     break;
                 }
-                if (!unlocked || slot >= committedIcons.Length) continue;
+                if (!unlocked || slot >= committedChips.Length) continue;
 
-                committedIcons[slot].gameObject.SetActive(true);
-                committedLabels[slot].gameObject.SetActive(true);
-                committedIcons[slot].Mark = SqdMarks.FromKey(definition.Icon);
-                committedIcons[slot].SetVerticesDirty();
-                committedIcons[slot].color = definition.Capability == null ? AvTheme.RailReady : AvTheme.RailInfo;
-                committedLabels[slot].text = definition.Capability == null
-                    ? definition.Name.Split(' ')[0].ToUpperInvariant()
-                    : PerkCatalog.CodeOf(definition);
+                committedChips[slot].SetShown(true);
+                string word = definition.IsTool
+                    ? definition.Lane + " TOOL"
+                    : definition.Name.ToUpperInvariant();
+                committedChips[slot].Set(word, definition.IsTool ? AvState.Info : AvState.Ready);
                 slot++;
             }
 
-            for (int i = slot; i < committedIcons.Length; i++)
+            for (int i = slot; i < committedChips.Length; i++) committedChips[i].SetShown(false);
+            committedSkillsEmpty?.SetShown(slot == 0);
+            committedSection?.SetCaption(slot == 0 ? null : AvNum.Thousands(slot) + " HELD");
+        }
+
+        /// <summary>
+        /// The pilot's ID card: portrait at left, callsign in display type, name, rank insignia with
+        /// its title, generation, a status line with its glyph, and the squadron emblem at right.
+        /// Absolute-positioned (not a vertical <see cref="AvFlow"/>) because its columns (photo / text /
+        /// emblem) have unrelated natural widths; every text has a fixed slot so none can run into
+        /// another.
+        /// </summary>
+        private sealed class PilotIdCard : AvPart
+        {
+            private const float CardH = 156f, StripH = 26f, PortraitW = 92f, EmblemW = 64f, Pad = 10f;
+            private readonly AvFrame frame, rankFrame;
+            private readonly Image strip;
+            private readonly AvPortrait portrait, emblem;
+            private readonly TMP_Text profileTag, callsignText, nameLine, rankCaption, rankNumber, rankTitle,
+                generationText, statusText, squadronText;
+            private TMP_Text statusIcon;
+            private readonly AvChip stateChip;
+            private AvState status = AvState.Info;
+            private AvIcon statusGlyph = AvIcon.None;
+
+            public PilotIdCard(RectTransform parent)
             {
-                committedIcons[i].gameObject.SetActive(false);
-                committedLabels[i].gameObject.SetActive(false);
+                Rect = AvLay.Child(parent, "PilotIdentity");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                AvLay.Fill(frame.rectTransform);
+                frame.Bracket = 6f;
+                strip = AvLay.Solid(Rect, "Rule", Color.clear);
+
+                profileTag = AvText.Make(Rect, "ProfileTag", AvTextRole.Micro);
+                AvText.Fit(profileTag, false);
+                stateChip = new AvChip(Rect);
+
+                portrait = new AvPortrait(Rect, "Pilot");
+                callsignText = AvText.Make(Rect, "Callsign", AvTextRole.Display);
+                AvText.Fit(callsignText, false);
+                nameLine = AvText.Make(Rect, "Name", AvTextRole.Prose);
+                AvText.Fit(nameLine, false);
+
+                rankFrame = AvFrame.Add(Rect, "RankFrame", AvChamfer.Diagonal(5f));
+                rankCaption = AvText.Make(Rect, "RankCaption", AvTextRole.Micro, "RANK", TextAlignmentOptions.Center);
+                AvText.Fit(rankCaption, false);
+                rankNumber = AvText.Make(Rect, "RankNumber", AvTextRole.Display, "", TextAlignmentOptions.Center);
+                AvText.Fit(rankNumber, false);
+                rankTitle = AvText.Make(Rect, "RankTitle", AvTextRole.Head);
+                AvText.Fit(rankTitle, false);
+                generationText = AvText.Make(Rect, "Generation", AvTextRole.DataSmall);
+                AvText.Fit(generationText, false);
+
+                statusIcon = AvIcons.Make(Rect, AvIcon.Circle, AvGridTokens.IconInline, Color.white);
+                statusText = AvText.Make(Rect, "Status", AvTextRole.ProseSmall);
+                AvText.Fit(statusText, false);
+
+                emblem = new AvPortrait(Rect, "Emblem", "NO ART");
+                squadronText = AvText.Make(Rect, "Squadron", AvTextRole.Micro, "", TextAlignmentOptions.Top, true);
+                AvText.Fit(squadronText, true);
+
+                Restyle();
             }
 
-            if (committedSkillsEmpty != null)
-                committedSkillsEmpty.gameObject.SetActive(slot == 0);
+            public void Set(string profileTagText, string callsign, string name, string rank, string title,
+                string generation, string statusLine, AvState statusState, Sprite photo, Sprite emblemSprite,
+                string squadron, AvState state, string stateWord)
+            {
+                profileTag.text = profileTagText ?? "";
+                callsignText.text = callsign ?? "";
+                nameLine.text = name ?? "";
+                rankNumber.text = rank ?? "";
+                rankTitle.text = title ?? "";
+                generationText.text = generation ?? "";
+                statusText.text = statusLine ?? "";
+                if (statusState != status || statusGlyph == AvIcon.None)
+                {
+                    status = statusState;
+                    statusGlyph = SqdTone.Glyph(statusState);
+                    AvIcons.Set(statusIcon, statusGlyph, AvGridTokens.IconInline);
+                    Restyle();
+                }
+                portrait.Set(photo);
+                emblem.Set(emblemSprite);
+                squadronText.text = squadron ?? "";
+                stateChip.Set(stateWord, state);
+            }
+
+            public override float Measure(float width) => CardH;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(profileTag.rectTransform, 12f, 6f, s.W - 130f, 14f);
+                stateChip.Place(new AvSlot(s.W - Pad - 96f, 2f, 96f, AvGridTokens.ChipStrip));
+                AvLay.Place(strip.rectTransform, Pad, StripH, s.W - 2f * Pad, 1f);
+
+                float top = StripH + 8f;
+                portrait.Place(new AvSlot(Pad, top, PortraitW, s.H - top - Pad));
+
+                float emblemX = s.W - Pad - EmblemW;
+                emblem.Place(new AvSlot(emblemX, top, EmblemW, EmblemW));
+                AvLay.Place(squadronText.rectTransform, emblemX - 8f, top + EmblemW + 4f, EmblemW + 16f,
+                    Mathf.Max(0f, s.H - top - EmblemW - Pad - 4f));
+
+                float x = Pad + PortraitW + 12f;
+                float w = emblemX - 12f - x;
+                AvLay.Place(callsignText.rectTransform, x, top - 2f, w, 30f);
+                AvLay.Place(nameLine.rectTransform, x, top + 30f, w, 18f);
+
+                float rankY = top + 54f;
+                AvLay.Place(rankFrame.rectTransform, x, rankY, 50f, 48f);
+                AvLay.Place(rankCaption.rectTransform, x, rankY + 3f, 50f, 13f);
+                AvLay.Place(rankNumber.rectTransform, x, rankY + 15f, 50f, 30f);
+                float tx = x + 60f, tw = Mathf.Max(0f, w - 60f);
+                AvLay.Place(rankTitle.rectTransform, tx, rankY, tw, 18f);
+                AvLay.Place(generationText.rectTransform, tx, rankY + 17f, tw, 16f);
+                AvLay.Place(statusIcon.rectTransform, tx, rankY + 33f, 14f, 14f);
+                AvLay.Place(statusText.rectTransform, tx + 18f, rankY + 32f, Mathf.Max(0f, tw - 18f), 16f);
+            }
+
+            public override void Restyle()
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card raised");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised),
+                    AvStyleHost.Resolve(c.Border, AvTheme.Frame));
+                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                AvStyle inert = AvStyleHost.FuiStyle("card inert");
+                rankFrame.Paint(AvStyleHost.Resolve(inert.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(inert.Border, AvTheme.Hairline));
+                strip.color = AvTheme.Hairline;
+                profileTag.color = SqdTone.Caption;
+                callsignText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
+                nameLine.color = SqdTone.Ink;
+                rankCaption.color = SqdTone.Caption;
+                rankNumber.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
+                rankTitle.color = SqdTone.Key;
+                generationText.color = SqdTone.Dim;
+                statusText.color = SqdTone.Text(status);
+                if (statusIcon != null) statusIcon.color = SqdTone.Rail(status);
+                squadronText.color = SqdTone.Caption;
+                portrait.Restyle();
+                emblem.Restyle();
+                stateChip.Restyle();
+            }
         }
     }
 }

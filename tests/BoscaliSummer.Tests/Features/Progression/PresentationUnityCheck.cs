@@ -19,7 +19,7 @@ public static class PresentationUnityCheck
 {
     private const BindingFlags All = BindingFlags.Instance | BindingFlags.Static |
         BindingFlags.Public | BindingFlags.NonPublic;
-    private static readonly Assembly Mod = typeof(AvScreen).Assembly;
+    private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static int assertions;
     private static int captures;
 
@@ -29,9 +29,7 @@ public static class PresentationUnityCheck
 
     public static void RunSqdOnly() => Execute(false, true);
 
-    public static void RunMfdOnly() => Execute(false, false, true);
-
-    private static void Execute(bool eventAlertOnly, bool sqdOnly, bool mfdOnly = false)
+    private static void Execute(bool eventAlertOnly, bool sqdOnly)
     {
         try
         {
@@ -39,7 +37,7 @@ public static class PresentationUnityCheck
             {
                 var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
                 AssetDatabase.importPackageCompleted += _ =>
-                    EditorApplication.delayCall += () => Execute(eventAlertOnly, sqdOnly, mfdOnly);
+                    EditorApplication.delayCall += () => Execute(eventAlertOnly, sqdOnly);
                 AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath,
                     "Package Resources/TMP Essential Resources.unitypackage"), false);
                 return;
@@ -53,23 +51,16 @@ public static class PresentationUnityCheck
                 pathArguments[i] = pathParameters[i].HasDefaultValue ? pathParameters[i].DefaultValue : null;
             setPaths.Invoke(null, pathArguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
             new GameObject("Events", typeof(EventSystem));
             if (!eventAlertOnly)
             {
                 foreach (float height in new[] { 420f, 596f, 896f })
                 {
                     RenderSqd(height);
-                    if (!sqdOnly)
-                    {
-                        RenderRadio(height);
-                        RenderEvents(height);
-                        RenderWeather(height);
-                    }
+                    // The EVN field archive has its own harness (Features/Events/Run-EventsUnityCheck.ps1).
                 }
             }
             if (!sqdOnly) RenderEventAlert();
-            if (!eventAlertOnly && !sqdOnly && !mfdOnly) RenderTargetBoard();
             File.WriteAllText("result.txt", "PASS: " + captures +
                 " production-builder renders; " + assertions +
                 " compact scroll/readability assertions. Offline fixture text only; no live game, input, audio or networking claim.");
@@ -86,13 +77,17 @@ public static class PresentationUnityCheck
     private static void RenderSqd(float height)
     {
         GameObject canvasObject = MakeCanvas("SqdPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "PILOT",
-            new[] { "PILOT", "SKILLS", "ACES", "STUDIO", "PLANE" },
-            new[] { new[] { "PILOT SCORE", "THIS PILOT" }, new[] { "QUAL. PICKS", "UNSPENT" } },
-            3, 480f, height, _ => { });
-        SeedShell(shell, "PERSONNEL FILE / PILOT");
-        shell.Metrics[0].Set("2,450", "NEXT IN 550", .72f, AvTheme.RailReady);
-        shell.Metrics[1].Set("2 PICKS", "4/7 EARNED", .57f, AvTheme.RailInfo);
+        AvConsole console = AvConsole.Build(root, "PILOT", "SQUADRON DOSSIER", 5, 480f, height);
+        AvChip[] chips = console.Chips(3);
+        AvMetric[] metrics = console.Metrics("PILOT SCORE", "QUAL PICKS");
+        console.Tabs((AvIcon.User, "PILOT"), (AvIcon.Star, "SKILLS"), (AvIcon.Skull, "ACES"),
+            (AvIcon.Pencil, "STUDIO"), (AvIcon.Plane, "PLANE"));
+        chips[0].Set("PERSONNEL FILE", AvState.Ready);
+        chips[1].Set("RANK 3", AvState.Info);
+        chips[2].Set("2 PICKS", AvState.Ready);
+        metrics[0].Set("2,450", "NEXT IN 550", .72f, AvState.Ready);
+        metrics[1].Set("2 PICKS", "4/7 EARNED · +0", .57f, AvState.Ready);
+        console.Footer.Set("Offline layout check · production builder · no live game state.");
 
         var panelObject = new GameObject("SqdMfdPanel");
         object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Progression.Presentation.SqdMfdPanel"));
@@ -105,13 +100,12 @@ public static class PresentationUnityCheck
         Call(manager, "Configure", settings, null, null, null);
         Set(manager, "localRank", 3);
         Set(manager, "localScore", 2450);
-        Set(manager, "localEarnedPoints", 4);
+        Set(manager, "localEarnedPoints", 0);
         Set(manager, "localMaximumPoints", 7);
         Set(manager, "localScorePerPoint", 750);
         Set(panel, "progression", manager);
         Set(panel, "settings", settings);
-        Set(panel, "shell", shell);
-        Call(panel, "PrepareShell");
+        Set(panel, "console", console);
 
         Type wingLink = TypeOf("BoscaliSummer.Runtime.WingLink");
         SetStatic(wingLink, "studioResolved", true);
@@ -119,402 +113,348 @@ public static class PresentationUnityCheck
 
         string[] methods = { "BuildPilotPage", "BuildSkillsPage", "BuildWingsPage", "BuildStudioPage", "BuildPlanePage" };
         string[] names = { "pilot", "skills", "wings", "studio", "plane" };
-        for (int i = 0; i < methods.Length; i++)
-        {
-            RectTransform page = (RectTransform)shell.CreatePage(i, names[i]).transform;
-            Call(panel, methods[i], page, shell.Body);
-        }
-        SeedSqd(panel);
-        ValidateSkillRows(panel);
+        for (int i = 0; i < methods.Length; i++) Call(panel, methods[i], console.Page(i));
+        console.Finish();
+        // Content binds AFTER Finish and the page re-lays through the ticker, exactly as in the game.
+        Settle(console);
 
-        for (int page = 0; page < names.Length; page++)
-        {
-            shell.SetPage(page);
-            shell.DataBar.State.text = "PERSONNEL FILE / " + names[page].ToUpperInvariant();
-            ValidateReadable(root, "SQD " + names[page]);
-            CaptureScrolled(canvasObject, height, "sqd-" + names[page] + "-" + height);
-            if (page == 4)
-            {
-                SeedPlane(panel);
-                ValidateReadable(root, "SQD plane populated");
-                CaptureScrolled(canvasObject, height, "sqd-plane-populated-" + height);
-            }
-        }
+        // Hover help survives the conversion: skills confirm (1), studio buttons, rows and fields, plane pager (1).
+        int helpTips = root.GetComponentsInChildren<AvHelpTip>(true).Length;
+        Check(helpTips >= 14, "SQD pages must carry their hover help, found " + helpTips);
+
+        var portrait = FixtureSprite(72, 90, new Color(.10f, .18f, .16f), new Color(.02f, .05f, .05f));
+        var crest = FixtureSprite(64, 64, new Color(.16f, .12f, .05f), new Color(.05f, .04f, .02f));
+        object perksEmpty = Perks(manager, 0u, 0);
+
+        // ---- PILOT -----------------------------------------------------------------------
+        console.SetPage(0);
+        SeedPilot(panel, false, portrait, crest);
+        Call(panel, "RefreshCommittedSkills", perksEmpty);
+        Gate(console, root, "SQD pilot empty");
+        CaptureConsole(canvasObject, height, "sqd-pilot-empty-" + height);
+        object perksHeld = Perks(manager, HeldMask, 6);
+        SeedPilot(panel, true, portrait, crest);
+        Call(panel, "RefreshCommittedSkills", perksHeld);
+        Gate(console, root, "SQD pilot populated");
+        CaptureConsole(canvasObject, height, "sqd-pilot-" + height);
+
+        // ---- SKILLS: the real refresh path against a real manager --------------------------
+        console.SetPage(1);
+        Perks(manager, 0u, 1); // a fresh career: one earned pick, so every lane's tool is open
+        Call(panel, "RefreshSkillsPage");
+        Gate(console, root, "SQD skills empty");
+        ValidateSkillNodes(panel);
+        CaptureConsole(canvasObject, height, "sqd-skills-empty-" + height);
+        Perks(manager, HeldMask, 6);
+        Set(panel, "skillAwaitingConfirmation", (byte?)3);
+        Call(panel, "RefreshSkillsPage");
+        Gate(console, root, "SQD skills populated");
+        ValidateSkillNodes(panel);
+        CaptureConsole(canvasObject, height, "sqd-skills-" + height);
+        Set(panel, "skillAwaitingConfirmation", null);
+
+        // ---- ACES ------------------------------------------------------------------------
+        console.SetPage(2);
+        Call(panel, "RefreshWingsPage");
+        Gate(console, root, "SQD aces empty");
+        CaptureConsole(canvasObject, height, "sqd-wings-empty-" + height);
+        SeedWings(panel, portrait, crest);
+        Gate(console, root, "SQD aces populated");
+        CaptureConsole(canvasObject, height, "sqd-wings-" + height);
+
+        // ---- STUDIO ----------------------------------------------------------------------
+        console.SetPage(3);
+        Call(panel, "RefreshStudioPage");
+        Gate(console, root, "SQD studio empty");
+        CaptureConsole(canvasObject, height, "sqd-studio-empty-" + height);
+        SeedStudio(panel, portrait, crest);
+        Gate(console, root, "SQD studio populated");
+        CaptureConsole(canvasObject, height, "sqd-studio-" + height);
+
+        // ---- PLANE -----------------------------------------------------------------------
+        console.SetPage(4);
+        Call(panel, "RefreshPlanePage");
+        Gate(console, root, "SQD plane empty");
+        CaptureConsole(canvasObject, height, "sqd-plane-empty-" + height);
+        SeedPlane(panel);
+        Gate(console, root, "SQD plane populated");
+        CaptureConsole(canvasObject, height, "sqd-plane-populated-" + height);
+
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(panelObject);
         Object.DestroyImmediate(managerObject);
     }
 
+    // Strike tool + two grades, Recon tool: two tools held, so SIGNALS and ENGINEER close.
+    private const uint HeldMask = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 6);
+
+    /// <summary>Sets the manager's career (held grades, earned picks) and returns its real PerkView list.</summary>
+    private static object Perks(object manager, uint mask, int earned)
+    {
+        Set(manager, "localState", Activator.CreateInstance(
+            TypeOf("BoscaliSummer.Features.Progression.Runtime.PerkState"), mask));
+        Set(manager, "localEarnedPoints", earned);
+        Type view = TypeOf("BoscaliSummer.Framework.Contracts.IProgressionView");
+        return view.GetMethod("GetPerks").Invoke(manager, null);
+    }
+
+    private static void Settle(AvConsole console)
+    {
+        for (int i = 0; i < 3; i++) console.Ticker.TickNow();
+        Canvas.ForceUpdateCanvases();
+    }
+
+    /// <summary>Settle, then the readable, fit and overlap gates for the current page.</summary>
+    private static void Gate(AvConsole console, RectTransform root, string name)
+    {
+        Settle(console);
+        ValidateReadable(root, name);
+        ValidateFit(console, name);
+        ValidateNoTextOverlap(console, name);
+    }
+
+    private static Sprite FixtureSprite(int w, int h, Color top, Color bottom)
+    {
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float t = y / (float)(h - 1);
+                Color c = Color.Lerp(bottom, top, t);
+                float hx = (x - w * .5f) / (w * .5f), hy = (y - h * .62f) / (h * .22f);
+                if (hx * hx * 1.6f + hy * hy < 1f) c = new Color(.62f, .55f, .48f);
+                float sx = (x - w * .5f) / (w * .46f), sy = (y - h * .18f) / (h * .34f);
+                if (sx * sx + sy * sy < 1f) c = new Color(.24f, .30f, .27f);
+                tex.SetPixel(x, y, c);
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+    }
+
+    private static void SeedPilot(object panel, bool populated, Sprite portrait, Sprite crest)
+    {
+        object id = Get(panel, "pilotIdentity");
+        if (populated)
+            Call(id, "Set", "LOCAL PROFILE", "DAYMAN", "M. FONTAINE", "3", "FLIGHT OFFICER", "GEN 1",
+                "Awaiting aircraft", AvState.Info, portrait, crest, "BOSCALI SUMMER", AvState.Ready, "ACTIVE");
+        else
+            Call(id, "Set", "PILOT DOSSIER", "RECORD PENDING", "—", "0", "ROOKIE", "GEN 1",
+                "NO STATUS ON FILE", AvState.Info, null, null, "NO SQUADRON NAME", AvState.Ready, "ACTIVE");
+
+        string[] tiles = { "tileSortie", "tileTime", "tileFuel", "tileDeaths" };
+        string[] full = { "1,240", "10:39", "62%", "1" }, none = { "—", "0:00", "—", "0" };
+        for (int i = 0; i < tiles.Length; i++)
+            Call(Get(panel, tiles[i]), "Set", populated ? full[i] : none[i],
+                populated && i == 3 ? AvState.Caution : AvState.Inert);
+        Call(Get(panel, "pilotBackground"), "Set", populated
+            ? "Flew medical supply routes along the coast before joining the reserves. Precise on the radio, calm under pressure, and never once late for a briefing."
+            : "No service background on file.");
+
+        object sortie = Get(panel, "sortieGrid"), career = Get(panel, "careerGrid");
+        string[] sortieKeys = { "sortieAirframe", "sortieCondition", "sortieLife", "sortieMission" };
+        string[] sortieValues = populated
+            ? new[] { "SAF-22 CHICANE", "AIRBORNE", "RESPAWNING", "18,450" }
+            : new[] { "NO AIRCRAFT", "GROUND", "ONE LIFE", "0" };
+        for (int i = 0; i < sortieKeys.Length; i++)
+            Call(sortie, "Set", (int)Get(panel, sortieKeys[i]), sortieValues[i],
+                populated && i == 1 ? AvState.Ready : AvState.Inert);
+        string[] careerKeys = { "careerPilot", "careerBonus", "careerNext", "careerEarned", "careerSpent", "careerUnspent" };
+        string[] careerValues = populated
+            ? new[] { "2,450", "+1P", "550", "6/7", "4", "2" }
+            : new[] { "0", "+0P", "750", "0/7", "0", "0" };
+        for (int i = 0; i < careerKeys.Length; i++)
+            Call(career, "Set", (int)Get(panel, careerKeys[i]), careerValues[i],
+                populated && i == 5 ? AvState.Ready : AvState.Inert);
+    }
+
+    private static void SeedWings(object panel, Sprite portrait, Sprite crest)
+    {
+        Call(Get(panel, "huntRow"), "Set", "ACE HUNT ACTIVE — YOU ARE THE TARGET",
+            "Revenant is closing on your sector.", null, null, AvState.Danger);
+        object lead = Get(panel, "wingLeadRow");
+        Call(lead, "Set", "DAYMAN", "M. FONTAINE   ·   FLIGHT LEAD", "SAF-22 CHICANE", "AIRBORNE", AvState.Ready);
+        Call(lead, "SetThumb", portrait);
+        Call(Get(panel, "friendlySection"), "SetCaption", "2 WINGMEN · 1 AIRBORNE");
+        Call(Get(panel, "wingTeamNote"), "SetShown", false);
+        var slots = (Array)Get(panel, "wingmanSlots");
+        string[] airframes = { "SAF-22 CHICANE", "COMP-2 ULTIMATE" }, status = { "AIRBORNE", "LANDED" };
+        for (int i = 0; i < slots.Length; i++)
+        {
+            object slot = slots.GetValue(i);
+            Call(slot, "SetShown", i < 2);
+            if (i < 2)
+                Call(slot, "Set", "WINGMAN " + (i + 1), airframes[i], status[i], null, i == 0 ? AvState.Ready : AvState.Caution);
+        }
+        string[] tiles = { "wingsTotalTile", "wingsActiveTile", "wingsAliveTile" }, values = { "4", "2", "5" };
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            Call(Get(panel, tiles[i]), "SetShown", true);
+            Call(Get(panel, tiles[i]), "Set", values[i], i == 0 ? AvState.Inert : AvState.Caution);
+        }
+        Call(Get(panel, "hostileSection"), "SetCaption", "1–2 OF 4 WINGS");
+        Call(Get(panel, "hostileEmpty"), "SetShown", false);
+        Call(Get(panel, "wingsPager"), "SetShown", true);
+        int index = 0;
+        foreach (object card in (IEnumerable)Get(panel, "wingRows"))
+        {
+            Call(card, "SetShown", true);
+            Call(card, "Set", index == 0 ? "▲" : "◆", index == 0 ? "NIGHT LANCE" : "BLACK TIDE",
+                index == 0 ? "REVENANT / VOSS" : "MARROW / KADE",
+                index == 0 ? "TIER 3 · SKILL VETERAN · FIRST ENCOUNTER" : "TIER 2 · SKILL TRAINED · RETURN #1",
+                index == 0 ? "HUNTING" : "PATROLLING", index == 0 ? 3 : 0, index == 0 ? 4 : 3,
+                index == 0 ? "YOU" : "", index == 0 ? 3 : 2, index == 0 ? 15 : 5);
+            Call(card, "SetCrest", crest);
+            Call(card, "SetPortrait", portrait);
+            index++;
+        }
+    }
+
+    private static void SeedStudio(object panel, Sprite portrait, Sprite crest)
+    {
+        Call(Get(panel, "studioSection"), "SetCaption", "1–2 OF 4 · WING COMMAND");
+        Call(Get(panel, "studioEmpty"), "SetShown", false);
+        Call(Get(panel, "studioPager"), "SetShown", true);
+        string[] calls = { "DAYMAN", "VIXEN" };
+        int index = 0;
+        foreach (object row in (Array)Get(panel, "studioRows"))
+        {
+            Call(row, "SetShown", true);
+            Call(row, "Set", calls[index], "M. Fontaine   ·   ROOKIE " + (index + 1),
+                index == 0 ? "IN SQUADRON" : "READY", index == 0 ? "EDITING" : null,
+                index == 0 ? AvState.Ready : AvState.Info);
+            Call(row, "set_Armed", index == 0);
+            index++;
+        }
+        Call(Get(panel, "studioPortrait"), "Set", portrait);
+        Call(Get(panel, "studioEmblem"), "Set", crest);
+        Call(Get(panel, "studioMessageText"), "Set", "Saved DAYMAN to the custom pilots folder.");
+    }
+
     private static void SeedPlane(object panel)
     {
-        Text(panel, "planeName", "SAF-22 CHICANE");
-        Text(panel, "planeState", "AIRBORNE");
-        Text(panel, "planeSelected", "AAM-10  ·  4 / 6");
-        Text(panel, "planeStoreOverflow", "1–4 OF 8");
-        Text(panel, "planePlotState", "LIVE PART CONDITION");
-        Text(panel, "planeTuneName", "RANGE");
-        Text(panel, "planeTuneState", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
+        Call(panel, "SetPlaneLive", true);
+        Call(Get(panel, "planeIdentity"), "Set", "SAF-22 CHICANE", "AIRBORNE", AvState.Ready, .36f, .82f);
+        Call(Get(panel, "planeTuneName"), "Set", "RANGE");
+        Call(Get(panel, "planeTuneState"), "Set", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
         string[] flight = { "940 km/h", "870 km/h", "6,120m", "+18.2m/s", "287°", "3.4 G" };
-        string[] systems = { "36%", "82%", "UP", "ON", "12 READY", "2 TRACKED" };
-        string[] stores = { "01  AAM-10  ·  4 / 6  SELECTED", "02  AAM-10  ·  2 / 4", "03  CBU-12  ·  3 / 3", "04  20MM CANNON  ·  320" };
+        Array tiles = (Array)Get(panel, "planeFlight");
+        for (int i = 0; i < tiles.Length; i++) Call(tiles.GetValue(i), "Set", flight[i], AvState.Inert);
+        object systems = Get(panel, "planeSystems");
+        string[] systemValues = { "UP", "ON", "12 READY", "2 TRACKED" };
+        for (int i = 0; i < systemValues.Length; i++)
+            Call(systems, "Set", i, systemValues[i], i == 3 ? AvState.Danger : AvState.Inert);
+        Call(Get(panel, "planeSelected"), "Set", "AAM-10", "SELECTED STATION", "4 / 6", null, AvState.Info);
+        Call(Get(panel, "planeStoresSection"), "SetCaption", "1–4 OF 8");
+        Call(Get(panel, "planeStorePager"), "SetShown", true);
+        string[] storeNames = { "1  AAM-10", "2  AAM-10", "3  CBU-12", "4  20MM CANNON" };
+        string[] ammo = { "4 / 6", "2 / 4", "3 / 3", "320" };
+        var stores = (Array)Get(panel, "planeStores");
+        for (int i = 0; i < stores.Length; i++)
+            Call(stores.GetValue(i), "Set", storeNames[i], null, ammo[i], i == 0 ? "SELECTED" : null,
+                i == 0 ? AvState.Info : AvState.Inert);
         string[] faults = { "LEFT WINGROOT", "ENGINE RIGHT", "RUDDER", "COCKPIT" };
         string[] values = { "42%", "67%", "88%", "100%" };
-        TMP_Text[] tiles = (TMP_Text[])Get(panel, "planeFlight");
-        TMP_Text[] rows = (TMP_Text[])Get(panel, "planeSystems");
-        TMP_Text[] storeRows = (TMP_Text[])Get(panel, "planeStores");
-        TMP_Text[] faultNames = (TMP_Text[])Get(panel, "planeFaultNames");
-        TMP_Text[] faultValues = (TMP_Text[])Get(panel, "planeFaultValues");
-        Image[] bars = (Image[])Get(panel, "planeFaultBars");
-        for (int i = 0; i < tiles.Length; i++) tiles[i].text = flight[i];
-        for (int i = 0; i < rows.Length; i++) rows[i].text = systems[i];
-        for (int i = 0; i < storeRows.Length; i++) storeRows[i].text = stores[i];
-        for (int i = 0; i < faultNames.Length; i++)
+        float[] fractions = { .42f, .67f, .88f, 1f };
+        var faultRows = (Array)Get(panel, "planeFaults");
+        for (int i = 0; i < faultRows.Length; i++)
         {
-            faultNames[i].text = faults[i];
-            faultValues[i].text = values[i];
-            bars[i].fillAmount = new[] { .42f, .67f, .88f, 1f }[i];
-            Color ink = i == 3 ? new Color(.48f, 1f, .44f) : new Color(1f, .72f, .27f);
-            faultValues[i].color = ink;
-            bars[i].color = ink;
+            object row = faultRows.GetValue(i);
+            AvState state = i == 0 ? AvState.Danger : i == 3 ? AvState.Ready : AvState.Caution;
+            Call(row, "SetShown", true);
+            Call(row, "Set", faults[i], null, values[i], null, state);
+            Call(row, "SetMeter", fractions[i], AvTheme.RailCaution);
         }
     }
 
-    private static void SeedSqd(object panel)
+    /// <summary>Every skill node is wide and tall enough for its name, and none overlap.</summary>
+    private static void ValidateSkillNodes(object panel)
     {
-        Text(panel, "pilotCallsign", "DAYMAN");
-        Text(panel, "pilotProfileTag", "LOCAL PROFILE");
-        Text(panel, "pilotName", "M. FONTAINE");
-        Text(panel, "pilotRankLine", "RANK 3  ·  GENERATION 1");
-        Text(panel, "pilotStatusLine", "AWAITING AIRCRAFT");
-        Text(panel, "pilotBackground", "Flew medical supply routes before joining the reserves. Precise on the radio and calm under pressure.");
-        Text(panel, "tileSortie", "—"); Text(panel, "tileTime", "10:39");
-        Text(panel, "tileFuel", "—"); Text(panel, "tileDeaths", "0");
-        Text(panel, "pilotMode", "RESPAWNING"); Text(panel, "pilotStatus", "AWAITING AIRCRAFT");
-        Text(panel, "pilotDeaths", "0"); Text(panel, "pilotGeneration", "1");
-        Text(panel, "runAirframeValue", "NO AIRCRAFT"); Text(panel, "runTimeValue", "10:39");
-        Text(panel, "runFlightStatusValue", "GROUND"); Text(panel, "runFuelValue", "—");
-        Text(panel, "runSortieScoreValue", "—"); Text(panel, "runRankValue", "3");
-        Text(panel, "runMissionScoreValue", "2,450"); Text(panel, "pilotScoreValue", "2,450");
-        Text(panel, "aceBonusValue", "+0"); Text(panel, "runNextPerkValue", "550");
-        Text(panel, "earnedValue", "4"); Text(panel, "spentValue", "2"); Text(panel, "availableValue", "2");
-        Text(panel, "pilotSquadron", "BOSCALI SUMMER");
-        Text(panel, "committedSkillsEmpty", "No skills committed yet. Open SKILLS to choose one.");
-
-        Text(panel, "skillStripTitle", "SELECT A QUALIFICATION");
-        Text(panel, "skillStripDetail", "Compare the same tier across lanes, then unlock the selected grade.");
-        Text(panel, "skillBudgetNote", "2 PICKS UNSPENT · 550 TO NEXT GRADE");
-        foreach (object row in (IEnumerable)Get(panel, "skillRows")) Text(row, "State", "AVAILABLE");
-        foreach (object branch in (IEnumerable)Get(panel, "skillBranches")) Text(branch, "Note", "0/6 OPEN");
-
-        Text(panel, "huntTitle", "ACE HUNT STANDBY");
-        Text(panel, "huntDetails", "No hostile ace is currently assigned to this pilot.");
-        Text(panel, "wingCallsign", "DAYMAN"); Text(panel, "wingName", "M. FONTAINE");
-        Text(panel, "wingAirframe", "NO AIRCRAFT · GROUND"); Text(panel, "wingCount", "0 / 4 ACTIVE");
-        Text(panel, "wingCountNote", "RECRUIT IN WMC");
-        Text(panel, "wingTeamNote", "NO RECRUITED WINGMEN · RECRUIT AND TASK THEM IN WMC.");
-        Text(panel, "rosterPage", "1–2 OF 4 CONTACTS");
-        int index = 0;
-        foreach (object row in (IEnumerable)Get(panel, "wingRows"))
+        Canvas.ForceUpdateCanvases();
+        var rects = new List<Vector3[]>();
+        foreach (object row in (IEnumerable)Get(panel, "skillRows"))
         {
-            Text(row, "Symbol", index == 0 ? "▲" : "◆");
-            Text(row, "Wing", index == 0 ? "NIGHT LANCE" : "BLACK TIDE");
-            Text(row, "Ace", index == 0 ? "ACE  REVENANT" : "ACE  MARROW");
-            Text(row, "Skill", index == 0 ? "TIER 3 · SKILL VETERAN · FIRST ENCOUNTER" : "TIER 2 · SKILL TRAINED · RETURN #1");
-            Text(row, "Status", index == 0 ? "HUNTING" : "PATROLLING");
-            Text(row, "Members", index == 0 ? "3 / 4 ALIVE" : "2 / 3 ALIVE");
-            Text(row, "Target", index == 0 ? "TARGET: YOU" : "TARGET: NORMAL OPERATIONS");
-            GameObject empty = Get(row, "Empty") as GameObject;
-            if (empty != null) empty.SetActive(false);
-            foreach (GameObject badge in (IEnumerable)Get(row, "Badges")) badge.SetActive(true);
-            TMP_Text noSkills = Get(row, "NoSkills") as TMP_Text;
-            if (noSkills != null) noSkills.gameObject.SetActive(false);
-            index++;
+            RectTransform cell = ((AvPart)Get(row, "Node")).Rect;
+            var corners = new Vector3[4];
+            cell.GetWorldCorners(corners);
+            Check(corners[2].x - corners[0].x >= 88f && corners[2].y - corners[0].y >= 44f,
+                "SQD skill node is too small to hold a name and its state glyph.");
+            // A name breaks between words, never inside one: no more lines than words.
+            var label = (TMP_Text)Get(Get(row, "Node"), "label");
+            label.ForceMeshUpdate();
+            int words = label.text.Split(' ').Length;
+            Check(label.textInfo.lineCount <= Math.Min(2, words),
+                "SQD skill node name breaks inside a word or runs past two lines: " + label.text);
+            foreach (Vector3[] other in rects)
+                Check(corners[2].x <= other[0].x + .5f || corners[0].x >= other[2].x - .5f ||
+                      corners[2].y <= other[0].y + .5f || corners[0].y >= other[2].y - .5f,
+                    "SQD skill nodes overlap.");
+            rects.Add(corners);
         }
-
-        Text(panel, "studioStatus", "Wing Command connected · 4 local custom pilots.");
-        Text(panel, "studioPager", "1–4 OF 4 · PAGE 1/1");
-        string[] calls = { "DAYMAN", "VIXEN", "CINDER", "MICA" };
-        index = 0;
-        foreach (object row in (IEnumerable)Get(panel, "studioRows"))
-        {
-            if (row == null) continue;
-            Text(row, "Callsign", calls[index]); Text(row, "Name", "CUSTOM PILOT " + (index + 1));
-            Text(row, "Rank", "RANK " + (index + 1)); Text(row, "Status", index == 0 ? "PROFILE" : "LOCAL");
-            index++;
-        }
-        Text(panel, "studioBodyValue", "BODY 1"); Text(panel, "studioFaceValue", "FACE 2/8");
-        Text(panel, "studioHairValue", "HAIR 3/10"); Text(panel, "studioSuitValue", "FLIGHT SUIT");
-        Text(panel, "studioBackValue", "BACK 2/6"); Text(panel, "studioStyleValue", "PROFESSIONAL");
-        Text(panel, "studioShapeValue", "CHEVRON"); Text(panel, "studioChargeValue", "WING");
-        Text(panel, "studioPaletteValue", "PALETTE 2/8"); Text(panel, "studioArtValue", "PROCEDURAL");
-        Text(panel, "studioMessageText", "Custom pilots stay local. Nothing is uploaded.");
     }
 
-    private static void RenderRadio(float height)
+    /// <summary>No two rendered texts of the current page may share glyph area (the double-print bug).</summary>
+    private static void ValidateNoTextOverlap(AvConsole console, string name)
     {
-        GameObject canvasObject = MakeCanvas("RadioPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "RAD", new[] { "RECEIVER", "MUSIC" }, null,
-            3, 480f, height, _ => { });
-        SeedShell(shell, "SIGNAL MONITOR");
-        Type radio = TypeOf("BoscaliSummer.Features.Radio.Presentation.RadioPanel");
-        float receiverHeight = Convert.ToSingle(radio.GetField("RadioContentHeight", All).GetRawConstantValue());
-        float deckHeight = Convert.ToSingle(radio.GetField("DeckNaturalHeight", All).GetRawConstantValue());
-        RectTransform receiver = AvScreen.Scroll((RectTransform)shell.CreatePage(0, "Receiver").transform,
-            shell.Body, receiverHeight, out Rect receiverArea);
-        SetStatic(radio, "radioPage", receiver);
-        CallStatic(radio, "BuildReceiver", receiver, receiverArea);
-        RectTransform music = AvScreen.Scroll((RectTransform)shell.CreatePage(1, "Music").transform,
-            shell.Body, Mathf.Max(deckHeight, shell.Body.height), out Rect musicArea);
-        CallStatic(radio, "BuildDeck", music, musicArea);
-        SeedRadio(radio);
-
-        for (int page = 0; page < 2; page++)
+        var boxes = new List<KeyValuePair<TMP_Text, Rect>>();
+        foreach (TMP_Text t in console.Page(console.CurrentPage).Content.GetComponentsInChildren<TMP_Text>(false))
         {
-            shell.SetPage(page);
-            shell.DataBar.State.text = page == 0 ? "RECEIVER / ON AIR" : "MUSIC / PLAYING";
-            ValidateReadable(root, "RAD " + page);
-            CaptureScrolled(canvasObject, height, "rad-" + (page == 0 ? "receiver" : "music") + "-" + height);
+            if (!t.gameObject.activeInHierarchy || string.IsNullOrWhiteSpace(t.text) || t.name.StartsWith("Icon")) continue;
+            if (t.GetComponentInParent<TMP_InputField>() != null) continue; // the field's own zero-width caret text
+            t.ForceMeshUpdate();
+            Bounds b = t.textBounds;
+            Vector3 a = t.transform.TransformPoint(b.min), c = t.transform.TransformPoint(b.max);
+            boxes.Add(new KeyValuePair<TMP_Text, Rect>(t, Rect.MinMaxRect(
+                Mathf.Min(a.x, c.x), Mathf.Min(a.y, c.y), Mathf.Max(a.x, c.x), Mathf.Max(a.y, c.y))));
         }
-        object waterfall = GetStatic(radio, "waterfall");
-        if (waterfall is IDisposable disposable) disposable.Dispose();
-        (GetStatic(radio, "dialMarkers") as IList)?.Clear();
-        SetStatic(radio, "waterfall", null); SetStatic(radio, "dialRoot", null);
-        SetStatic(radio, "rx", null); SetStatic(radio, "deck", null); SetStatic(radio, "radioPage", null);
-        Object.DestroyImmediate(canvasObject);
-    }
-
-    private static void SeedRadio(Type radio)
-    {
-        object rx = GetStatic(radio, "rx");
-        Text(rx, "Frequency", "101.7"); Text(rx, "Unit", "MHz");
-        Text(rx, "ModeLine", "FM STEREO · 100 kHz"); Text(rx, "Station", "BOSCALI FM");
-        Text(rx, "Program", "FIELD OPERATIONS"); Text(rx, "OnAir", "ON AIR · NIGHT DRIVE");
-        Text(rx, "Time", "02:14 / 04:32"); Text(rx, "ScopeNote", "87.5–108.0 MHz · FM BROADCAST");
-        Text(rx, "StationsNote", "8 FOUND"); Text(rx, "PageValue", "1–5 OF 8");
-        int i = 0;
-        foreach (object row in (IEnumerable)Get(rx, "Rows"))
-        {
-            Text(row, "Preset", (i + 1).ToString()); Text(row, "Badge", "B" + (i + 1));
-            Text(row, "Name", new[] { "BOSCALI FM", "FRONTLINE RADIO", "AIR CONTROL", "NIGHT SIGNAL", "RESERVE NET" }[i]);
-            Text(row, "Frequency", (101.7f + i * .6f).ToString("0.0")); Text(row, "Unit", "MHz");
-            Text(row, "Status", i == 0 ? "STRONG" : i < 3 ? "FAIR" : "WEAK");
-            i++;
-        }
-
-        object deck = GetStatic(radio, "deck");
-        Text(deck, "FolderLabel", "LOCAL MUSIC · SORTIE MIX"); Text(deck, "Position", "TRACK 2 / 18");
-        Text(deck, "TrackLabel", "NIGHT DRIVE"); Text(deck, "Elapsed", "02:14"); Text(deck, "Duration", "/ 04:32");
-        Text(deck, "LibraryNote", "18 TRACKS"); Text(deck, "FolderValue", "1 / 3 · 18 TRK");
-        Text(deck, "PageValue", "1–12 OF 18");
-        GameObject list = Get(deck, "ListRoot") as GameObject; if (list != null) list.SetActive(true);
-        GameObject empty = Get(deck, "EmptyRoot") as GameObject; if (empty != null) empty.SetActive(false);
-        i = 0;
-        foreach (object row in (IEnumerable)Get(deck, "Rows"))
-        {
-            GameObject rowRoot = Get(row, "Root") as GameObject; if (rowRoot != null) rowRoot.SetActive(true);
-            Text(row, "Number", i == 1 ? ">" : (i + 1).ToString("00"));
-            Text(row, "Title", new[] { "WHEELS UP", "NIGHT DRIVE", "LOW ALTITUDE", "RADAR SHADOW",
-                "COAST RUN", "DARK APPROACH", "FUEL STATE", "HOME VECTOR", "RESERVE", "AFTERBURNER",
-                "FINAL TURN", "TOUCHDOWN" }[i]);
-            if (i == 1)
+        var bad = new List<string>();
+        for (int i = 0; i < boxes.Count; i++)
+            for (int j = i + 1; j < boxes.Count; j++)
             {
-                (Get(row, "Ground") as Image).color = AvTheme.RailInfo.WithAlpha(.1f);
-                (Get(row, "Rule") as Image).color = AvTheme.RailInfo;
-                (Get(row, "Title") as TMP_Text).color = AvTheme.RailInfo;
+                Rect x = boxes[i].Value, y = boxes[j].Value;
+                float w = Mathf.Min(x.xMax, y.xMax) - Mathf.Max(x.xMin, y.xMin);
+                float h = Mathf.Min(x.yMax, y.yMax) - Mathf.Max(x.yMin, y.yMin);
+                if (w > 1.5f && h > 2f) bad.Add(name + ": \"" + boxes[i].Key.text + "\" overlaps \"" + boxes[j].Key.text + "\"");
             }
-            i++;
-        }
+        Check(bad.Count == 0, "text overlap (" + bad.Count + "): " + string.Join(" | ", bad.GetRange(0, Math.Min(20, bad.Count))));
     }
 
-    private static void RenderWeather(float height)
+    /// <summary>Kit v2 fit gate for a console page: no wrapped-off text, no text into the scroll gutter.</summary>
+    private static void ValidateFit(AvConsole console, string name)
     {
-        GameObject canvasObject = MakeCanvas("WeatherPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "ENV", new[] { "WEATHER", "SKY & AIR" },
-            new[] { new[] { "COVER", "CLOUD COVER" }, new[] { "BASE", "CLOUD BASE" },
-                    new[] { "WIND", "WIND FROM" }, new[] { "DENSITY", "CAMERA ALT" } },
-            2, 480f, height, _ => { });
-        SeedShell(shell, "METOC / BATTLEFIELD");
-        shell.Metrics[0].Set("35%", "BROKEN", .35f, AvTheme.RailInfo);
-        shell.Metrics[1].Set("1,800", "METRES", .60f, AvTheme.RailInfo);
-        shell.Metrics[2].Set("12", "KNOTS", .40f, AvTheme.RailReady);
-        shell.Metrics[3].Set("92%", "SEA LEVEL", .92f, AvTheme.RailInfo);
-
-        var panelObject = new GameObject("WeatherMfdPanel");
-        object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Weather.Presentation.WeatherMfdPanel"));
-        ((Behaviour)panel).enabled = false;
-        Set(panel, "shell", shell);
-        Call(panel, "BuildForecastPage", shell.CreatePage(0, "Forecast"));
-        Call(panel, "BuildEnvironmentPage", shell.CreatePage(1, "Environment"));
-        SeedWeather(panel);
-        for (int page = 0; page < 2; page++)
+        float gutterLeft = 480f - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
+        var bad = new List<string>();
+        foreach (TMP_Text t in console.Page(console.CurrentPage).Content.GetComponentsInChildren<TMP_Text>(false))
         {
-            shell.SetPage(page);
-            ValidateReadable(root, "ENV page " + page);
-            CaptureScrolled(canvasObject, height, "env-" + (page == 0 ? "weather-" : "sky-") + height);
+            if (!t.gameObject.activeInHierarchy || string.IsNullOrEmpty(t.text) || t.name.StartsWith("Icon")) continue;
+            t.ForceMeshUpdate();
+            Rect r = t.rectTransform.rect;
+            Bounds b = t.textBounds;
+            if (b.size.x > r.width + 1.5f) bad.Add(name + " width " + b.size.x + " > " + r.width + ": " + t.text);
+            if (b.size.y > r.height + 1.5f) bad.Add(name + " height " + b.size.y + " > " + r.height + ": " + t.text);
+            var corners = new Vector3[4];
+            t.rectTransform.GetWorldCorners(corners);
+            float right = console.Root.InverseTransformPoint(corners[2]).x;
+            if (right > gutterLeft) bad.Add(name + " enters the scroll gutter: " + t.text);
         }
-        Object.DestroyImmediate(panelObject);
-        Object.DestroyImmediate(canvasObject);
+        Check(bad.Count == 0, "fit failures (" + bad.Count + "): " + string.Join(" | ", bad.GetRange(0, Math.Min(40, bad.Count))));
     }
 
-    private static void SeedWeather(object panel)
+    private static void CaptureConsole(GameObject canvas, float height, string prefix)
     {
-        Type regimeType = TypeOf("BoscaliSummer.Features.Weather.Domain.WeatherRegimeType");
-        object liveGlyph = Get(panel, "liveGlyph");
-        Call(liveGlyph, "SetKind", Enum.Parse(regimeType, "Broken"));
-        ((Graphic)liveGlyph).color = AvTheme.Warning;
-        Text(panel, "liveRegimeTitle", "BROKEN DECK");
-        Text(panel, "liveRegimeBadge", "BKN");
-        Text(panel, "liveCoverLabel", "52% COVER");
-        Text(panel, "liveQuickMetrics", "DECK 2200 M   /   WIND 18 KT   /   RAIN 8%");
-        Text(panel, "liveTacticalBrief", "VARIABLE CEILING // WATCH CLOUD BREAKS ON INGRESS");
-        string[] types = { "Clear", "Fair", "Scattered", "Broken", "RainSquall", "Storm" };
-        string[] codes = { "CLR", "FEW", "SCT", "BKN", "RA+", "TS" };
-        int rowIndex = 0;
-        foreach (object row in (IEnumerable)Get(panel, "timelineRows"))
+        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
+            if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 1f;
+        Capture(canvas, 480f, height, prefix + "-top.png");
+        if (height >= 800f)
         {
-            object glyph = Get(row, "Glyph");
-            Call(glyph, "SetKind", Enum.Parse(regimeType, types[rowIndex]));
-            ((Graphic)glyph).color = rowIndex >= 4 ? AvTheme.Warning : AvTheme.RailInfo;
-            (Get(row, "RegimeBadgeText") as TMP_Text).text = codes[rowIndex];
-            (Get(row, "ConditionsLabel") as TMP_Text).text = (5 + rowIndex * 17) + "%";
-            (Get(row, "DeckLabel") as TMP_Text).text = (3200 - rowIndex * 380) + " M";
-            (Get(row, "RainText") as TMP_Text).text = rowIndex >= 4 ?
-                (rowIndex * 15) + "% RAIN" : "— DRY —";
-            rowIndex++;
+            foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
+                if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = .5f;
+            Capture(canvas, 480f, height, prefix + "-mid.png");
         }
-        Text(panel, "advisoryLight", "TWILIGHT");
-        Text(panel, "advisoryDeck", "BASE 2200 M");
-        Text(panel, "advisoryWind", "18 KT");
+        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
+            if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 0f;
+        Capture(canvas, 480f, height, prefix + "-bottom.png");
     }
 
-    private static void RenderEvents(float height)
-    {
-        GameObject canvasObject = MakeCanvas("EventsPreview", height, out RectTransform root);
-        AvScreen shell = AvScreen.Build(root, "EVN", new[] { "DISPATCH", "DESK" },
-            new[] { new[] { "SUPPORT COST", "YOUR SIDE" }, new[] { "SUPPORT RESET", "TEMPO" } },
-            3, 480f, height, _ => { });
-        SeedShell(shell, "EVENT ACTIVE");
-        shell.Metrics[0].Set("+35%", "SUPPORT COST", .35f, AvTheme.RailCaution);
-        shell.Metrics[1].Set("x1.20", "LONGER COOLDOWN", .20f, AvTheme.RailCaution);
-
-        var panelObject = new GameObject("EventsMfdPanel");
-        object panel = panelObject.AddComponent(TypeOf("BoscaliSummer.Features.Events.Presentation.EventsMfdPanel"));
-        ((Behaviour)panel).enabled = false;
-        object settings = NewSettings("BoscaliSummer.Features.Events.Configuration.EventsSettings",
-            "events-fixture.cfg");
-        SetEntry(settings, "HistoryLength", 4);
-        Set(panel, "settings", settings); Set(panel, "shell", shell);
-        Call(panel, "BuildEventsPage", shell.CreatePage(0, "Events"));
-        GameObject docs = shell.CreatePage(1, "Docs");
-        Call(panel, "BuildDocsPage", docs);
-        foreach (TMP_Text copy in docs.GetComponentsInChildren<TMP_Text>(true))
-        {
-            if (copy.text.Length < 65) continue;
-            RectTransform rect = (RectTransform)copy.transform;
-            Check(copy.GetPreferredValues(copy.text, rect.rect.width, 0f).y <= rect.rect.height + 1f,
-                "EVN docs copy must fit its reading area: " + copy.text.Substring(0, 24));
-        }
-        SeedEvents(panel);
-        shell.SetPage(0);
-        ValidateReadable(root, "EVN dispatch");
-        CaptureScrolled(canvasObject, height, "evn-events-" + height);
-        Call(Get(panel, "activeCard"), "BindPlaceholder", "The theater is quiet. The director is watching for a story worth telling.");
-        Call(Get(panel, "decisionBoard"), "SetStandby");
-        Call(panel, "LayoutHistory", 3);
-        CaptureScrolled(canvasObject, height, "evn-calm-" + height);
-        shell.SetPage(1);
-        ValidateReadable(root, "EVN docs");
-        CaptureScrolled(canvasObject, height, "evn-docs-" + height);
-        Object.DestroyImmediate(canvasObject);
-        Object.DestroyImmediate(panelObject);
-        if (height >= 896f) RenderArchive();
-    }
-
-    private static void RenderArchive()
-    {
-        object archive = CallStatic(TypeOf("BoscaliSummer.Features.Events.Presentation.EventDeskArchive"), "Create");
-        Call(archive, "Show", 2);
-        GameObject archiveObject = ((Component)archive).gameObject;
-        PrepareWorldCanvas(archiveObject.GetComponent<Canvas>(), 1920f, 1080f);
-        archiveObject.GetComponent<CanvasScaler>().enabled = false;
-        RectTransform archiveRoot = (RectTransform)archiveObject.transform;
-        archiveRoot.pivot = new Vector2(0f, 1f);
-        archiveRoot.position = new Vector3(-960f, 540f, 0f);
-        Set(archive, "fitted", Vector2.zero);
-        Call(archive, "Fit");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-world.png");
-        Call(archive, "SelectSection", 1);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-events.png");
-        Call(archive, "SelectSection", 0);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-empty.png");
-        var aircraftDefinition = ScriptableObject.CreateInstance<AircraftDefinition>();
-        aircraftDefinition.unitName = "MODEL PREVIEW FIXTURE";
-        aircraftDefinition.code = "QA-1";
-        aircraftDefinition.description = "Mesh only. No aircraft simulation is created in the field archive.";
-        GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        prefab.name = "PreviewMeshFixture";
-        aircraftDefinition.unitPrefab = prefab;
-        ((List<AircraftDefinition>)Get(archive, "aircraft")).Add(aircraftDefinition);
-        Call(archive, "SelectSection", 0);
-        Check(Get(archive, "preview") != null, "EVN aircraft preview must create a mesh-only viewer.");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-model.png");
-        Call(archive, "Close");
-        Object.DestroyImmediate(archiveObject);
-        Object.DestroyImmediate(prefab);
-        Object.DestroyImmediate(aircraftDefinition);
-    }
-
-    private static void SeedEvents(object panel)
-    {
-        Text(panel, "directorLine", "DIRECTOR ARMED · TRAILING SIDE ELIGIBLE · SUPERS 1/3");
-        object current = Event("supply_shock", "SUPPLY SHOCK", "A logistics corridor is under sustained pressure. Allocation costs rise until the theater stabilizes.",
-            "ECONOMIC", "MEDIUM", "YOUR SIDE", false, "+35% SUPPORT COST", 120f, 520f);
-        object active = Get(panel, "activeCard");
-        Call(active, "Bind", current, "+35% SUPPORT COST", AvTheme.RailCaution,
-            "Your side pays more for support while the corridor remains disrupted.");
-        Call(active, "SetClock", "ENDS 04:18", false, false);
-        Call(active, "SetProgress", .64f, AvTheme.RailCaution);
-
-        object desk = Get(panel, "decisionBoard");
-        ((RectTransform)Get(desk, "root")).gameObject.SetActive(true);
-        Text(desk, "subheading", "CHOOSE ONE RESPONSE");
-        var choices = (AvButton[])Get(desk, "actions");
-        var details = (TMP_Text[])Get(desk, "details");
-        var reasons = (TMP_Text[])Get(desk, "reasons");
-        string[] names = { "CONTAIN", "TREASURY DIRECTIVE", "CONTRACT INTELLIGENCE", "PILOT CHANNEL" };
-        string[] requirements = { "PERSONAL ALLOCATION", "FACTION FUNDS", "HOST CHECKS FACTION CONTRACT", "RECON QUALIFICATION REQUIRED" };
-        for (int choice = 0; choice < choices.Length; choice++)
-        {
-            choices[choice].SetText(names[choice]);
-            details[choice].text = "HOST COST QUOTE";
-            reasons[choice].text = requirements[choice];
-        }
-
-        Call(panel, "LayoutHistory", 3);
-        int i = 0;
-        foreach (object card in (IEnumerable)Get(panel, "historyCards"))
-        {
-            if (i >= 3) break;
-            object view = Event("history_" + i, new[] { "AIRLIFT SURGE", "RADAR BLACKOUT", "FUEL PRIORITY" }[i],
-                "Completed theater event.", i == 1 ? "HAZARD" : "POLITICAL", i == 0 ? "MEDIUM" : "MINOR",
-                "ALL THEATER", false, i == 1 ? "NO EFFECT" : "-15% SUPPORT COST", 0f, 1f);
-            Call(card, "Bind", view, AvTheme.TextPrimary, i == 1 ? AvTheme.RailDanger : AvTheme.RailInfo,
-                i == 1 ? AvTheme.RailDanger : AvTheme.RailReady);
-            Call(card, "SetClock", (i + 2) + " MIN AGO");
-            i++;
-        }
-    }
-
-    private static object Event(string id, string title, string flavor, string category, string tier,
-        string target, bool isSuper, string effect, float start, float end)
-    {
-        Type step = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventStep");
-        Type view = TypeOf("BoscaliSummer.Framework.Contracts.ActiveEventView");
-        Array steps = Array.CreateInstance(step, 0);
-        string art = category == "HAZARD" ? "fuel_depot_fire" : "industrial_surge";
-        return Activator.CreateInstance(view, new object[] { id, title, flavor, category, tier, target,
-            isSuper, art, effect, steps, start, end, true, "+20% SUPPORT RESET" });
-    }
 
     private static void RenderEventAlert()
     {
@@ -569,14 +509,13 @@ public static class PresentationUnityCheck
         Sprite poster = (Sprite)cache.GetMethod("Get", All).Invoke(null,
             new object[] { "ceasefire_ultimatum", "tier_super" });
         Check(poster != null, "The superevent dispatch must load its embedded poster.");
-        Image art = (Image)Get(alert, "art"); art.sprite = poster; art.enabled = poster != null;
-        Image compactArt = (Image)Get(alert, "compactArt"); compactArt.sprite = poster;
-        compactArt.enabled = poster != null;
-        Component glyph = (Component)Get(alert, "glyph"); glyph.gameObject.SetActive(poster == null);
-        Component compactGlyph = (Component)Get(alert, "compactGlyph");
-        compactGlyph.gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "stripes")).gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "compactStripes")).gameObject.SetActive(poster == null);
+        // The alert draws its art through two EventPlateArt plates (poster or category glyph).
+        foreach (string plateField in new[] { "plate", "compactPlate" })
+        {
+            object plate = Get(alert, plateField);
+            Check(plate != null, "The superevent alert must build its " + plateField + ".");
+            plate.GetType().GetMethod("Bind", All).Invoke(plate, new object[] { poster, NOAvionics.AvIcon.AlertTriangle, Color.white });
+        }
         TMP_Text title = (TMP_Text)Get(alert, "title");
         TMP_Text next = (TMP_Text)Get(alert, "nextOrder");
         TMP_Text flavor = (TMP_Text)Get(alert, "flavor");
@@ -610,203 +549,13 @@ public static class PresentationUnityCheck
         Object.DestroyImmediate(root); Object.DestroyImmediate(componentObject);
     }
 
-    private static void RenderTargetBoard()
-    {
-        // The external-view dock from modules/Hud, built from the shipped DLL. Hud/HudUnityCheck
-        // pins its geometry against game stubs; this pins what the pilot reads off it: both shot
-        // directions counted and drawn, every word legible, nothing past the safe area.
-        var owner = new GameObject("BoardOwner");
-        object board = Activator.CreateInstance(
-            TypeOf("BoscaliSummer.Features.Hud.Presentation.ThirdPersonTargetBoard"), owner.transform);
-        object settings = NewSettings("BoscaliSummer.Features.Hud.Configuration.HudSettings",
-            "hud-board-fixture.cfg");
-        object systems = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.SystemsReading"));
-        Set(systems, "Valid", true);
-        Set(systems, "FaultsAvailable", true);
-        Set(systems, "Parts", 24);
-        Set(systems, "Damaged", 2);
-        Set(systems, "Failures", 1);
-        object missiles = Activator.CreateInstance(TypeOf("BoscaliSummer.Features.Hud.Runtime.MissileTelemetry"));
-        // A 3:2 picture in the 16:9 camera slot, so the letterboxed feed is part of what must fit.
-        var picture = new RenderTexture(336, 224, 0);
-        picture.Create();
-
-        // Three out, two in, interleaved: uneven counts catch swapped IN/OUT labels, the mixed
-        // order checks that lanes follow direction rather than list position, and three rows is
-        // the tallest the dock gets. Tracks come from ShotMath the way the reader starts them.
-        var shots = new (bool Outbound, string Seeker, string Range, float First, float Now, string Eta)[]
-        {
-            (true, "ARH", "4.2 km", 4200f, 3800f, "10s"),
-            (false, "IR", "1.8 km", 2000f, 1500f, "3s"),
-            (true, "SARH", "6.8 km", 7000f, 6800f, "34s"),
-            (false, "ARH", "9.6 km", 10000f, 9600f, "24s"),
-            (true, "IR", "2.1 km", 2400f, 2100f, "7s"),
-        };
-        Type shotEntry = TypeOf("BoscaliSummer.Features.Hud.Runtime.MissileTelemetry+ShotEntry");
-        Type shotMath = TypeOf("BoscaliSummer.Features.Hud.Domain.ShotMath");
-        var shown = (IList)Get(missiles, "shown");
-        foreach (var shot in shots)
-            shown.Add(ShotFixture(shotEntry, shotMath, shot.Outbound, shot.Seeker, shot.Range, shot.First, shot.Now));
-        Set(missiles, "shownOutbound", 3);
-        Set(missiles, "shownInbound", 2);
-        Call(board, "Present", settings, systems, missiles, picture, "FORWARD", "MARK 1.2 km  34s");
-
-        object surface = Get(board, "surface");
-        var canvas = (Canvas)Get(surface, "Canvas");
-        var panel = (RectTransform)Get(board, "panel");
-        var inbound = (TMP_Text)Get(board, "inbound");
-        var outbound = (TMP_Text)Get(board, "outbound");
-        var rows = (IList)Get(board, "shotRows");
-        Check(((GameObject)Get(surface, "Root")).activeSelf,
-            "Target board must present at the editor's " + Screen.width + "x" + Screen.height + " screen.");
-        Check(inbound.text == "IN 02" && outbound.text == "OUT 03",
-            "Target board must count both shot directions, got " + inbound.text + " / " + outbound.text + ".");
-        Check(inbound.color != outbound.color,
-            "Inbound shots must set the IN count apart from the OUT count.");
-        int inboundSlot = 0, outboundSlot = 3;
-        foreach (var shot in shots)
-        {
-            object row = rows[shot.Outbound ? outboundSlot++ : inboundSlot++];
-            string lane = "Target board " + (shot.Outbound ? "OUT " : "IN ") + shot.Seeker + " row";
-            Check(((RectTransform)Get(row, "Rect")).gameObject.activeSelf &&
-                  ((TMP_Text)Get(row, "seeker")).text == shot.Seeker &&
-                  ((TMP_Text)Get(row, "range")).text == shot.Range &&
-                  ((TMP_Text)Get(row, "eta")).text == shot.Eta,
-                lane + " must show its seeker, range and countdown in its direction's lane.");
-            // The tip sits the remaining share of first-seen range away from the row's endpoint:
-            // the left end for an inbound shot, the right end for an outbound one.
-            float remaining = shot.Now / shot.First;
-            float tip = ((Image)Get(row, "tip")).rectTransform.anchoredPosition.x;
-            Check(Mathf.Abs(tip - (3f + 132f * (shot.Outbound ? 1f - remaining : remaining))) < .5f,
-                lane + " must drain against its first-seen range.");
-        }
-        Check(!((RectTransform)Get(rows[2], "Rect")).gameObject.activeSelf,
-            "The unused third IN lane row must stay empty.");
-        ValidateBoard(canvas, panel, "Target board shots");
-        CaptureBoard(canvas, "target-board-shots.png");
-
-        // The usual state: nothing in the air, no target camera, no mark. The counts still
-        // answer for both directions, and the standby copy must be as legible as the rest.
-        shown.Clear();
-        Set(missiles, "shownOutbound", 0);
-        Set(missiles, "shownInbound", 0);
-        Call(board, "Present", settings, systems, missiles, null, "FORWARD", null);
-        Check(inbound.text == "IN --" && outbound.text == "OUT --" && inbound.color == outbound.color,
-            "With no shots both directions must read empty and IN must drop its warning tone.");
-        foreach (object row in rows)
-            Check(!((RectTransform)Get(row, "Rect")).gameObject.activeSelf,
-                "With no shots no lane row may stay drawn.");
-        ValidateBoard(canvas, panel, "Target board idle");
-        CaptureBoard(canvas, "target-board-idle.png");
-
-        Call(board, "Hide");
-        Object.DestroyImmediate(owner);
-        picture.Release(); Object.DestroyImmediate(picture);
-    }
-
-    private static object ShotFixture(Type shotEntry, Type shotMath, bool outbound, string seeker,
-        string rangeText, float first, float range)
-    {
-        object track = CallStatic(shotMath, "Start", first, 0f);
-        track = CallStatic(shotMath, "Update", track, range, 1f);
-        object entry = Activator.CreateInstance(shotEntry, true);
-        Set(entry, "Outbound", outbound);
-        Set(entry, "Seeker", seeker);
-        Set(entry, "RangeText", rangeText);
-        Set(entry, "Track", track);
-        return entry;
-    }
-
-    private static void ValidateBoard(Canvas canvas, RectTransform panel, string name)
-    {
-        ValidateReadable(panel, name);
-        // On screen: the panel is placed in canvas units from the canvas's bottom-left, which a
-        // screen-space canvas pins to the screen's, so its pixels are its placement times the scale.
-        // Then every drawn piece, text, lines, backing and picture, stays inside that panel.
-        Rect screen = Screen.safeArea;
-        if (screen.width < 1 || screen.height < 1) screen = new Rect(0, 0, Screen.width, Screen.height);
-        Vector2 min = panel.anchoredPosition * canvas.scaleFactor;
-        Vector2 max = (panel.anchoredPosition + panel.sizeDelta) * canvas.scaleFactor;
-        Check(min.x >= screen.xMin - .5f && min.y >= screen.yMin - .5f &&
-              max.x <= screen.xMax + .5f && max.y <= screen.yMax + .5f,
-            name + " must stay inside the screen's safe area.");
-        foreach (Graphic graphic in panel.GetComponentsInChildren<Graphic>())
-        {
-            if (!graphic.enabled) continue;
-            Rect rect = PanelRect(panel, graphic.rectTransform);
-            Check(rect.xMin >= -.5f && rect.yMin >= -.5f &&
-                  rect.xMax <= panel.rect.width + .5f && rect.yMax <= panel.rect.height + .5f,
-                name + " draws " + graphic.name + " outside its own panel.");
-        }
-        // Legible: no line ellipsized by its own box, and no two lines drawn over each other.
-        var labels = new List<TMP_Text>();
-        foreach (TMP_Text label in panel.GetComponentsInChildren<TMP_Text>())
-            if (!string.IsNullOrWhiteSpace(label.text)) labels.Add(label);
-        for (int i = 0; i < labels.Count; i++)
-        {
-            Check(labels[i].preferredWidth <= labels[i].rectTransform.rect.width + .5f,
-                name + " cuts \"" + labels[i].text + "\" short.");
-            Rect own = PanelRect(panel, labels[i].rectTransform);
-            own = new Rect(own.x + .5f, own.y + .5f, own.width - 1f, own.height - 1f);
-            for (int j = i + 1; j < labels.Count; j++)
-                Check(!own.Overlaps(PanelRect(panel, labels[j].rectTransform)),
-                    name + " draws \"" + labels[i].text + "\" over \"" + labels[j].text + "\".");
-        }
-    }
-
-    private static Rect PanelRect(RectTransform panel, RectTransform child)
-    {
-        var corners = new Vector3[4];
-        child.GetWorldCorners(corners);
-        Vector2 min = panel.InverseTransformPoint(corners[0]), max = min;
-        for (int i = 1; i < 4; i++)
-        {
-            Vector2 corner = panel.InverseTransformPoint(corners[i]);
-            min = Vector2.Min(min, corner);
-            max = Vector2.Max(max, corner);
-        }
-        return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-    }
-
-    private static void CaptureBoard(Canvas canvas, string file)
-    {
-        // Frame the whole screen in canvas units so the corner placement shows, then hand the
-        // canvas back to screen space for the next Present.
-        float width = Screen.width / canvas.scaleFactor, height = Screen.height / canvas.scaleFactor;
-        PrepareWorldCanvas(canvas, width, height);
-        Capture(canvas.gameObject, width, height, file);
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-    }
-
-    private static void ValidateSkillRows(object panel)
-    {
-        Canvas.ForceUpdateCanvases();
-        foreach (object row in (IEnumerable)Get(panel, "skillRows"))
-        {
-            RectTransform cell = ((Image)Get(row, "Fill")).rectTransform;
-            RectTransform name = ((TMP_Text)Get(row, "Name")).rectTransform;
-            RectTransform state = ((TMP_Text)Get(row, "State")).rectTransform;
-            Vector3[] cellCorners = new Vector3[4];
-            Vector3[] nameCorners = new Vector3[4];
-            Vector3[] stateCorners = new Vector3[4];
-            cell.GetWorldCorners(cellCorners);
-            name.GetWorldCorners(nameCorners);
-            state.GetWorldCorners(stateCorners);
-            Check(stateCorners[0].y + .5f >= cellCorners[0].y &&
-                  stateCorners[2].y <= cellCorners[2].y + .5f,
-                "SQD skill state line escapes its cell.");
-            Check(stateCorners[2].y <= nameCorners[0].y + .5f,
-                "SQD skill state line overlaps its name lane.");
-        }
-    }
-
     private static GameObject MakeCanvas(string name, float height, out RectTransform root)
     {
         var canvasObject = new GameObject(name, typeof(RectTransform), typeof(Canvas));
         Canvas canvas = canvasObject.GetComponent<Canvas>();
         PrepareWorldCanvas(canvas, 480f, height);
         root = (RectTransform)canvasObject.transform;
-        AvKit.Panel(root, new Rect(0f, 0f, 480f, height), AvTheme.SurfaceInert);
+        AvLay.Fill(AvLay.Solid(root, "Ground", AvTheme.SurfaceInert).rectTransform);
         return canvasObject;
     }
 
@@ -821,36 +570,12 @@ public static class PresentationUnityCheck
         root.sizeDelta = new Vector2(width, height);
     }
 
-    private static void SeedShell(AvScreen shell, string state)
-    {
-        shell.DataBar.State.text = state;
-        shell.DataBar.SetChip(0, "OFFLINE QA", "info");
-        shell.DataBar.SetChip(1, "FIXTURE DATA", "inert");
-        shell.DataBar.SetChip(2, "NO ORDERS", "inert");
-        shell.WriteStatus(null, null, "Offline layout check · production builder · no live game state.");
-    }
-
-    private static void CaptureScrolled(GameObject canvas, float height, string prefix)
-    {
-        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
-        {
-            if (!scroll.gameObject.activeInHierarchy) continue;
-            Check(scroll.content.rect.height + .5f >= scroll.viewport.rect.height,
-                prefix + " scroll content must cover its viewport.");
-            scroll.verticalNormalizedPosition = 1f;
-        }
-        Capture(canvas, 480f, height, prefix + "-top.png");
-        foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
-            if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 0f;
-        Capture(canvas, 480f, height, prefix + "-bottom.png");
-    }
-
     private static void ValidateReadable(RectTransform root, string name)
     {
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true))
         {
-            if (!text.gameObject.activeInHierarchy || string.IsNullOrWhiteSpace(text.text)) continue;
+            if (!text.gameObject.activeInHierarchy || string.IsNullOrWhiteSpace(text.text) || text.name.StartsWith("Icon")) continue; // kit icon glyphs are not type
             text.ForceMeshUpdate();
             Check(text.fontSize >= 10f, name + " has unreadable type: " + text.text);
             Check(text.color.a >= .35f, name + " has near-invisible type: " + text.text);

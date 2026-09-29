@@ -125,6 +125,8 @@ namespace BoscaliSummer.Features.UrbanCombat.Runtime
             }
 
             Airbase strongpointBase = null;
+            int strongpointTier = 0;
+            int strongpointNests = 0;
             Vector3 localPos = local.transform.position;
             for (int a = 0; a < cachedAirbases.Length; a++)
             {
@@ -133,10 +135,16 @@ namespace BoscaliSummer.Features.UrbanCombat.Runtime
 
                 Vector3 basePos = airbase.center != null ? airbase.center.position : airbase.transform.position;
                 if ((localPos - basePos).sqrMagnitude > StrongpointRadiusSq) continue;
-                if (ZoneGarrisonManager.TierFor(airbase) < 1) continue;
-                if (ZoneGarrisonManager.IntactNestsFor(airbase) < 1) continue;
+                int tier = ZoneGarrisonManager.TierFor(airbase);
+                if (tier < 1) continue;
+                int nests = ZoneGarrisonManager.IntactNestsFor(airbase);
+                if (nests < 1) continue;
+                if (SiegeMath.DefenseMultiplier(tier, nests, ZoneGarrisonManager.SiegeScale) <= 1f &&
+                    SiegeMath.SiegeFloor(tier, nests, ZoneGarrisonManager.SiegeScale) <= 0f) continue;
 
                 strongpointBase = airbase;
+                strongpointTier = tier;
+                strongpointNests = nests;
                 break;
             }
 
@@ -145,7 +153,10 @@ namespace BoscaliSummer.Features.UrbanCombat.Runtime
                 string baseName = !string.IsNullOrEmpty(strongpointBase.name)
                     ? strongpointBase.name.Replace("(Clone)", "").Trim().ToUpperInvariant()
                     : "AIRFIELD";
-                ActiveAlertTicker = $"[STRONGPOINTS // {baseName} GARRISONED - REDUCE NESTS BEFORE ASSAULT]";
+                float defense = SiegeMath.DefenseMultiplier(strongpointTier, strongpointNests, ZoneGarrisonManager.SiegeScale);
+                float floor = SiegeMath.SiegeFloor(strongpointTier, strongpointNests, ZoneGarrisonManager.SiegeScale);
+                string hold = strongpointNests == 1 ? "NEST HOLDS" : "NESTS HOLD";
+                ActiveAlertTicker = $"[STRONGPOINTS // {baseName} GARRISONED - {strongpointNests} {hold} {floor * 100f:0}% · DEF x{defense:0.#}]";
                 IsBaseUnderAttack = false;
             }
             else

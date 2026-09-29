@@ -33,7 +33,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         private static RectTransform panel;
-        private static AvStyled.DataBar statusBar;
+        private static TMP_Text headerIcon;
+        private static TMP_Text headerTitle;
+        private static TMP_Text headerCaption;
+        private static Image chipRail;
+        private static TMP_Text chipText;
         private static TMP_Text body;
         private static RectTransform scrollContent;
         private static ScrollRect scroll;
@@ -71,7 +75,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // Only reuse our live reference; a name lookup can resurrect that doomed panel.
             if (panel == null)
             {
-                var go = new GameObject(PanelName, typeof(RectTransform), typeof(Image));
+                var go = new GameObject(PanelName, typeof(RectTransform));
                 panel = go.GetComponent<RectTransform>();
                 panel.SetParent(canvas.transform, worldPositionStays: false);
             }
@@ -118,11 +122,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             panel.anchoredPosition = new Vector2(columns.Panel.x, columns.Panel.y + topOffset);
             panel.localScale = Vector3.one;
             panel.gameObject.SetActive(true);
-            Image background = panel.GetComponent<Image>();
-            background.sprite = merged ? null : AvSprites.Panel;
-            background.type = merged ? Image.Type.Simple : Image.Type.Sliced;
-            background.color = merged ? new Color32(10, 14, 18, 235) : Color.white;
-            background.raycastTarget = false;
+            AvFrame background = panel.GetComponent<AvFrame>();
+            if (background == null)
+            {
+                background = panel.gameObject.AddComponent<AvFrame>();
+                background.raycastTarget = false;
+                background.Fill = true;
+            }
+            background.Chamfer = merged ? AvChamfer.All(0f) : AvChamfer.Diagonal(6f);
+            background.Paint(
+                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(merged ? 0.94f : 1f),
+                merged ? Color.clear : AvStyleHost.FuiColor("frame", AvTheme.Frame));
             // The log is always subordinate to the instrument surfaces, including
             // during a resize between layout refreshes.
             Transform dock = panel.parent.Find(MfdPanelDock.DockName);
@@ -136,7 +146,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (added || pruned || string.IsNullOrEmpty(body.text))
             {
                 body.text = HistoryText();
-                statusBar?.SetChip(0, history.Count > 0 ? "LIVE" : "STANDBY", history.Count > 0);
+                SetLiveChip(history.Count > 0);
                 ResizeScrollContent(added);
             }
         }
@@ -146,7 +156,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             RestoreOriginals();
             if (panel != null) UnityEngine.Object.Destroy(panel.gameObject);
             panel = null;
-            statusBar = null;
+            headerIcon = null;
+            headerTitle = null;
+            headerCaption = null;
+            chipRail = null;
+            chipText = null;
             body = null;
             scrollContent = null;
             scroll = null;
@@ -238,24 +252,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             builtSize = size;
             builtMerged = merged;
-            statusBar = null;
+            headerIcon = null;
+            headerTitle = null;
+            headerCaption = null;
+            chipRail = null;
+            chipText = null;
             float contentTop = merged ? 0f : HeaderHeight;
             if (merged)
             {
-                Color frame = AvTheme.Frame.WithAlpha(0.55f);
-                AvKit.Rule(panel, new Rect(0f, 0f, 1f, size.y), frame);
-                AvKit.Rule(panel, new Rect(size.x - 1f, 0f, 1f, size.y), frame);
-                AvKit.Rule(panel, new Rect(0f, -size.y + 1f, size.x, 1f), frame);
+                Color frame = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f);
+                MfdChromeLay.Rule(panel, "LeftEdge", new Rect(0f, 0f, 1f, size.y), frame);
+                MfdChromeLay.Rule(panel, "RightEdge", new Rect(size.x - 1f, 0f, 1f, size.y), frame);
+                MfdChromeLay.Rule(panel, "BottomEdge", new Rect(0f, -size.y + 1f, size.x, 1f), frame);
             }
             else
             {
-                statusBar = AvStyled.TopBar(panel, new Rect(0f, 0f, size.x, HeaderHeight), "FIELD LOG", 1);
-                statusBar.State.text = "TACTICAL EVENT STREAM";
-                statusBar.SetChip(0, history.Count > 0 ? "LIVE" : "STANDBY", history.Count > 0);
+                BuildHeader(size);
             }
 
             float feedHeight = Mathf.Max(0f, size.y - contentTop - 6f);
-            AvStyled.Spine(panel, new Rect(3f, -contentTop - 3f, 3f, feedHeight));
+            MfdChromeLay.Rule(panel, "Spine", new Rect(3f, -contentTop - 3f, 3f, feedHeight),
+                AvStyleHost.FuiColor("select", AvTheme.Accent));
 
             bodyWidth = Mathf.Max(0f, size.x - 24f);
             viewportHeight = feedHeight;
@@ -263,7 +280,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var scrollGo = new GameObject("EventScroll", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
             var scrollRect = scrollGo.GetComponent<RectTransform>();
             scrollRect.SetParent(panel, worldPositionStays: false);
-            AvKit.Place(scrollRect,
+            MfdChromeLay.Place(scrollRect,
                 new Rect(12f, -contentTop - 3f, bodyWidth + 8f, viewportHeight));
 
             Image scrollHitArea = scrollGo.GetComponent<Image>();
@@ -287,16 +304,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             scrollContent.anchoredPosition = Vector2.zero;
             scrollContent.sizeDelta = new Vector2(0f, viewportHeight);
 
-            body = AvStyled.Label(
-                scrollContent,
-                new Rect(0f, 0f, bodyWidth, viewportHeight),
-                "", "row-sub", align: TextAlignmentOptions.TopLeft);
-            body.richText = true;
-            body.fontSize = 13f;
+            body = AvText.Make(scrollContent, "Body", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, wrap: true);
+            MfdChromeLay.Place(body.rectTransform, new Rect(0f, 0f, bodyWidth, viewportHeight));
+            body.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             body.lineSpacing = 5f;
             body.paragraphSpacing = 4f;
-            body.characterSpacing = 0f;
-            body.enableWordWrapping = true;
             body.overflowMode = TextOverflowModes.Overflow;
 
             scroll = scrollGo.GetComponent<ScrollRect>();
@@ -309,6 +321,46 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             scroll.decelerationRate = 0.12f;
             scroll.scrollSensitivity = 28f;
             scroll.verticalNormalizedPosition = 1f;
+        }
+
+        /// <summary>Icon + title + caption over a hairline, plus the LIVE/STANDBY chip — the standalone panel's own header.</summary>
+        private static void BuildHeader(Vector2 size)
+        {
+            MfdChromeLay.Rule(panel, "HeaderRule", new Rect(0f, -HeaderHeight + 1f, size.x, 1f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f));
+
+            headerIcon = AvIcons.Make(panel, AvIcon.ListDetails, AvGridTokens.IconHead,
+                AvStyleHost.FuiColor("key", AvTheme.RailInfo));
+            MfdChromeLay.Place(headerIcon.rectTransform, new Rect(8f, -(HeaderHeight - 16f) * 0.5f, 16f, 16f));
+
+            headerTitle = AvText.Make(panel, "Title", AvTextRole.Head, "FIELD LOG", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(headerTitle.rectTransform, new Rect(30f, 0f, 84f, HeaderHeight));
+            headerTitle.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+
+            float chipX = size.x - 74f;
+            headerCaption = AvText.Make(panel, "Caption", AvTextRole.Micro, "TACTICAL EVENT STREAM", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(headerCaption.rectTransform, new Rect(122f, 0f, Mathf.Max(0f, chipX - 8f - 122f), HeaderHeight));
+            headerCaption.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+
+            chipRail = MfdChromeLay.Rule(panel, "ChipRail", new Rect(chipX, -(HeaderHeight - 10f) * 0.5f, 3f, 10f), Color.clear);
+            chipText = AvText.Make(panel, "Chip", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(chipText.rectTransform, new Rect(chipX + 8f, 0f, 62f, HeaderHeight));
+
+            SetLiveChip(history.Count > 0);
+        }
+
+        /// <summary>
+        /// The header's LIVE/STANDBY state: a word (not colour alone, R1) plus a matching rail,
+        /// from the ready/inert roles.
+        /// </summary>
+        private static void SetLiveChip(bool live)
+        {
+            if (chipText == null) return;
+            AvState state = live ? AvState.Ready : AvState.Inert;
+            Color paint = AvStyleHost.FuiColor(AvStates.Class(state), live ? AvTheme.Accent : AvTheme.Dim);
+            chipText.text = AvStates.Glyph(state) + (live ? "LIVE" : "STANDBY");
+            chipText.color = paint;
+            if (chipRail != null) chipRail.color = paint;
         }
 
         private static void HideOriginals()
@@ -468,7 +520,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             float preferred = body.GetPreferredValues(body.text, bodyWidth, 0f).y + 6f;
             float height = Mathf.Max(viewportHeight, preferred);
             scrollContent.sizeDelta = new Vector2(0f, height);
-            AvKit.Place(body.transform as RectTransform, new Rect(0f, 0f, bodyWidth, height));
+            MfdChromeLay.Place(body.transform as RectTransform, new Rect(0f, 0f, bodyWidth, height));
 
             // Follow new traffic only when the reader is at the live edge. Snapping a
             // scrolled-back reader to the top on every message loses their place.

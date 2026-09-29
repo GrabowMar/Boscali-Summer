@@ -8,10 +8,10 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 {
     internal static class BoscaliRadialMenu
     {
-        private const string RootLabel = "Boscali Summer";
-        private const string LandLabel = "Autopilot: Land";
-        private const string CancelLabel = "Autopilot: Cancel";
-        private const string BackLabel = "Back";
+        private const string RootLabel = "BOSCALI";
+        private const string LandLabel = "AUTOPILOT · LAND";
+        private const string CancelLabel = "AUTOPILOT · CANCEL";
+        private const string BackLabel = "BACK";
         private const int MaxPageEntries = 6;
         private const float RestoreAfterSeconds = 6f;
 
@@ -82,6 +82,12 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             rootEntry.CopyAppearanceFrom(Template(appearanceTemplates, 0));
             landEntry.CopyAppearanceFrom(Template(appearanceTemplates, 1));
             submenuBack.CopyAppearanceFrom(Template(appearanceTemplates, 2));
+
+            // Icon overridden after the appearance copy: the wedge background/colour/layout
+            // stay native, only the icon glyph gets the shared HUD's datalink style.
+            rootEntry.SetIcon(RadialMenuIcons.Datalink);
+            landEntry.SetIcon(RadialMenuIcons.Datalink);
+            submenuBack.SetIcon(RadialMenuIcons.Datalink);
         }
 
         private static RadialMenuAction Template(RadialMenuAction[] templates, int index) =>
@@ -268,6 +274,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             DestroyAction(ref submenuBack);
             DestroyAction(ref landEntry);
             DestroyAction(ref rootEntry);
+            RadialMenuIcons.Teardown();
         }
 
         private static void DestroyActions(ref BoscaliMenuAction[] actions)

@@ -8,557 +8,529 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Events.Presentation
 {
     /// <summary>
-    /// The two card shapes the feed uses.
+    /// The kit v2 parts the DISPATCH and DESK pages share.
     ///
-    /// <para>The active event is a media card read top to bottom in one order: the 16:9 plate
-    /// (the event's poster when the player has drawn one, a generated stripe plate over the
-    /// category mark when not — never a blank rectangle), the title, the category and scope,
-    /// the countdown, the live effect, its plain-words consequence, the flavor copy and the
-    /// scripted beats. The title is the headline and the effect is the figure; the countdown
-    /// is quiet row text on a state rail, so it never competes with either. Every state the
-    /// card can hold, such as ENDING, is carried by words and a rail, never by colour alone.</para>
+    /// <para><see cref="EventPlateArt"/> hosts the event poster (data/art, <see cref="EventArtCache"/> and
+    /// <see cref="EventPlate"/>): the player's drawn poster when one exists, else a generated stripe plate
+    /// over a Tabler category glyph — never a blank rectangle. It is not itself an <see cref="AvPart"/>;
+    /// it is a small widget the cards below place and resize, the way <c>AvCard</c> hosts a nested
+    /// <c>AvFlow</c>. The poster is centre-cropped to the plate, never stretched.</para>
     ///
-    /// <para>Bars are placed by width, not by <c>fillAmount</c>: Unity's filled image type
-    /// draws a full quad without a sprite, which is the module's oldest layout lesson.</para>
+    /// <para><see cref="EventHeroPart"/> is the live dispatch: a banner, the tier tag, the event name, effect
+    /// pills, a countdown with its time-remaining bar, the plain-words consequence and the scripted beats.
+    /// It has a compact calm state for a quiet theater. Every state it can show (ENDING, a scripted beat
+    /// firing, a cancelled beat) carries a word as well as a colour (R1). <see cref="EventCaseFilePart"/>
+    /// is the same poster-plus-copy shape, sized for the DESK page's current-or-last case file.</para>
+    ///
+    /// <para>Every part here measures and places through one arrangement routine and calls
+    /// <see cref="AvPart.Changed"/> whenever a setter changes text that can change its height.</para>
     /// </summary>
     internal sealed partial class EventsMfdPanel
     {
-        /// <summary>One 16:9 image plate: poster or generated stripe plate, plus the category mark.</summary>
-        private sealed class PlateUi
+        /// <summary>The category mark shown when no poster has been drawn for an event.</summary>
+        internal static AvIcon CategoryIcon(string category) =>
+            category == "POLITICAL" ? AvIcon.Scale
+            : category == "HAZARD" ? AvIcon.AlertTriangle
+            : AvIcon.Coins;
+
+        /// <summary>A state colour that is legible as text: inert reads as the dim ink, not the rail grey.</summary>
+        internal static Color TextColor(AvState state) =>
+            state == AvState.Inert
+                ? AvStyleHost.FuiColor("ink-dim", AvTheme.Dim)
+                : AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo);
+
+        /// <summary>The rect of <paramref name="source"/> (in uv space) that fills a w x h plate without stretching.</summary>
+        internal static Rect CropUv(Rect source, float w, float h)
         {
-            private readonly RectTransform root;
-            private readonly Image stripes;
-            private readonly Image art;
-            private readonly EventGlyph mark;
-
-            private PlateUi(RectTransform root, Image stripes, Image art, EventGlyph mark)
+            if (w <= 0f || h <= 0f || source.width <= 0f || source.height <= 0f) return source;
+            float srcAspect = source.width / source.height, dstAspect = w / h;
+            if (dstAspect > srcAspect)
             {
-                this.root = root;
-                this.stripes = stripes;
-                this.art = art;
-                this.mark = mark;
+                float keep = source.height * srcAspect / dstAspect;
+                return new Rect(source.x, source.y + (source.height - keep) * 0.5f, source.width, keep);
             }
+            float keepW = source.width * dstAspect / srcAspect;
+            return new Rect(source.x + (source.width - keepW) * 0.5f, source.y, keepW, source.height);
+        }
 
-            /// <summary>The plate frame, so a row can move it without touching its children.</summary>
-            public RectTransform Root => root;
+        /// <summary>The uv rect of a sprite inside its texture.</summary>
+        internal static Rect SpriteUv(Sprite sprite)
+        {
+            Texture2D texture = sprite != null ? sprite.texture : null;
+            if (texture == null || texture.width == 0 || texture.height == 0) return new Rect(0f, 0f, 1f, 1f);
+            Rect r = sprite.textureRect;
+            return new Rect(r.x / texture.width, r.y / texture.height, r.width / texture.width, r.height / texture.height);
+        }
 
-            public static PlateUi Build(RectTransform parent, float x, float y, float width, float height,
-                float markSize)
+        /// <summary>One plate: the drawn art, or a generated stripe film over a category glyph.</summary>
+        internal sealed class EventPlateArt
+        {
+            private readonly Image back, stripes;
+            private readonly RawImage art;
+            private readonly TMP_Text mark;
+            private readonly float markSize;
+            private Sprite poster;
+
+            public RectTransform Root { get; }
+
+            public EventPlateArt(RectTransform parent, float markSizePx)
             {
-                var rootObject = new GameObject("Plate", typeof(RectTransform), typeof(Image));
-                var root = (RectTransform)rootObject.transform;
-                root.SetParent(parent, false);
-                Image back = rootObject.GetComponent<Image>();
-                back.color = AvTheme.SurfaceInert;
-                back.raycastTarget = false;
-                rootObject.AddComponent<RectMask2D>();
-
-                var stripeObject = new GameObject("Stripes", typeof(RectTransform), typeof(Image));
-                Image stripes = stripeObject.GetComponent<Image>();
-                stripes.transform.SetParent(root, false);
+                markSize = markSizePx;
+                Root = AvLay.Child(parent, "Plate");
+                Root.gameObject.AddComponent<RectMask2D>();
+                back = AvLay.Solid(Root, "Back", Color.clear);
+                stripes = AvLay.Solid(Root, "Stripes", Color.white);
                 stripes.sprite = EventPlate.Stripes();
                 stripes.type = Image.Type.Tiled;
-                stripes.raycastTarget = false;
-
-                var artObject = new GameObject("Art", typeof(RectTransform), typeof(Image));
-                Image art = artObject.GetComponent<Image>();
-                art.transform.SetParent(root, false);
-                art.preserveAspect = false;
+                var artGo = new GameObject("Art", typeof(RectTransform), typeof(CanvasRenderer));
+                artGo.transform.SetParent(Root, false);
+                art = artGo.AddComponent<RawImage>();
                 art.raycastTarget = false;
-
-                var markObject = new GameObject("Mark", typeof(RectTransform), typeof(CanvasRenderer), typeof(EventGlyph));
-                EventGlyph mark = markObject.GetComponent<EventGlyph>();
-                markObject.transform.SetParent(root, false);
-                mark.raycastTarget = false;
-
-                AvKit.Place(root, new Rect(x, y, width, height));
-                AvKit.Place(stripes.rectTransform, new Rect(0f, 0f, width, height));
-                float imageWidth = Mathf.Max(width, height * 16f / 9f);
-                float imageHeight = imageWidth * 9f / 16f;
-                AvKit.Place(art.rectTransform, new Rect((width - imageWidth) * 0.5f,
-                    (imageHeight - height) * 0.5f, imageWidth, imageHeight));
-                AvKit.Place(mark.rectTransform, new Rect(width * 0.5f - markSize * 0.5f,
-                    -height * 0.5f + markSize * 0.5f, markSize, markSize));
-
-                AvKit.Outline(parent, new Rect(x, y, width, height), AvTheme.Frame.WithAlpha(0.6f));
-                return new PlateUi(root, stripes, art, mark);
+                mark = AvIcons.Make(Root, AvIcon.Coins, markSize, Color.white);
+                Restyle();
             }
 
-            public void Bind(Sprite poster, int category, Color ink)
+            public void Layout(float w, float h)
             {
+                AvLay.Fill(back.rectTransform);
+                AvLay.Fill(stripes.rectTransform);
+                AvLay.Fill(art.rectTransform);
+                if (poster != null) art.uvRect = CropUv(SpriteUv(poster), w, h);
+                float size = Mathf.Min(markSize, Mathf.Min(w, h) * 0.6f);
+                AvLay.Place(mark.rectTransform, (w - size) * 0.5f, (h - size) * 0.5f, size, size);
+            }
+
+            public void Bind(Sprite art, AvIcon categoryGlyph, Color ink)
+            {
+                poster = art;
                 bool hasArt = poster != null;
-                art.sprite = poster;
-                art.enabled = hasArt;
+                this.art.texture = hasArt ? poster.texture : null;
+                this.art.enabled = hasArt;
                 stripes.gameObject.SetActive(!hasArt);
                 stripes.color = ink.WithAlpha(0.10f);
                 mark.gameObject.SetActive(!hasArt);
                 if (hasArt) return;
-                mark.SetKind(GlyphKind(category));
+                AvIcons.Set(mark, categoryGlyph, markSize);
                 mark.color = ink.WithAlpha(0.85f);
             }
+
+            public void Restyle() => back.color = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
         }
 
-        private sealed class ActiveEventCard
+        /// <summary>A small effect pill: state rail plus the effect word, sized to its text and wrapped by its owner.</summary>
+        internal sealed class Pill
         {
-            public const float PlainHeight = 366f;
-            private const float CalmHeight = 236f;
+            private const float Height = 22f;
+            private readonly Image back, rail;
+            private readonly TMP_Text text;
+            private AvState state = AvState.Inert;
 
-            /// <summary>
-            /// The height the page reserves for a scripted card at the beat cap, so the scroll
-            /// viewport exists whenever a superevent can grow the page. The card's actual height
-            /// follows the entry's own beat count and flavour copy.
-            /// </summary>
-            public const float ScriptedHeight = ScriptedBaseHeight + MaximumEventSteps * StepPitch;
+            public RectTransform Root { get; }
+            public static float PillHeight => Height;
+            public bool Visible => text.text.Length > 0;
+            public float Width => Visible ? Mathf.Ceil(AvText.Width(text)) + 20f : 0f;
 
-            private const float PlateHeight = 132f;
-            private const float TextX = 12f;
-            private const float TitleY = -153f;
-            private const float ScopeY = -184f;
-            private const float CountdownY = -201f;
-            private const float EffectY = -229f;
-            private const float ConsequenceY = -260f;
-            private const float FlavorY = -294f;
-            private const float FlavorMinHeight = 42f;
-            private const float FlavorMaxHeight = 66f;
-            private const float StepTop = 347f;
-            private const float StepPitch = 16f;
-            private const float ScriptedBaseHeight = 368f;
-            private const int MaximumSteps = EventsMfdPanel.MaximumEventSteps;
+            public Pill(RectTransform parent)
+            {
+                Root = AvLay.Child(parent, "Pill");
+                back = AvLay.Solid(Root, "Back", Color.clear);
+                rail = AvLay.Solid(Root, "Rail", Color.clear);
+                text = AvText.Make(Root, "Text", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft);
+                Root.gameObject.SetActive(false);
+                Restyle();
+            }
 
-            private readonly float width;
-            private readonly float originX;
-            private readonly float originY;
-            private readonly GameObject root;
-            private readonly RectTransform rootRect;
-            private readonly Image box;
-            private readonly Image rail;
-            private readonly PlateUi plate;
-            private readonly TMP_Text posterTag;
-            private readonly TMP_Text title;
-            private readonly TMP_Text scope;
-            private readonly Image countdownRail;
-            private readonly TMP_Text countdown;
-            private readonly TMP_Text effect;
-            private readonly TMP_Text consequence;
-            private readonly TMP_Text flavor;
-            private readonly Image[] stepDot;
-            private readonly TMP_Text[] stepClock;
-            private readonly TMP_Text[] stepLabel;
-            private readonly Image track;
-            private readonly Image fill;
-            private readonly Image[] timeTicks;
+            /// <summary>True when the pill's text or visibility changed (its owner must re-measure).</summary>
+            public bool Set(string value, AvState st)
+            {
+                string composed = string.IsNullOrEmpty(value) ? "" : AvStates.Glyph(st) + value;
+                if (composed == text.text && st == state) return false;
+                bool visibilityOrWidth = composed != text.text;
+                text.text = composed;
+                state = st;
+                Root.gameObject.SetActive(composed.Length > 0);
+                Restyle();
+                return visibilityOrWidth;
+            }
 
-            private Color tierInk = AvTheme.Dim;
-            private Color tierRail = AvTheme.RailInert;
-            private float urgency;
-            private bool ending;
-            private bool critical;
+            public void Place(float x, float y, float w)
+            {
+                AvLay.Place(Root, x, y, w, Height);
+                AvLay.Fill(back.rectTransform);
+                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, Height);
+                AvLay.Place(text.rectTransform, 10f, 0f, w - 12f, Height);
+            }
+
+            public void Restyle()
+            {
+                AvStyle st = AvStyleHost.FuiStyle("chip " + AvStates.Class(state));
+                back.color = AvStyleHost.Resolve(st.Background, AvTheme.SurfaceInert);
+                rail.color = AvStyleHost.Resolve(st.Rail, AvTheme.RailInert);
+                text.color = state == AvState.Inert
+                    ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary)
+                    : TextColor(state);
+            }
+        }
+
+        /// <summary>
+        /// The active dispatch, the page's hero. Calm: one compact card. Active: banner + tier tag, category and
+        /// target, the event name, effect pills, a big countdown over its time-remaining bar, the consequence in
+        /// plain words, flavour copy and (for a scripted superevent) the beat log.
+        /// </summary>
+        private sealed class EventHeroPart : AvPart
+        {
+            private const float BannerHeight = 100f;
+            private const float CalmPlate = 52f;
+
+            private readonly AvFrame frame;
+            private readonly Image rail, tagBack;
+            private readonly EventPlateArt plate;
+            private readonly TMP_Text tag, kicker, title, clock, clockNote, clockTag, consequence, flavor;
+            private readonly Pill[] pills = new Pill[3];
+            private readonly TMP_Text[] steps;
+            private readonly AvGaugeGraphic progress;
+
+            private AvState tierState = AvState.Inert;
+            private AvState clockState = AvState.Inert;
+            private AvState progressState = AvState.Inert;
+            private bool calm = true;
             private bool scripted;
-            private bool shapeSet;
-            private bool calm;
-            private int scriptedSteps;
-            private float flavorExtra;
+            private int stepCount;
 
-            public float Height { get; private set; } = PlainHeight;
-
-            public ActiveEventCard(RectTransform parent, float x, float y, float cardWidth)
+            public EventHeroPart(RectTransform parent)
             {
-                width = cardWidth;
-                originX = x;
-                originY = y;
-
-                root = new GameObject("ActiveEventCard", typeof(RectTransform));
-                rootRect = (RectTransform)root.transform;
-                rootRect.SetParent(parent, false);
-                box = AvStyled.Box(rootRect, new Rect(0f, 0f, width, PlainHeight), "card");
-                rail = AvStyled.Rail(rootRect, new Rect(0f, 0f, 3f, PlainHeight), "locked");
-
-                plate = PlateUi.Build(rootRect, TextX, -8f, width - TextX * 2f, PlateHeight, 30f);
-                AvKit.Panel(rootRect, new Rect(TextX + 8f, -17f, 148f, 20f),
-                    AvTheme.Ground.WithAlpha(.86f)).raycastTarget = false;
-                posterTag = AvStyled.Label(rootRect, new Rect(TextX + 16f, -19f, 136f, 16f),
-                    "THEATER / LIVE", "section-title-note");
-
-                title = AvStyled.Label(rootRect,
-                    new Rect(TextX, TitleY, width - TextX * 2f, 27f), "", "page-title");
-                title.enableAutoSizing = true;
-                title.fontSizeMin = AvTokens.FontLead;
-                scope = AvStyled.Label(rootRect, new Rect(TextX, ScopeY, width - TextX * 2f, 13f), "",
-                    "section-title-note");
-                countdownRail = AvKit.Panel(rootRect, new Rect(TextX, CountdownY - 1f, 3f, 12f),
-                    AvTheme.RailInert);
-                countdownRail.raycastTarget = false;
-                countdown = AvStyled.Label(rootRect,
-                    new Rect(TextX + 10f, CountdownY, width - TextX * 2f - 10f, 16f),
-                    "", "row-value", align: TextAlignmentOptions.MidlineLeft);
-
-                effect = AvStyled.Label(rootRect, new Rect(TextX, EffectY, width - TextX * 2f, 22f),
-                    "", "metric-value");
-                effect.fontSize = AvTokens.FontTitle;
-                consequence = AvStyled.Label(rootRect, new Rect(TextX, ConsequenceY, width - TextX * 2f, 28f),
-                    "", "row-main");
-                flavor = AvStyled.Label(rootRect, new Rect(TextX, FlavorY, width - TextX * 2f, 42f),
-                    "", "row-sub");
-
-                stepDot = new Image[MaximumSteps];
-                stepClock = new TMP_Text[MaximumSteps];
-                stepLabel = new TMP_Text[MaximumSteps];
-                for (int i = 0; i < MaximumSteps; i++)
-                {
-                    stepDot[i] = AvKit.Panel(rootRect, new Rect(0f, 0f, 6f, 6f), AvTheme.Dim);
-                    stepDot[i].raycastTarget = false;
-                    stepClock[i] = AvStyled.Label(rootRect, new Rect(0f, 0f, 46f, 14f), "", "section-title-note");
-                    stepLabel[i] = AvStyled.Label(rootRect, new Rect(0f, 0f, width - TextX - 78f, 14f),
-                        "", "row-sub");
-                    stepDot[i].gameObject.SetActive(false);
-                    stepClock[i].gameObject.SetActive(false);
-                    stepLabel[i].gameObject.SetActive(false);
-                }
-
-                var barArea = new Rect(8f, -(PlainHeight - 10f), width - 16f, 3f);
-                track = AvKit.Panel(rootRect, barArea, AvTheme.SurfaceInert);
-                track.raycastTarget = false;
-                fill = AvKit.Panel(rootRect, new Rect(barArea.x, barArea.y, 0f, barArea.height), AvTheme.Dim);
-                fill.raycastTarget = false;
-                timeTicks = new Image[3];
-                for (int i = 0; i < timeTicks.Length; i++)
-                    timeTicks[i] = AvKit.Rule(rootRect,
-                        new Rect(barArea.x + barArea.width * (i + 1f) / 4f,
-                            barArea.y - 1f, 1f, 5f), AvTheme.Frame);
-
-                ApplyShape(false, 0, force: true);
+                Rect = AvLay.Child(parent, "EventHero");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
+                AvLay.Fill(frame.rectTransform);
+                rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                plate = new EventPlateArt(Rect, 30f);
+                tagBack = AvLay.Solid(plate.Root, "TagBack", Color.clear);
+                tag = AvText.Make(tagBack.rectTransform, "Tag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                kicker = AvText.Make(Rect, "Kicker", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
+                title = AvText.Make(Rect, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
+                for (int i = 0; i < pills.Length; i++) pills[i] = new Pill(Rect);
+                clock = AvText.Make(Rect, "Clock", AvTextRole.Display, "", TextAlignmentOptions.MidlineLeft);
+                clockNote = AvText.Make(Rect, "ClockNote", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                clockTag = AvText.Make(Rect, "ClockTag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+                consequence = AvText.Make(Rect, "Consequence", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
+                flavor = AvText.Make(Rect, "Flavor", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+                steps = new TMP_Text[MaximumEventSteps];
+                for (int i = 0; i < steps.Length; i++)
+                    steps[i] = AvText.Make(Rect, "Step " + i, AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
+                var go = new GameObject("Progress", typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(Rect, false);
+                progress = go.AddComponent<AvGaugeGraphic>();
+                progress.Shape = AvGaugeShape.Bar;
+                progress.raycastTarget = false;
+                ApplyMode(true);
+                Restyle();
             }
 
-            public void Bind(ActiveEventView view, string effectText, Color effectColor, string consequenceText)
+            /// <summary>Show the calm compact card or the full active one.</summary>
+            private void ApplyMode(bool isCalm)
             {
-                if (!root.activeSelf) root.SetActive(true);
-                calm = false;
-                ApplyShape(view.IsSuper, view.Steps.Count, force: true);
-                tierInk = TierInk(view.Tier);
-                tierRail = TierRail(view.Tier);
-                urgency = 0f;
-                ending = false;
-                critical = false;
+                calm = isCalm;
+                tagBack.gameObject.SetActive(!isCalm);
+                kicker.gameObject.SetActive(!isCalm);
+                clock.gameObject.SetActive(!isCalm);
+                clockNote.gameObject.SetActive(!isCalm);
+                clockTag.gameObject.SetActive(!isCalm);
+                progress.gameObject.SetActive(!isCalm);
+                flavor.gameObject.SetActive(!isCalm);
+                if (isCalm)
+                    foreach (Pill pill in pills) pill.Set("", AvState.Inert);
+            }
 
-                plate.Bind(EventArtCache.Get(view.IconKey,
-                    view.IsSuper ? "tier_super" : "tier_medium"), CategoryOf(view.Category), tierInk);
-                posterTag.text = "THEATER / " + TierShort(view.Tier);
-
-                scope.gameObject.SetActive(true);
-                countdown.gameObject.SetActive(true);
-                countdownRail.gameObject.SetActive(true);
-                effect.gameObject.SetActive(true);
-                flavor.gameObject.SetActive(true);
-                AvKit.Place(consequence.rectTransform,
-                    new Rect(TextX, ConsequenceY, width - TextX * 2f, 28f));
+            /// <summary>Binds a live dispatch. Clock, bar and script refresh separately, at refresh cadence.</summary>
+            public void BindActive(ActiveEventView view, AvState tier, string consequenceText)
+            {
+                ApplyMode(false);
+                tierState = tier;
+                plate.Bind(EventArtCache.Get(view.IconKey, view.IsSuper ? "tier_super" : "tier_medium"),
+                    CategoryIcon(view.Category), TextColor(tierState));
+                tag.text = AvStates.Glyph(tierState) + view.Tier;
+                kicker.text = view.Category + " · " + view.Target;
                 title.text = view.Title.ToUpperInvariant();
-                scope.text = view.Category + "  ·  " + view.Target;
-                scope.color = AvTheme.Dim;
-                effect.text = effectText;
-                effect.color = effectColor;
-                consequence.text = consequenceText;
-                SetFlavor(view.FlavorText);
-                rail.color = tierRail;
-                countdownRail.color = AvTheme.RailInert;
-                TickPulse();
+                consequence.text = consequenceText ?? "";
+                flavor.text = view.FlavorText ?? "";
+                Restyle();
+                Changed();
             }
 
-            public void BindPlaceholder(string noteText)
+            public void BindCalm(string note)
             {
-                if (!root.activeSelf) root.SetActive(true);
-                calm = true;
-                flavorExtra = 0f;
-                ApplyShape(false, 0, force: true);
-                tierInk = AvTheme.Dim;
-                tierRail = AvTheme.RailInert;
-                urgency = 0f;
-                ending = false;
-                critical = false;
-
-                plate.Bind(null, 0, AvTheme.Dim);
-                posterTag.text = "THEATER / STANDBY";
+                ApplyMode(true);
+                tierState = AvState.Inert;
+                clockState = AvState.Inert;
+                scripted = false;
+                stepCount = 0;
+                foreach (TMP_Text step in steps) step.text = "";
+                plate.Bind(null, AvIcon.Radar2, TextColor(AvState.Inert));
                 title.text = "THE THEATER IS QUIET";
-                scope.gameObject.SetActive(false);
-                effect.gameObject.SetActive(false);
-                flavor.gameObject.SetActive(false);
-                countdown.gameObject.SetActive(false);
-                countdownRail.gameObject.SetActive(false);
-                consequence.text = noteText;
-                AvKit.Place(consequence.rectTransform,
-                    new Rect(TextX, -184f, width - TextX * 2f, 38f));
-                countdown.text = "";
-                countdownRail.color = AvTheme.RailInert;
-                rail.color = AvTheme.RailInert;
-
-                for (int i = 0; i < MaximumSteps; i++) SetStep(i, false, "", "", AvTheme.Dim);
-                SetProgress(0f, AvTheme.RailInert);
+                consequence.text = note ?? "";
+                SetProgress(0f, AvState.Inert);
+                Restyle();
+                Changed();
             }
 
-            /// <summary>
-            /// A scripted event needs the beat rows, an ordinary one does not; the card's height
-            /// and every placement that depends on it follow from the entry's own beat count and
-            /// the flavour copy's measured height.
-            /// </summary>
-            private void ApplyShape(bool isScripted, int stepCount, bool force)
+            /// <summary>The three effect pills (cost, tempo, side). Empty text hides a pill.</summary>
+            public void SetPills(string first, AvState firstState, string second, AvState secondState,
+                string third, AvState thirdState)
             {
-                int steps = Mathf.Clamp(stepCount, 0, MaximumSteps);
-                if (!force && shapeSet && scripted == isScripted && scriptedSteps == steps) return;
-                shapeSet = true;
-                scripted = isScripted;
-                scriptedSteps = steps;
-                float shift = flavorExtra;
-                Height = calm ? CalmHeight :
-                    isScripted ? ScriptedBaseHeight + steps * StepPitch + shift
-                    : PlainHeight + shift;
-                float h = Height;
+                bool grew = pills[0].Set(first, firstState);
+                grew |= pills[1].Set(second, secondState);
+                grew |= pills[2].Set(third, thirdState);
+                if (grew) Changed();
+            }
 
-                AvKit.Place(rootRect, new Rect(originX, originY, width, h));
-                AvKit.Place(box.rectTransform, new Rect(0f, 0f, width, h));
-                AvKit.Place(rail.rectTransform, new Rect(0f, 0f, 3f, h));
+            /// <summary>The clock is one mono number; ENDING / CRITICAL is a word beside it (R1).</summary>
+            public void SetClock(string clockText, bool ending, bool critical)
+            {
+                clock.text = clockText ?? "";
+                clockNote.text = "REMAINING";
+                clockState = critical ? AvState.Danger : ending ? AvState.Caution : AvState.Inert;
+                clockTag.text = critical ? AvStates.Glyph(AvState.Danger) + "CRITICAL"
+                    : ending ? AvStates.Glyph(AvState.Caution) + "ENDING" : "";
+                clock.color = clockState == AvState.Inert ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : TextColor(clockState);
+                clockTag.color = TextColor(clockState);
+            }
 
-                for (int i = 0; i < MaximumSteps; i++)
+            public void SetProgress(float fraction01, AvState state)
+            {
+                progress.Value = Mathf.Clamp01(fraction01);
+                if (state != progressState)
                 {
-                    if (!isScripted) continue;
-                    float rowY = -StepTop - shift - i * StepPitch;
-                    AvKit.Place(stepDot[i].rectTransform, new Rect(TextX, rowY + 5f, 6f, 6f));
-                    AvKit.Place(stepClock[i].rectTransform, new Rect(TextX + 14f, rowY, 46f, 14f));
-                    AvKit.Place(stepLabel[i].rectTransform, new Rect(TextX + 66f, rowY, width - TextX - 78f, 14f));
+                    progressState = state;
+                    Restyle();
                 }
-
-                var barArea = new Rect(8f, -(h - 10f), width - 16f, 3f);
-                AvKit.Place(track.rectTransform, barArea);
-                AvKit.Place(fill.rectTransform, new Rect(barArea.x, barArea.y, 0f, barArea.height));
-                for (int i = 0; i < timeTicks.Length; i++)
-                    AvKit.Place(timeTicks[i].rectTransform,
-                        new Rect(barArea.x + barArea.width * (i + 1f) / 4f,
-                            barArea.y - 1f, 1f, 5f));
             }
 
-            /// <summary>
-            /// Writes the copy and gives the block the height it measured, growing the card and
-            /// shifting the beats down with it. The copy is never ellipsised.
-            /// </summary>
-            private void SetFlavor(string copy)
-            {
-                flavor.text = copy ?? string.Empty;
-                float measured = flavor.GetPreferredValues(flavor.text, width - TextX * 2f, 0f).y;
-                float height = Mathf.Clamp(Mathf.Ceil(measured), FlavorMinHeight, FlavorMaxHeight);
-                AvKit.Place(flavor.rectTransform, new Rect(TextX, FlavorY, width - TextX * 2f, height));
-                float extra = height - FlavorMinHeight;
-                if (Mathf.Abs(extra - flavorExtra) < 0.5f) return;
-                flavorExtra = extra;
-                ApplyShape(scripted, scriptedSteps, force: true);
-            }
-
-            public void SetScript(ActiveEventView view, float start, float now, Color railColor)
+            /// <summary>The scripted beat log: "T+m:ss [DONE]/[NEXT] label", or cancelled when the target didn't resolve.</summary>
+            public void SetScript(ActiveEventView view, float start, float now)
             {
                 int count = view != null ? view.Steps.Count : 0;
-                for (int i = 0; i < MaximumSteps; i++)
+                bool wasScripted = scripted;
+                int wasCount = stepCount;
+                scripted = view != null && view.IsSuper && count > 0;
+                stepCount = Mathf.Clamp(count, 0, steps.Length);
+                bool textChanged = wasScripted != scripted || wasCount != stepCount;
+                for (int i = 0; i < steps.Length; i++)
                 {
-                    if (i >= count)
+                    string line = "";
+                    if (scripted && i < stepCount)
                     {
-                        SetStep(i, false, "", "", AvTheme.Dim);
-                        continue;
+                        ActiveEventStep step = view.Steps[i];
+                        if (!view.TargetResolved)
+                            line = "T+" + AvNum.Clock(step.AtSeconds) + "  [CANCELLED] " + step.Label;
+                        else
+                        {
+                            bool fired = now >= start + step.AtSeconds;
+                            line = "T+" + AvNum.Clock(step.AtSeconds) + "  " + (fired ? "[DONE] " : "[NEXT] ") + step.Label;
+                        }
                     }
-
-                    ActiveEventStep step = view.Steps[i];
-                    if (!view.TargetResolved)
+                    if (steps[i].text != line)
                     {
-                        SetStep(i, true, "T+" + StepClock(step.AtSeconds),
-                            "[CANCELLED] " + step.Label, AvTheme.Dim);
-                        continue;
+                        // [NEXT] -> [DONE] keeps the line length; only a line appearing or going changes height.
+                        textChanged |= steps[i].text.Length == 0 || line.Length == 0;
+                        steps[i].text = line;
                     }
-                    bool fired = now >= start + step.AtSeconds;
-                    SetStep(i, true,
-                        "T+" + StepClock(step.AtSeconds),
-                        (fired ? "[DONE] " : "[NEXT] ") + step.Label,
-                        fired ? AvTheme.Dim : railColor);
                 }
+                if (textChanged) Changed();
             }
 
-            private void SetStep(int index, bool active, string time, string label, Color color)
+            public override float Measure(float width) => Arrange(width, false);
+
+            public override void Place(AvSlot s)
             {
-                stepDot[index].gameObject.SetActive(active);
-                stepClock[index].gameObject.SetActive(active);
-                stepLabel[index].gameObject.SetActive(active);
-                if (!active) return;
-                stepDot[index].color = color;
-                stepClock[index].text = time;
-                stepClock[index].color = color;
-                stepLabel[index].text = label;
-                stepLabel[index].color = color;
+                base.Place(s);
+                Arrange(s.W, true);
             }
 
-            /// <summary>
-            /// The clock is text plus a rail: "ENDING · ENDS 0:52" and the rail colour that
-            /// goes with it, so the alarm never depends on the colour being seen.
-            /// </summary>
-            public void SetClock(string text, bool isEnding, bool isCritical)
+            private float Arrange(float width, bool place)
             {
-                ending = isEnding;
-                critical = isCritical;
-                countdown.text = isEnding ? "ENDING · " + text : text;
+                float x = 12f, w = width - 24f, y = 12f;
+                if (calm)
+                {
+                    float textX = x + CalmPlate + 12f, textW = w - CalmPlate - 12f;
+                    float th = AvText.Height(title, textW);
+                    float ch = consequence.text.Length > 0 ? AvText.Height(consequence, textW) : 0f;
+                    float block = th + (ch > 0f ? 4f + ch : 0f);
+                    float total = 12f + Mathf.Max(CalmPlate, block) + 12f;
+                    if (place)
+                    {
+                        AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
+                        AvLay.Place(plate.Root, x, y, CalmPlate, CalmPlate);
+                        plate.Layout(CalmPlate, CalmPlate);
+                        AvLay.Place(title.rectTransform, textX, y, textW, th);
+                        AvLay.Place(consequence.rectTransform, textX, y + th + 4f, textW, ch);
+                    }
+                    return total;
+                }
+
+                if (place)
+                {
+                    AvLay.Place(plate.Root, x, y, w, BannerHeight);
+                    plate.Layout(w, BannerHeight);
+                    float tagW = Mathf.Ceil(AvText.Width(tag)) + 16f;
+                    AvLay.Place(tagBack.rectTransform, 8f, 8f, tagW, 20f);
+                    AvLay.Place(tag.rectTransform, 8f, 0f, tagW - 10f, 20f);
+                }
+                y += BannerHeight + 10f;
+
+                float kh = AvText.Height(kicker, w);
+                if (place) AvLay.Place(kicker.rectTransform, x, y, w, kh);
+                y += kh + 2f;
+                float titleH = AvText.Height(title, w);
+                if (place) AvLay.Place(title.rectTransform, x, y, w, titleH);
+                y += titleH + 8f;
+
+                float cx = 0f, rowY = y;
+                bool anyPill = false;
+                foreach (Pill pill in pills)
+                {
+                    if (!pill.Visible) continue;
+                    float pw = Mathf.Min(w, pill.Width);
+                    if (cx > 0f && cx + pw > w) { cx = 0f; rowY += Pill.PillHeight + 6f; }
+                    if (place) pill.Place(x + cx, rowY, pw);
+                    cx += pw + 6f;
+                    anyPill = true;
+                }
+                if (anyPill) y = rowY + Pill.PillHeight + 10f;
+
+                float clockW = Mathf.Ceil(AvText.Width(clock)) + 4f;
+                if (place)
+                {
+                    AvLay.Place(clock.rectTransform, x, y, clockW, 32f);
+                    AvLay.Place(clockNote.rectTransform, x + clockW + 8f, y + 12f, Mathf.Max(40f, w - clockW - 8f), 15f);
+                    AvLay.Place(clockTag.rectTransform, x, y + 12f, w, 15f);
+                }
+                y += 32f + 4f;
+                if (place) AvLay.Place((RectTransform)progress.transform, x, y, w, 4f);
+                y += 4f + 10f;
+
+                if (consequence.text.Length > 0)
+                {
+                    float qh = AvText.Height(consequence, w);
+                    if (place) AvLay.Place(consequence.rectTransform, x, y, w, qh);
+                    y += qh + 4f;
+                }
+                if (flavor.text.Length > 0)
+                {
+                    float fh = AvText.Height(flavor, w);
+                    if (place) AvLay.Place(flavor.rectTransform, x, y, w, fh);
+                    y += fh + 6f;
+                }
+                for (int i = 0; i < steps.Length; i++)
+                {
+                    bool active = scripted && i < stepCount && steps[i].text.Length > 0;
+                    if (place) steps[i].gameObject.SetActive(active);
+                    if (!active) continue;
+                    float sh = AvText.Height(steps[i], w);
+                    if (place) AvLay.Place(steps[i].rectTransform, x, y, w, sh);
+                    y += sh + 2f;
+                }
+                float total2 = y + 8f;
+                if (place) AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total2);
+                return total2;
             }
 
-            /// <summary>0 well before the end, 1 at the end: the countdown starts to breathe.</summary>
-            public void SetUrgency(float value) => urgency = Mathf.Clamp01(value);
-
-            /// <summary>Called every visible frame; the only per-frame work on this screen.</summary>
-            public void TickPulse()
+            public override void Restyle()
             {
-                Color baseColor = critical ? AvTheme.RailDanger
-                    : ending ? AvTheme.RailCaution
-                    : urgency > 0.85f ? AvTheme.RailDanger
-                    : urgency > 0.5f ? AvTheme.RailCaution
-                    : tierInk;
-                baseColor.a = 1f;
-                countdown.color = baseColor;
-                countdownRail.color = critical ? AvTheme.RailDanger
-                    : ending ? AvTheme.RailCaution
-                    : urgency > 0.5f ? AvTheme.RailCaution
-                    : AvTheme.RailInert;
-            }
-
-            /// <summary>Width-driven fill; see the class note about Unity's filled images.</summary>
-            public void SetProgress(float fraction, Color color)
-            {
-                fill.color = color;
-                fill.rectTransform.sizeDelta = new Vector2(
-                    Mathf.Clamp01(fraction) * (width - 16f), fill.rectTransform.sizeDelta.y);
-            }
-
-            private static string StepClock(int seconds)
-            {
-                int total = Mathf.Max(0, seconds);
-                return (total / 60) + ":" + (total % 60).ToString("00");
+                AvStyle c = AvStyleHost.FuiStyle("card");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                rail.color = AvStyleHost.FuiColor(AvStates.Class(tierState), AvTheme.RailInfo);
+                tagBack.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.88f);
+                tag.color = TextColor(tierState);
+                kicker.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                clock.color = clockState == AvState.Inert ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : TextColor(clockState);
+                clockNote.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                clockTag.color = TextColor(clockState);
+                consequence.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                flavor.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                foreach (TMP_Text step in steps) step.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                foreach (Pill pill in pills) pill.Restyle();
+                progress.Track = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
+                progress.FillColor = progress.FillEnd = AvStyleHost.FuiColor(
+                    AvStates.Class(progressState == AvState.Inert ? AvState.Info : progressState), AvTheme.RailInfo);
+                progress.SetVerticesDirty();
+                plate.Restyle();
             }
         }
 
-        private sealed class HistoryCard
+        /// <summary>The DESK page's current-or-last case file: a poster plus title, meta and body copy.</summary>
+        private sealed class EventCaseFilePart : AvPart
         {
-            private const float NormalHeight = 64f;
-            private const float TallThreshold = 80f;
-            private const float ThumbWidth = 40f;
-            private const float ThumbHeight = 22f;
-
-            private readonly GameObject root;
-            private readonly RectTransform rootRect;
-            private readonly Image box;
+            private const float PlateSize = 64f;
+            private readonly AvFrame frame;
             private readonly Image rail;
-            private readonly PlateUi plate;
-            private readonly Image chipFill;
-            private readonly TMP_Text chip;
-            private readonly TMP_Text title;
-            private readonly TMP_Text meta;
-            private readonly TMP_Text help;
-            private readonly TMP_Text clock;
-            private readonly Image effectFill;
-            private readonly TMP_Text effect;
+            private readonly EventPlateArt plate;
+            private readonly TMP_Text title, meta, body;
+            private AvState tierState = AvState.Inert;
 
-            public HistoryCard(RectTransform parent)
+            public EventCaseFilePart(RectTransform parent)
             {
-                root = new GameObject("HistoryCard", typeof(RectTransform));
-                rootRect = (RectTransform)root.transform;
-                rootRect.SetParent(parent, false);
-                box = AvStyled.Box(rootRect, new Rect(0f, 0f, 438f, NormalHeight), "row");
-                rail = AvStyled.Rail(rootRect, new Rect(0f, -6f, 3f, NormalHeight - 12f), "locked");
-
-                plate = PlateUi.Build(rootRect, 10f, -8f, ThumbWidth, ThumbHeight, 12f);
-
-                chipFill = AvStyled.Box(rootRect, new Rect(58f, -9f, 56f, 16f), "chip", "inert");
-                chip = AvStyled.Label(rootRect, new Rect(58f, -9f, 56f, 16f), "", "chip", "inert",
-                    align: TextAlignmentOptions.Center);
-
-                title = AvStyled.Label(rootRect, new Rect(122f, -8f, 212f, 18f), "", "row-name");
-                clock = AvStyled.Label(rootRect, new Rect(338f, -8f, 88f, 16f), "", "row-value-unit",
-                    align: TextAlignmentOptions.MidlineRight);
-                meta = AvStyled.Label(rootRect, new Rect(58f, -29f, 190f, 13f), "", "row-sub");
-
-                effectFill = AvStyled.Box(rootRect, new Rect(270f, -28f, 156f, 17f), "chip", "inert");
-                effect = AvStyled.Label(rootRect, new Rect(270f, -28f, 156f, 17f), "", "chip", "inert",
-                    align: TextAlignmentOptions.Center);
-
-                help = AvStyled.Label(rootRect, new Rect(60f, -48f, 318f, 30f), "", "row-sub");
-                help.gameObject.SetActive(false);
+                Rect = AvLay.Child(parent, "CaseFile");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                AvLay.Fill(frame.rectTransform);
+                rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                plate = new EventPlateArt(Rect, 20f);
+                title = AvText.Make(Rect, "Title", AvTextRole.Head, "", TextAlignmentOptions.TopLeft, true);
+                meta = AvText.Make(Rect, "Meta", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
+                body = AvText.Make(Rect, "Body", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
             }
 
-            /// <summary>
-            /// Width follows the page column, so the row is re-placed on every layout pass.
-            /// A tall card is the empty feed's fill: the section stretches to the bottom of
-            /// the body and its message centres, so the lower half is never dead space.
-            /// </summary>
-            public void Place(float x, float y, float width, float height)
+            public void Bind(string titleText, string metaText, string bodyText, AvIcon icon, Sprite poster, AvState tier)
             {
-                AvKit.Place(rootRect, new Rect(x, y, width, height));
-                AvKit.Place(box.rectTransform, new Rect(0f, 0f, width, height));
-                float inset = height > TallThreshold ? 14f : 6f;
-                AvKit.Place(rail.rectTransform, new Rect(0f, -inset, 3f, height - inset * 2f));
-
-                float top = height > TallThreshold ? -(height * 0.5f) + 40f : -8f;
-                AvKit.Place(plate.Root, new Rect(10f, top, ThumbWidth, ThumbHeight));
-                PlaceChip(new Rect(58f, top - 1f, 56f, 16f), chipFill, chip);
-                AvKit.Place(title.rectTransform, new Rect(122f, top, width - 222f, 18f));
-                AvKit.Place(clock.rectTransform, new Rect(width - 96f, top, 88f, 16f));
-                AvKit.Place(meta.rectTransform, new Rect(58f, top - 21f, width - 230f, 13f));
-                PlaceChip(new Rect(width - 168f, top - 20f, 156f, 17f), effectFill, effect);
-                AvKit.Place(help.rectTransform, new Rect(12f, top - 48f, width - 24f, 30f));
+                tierState = tier;
+                title.text = titleText ?? "";
+                meta.text = metaText ?? "";
+                body.text = bodyText ?? "";
+                plate.Bind(poster, icon, TextColor(tierState));
+                Restyle();
+                Changed();
             }
 
-            private static void PlaceChip(Rect area, Image fill, TMP_Text label)
+            public override float Measure(float width) => Arrange(width, false);
+
+            public override void Place(AvSlot s)
             {
-                AvKit.Place(fill.rectTransform, area);
-                AvKit.Place(label.rectTransform, area);
+                base.Place(s);
+                Arrange(s.W, true);
             }
 
-            public void Bind(ActiveEventView view, Color ink, Color railColor, Color effectColor)
+            private float Arrange(float width, bool place)
             {
-                if (!root.activeSelf) root.SetActive(true);
-                if (help.gameObject.activeSelf) help.gameObject.SetActive(false);
-
-                plate.Bind(EventArtCache.Get(view.IconKey,
-                    view.IsSuper ? "tier_super" : "tier_medium"), CategoryOf(view.Category), ink);
-
-                chip.text = TierShort(view.Tier);
-                chip.color = ink;
-                chipFill.color = ink.WithAlpha(0.12f);
-
-                title.text = view.Title.ToUpperInvariant();
-                meta.text = view.Category + "  ·  " + ShortTarget(view.Target);
-                effect.text = IsNeutral(view.EffectSummary) && !string.IsNullOrEmpty(view.TempoSummary)
-                    ? view.TempoSummary : view.EffectSummary;
-                effect.color = effectColor;
-                effectFill.color = effectColor.WithAlpha(0.10f);
-                rail.color = railColor;
+                float x = 12f, textX = x + PlateSize + 12f, textW = width - textX - 12f;
+                float th = AvText.Height(title, textW);
+                float mh = meta.text.Length > 0 ? AvText.Height(meta, textW) : 0f;
+                float head = Mathf.Max(PlateSize, th + 4f + mh);
+                float bodyW = width - 24f;
+                float bh = body.text.Length > 0 ? AvText.Height(body, bodyW) : 0f;
+                float total = 12f + head + (bh > 0f ? 8f + bh : 0f) + 12f;
+                if (place)
+                {
+                    AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
+                    AvLay.Place(plate.Root, x, 12f, PlateSize, PlateSize);
+                    plate.Layout(PlateSize, PlateSize);
+                    AvLay.Place(title.rectTransform, textX, 12f, textW, th);
+                    AvLay.Place(meta.rectTransform, textX, 12f + th + 4f, textW, mh);
+                    AvLay.Place(body.rectTransform, x, 12f + head + 8f, bodyW, bh);
+                }
+                return total;
             }
 
-            /// <summary>The empty feed keeps its helpful copy and chip, in a full-height card.</summary>
-            public void BindEmpty()
+            public override void Restyle()
             {
-                if (!root.activeSelf) root.SetActive(true);
-                if (!help.gameObject.activeSelf) help.gameObject.SetActive(true);
-
-                plate.Bind(null, 0, AvTheme.Dim);
-                chip.text = "STANDBY";
-                chip.color = AvTheme.Dim;
-                chipFill.color = AvTheme.Dim.WithAlpha(0.08f);
-
-                title.text = "THE FEED IS EMPTY";
-                meta.text = "COMPLETED EVENTS APPEAR HERE";
-                help.text = "NO COMPLETED EVENTS YET — THE FEED ROLLS ONE EVENT AT A TIME.";
-                effect.text = "AWAITING FIRST EVENT";
-                effect.color = AvTheme.Dim;
-                effectFill.color = AvTheme.Dim.WithAlpha(0.08f);
-                rail.color = AvTheme.RailInert;
-                clock.text = "";
+                AvStyle c = AvStyleHost.FuiStyle("card");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                rail.color = AvStyleHost.FuiColor(AvStates.Class(tierState), AvTheme.RailInfo);
+                title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                meta.color = TextColor(tierState);
+                body.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                plate.Restyle();
             }
-
-            public void SetClock(string text)
-            {
-                clock.text = text;
-                clock.color = AvTheme.Dim;
-            }
-
-            public void Hide() => root.SetActive(false);
         }
     }
 }

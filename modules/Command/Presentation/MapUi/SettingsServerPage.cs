@@ -1,154 +1,198 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using NOAvionics;
 using NOAvionics.Ui;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
-    /// <summary>Faction tasking and live host controls, read-only for remote clients.</summary>
+    /// <summary>SERVER pages: faction tasking and live host controls, read-only for remote clients.</summary>
     internal sealed partial class SettingsMfdPanel
     {
-        private const int ServerPageCount = 2;
         private const int TaskRowCount = 3;
         private const float TaskingRefreshSeconds = 2f;
         private ISecondaryObjectivesView tasking;
-        private AvButton taskRequest;
-        private TMP_Text taskNote;
-        private readonly ListRow[] taskRows = new ListRow[TaskRowCount];
-        private readonly bool[] serverScrolls = new bool[ServerPageCount];
-        private GameObject[] serverPages;
-        private AvButton[] serverTabs;
-        private int serverPage;
+        private AvControl taskRequest;
+        private NoteLine taskNote;
+        private AvList taskList;
+        private IReadOnlyList<SecondaryObjectiveView> taskCards;
         private float nextTaskingRefresh;
 
-        private void BuildServerPage(RectTransform parent, Rect body)
+        private void BuildTaskingPage(AvFlow flow, int page)
         {
-            serverRefresherStart = refreshers.Count;
-            const float barHeight = 26f;
-            const float gap = 6f;
-            AvNode bar = AvBox.Row("server-tabs").Height(barHeight)
-                .Add(AvBox.Cell("tasking").Grow())
-                .Add(AvBox.Cell("settings").Grow());
-            bar.Arrange(new Rect(body.x, body.y, body.width, barHeight));
-            serverTabs = new[]
+            flow.Section(AvIcon.ListDetails, "FACTION TASKING", "SECONDARY OBJECTIVES");
+            taskRequest = flow.Buttons(new AvControl.Spec("REFRESH BOARD", () =>
             {
-                AvStyled.Button(parent, bar.At("tasking"), "TASKING", "tab",
-                    () => SetServerPage(0), AvButtonStyle.Tab),
-                AvStyled.Button(parent, bar.At("settings"), "HOST SETTINGS", "tab",
-                    () => SetServerPage(1), AvButtonStyle.Tab)
-            };
-            serverPages = new GameObject[ServerPageCount];
-            for (int i = 0; i < ServerPageCount; i++)
-            {
-                var page = new GameObject("ServerPage" + i, typeof(RectTransform));
-                var rect = (RectTransform)page.transform;
-                rect.SetParent(parent, false);
-                AvKit.Stretch(rect);
-                serverPages[i] = page;
-            }
-            var content = new Rect(body.x, body.y - barHeight - gap,
-                body.width, body.height - barHeight - gap);
-            BuildTaskingPage((RectTransform)serverPages[0].transform, content);
-            BuildHostSettingsPage((RectTransform)serverPages[1].transform, content);
-            SetServerPage(0);
+                tasking?.Refresh();
+                nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
+            })).Controls[0];
+            taskNote = flow.Add(new NoteLine(flow.Content));
+            taskList = flow.Add(new AvList(flow.Content, flow.Ticker, TaskRowCount, BindTaskRow));
+
+            flow.Ticker.Add(page, AvTickRate.Slow, RefreshTasking);
+            RefreshTasking();
         }
 
-        private void SetServerPage(int page)
+        private void BindTaskRow(int index, AvRow row)
         {
-            serverPage = Mathf.Clamp(page, 0, ServerPageCount - 1);
-            for (int i = 0; i < ServerPageCount; i++)
+            if (taskCards == null || index >= taskCards.Count)
             {
-                serverPages?[i]?.SetActive(i == serverPage);
-                serverTabs?[i]?.SetLatched(i == serverPage);
-            }
-            pageScrolls[ServerDisplay] = serverScrolls[serverPage];
-            AvButton.ClearTooltip();
-            if (shell != null && shell.Page == TabServer)
-                shell.DataBar.State.text = serverPage == 0 ? "FACTION TASKING" : "HOST SETTINGS";
-            nextTick = 0f;
-            RefreshPanel();
-        }
-
-        private void BuildTaskingPage(RectTransform parent, Rect body)
-        {
-            const float taskingBlock = 32f + 36f + TaskRowCount * ListRow.Pitch + 10f;
-            parent = Page(ServerDisplay, parent, body, 0, 1, taskingBlock, out Rect area);
-            serverScrolls[0] = pageScrolls[ServerDisplay];
-            refreshers.Add(RefreshTasking);
-            float x = area.x;
-            float width = area.width;
-            Heading(parent, ref area, "01", "FACTION TASKING", "SECONDARY OBJECTIVES");
-            taskRequest = AvStyled.Button(parent, new Rect(x, area.y - 2f, 144f, 28f),
-                "REFRESH BOARD", "btn", () =>
-                {
-                    tasking?.Refresh();
-                    nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
-                    nextTick = 0f;
-                });
-            area.y -= 32f;
-            taskNote = AvStyled.Label(parent, new Rect(x, area.y, width, 30f), "", "row-sub");
-            area.y -= 36f;
-            for (int i = 0; i < taskRows.Length; i++)
-                taskRows[i] = new ListRow(parent, x, area.y - i * ListRow.Pitch, width);
-        }
-
-        private void BuildHostSettingsPage(RectTransform parent, Rect body)
-        {
-            int settingRows = 0;
-            int sections = 0;
-            if (hostSettings != null)
-            {
-                for (int i = 0; i < hostSettings.Views.Count; i++)
-                {
-                    sections++;
-                    settingRows += hostSettings.Views[i].Rows.Count;
-                }
-            }
-
-            parent = Page(ServerDisplay, parent, body, settingRows, Math.Max(1, sections), out Rect area);
-            serverScrolls[1] = pageScrolls[ServerDisplay];
-            if (hostSettings != null)
-                refreshers.Add(() =>
-                {
-                    if (serverPage != 1) return;
-                    for (int i = 0; i < hostSettings.Views.Count; i++) hostSettings.Views[i].Refresh();
-                });
-
-            if (hostSettings == null || hostSettings.Views.Count == 0)
-            {
-                Heading(parent, ref area, "01", "HOST SETTINGS", "NO MODULE CONTROLS");
-                AvStyled.Label(parent, TakeRow(ref area), "No host settings are available.", "row-sub");
+                row.Set("", "", "", AvState.Inert);
                 return;
             }
 
-            int section = 1;
-            for (int v = 0; v < hostSettings.Views.Count; v++)
+            SecondaryObjectiveView card = taskCards[index];
+            bool active = card.IsActive;
+            AvState state = card.IsComplete ? AvState.Ready : active ? AvState.Caution : AvState.Inert;
+            string clock = card.IsOffered || active ? MfdSecondaryObjectives.ChipLabel(card) : "";
+            string detail = card.Target + " \u00b7 " + card.Status +
+                            (string.IsNullOrEmpty(clock) ? "" : " \u00b7 " + clock) +
+                            "\n" + card.Reward;
+            row.Set(card.Title, detail, AvNum.Percent(Mathf.Clamp01(card.Progress)), state);
+        }
+
+        private void RefreshTasking()
+        {
+            if (tasking == null) ModServices.TryGet(out tasking);
+            // The board only paints from the last snapshot, so the TASKING page has to keep
+            // asking even when no HUD or map layer is pulling snapshots on its own.
+            if (tasking != null && Time.unscaledTime >= nextTaskingRefresh)
             {
-                IHostSettingsView view = hostSettings.Views[v];
-                Heading(parent, ref area, section.ToString("00", CultureInfo.InvariantCulture), view.Section, null);
+                nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
+                tasking.Refresh();
+            }
+
+            bool host = HostAuthority();
+            if (taskRequest != null)
+            {
+                taskRequest.Interactable = host && tasking != null;
+                taskRequest.Help = !host
+                    ? "Host only. The host issues faction tasking."
+                    : tasking == null
+                        ? "Dynamic operations are not running on this host."
+                        : "Ask the host for the current faction objective board. The board is " +
+                          "issued by the host; this does not create work.";
+            }
+
+            if (tasking == null)
+            {
+                taskNote?.Set("Dynamic operations are not running on this host. Nothing is issuing faction tasking.");
+                taskCards = null;
+                taskList?.SetCount(0);
+                return;
+            }
+
+            taskNote?.Set(tasking.Status ?? "");
+            taskCards = tasking.Objectives;
+            taskList?.SetCount(taskCards?.Count ?? 0);
+        }
+
+        /// <summary>Which SERVER tab lists a host-settings section. Effects come from the section's own page.</summary>
+        private static int ServerGroupOf(IHostSettingsView view)
+        {
+            if (view.Page == HostSettingsPage.Effects) return SEffects;
+            switch ((view.Section ?? "").ToUpperInvariant())
+            {
+                case "HIGH COMMAND":
+                case "SUPPORT CALL-INS":
+                case "SQUAD AND ACES":
+                case "PROGRESSION":
+                case "COMMS":
+                    return SForces;
+                default:
+                    return SWorld; // new sections default to the general rules tab
+            }
+        }
+
+        // Reading order inside a tab; sections a module adds later follow in registration order.
+        private static readonly string[] SectionOrder =
+        {
+            "DYNAMIC OPERATIONS", "WORLD EVENTS", "TRENCHES", "URBAN COMBAT",
+            "HIGH COMMAND", "SUPPORT CALL-INS", "SQUAD AND ACES", "PROGRESSION", "COMMS",
+            "FIRE AND DESTRUCTION", "WEATHER"
+        };
+
+        private static AvIcon SectionIcon(string section)
+        {
+            switch ((section ?? "").ToUpperInvariant())
+            {
+                case "DYNAMIC OPERATIONS": return AvIcon.Target;
+                case "WORLD EVENTS": return AvIcon.Flag;
+                case "TRENCHES": return AvIcon.Ruler2;
+                case "URBAN COMBAT": return AvIcon.Shield;
+                case "HIGH COMMAND": return AvIcon.Crown;
+                case "SUPPORT CALL-INS": return AvIcon.Radio;
+                case "SQUAD AND ACES": return AvIcon.UsersGroup;
+                case "PROGRESSION": return AvIcon.Star;
+                case "COMMS": return AvIcon.Antenna;
+                case "FIRE AND DESTRUCTION": return AvIcon.Flame;
+                case "WEATHER": return AvIcon.CloudRain;
+                default: return AvIcon.Settings;
+            }
+        }
+
+        private static int SectionRank(string section)
+        {
+            int i = Array.IndexOf(SectionOrder, (section ?? "").ToUpperInvariant());
+            return i < 0 ? int.MaxValue : i;
+        }
+
+        private void BuildServerGroupPage(AvFlow flow, int page, int group)
+        {
+            var views = new List<IHostSettingsView>();
+            if (hostSettings != null)
+            {
+                for (int i = 0; i < hostSettings.Views.Count; i++)
+                    if (ServerGroupOf(hostSettings.Views[i]) == group) views.Add(hostSettings.Views[i]);
+            }
+
+            // Stable by registration order among equals.
+            for (int i = 1; i < views.Count; i++)
+            {
+                IHostSettingsView v = views[i];
+                int j = i - 1;
+                while (j >= 0 && SectionRank(views[j].Section) > SectionRank(v.Section)) { views[j + 1] = views[j]; j--; }
+                views[j + 1] = v;
+            }
+
+            if (views.Count == 0)
+            {
+                flow.Section(group == SEffects ? AvIcon.CloudRain : group == SForces ? AvIcon.Shield : AvIcon.Flag,
+                    group == SEffects ? "WORLD EFFECTS" : group == SForces ? "FORCES & ECONOMY" : "WORLD RULES", "NOT INSTALLED");
+                flow.Add(new NoteLine(flow.Content)).Set("No settings are published here. The features that own them are not running in this session.");
+                return;
+            }
+
+            flow.Ticker.Add(page, AvTickRate.Slow, () =>
+            {
+                for (int i = 0; i < views.Count; i++) views[i].Refresh();
+            });
+
+            for (int v = 0; v < views.Count; v++)
+            {
+                IHostSettingsView view = views[v];
+                AvSection section = flow.Section(SectionIcon(view.Section), view.Section, null);
+                string count = AvNum.Fixed(view.Rows.Count, 0) + (view.Rows.Count == 1 ? " SETTING" : " SETTINGS");
+                void Caption() => section.SetCaption(count + (HostAuthority() ? " \u00b7 LIVE" : " \u00b7 LOCKED, HOST ONLY"));
+                Caption();
+                flow.Ticker.Add(page, AvTickRate.Slow, Caption);
 
                 for (int r = 0; r < view.Rows.Count; r++)
                 {
                     HostSettingView row = view.Rows[r];
-                    Rect rect = TakeRow(ref area);
                     if (row.Kind == HostSettingKind.Toggle)
-                        Toggle(parent, rect, row.Label, row.Help,
+                        Toggle(flow, page, row.Label, row.Help,
                             () => row.Value, _ => view.Toggle(row.Id),
                             () => RowInteractive(row), () => RowReason(row));
                     else
-                        Stepper(parent, rect, row.Label, () => row.ValueText,
+                        Stepper(flow, page, row.Label, () => row.ValueText,
                             d => view.Step(row.Id, d),
                             () => RowInteractive(row) && row.CanDecrease,
                             () => RowInteractive(row) && row.CanIncrease,
                             row.Help, () => RowInteractive(row), () => RowReason(row), readOnlyValue: true);
                 }
-                section++;
             }
         }
 
@@ -156,143 +200,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static string RowReason(HostSettingView row) =>
             !HostAuthority()
-                ? "Host only. This is the host's value; only the host can change how the mission plays."
+                ? "LOCKED \u00b7 " + row.Help
                 : row.Reason ?? row.Help;
-        private void RefreshTasking()
-        {
-            if (shell == null || shell.Page != TabServer || serverPage != 0) return;
-            if (tasking == null) ModServices.TryGet(out tasking);
-            // The board only paints from the last snapshot, so the SERVER page has to keep
-            // asking even when no HUD or map layer is pulling snapshots on its own.
-            if (tasking != null && Time.unscaledTime >= nextTaskingRefresh)
-            {
-                nextTaskingRefresh = Time.unscaledTime + TaskingRefreshSeconds;
-                tasking.Refresh();
-            }
-            if (taskRequest != null)
-            {
-                bool host = HostAuthority();
-                taskRequest.SetEnabled(host && tasking != null);
-                taskRequest.WithTooltip(!host
-                    ? "Host only. The host issues faction tasking."
-                    : tasking == null
-                        ? "Dynamic operations are not running on this host."
-                        : "Ask the host for the current faction objective board. The board is " +
-                          "issued by the host; this does not create work.");
-            }
-            if (taskNote == null) return;
-
-            if (tasking == null)
-            {
-                taskNote.text = "Dynamic operations are not running on this host. " +
-                                "Nothing is issuing faction tasking.";
-                taskNote.color = AvTheme.Dim;
-                for (int i = 0; i < taskRows.Length; i++) taskRows[i]?.Hide();
-                return;
-            }
-
-            taskNote.text = tasking.Status ?? "";
-            taskNote.color = AvTheme.Dim;
-
-            IReadOnlyList<SecondaryObjectiveView> cards = tasking.Objectives;
-            int count = cards == null ? 0 : cards.Count;
-
-            for (int i = 0; i < taskRows.Length; i++)
-            {
-                if (i >= count)
-                {
-                    taskRows[i]?.Hide();
-                    continue;
-                }
-
-                SecondaryObjectiveView card = cards[i];
-                bool active = card.IsActive;
-
-                string rail = card.IsComplete ? "ready" : active ? "armed" : "locked";
-                Color tint = card.IsComplete ? AvTheme.RailReady
-                           : active ? AvTheme.RailCaution
-                           : AvTheme.Disabled;
-
-                string clock = card.IsOffered || active ? MfdSecondaryObjectives.ChipLabel(card) : "";
-                string detail = card.Target + " · " + card.Status +
-                                (string.IsNullOrEmpty(clock) ? "" : " · " + clock) +
-                                "\n" + card.Reward;
-
-                taskRows[i].Bind(
-                    rail,
-                    card.Title,
-                    detail,
-                    Percent(card.Progress),
-                    card.Progress,
-                    tint,
-                    tint);
-            }
-        }
-
-        private static string Percent(float ratio)
-        {
-            if (float.IsNaN(ratio) || float.IsInfinity(ratio)) return "—";
-            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
-            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
-                   .ToString(CultureInfo.InvariantCulture) + "%";
-        }
-
-        /// <summary>One objective card: rail, title, detail, progress figure and track.</summary>
-        private sealed class ListRow
-        {
-            public const float Pitch = 64f;
-
-            private readonly GameObject root;
-            private readonly Image rail;
-            private readonly TMP_Text name;
-            private readonly TMP_Text detail;
-            private readonly TMP_Text value;
-            private readonly Image bar;
-
-            public ListRow(RectTransform parent, float x, float y, float width)
-            {
-                root = new GameObject("ListRow", typeof(RectTransform));
-                var rect = root.GetComponent<RectTransform>();
-                rect.SetParent(parent, false);
-                AvKit.Place(rect, new Rect(x, y, width, Pitch - 4f));
-
-                const float trail = 56f;
-                float textWidth = width - trail - 20f;
-
-                rail = AvStyled.Rail(rect, new Rect(0f, 0f, 3f, Pitch - 8f), "locked");
-                name = AvStyled.Label(rect, new Rect(12f, 0f, textWidth, 15f), "", "row-name");
-                detail = AvStyled.Label(rect, new Rect(12f, -20f, textWidth, 34f), "", "row-sub");
-                value = AvStyled.Label(rect, new Rect(width - trail, 0f, trail, 15f), "",
-                                       "row-value", align: TextAlignmentOptions.MidlineRight);
-                bar = AvKit.ProgressBar(rect, new Rect(width - trail, -22f, trail, 6f), 0f,
-                                        AvTheme.RailReady);
-
-                AvKit.Rule(rect, new Rect(0f, -(Pitch - 8f), width, 1f),
-                           AvTheme.Unity(AvTokens.Hairline.WithAlpha(0.13f)));
-                root.SetActive(false);
-            }
-
-            public void Bind(string railState, string title, string sub, string figure,
-                             float fraction, Color figureColor, Color barColor)
-            {
-                rail.color = AvStyleHost.Resolve(
-                    AvStyleHost.Style("rail " + railState).Background, AvTheme.RailInert);
-
-                name.text = title ?? "";
-                detail.text = sub ?? "";
-                value.text = figure ?? "";
-                value.color = figureColor;
-
-                bar.color = barColor;
-                bar.fillAmount = Mathf.Clamp01(fraction);
-
-                if (!root.activeSelf) root.SetActive(true);
-            }
-
-            public void Hide()
-            {
-                if (root.activeSelf) root.SetActive(false);
-            }
-        }
     }
 }

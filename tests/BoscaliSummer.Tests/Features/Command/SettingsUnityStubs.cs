@@ -31,7 +31,8 @@ namespace BoscaliSummer.Runtime
     public static class MfdSlots { public const string Set = "SET"; public const string Str = "STR"; }
     public static class GameAccess
     {
-        public static bool IsServer() => false;
+        public static bool ForceServer;
+        public static bool IsServer() => ForceServer;
         public static bool MfdAvailable => false;
         public static bool HqSensorsAvailable => false;
     }
@@ -74,6 +75,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         public static void Refresh(DynamicMap map) { }
         public static void Reconcile() { }
     }
+    // MfdRail only asks which screen the faction merge patch owns; the patch itself (Harmony, InfoPanel_Faction) is not part of this harness.
+    internal static class FactionMfdMergePatch { public static MFDScreen Screen => null; }
     internal static class MfdNewsTicker { public static void Ensure(Canvas c, MfdLayout.Columns columns, object settings) { } }
 }
 namespace NuclearOption.UIStyleSystem
@@ -83,7 +86,7 @@ namespace NuclearOption.UIStyleSystem
     public class TacticalScreenTheme { public List<TacticalTextStyle> TextStyles; }
     public class TacticalTextStyle { public TacticalStyle Style; }
     public class TacticalStyle { public TMP_FontAsset Font; }
-    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, Warning, Alert; }
+    public class Palette { public Color AllClear, MapIconFriendly, HudUnitFriendly, HudUnitNeutral, HudUnitHostile, HudUnitSelected, Warning, Alert; }
 }
 namespace Rewired
 {

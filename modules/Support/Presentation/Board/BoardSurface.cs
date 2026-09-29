@@ -2,6 +2,7 @@ using System;
 using BoscaliSummer.Features.Support.Domain.Layout;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Features.Support.Presentation.Window;
 using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -16,7 +17,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
     /// label placement and the frontline traces. It creates exactly one invisible input rect and never
     /// a visible graphic: each room renders its own map on top of it in its own language.
     ///
-    /// <para>Coordinates handed to rooms are <see cref="AvKit"/> coordinates in the parent (Y negative
+    /// <para>Coordinates handed to rooms are <c>Chrome</c> coordinates in the parent (Y negative
     /// downward). The pure maths underneath (<see cref="BoardFit"/>, <see cref="LabelPlacer"/>) is
     /// Y-down; the conversion happens only here.</para>
     /// </summary>
@@ -67,7 +68,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
 
         /// <summary>
         /// <paramref name="view"/> is the whole drawable area; <paramref name="focus"/> the part of it
-        /// no panel covers, which fitting frames. Both in the parent's AvKit coordinates.
+        /// no panel covers, which fitting frames. Both in the parent's Chrome coordinates (top-left, Y negative downward).
         /// </summary>
         public BoardSurface(RectTransform parent, Rect view, Rect focus, bool interactive, bool clip = false)
         {
@@ -78,7 +79,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
             var go = new GameObject("BoardInput", typeof(RectTransform), typeof(Image));
             input = (RectTransform)go.transform;
             input.SetParent(parent, false);
-            AvKit.Place(input, view);
+            Chrome.Place(input, view);
             Image hit = go.GetComponent<Image>();
             hit.color = Color.clear;
             hit.raycastTarget = true;
@@ -146,7 +147,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
 
         // ---- Projection -------------------------------------------------------------------------
 
-        /// <summary>World X/Z to the parent's AvKit coordinates.</summary>
+        /// <summary>World X/Z to the parent's Chrome coordinates (top-left, Y negative downward).</summary>
         public Vector2 Project(float worldX, float worldZ)
         {
             BoardFit.Project(frame, worldX, worldZ, view.width, view.height, out float sx, out float sy);
@@ -202,7 +203,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
 
         // ---- Labels -----------------------------------------------------------------------------
 
-        /// <summary>Areas labels must avoid (a panel lying over the map), in AvKit coordinates.</summary>
+        /// <summary>Areas labels must avoid (a panel lying over the map), in Chrome coordinates.</summary>
         public void SetObstacles(Rect[] rects, int count)
         {
             obstacleCount = 0;
@@ -214,8 +215,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
         }
 
         /// <summary>
-        /// Place up to <see cref="LabelPlacer.Maximum"/> labels around anchors given in AvKit
-        /// coordinates. <paramref name="into"/> receives AvKit top-left positions and leader flags.
+        /// Place up to <see cref="LabelPlacer.Maximum"/> labels around anchors given in Chrome
+        /// coordinates. <paramref name="into"/> receives Chrome top-left positions and leader flags.
         /// Returns how many are visible.
         /// </summary>
         public int PlaceLabels(Vector2[] anchors, Vector2[] sizes, int[] priorities, float[] markerRadii, int count,
@@ -320,7 +321,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
                 Board.Clicked?.Invoke(local, eventData.button);
             }
 
-            /// <summary>Pointer position in the board parent's AvKit coordinates.</summary>
+            /// <summary>Pointer position in the board parent's Chrome coordinates (top-left, Y negative downward).</summary>
             private bool Local(PointerEventData eventData, out Vector2 local)
             {
                 var rect = (RectTransform)transform;

@@ -23,7 +23,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             float size = Mathf.Min(14f, area.width / pips.Length - 2f);
             for (int i = 0; i < pips.Length; i++)
             {
-                pips[i] = AvKit.Panel(parent, new Rect(area.x + i * (size + 2f), area.y, size, size), skin.Track);
+                pips[i] = Chrome.Panel(parent, new Rect(area.x + i * (size + 2f), area.y, size, size), skin.Track);
                 if (skin.Glyph != null) pips[i].sprite = skin.Glyph;
             }
             caption = PrimitiveText.Label(parent, new Rect(area.x, area.y - size - 2f, area.width, 14f), skin, TextAlignmentOptions.MidlineLeft);

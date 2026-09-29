@@ -23,13 +23,13 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             this.skin = skin;
             x0 = area.x;
             width = area.width;
-            AvKit.Panel(parent, new Rect(area.x, area.y, area.width, 12f), skin.Track);
+            Chrome.Panel(parent, new Rect(area.x, area.y, area.width, 12f), skin.Track);
             for (int i = 0; i < Segments; i++)
             {
-                bars[i] = AvKit.Panel(parent, new Rect(area.x, area.y, 0f, 12f), skin.Fill);
+                bars[i] = Chrome.Panel(parent, new Rect(area.x, area.y, 0f, 12f), skin.Fill);
                 bars[i].enabled = false;
             }
-            AvKit.Panel(parent, new Rect(area.x, area.y + 3f, 2f, 18f), skin.Mark);
+            Chrome.Panel(parent, new Rect(area.x, area.y + 3f, 2f, 18f), skin.Mark);
             caption = PrimitiveText.Label(parent, new Rect(area.x, area.y - 15f, area.width, 14f), skin, TextAlignmentOptions.MidlineLeft);
         }
 
@@ -37,7 +37,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         {
             int hash = count;
             for (int i = 0; i < count && segments != null; i++)
-                hash = hash * 31 + (int)(segments[i].Start * 1000f) * 7 + (int)(segments[i].End * 1000f) + (int)segments[i].Kind;
+                hash = hash * 31 + (int)(segments[i].Start * 1000f) * 7 + (int)(segments[i].End * 1000f) +
+                    (int)segments[i].Kind * 2 + (segments[i].Projected ? 1 : 0);
             if (hash != signature)
             {
                 signature = hash;

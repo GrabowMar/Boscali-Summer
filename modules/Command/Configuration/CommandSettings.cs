@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Configuration
@@ -27,6 +28,7 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public ConfigEntry<bool> MapTerrainImage { get; }
         public ConfigEntry<bool> MapRelief3D { get; }
+        public ConfigEntry<bool> MapSymbology { get; }
         public ConfigEntry<float> MapTerrainOpacity { get; }
         public ConfigEntry<float> MapTrayOpacity { get; }
 
@@ -52,6 +54,10 @@ namespace BoscaliSummer.Features.Command.Configuration
         public ConfigEntry<float> DisplayVignette { get; }
         public ConfigEntry<int> DisplayTint { get; }
         public ConfigEntry<float> DisplayTintStrength { get; }
+        public ConfigEntry<AvThemeId> AvionicsTheme { get; }
+        public ConfigEntry<AvFxTier> AvionicsFxTier { get; }
+        public ConfigEntry<bool> AvionicsBlurBehind { get; }
+        public ConfigEntry<bool> AvionicsReducedMotion { get; }
 
         public CommandSettings(ConfigFile config)
         {
@@ -69,6 +75,14 @@ namespace BoscaliSummer.Features.Command.Configuration
                 new ConfigDescription("MFD color wash: 0 Neutral, 1 Green, 2 Amber, 3 Ice, 4 Rose.", new AcceptableValueRange<int>(0, 4)));
             DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
                 new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
+            AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Steel,
+                "Panel colour theme: Steel (follows the game theme), Ace (blue + amber), Phosphor (green + magenta).");
+            AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
+                "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
+            AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,
+                "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).");
+            AvionicsReducedMotion = config.Bind("Avionics", "ReducedMotion", false,
+                "Snap every panel animation to its end state.");
 
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
                 "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
@@ -141,6 +155,9 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             MapRelief3D = config.Bind("Command", "MapRelief3D", true,
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");
+
+            MapSymbology = config.Bind("Command", "MapSymbology", true,
+                "Draw expanded-map contacts as framed symbols: a frame shape for allegiance (square friendly, diamond hostile, circle unknown), a glyph per platform class and a dark plate that lifts them off the terrain. Off keeps the game's bare icons.");
 
             MapTerrainOpacity = config.Bind("Command", "MapTerrainOpacity", 1.0f,
                 new ConfigDescription(

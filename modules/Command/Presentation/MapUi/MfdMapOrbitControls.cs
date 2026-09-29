@@ -5,17 +5,19 @@ using UnityEngine;
 
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
-    /// <summary>Client-only camera controls, anchored to the fixed map viewport.</summary>
+    /// <summary>
+    /// Client-only relief view buttons and readout, anchored to the fixed map viewport.
+    /// Mouse navigation lives in <see cref="ReliefNavigator"/>.
+    /// </summary>
     internal static class MfdMapOrbitControls
     {
+        private const float RootWidth = 520f;
         private static RectTransform root;
         private static TMP_Text readout;
-        private static TMP_Text cursorText;
-        private static bool dragging;
-        private static Vector2 lastMouse;
-        private static Vector2 dragDelta;
-        private static float nextDragUpdate;
+        private static AvFooter cursorLine;
+        private static AvControl followButton;
         private static int lastRevision = -1;
+        private static bool lastFollowing;
         private static float nextCursorRead;
 
         internal static bool Contains(Vector2 screenPoint) => MapUiPointer.Contains(root, screenPoint);
@@ -26,51 +28,42 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             RectTransform viewport = map.mapBackground.rectTransform;
             if (root == null || root.parent != viewport) Build(viewport);
             if (root == null) return;
-            root.SetAsLastSibling();
+            if (root.GetSiblingIndex() != root.parent.childCount - 1) root.SetAsLastSibling();
 
-            if (!Input.GetMouseButton(2))
-            {
-                if (dragging && dragDelta.sqrMagnitude > 0f)
-                    MfdTerrainRelief.Rotate(dragDelta.x * .25f, -dragDelta.y * .20f);
-                dragging = false;
-                dragDelta = Vector2.zero;
-            }
-            else if (dragging)
-            {
-                Vector2 current = Input.mousePosition;
-                dragDelta += current - lastMouse;
-                lastMouse = current;
-                if (Time.unscaledTime >= nextDragUpdate)
-                {
-                    MfdTerrainRelief.Rotate(dragDelta.x * .25f, -dragDelta.y * .20f);
-                    dragDelta = Vector2.zero;
-                    nextDragUpdate = Time.unscaledTime + .05f;
-                }
-            }
-            else if (Input.GetMouseButtonDown(2) &&
-                MapUiPointer.Contains(viewport, Input.mousePosition) &&
-                !MapUiPointer.OverControls())
-            {
-                dragging = true;
-                lastMouse = Input.mousePosition;
-                nextDragUpdate = 0f;
-            }
-
-            if (lastRevision != MfdTerrainRelief.ViewRevision)
+            bool following = ReliefNavigator.Following;
+            if (lastRevision != MfdTerrainRelief.ViewRevision || following != lastFollowing)
             {
                 lastRevision = MfdTerrainRelief.ViewRevision;
+                lastFollowing = following;
                 if (readout != null)
-                    readout.text = $"AZ {Mathf.RoundToInt(MfdTerrainRelief.Yaw):+000;-000;000}°  EL {Mathf.RoundToInt(MfdTerrainRelief.Pitch):00}°";
+                    readout.text = "3D " + Heading(Mathf.RoundToInt(MfdTerrainRelief.Yaw)) + "°/" +
+                        MfdChromeLay.TwoDigits(Mathf.RoundToInt(MfdTerrainRelief.Pitch)) + "°  ×" +
+                        AvNum.Fixed(MfdTerrainRelief.Zoom, 1);
+                if (followButton != null)
+                {
+                    followButton.Label = following ? "FOLLOW" : "FREE";
+                    followButton.Latched = following;
+                }
             }
-            if (cursorText == null || Time.unscaledTime < nextCursorRead) return;
+            if (cursorLine == null || Time.unscaledTime < nextCursorRead) return;
             nextCursorRead = Time.unscaledTime + .1f;
+            string cursor;
             if (MfdMapInteractions.Feedback != null)
-                cursorText.text = MfdMapInteractions.Feedback;
+                cursor = MfdMapInteractions.Feedback;
             else if (MfdTerrainRelief.HoveredStackCount >= 5)
-                cursorText.text = MfdTerrainRelief.HoveredStackCount + " TRACKS  /  ZOOM TO RESOLVE";
+                cursor = MfdTerrainRelief.HoveredStackCount + " TRACKS  /  ZOOM TO RESOLVE";
             else if (MfdTerrainRelief.TryInspectCursor(out GlobalPosition point, out float elevation))
-                cursorText.text = $"X {point.x / 1000f:+0.0;-0.0;0.0}  Z {point.z / 1000f:+0.0;-0.0;0.0} km  ·  TERRAIN ~{elevation:0} m";
-            else cursorText.text = "HOVER TERRAIN FOR GROUND FIX";
+                cursor = "X " + AvNum.Signed(point.x / 1000f, 1) + "  Z " + AvNum.Signed(point.z / 1000f, 1) +
+                    " km  ·  TERRAIN ~" + AvNum.Fixed(elevation, 0) + " m";
+            else cursor = "";
+            cursorLine.Set(cursor);
+        }
+
+        /// <summary>Yaw as a signed three-digit field (+045 / -045 / 000), digits written by hand like AvNum.</summary>
+        private static string Heading(int degrees)
+        {
+            string digits = AvNum.Fixed(Mathf.Abs(degrees), 0).PadLeft(3, '0');
+            return degrees > 0 ? "+" + digits : degrees < 0 ? "-" + digits : digits;
         }
 
         private static void Build(RectTransform viewport)
@@ -81,43 +74,45 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             root.SetParent(viewport, false);
             root.anchorMin = root.anchorMax = new Vector2(1f, 1f);
             root.pivot = new Vector2(1f, 1f);
-            root.anchoredPosition = new Vector2(-12f, -12f);
-            root.sizeDelta = new Vector2(276f, 114f);
-            AvKit.Panel(root, new Rect(0f, 0f, 276f, 114f),
-                new Color(.025f, .055f, .068f, .94f));
-            AvKit.Label(root, "TERRAIN VIEW  /  MIDDLE DRAG ORBIT",
-                new Rect(8f, 4f, 260f, 15f), AvTheme.Dim, AvTokens.FontMicro);
-            AvKit.Button(root, "-15°", new Rect(6f, 23f, 43f, 30f),
-                () => MfdTerrainRelief.Rotate(-15f, 0f), AvTokens.FontMicro)
-                .WithTooltip("Rotate view 15 degrees left. Middle drag to orbit freely.");
-            AvKit.Button(root, "+15°", new Rect(51f, 23f, 43f, 30f),
-                () => MfdTerrainRelief.Rotate(15f, 0f), AvTokens.FontMicro)
-                .WithTooltip("Rotate view 15 degrees right. Middle drag to orbit freely.");
-            AvKit.Button(root, "RESET", new Rect(96f, 23f, 59f, 30f),
-                MfdTerrainRelief.ResetOrbit, AvTokens.FontMicro)
-                .WithTooltip("Reset north and terrain tilt.");
-            AvKit.Button(root, "LOW", new Rect(157f, 23f, 46f, 30f),
-                () => MfdTerrainRelief.Rotate(0f, -10f), AvTokens.FontMicro)
-                .WithTooltip("Lower the viewing angle by 10 degrees.");
-            AvKit.Button(root, "HIGH", new Rect(205f, 23f, 65f, 30f),
-                () => MfdTerrainRelief.Rotate(0f, 10f), AvTokens.FontMicro)
-                .WithTooltip("Raise the viewing angle by 10 degrees.");
-            readout = AvKit.Label(root, "", new Rect(6f, 59f, 264f, 17f),
-                AvTheme.RailInfo, AvTokens.FontMicro);
-            cursorText = AvKit.Label(root, "", new Rect(6f, 77f, 264f, 17f),
-                AvTheme.Dim, AvTokens.FontMicro);
-            AvKit.Label(root, "LMB PAN · CTRL BOX · ALT ADD · RMB ACTIONS",
-                new Rect(6f, 96f, 264f, 14f), AvTheme.RailInfo, AvTokens.FontMicro);
+            root.anchoredPosition = new Vector2(-12f, -8f);
+            root.sizeDelta = new Vector2(RootWidth, 52f);
+            cursorLine = new AvFooter(root);
+            root.gameObject.AddComponent<AvHelpScope>().Footer = cursorLine;
+            cursorLine.Place(new AvSlot(0f, 30f, RootWidth, 22f));
+            readout = AvText.Make(root, "Readout", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+            MfdChromeLay.Place(readout.rectTransform, new Rect(0f, 0f, 150f, 26f));
+            readout.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+            AvText.Fit(readout, false);
+            float x = 152f;
+            Button("-15°", 44f, () => ReliefNavigator.Turn(-15f),
+                "Turn the view 15 degrees left. Right or middle drag orbits freely.", ref x);
+            Button("+15°", 44f, () => ReliefNavigator.Turn(15f),
+                "Turn the view 15 degrees right. Right or middle drag orbits freely.", ref x);
+            Button("N", 30f, ReliefNavigator.North, "North up at the default terrain tilt.", ref x);
+            Button("LOW", 48f, () => ReliefNavigator.Tilt(-10f), "Lower the viewing angle by 10 degrees.", ref x);
+            Button("HIGH", 52f, () => ReliefNavigator.Tilt(10f), "Raise the viewing angle by 10 degrees.", ref x);
+            Button("FIT", 40f, ReliefNavigator.Fit,
+                "Fit the whole mission map. Double-click the ground to zoom in there.", ref x);
+            followButton = Button("FREE", 78f, ReliefNavigator.ToggleFollow,
+                "FOLLOW keeps your aircraft centred; dragging the map sets it FREE.", ref x);
             lastRevision = -1;
             nextCursorRead = 0f;
         }
 
+        private static AvControl Button(string label, float width, System.Action onClick, string help, ref float x)
+        {
+            AvControl control = AvControl.Make(root, new AvControl.Spec(label, onClick));
+            MfdChromeLay.Place(control.Rect, new Rect(x, 0f, width, 26f));
+            control.Help = help;
+            x += width + 2f;
+            return control;
+        }
+
         internal static void Restore()
         {
-            dragging = false;
-            dragDelta = Vector2.zero;
             readout = null;
-            cursorText = null;
+            cursorLine = null;
+            followButton = null;
             lastRevision = -1;
             if (root != null) Object.Destroy(root.gameObject);
             root = null;

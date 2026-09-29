@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
+using NOAvionics;
 using NOAvionics.Ui;
 using UnityEngine;
 
@@ -8,66 +9,100 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     internal sealed partial class SettingsMfdPanel
     {
-        private void BuildHudPage(RectTransform parent, Rect body)
+        /// <summary>
+        /// The common HUD element's own rows, in the COCKPIT page. Everything here is client-local
+        /// presentation and applies on the board's next tick, so the pilot sees the change while
+        /// flying. The feeds are listed from whatever modules declared one, not from a list kept here.
+        /// </summary>
+        private void BuildHudRows(AvFlow flow, int page, IHudBoard board)
         {
-            ModServices.TryGet(out IHudBoard board);
-            int feeds = board == null ? 1 : Mathf.Min(board.Channels.Count, HudLayout.MaxChannels);
-            parent = Page(4, parent, body, HudSettingRows + feeds, 1, out var area);
-            Heading(parent, ref area, "01", "STATUS & NOTICES", "LOCAL DISPLAY");
-            BuildHudRows(parent, ref area, board);
+            Func<bool> on = () => board != null && board.Enabled;
+            Func<string> off = () => "Turn the common HUD element on first.";
+
+            flow.Section(AvIcon.Eye, "HUD ELEMENT", "STATUS STACK");
+            Toggle(flow, page, "HUD ELEMENT",
+                "Draw the one cockpit HUD element every feature shares for status lines and notices.",
+                () => on(), v => { if (board != null) board.Enabled = v; });
+
+            Stepper(flow, page, "SIZE",
+                () => board != null ? HudLayout.ScaleName(board.ScaleStep) : "--",
+                d => { if (board != null) board.ScaleStep = HudLayout.Cycle(board.ScaleStep, HudLayout.ScaleCount, d); },
+                () => board != null, () => board != null,
+                "Text size as a multiple of the game's own overlay text size option.",
+                on, off);
+
+            Stepper(flow, page, "OPACITY",
+                () => board != null ? HudLayout.OpacityName(board.OpacityStep) : "--",
+                d => { if (board != null) board.OpacityStep = HudLayout.Cycle(board.OpacityStep, HudLayout.OpacityCount, d); },
+                () => board != null, () => board != null,
+                "How solid the element reads over a bright sky. OFF hides it without unloading it.",
+                on, off);
+
+            Stepper(flow, page, "CONTRAST",
+                () => HudLayout.ContrastName(board?.Contrast ?? 1),
+                d => { if (board != null) board.Contrast = HudLayout.Cycle(board.Contrast, 3, d); },
+                () => true, () => true, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
+
+            Stepper(flow, page, "MAX LINES",
+                () => board != null ? AvNum.Fixed(board.MaxRows, 0) : "--",
+                d => { if (board != null) board.MaxRows = Mathf.Clamp(board.MaxRows + d, HudLayout.MinRows, HudLayout.MaxRows); },
+                () => board != null && board.MaxRows > HudLayout.MinRows,
+                () => board != null && board.MaxRows < HudLayout.MaxRows,
+                "How many lines the element may show at once. Two are kept for live notices.",
+                on, off);
+
+            Toggle(flow, page, "DETAIL LINES", "Supporting text and progress gauges; off uses compact single-line rows.",
+                () => board != null && board.ShowDetails, v => { if (board != null) board.ShowDetails = v; }, on, off);
+
+            flow.Section(AvIcon.Message2, "NOTICES", "TRANSIENT ALERTS");
+            Toggle(flow, page, "NOTICES",
+                "Show transient notices, including ace hunt and mission alerts.",
+                () => board != null && board.NoticesEnabled,
+                v => { if (board != null) board.NoticesEnabled = v; },
+                on, off);
+
+            Stepper(flow, page, "NOTICE TIME",
+                () => board != null ? AvNum.Seconds(board.NoticeSeconds, 0) : "--",
+                d => { if (board != null) board.NoticeSeconds = Mathf.Clamp(board.NoticeSeconds + d, HudLayout.MinNoticeSeconds, HudLayout.MaxNoticeSeconds); },
+                () => board != null && board.NoticeSeconds > HudLayout.MinNoticeSeconds,
+                () => board != null && board.NoticeSeconds < HudLayout.MaxNoticeSeconds,
+                "How long a transient notice stays up.",
+                () => on() && board.NoticesEnabled, () => "Turn notices on first.");
+
+            flow.Section(AvIcon.Maximize, "PLACEMENT", "SAFE AREA");
+            HudOffset(flow, page, "HORIZONTAL", () => board?.OffsetX ?? 0,
+                v => { if (board != null) board.OffsetX = v; }, -600, on, off);
+            HudOffset(flow, page, "VERTICAL", () => board?.OffsetY ?? 0,
+                v => { if (board != null) board.OffsetY = v; }, -600, on, off);
+            flow.Buttons(new AvControl.Spec("RESET STATUS LAYOUT", () =>
+            { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); }))
+                .Controls[0].Help = "Restore the status layout. Feed preferences are kept.";
+
+            flow.Section(AvIcon.ListDetails, "FEEDS", board == null ? "UNAVAILABLE" : "PER FEATURE");
+            if (board == null)
+            {
+                Toggle(flow, page, "FEEDS",
+                    "The common HUD element is not installed in this session.",
+                    () => false, v => { }, () => false, () => "HUD element unavailable.");
+                return;
+            }
+
+            int feeds = Mathf.Min(board.Channels.Count, HudLayout.MaxChannels);
+            for (int i = 0; i < feeds; i++)
+            {
+                IHudChannel feed = board.Channels[i];
+                Toggle(flow, page, feed.Label,
+                    "Show this feed on the common HUD element. Switching it off hides its lines " +
+                    "and changes nothing about how the feature itself runs.",
+                    () => feed.Enabled, v => { if (feed.Enabled != v) feed.Toggle(); },
+                    on, off);
+            }
         }
 
-        private void BuildFlightStyleRows(RectTransform parent, ref Rect area, IThirdPersonHud hud)
-        {
-            Func<bool> available = () => hud != null && hud.IsEnabled && hud.ModifyVanillaHud;
-            Stepper(parent, TakeRow(ref area), "FLIGHT SIZE", () => HudLayout.ScaleName(hud?.FlightScaleStep ?? 1),
-                d => { if (hud != null) hud.FlightScaleStep = HudLayout.Cycle(hud.FlightScaleStep, 4, d); },
-                available, available, "Scale flight readouts independently from the tactical dock.", available);
-            Stepper(parent, TakeRow(ref area), "FLIGHT OPACITY", () => HudLayout.OpacityName(hud?.FlightOpacityStep ?? 0),
-                d => { if (hud != null) hud.FlightOpacityStep = HudLayout.Cycle(hud.FlightOpacityStep, 4, d); },
-                available, available, "Flight readout transparency; OFF leaves native tactical markers visible.", available);
-            Stepper(parent, TakeRow(ref area), "FLIGHT CONTRAST", () => HudLayout.ContrastName(hud?.FlightContrast ?? 1),
-                d => { if (hud != null) hud.FlightContrast = HudLayout.Cycle(hud.FlightContrast, 3, d); },
-                available, available, "CLEAR ink, GLASS backing, or SOLID backing.", available);
-        }
-
-        private void BuildInstrumentRows(RectTransform parent, ref Rect area, IThirdPersonHud hud)
-        {
-            Func<bool> available = () => hud != null;
-            Func<bool> on = () => hud != null && hud.BoardEnabled;
-            Func<string> off = () => "Enable the instrument board first.";
-            Toggle(parent, TakeRow(ref area), "INSTRUMENT BOARD", "Camera, systems, missile tracks and observations in external view.",
-                () => hud != null && hud.BoardEnabled, v => { if (hud != null) hud.BoardEnabled = v; }, available);
-            Toggle(parent, TakeRow(ref area), "SYSTEMS", "Counts of damaged parts, detached parts and native faults. No artificial health score.",
-                () => hud != null && hud.AirframeEnabled, v => { if (hud != null) hud.AirframeEnabled = v; }, on, off);
-            Toggle(parent, TakeRow(ref area), "MISSILE TRACKS", "Own shots and detected inbound warnings, up to three each.",
-                () => hud != null && hud.ShotsEnabled, v => { if (hud != null) hud.ShotsEnabled = v; }, on, off);
-            Toggle(parent, TakeRow(ref area), "OBSERVATION", "Range and age of your current camera mark.",
-                () => hud != null && hud.MarkEnabled, v => { if (hud != null) hud.MarkEnabled = v; }, on, off);
-            Stepper(parent, TakeRow(ref area), "BOARD CORNER", () => HudLayout.CornerName(hud?.BoardCorner ?? 0),
-                d => { if (hud != null) hud.BoardCorner = HudLayout.Cycle(hud.BoardCorner, 4, d); },
-                available, available, "Anchor to a safe-area corner; top corners leave room for native instruments.", on, off);
-            Stepper(parent, TakeRow(ref area), "BOARD SIZE", () => HudLayout.ScaleName(hud?.BoardScaleStep ?? 1),
-                d => { if (hud != null) hud.BoardScaleStep = HudLayout.Cycle(hud.BoardScaleStep, 4, d); },
-                available, available, "Scales all board instruments together.", on, off);
-            Stepper(parent, TakeRow(ref area), "BOARD OPACITY", () => HudLayout.OpacityName(hud?.BoardOpacityStep ?? 0),
-                d => { if (hud != null) hud.BoardOpacityStep = HudLayout.Cycle(hud.BoardOpacityStep, 4, d); },
-                available, available, "Transparency of the complete instrument board.", on, off);
-            Stepper(parent, TakeRow(ref area), "BOARD CONTRAST", () => HudLayout.ContrastName(hud?.BoardContrast ?? 1),
-                d => { if (hud != null) hud.BoardContrast = HudLayout.Cycle(hud.BoardContrast, 3, d); },
-                available, available, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
-            HudOffset(parent, ref area, "INSET HORIZONTAL", () => hud?.BoardInsetX ?? 0,
-                v => { if (hud != null) hud.BoardInsetX = v; }, 0, on, off);
-            HudOffset(parent, ref area, "INSET VERTICAL", () => hud?.BoardInsetY ?? 0,
-                v => { if (hud != null) hud.BoardInsetY = v; }, 0, on, off);
-            AvStyled.Button(parent, TakeRow(ref area), "RESET INSTRUMENT LAYOUT", "btn", () =>
-            { hud?.ResetLayout(); Echo("Instrument layout restored."); Changed(); });
-        }
-
-        private void HudOffset(RectTransform parent, ref Rect area, string label, Func<int> read,
+        private void HudOffset(AvFlow flow, int page, string label, Func<int> read,
             Action<int> write, int min, Func<bool> enabled, Func<string> reason)
         {
-            Stepper(parent, TakeRow(ref area), label, () => read() + " px",
+            Stepper(flow, page, label, () => AvNum.Fixed(read(), 0) + " px",
                 d => write(Mathf.Clamp(read() + d * 20, min, 600)),
                 () => read() > min, () => read() < 600,
                 "Adjust by 20 reference pixels. The complete overlay is clamped inside the safe area.", enabled, reason);

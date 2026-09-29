@@ -22,6 +22,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static Shader terrainShader;
         private static Shader updateShader;
         private static Shader flightCloudShader;
+        private static Shader flightCloudCompositeShader;
         private static bool attempted;
         private static bool prewarmed;
 
@@ -38,12 +39,14 @@ namespace BoscaliSummer.Features.Weather.Visuals
             GetTerrainShader();
             GetUpdateShader();
             GetFlightCloudShader();
+            GetFlightCloudCompositeShader();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             int warmed = 0;
             warmed += WarmOne(shader) ? 1 : 0;
             warmed += WarmOne(terrainShader) ? 1 : 0;
             warmed += WarmOne(updateShader) ? 1 : 0;
             warmed += WarmOne(flightCloudShader) ? 1 : 0;
+            warmed += WarmOne(flightCloudCompositeShader) ? 1 : 0;
             watch.Stop();
             return warmed > 0 ? watch.ElapsedMilliseconds : -1;
         }
@@ -91,6 +94,13 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return flightCloudShader;
         }
 
+        /// <summary>Upsamples the half-resolution clouds over the scene (WeatherCloudPass).</summary>
+        internal static Shader GetFlightCloudCompositeShader()
+        {
+            GetShader();
+            return flightCloudCompositeShader;
+        }
+
         internal static Shader GetShader()
         {
             if (shader != null) return shader;
@@ -131,6 +141,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
                             updateShader = shaders[i];
                         if (shaders[i] != null && shaders[i].name == "Boscali/FlightCloud" && shaders[i].isSupported)
                             flightCloudShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/FlightCloudComposite" && shaders[i].isSupported)
+                            flightCloudCompositeShader = shaders[i];
                     }
                 }
                 if (shader != null || terrainShader != null || updateShader != null ||

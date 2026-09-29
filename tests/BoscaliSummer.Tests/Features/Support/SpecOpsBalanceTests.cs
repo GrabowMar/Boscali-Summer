@@ -51,11 +51,11 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void CheckCycleTimes()
         {
-            // 10 km out: 40 s travel, then task, the recruit's 300 s hold and 60 s recovery.
-            TestAssert.That(Math.Abs(Cycle(FieldMission.Recon) - 430f) < 0.001f, "RECON turns in 7 min 10 s");
-            TestAssert.That(Math.Abs(Cycle(FieldMission.Sabotage) - 445f) < 0.001f, "SABOTAGE turns in 7 min 25 s");
-            TestAssert.That(Math.Abs(Cycle(FieldMission.Steal) - 445f) < 0.001f, "STEAL turns in 7 min 25 s");
-            TestAssert.That(Math.Abs(Cycle(FieldMission.Seize) - 460f) < 0.001f, "SEIZE turns in 7 min 40 s");
+            // 10 km out: 40 s travel, immediate execution, task, 120 s temporary post and 60 s recovery.
+            TestAssert.That(Math.Abs(Cycle(FieldMission.Recon) - 250f) < 0.001f, "RECON turns in 4 min 10 s");
+            TestAssert.That(Math.Abs(Cycle(FieldMission.Sabotage) - 265f) < 0.001f, "SABOTAGE turns in 4 min 25 s");
+            TestAssert.That(Math.Abs(Cycle(FieldMission.Steal) - 265f) < 0.001f, "STEAL turns in 4 min 25 s");
+            TestAssert.That(Math.Abs(Cycle(FieldMission.Seize) - 280f) < 0.001f, "SEIZE turns in 4 min 40 s");
         }
 
         private static float Cycle(FieldMission mission) =>
@@ -72,6 +72,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 detachment.TryLaunch(0, FieldMission.Recon, Town, 0f, now);
                 now += FieldCatalog.TravelSeconds(0f);
                 detachment.Tick(now, () => 0.0, r => true);
+                detachment.TryDirective(0, SpecOpsDirective.Execute, now);
                 now += FieldCatalog.TaskSeconds(FieldMission.Recon);
                 detachment.Tick(now, () => 0.0, r => true);
                 now += FieldCatalog.HoldSeconds(detachment.Team(0).Rank);
@@ -81,15 +82,15 @@ namespace BoscaliSummer.Tests.Features.Support
             }
             FieldTeam alpha = detachment.Team(0);
             TestAssert.That(alpha.Wins == 6 && alpha.Rank == FieldCatalog.MaxRank, "six held posts make ELITE");
-            TestAssert.That(Math.Abs(now - 3060.0) < 0.001, "even flawless, ELITE costs 51 minutes in the field");
+            TestAssert.That(Math.Abs(now - 1440.0) < 0.001, "even flawless, ELITE takes 24 minutes through temporary posts");
         }
 
         private static void CheckPostShare()
         {
             // Share of a success cycle the post (and its ACTIONS) is actually up, rank 0, 10 km out.
-            TestAssert.That(Math.Abs(Share(FieldMission.Recon) - 300f / 430f) < 0.001f, "RECON posts 70% of its cycle");
-            TestAssert.That(Math.Abs(Share(FieldMission.Sabotage) - 300f / 445f) < 0.001f, "SABOTAGE posts 67% of its cycle");
-            TestAssert.That(Math.Abs(Share(FieldMission.Seize) - 300f / 460f) < 0.001f, "SEIZE posts 65% of its cycle");
+            TestAssert.That(Math.Abs(Share(FieldMission.Recon) - 120f / 250f) < 0.001f, "RECON posts are temporary for 48% of a cycle");
+            TestAssert.That(Math.Abs(Share(FieldMission.Sabotage) - 120f / 265f) < 0.001f, "SABOTAGE posts are temporary for 45% of a cycle");
+            TestAssert.That(Math.Abs(Share(FieldMission.Seize) - 120f / 280f) < 0.001f, "SAFEHOUSES are temporary for 43% of a cycle");
         }
 
         private static float Share(FieldMission mission) => FieldCatalog.HoldSeconds(0) / Cycle(mission);

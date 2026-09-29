@@ -1,4 +1,5 @@
 using BoscaliSummer.Features.Command.Presentation.MapUi;
+using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Command
 {
@@ -53,22 +54,22 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void RunRailCatalogTests()
         {
             MfdRailEntry set = MfdRailCatalog.For("SET");
-            TestAssert.That(set.Code == "SET" && set.Name == "SETTINGS" && set.Glyph == "settings",
+            TestAssert.That(set.Code == "SET" && set.Name == "SETTINGS" && set.Glyph == AvIcon.AdjustmentsHorizontal,
                 "SET maps to a readable rail entry");
             MfdRailEntry adm = MfdRailCatalog.For("ADM");
-            TestAssert.That(adm.Code == "ADM" && !adm.HasName && adm.Glyph == null,
-                "the deleted ADM bezel leaves no rail entry behind");
+            TestAssert.That(adm.Code == "ADM" && !adm.HasName && adm.Glyph == AvIcon.ListDetails,
+                "the deleted ADM bezel leaves no rail entry behind but keeps the neutral fallback icon");
             MfdRailEntry bdf = MfdRailCatalog.For("bdf");
-            TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == "faction", "codes are case-insensitive");
+            TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == AvIcon.BuildingBank, "codes are case-insensitive");
             MfdRailEntry faction = MfdRailCatalog.For("FAC");
             TestAssert.That(faction.Code == "FAC" && faction.Name == "FACTIONS" &&
-                            faction.Glyph == "faction", "merged faction bezel is branded");
+                            faction.Glyph == AvIcon.BuildingBank, "merged faction bezel is branded");
             TestAssert.That(VanillaMfdPanelCatalog.FromShortName("FAC") == VanillaMfdPanelId.Bdf &&
                             VanillaMfdPanelCatalog.Label(VanillaMfdPanelId.Bdf) == "FAC",
                 "merged faction screen has one header identity");
             MfdRailEntry unknown = MfdRailCatalog.For("<SUD>");
-            TestAssert.That(unknown.Code == "SUD" && !unknown.HasName && unknown.Glyph == null,
-                "unknown codes survive sanitising without an invented meaning");
+            TestAssert.That(unknown.Code == "SUD" && !unknown.HasName && unknown.Glyph == AvIcon.ListDetails,
+                "unknown codes survive sanitising without an invented meaning, keeping the neutral fallback icon");
             TestAssert.That(MfdRailCatalog.For(null).Code == "" && MfdRailCatalog.For("  ").Code == "",
                 "empty labels stay empty");
             TestAssert.That(MfdRailCatalog.OrderRank("FAC") < MfdRailCatalog.OrderRank("BDF") &&
@@ -97,12 +98,12 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void RunHostedEntryTests()
         {
             MfdRailEntry events = MfdRailCatalog.For("EVN");
-            TestAssert.That(events.HasName && events.Glyph == "pulse",
+            TestAssert.That(events.HasName && events.Glyph == AvIcon.Activity,
                 "the hosted EVN button carries a readable rail entry");
             TestAssert.That(events.Glyph != MfdRailCatalog.For("MIS").Glyph,
                 "the event feed must not wear the mission flag");
             MfdRailEntry comms = MfdRailCatalog.For("COM");
-            TestAssert.That(comms.HasName && comms.Name == "COMMS" && comms.Glyph == "comms",
+            TestAssert.That(comms.HasName && comms.Name == "COMMS" && comms.Glyph == AvIcon.Message2,
                 "the hosted COM button reads as COMMS with its own glyph");
         }
 

@@ -19,31 +19,47 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         public MfdLedgerChart(RectTransform parent, float y, float panelWidth, float availableHeight)
         {
-            float x = AvTokens.Space3;
+            const float x = 12f;
             width = panelWidth - 2f * x;
             rowPitch = Mathf.Clamp((availableHeight - 34f) / 4f, 28f, 64f);
             primaryHeight = rowPitch > 40f ? 12f : 5f;
             secondaryHeight = rowPitch > 40f ? 8f : 3f;
-            legend = AvStyled.Label(parent, new Rect(x, y, width, 14f), "", "row-sub");
+            Color track = AvStyleHost.FuiColor("surface-raised", AvTheme.SurfaceRaised);
+            Color grid = AvStyleHost.FuiColor("hairline", AvTheme.Hairline).WithAlpha(0.55f);
+            Color primaryInk = AvStyleHost.FuiColor("ready", AvTheme.Accent);
+            Color secondaryInk = AvStyleHost.FuiColor("caution", AvTheme.Warning);
+            Color rail = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
+            legend = Label(parent, "Legend", AvTextRole.Micro, new Rect(x, y, width, 14f), "ink-dim", TextAlignmentOptions.MidlineLeft);
             y -= 20f;
             string[] names = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
             for (int i = 0; i < 4; i++)
             {
-                float top = y-i*rowPitch;
-                AvStyled.Label(parent, new Rect(x, top, width * .4f, 16f), names[i], "row-main");
-                AvKit.Rule(parent, new Rect(x, top-16f, width, primaryHeight+secondaryHeight+2f), AvTheme.SurfaceRaised);
+                float top = y - i * rowPitch;
+                Label(parent, "Name " + names[i], AvTextRole.Label, new Rect(x, top, width * .4f, 16f), "ink",
+                    TextAlignmentOptions.MidlineLeft).text = names[i];
+                MfdChromeLay.Rule(parent, "Track", new Rect(x, top - 16f, width, primaryHeight + secondaryHeight + 2f), track);
                 for (int tick = 1; tick < 4; tick++)
-                    AvKit.Rule(parent, new Rect(x + width * tick / 4f, top - 16f,
-                        1f, primaryHeight + secondaryHeight + 2f),
-                        AvTheme.Hairline.WithAlpha(0.55f));
-                primary[i] = AvKit.Rule(parent, new Rect(x, top-16f, 0f, primaryHeight), AvTheme.Accent);
-                secondary[i] = AvKit.Rule(parent, new Rect(x, top-18f-primaryHeight, 0f, secondaryHeight), AvTheme.Warning);
-                AvKit.Rule(parent, new Rect(x, top - 16f, 2f,
-                    primaryHeight + secondaryHeight + 2f), AvTheme.RailInfo);
-                values[i] = AvStyled.Label(parent, new Rect(x+width*.4f, top, width*.6f, 16f), "", "row-main",
-                    align: TextAlignmentOptions.MidlineRight);
+                    MfdChromeLay.Rule(parent, "Tick", new Rect(x + width * tick / 4f, top - 16f,
+                        1f, primaryHeight + secondaryHeight + 2f), grid);
+                primary[i] = MfdChromeLay.Rule(parent, "Primary", new Rect(x, top - 16f, 0f, primaryHeight), primaryInk);
+                secondary[i] = MfdChromeLay.Rule(parent, "Secondary", new Rect(x, top - 18f - primaryHeight, 0f, secondaryHeight), secondaryInk);
+                MfdChromeLay.Rule(parent, "Rail", new Rect(x, top - 16f, 2f, primaryHeight + secondaryHeight + 2f), rail);
+                values[i] = Label(parent, "Value " + names[i], AvTextRole.DataSmall, new Rect(x + width * .4f, top, width * .6f, 16f),
+                    "ink", TextAlignmentOptions.MidlineRight);
             }
-            scale = AvStyled.Label(parent, new Rect(x, y-4f*rowPitch, width, 14f), "", "row-sub");
+            scale = Label(parent, "Scale", AvTextRole.DataSmall, new Rect(x, y - 4f * rowPitch, width, 14f), "ink-dim",
+                TextAlignmentOptions.MidlineLeft);
+        }
+
+        /// <summary>A fixed-box caption: kit type role, role colour, shrinks toward the 11 px floor instead of spilling.</summary>
+        private static TMP_Text Label(RectTransform parent, string name, AvTextRole role, Rect area, string colourRole,
+            TextAlignmentOptions align)
+        {
+            TMP_Text text = AvText.Make(parent, name, role, "", align);
+            MfdChromeLay.Place(text.rectTransform, area);
+            text.color = AvStyleHost.FuiColor(colourRole, AvTheme.TextPrimary);
+            AvText.Fit(text, false);
+            return text;
         }
 
         public void Set(float[] first, float[] second, string firstName, string secondName, string unit,

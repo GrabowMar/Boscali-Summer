@@ -86,7 +86,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 denial = PlatformDenial.NoPlatform;
                 return null;
             }
-            denial = platform.Check(ability, Host.OrbitNow);
+            denial = platform.CheckTarget(ability, Target.x, Target.z, Host.OrbitNow);
             return denial == PlatformDenial.None ? platform : null;
         }
 
@@ -102,6 +102,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case PlatformDenial.Recharging: return SupportResult.PlatformRecharging;
                 case PlatformDenial.Expended: return SupportResult.PlatformExpended;
                 case PlatformDenial.NoFuel: return SupportResult.NoFuel;
+                case PlatformDenial.WrongFocus: return SupportResult.PlatformWrongFocus;
+                case PlatformDenial.Retasking: return SupportResult.PlatformRetasking;
+                case PlatformDenial.NoSolution: return SupportResult.NeedsTargetSolution;
+                case PlatformDenial.OutsideSector: return SupportResult.PlatformOutOfReach;
                 default: return SupportResult.OutOfCoverage;
             }
         }

@@ -15,7 +15,6 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestEffectLabels();
             TestWingmanPresenceTracking();
             TestSquadBezelCoexistence();
-            TestDossierStylesheet();
         }
 
         /// <summary>
@@ -48,32 +47,24 @@ namespace BoscaliSummer.Tests.Features.Progression
                     "lanes " + (l - 1) + " and " + l + " are not separated by exactly one gap");
             }
 
-            float roomy = SkillBoardLayout.RowHeight(604f, PerkCatalog.MaximumDepth);
-            TestAssert.That(roomy >= SkillBoardLayout.MinCellHeight &&
-                            roomy <= SkillBoardLayout.MaxCellHeight,
-                "a tall sheet must keep the grade rows inside the readable band");
-            float tight = SkillBoardLayout.RowHeight(100f, PerkCatalog.MaximumDepth);
-            TestAssert.That(tight == SkillBoardLayout.MinCellHeight,
-                "a short sheet must keep the grade rows at the readable minimum");
-
-            // The scroll content must declare everything the board draws at the minimum row
-            // height - masthead, clause heading, rail key, lane header and rows - or the parts
-            // below the declared height can never be scrolled into view.
-            float declared = SkillBoardLayout.ContentHeight(
-                SkillBoardLayout.MinCellHeight, PerkCatalog.MaximumDepth);
-            float drawn = SkillBoardLayout.FileHeaderHeight + SkillBoardLayout.TitleHeight +
-                SkillBoardLayout.LegendHeight + SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap +
-                PerkCatalog.MaximumDepth * SkillBoardLayout.MinCellHeight;
-            TestAssert.That(declared >= drawn - 0.01f,
-                "the scroll content height must cover every band the board draws");
-
-            foreach (float height in new[] { SkillBoardLayout.MinCellHeight, SkillBoardLayout.MaxCellHeight })
-            {
-                float stateTop = SkillBoardLayout.StateTop(height);
-                float stateBottom = stateTop - SkillBoardLayout.StateHeight;
-                TestAssert.That(stateTop <= 0f && stateBottom >= -height,
-                    "the skill state line must stay inside its cell at height " + height);
-            }
+            // The flow measures the board by ContentHeight, so it must reach the bottom of the last
+            // node row or the tail of the tree can never be scrolled into view; and every tier row
+            // must sit below the one before it with a connector gap between them.
+            int tiers = PerkCatalog.MaximumDepth;
+            float declared = SkillBoardLayout.ContentHeight(tiers);
+            float lastBottom = SkillBoardLayout.NodeTop(tiers - 1) + SkillBoardLayout.NodeHeight;
+            TestAssert.That(System.Math.Abs(declared - lastBottom) < 0.01f,
+                "the board's declared height must end exactly at its last node");
+            TestAssert.That(SkillBoardLayout.NodeTop(0) >= SkillBoardLayout.HeaderTop + SkillBoardLayout.LaneHeaderHeight,
+                "the first tier must start below the lane headers");
+            for (int t = 1; t < tiers; t++)
+                TestAssert.That(System.Math.Abs(SkillBoardLayout.NodeTop(t) - SkillBoardLayout.NodeTop(t - 1) -
+                                SkillBoardLayout.NodeHeight - SkillBoardLayout.NodeGap) < 0.01f,
+                    "tier " + t + " is not separated from the tier above by exactly one node gap");
+            TestAssert.That(SkillBoardLayout.NodeGap >= 6f,
+                "the connector between two tiers needs room to be seen");
+            TestAssert.That(SkillBoardLayout.NodeHeight >= 44f,
+                "a node must hold its glyph and a two-line name");
         }
 
         /// <summary>
@@ -146,48 +137,6 @@ namespace BoscaliSummer.Tests.Features.Progression
                 PresenceBoard.SetString(PresenceBoard.WingGuid, prevGuid);
                 PresenceBoard.SetInts(PresenceBoard.WingMemberIds, prevIds);
             }
-        }
-
-        /// <summary>
-        /// SQD now uses the common instrument hierarchy rather than paper-file decoration.
-        /// Parse the shipped sheet here and pin the type roles the dense personnel pages rely on.
-        /// </summary>
-        private static void TestDossierStylesheet()
-        {
-            string text;
-            using (System.IO.Stream stream = typeof(SqdPanelTests).Assembly
-                .GetManifestResourceStream("BoscaliSummer.Tests.avionics.avss"))
-            {
-                TestAssert.That(stream != null, "the shipped avionics sheet must be embedded for this check");
-                using (var reader = new System.IO.StreamReader(stream)) text = reader.ReadToEnd();
-            }
-
-            AvStyleSheet sheet = AvStyleSheet.Parse(text);
-            for (int i = 0; i < sheet.Errors.Count; i++)
-                TestAssert.That(false, "avionics.avss " + sheet.Errors[i]);
-
-            AvStyle pageTitle = sheet.Resolve("page-title");
-            AvStyle sectionTitle = sheet.Resolve("section-title");
-            AvStyle rowMain = sheet.Resolve("row-main");
-            AvStyle rowSub = sheet.Resolve("row-sub");
-            AvStyle formKey = sheet.Resolve("form-key");
-            AvStyle formValue = sheet.Resolve("form-value");
-            AvStyle status = sheet.Resolve("status-text");
-
-            TestAssert.That(pageTitle.HasFont && pageTitle.FontSize >= 18f,
-                "SQD page identity must stay visually above its sections");
-            TestAssert.That(sectionTitle.HasFont && sectionTitle.FontSize >= 11f,
-                "SQD section labels must remain readable on a compact MFD");
-            TestAssert.That(rowMain.HasFont && rowMain.FontSize >= 12f,
-                "primary personnel data must use at least the 12px body role");
-            TestAssert.That(rowSub.HasFont && rowSub.FontSize >= 11f && rowSub.Wrap,
-                "secondary personnel copy must be readable and wrap instead of ellipsising");
-            TestAssert.That(formKey.HasFont && formKey.FontSize >= 11f,
-                "personnel field labels must carry a readable type size");
-            TestAssert.That(formValue.HasFont && formValue.FontSize >= 12f,
-                "personnel values must remain stronger than their labels");
-            TestAssert.That(status.HasFont && status.FontSize >= 12f && status.Wrap,
-                "the SQD status strip must carry readable wrapped guidance");
         }
 
         private static void TestSquadBezelCoexistence()

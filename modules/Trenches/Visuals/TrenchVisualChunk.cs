@@ -39,6 +39,10 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         private readonly float[] bayExtra = new float[MaximumRings];
         private readonly float[] curveX = new float[TrenchLine.MaximumCurvePoints];
         private readonly float[] curveZ = new float[TrenchLine.MaximumCurvePoints];
+        private readonly Queue<TrenchBuildStep> pendingBuild = new Queue<TrenchBuildStep>();
+        private readonly TrenchBuildStep[] buildPlan = new TrenchBuildStep[TrenchTraceMath.MaximumBuildSteps];
+        private Vector3[] stagedFirePath;
+        private const int RebuildMillisecondsPerFrame = 3;
 
         public float Lod0Distance = 250f;
         public float Lod1Distance = 1200f;
@@ -74,7 +78,6 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             if (line == null || line.Curve == null || line.Curve.Length < 2) return;
 
             Material earthMat = TrenchMaterialResolver.GetEarthBermMaterial();
-            Material wireMat = TrenchMaterialResolver.GetWireMaterial();
             EarthMaterial = earthMat != null ? earthMat.name + " / " + earthMat.shader?.name : "MISSING";
             if (earthMat == null) return;
 
@@ -99,45 +102,105 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 colliderRoot.transform.SetParent(transform, false);
             }
 
-            float width = WidthFor(line.Stage);
-            float parapet = ParapetFor(line.Stage);
-            Vector3[] fire = BuildDitchPath(line.Curve, TraceStep);
-            if (fire != null)
-            {
-                // Bays flare the LOD0 fire ditch only: a 1.4m widening is sub-pixel at the mid
-                // and far LOD ranges, and the constant silhouettes already read from there.
-                AddMesh(lod0Root.transform, "Fire_LOD0", fire, width, parapet, 1.1f, earthMat, true,
-                    BuildBaySchedule(fire));
-                AddFrontColliders(fire, width, parapet, "Fire");
-                AddWireBelt(lod0Root.transform, wireMat ?? earthMat, WireForward, WireHeight, "WireBelt");
-                // A second, lower belt further out: the double-apron read of a real wired
-                // approach, so the belt is a band of no man's land instead of a single line.
-                AddWireBelt(lod0Root.transform, wireMat ?? earthMat, OuterWireForward, OuterWireHeight, "WireBelt_Outer");
-            }
-            // Mid and far LODs stay real earthworks at a coarser ring pitch: a wing flying
-            // over the front must still read the parapet line and the belt behind it. The
-            // far ridge is the silhouette — berms, no skirts — rather than a flat scar.
-            AddPath(lod1Root.transform, "Fire_LOD1", line.Curve, CoarseStep,
-                width, parapet * 0.85f, 0.8f, earthMat, true);
-            AddPath(lod2Root.transform, "Fire_LOD2", line.Curve, RidgeStep,
-                width + 3f, 1.8f, 0.5f, earthMat, true);
-            if (line.Support != null)
-            {
-                AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 2.2f, 1.2f, 1.0f, earthMat, true);
-                AddPath(lod1Root.transform, "Support_LOD1", line.Support, CoarseStep, 2.2f, 1.05f, 0.8f, earthMat, true);
-                AddPath(lod2Root.transform, "Support_LOD2", line.Support, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
-            }
-            if (line.Redoubt != null)
-            {
-                AddPath(lod0Root.transform, "Redoubt", line.Redoubt, TraceStep, 2.2f, 1.15f, 1.0f, earthMat, true);
-                AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, CoarseStep, 2.2f, 1.0f, 0.8f, earthMat, true);
-                AddPath(lod2Root.transform, "Redoubt_LOD2", line.Redoubt, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
-            }
-            AddTraces(lod0Root.transform, line.Links, "Link", 1.8f, 1.1f, earthMat);
-            AddTraces(lod0Root.transform, line.Spurs, "Sap", 1.3f, 0.8f, earthMat);
+            int planned = TrenchTraceMath.PlanBuildSteps(line.Support != null, line.Redoubt != null,
+                line.Links != null ? line.Links.Length : 0, line.Spurs != null ? line.Spurs.Length : 0,
+                buildPlan);
+            for (int i = 0; i < planned; i++) pendingBuild.Enqueue(buildPlan[i]);
+            PumpBuildQueue();
+        }
 
+        /// <summary>Drains staged build steps until the frame's rebuild budget is spent.</summary>
+        internal void PumpBuildQueue()
+        {
+            if (pendingBuild.Count == 0 || line == null) return;
+            System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
+            do
+            {
+                RunBuildStep(pendingBuild.Dequeue());
+                if (pendingBuild.Count == 0)
+                {
+                    stagedFirePath = null;
+                    currentLod = -1;
+                    UpdateLod(true);
+                    return;
+                }
+            } while (watch.ElapsedMilliseconds < RebuildMillisecondsPerFrame);
+        }
+
+        /// <summary>Finishes a staged rebuild at once: tests and scene teardown, never the frame loop.</summary>
+        internal void CompleteBuild()
+        {
+            while (pendingBuild.Count > 0) RunBuildStep(pendingBuild.Dequeue());
+            stagedFirePath = null;
             currentLod = -1;
             UpdateLod(true);
+        }
+
+        private void RunBuildStep(TrenchBuildStep step)
+        {
+            if (line == null || line.Curve == null || line.Curve.Length < 2) return;
+            Material earthMat = TrenchMaterialResolver.GetEarthBermMaterial();
+            if (earthMat == null) return;
+            float width = WidthFor(line.Stage);
+            float parapet = ParapetFor(line.Stage);
+            switch (step)
+            {
+                case TrenchBuildStep.Fire:
+                    // Bays flare the LOD0 fire ditch only: a 1.4m widening is sub-pixel at the mid
+                    // and far LOD ranges, and the constant silhouettes already read from there.
+                    stagedFirePath = BuildDitchPath(line.Curve, TraceStep);
+                    if (stagedFirePath != null)
+                        AddMesh(lod0Root.transform, "Fire_LOD0", stagedFirePath, width, parapet, 1.1f, earthMat, true,
+                            BuildBaySchedule(stagedFirePath));
+                    break;
+                case TrenchBuildStep.Colliders:
+                    if (stagedFirePath != null)
+                        AddFrontColliders(stagedFirePath, width, parapet, "Fire");
+                    break;
+                case TrenchBuildStep.Wire:
+                case TrenchBuildStep.WireOuter:
+                    // The wired approach rides the fire ditch: no ditch, no belts. The second,
+                    // lower belt further out is the double-apron read of a real wired approach.
+                    if (stagedFirePath == null) break;
+                    Material wireMat = TrenchMaterialResolver.GetWireMaterial();
+                    if (step == TrenchBuildStep.Wire)
+                        AddWireBelt(lod0Root.transform, wireMat ?? earthMat, WireForward, WireHeight, "WireBelt");
+                    else
+                        AddWireBelt(lod0Root.transform, wireMat ?? earthMat, OuterWireForward, OuterWireHeight, "WireBelt_Outer");
+                    break;
+                case TrenchBuildStep.Support:
+                    AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 2.2f, 1.2f, 1.0f, earthMat, true);
+                    break;
+                case TrenchBuildStep.Redoubt:
+                    AddPath(lod0Root.transform, "Redoubt", line.Redoubt, TraceStep, 2.2f, 1.15f, 1.0f, earthMat, true);
+                    break;
+                case TrenchBuildStep.Links:
+                    AddTraces(lod0Root.transform, line.Links, "Link", 1.8f, 1.1f, earthMat);
+                    break;
+                case TrenchBuildStep.Spurs:
+                    AddTraces(lod0Root.transform, line.Spurs, "Sap", 1.3f, 0.8f, earthMat);
+                    break;
+                // Mid and far LODs stay real earthworks at a coarser ring pitch: the far ridge
+                // is the silhouette (berms, no skirts) rather than a flat scar.
+                case TrenchBuildStep.FireLod1:
+                    AddPath(lod1Root.transform, "Fire_LOD1", line.Curve, CoarseStep, width, parapet * 0.85f, 0.8f, earthMat, true);
+                    break;
+                case TrenchBuildStep.FireLod2:
+                    AddPath(lod2Root.transform, "Fire_LOD2", line.Curve, RidgeStep, width + 3f, 1.8f, 0.5f, earthMat, true);
+                    break;
+                case TrenchBuildStep.SupportLod1:
+                    AddPath(lod1Root.transform, "Support_LOD1", line.Support, CoarseStep, 2.2f, 1.05f, 0.8f, earthMat, true);
+                    break;
+                case TrenchBuildStep.SupportLod2:
+                    AddPath(lod2Root.transform, "Support_LOD2", line.Support, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
+                    break;
+                case TrenchBuildStep.RedoubtLod1:
+                    AddPath(lod1Root.transform, "Redoubt_LOD1", line.Redoubt, CoarseStep, 2.2f, 1.0f, 0.8f, earthMat, true);
+                    break;
+                case TrenchBuildStep.RedoubtLod2:
+                    AddPath(lod2Root.transform, "Redoubt_LOD2", line.Redoubt, RidgeStep, 3.4f, 1.5f, 0.5f, earthMat, true);
+                    break;
+            }
         }
 
         private void AddTraces(Transform parent, Vector3[][] traces, string name, float width, float parapet,
@@ -161,7 +224,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             Vector3[] path = BuildDitchPath(wireCurve, CoarseStep);
             if (path == null) return;
 
-            Mesh mesh = TrenchMeshBuilder.BuildWireBeltMesh(path, height);
+            Mesh mesh = TrenchMeshBuilder.BuildWireBeltMesh(path, height, line.Spurs);
             if (mesh == null) return;
             proceduralMeshes.Add(mesh);
             var go = new GameObject(name);
@@ -327,6 +390,7 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private void Update()
         {
+            if (pendingBuild.Count > 0) PumpBuildQueue();
             float now = Time.time;
             if (now < nextLodCheckTime) return;
             nextLodCheckTime = now + 0.25f;
@@ -386,6 +450,8 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 if (proceduralMeshes[i] != null) Destroy(proceduralMeshes[i]);
             }
             proceduralMeshes.Clear();
+            pendingBuild.Clear();
+            stagedFirePath = null;
         }
 
         private void OnDestroy()

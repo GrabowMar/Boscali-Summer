@@ -7,6 +7,7 @@ using BoscaliSummer.Framework.Contracts;
 using BoscaliSummer.Framework.Features;
 using BoscaliSummer.Framework.Lifecycle;
 using BoscaliSummer.Runtime;
+using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
@@ -230,7 +231,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 int bearing = CommsText.Bearing(manager.MeasureAX, manager.MeasureAZ, manager.MeasureBX, manager.MeasureBZ);
                 Vector2 mid = CommsProjection.At((manager.MeasureAX + manager.MeasureBX) * 0.5f,
                     (manager.MeasureAZ + manager.MeasureBZ) * 0.5f, factor);
-                Tag(mid, inverse, CommsText.Distance(metres, VanillaHudStyle.Metric) + " · " + bearing.ToString("000") + "°",
+                Tag(mid, inverse, CommsText.Distance(metres, VanillaHudStyle.Metric) + " · " + AvNum.Fixed(bearing, 0).PadLeft(3, '0') + "°",
                     CommsMesh.Tone(CommsTone.Caution), new Vector2(0f, 14f), 13f, bold: true);
             }
 
@@ -253,7 +254,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private const float Height = 18f;
 
         private readonly RectTransform root;
-        private readonly Image plate;
+        private readonly AvFrame plate;
         private readonly TMP_Text label;
         private string text;
 
@@ -266,19 +267,22 @@ namespace BoscaliSummer.Features.Comms.Presentation
             root.pivot = new Vector2(0.5f, 0.5f);
             root.sizeDelta = new Vector2(Width, Height);
 
-            plate = AvKit.Panel(root, new Rect(0f, 0f, Width, Height), new Color(0.02f, 0.03f, 0.04f, 0.62f));
+            plate = AvFrame.Add(root, "Plate", AvChamfer.All(0f));
+            plate.Stroke = 0f;
+            plate.raycastTarget = false;
+            plate.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.62f), Color.clear);
             plate.rectTransform.anchorMin = plate.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             plate.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             plate.rectTransform.anchoredPosition = Vector2.zero;
+            plate.rectTransform.sizeDelta = new Vector2(Width, Height);
 
-            label = AvKit.Label(root, "", new Rect(0f, 0f, Width, Height), Color.white, 11f,
-                FontStyles.Normal, TextAlignmentOptions.Center);
+            label = AvText.Make(root, "Label", AvTextRole.ProseSmall, "", TextAlignmentOptions.Center);
             label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             label.rectTransform.anchoredPosition = Vector2.zero;
+            label.rectTransform.sizeDelta = new Vector2(Width, Height);
             label.richText = false;
             label.raycastTarget = false;
-            plate.raycastTarget = false;
             go.SetActive(false);
         }
 
@@ -290,11 +294,12 @@ namespace BoscaliSummer.Features.Comms.Presentation
             if (text != value)
             {
                 text = value;
+                // Captions are player text, so they keep case: a prose role (or the strong mono for emphasis), never a caps role.
+                AvTextRole role = bold ? AvTextRole.DataStrong : size >= 12.5f ? AvTextRole.Prose : AvTextRole.ProseSmall;
+                AvType.Apply(label, role);
                 label.text = value;
-                label.fontSize = size;
-                label.fontStyle = bold ? FontStyles.Bold : FontStyles.Normal;
                 float width = Mathf.Min(Width, Mathf.Ceil(label.GetPreferredValues(value).x) + 10f);
-                plate.rectTransform.sizeDelta = new Vector2(width, size + 5f);
+                plate.rectTransform.sizeDelta = new Vector2(width, AvTypeScale.Of(role).Size + 5f);
             }
             label.color = colour;
         }

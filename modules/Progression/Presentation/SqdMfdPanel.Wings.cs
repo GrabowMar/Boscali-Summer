@@ -15,301 +15,90 @@ namespace BoscaliSummer.Features.Progression.Presentation
     internal sealed partial class SqdMfdPanel
     {
         private const int WingmanRows = 4;
+        private const int EnemyScanLimit = 64;
 
-        private const float WingHuntHeight = 78f;
-        private const float WingFriendlyHeight = 112f;
-        private const float WingRowHeight = 124f;
-        private const float WingPagerHeight = 28f;
-        private const float WingFooterHeight = 44f;
-        private const float WingRowGrowthCap = 28f;
-
-        private sealed class FriendlySlot
-        {
-            public RectTransform Root;
-            public TMP_Text Index;
-            public TMP_Text Airframe;
-            public TMP_Text Status;
-        }
-
-        private Image huntRail;
-        private TMP_Text huntTitle;
-        private TMP_Text huntDetails;
-        private TMP_Text rosterPage;
-        private AvButton previousWings;
-        private AvButton nextWings;
-        private int wingPage;
-        private readonly List<WingRow> wingRows = new List<WingRow>(WingRowsPerPage);
-        private readonly string[] wingPortraitKeys = new string[WingRowsPerPage];
-
-        private Image wingPortrait;
-        private GameObject wingPortraitFallback;
-        private TMP_Text wingCallsign;
-        private TMP_Text wingName;
-        private TMP_Text wingAirframe;
-        private TMP_Text wingCount;
-        private TMP_Text wingCountNote;
-        private TMP_Text wingTeamNote;
+        private SqdRosterRow huntRow;
+        private SqdRosterRow wingLeadRow;
+        private SqdEmptyCard wingTeamNote;
+        private SqdEmptyCard hostileEmpty;
+        private AvSection friendlySection;
+        private AvSection hostileSection;
+        private AvStatTile wingsTotalTile, wingsActiveTile, wingsAliveTile;
+        private readonly SqdRosterRow[] wingmanSlots = new SqdRosterRow[WingmanRows];
         private readonly List<Aircraft> friendlyWing = new List<Aircraft>(WingmanRows);
-        private readonly FriendlySlot[] wingmanSlots = new FriendlySlot[WingmanRows];
+
+        private AvButtons wingsPager;
+        private AvControl previousWings;
+        private AvControl nextWings;
+        private int wingPage;
+        private readonly List<HostileWingCard> wingRows = new List<HostileWingCard>(WingRowsPerPage);
+        private readonly string[] wingPortraitKeys = new string[WingRowsPerPage];
 
         private void ResetWingsPage()
         {
-            huntRail = null;
-            huntTitle = huntDetails = rosterPage = null;
+            huntRow = wingLeadRow = null;
+            wingTeamNote = hostileEmpty = null;
+            friendlySection = hostileSection = null;
+            wingsTotalTile = wingsActiveTile = wingsAliveTile = null;
+            Array.Clear(wingmanSlots, 0, wingmanSlots.Length);
+            friendlyWing.Clear();
+            wingsPager = null;
             previousWings = nextWings = null;
             wingPage = 0;
             wingRows.Clear();
             Array.Clear(wingPortraitKeys, 0, wingPortraitKeys.Length);
-            wingPortrait = null;
-            wingPortraitFallback = null;
-            wingCallsign = wingName = wingAirframe = wingCount = wingCountNote = wingTeamNote = null;
-            friendlyWing.Clear();
-            Array.Clear(wingmanSlots, 0, wingmanSlots.Length);
         }
 
-        // ---- WINGS page ------------------------------------------------------------------
+        // ---- ACES page ---------------------------------------------------------------------
 
-        /// <summary>
-        /// The page's blocks at their natural heights: header, hunt band, the two wing
-        /// sections, the pager, two hostile rows and the footer. A taller bezel grows the
-        /// hostile cards first and then the gaps, so the last note always sits on the
-        /// status strip instead of leaving the lower third of the glass blank.
-        /// </summary>
-        private static float WingMinContentHeight() =>
-            SheetHeaderHeight + WingHuntHeight + SheetHeadingHeight + WingFriendlyHeight +
-            SheetHeadingHeight + WingPagerHeight + 2f * (WingRowHeight + AvTokens.Space2) +
-            WingFooterHeight + SheetBaseGap * 3f + AvTokens.Space3;
-
-        private void BuildWingsPage(RectTransform page, Rect body)
+        private void BuildWingsPage(AvFlow p)
         {
-            float content = WingMinContentHeight();
-            RectTransform parent = AvScreen.Scroll(page, body, content, out body);
-            PageRail(parent, new Rect(body.x, body.y, 3f, body.height));
-            float x = body.x + SpineInset;
-            float width = body.width - SpineInset;
-            float y = body.y;
+            p.Section(AvIcon.Skull, "ACE INTELLIGENCE", "LIVE + ENCOUNTER DATA");
 
-            float slack = Mathf.Max(0f, body.height - content);
-            float gap = SheetGap(body.height, content, 3);
-            float rowHeight = WingRowHeight + Mathf.Max(0f,
-                Mathf.Min((slack - (gap - SheetBaseGap) * 3f) / 2f, WingRowGrowthCap));
+            huntRow = p.Add(new SqdRosterRow(p.Content));
+            huntRow.Set("ACE HUNT STANDBY", "Awaiting enemy wing reports.", null, null, AvState.Info);
 
-            y = DrawPageHeader(parent, x, y, width, "ACE INTELLIGENCE",
-                "LIVE + ENCOUNTER DATA", SqdMark.Aircraft);
+            wingsTotalTile = new AvStatTile(p.Content, "HOSTILE WINGS");
+            wingsActiveTile = new AvStatTile(p.Content, "STILL ACTIVE");
+            wingsAliveTile = new AvStatTile(p.Content, "ACES + ESCORTS");
+            p.Row(wingsTotalTile, wingsActiveTile, wingsAliveTile);
 
-            // ---- Hunt status -------------------------------------------------------------
-            AvKit.Panel(parent, new Rect(x, y, width, WingHuntHeight), AvTheme.SurfaceInert);
-            AvKit.Outline(parent, new Rect(x, y, width, WingHuntHeight), AvTheme.Frame.WithAlpha(0.7f));
-            huntRail = AvStyled.Rail(parent, new Rect(x + 6f, y - 8f, 3f, WingHuntHeight - 18f), "ready");
-            huntTitle = Fitted(PlainLabel(parent, new Rect(x + 18f, y - 8f, width - 28f, 18f),
-                "ACE HUNT STANDBY", "section-title"));
-            huntTitle.characterSpacing = 2f;
-            huntDetails = PlainLabel(parent, new Rect(x + 18f, y - 30f, width - 28f, WingHuntHeight - 38f),
-                "Awaiting enemy wing reports.", "row-sub");
-            y -= WingHuntHeight + gap;
-
-            // ---- Your wing ---------------------------------------------------------------
-            y = DrawSectionTitle(parent, x, y, width, "FRIENDLY FLIGHT", "MANAGED IN WMC", band: false);
-            BuildFriendlyWing(parent, x, y, width);
-            y -= WingFriendlyHeight + gap;
-
-            // ---- Hostile wings -----------------------------------------------------------
-            y = DrawSectionTitle(parent, x, y, width, "HOSTILE ACE INTELLIGENCE", "MOST RECENT CONTACTS", band: false);
-
-            previousWings = AvStyled.Button(parent, new Rect(x, y, 88f, WingPagerHeight), "PREVIOUS", "btn", () =>
-            {
-                wingPage = Math.Max(0, wingPage - 1);
-                nextRefresh = 0f;
-            }, AvButtonStyle.Quiet);
-            previousWings.WithTooltip("Show the previous two hostile wings.");
-            rosterPage = PlainLabel(parent, new Rect(x + 94f, y, width - 188f, WingPagerHeight), "NO CONTACTS", "kv-value");
-            rosterPage.alignment = TextAlignmentOptions.Center;
-            nextWings = AvStyled.Button(parent, new Rect(x + width - 88f, y, 88f, WingPagerHeight), "NEXT", "btn", () =>
-            {
-                int count = squad != null ? squad.EnemyWingCount : 0;
-                if ((wingPage + 1) * WingRowsPerPage < count) wingPage++;
-                nextRefresh = 0f;
-            }, AvButtonStyle.Quiet);
-            nextWings.WithTooltip("Show the next two hostile wings, including previous encounters.");
-            y -= WingPagerHeight + AvTokens.Space2;
-
-            for (int i = 0; i < WingRowsPerPage; i++)
-            {
-                var rowObject = new GameObject("EnemyWing_" + i, typeof(RectTransform));
-                var root = (RectTransform)rowObject.transform;
-                root.SetParent(parent, false);
-                AvKit.Place(root, new Rect(x, y, width, rowHeight));
-                AvStyled.Box(root, new Rect(0f, 0f, width, rowHeight), "card");
-
-                var row = new WingRow
-                {
-                    Root = root,
-                    Rail = AvStyled.Rail(root, new Rect(4f, -8f, 3f, rowHeight - 16f), "locked"),
-                };
-
-                var emptyObject = new GameObject("NoFurtherContacts_" + i, typeof(RectTransform));
-                var empty = (RectTransform)emptyObject.transform;
-                empty.SetParent(parent, false);
-                AvKit.Place(empty, new Rect(x, y, width, rowHeight));
-                AvStyled.Box(empty, new Rect(0f, 0f, width, rowHeight), "card inert");
-                AvStyled.Rail(empty, new Rect(4f, -8f, 3f, rowHeight - 16f), "locked");
-                TMP_Text emptyLabel = PlainLabel(empty,
-                    new Rect(14f, -(rowHeight - 20f) * 0.5f, width - 28f, 20f),
-                    "NO FURTHER HOSTILE CONTACTS ON RECORD", "row-sub");
-                emptyLabel.alignment = TextAlignmentOptions.Center;
-                emptyObject.SetActive(false);
-                row.Empty = emptyObject;
-                row.EmptyLabel = emptyLabel;
-
-                Rect crestFrame = new Rect(14f, -10f, 54f, 54f);
-                AvKit.Panel(root, crestFrame, AvTheme.SurfaceInert);
-                AvKit.Outline(root, crestFrame, AvTheme.Frame.WithAlpha(0.6f));
-                row.Crest = AvKit.Panel(root,
-                    new Rect(crestFrame.x + 1f, crestFrame.y - 1f, crestFrame.width - 2f, crestFrame.height - 2f),
-                    Color.white);
-                row.Crest.type = Image.Type.Simple;
-                row.Crest.preserveAspect = true;
-                row.Crest.raycastTarget = false;
-                row.Crest.enabled = false;
-
-                Rect portraitFrame = new Rect(74f, -10f, 42f, 54f);
-                AvKit.Panel(root, portraitFrame, AvTheme.SurfaceInert);
-                AvKit.Outline(root, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-                row.PortraitFallback = VisualPlaceholder(root,
-                    new Rect(portraitFrame.x + 2f, portraitFrame.y - 2f,
-                        portraitFrame.width - 4f, portraitFrame.height - 4f));
-                row.Portrait = AvKit.Panel(root,
-                    new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
-                    Color.white);
-                row.Portrait.type = Image.Type.Simple;
-                row.Portrait.preserveAspect = true;
-                row.Portrait.raycastTarget = false;
-                row.Portrait.enabled = false;
-
-                row.Symbol = PlainLabel(root, new Rect(124f, -12f, 28f, 18f), "", "section-title");
-                row.Wing = Fitted(PlainLabel(root, new Rect(156f, -10f, 138f, 20f), "", "row-name"));
-                row.Ace = Fitted(PlainLabel(root, new Rect(124f, -34f, 172f, 15f), "", "kv-value"));
-                // One line, shrunk to fit: the flight line runs to "· FIRST ENCOUNTER" and
-                // the target name is a base name, neither of which has a wrap budget.
-                row.Skill = Fitted(PlainLabel(root, new Rect(124f, -52f, width - 136f, 14f), "", "row-sub"));
-                row.Skill.enableWordWrapping = false;
-                row.Skill.characterSpacing = 0f;
-
-                row.Status = PlainLabel(root, new Rect(width - 152f, -12f, 142f, 16f), "", "kv-value");
-                row.Status.alignment = TextAlignmentOptions.MidlineRight;
-                row.Members = PlainLabel(root, new Rect(width - 152f, -30f, 142f, 14f), "", "kv-value");
-                row.Members.alignment = TextAlignmentOptions.MidlineRight;
-
-                // The badge row keeps its offset under the identity block; the target line
-                // hangs off the card's bottom edge, so a card grown by a taller bezel opens
-                // its spare space between the two instead of leaving a band above neither.
-                const float badgeTop = -70f;
-                for (int badge = 0; badge < row.Badges.Length; badge++)
-                {
-                    RectTransform slot = AvKit.Panel(root, new Rect(124f + badge * 40f, badgeTop, 36f, 38f),
-                        new Color32(22, 26, 30, 255)).rectTransform;
-                    row.Badges[badge] = slot.gameObject;
-                    AvKit.Outline(slot, new Rect(0f, 0f, 36f, 38f), AvTheme.RailCaution.WithAlpha(0.35f));
-                    Glyph(slot, new Rect(9f, -4f, 18f, 18f),
-                        HuntMark.Toughness + badge, AvTheme.RailCaution);
-                    TMP_Text caption = PlainLabel(slot, new Rect(0f, -24f, 36f, 12f),
-                        AceSkillCatalog.All[badge].Code, "section-title-note");
-                    caption.fontSize = AvTokens.FontMicro;
-                    caption.characterSpacing = 0f;
-                    caption.alignment = TextAlignmentOptions.Center;
-                }
-                row.NoSkills = PlainLabel(root, new Rect(124f, -68f, 158f, 14f),
-                    "NO ACTIVE THREAT SKILLS", "row-sub");
-
-                row.Target = Fitted(PlainLabel(root, new Rect(288f, -(rowHeight - 24f), width - 298f, 15f), "", "row-sub"));
-                row.Target.enableWordWrapping = false;
-                row.Target.characterSpacing = 0f;
-                row.Target.alignment = TextAlignmentOptions.MidlineRight;
-
-                wingRows.Add(row);
-                y -= rowHeight;
-                if (i < WingRowsPerPage - 1) y -= AvTokens.Space2;
-            }
-
-            y -= gap;
-            AvKit.Panel(parent, new Rect(x, y, width, WingFooterHeight), AvTheme.SurfaceInert);
-            AvKit.Outline(parent, new Rect(x, y, width, WingFooterHeight), AvTheme.Frame.WithAlpha(0.6f));
-            AvStyled.Rail(parent, new Rect(x + 4f, y - 6f, 3f, WingFooterHeight - 12f), "info");
-            TMP_Text footer = AvStyled.Label(parent,
-                new Rect(x + 12f, y - 6f, width - 18f, WingFooterHeight - 12f),
-                "ACE KILL: +1 SKILL POINT. Downed aces may return stronger.\nFRIENDLY WING RECRUITING AND ORDERS REMAIN IN WMC.", "row-sub");
-            footer.fontSize = AvTokens.FontSmall;
-            footer.lineSpacing = -10f;
-        }
-
-        /// <summary>Your own flight, read-only: the career lead plus Wing Command's published
-        /// wingmen. Recruiting, loadouts and orders stay in WMC; a slot with no live aircraft
-        /// reads NO SIGNAL rather than guessing.</summary>
-        private void BuildFriendlyWing(RectTransform parent, float x, float y, float width)
-        {
-            AvStyled.Box(parent, new Rect(x, y, width, 112f), "card");
-            AvStyled.Rail(parent, new Rect(x + 4f, y - 8f, 3f, 96f), "ready");
-
-            Rect portraitFrame = new Rect(x + 14f, y - 10f, 42f, 54f);
-            AvKit.Panel(parent, portraitFrame, AvTheme.SurfaceInert);
-            AvKit.Outline(parent, portraitFrame, AvTheme.Frame.WithAlpha(0.6f));
-            wingPortraitFallback = VisualPlaceholder(parent,
-                new Rect(portraitFrame.x + 2f, portraitFrame.y - 2f,
-                    portraitFrame.width - 4f, portraitFrame.height - 4f));
-            wingPortrait = AvKit.Panel(parent,
-                new Rect(portraitFrame.x + 1f, portraitFrame.y - 1f, portraitFrame.width - 2f, portraitFrame.height - 2f),
-                Color.white);
-            wingPortrait.type = Image.Type.Simple;
-            wingPortrait.preserveAspect = true;
-            wingPortrait.raycastTarget = false;
-            wingPortrait.enabled = false;
-
-            float textX = portraitFrame.x + portraitFrame.width + 10f;
-            float rightX = x + width - 156f;
-            float textWidth = rightX - textX - 8f;
-            wingCallsign = Fitted(PlainLabel(parent, new Rect(textX, y - 8f, textWidth, 20f), "PILOT RECORD PENDING", "row-name"));
-            wingName = Fitted(PlainLabel(parent, new Rect(textX, y - 30f, textWidth, 15f), "", "kv-value"));
-            wingAirframe = Fitted(PlainLabel(parent, new Rect(textX, y - 48f, rightX - textX - 8f, 14f), "", "row-sub"));
-            wingAirframe.enableWordWrapping = false;
-            wingAirframe.characterSpacing = 0f;
-
-            wingCount = Fitted(PlainLabel(parent, new Rect(rightX, y - 8f, 146f, 18f), "", "kv-value"));
-            wingCount.alignment = TextAlignmentOptions.MidlineRight;
-            wingCountNote = PlainLabel(parent, new Rect(rightX, y - 28f, 146f, 14f), "", "section-title-note");
-            wingCountNote.alignment = TextAlignmentOptions.MidlineRight;
-
-            // The note only shows on an empty wing, when the wingman slots below it are
-            // hidden, so the two lines it may need can use the slot band.
-            wingTeamNote = PlainLabel(parent, new Rect(textX, y - 66f, width - (textX - x) - 14f, 30f),
-                "NO RECRUITED WINGMEN — RECRUIT AND TASK THEM IN WMC.", "row-sub");
-
-            float slotWidth = (width - 36f) / 2f;
+            friendlySection = p.Section(AvIcon.UsersGroup, "FRIENDLY FLIGHT", "MANAGED IN WMC");
+            wingLeadRow = p.Add(new SqdRosterRow(p.Content, true));
+            wingLeadRow.Set("RECORD PENDING", null, null, null, AvState.Info);
             for (int i = 0; i < wingmanSlots.Length; i++)
-            {
-                var slotObject = new GameObject("Wingman_" + i, typeof(RectTransform));
-                var slotRect = (RectTransform)slotObject.transform;
-                slotRect.SetParent(parent, false);
-                AvKit.Place(slotRect, new Rect(
-                    x + 14f + (i % 2) * (slotWidth + 8f), y - 66f - (i / 2) * 19f, slotWidth, 16f));
+                wingmanSlots[i] = p.Add(new SqdRosterRow(p.Content));
+            wingTeamNote = p.Add(new SqdEmptyCard(p.Content, AvIcon.UsersGroup, "NO RECRUITED WINGMEN",
+                "Recruit and task wingmen in Wing Command (WMC); they fly beside you and appear here."));
 
-                var slot = new FriendlySlot { Root = slotRect };
-                slot.Index = PlainLabel(slotRect, new Rect(0f, 0f, 22f, 16f), "", "section-title-note");
-                slot.Airframe = PlainLabel(slotRect, new Rect(24f, 0f, slotWidth - 88f, 16f), "", "row-sub");
-                slot.Status = PlainLabel(slotRect, new Rect(slotWidth - 62f, 0f, 62f, 16f), "", "kv-value");
-                slot.Status.alignment = TextAlignmentOptions.MidlineRight;
-                wingmanSlots[i] = slot;
-            }
+            hostileSection = p.Section(AvIcon.Skull, "HOSTILE ACES", "MOST RECENT CONTACTS");
+            hostileEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Radar2, "NO HOSTILE ACES ON RECORD",
+                "Damage hostile forces to attract an enemy ace wing. Each ace kill is worth +1 skill point, and downed aces may return stronger."));
+            for (int i = 0; i < WingRowsPerPage; i++)
+                wingRows.Add(p.Add(new HostileWingCard(p.Content)));
+
+            wingsPager = p.Buttons(
+                new AvControl.Spec("PREVIOUS", () => { wingPage = Math.Max(0, wingPage - 1); nextRefresh = 0f; },
+                    AvButtonStyle.Quiet, AvIcon.ChevronLeft),
+                new AvControl.Spec("NEXT", () =>
+                {
+                    int count = squad != null ? squad.EnemyWingCount : 0;
+                    if ((wingPage + 1) * WingRowsPerPage < count) wingPage++;
+                    nextRefresh = 0f;
+                }, AvButtonStyle.Quiet, AvIcon.ChevronRight));
+            previousWings = wingsPager.Controls[0];
+            nextWings = wingsPager.Controls[1];
         }
 
-        // ---- WINGS refresh ---------------------------------------------------------------
+        // ---- ACES refresh -------------------------------------------------------------------
 
         private void RefreshWingsPage()
         {
-            if (huntTitle == null) return;
+            if (huntRow == null) return;
             bool hunted = squad != null && squad.HuntActive;
-            huntTitle.text = hunted ? "ACE HUNT ACTIVE — YOU ARE THE TARGET" : "ACE HUNT STANDBY";
-            huntTitle.color = huntRail.color = hunted ? AvTheme.Alert : AvTheme.RailInfo;
-            huntDetails.text = squad != null ? squad.Status : "Enemy wing reports are unavailable.";
+            huntRow.Set(hunted ? "ACE HUNT ACTIVE — YOU ARE THE TARGET" : "ACE HUNT STANDBY",
+                squad != null ? squad.Status : "Enemy wing reports are unavailable.", null, null,
+                hunted ? AvState.Danger : AvState.Info);
 
             RefreshFriendlyWing();
 
@@ -317,69 +106,55 @@ namespace BoscaliSummer.Features.Progression.Presentation
             wingPage = Math.Min(wingPage, Math.Max(0, (count - 1) / WingRowsPerPage));
             int first = wingPage * WingRowsPerPage;
             int last = Math.Min(first + WingRowsPerPage, count);
-            rosterPage.text = count == 0 ? "NO HOSTILE WINGS ENCOUNTERED"
+
+            int active = 0, alive = 0;
+            for (int i = 0, scan = Math.Min(count, EnemyScanLimit); i < scan; i++)
+            {
+                int members = squad.GetEnemyWing(i).MembersAlive;
+                if (members <= 0) continue;
+                active++;
+                alive += members;
+            }
+            bool any = count > 0;
+            wingsTotalTile.SetShown(any);
+            wingsActiveTile.SetShown(any);
+            wingsAliveTile.SetShown(any);
+            wingsTotalTile.Set(AvNum.Thousands(count));
+            wingsActiveTile.Set(AvNum.Thousands(active), active > 0 ? AvState.Caution : AvState.Inert);
+            wingsAliveTile.Set(AvNum.Thousands(alive), alive > 0 ? AvState.Caution : AvState.Inert);
+
+            hostileSection.SetCaption(count == 0 ? "NO CONTACTS"
                 : count == 1 ? "1 OF 1 WING"
-                : (first + 1) + "–" + last + " OF " + count + " WINGS";
-            previousWings.SetEnabled(wingPage > 0);
-            previousWings.WithTooltip(wingPage > 0
-                ? "Show the previous two hostile wings." : "Already on the first page.");
-            nextWings.SetEnabled(first + WingRowsPerPage < count);
-            nextWings.WithTooltip(first + WingRowsPerPage < count
+                : AvNum.Thousands(first + 1) + "–" + AvNum.Thousands(last) + " OF " + AvNum.Thousands(count) + " WINGS");
+            hostileEmpty.SetShown(count == 0);
+            wingsPager.SetShown(count > WingRowsPerPage);
+            previousWings.Interactable = wingPage > 0;
+            nextWings.Interactable = first + WingRowsPerPage < count;
+            previousWings.Help = wingPage > 0
+                ? "Show the previous two hostile wings." : "Already on the first page.";
+            nextWings.Help = first + WingRowsPerPage < count
                 ? "Show the next two hostile wings, including previous encounters."
-                : "Already on the last page.");
-            bool tailPage = (wingPage + 1) * WingRowsPerPage >= count;
+                : "Already on the last page.";
 
             for (int i = 0; i < wingRows.Count; i++)
             {
-                WingRow row = wingRows[i];
+                HostileWingCard card = wingRows[i];
                 bool visible = first + i < count;
-                row.Root.gameObject.SetActive(visible);
-                if (!visible)
-                {
-                    // A zero-contact page still fills the reserved band with inert plates:
-                    // blank glass reads as a broken page. The first slot carries the reason.
-                    bool placeholder = count == 0 || (tailPage && i == count - first);
-                    row.Empty.SetActive(placeholder);
-                    if (placeholder)
-                        row.EmptyLabel.text = count == 0
-                            ? (i == 0 ? "NO HOSTILE CONTACTS ON RECORD" : "")
-                            : "NO FURTHER HOSTILE CONTACTS ON RECORD";
-                    continue;
-                }
-                row.Empty.SetActive(false);
-                EnemyWingView wing = squad.GetEnemyWing(first + i);
-                row.Symbol.text = wing.Symbol;
-                row.Wing.text = wing.WingName;
-                row.Ace.text = "ACE  " + wing.AceName;
-                row.Skill.text = "TIER " + wing.Tier + " · SKILL " + wing.Skill +
-                    (wing.Returns > 0 ? " · RETURN #" + wing.Returns : " · FIRST ENCOUNTER");
-                row.Status.text = wing.Status;
-                row.Members.text = wing.MembersAlive + " / " + wing.MemberCount + " ALIVE";
-                row.Target.text = wing.MembersAlive <= 0 ? "WING NO LONGER ACTIVE" :
-                    string.IsNullOrEmpty(wing.TargetName) ? "TARGET: NORMAL OPERATIONS" : "TARGET: " + wing.TargetName;
-                Color color = wing.MembersAlive <= 0 ? AvTheme.Dim :
-                    !string.IsNullOrEmpty(wing.TargetName) ? AvTheme.Alert : AvTheme.RailInfo;
-                row.Status.color = row.Rail.color = row.Symbol.color = color;
-                row.Members.color = wing.MembersAlive <= 0 ? AvTheme.Dim : AvTheme.RailReady;
-                row.Target.color = wing.MembersAlive <= 0 ? AvTheme.Dim : AvTheme.TextPrimary;
-                row.Crest.color = new Color(1f, 1f, 1f, wing.MembersAlive <= 0 ? 0.35f : 1f);
+                card.SetShown(visible);
+                if (!visible) continue;
 
-                int mask = wing.AbilityMask & AceSkillCatalog.MaskWindow;
-                bool anySkill = false;
-                for (int badge = 0; badge < row.Badges.Length; badge++)
-                {
-                    bool active = AceSkillCatalog.Has(mask, badge);
-                    row.Badges[badge].SetActive(active);
-                    anySkill |= active;
-                }
-                row.NoSkills.gameObject.SetActive(!anySkill);
+                EnemyWingView wing = squad.GetEnemyWing(first + i);
+                card.Set(wing.Symbol, wing.WingName, wing.AceName,
+                    "TIER " + AvNum.Thousands(wing.Tier) + " · SKILL " + wing.Skill +
+                        (wing.Returns > 0 ? " · RETURN #" + AvNum.Thousands(wing.Returns) : " · FIRST ENCOUNTER"),
+                    wing.Status, wing.MembersAlive, wing.MemberCount, wing.TargetName, wing.Tier,
+                    wing.AbilityMask & AceSkillCatalog.MaskWindow);
 
                 string crestKey = (wing.Symbol ?? string.Empty) + "|" + (wing.WingName ?? string.Empty);
-                if (row.CrestKey != crestKey)
+                if (card.CrestKey != crestKey)
                 {
-                    row.CrestKey = crestKey;
-                    row.Crest.sprite = EmblemRenderer.Procedural(EmblemDesign.Hostile(crestKey));
-                    row.Crest.enabled = true;
+                    card.CrestKey = crestKey;
+                    card.SetCrest(EmblemRenderer.Procedural(EmblemDesign.Hostile(crestKey)));
                 }
 
                 if (!string.Equals(wingPortraitKeys[i], wing.AceName, StringComparison.Ordinal))
@@ -389,28 +164,27 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     int separator = ace.IndexOf(" / ", StringComparison.Ordinal);
                     string name = separator < 0 ? ace : ace.Substring(0, separator);
                     string handle = separator < 0 ? string.Empty : ace.Substring(separator + 3);
-                    Sprite sprite = WingLink.PilotPortrait(name, handle);
-                    row.Portrait.sprite = sprite;
-                    row.Portrait.enabled = sprite != null;
-                    row.PortraitFallback.SetActive(sprite == null);
+                    card.SetPortrait(WingLink.PilotPortrait(name, handle));
                 }
             }
         }
 
         private void RefreshFriendlyWing()
         {
-            if (wingCallsign == null) return;
+            if (wingLeadRow == null) return;
             PilotView pilot = squad != null ? squad.Pilot : default;
             bool profile = hasLocalProfile && !string.IsNullOrEmpty(localProfile.Callsign);
             string callsign = profile ? localProfile.Callsign : pilot.Callsign;
             string name = profile ? localProfile.Name : pilot.Name;
-            wingCallsign.text = string.IsNullOrEmpty(callsign) ? "PILOT RECORD PENDING" : callsign;
-            wingName.text = (string.IsNullOrEmpty(name) ? "—" : name) + "   ·   FLIGHT LEAD";
-            SetPortrait(wingPortrait, wingPortraitFallback, PlayerPortrait(name, callsign));
 
             Aircraft lead = null;
             if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null) lead = local.Aircraft;
-            wingAirframe.text = lead == null ? "NO AIRCRAFT ASSIGNED" : AirframeOf(lead) + "   ·   " + AircraftStatus(lead);
+            wingLeadRow.Set(string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
+                (string.IsNullOrEmpty(name) ? "—" : name) + "   ·   FLIGHT LEAD",
+                lead == null ? null : AirframeOf(lead),
+                lead == null ? "NO AIRCRAFT" : AircraftStatus(lead),
+                lead == null ? AvState.Inert : AvState.Ready);
+            wingLeadRow.SetThumb(PlayerPortrait(name, callsign));
 
             friendlyWing.Clear();
             int total = WingLink.WingCount;
@@ -421,26 +195,24 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 Aircraft member = friendlyWing[i];
                 if (member != null && !member.disabled && !member.HasEjected()) flying++;
             }
+
+            friendlySection.SetCaption(total > 0
+                ? AvNum.Thousands(total) + (total == 1 ? " WINGMAN" : " WINGMEN") + " · " + AvNum.Thousands(flying) + " AIRBORNE"
+                : WingLink.Available ? "AWAITING RECRUITS" : "WMC OFFLINE");
+            wingTeamNote.SetShown(total == 0);
+
             for (int i = 0; i < wingmanSlots.Length; i++)
             {
-                FriendlySlot slot = wingmanSlots[i];
+                SqdRosterRow slot = wingmanSlots[i];
                 bool visible = i < friendlyWing.Count;
-                slot.Root.gameObject.SetActive(visible);
+                slot.SetShown(visible);
                 if (!visible) continue;
                 Aircraft aircraft = friendlyWing[i];
-                slot.Index.text = "W" + (i + 1);
-                slot.Airframe.text = AirframeOf(aircraft);
-                slot.Status.text = AircraftStatus(aircraft);
-                slot.Status.color = aircraft == null ? AvTheme.Dim
-                    : aircraft.disabled || aircraft.HasEjected() ? AvTheme.Alert
-                    : aircraft.IsLanded() ? AvTheme.RailCaution : AvTheme.RailReady;
+                AvState state = aircraft == null ? AvState.Inert
+                    : aircraft.disabled || aircraft.HasEjected() ? AvState.Danger
+                    : aircraft.IsLanded() ? AvState.Caution : AvState.Ready;
+                slot.Set("WINGMAN " + AvNum.Thousands(i + 1), AirframeOf(aircraft), AircraftStatus(aircraft), null, state);
             }
-
-            wingCount.text = total > 0 ? total + (total == 1 ? " WINGMAN" : " WINGMEN") : "NO RECRUITED WING";
-            wingCount.color = total > 0 ? AvTheme.RailReady : AvTheme.Dim;
-            wingCountNote.text = total > 0 ? flying + " AIRBORNE"
-                : WingLink.Available ? "AWAITING RECRUITS" : "WMC OFFLINE";
-            wingTeamNote.gameObject.SetActive(total == 0);
         }
 
         private static string AirframeOf(Aircraft aircraft)
@@ -455,5 +227,177 @@ namespace BoscaliSummer.Features.Progression.Presentation
             : aircraft.HasEjected() ? "EJECTED"
             : aircraft.IsLanded() ? "LANDED"
             : "AIRBORNE";
+
+        /// <summary>
+        /// One hostile ace wing as an intel card: crest + ace portrait, wing and ace identity, a
+        /// threat meter (tier), the wing's remaining strength, active skill badges and the target.
+        /// Every text has a fixed slot, so nothing can float or overlap.
+        /// </summary>
+        private sealed class HostileWingCard : AvPart
+        {
+            private const float CardH = 156f, LeftW = 54f, TextX = 72f, Pad = 10f;
+            private const int ThreatPips = 5;
+            private readonly AvFrame frame;
+            private readonly Image rail;
+            private readonly AvPortrait crest, portrait;
+            private readonly TMP_Text symbol, wing, ace, skill, status, threatCaption, threatWord, members, target, noSkills;
+            private readonly Image[] pips = new Image[ThreatPips];
+            private readonly SqdBar aliveBar;
+            private readonly AvFrame[] badgeFrames = new AvFrame[AceSkillCatalog.MaximumSkills];
+            private readonly TMP_Text[] badgeText = new TMP_Text[AceSkillCatalog.MaximumSkills];
+            private AvState state = AvState.Inert;
+            private int threat, mask;
+            private float aliveFraction;
+            public string CrestKey;
+
+            public HostileWingCard(RectTransform parent)
+            {
+                Rect = AvLay.Child(parent, "HostileWing");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                AvLay.Fill(frame.rectTransform);
+                rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                crest = new AvPortrait(Rect, "Crest", "");
+                portrait = new AvPortrait(Rect, "Ace");
+                symbol = AvText.Make(Rect, "Symbol", AvTextRole.Head, "", TextAlignmentOptions.Center);
+                wing = AvText.Make(Rect, "Wing", AvTextRole.Head);
+                AvText.Fit(wing, false);
+                ace = AvText.Make(Rect, "Ace", AvTextRole.ProseSmall);
+                AvText.Fit(ace, false);
+                skill = AvText.Make(Rect, "Skill", AvTextRole.Micro);
+                AvText.Fit(skill, false);
+                status = AvText.Make(Rect, "Status", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+                AvText.Fit(status, false);
+                threatCaption = AvText.Make(Rect, "ThreatCaption", AvTextRole.Micro, "THREAT");
+                threatWord = AvText.Make(Rect, "ThreatWord", AvTextRole.DataSmall);
+                AvText.Fit(threatWord, false);
+                for (int i = 0; i < pips.Length; i++) pips[i] = AvLay.Solid(Rect, "Pip" + i, Color.clear);
+                members = AvText.Make(Rect, "Members", AvTextRole.DataSmall);
+                AvText.Fit(members, false);
+                aliveBar = new SqdBar(Rect, "Alive");
+                target = AvText.Make(Rect, "Target", AvTextRole.Micro);
+                AvText.Fit(target, false);
+                noSkills = AvText.Make(Rect, "NoSkills", AvTextRole.Micro, "NO ACTIVE THREAT SKILLS");
+                AvText.Fit(noSkills, false);
+                for (int i = 0; i < badgeText.Length; i++)
+                {
+                    badgeFrames[i] = AvFrame.Add(Rect, "BadgeFrame" + i, AvChamfer.Diagonal(3f));
+                    badgeText[i] = AvText.Make(Rect, "Badge" + i, AvTextRole.Micro,
+                        AceSkillCatalog.All[i].Code, TextAlignmentOptions.Center);
+                    AvText.Fit(badgeText[i], false);
+                }
+                Restyle();
+            }
+
+            public void SetCrest(Sprite sprite) => crest.Set(sprite);
+            public void SetPortrait(Sprite sprite) => portrait.Set(sprite);
+
+            public void Set(string symbolText, string wingName, string aceName, string skillLine, string statusText,
+                int alive, int total, string targetName, int tier, int abilityMask)
+            {
+                symbol.text = symbolText ?? "";
+                wing.text = wingName ?? "";
+                ace.text = "ACE  " + (aceName ?? "");
+                skill.text = skillLine ?? "";
+                status.text = statusText ?? "";
+                members.text = AvNum.Thousands(alive) + " / " + AvNum.Thousands(total) + " ALIVE";
+                aliveFraction = total <= 0 ? 0f : Mathf.Clamp01(alive / (float)total);
+                target.text = alive <= 0 ? "WING NO LONGER ACTIVE"
+                    : string.IsNullOrEmpty(targetName) ? "TARGET: NORMAL OPERATIONS" : "TARGET: " + targetName;
+                threat = Mathf.Clamp(tier, 1, ThreatPips);
+                threatWord.text = ThreatWordOf(threat);
+                mask = abilityMask;
+                bool anySkill = false;
+                for (int i = 0; i < badgeText.Length; i++)
+                {
+                    bool active = AceSkillCatalog.Has(mask, i);
+                    badgeText[i].gameObject.SetActive(active);
+                    badgeFrames[i].gameObject.SetActive(active);
+                    anySkill |= active;
+                }
+                noSkills.gameObject.SetActive(!anySkill);
+                state = alive <= 0 ? AvState.Inert
+                    : !string.IsNullOrEmpty(targetName) ? AvState.Danger : AvState.Caution;
+                Restyle();
+            }
+
+            private static string ThreatWordOf(int level)
+            {
+                switch (level)
+                {
+                    case 1: return "LOW";
+                    case 2: return "MODERATE";
+                    case 3: return "HIGH";
+                    case 4: return "SEVERE";
+                    default: return "EXTREME";
+                }
+            }
+
+            public override float Measure(float width) => CardH;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                float tw = s.W - TextX - Pad;
+                AvLay.Place(rail.rectTransform, 0f, 0f, 3f, s.H);
+                crest.Place(new AvSlot(Pad + 2f, Pad, LeftW - 2f, 44f));
+                portrait.Place(new AvSlot(Pad + 2f, Pad + 50f, LeftW - 2f, 62f));
+
+                AvLay.Place(symbol.rectTransform, TextX, 8f, 18f, 20f);
+                AvLay.Place(wing.rectTransform, TextX + 22f, 8f, tw - 22f - 120f, 20f);
+                AvLay.Place(status.rectTransform, s.W - Pad - 116f, 8f, 116f, 20f);
+                AvLay.Place(ace.rectTransform, TextX, 30f, tw, 16f);
+                AvLay.Place(skill.rectTransform, TextX, 48f, tw, 14f);
+
+                AvLay.Place(threatCaption.rectTransform, TextX, 68f, 50f, 14f);
+                for (int i = 0; i < pips.Length; i++)
+                    AvLay.Place(pips[i].rectTransform, TextX + 54f + i * 17f, 72f, 14f, 6f);
+                AvLay.Place(threatWord.rectTransform, TextX + 54f + pips.Length * 17f + 6f, 66f, 90f, 16f);
+
+                AvLay.Place(members.rectTransform, TextX, 88f, 100f, 16f);
+                aliveBar.Place(TextX + 108f, 94f, tw - 108f, 4f);
+                aliveBar.Set(aliveFraction, SqdTone.Rail(state));
+
+                float badgeW = 54f; // 4 codes (TOUGH/NOTCH/GHOST/...) at Micro caps need ~42 px
+                int shown = 0;
+                for (int i = 0; i < badgeText.Length; i++)
+                {
+                    float x = TextX + shown * (badgeW + 4f);
+                    AvLay.Place(badgeFrames[i].rectTransform, x, 110f, badgeW, 20f);
+                    AvLay.Place(badgeText[i].rectTransform, x, 110f, badgeW, 20f);
+                    if (AceSkillCatalog.Has(mask, i)) shown++;
+                }
+                AvLay.Place(noSkills.rectTransform, TextX, 110f, tw, 20f);
+                AvLay.Place(target.rectTransform, TextX, 134f, tw, 14f);
+            }
+
+            public override void Restyle()
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card inert");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                Color tone = SqdTone.Rail(state);
+                rail.color = tone;
+                wing.color = SqdTone.Ink;
+                symbol.color = tone;
+                ace.color = SqdTone.Ink;
+                skill.color = SqdTone.Dim;
+                status.color = SqdTone.Text(state);
+                threatCaption.color = SqdTone.Caption;
+                threatWord.color = SqdTone.Text(state);
+                for (int i = 0; i < pips.Length; i++)
+                    pips[i].color = i < threat && state != AvState.Inert ? tone : AvTheme.Hairline;
+                members.color = SqdTone.Ink;
+                aliveBar.Restyle();
+                aliveBar.Set(aliveFraction, tone);
+                target.color = state == AvState.Danger ? SqdTone.Text(AvState.Danger) : SqdTone.Dim;
+                noSkills.color = SqdTone.Caption;
+                for (int i = 0; i < badgeText.Length; i++)
+                {
+                    badgeText[i].color = SqdTone.Ink;
+                    badgeFrames[i].Paint(tone.WithAlpha(.14f), tone.WithAlpha(.6f));
+                }
+                crest.Restyle();
+                portrait.Restyle();
+            }
+        }
     }
 }

@@ -10,6 +10,8 @@ namespace BoscaliSummer.Garrisons
     internal static class VanillaSoldierFactory
     {
         private static GameObject staging;
+        private static GameObject template;
+        private static GameObject templateSource;
 
         public static GameObject CreateVisualSoldier(Vector3 position, Quaternion rotation, Transform parent)
         {
@@ -25,9 +27,36 @@ namespace BoscaliSummer.Garrisons
                 staging.SetActive(false);
                 UnityEngine.Object.DontDestroyOnLoad(staging);
             }
-            GameObject go = UnityEngine.Object.Instantiate(GameAssets.i.pilotDismounted, position, rotation, staging.transform);
+            // One strip per prefab: every jumper clones the already-cleaned template instead
+            // of paying the DestroyImmediate and component-scan strip each (16x per stick).
+            GameObject source = GameAssets.i.pilotDismounted;
+            if (template == null || templateSource != source)
+            {
+                if (template != null) UnityEngine.Object.Destroy(template);
+                template = UnityEngine.Object.Instantiate(source, Vector3.zero, Quaternion.identity, staging.transform);
+                template.name = "BoscaliSummer.SoldierTemplate";
+                StripCopy(template);
+                templateSource = source;
+            }
+            GameObject go = UnityEngine.Object.Instantiate(template, position, rotation, staging.transform);
             go.name = "BoscaliSummer.Soldier";
+            // Rigidbody.detectCollisions is runtime-only state: Instantiate copies the
+            // template's serialized fields but not this flag, so every clone re-parks it.
+            Rigidbody cloneRb = go.GetComponent<Rigidbody>();
+            if (cloneRb != null)
+            {
+                cloneRb.isKinematic = true;
+                cloneRb.detectCollisions = false;
+            }
+            go.transform.SetParent(parent, true);
+            // Animator parameter state is runtime state, not prefab state: every clone still
+            // gets its own standing/ready pose setup, exactly as a fresh strip did.
+            ConfigureAnimator(go);
+            return go;
+        }
 
+        private static void StripCopy(GameObject go)
+        {
             // 1. Remove the networked unit and transform (PilotDismounted,
             // PilotDismountedNetworkTransform), then the identity, then the ejection seat.
             NetworkBehaviour[] behaviours = go.GetComponentsInChildren<NetworkBehaviour>(true);
@@ -52,8 +81,6 @@ namespace BoscaliSummer.Garrisons
                     UnityEngine.Object.DestroyImmediate(child.gameObject);
                 }
             }
-
-            go.transform.SetParent(parent, true);
 
             // 3. Configure physics (kinematic and non-colliding)
             Rigidbody rb = go.GetComponent<Rigidbody>();
@@ -95,7 +122,10 @@ namespace BoscaliSummer.Garrisons
                     }
                 }
             }
+        }
 
+        private static void ConfigureAnimator(GameObject go)
+        {
             // 5. Configure animator to play human standing/ready pose
             Animator anim = go.GetComponentInChildren<Animator>();
             if (anim != null)
@@ -115,8 +145,6 @@ namespace BoscaliSummer.Garrisons
                     }
                 }
             }
-
-            return go;
         }
     }
 }

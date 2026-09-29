@@ -156,6 +156,7 @@ namespace BoscaliSummer.Garrisons
             private int troopCount;
             private float elapsed;
             private float operationTime;
+            private int frame;
 
             private readonly List<ParatrooperDrop> droppers = new List<ParatrooperDrop>(MaxParatroopers);
 
@@ -253,13 +254,15 @@ namespace BoscaliSummer.Garrisons
 
                     elapsed += dt;
                     bool anyActive = false;
+                    frame++;
+                    Vector3 frameWind = GetWindVector();
 
                     for (int i = 0; i < droppers.Count; i++)
                     {
                         if (droppers[i].Soldier == null)
                             continue;
 
-                        if (AdvanceDrop(droppers[i], dt))
+                        if (AdvanceDrop(droppers[i], dt, frameWind))
                             anyActive = true;
                     }
 
@@ -274,7 +277,7 @@ namespace BoscaliSummer.Garrisons
                 Destroy(gameObject);
             }
 
-            private bool AdvanceDrop(ParatrooperDrop drop, float dt)
+            private bool AdvanceDrop(ParatrooperDrop drop, float dt, Vector3 wind)
             {
                 if (drop.Soldier == null)
                     return false;
@@ -328,7 +331,7 @@ namespace BoscaliSummer.Garrisons
 
                     // Mission wind plus a per-jumper drift fans the stick out naturally.
                     float driftBlend = Mathf.Clamp01(fallTime / 1.8f);
-                    Vector3 wind = GetWindVector();
+
                     Vector3 target = new Vector3(
                         wind.x * 0.75f + drop.DriftDir.x * drop.DriftSpeed * driftBlend,
                         drop.TerminalSpeed,
@@ -338,7 +341,7 @@ namespace BoscaliSummer.Garrisons
                 }
 
                 IntegrateSoldier(drop, dt);
-                CheckLanding(drop);
+                if (((frame + drop.Index) & 1) == 0) CheckLanding(drop);
                 return true;
             }
 

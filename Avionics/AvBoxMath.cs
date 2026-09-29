@@ -6,9 +6,9 @@ namespace NOAvionics
     /// <summary>
     /// A rectangle in avionics panel space: top-left origin, <c>Y</c> negative going down.
     ///
-    /// This is the convention <c>AvKit.Place</c> already writes into a <c>RectTransform</c>
+    /// This is the convention <c>AvLay.Place</c> writes into a <c>RectTransform</c>
     /// (anchor and pivot pinned to the parent's top-left), so a computed box drops straight
-    /// into the existing widget calls. It is a separate type from <c>UnityEngine.Rect</c>
+    /// into the widget calls. It is a separate type from <c>UnityEngine.Rect</c>
     /// only because this assembly is compiled into the net8.0 test projects, which have no
     /// game install to reference.
     /// </summary>

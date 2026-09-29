@@ -21,6 +21,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestWeaponUpgrades();
             TestMtiSharesImagerTasking();
             TestAbilities();
+            TestTaskingWindows();
             TestManoeuvres();
             TestSafeMode();
             TestDebris();
@@ -469,8 +470,8 @@ namespace BoscaliSummer.Tests.Features.Support
 
             platform.Consume(PlatformAbility.RadarScan, now);
             TestAssert.That(platform.Check(PlatformAbility.RadarScan, now + 1.0) == PlatformDenial.Recharging &&
-                            Near(platform.RechargeRemaining(PlatformAbility.RadarScan, now), 45.0, 1e-6),
-                "a scan must recharge for 45 s");
+                            Near(platform.RechargeRemaining(PlatformAbility.RadarScan, now), 33.75, 1e-6),
+                "survey power shortens a scan recharge to 33.75 s");
             TestAssert.That(Near(platform.RechargeSeconds(PlatformAbility.EmpBurst, now), 360.0, 1e-3),
                 "an uncooled EMP must recharge twice as slowly");
 
@@ -493,14 +494,84 @@ namespace BoscaliSummer.Tests.Features.Support
             OrbitalPlatform crewed = Station(out double t);
             Add(crewed, ModuleKind.Imager, 6, ref t);
             Add(crewed, ModuleKind.Habitat, 8, ref t);
-            TestAssert.That(Near(crewed.RechargeSeconds(PlatformAbility.RadarScan, t), 45.0 * 0.75, 1e-3),
+            TestAssert.That(Near(crewed.RechargeSeconds(PlatformAbility.RadarScan, t), 45.0 * 0.75 * 0.75, 1e-3),
                 "a crew must speed recharge");
-            TestAssert.That(Near(crewed.ScanScale(t), 1f, 1e-6), "an unboosted LEO scan must be nominal");
+            TestAssert.That(Near(crewed.ScanScale(t), 1.2f, 1e-6), "survey focus widens an unboosted LEO scan by 20 percent");
             Add(crewed, ModuleKind.Relay, 1, ref t);
-            TestAssert.That(Near(crewed.ScanScale(t), OrbitalPlatform.RelayBoost, 1e-6), "a relay next to the imager must boost it");
+            TestAssert.That(Near(crewed.ScanScale(t), OrbitalPlatform.RelayBoost * 1.2f, 1e-6), "a relay next to the imager must boost it");
             TestAssert.That(Near(crewed.RodScatter(t), 15f, 1e-6), "LEO rods must scatter 15 m");
             Add(crewed, ModuleKind.Gyro, 2, ref t);
             TestAssert.That(Near(crewed.RodScatter(t), 7.5f, 1e-6), "gyros must halve rod scatter");
+        }
+
+        private static void TestTaskingWindows()
+        {
+            OrbitalPlatform platform = Station(out double now);
+            Add(platform, ModuleKind.Imager, 6, ref now);
+            Add(platform, ModuleKind.Solar, 5, ref now);
+            Add(platform, ModuleKind.Rods, 8, ref now);
+            for (int i = 0; i < 60; i++) platform.Tick(now, 5f, true);
+            TestAssert.That(platform.Focus == PlatformFocus.Survey &&
+                platform.Check(PlatformAbility.RodStrike, now) == PlatformDenial.WrongFocus,
+                "weapons require a deliberate shared power decision");
+            TestAssert.That(!platform.TryFocus((PlatformFocus)255, now) &&
+                platform.TryFocus(PlatformFocus.Strike, now), "only a valid focus transition is accepted");
+            TestAssert.That(!platform.TryFocus(PlatformFocus.Screen, now + 1) &&
+                platform.Check(PlatformAbility.RadarScan, now + 1) == PlatformDenial.Retasking,
+                "another pilot cannot overwrite an in-progress retask");
+            now += OrbitalPlatform.RetaskSeconds;
+            TestAssert.That(platform.CheckTarget(PlatformAbility.RodStrike, 0, 0, now) == PlatformDenial.NoSolution,
+                "building a weapon alone cannot authorise a strike");
+            platform.RecordSolution(1000, -2000, 1500, now);
+            TestAssert.That(platform.CheckTarget(PlatformAbility.RodStrike, 2500, -2000, now) == PlatformDenial.None &&
+                platform.CheckTarget(PlatformAbility.RodStrike, 2501, -2000, now) == PlatformDenial.NoSolution &&
+                platform.CheckTarget(PlatformAbility.RodStrike, float.NaN, 0, now) == PlatformDenial.OutsideSector,
+                "fresh intelligence authorises only the surveyed area, including its boundary");
+            TestAssert.That(platform.CheckTarget(PlatformAbility.RodStrike, 1000, -2000,
+                now + OrbitalPlatform.SolutionSeconds) == PlatformDenial.NoSolution,
+                "a pilot must exploit an opening before intelligence expires");
+            float radius = platform.SolutionRadius;
+            platform.RecordSolution(float.NaN, 0, 3000, now);
+            TestAssert.That(platform.SolutionRadius == radius && platform.SolutionX == 1000,
+                "invalid recon does not replace a legitimate team solution");
+
+            var snapshot = new PlatformSnapshot();
+            platform.Export(now + 2, snapshot);
+            var client = new OrbitalPlatform();
+            client.Mirror(snapshot, 9000);
+            TestAssert.That(client.Focus == PlatformFocus.Strike && client.SolutionX == 1000 &&
+                Near(client.SolutionRemaining(9000), OrbitalPlatform.SolutionSeconds - 2, 0.001),
+                "late join carries power focus, target area and a relative intelligence clock");
+            platform.Consume(PlatformAbility.RodStrike, now);
+            TestAssert.That(platform.SolutionRemaining(now) == 0 &&
+                platform.CheckTarget(PlatformAbility.RodStrike, 1000, -2000, now + 61) == PlatformDenial.NoSolution,
+                "an accepted team strike consumes its solution once, even after weapon recharge");
+            platform.Export(now, snapshot);
+            client.Mirror(snapshot, 9001);
+            TestAssert.That(client.SolutionRemaining(9001) == 0, "consumption clears every peer's targeting window");
+            platform.RecordSolution(500, 600, 100000, now);
+            TestAssert.That(platform.SolutionRadius == OrbitalPlatform.MaximumSolutionRadius,
+                "recon cannot authorise theater-wide fire");
+            TestAssert.That(platform.CheckTarget(PlatformAbility.RadarScan, 60000, 0, now + 100) == PlatformDenial.OutsideSector,
+                "station sectors constrain actual scans rather than only moving the camera");
+            float reach = platform.CoverageRadius(now);
+            Add(platform, ModuleKind.Relay, 1, ref now);
+            TestAssert.That(platform.CoverageRadius(now) > reach,
+                "online relay investment extends actual tasking reach");
+            Add(platform, ModuleKind.Propulsion, 9, ref now);
+            TestAssert.That(platform.TryRelocate(5, now), "the operator may move coverage toward an objective");
+            now += OrbitalPlatform.RephaseLeadSeconds;
+            TestAssert.That(platform.CheckTarget(PlatformAbility.RadarScan, 58000, 0, now) == PlatformDenial.None,
+                "the relocated station can task inside its new sector reach");
+            platform.Export(now, snapshot);
+            snapshot.SolutionIn = float.PositiveInfinity;
+            client.Mirror(snapshot, 9002);
+            TestAssert.That(client.Exists && client.PositionIndex == StationKeeping.Centre &&
+                client.SolutionRemaining(9002) == 0,
+                "a corrupt snapshot cannot move the client or restore a consumed targeting window");
+            platform.Clear();
+            TestAssert.That(!platform.Exists && platform.Focus == PlatformFocus.Survey &&
+                platform.SolutionRemaining(now) == 0, "scene reset clears all tasking and targeting state");
         }
 
         private static void TestManoeuvres()
@@ -589,7 +660,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 "a mirror must rebase the pass clock");
             TestAssert.That(client.State(local).Phase == host.State(now).Phase,
                 "host and client must agree on the phase");
-            TestAssert.That(Near(client.RechargeRemaining(PlatformAbility.RadarScan, local), 45.0, 1e-3),
+            TestAssert.That(Near(client.RechargeRemaining(PlatformAbility.RadarScan, local), 33.75, 1e-3),
                 "a mirror must carry recharge timers");
             TestAssert.That(client.Pending == ModuleKind.Solar && client.PendingCell == 5 && Near(client.DockAt - local, Dock, 1e-3),
                 "a mirror must carry the launch in flight");

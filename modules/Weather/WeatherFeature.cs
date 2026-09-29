@@ -3,6 +3,7 @@ using BoscaliSummer.Features.Weather.Networking;
 using BoscaliSummer.Features.Weather.Presentation;
 using BoscaliSummer.Features.Weather.Runtime;
 using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Features.Weather.Configuration;
 using BoscaliSummer.Framework.Features;
 
 namespace BoscaliSummer.Features.Weather
@@ -53,15 +54,28 @@ namespace BoscaliSummer.Features.Weather
                 "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
                 context.Settings.Weather.CinematicCloudsEnabled);
 
-            context.AddHostSettings(new HostSettingsTable("WEATHER & ENVIRONMENT")
-                .Toggle(1, context.Settings.Weather.DynamicWeatherEnabled, "CHANGING WEATHER",
+            WeatherSettings weather = context.Settings.Weather;
+            context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)
+                .Toggle(1, weather.DynamicWeatherEnabled, "CHANGING WEATHER",
                     "Step the weather one state at a time over mission time. Off holds the mission's weather.")
-                .Number(2, context.Settings.Weather.StateIntervalMinutes, "STATE INTERVAL",
+                .Number(2, weather.StateIntervalMinutes, "STATE INTERVAL",
                     "Mission minutes each weather state holds before the next step.",
                     1.0f, v => $"{v:F0} MIN")
-                .Number(3, context.Settings.Weather.WindVariability, "WIND VARIABILITY",
-                    "How strongly wind shifts direction during weather transitions.",
-                    0.1f, v => v.ToString("P0")));
+                .Number(3, weather.StateFadeSeconds, "STATE FADE",
+                    "Seconds a change fades the sky, fog and wind. Storm cells always grow over a few minutes.",
+                    10f, v => $"{v:F0} S")
+                .Number(4, weather.MinConditions, "CLEAREST SKY",
+                    "Lowest cloud cover the game's own fog and light may fall to.",
+                    0.05f, v => v.ToString("P0"))
+                .Number(5, weather.MaxConditions, "STORMIEST SKY",
+                    "Highest cloud cover the game's own fog and light may reach. Lower it to keep storms flyable.",
+                    0.02f, v => v.ToString("P0"))
+                .Number(6, weather.WindVariability, "WIND VARIABILITY",
+                    "How strongly each weather state freshens or calms the mission wind.",
+                    0.1f, v => v.ToString("P0"))
+                .Number(7, weather.TurbulenceMultiplier, "TURBULENCE",
+                    "Multiplier on each weather state's turbulence over the mission's own.",
+                    0.1f, v => $"{v:F1}x"));
         }
     }
 }

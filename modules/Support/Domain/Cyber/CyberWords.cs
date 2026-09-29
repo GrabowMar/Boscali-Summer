@@ -4,7 +4,7 @@ using System.Globalization;
 namespace BoscaliSummer.Features.Support.Domain.Cyber
 {
     /// <summary>
-    /// Every word the CYBER page, the console and the map use for nodes, stages, breaches,
+    /// Every word the CYBER page, the console and the map use for nodes, leases, breaches,
     /// incidents and refusals, so the three always agree. Status is always a word; colour only
     /// repeats it.
     /// </summary>
@@ -62,9 +62,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                     return "Bait a node for " + (int)CyberLocations.HoneypotSeconds +
                            " s: an intrusion walks into it, stalls, and traces twice as fast.";
                 case CyberVerb.Trace:
-                    return "Follow an intrusion or a detected enemy operation home. Needs a stage-2 location's ear over it; " +
-                           "bait doubles the speed. A finished trace opens a foothold for " +
-                           (int)CyberLocations.FootholdSeconds + " s: operations cost 25% less and bank an intel token.";
+                    return "Follow an intrusion or detected enemy operation home. A home ear or active forward lease must cover it; " +
+                           "bait doubles the speed. A finished trace tracks the source for a short intelligence window.";
                 default:
                     return "Overpower a jamming raid with a hacked location inside or beside it.";
             }
@@ -82,7 +81,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberDenial.NotCompromised: return "NODE IS CLEAN";
                 case CyberDenial.AlreadyPatching: return "PATCH RUNNING";
                 case CyberDenial.AlreadyBaited: return "ALREADY BAITED";
-                case CyberDenial.NeedsEar: return "NO STAGE-2 LOCATION OVER IT";
+                case CyberDenial.NeedsEar: return "NO HOME OR FORWARD EAR OVER IT";
                 case CyberDenial.NeedsCoverage: return "NO HACKED LOCATION COVERS IT";
                 case CyberDenial.NotTraceable: return "NOT TRACEABLE";
                 case CyberDenial.AlreadyTracing: return "TRACE RUNNING";
@@ -106,7 +105,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case BreachDenial.NotRunning: return "NO BREACH RUNNING";
                 case BreachDenial.NoSession: return "NO BREACH RUNNING";
                 case BreachDenial.LowComputing: return "NOT ENOUGH COMPUTING";
-                case BreachDenial.Recharging: return "SPOOF RECHARGING";
+                case BreachDenial.Recharging: return "ACCESS RECOVERY OR SPOOF RECHARGING";
+                case BreachDenial.AccessActive: return "TEMPORARY ACCESS STILL OPEN";
                 default: return "CHOOSE A CAPSTONE FIRST";
             }
         }
@@ -125,9 +125,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (node.Isolated) return "ISOLATED";
             if (network.Jammed(slot, now)) return "JAMMED";
             if (node.HoneypotUntil > now) return "BAITED " + Seconds(node.HoneypotUntil - now);
-            if (node.Hacked && node.Stage >= CyberLocations.StageCount)
-                return node.Capstone == Capstone.None ? "AWAITING CAPSTONE" : "MASTERED · " + Capstones.Code(node.Capstone);
-            return node.Hacked ? "ONLINE · " + Stage(node.Stage) : "HOME";
+            if (node.Hacked) return "ACCESS · " + Seconds(network.AccessRemaining(now)) +
+                (node.Capstone == Capstone.None ? " · ONE EFFECT" : " · PAYLOAD " + Capstones.Code(node.Capstone));
+            return "HOME";
         }
 
         public static string Stage(int stage) =>
@@ -199,7 +199,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberNotice.IntrusionContained: return "INTRUSION CONTAINED AT " + node;
                 case CyberNotice.IntrusionWithdrew: return "INTRUDER WITHDREW · PATCH WHAT THEY LEFT";
                 case CyberNotice.TraceStarted: return "TRACE RUNNING ON " + origin;
-                case CyberNotice.TraceComplete: return "TRACE COMPLETE · FOOTHOLD IN " + origin;
+                case CyberNotice.TraceComplete: return "ORIGIN TRACKED · " + origin;
                 case CyberNotice.RaidStarted: return "JAMMING RAID NEAR " + node + " · COVERAGE HALVED";
                 case CyberNotice.RaidBroken: return "BURN-THROUGH · RAID BROKEN";
                 case CyberNotice.RaidFaded: return "JAMMING RAID ENDED";
@@ -226,6 +226,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberNotice.CapstoneReady: return node + " IS MASTERED · CHOOSE A CAPSTONE";
                 case CyberNotice.CapstoneChosen: return node + " FIELDS " + Capstones.Name((Capstone)Math.Max(0, Math.Min(3, (int)code)));
                 case CyberNotice.LocationLost: return node + " LOST · THE AIRBASE CHANGED HANDS";
+                case CyberNotice.AccessOpened: return "TEMPORARY ACCESS OPEN ON " + node;
+                case CyberNotice.AccessConsumed: return "ACCESS USED · " + node + " WINDOW CLOSED";
+                case CyberNotice.AccessExpired: return "ACCESS EXPIRED · " + node + " WINDOW CLOSED";
                 default: return null;
             }
         }
@@ -288,10 +291,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 if (!incident.Tracing)
                 {
                     if (!network.EarCovers(incident.X, incident.Z, now))
-                        return "INTRUSION HELD · A STAGE-2 LOCATION OVER IT WOULD LET YOU TRACE IT HOME";
+                        return "INTRUSION HELD · HOME EAR COVERS IT · TRACE THE SOURCE";
                     verb = CyberVerb.Trace;
                     target = i;
-                    return "INTRUSION HELD AT " + Callsign(network, slot) + " · TRACE IT [4] FOR A FOOTHOLD";
+                    return "INTRUSION HELD AT " + Callsign(network, slot) + " · TRACE IT [4] TO TRACK THE SOURCE";
                 }
             }
             for (int i = 0; i < CyberNetwork.IncidentSlots; i++)
@@ -313,7 +316,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 }
                 if (incident.Kind == IncidentKind.Probe && !network.EarCovers(incident.X, incident.Z, now))
                     return "RECON PROBE ON " + Callsign(network, incident.Site) +
-                           " · NO STAGE-2 EAR ON IT; YOUR NETWORK WILL BE EXPOSED";
+                           " · NO HOME OR FORWARD EAR ON IT; YOUR NETWORK WILL BE EXPOSED";
             }
 
             // Then the housekeeping the network needs.
@@ -340,14 +343,15 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
             // Then the offensive game: the breach and the next location.
             if (network.BreachAwaitingChoice)
-                return "A LOCATION IS MASTERED · CHOOSE ITS CAPSTONE IN THE CONSOLE";
+                return "ACCESS OPEN · CHOOSE AN OPTIONAL PAYLOAD IN THE CONSOLE";
             if (network.BreachActive)
             {
                 int percent = (int)Math.Round(Math.Max(0f, Math.Min(1f, network.BreachTrace)) * 100f);
                 return "BREACH " + PhaseOf(network.BreachPhase) + " · TRACE " + percent + "% · SPOOF IF IT CLIMBS";
             }
-            if (network.HackedCount == 0)
-                return "NO LOCATIONS TAKEN · OPEN THE CONSOLE AND BREACH A CITY OR AIRFIELD";
+            if (network.AccessRemaining(now) > 0f)
+                return "ACCESS AT " + Callsign(network, network.AccessSlot) + " · " + Seconds(network.AccessRemaining(now)) +
+                       " LEFT · ONE ACCEPTED EFFECT CONSUMES IT";
             int inReach = 0;
             for (int slot = CyberNetwork.TargetBase; slot < CyberNetwork.SlotCount; slot++)
             {
@@ -360,9 +364,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (network.Computing < CyberLocations.ExploitCostPerStage)
                 return "COMPUTING LOW · IT FUELS EVERY BREACH PHASE";
             if (network.AnyFoothold(now))
-                return "FOOTHOLD OPEN · ABILITIES ARE CHEAPER AND NEED NO COVERAGE";
-            return "NETWORK HOLDING · " + inReach + " LOCATION" + (inReach == 1 ? "" : "S") +
-                   " IN REACH · BREACH ONE FROM THE CONSOLE";
+                return "TRACE LEAD OPEN · FOLLOW A DETECTED OPERATION FOR INTELLIGENCE";
+            return "NO LIVE ACCESS · " + inReach + " LOCATION" + (inReach == 1 ? "" : "S") +
+                   " IN REACH · CHOOSE QUIET OR LOUD IN THE CONSOLE";
         }
 
         public static string Seconds(double seconds) =>

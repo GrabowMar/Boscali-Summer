@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Trenches.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Features.Trenches.Visuals
@@ -207,11 +208,11 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         /// <summary>
         /// The wire belt in front of a trench: a row of crossed pickets every eight metres
-        /// under two taut strands. Dark, low and continuous along the whole line, so a
+        /// under two taut strands, broken only where saps push through. Dark and low, so a
         /// position reads as a wired defence line from the air — the belt is what an attacker
         /// must cross, and what makes the ground in front of the parapet read as no man's land.
         /// </summary>
-        public static Mesh BuildWireBeltMesh(Vector3[] path, float postHeight)
+        public static Mesh BuildWireBeltMesh(Vector3[] path, float postHeight, Vector3[][] spurs)
         {
             if (path == null || path.Length < 2) return null;
 
@@ -237,6 +238,13 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                 float segment = delta.magnitude;
                 if (segment < 0.01f) continue;
                 arc += segment;
+                if (NearSapHead(path[i], spurs))
+                {
+                    strandAnchor = path[i];
+                    strandV = arc * 0.34f;
+                    sinceStrand = 0f;
+                    continue;
+                }
 
                 sinceStrand += segment;
                 if (sinceStrand >= PostSpacing || i == path.Length - 1)
@@ -259,11 +267,12 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                     sincePost = 0f;
                     Vector3 side = Lateral(delta, Vector3.right);
                     Vector3 forward = delta.normalized * BladeWidth;
-                    Vector3 baseAt = path[i];
+                    Vector3 baseAt = path[i] + side * ((Noise(arc * 0.37f, 3.7f) - 0.5f) * 0.8f);
+                    Vector3 lean = forward * ((Noise(arc * 0.53f, 9.1f) - 0.5f) * 2f);
                     AddBlade(vertices, uvs, triangles, baseAt - side * 0.5f,
-                        baseAt + side * 0.5f + Vector3.up * postHeight, forward, u, arc * 0.34f, arc * 0.34f);
+                        baseAt + side * 0.5f + Vector3.up * postHeight + lean, forward, u, arc * 0.34f, arc * 0.34f);
                     AddBlade(vertices, uvs, triangles, baseAt + side * 0.5f,
-                        baseAt - side * 0.5f + Vector3.up * postHeight, -forward, u, arc * 0.34f, arc * 0.34f);
+                        baseAt - side * 0.5f + Vector3.up * postHeight + lean, -forward, u, arc * 0.34f, arc * 0.34f);
                 }
             }
 
@@ -321,5 +330,18 @@ namespace BoscaliSummer.Features.Trenches.Visuals
         }
 
         private static float Noise(float distance, float seed) => Mathf.PerlinNoise(distance, seed);
+
+        private static bool NearSapHead(Vector3 point, Vector3[][] spurs)
+        {
+            if (spurs == null) return false;
+            for (int i = 0; i < spurs.Length; i++)
+            {
+                Vector3[] spur = spurs[i];
+                if (spur == null || spur.Length == 0) continue;
+                Vector3 head = spur[spur.Length - 1];
+                if (TrenchTraceMath.WithinSapGap(point.x, point.z, head.x, head.z)) return true;
+            }
+            return false;
+        }
     }
 }

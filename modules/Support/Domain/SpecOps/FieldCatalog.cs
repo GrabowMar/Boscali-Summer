@@ -10,8 +10,12 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         EnRoute = 2,
         OnTask = 3,
         Holding = 4,
-        Recovering = 5
+        Recovering = 5,
+        Deciding = 6
     }
+
+    /// <summary>Host-authoritative choice after arrival; values are carried by OpsCommand 24.</summary>
+    internal enum SpecOpsDirective : byte { Execute = 0, Extract = 1 }
 
     /// <summary>Team missions; wire-stable values also identify the post left by success.</summary>
     internal enum FieldMission : byte
@@ -50,7 +54,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         Failed = 2,
         Lost = 3,
         Recalled = 4,
-        NoBuildings = 5
+        NoBuildings = 5,
+        Extracted = 6
     }
 
     /// <summary>Why the host refused a detachment order: <c>SupportResult.SpecOpsRefused + denial</c>.</summary>
@@ -68,12 +73,14 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         NoRadars = 9,
         SeizeUnavailable = 10,
         ObjectiveTaken = 11,
-        BadMission = 12
+        BadMission = 12,
+        BadDirective = 13,
+        NotAtDecision = 14
     }
 
     /// <summary>
     /// The numbers behind every mission and ability, in one table the host, the MFD and the desk
-    /// share. Rank widens effects and lengthens posts; threat lowers the odds. Pure: nothing here
+    /// share. Rank widens effects; live threat lowers the odds. Posts have a fixed bounded lifetime. Pure: nothing here
     /// touches the game.
     /// </summary>
     internal static class FieldCatalog
@@ -95,6 +102,10 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public const float ScoutSeconds = 600f;
         public const float RecoverSeconds = 60f;
         public const float FailedRecoverSeconds = 120f;
+        public const float ExtractSeconds = 20f;
+        public const float DecisionSeconds = 30f;
+        public const int MaximumHeldPosts = 2;
+        public const float PostSeconds = 120f;
         public const float MinimumTravel = 30f;
         public const float MaximumTravel = 120f;
         public const float DefaultTravel = 60f;
@@ -143,7 +154,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             post == FieldMission.Recon ? 6000f : post == FieldMission.Sabotage ? 5000f :
             post == FieldMission.Steal ? 5000f : 3000f;
 
-        public static float HoldSeconds(int rank) => 300f + 60f * Rank(rank);
+        public static float HoldSeconds(int rank) => PostSeconds;
 
         /// <summary>Travel from the nearest owned airbase: 20 s plus 2 s per kilometre, 30–120 s.</summary>
         public static float TravelSeconds(float metres)
@@ -157,21 +168,25 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         // ---- Odds ------------------------------------------------------------------------------
 
-        public static int SuccessChance(FieldMission mission, int rank, int threat, bool scouted)
+        public static int SuccessChance(FieldMission mission, int rank, int threat, bool scouted, int radars = 0)
         {
-            int value = BaseChance(mission) + 8 * Rank(rank) + (scouted ? 10 : 0) - Math.Min(40, 3 * Math.Max(0, threat));
+            long pressure = 3L * Math.Max(0, threat) + 2L * Math.Max(0, radars);
+            int value = BaseChance(mission) + 8 * Rank(rank) + (scouted ? 10 : 0) - (int)Math.Min(40L, pressure);
             return Math.Max(5, Math.Min(95, value));
         }
 
         /// <summary>Home-ground setup is reliable until enemy ground units contest the site.</summary>
-        public static int FriendlyChance(int threat) => Math.Max(75, 95 - Math.Min(20, Math.Max(0, threat) * 2));
+        public static int FriendlyChance(int threat, int radars = 0) => Math.Max(75,
+            95 - (int)Math.Min(20L, 2L * Math.Max(0, threat) + Math.Max(0, radars)));
 
-        public static int FriendlyLoss(int threat) => Math.Min(6, Math.Max(0, threat));
+        public static int FriendlyLoss(int threat, int radars = 0) => (int)Math.Min(6L,
+            (long)Math.Max(0, threat) + Math.Max(0, radars));
 
         /// <summary>The probability the team is lost, never more than the failure share.</summary>
-        public static int LossChance(FieldMission mission, int rank, int threat, int success)
+        public static int LossChance(FieldMission mission, int rank, int threat, int success, int radars = 0)
         {
-            int value = Math.Max(1, Math.Min(40, LossBase(mission) + 2 * Math.Max(0, threat) - 3 * Rank(rank)));
+            long risk = LossBase(mission) + 2L * Math.Max(0, threat) + Math.Max(0, radars) - 3 * Rank(rank);
+            int value = (int)Math.Max(1L, Math.Min(40L, risk));
             return Math.Max(0, Math.Min(100 - Math.Max(0, Math.Min(100, success)), value));
         }
 

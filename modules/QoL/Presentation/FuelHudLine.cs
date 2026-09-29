@@ -30,7 +30,7 @@ namespace BoscaliSummer.Features.QoL.Presentation
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null ||
                 aircraft.disabled || aircraft.HasEjected()) return false;
 
-            float level = aircraft.fuelLevel;
+            float level = aircraft.GetFuelLevel();
             tone = FuelHudCopy.Tone(level);
             bar = FuelHudCopy.Bar(level);
             text = FuelHudCopy.Fuel(level);

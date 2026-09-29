@@ -1,0 +1,40 @@
+{
+  "name": "weather-warm-front",
+  "mods": ["wingcommand", "boscalisummer"],
+  "timeout_s": 180,
+  "ops": [
+    {"op": "spawn", "id": "observer", "type": "FS-20 Vortex", "at": {"map": [-34486, -20265]}, "altitude": 1800, "speed": 120, "heading": 60},
+    {"op": "fly", "id": "observer", "program": [{"level": 180}]},
+    {"op": "observe", "follow": "observer"},
+    {"op": "call", "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.ForceWeather", "store": "fixture",
+     "args": {"conditions": 0.75, "cloudHeight": 800, "seed": 6, "modelAge": 1200, "regime": "Frontal"}},
+    {"op": "wait", "seconds": 12},
+    {"op": "call", "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.Readout", "store": "ready", "args": {"requireClouds": true}},
+    {"op": "observe", "follow": "observer"},
+    {"op": "camera", "position": [-60351, 4000, -35464], "heading": 59.56, "pitch": -4, "fov": 70},
+    {"op": "wait", "seconds": 2},
+    {"op": "capture", "name": "warm-lowering-rain-shield", "hide_ui": true},
+    {"op": "perf_window", "store": "low_perf", "seconds": 8, "warmup": 2},
+    {"op": "observe", "follow": "observer"},
+    {"op": "camera", "position": [-51730, 4000, -30398], "heading": 239.56, "pitch": -8, "fov": 70},
+    {"op": "wait", "seconds": 2},
+    {"op": "capture", "name": "warm-rising-leading-shield", "hide_ui": true},
+    {"op": "observe", "follow": "observer"},
+    {"op": "camera", "position": [-60351, 9000, -35464], "heading": 59.56, "pitch": 20, "fov": 70},
+    {"op": "wait", "seconds": 2},
+    {"op": "capture", "name": "warm-above-shield", "hide_ui": true},
+    {"op": "perf_window", "store": "high_perf", "seconds": 8, "warmup": 2},
+    {"op": "call", "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.Readout", "store": "weather"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "ready.flightClouds", "min": 1},
+    {"check": "result_above", "path": "ready.nativeCloudsHidden", "min": 1},
+    {"check": "result_above", "path": "weather.frontCount", "min": 1},
+    {"check": "result_above", "path": "weather.frontKind", "min": 1},
+    {"check": "result_below", "path": "weather.frontKind", "max": 1},
+    {"check": "result_below", "path": "low_perf.frame_p95_ms", "max": 33.3},
+    {"check": "result_below", "path": "high_perf.frame_p95_ms", "max": 33.3}
+  ]
+}

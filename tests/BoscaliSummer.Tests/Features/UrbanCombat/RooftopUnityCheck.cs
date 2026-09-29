@@ -19,7 +19,9 @@ public sealed class Building : MonoBehaviour
     public BuildingDefinition definition;
 }
 public sealed class FactionHQ { public Faction faction = new Faction(); }
-public sealed class Faction { public Color color = Color.blue; }
+public sealed class Faction { public Color color = Color.blue; public string factionName; }
+public sealed class UnitPart : MonoBehaviour { public float hitPoints = 100f; }
+public sealed class MapBuilding : MonoBehaviour { }
 namespace NuclearOption.Networking
 {
     public sealed class Player { public FactionHQ HQ; }
@@ -158,7 +160,7 @@ public static class RooftopUnityCheck
             tower.transform.SetParent(roof.transform, true);
             Bounds tiers = roof.GetComponent<Renderer>().bounds;
             tiers.Encapsulate(tower.GetComponent<Renderer>().bounds);
-            Check(RooftopPlacement.TryPlace(roof, tiers, definition, out p, out _) && Mathf.Abs(p.y - 25.03f) < .01f,
+            Check(RooftopPlacement.TryPlace(roof, tiers, definition, out p, out _, out _) && Mathf.Abs(p.y - 25.03f) < .01f,
                 "Highest supported tower roof must win over lower podium candidates");
             foreach (var collider in roof.GetComponentsInChildren<MeshCollider>(true))
                 Check(!collider.gameObject.activeSelf, "Temporary mesh probes must be inactive immediately");
@@ -183,7 +185,7 @@ public static class RooftopUnityCheck
                 Renderer[] surfaces = native.GetComponentsInChildren<Renderer>();
                 Bounds nativeBounds = surfaces[0].bounds;
                 foreach (Renderer surface in surfaces) nativeBounds.Encapsulate(surface.bounds);
-                Check(RooftopPlacement.TryPlace(native, nativeBounds, definition, out p, out _) && p.y >= nativeBounds.max.y - 5f,
+                Check(RooftopPlacement.TryPlace(native, nativeBounds, definition, out p, out _, out _) && p.y >= nativeBounds.max.y - 5f,
                     "Native " + nativeName + " must have a supported position on its upper roof");
                 Debug.Log("Native roof fixture passed: " + nativeName + " at " + p);
                 Object.DestroyImmediate(native);

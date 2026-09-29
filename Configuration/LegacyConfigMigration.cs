@@ -128,6 +128,10 @@ namespace BoscaliSummer
             BindAndRemove(config, "Weather", "TransitionIntervalMinutes", 4f);
             BindAndRemove(config, "Weather", "TransitionDurationMinutes", 2f);
             BindAndRemove(config, "Weather", "RadarRangeKm", 40f);
+            // The F11 weather cycling gave way to the Ctrl+O weather console.
+            BindAndRemove(config, "Weather", "DebugControlsEnabled", true);
+            BindAndRemove(config, "Weather", "DebugKey", "F11");
+            BindAndRemove(config, "Weather", "DebugKeyRequiresCtrl", false);
 
             // The weather overhaul's own [WeatherFronts] section is gone with the module.
             BindAndRemove(config, "WeatherFronts", "Enabled", true);

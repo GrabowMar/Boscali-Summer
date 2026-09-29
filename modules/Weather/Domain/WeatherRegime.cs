@@ -170,11 +170,29 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float Convective;
         /// <summary>Share of cells that are severe (hail, strong lightning), 0..1.</summary>
         public float Severity;
-        /// <summary>Frontal bands, 0..1: first band from ~0.1, second from ~0.7.</summary>
+        /// <summary>Frontal bands, 0..1: first band from ~0.1 (OVERCAST up), second from ~0.85.</summary>
         public float Frontal;
         public float HazeKm;
         public float Qnh;
         public float Temperature;
+
+        // Cloud genera beyond the low deck and the convective cells (see the WMO chart:
+        // low stratus/stratocumulus/nimbostratus, middle alto-, high cirro-).
+
+        /// <summary>Low deck depth in metres: ~500 stratocumulus sheet, ~2500 nimbostratus.</summary>
+        public float LayerDepth;
+        /// <summary>0 lumpy stratocumulus bodies .. 1 flat, uniform stratus.</summary>
+        public float LayerSmooth;
+        /// <summary>Middle layer (3.5-5 km) coverage, 0..1.</summary>
+        public float MidCover;
+        /// <summary>0 altocumulus puffs .. 1 altostratus sheet.</summary>
+        public float MidSheet;
+        /// <summary>High layer (8-9.5 km) coverage, 0..1.</summary>
+        public float HighCover;
+        /// <summary>0 cirrus streaks .. ~0.5 cirrocumulus ripples .. 1 cirrostratus veil.</summary>
+        public float HighVeil;
+        /// <summary>0 uniform sky .. 1 a frontal boundary with an open sky ahead of it (<see cref="SkySplit"/>).</summary>
+        public float Split;
 
         public static StateParams Lerp(StateParams a, StateParams b, float t)
         {
@@ -192,6 +210,13 @@ namespace BoscaliSummer.Features.Weather.Domain
                 HazeKm = WeatherMath.Lerp(a.HazeKm, b.HazeKm, t),
                 Qnh = WeatherMath.Lerp(a.Qnh, b.Qnh, t),
                 Temperature = WeatherMath.Lerp(a.Temperature, b.Temperature, t),
+                LayerDepth = WeatherMath.Lerp(a.LayerDepth, b.LayerDepth, t),
+                LayerSmooth = WeatherMath.Lerp(a.LayerSmooth, b.LayerSmooth, t),
+                MidCover = WeatherMath.Lerp(a.MidCover, b.MidCover, t),
+                MidSheet = WeatherMath.Lerp(a.MidSheet, b.MidSheet, t),
+                HighCover = WeatherMath.Lerp(a.HighCover, b.HighCover, t),
+                HighVeil = WeatherMath.Lerp(a.HighVeil, b.HighVeil, t),
+                Split = WeatherMath.Lerp(a.Split, b.Split, t),
             };
         }
     }
@@ -207,13 +232,21 @@ namespace BoscaliSummer.Features.Weather.Domain
         private static readonly StateParams[] Table =
         {
             //   sheet  base   wind  turb  rain  cu    conv  sev   front haze qnh    temp
-            Make(0.00f, 2400f, 0.85f, 0.05f, 0f,  0.00f, 0.00f, 0f,  0.00f, 45f, 1022f, 24f), // CLEAR
-            Make(0.03f, 1800f, 0.90f, 0.08f, 0f,  0.45f, 0.00f, 0f,  0.00f, 38f, 1018f, 23f), // FAIR
-            Make(0.10f, 1500f, 1.00f, 0.14f, 0f,  0.85f, 0.18f, 0f,  0.00f, 28f, 1014f, 22f), // SCATTERED
-            Make(0.40f, 1200f, 1.05f, 0.20f, 0.2f, 1.00f, 0.30f, 0f,  0.35f, 20f, 1010f, 20f), // BROKEN
-            Make(0.85f,  900f, 1.10f, 0.15f, 1.0f, 0.55f, 0.12f, 0f,  0.80f, 12f, 1006f, 17f), // OVERCAST
-            Make(0.80f,  800f, 1.25f, 0.30f, 3.0f, 0.40f, 0.60f, 0.1f, 1.00f,  9f, 1000f, 17f), // RAIN SQUALL
-            Make(0.70f,  900f, 1.45f, 0.45f, 2.0f, 0.30f, 1.00f, 0.6f, 1.00f,  8f,  995f, 19f), // STORM
+            //   deck depth / smooth, middle cover / sheet, high cover / veil
+            Make(0.00f, 2400f, 0.85f, 0.05f, 0f,  0.00f, 0.00f, 0f,  0.00f, 45f, 1022f, 24f,
+                 900f, 0.0f, 0.00f, 0.0f, 0.18f, 0.0f, 0.00f),  // CLEAR: a few cirrus streaks
+            Make(0.03f, 1800f, 0.90f, 0.08f, 0f,  0.45f, 0.00f, 0f,  0.00f, 38f, 1018f, 23f,
+                 900f, 0.0f, 0.08f, 0.0f, 0.28f, 0.1f, 0.00f),  // FAIR: cumulus humilis, cirrus
+            Make(0.10f, 1500f, 1.00f, 0.14f, 0f,  0.85f, 0.18f, 0f,  0.00f, 28f, 1014f, 22f,
+                 1000f, 0.0f, 0.28f, 0.0f, 0.25f, 0.45f, 0.00f), // SCATTERED: cumulus, altocumulus, cirrocumulus
+            Make(0.40f, 1200f, 1.05f, 0.20f, 0.2f, 1.00f, 0.30f, 0f,  0.00f, 20f, 1010f, 20f,
+                 1200f, 0.1f, 0.40f, 0.25f, 0.30f, 0.6f, 0.55f), // BROKEN: stratocumulus, altocumulus
+            Make(0.85f,  900f, 1.10f, 0.15f, 1.0f, 0.55f, 0.12f, 0f,  0.80f, 12f, 1006f, 17f,
+                 1500f, 0.5f, 0.70f, 0.85f, 0.55f, 1.0f, 0.60f), // OVERCAST: stratus deck, altostratus, cirrostratus
+            Make(0.80f,  800f, 1.25f, 0.30f, 3.0f, 0.40f, 0.60f, 0.1f, 1.00f,  9f, 1000f, 17f,
+                 2600f, 0.7f, 0.85f, 1.0f, 0.40f, 1.0f, 0.50f),  // RAIN SQUALL: nimbostratus under altostratus
+            Make(0.70f,  900f, 1.45f, 0.45f, 2.0f, 0.30f, 1.00f, 0.6f, 1.00f,  8f,  995f, 19f,
+                 1800f, 0.2f, 0.35f, 0.4f, 0.50f, 0.3f, 0.35f),  // STORM: cumulonimbus, anvil cirrus
         };
 
         public static StateParams Get(WeatherRegimeType state) => Table[Index((int)state)];
@@ -255,13 +288,16 @@ namespace BoscaliSummer.Features.Weather.Domain
         private static int Index(int i) => i < 0 ? 0 : i >= Count ? Count - 1 : i;
 
         private static StateParams Make(float overcast, float cloudBase, float wind, float turbulence, float rain,
-            float cumulus, float convective, float severity, float frontal, float haze, float qnh, float temperature)
+            float cumulus, float convective, float severity, float frontal, float haze, float qnh, float temperature,
+            float layerDepth, float layerSmooth, float midCover, float midSheet, float highCover, float highVeil, float split)
         {
             return new StateParams
             {
                 Overcast = overcast, CloudBase = cloudBase, WindFactor = wind, Turbulence = turbulence,
                 AreaRain = rain, Cumulus = cumulus, Convective = convective, Severity = severity,
                 Frontal = frontal, HazeKm = haze, Qnh = qnh, Temperature = temperature,
+                LayerDepth = layerDepth, LayerSmooth = layerSmooth, MidCover = midCover, MidSheet = midSheet,
+                HighCover = highCover, HighVeil = highVeil, Split = split,
             };
         }
     }

@@ -51,7 +51,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (created)
             {
                 CopyScaler(source.GetComponent<CanvasScaler>(), root.GetComponent<CanvasScaler>());
-                AvKit.Stretch(root);
+                AvLay.Fill(root);
             }
         }
 

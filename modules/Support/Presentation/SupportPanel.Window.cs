@@ -14,6 +14,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private OpsWindow opsWindow;
         private DeskView deskView;
         private CyberView cyberView;
+        private StationTaskingView taskingView;
         private StationView stationView;
         private ImagerView imagerView;
 
@@ -21,6 +22,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             if (opsWindow != null) return opsWindow;
             opsWindow = OpsWindow.Create(() => support != null && support.Settings != null && support.Settings.ReduceMotion.Value);
+            opsWindow.Register(TaskingRoom());
             opsWindow.Register(StationRoom());
             opsWindow.Register(ImagerRoom());
             opsWindow.Register(CyberRoom());
@@ -32,11 +34,17 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private CyberView CyberRoom() => cyberView ?? (cyberView = new CyberView(support, cyberLoop));
 
+        private StationTaskingView TaskingRoom() => taskingView ?? (taskingView = new StationTaskingView(support,
+            () => OpenRoom(StationRoom(), null, null),
+            aim => OpenRoom(ImagerRoom(), aim.HasValue ? (object)aim.Value : null, null),
+            () => opsWindow?.Close()));
+
         private StationView StationRoom() =>
-            stationView ?? (stationView = new StationView(support, plan, loop, () => OpenRoom(ImagerRoom(), null, null)));
+            stationView ?? (stationView = new StationView(support, plan, loop,
+                () => OpenRoom(ImagerRoom(), null, null), () => OpenRoom(TaskingRoom(), null, null)));
 
         private ImagerView ImagerRoom() =>
-            imagerView ?? (imagerView = new ImagerView(support, products, () => OpenRoom(StationRoom(), null, null)));
+            imagerView ?? (imagerView = new ImagerView(support, products, () => OpenRoom(TaskingRoom(), null, null)));
 
         /// <summary>True while the imager is on screen; the SAR scene forms only while it, or the MFD, is.</summary>
         private bool ImagerOpen => imagerView != null && imagerView.Active && Window.OpsWindow.IsOpen;
@@ -54,6 +62,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             opsWindow = null;
             deskView = null;
             cyberView = null;
+            taskingView = null;
             stationView = null;
             imagerView = null;
         }

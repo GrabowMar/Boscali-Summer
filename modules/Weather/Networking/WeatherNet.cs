@@ -16,7 +16,7 @@ namespace BoscaliSummer.Features.Weather.Networking
     /// </summary>
     internal sealed class WeatherNet : MonoBehaviour
     {
-        public const byte ProtocolVersion = 4;
+        public const byte ProtocolVersion = 6;
 
         private WeatherManager manager;
         private MessageHandler serverHandler;
@@ -124,6 +124,12 @@ namespace BoscaliSummer.Features.Weather.Networking
                 w.WriteByte((byte)(v.FieldManual ? 1 : 0));
                 w.WriteSingle(v.HoldMinutes);
                 w.WriteSingle(v.BlendMinutes);
+                w.WriteByte(v.FieldSets);
+                w.WriteByte(v.FieldSalt);
+                w.WriteByte((byte)(v.FieldHasAnchor ? 1 : 0));
+                w.WriteSingle(v.FieldAnchorX);
+                w.WriteSingle(v.FieldAnchorZ);
+                w.WriteByte(v.FieldFrontTurn);
             }));
 
             Bind(typeof(Reader<WeatherSyncMessage>), "Read", (Func<NetworkReader, WeatherSyncMessage>)(r =>
@@ -147,6 +153,12 @@ namespace BoscaliSummer.Features.Weather.Networking
                 message.FieldManual = r.ReadByte() != 0;
                 message.HoldMinutes = r.ReadSingle();
                 message.BlendMinutes = r.ReadSingle();
+                message.FieldSets = r.ReadByte();
+                message.FieldSalt = r.ReadByte();
+                message.FieldHasAnchor = r.ReadByte() != 0;
+                message.FieldAnchorX = r.ReadSingle();
+                message.FieldAnchorZ = r.ReadSingle();
+                message.FieldFrontTurn = r.ReadByte();
                 return message;
             }));
 

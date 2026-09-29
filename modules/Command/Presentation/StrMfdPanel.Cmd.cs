@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
 using NOAvionics.Ui;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Command.Presentation
 {
@@ -14,117 +13,118 @@ namespace BoscaliSummer.Features.Command.Presentation
     {
         private const int ProposalSlots = 3;
         private const int FrontSlots = 4;
-        private readonly TMP_Text[] proposalNames = new TMP_Text[ProposalSlots];
-        private readonly TMP_Text[] proposalBriefs = new TMP_Text[ProposalSlots];
-        private readonly TMP_Text[] proposalTimes = new TMP_Text[ProposalSlots];
-        private readonly AvButton[] proposalButtons = new AvButton[ProposalSlots];
-        private readonly GameObject[] proposalRoots = new GameObject[ProposalSlots];
-        private readonly TMP_Text[] frontNames = new TMP_Text[FrontSlots];
-        private readonly TMP_Text[] frontStates = new TMP_Text[FrontSlots];
-        private TMP_Text operationName, operationState, operationForces, proposalNote, frontsNote, warStatus;
-        private AvButton cancelOperation;
-        private AvButton[] postureButtons;
+
+        private StrOpCard operationCard;
+        private StrNote operationNote;
+        private AvSection proposalSection;
+        private StrProposalDeck proposals;
+        private StrNote proposalNote;
+        private AvSection frontsSection;
+        private StrFrontBoard fronts;
+        private StrNote frontsNote;
+        private AvSegmented postureControl;
+        private ProseText postureText;
+        private ProseText warStatusText;
+        private AvControl openRoomButton, replanButton;
         private StrPlanningWindow cmdPlanningWindow;
+        private TheaterWarPosture selectedPosture;
 
         private void ResetCmd()
         {
             if (cmdPlanningWindow != null) Destroy(cmdPlanningWindow.gameObject);
             cmdPlanningWindow = null;
-            operationName = operationState = operationForces = proposalNote = frontsNote = warStatus = null;
-            cancelOperation = null;
-            postureButtons = null;
-            Array.Clear(proposalNames, 0, proposalNames.Length);
-            Array.Clear(proposalBriefs, 0, proposalBriefs.Length);
-            Array.Clear(proposalTimes, 0, proposalTimes.Length);
-            Array.Clear(proposalButtons, 0, proposalButtons.Length);
-            Array.Clear(proposalRoots, 0, proposalRoots.Length);
-            Array.Clear(frontNames, 0, frontNames.Length);
-            Array.Clear(frontStates, 0, frontStates.Length);
+            operationCard = null;
+            operationNote = null;
+            proposalSection = null;
+            proposals = null;
+            proposalNote = null;
+            frontsSection = null;
+            fronts = null;
+            frontsNote = null;
+            postureControl = null;
+            postureText = null;
+            warStatusText = null;
+            openRoomButton = replanButton = null;
         }
 
-        private void BuildCmdPage(GameObject page)
+        private void BuildCmdPage(AvFlow p)
         {
-            Rect view = shell.Body;
-            const float contentHeight = 766f;
-            Rect body;
-            RectTransform root = AvScreen.Scroll((RectTransform)page.transform, view,
-                Mathf.Max(view.height, contentHeight), out body);
-            AvStyled.Spine(root, new Rect(body.x, body.y, 3f, body.height));
-            float x = body.x + AvScreen.SpineInset;
-            float w = body.width - AvScreen.SpineInset;
-            float y = body.y;
+            p.Section(AvIcon.Flag, "LIVE OPERATION", "STAFF DIRECTED");
+            operationCard = p.Add(new StrOpCard(p.Content));
+            operationNote = p.Add(new StrNote(p.Content, AvIcon.Flag));
+            AvButtons ops = p.Buttons(
+                new AvControl.Spec("OPEN ROOM", OpenCmdPlanning, AvButtonStyle.Default, AvIcon.Maximize),
+                new AvControl.Spec("REPLAN", CancelCmdOperation, AvButtonStyle.Danger, AvIcon.X));
+            openRoomButton = ops.Controls[0];
+            replanButton = ops.Controls[1];
+            openRoomButton.Help = "Open the operations room and live theater map.";
+            replanButton.Help = "Call off this operation and ask staff for new choices.";
 
-            y = SectionHeader(root, x, y, w, "LIVE OPERATION", "STAFF DIRECTED", false);
-            AvKit.Panel(root, new Rect(x, y, w, 95f), AvTheme.Surface);
-            AvKit.Rule(root, new Rect(x, y, 3f, 95f), AvTheme.RailInfo);
-            operationName = AvStyled.Label(root, new Rect(x + 12f, y - 8f, w - 24f, 19f),
-                "STAFF ASSESSING", "row-name");
-            operationState = AvStyled.Label(root, new Rect(x + 12f, y - 32f, w - 24f, 18f),
-                "", "row-sub");
-            operationForces = AvStyled.Label(root, new Rect(x + 12f, y - 53f, w - 24f, 18f),
-                "", "row-sub");
-            AvStyled.Button(root, new Rect(x + 12f, y - 74f, 125f, 20f), "OPEN ROOM", "btn",
-                OpenCmdPlanning, AvButtonStyle.Default)
-                .WithTooltip("Open the operations room and live theater map.");
-            cancelOperation = AvStyled.Button(root,
-                new Rect(x + w - 137f, y - 74f, 125f, 20f), "REPLAN", "btn",
-                CancelCmdOperation, AvButtonStyle.Danger);
-            cancelOperation.WithTooltip("Call off this operation and ask staff for new choices.");
-            y -= 106f;
+            proposalSection = p.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES");
+            proposals = p.Add(new StrProposalDeck(p.Content, ProposalSlots, PickCmdProposal));
+            proposalNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
 
-            y = SectionHeader(root, x, y, w, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES", false);
-            proposalNote = AvStyled.Label(root, new Rect(x, y, w, 16f), "", "row-sub");
-            y -= 23f;
-            for (int i = 0; i < ProposalSlots; i++)
+            frontsSection = p.Section(AvIcon.MapPin, "ACTIVE FRONTS", "MOST URGENT");
+            fronts = p.Add(new StrFrontBoard(p.Content, FrontSlots, BindFrontRow));
+            frontsNote = p.Add(new StrNote(p.Content, AvIcon.MapPin));
+
+            p.Section(AvIcon.AdjustmentsHorizontal, "STAFF POSTURE", "BROAD INTENT");
+            postureControl = p.Add(new AvSegmented(p.Content, "POSTURE",
+                new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetCmdPosture((TheaterWarPosture)i)));
+            postureText = p.Add(new ProseText(p.Content));
+            warStatusText = p.Add(new ProseText(p.Content));
+        }
+
+        /// <summary>What a posture changes, in the staff's own terms (it biases which assaults the staff offers).</summary>
+        internal static string PostureBrief(TheaterWarPosture posture)
+        {
+            switch (posture)
             {
-                int slot = i;
-                proposalRoots[i] = new GameObject("Proposal" + i, typeof(RectTransform));
-                RectTransform card = (RectTransform)proposalRoots[i].transform;
-                card.SetParent(root, false);
-                AvKit.Place(card, new Rect(x, y, w, 78f));
-                AvKit.Panel(card, new Rect(0f, 0f, w, 76f), AvTheme.Surface);
-                AvKit.Rule(card, new Rect(0f, 0f, 3f, 76f), AvTheme.RailReady);
-                proposalNames[i] = AvStyled.Label(card, new Rect(12f, -7f, w - 91f, 18f),
-                    "", "row-name");
-                proposalTimes[i] = AvStyled.Label(card, new Rect(w - 81f, -7f, 69f, 18f),
-                    "", "row-value", align: TextAlignmentOptions.MidlineRight);
-                proposalBriefs[i] = AvStyled.Label(card, new Rect(12f, -30f, w - 24f, 38f),
-                    "", "row-sub");
-                proposalBriefs[i].enableWordWrapping = true;
-                proposalButtons[i] = AvKit.HitButton(card,
-                    new Rect(0f, 0f, w, 76f), () => PickCmdProposal(slot));
-                proposalButtons[i].WithTooltip("Choose this staff proposal; the host validates the current offer.");
-                y -= 83f;
+                case TheaterWarPosture.Cautious: return "CAUTIOUS: staff defends first and offers assaults only at clear odds.";
+                case TheaterWarPosture.Bold: return "BOLD: staff offers assaults sooner and accepts thinner odds.";
+                default: return "STEADY: staff weighs assault and defence evenly.";
             }
-            y -= 5f;
+        }
 
-            y = SectionHeader(root, x, y, w, "ACTIVE FRONTS", "MOST URGENT", false);
-            frontsNote = AvStyled.Label(root, new Rect(x, y, w, 16f), "", "row-sub");
-            y -= 24f;
-            for (int i = 0; i < FrontSlots; i++)
+        internal static void FillFront(StrFrontBoard.Row row, TheaterFrontView front)
+        {
+            if (front == null) { row.Set("—", "", 0f, false, AvState.Inert, null); return; }
+            if (front.Observed)
             {
-                frontNames[i] = AvStyled.Label(root,
-                    new Rect(x + 10f, y, w - 20f, 16f), "", "row-name");
-                frontStates[i] = AvStyled.Label(root,
-                    new Rect(x + 10f, y - 19f, w - 20f, 16f), "", "row-sub");
-                Divider(root, x, y - 38f, w);
-                y -= 42f;
+                float pressure = Mathf.Clamp01(front.Pressure);
+                row.Set(front.Label, front.Status, pressure, true,
+                    pressure > 0.5f ? AvState.Caution : AvState.Info,
+                    front.Label + " — " + (front.Status ?? "").ToLowerInvariant() + ", " +
+                    TheaterReadout.Percent(pressure) + " pressure.");
             }
-            y -= 9f;
+            else
+            {
+                string age = front.AgeSeconds < 0f ? "UNCONFIRMED REPORT"
+                    : "UNCONFIRMED · AGE " + Mathf.RoundToInt(front.AgeSeconds) + "S";
+                row.Set(front.Label, age, 0f, false, AvState.Inert, front.Label + " — no confirmed contact.");
+            }
+        }
 
-            y = SectionHeader(root, x, y, w, "STAFF POSTURE", "BROAD INTENT", false);
-            postureButtons = new AvButton[3];
-            string[] names = { "CAUTIOUS", "STEADY", "BOLD" };
-            for (int i = 0; i < postureButtons.Length; i++)
+        private void BindFrontRow(int index, StrFrontBoard.Row row)
+        {
+            IReadOnlyList<TheaterFrontView> list = theaterWar?.Available == true ? theaterWar.Fronts : null;
+            FillFront(row, list != null && index < list.Count ? list[index] : null);
+        }
+
+        /// <summary>Fill the proposal deck; shared by the console page and the operations room.</summary>
+        internal static void FillProposals(StrProposalDeck deck, IReadOnlyList<TheaterProposalView> list,
+            int slots, bool canCommand)
+        {
+            int count = list != null ? Mathf.Min(list.Count, slots) : 0;
+            for (int i = 0; i < deck.Slots; i++)
             {
-                TheaterWarPosture posture = (TheaterWarPosture)i;
-                float bx = x + i * (w / 3f + 2f);
-                postureButtons[i] = AvStyled.Button(root,
-                    new Rect(bx, y, w / 3f - 5f, 25f), names[i], "btn",
-                    () => SetCmdPosture(posture), AvButtonStyle.Default);
+                if (i >= count) { deck.Hide(i); continue; }
+                TheaterProposalView proposal = list[i];
+                deck.Set(i, proposal.Kind, proposal.Label, proposal.Brief, proposal.Forces, proposal.Risk,
+                    Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)), canCommand,
+                    canCommand ? "Choose this staff proposal; the host validates the current offer."
+                        : "Staff proposal. Only the host can choose.");
             }
-            y -= 36f;
-            warStatus = AvStyled.Label(root, new Rect(x, y, w, 20f), "", "row-sub");
         }
 
         private void RefreshCmd()
@@ -132,57 +132,52 @@ namespace BoscaliSummer.Features.Command.Presentation
             ITheaterWarView war = theaterWar;
             bool ready = war != null && war.Available;
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;
-            operationName.text = active == null ? "NO PRIMARY OPERATION" : active.Label;
-            operationState.text = active == null ? "Local clashes continue while the staff assesses openings."
-                : active.Kind + " / " + active.Phase + " · " + active.Summary;
-            operationForces.text = active == null ? "" :
-                "GROUPS  " + active.GroundGroups + " GROUND  /  " +
-                active.AirGroups + " AIR  /  " + active.NavalGroups + " NAVAL";
-            cancelOperation.SetEnabled(ready && war.CanCommand && active != null);
 
-            IReadOnlyList<TheaterProposalView> proposals = ready ? war.Proposals : null;
-            int count = proposals != null ? Mathf.Min(proposals.Count, ProposalSlots) : 0;
-            proposalNote.text = !ready ? "WAR PICTURE UNAVAILABLE" : count == 0
-                ? "No decision pending. The staff will act on its own."
-                : count + " OPENING" + (count == 1 ? "" : "S") + " · SELECT A PRIORITY";
-            for (int i = 0; i < ProposalSlots; i++)
-            {
-                bool visible = i < count;
-                if (proposalRoots[i].activeSelf != visible) proposalRoots[i].SetActive(visible);
-                if (!visible) continue;
-                TheaterProposalView proposal = proposals[i];
-                proposalNames[i].text = proposal.Kind + " / " + proposal.Label;
-                proposalBriefs[i].text = proposal.Brief + "  ·  " + proposal.Forces +
-                    "  ·  RISK " + proposal.Risk;
-                proposalTimes[i].text = Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S";
-                proposalButtons[i].SetEnabled(war.CanCommand);
-            }
+            operationCard.SetShown(active != null);
+            operationNote.SetShown(active == null);
+            if (active != null)
+                operationCard.Set(active.Kind, active.Label, active.Phase, active.Summary,
+                    active.GroundGroups, active.AirGroups, active.NavalGroups);
+            else
+                operationNote.Set(ready ? "NO PRIMARY OPERATION" : "THEATER STAFF UNAVAILABLE",
+                    ready ? "Local clashes continue while the staff assesses openings."
+                        : "No staff is running for this faction. Fronts and offers appear once it forms.");
+            replanButton.Interactable = ready && war.CanCommand && active != null;
 
-            IReadOnlyList<TheaterFrontView> fronts = ready ? war.Fronts : null;
-            int frontCount = fronts != null ? Mathf.Min(fronts.Count, FrontSlots) : 0;
-            frontsNote.text = !ready ? "NO VERIFIED FRONT REPORT" :
-                (fronts?.Count ?? 0) + " FRONTS TRACKED";
-            for (int i = 0; i < FrontSlots; i++)
-            {
-                TheaterFrontView front = i < frontCount ? fronts[i] : null;
-                frontNames[i].text = front == null ? "—" : front.Label;
-                frontStates[i].text = front == null ? "" : front.Observed
-                    ? front.Status + " · PRESSURE " + Mathf.RoundToInt(Mathf.Clamp01(front.Pressure) * 100f) + "%"
-                    : front.AgeSeconds < 0f ? "UNCONFIRMED REPORT"
-                    : "UNCONFIRMED REPORT · AGE " + Mathf.RoundToInt(front.AgeSeconds) + "S";
-            }
-            for (int i = 0; i < 3; i++)
-                postureButtons[i].SetLatched(ready && (int)war.Posture == i);
-            warStatus.text = !ready ? "THEATER STAFF UNAVAILABLE" : war.CanCommand
+            IReadOnlyList<TheaterProposalView> propList = ready ? war.Proposals : null;
+            int count = propList != null ? Mathf.Min(propList.Count, ProposalSlots) : 0;
+            proposalSection.SetCaption(!ready ? "UNAVAILABLE" : count == 0
+                ? "STAFF WILL ACT ON ITS OWN" : count + " OPENING" + (count == 1 ? "" : "S"));
+            proposals.SetShown(count > 0);
+            proposalNote.SetShown(count == 0);
+            if (count > 0) FillProposals(proposals, propList, ProposalSlots, war.CanCommand);
+            else
+                proposalNote.Set(ready ? "NO OPENINGS ON OFFER" : "NO STAFF PROPOSALS",
+                    ready ? "The staff spends from the faction pool and acts on its own until it sees an opening."
+                        : "Proposals appear here once theater staff is available.");
+
+            IReadOnlyList<TheaterFrontView> frontList = ready ? war.Fronts : null;
+            int frontCount = frontList?.Count ?? 0;
+            frontsSection.SetCaption(!ready ? "NO VERIFIED FRONT REPORT" : frontCount + " TRACKED");
+            fronts.SetCount(frontCount);
+            fronts.SetShown(frontCount > 0);
+            frontsNote.SetShown(frontCount == 0);
+            if (frontCount == 0)
+                frontsNote.Set("NO FRONTS REPORTED", "Verified fronts appear here with their pressure once staff has contact.");
+
+            selectedPosture = ready ? war.Posture : TheaterWarPosture.Steady;
+            postureControl.Refresh();
+            postureText.Set(PostureBrief(selectedPosture));
+            warStatusText.Set(!ready ? "THEATER STAFF UNAVAILABLE" : war.CanCommand
                 ? "STAFF SPENDS FROM THE FACTION POOL AUTOMATICALLY"
-                : "OBSERVE / HOST VALIDATES ORDERS";
+                : "OBSERVE / HOST VALIDATES ORDERS");
         }
 
         private void PickCmdProposal(int slot)
         {
-            IReadOnlyList<TheaterProposalView> proposals = theaterWar?.Proposals;
-            if (proposals == null || slot < 0 || slot >= proposals.Count) return;
-            TheaterProposalView proposal = proposals[slot];
+            IReadOnlyList<TheaterProposalView> proposalList = theaterWar?.Proposals;
+            if (proposalList == null || slot < 0 || slot >= proposalList.Count) return;
+            TheaterProposalView proposal = proposalList[slot];
             if (theaterWar.RequestPick(proposal.Id, proposal.Revision)) nextRefresh = 0f;
         }
 

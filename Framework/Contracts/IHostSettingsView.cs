@@ -2,6 +2,16 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Framework.Contracts
 {
+    /// <summary>Which SET SERVER page lists a section.</summary>
+    internal enum HostSettingsPage
+    {
+        /// <summary>Gameplay: what exists, what pays out, scale dials.</summary>
+        Settings,
+
+        /// <summary>World effects the host runs for everyone: weather, fire.</summary>
+        Effects
+    }
+
     /// <summary>How a host setting row is operated: a latched ON/OFF, or a stepped value.</summary>
     internal enum HostSettingKind
     {
@@ -52,6 +62,7 @@ namespace BoscaliSummer.Framework.Contracts
     internal interface IHostSettingsView
     {
         string Section { get; }
+        HostSettingsPage Page { get; }
         IReadOnlyList<HostSettingView> Rows { get; }
 
         /// <summary>Re-read every row's live value. Values are mutated in place, never rebuilt.</summary>

@@ -358,6 +358,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             bool attached = IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen) &&
                 VanillaMfdRebuild.TryApply(screen);
             if (!attached) VanillaMfdRebuild.OnShown(screen);
+            // HUD and MIS build their console on first show, after the align above measured the stock
+            // 596 px panel: re-align against the console that is now attached, or ~300 px hang below the screen.
+            if (attached) AlignToBottom(screen, slot);
         }
 
         /// <summary>Dock every screen the two mods own, on both vanilla bezel columns.</summary>

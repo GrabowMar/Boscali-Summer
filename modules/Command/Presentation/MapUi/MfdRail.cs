@@ -84,6 +84,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static int buttonCount;
         private static RectTransform header;
         private static TMP_Text headerText;
+        private static TMP_Text headerIcon;
 
         /// <summary>Y offset of the next free slot, measured down from the rail's top.</summary>
         private static float cursor;
@@ -119,12 +120,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 rail.SetParent(canvas.transform, worldPositionStays: false);
             }
 
-            Image backdrop = rail.GetComponent<Image>();
-            if (backdrop == null) backdrop = rail.gameObject.AddComponent<Image>();
-            backdrop.sprite = AvSprites.Panel;
-            backdrop.type = Image.Type.Sliced;
-            backdrop.color = Color.white;
-            backdrop.raycastTarget = false;
+            AvFrame backdrop = rail.GetComponent<AvFrame>();
+            if (backdrop == null)
+            {
+                backdrop = rail.gameObject.AddComponent<AvFrame>();
+                backdrop.raycastTarget = false;
+                backdrop.Chamfer = AvChamfer.Diagonal(6f);
+                backdrop.Fill = true;
+            }
+            backdrop.Paint(AvStyleHost.FuiColor("surface", AvTheme.Surface), AvStyleHost.FuiColor("frame", AvTheme.Frame));
 
             rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
             rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
@@ -190,19 +194,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 var go = new GameObject("IndexHeader", typeof(RectTransform));
                 header = go.GetComponent<RectTransform>();
                 header.SetParent(rail, false);
-                AvKit.Place(header, new Rect(0f, 0f, rail.rect.width, HeaderHeight));
-                headerText = AvStyled.Label(header,
-                    new Rect(10f, -2f, rail.rect.width - 48f, 20f), "", "row-sub",
-                    align: TextAlignmentOptions.MidlineLeft);
-                headerText.color = AvTheme.Dim;
-                AvKit.Rule(header, new Rect(4f, -HeaderHeight + 1f, rail.rect.width - 8f, 1f),
-                    AvTheme.Frame.WithAlpha(0.65f));
+                MfdChromeLay.Place(header, new Rect(0f, 0f, rail.rect.width, HeaderHeight));
+                headerIcon = AvIcons.Make(header, AvIcon.ListDetails, AvGridTokens.IconInline,
+                    AvStyleHost.FuiColor("ink-dim", AvTheme.Dim));
+                MfdChromeLay.Place(headerIcon.rectTransform, new Rect(10f, -3f, 14f, 14f));
+                headerText = AvText.Make(header, "Text", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                MfdChromeLay.Place(headerText.rectTransform, new Rect(28f, -2f, rail.rect.width - 66f, 20f));
+                headerText.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                MfdChromeLay.Rule(header, "Rule", new Rect(4f, -HeaderHeight + 1f, rail.rect.width - 8f, 1f),
+                    AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f));
                 for (int i = 0; i < 3; i++)
-                    AvKit.Rule(header, new Rect(rail.rect.width - 27f + i * 5f, -11f, 3f, 2f),
-                        i == 2 ? AvTheme.Accent.WithAlpha(0.75f) : AvTheme.Frame);
+                    MfdChromeLay.Rule(header, "Tick" + i, new Rect(rail.rect.width - 27f + i * 5f, -11f, 3f, 2f),
+                        i == 2 ? AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.75f) : AvStyleHost.FuiColor("frame", AvTheme.Frame));
             }
             header.gameObject.SetActive(true);
-            if (headerText != null) headerText.text = "MFD INDEX  /  " + buttonCount.ToString("00");
+            if (headerText != null) headerText.text = "MFD INDEX  /  " + MfdChromeLay.TwoDigits(buttonCount);
         }
 
         public static int Count(List<Button> buttons, List<MFDScreen> screens)
@@ -241,6 +247,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             buttonCount = 0;
             header = null;
             headerText = null;
+            headerIcon = null;
             effectiveButtonHeight = ButtonHeight;
             effectiveButtonGap = ButtonGap;
             effectiveLabelSize = LabelSize;
@@ -287,7 +294,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             /// <summary>The crisp frame drawn over the fill, plus the branded glyph the rail
             /// added; destroyed on restore rather than undone value-by-value.</summary>
             public GameObject Decoration;
-            public MfdGlyph Icon;
+            public TMP_Text Icon;
 
             /// <summary>
             /// The ownership mark the rail leaves on the button. It carries the branded
@@ -310,13 +317,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 if (latched == on) return;
                 latched = on;
+                Color select = AvStyleHost.FuiColor("select", AvTheme.Accent);
+                // R3: "ON"/"SELECTED" is an outline + LED + an 8% wash, never a solid fill.
                 if (Background != null)
                 {
-                    Background.color = on ? Color.Lerp(RestFill, AvTheme.Accent, 0.15f) : RestFill;
+                    Background.color = on ? Color.Lerp(RestFill, select, 0.08f) : RestFill;
                 }
-                if (Icon != null) Icon.color = on ? AvTheme.Accent : AvTheme.TextPrimary;
-                if (SelectionRail != null) SelectionRail.color = on ? AvTheme.Accent : Color.clear;
-                if (StateTick != null) StateTick.color = on ? AvTheme.Accent : AvTheme.Frame.WithAlpha(0.55f);
+                if (Icon != null) Icon.color = on ? select : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                if (SelectionRail != null) SelectionRail.color = on ? select : Color.clear;
+                if (StateTick != null) StateTick.color = on ? select : AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f);
             }
 
             public void Restore()
@@ -343,7 +352,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Label.fontSizeMin = LabelSizeMin;
                     Label.fontSizeMax = LabelSizeMax;
                     Label.color = LabelColor;
-                    Label.fontSize = LabelSize;
+                    MfdChromeLay.RestoreCapturedSize(Label, LabelSize);
                     Label.fontStyle = LabelStyle;
                     Label.characterSpacing = LabelSpacing;
                     Label.alignment = LabelAlignment;
@@ -415,12 +424,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 skin.Color = bg.color;
 
                 // A dark, near-opaque key rather than a washed-out grey: the rail sits over
-                // a bright map, so anything translucent reads as murky. The accent frame is
-                // baked into the sliced Control sprite; the fill just needs to be black
-                // enough to make the label pop.
-                bg.sprite = AvSprites.Control;
-                bg.type = Image.Type.Sliced;
-                bg.color = AvTheme.Surface;
+                // a bright map, so anything translucent reads as murky. Decorate() now draws
+                // the button's frame as its own AvFrame mesh, so the fill itself only needs
+                // to read as a flat surface.
+                bg.sprite = null;
+                bg.type = Image.Type.Simple;
+                bg.color = AvStyleHost.FuiColor("surface", AvTheme.Surface);
                 skin.RestFill = bg.color;
             }
 
@@ -449,15 +458,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     skin.LabelSizeDelta = labelRect.sizeDelta;
                 }
 
-                // The stock bezel label is auto-sized to fit a small cockpit button, and
-                // while enableAutoSizing is on TMP recomputes the size every layout and
-                // discards whatever fontSize is assigned. Turning it off — and pinning the
-                // min/max it would otherwise clamp to — is what makes the rail's type take.
-                label.enableAutoSizing = false;
+                // Pin min == max rather than assign fontSize directly: TMP's auto-size pass
+                // then converges to exactly that value regardless of box width, the same
+                // pinned-size idiom AvText.Fit uses for kit-authored chrome.
+                label.enableAutoSizing = true;
                 label.fontSizeMin = effectiveLabelSize;
                 label.fontSizeMax = effectiveLabelSize;
-                label.color = AvTheme.TextPrimary;
-                label.fontSize = effectiveLabelSize;
+                label.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 label.fontStyle = FontStyles.Normal;
                 label.characterSpacing = 0f;
                 label.alignment = TextAlignmentOptions.Center;
@@ -480,13 +487,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             skin.Transition = button.transition;
             skin.Colors = button.colors;
             button.transition = Selectable.Transition.ColorTint;
+            // ColorTint multipliers, not paint: these ride the vanilla Selectable bridge (not
+            // an AvControl), so they stay numeric tint factors rather than theme roles. Built
+            // through Rgba/AvTheme.Unity so no literal Color escapes this kit-authored file.
             button.colors = new ColorBlock
             {
                 normalColor = Color.white,
-                highlightedColor = new Color(1.35f, 1.35f, 1.35f, 1f),
-                pressedColor = new Color(0.70f, 0.70f, 0.70f, 1f),
+                highlightedColor = AvTheme.Unity(new Rgba(1.35f, 1.35f, 1.35f, 1f)),
+                pressedColor = AvTheme.Unity(new Rgba(0.70f, 0.70f, 0.70f, 1f)),
                 selectedColor = Color.white,
-                disabledColor = new Color(0.50f, 0.50f, 0.60f, 0.60f),
+                disabledColor = AvTheme.Unity(new Rgba(0.50f, 0.50f, 0.60f, 0.60f)),
                 colorMultiplier = 1f,
                 fadeDuration = 0.06f,
             };
@@ -509,18 +519,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var rt = button.GetComponent<RectTransform>();
             if (rt == null) return;
 
-            AvKit.Place(rt, slot);
+            MfdChromeLay.Place(rt, slot);
             rt.localRotation = Quaternion.identity;
             t.SetAsLastSibling();
         }
 
         /// <summary>
-        /// A crisp frame and corner ticks over the flat fill, plus the branded icon and
+        /// A crisp <see cref="AvFrame"/> border over the flat fill, plus the branded icon and
         /// two-line label.
         ///
-        /// <c>AvSprites.Control</c>'s baked edge is tinted the same colour as the fill,
-        /// so a single flat Image reads as one dark blob with no definition; this draws the
-        /// accent border and ticks as a child instead, and is torn down as one object on
+        /// A flat <c>Image</c> fill alone reads as one dark blob with no definition; this draws
+        /// the kit v2 frame and ticks as a child instead, and is torn down as one object on
         /// restore rather than undone value by value.
         /// </summary>
         private static void Decorate(Button button, ButtonSkin skin, Rect slot)
@@ -530,20 +539,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var go = new GameObject("AvDecoration", typeof(RectTransform));
             var rt = go.GetComponent<RectTransform>();
             rt.SetParent(button.transform, worldPositionStays: false);
-            AvKit.Stretch(rt);
+            AvLay.Fill(rt, 0f);
             rt.SetAsLastSibling();
 
-            AvKit.Rule(rt, new Rect(0f, -slot.height + 1f, slot.width, 1f),
-                AvTheme.Hairline.WithAlpha(0.65f));
-            AvKit.Rule(rt, new Rect(IconBayWidth, -7f, 1f, slot.height - 14f),
-                AvTheme.Frame.WithAlpha(0.65f));
-            skin.SelectionRail = AvKit.Rule(rt, new Rect(0f, -2f, 3f, slot.height - 4f), Color.clear);
-            skin.StateTick = AvKit.Rule(rt, new Rect(slot.width - 11f, -slot.height * 0.5f, 7f, 1f),
-                AvTheme.Frame.WithAlpha(0.55f));
+            // The crisp button frame: one mesh instead of the old baked sliced sprite.
+            MfdChromeLay.Outline(rt, "Frame", new Rect(0f, 0f, slot.width, slot.height),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f), AvChamfer.Diagonal(3f));
+            MfdChromeLay.Rule(rt, "IconDivider", new Rect(IconBayWidth, -7f, 1f, slot.height - 14f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f));
+            skin.SelectionRail = MfdChromeLay.Rule(rt, "SelectionRail", new Rect(0f, -2f, 3f, slot.height - 4f), Color.clear);
+            skin.StateTick = MfdChromeLay.Rule(rt, "StateTick", new Rect(slot.width - 11f, -slot.height * 0.5f, 7f, 1f),
+                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f));
 
             var brand = button.gameObject.AddComponent<MfdRailBrand>();
             brand.Label = skin.Label;
-            brand.LabelColor = skin.Label != null ? skin.Label.color : AvTheme.TextPrimary;
+            brand.LabelColor = skin.Label != null ? skin.Label.color : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             skin.Brand = brand;
 
             Brand(button, skin, rt, slot);
@@ -559,15 +569,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             TMP_Text label = skin.Label;
             if (label == null) return;
 
-            AvKit.Place(label.rectTransform,
+            MfdChromeLay.Place(label.rectTransform,
                 new Rect(LabelInset, 0f, Mathf.Max(0f, slot.width - LabelInset - RailPad), slot.height));
             label.alignment = TextAlignmentOptions.MidlineLeft;
 
             string raw = label.text;
             MfdRailEntry entry = MfdRailCatalog.For(raw);
             float codeSize = Mathf.Clamp(slot.height * 0.31f, 13f, 18f);
-            float nameSize = Mathf.Clamp(slot.height * 0.21f, AvTokens.FontMicro, 12f);
-            label.fontSize = codeSize;
+            float nameSize = Mathf.Clamp(slot.height * 0.21f, AvTypeScale.Floor, 12f);
+            // Pin min == max (see Restyle) rather than assign fontSize directly.
+            label.enableAutoSizing = true;
             label.fontSizeMin = codeSize;
             label.fontSizeMax = codeSize;
 
@@ -579,21 +590,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
 
             label.text = entry.HasName
-                ? entry.Code + "\n<size=" +
-                  nameSize.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) +
-                  "><color=#" + ColorUtility.ToHtmlStringRGB(AvTheme.Dim) + ">" + entry.Name +
+                ? entry.Code + "\n<size=" + AvNum.Fixed(nameSize, 1) +
+                  "><color=#" + ColorUtility.ToHtmlStringRGB(AvStyleHost.FuiColor("ink-dim", AvTheme.Dim)) + ">" + entry.Name +
                   "</color></size>"
                 : entry.Code;
             Remember(skin, entry.Code, label.text);
 
-            var iconObject = new GameObject("RailIcon", typeof(RectTransform), typeof(MfdGlyph));
-            var iconRect = iconObject.GetComponent<RectTransform>();
-            iconRect.SetParent(decoration, worldPositionStays: false);
-            AvKit.Place(iconRect, new Rect(IconInset, -(slot.height - IconSize) * 0.5f, IconSize, IconSize));
-
-            MfdGlyph icon = iconObject.GetComponent<MfdGlyph>();
-            icon.raycastTarget = false;
-            icon.SetKind(string.IsNullOrEmpty(entry.Glyph) ? "list" : entry.Glyph, AvTheme.TextPrimary);
+            TMP_Text icon = AvIcons.Make(decoration, entry.Glyph, IconSize, AvStyleHost.FuiColor("ink", AvTheme.TextPrimary));
+            MfdChromeLay.Place(icon.rectTransform, new Rect(IconInset, -(slot.height - IconSize) * 0.5f, IconSize, IconSize));
             skin.Icon = icon;
         }
 

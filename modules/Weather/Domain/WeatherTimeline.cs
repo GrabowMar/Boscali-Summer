@@ -61,7 +61,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                 {
                     From = start, To = start, Blend = 1f, Level = (int)start, GrowthLevel = (int)start,
                     StepStart = key.Epoch, NextChangeAt = float.PositiveInfinity, Next = start,
-                    Layout = LayoutSeed(key.Seed, 0),
+                    Layout = LayoutSeed(key, 0),
                 };
             }
 
@@ -96,7 +96,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                 StepStart = stepStart,
                 NextChangeAt = stepStart + interval,
                 Next = StateTable.Next(current, WeatherMath.Hash01(key.Seed, n + 1, 13)),
-                Layout = LayoutSeed(key.Seed, clears),
+                Layout = LayoutSeed(key, clears),
             };
         }
 
@@ -115,7 +115,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         public static float SettledAt(WeatherKey key, TimelineState state)
             => key.Dynamic ? state.StepStart + SettleSeconds(key) : key.Epoch;
 
-        private static uint LayoutSeed(uint seed, int generation)
-            => unchecked(seed * 2654435761u ^ (uint)(generation * 40503 + 17));
+        private static uint LayoutSeed(WeatherKey key, int generation)
+            => unchecked(key.Seed * 2654435761u ^ (uint)(generation * 40503 + 17) ^ (uint)(key.LayoutSalt * 0x9E3779B1u));
     }
 }

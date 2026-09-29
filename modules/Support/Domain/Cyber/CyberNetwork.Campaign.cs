@@ -73,7 +73,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         BreachDisconnected,
         CapstoneReady,
         CapstoneChosen,
-        LocationLost
+        LocationLost,
+        AccessOpened,
+        AccessConsumed,
+        AccessExpired
     }
 
     /// <summary>Escalation of the adversary campaign.</summary>
@@ -139,7 +142,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float RaidRadius = 8000f;
         public const float HostileSeconds = 45f;
         public const double ResolvedLinger = 90.0;
-        public const float FirstIncidentDelay = 90f;
+        // A temporary access lease lasts 75 seconds. The first hostile probe must arrive inside
+        // that window so the operator can see and answer the new defense loop before access expires.
+        public const float FirstIncidentDelay = 25f;
 
         private readonly CyberIncident[] incidents = new CyberIncident[IncidentSlots];
         private int nextIncidentId = 1;

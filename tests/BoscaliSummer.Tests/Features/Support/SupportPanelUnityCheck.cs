@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BepInEx.Configuration;
@@ -12,270 +13,71 @@ using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-/// <summary>Real production OPS builders, deterministic display data; no game or network simulation.</summary>
-public static class SupportPanelUnityCheck
+/// <summary>
+/// Real production OPS builders on kit v2 (<see cref="AvConsole"/>), deterministic display data;
+/// no game or network simulation. Each named "page" is one of the two STATUS/ACTIONS sub-flows a
+/// domain's <c>BuildXPage(AvFlow)</c> builds together — both are always built, only the requested
+/// sub is activated/inspected, matching what the console actually shows on screen.
+/// </summary>
+public static partial class SupportPanelUnityCheck
 {
     private const BindingFlags Hidden = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
-    private static readonly Assembly Mod = typeof(AvScreen).Assembly;
+    private static readonly Assembly Mod = typeof(AvConsole).Assembly;
     private static readonly string[] Pages = { "Station", "SpaceOps", "Status", "CyberOps", "SpecStatus", "SpecActions" };
     private static int assertions;
+    // Every ability name shown by an ACTIONS page, by page name: CheckActionForms proves each ability has exactly one home.
+    private static readonly Dictionary<string, HashSet<string>> ActionNamesByPage = new Dictionary<string, HashSet<string>>();
     private static object overlaySupport;
 
-    public static void Run()
+    /// <summary>Which domain (0/1/2) and sub (0 STATUS / 1 ACTIONS) a page name maps to, and the
+    /// build method / OpsSubPage field that domain's shell uses.</summary>
+    private static void PageInfo(string page, out int tab, out int sub, out string buildMethod, out string subField)
     {
-        try
-        {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            ParameterInfo[] parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("SupportPreview.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
-            AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            AvFont.Font = TMP_FontAsset.CreateFontAsset(new Font("C:/Windows/Fonts/consola.ttf"));
-            foreach (float height in new[] { 420f, 596f, 896f })
-                foreach (string page in Pages) Render(page, height);
-            CheckActionForms();
-            string window = OpsWindowUnityCheck.Run(overlaySupport, _ => DetachmentFixture(out _), () =>
-            {
-                object network = CyberFixture(out int held, out double clock);
-                return new object[] { network, clock, held };
-            }, () =>
-            {
-                object station = PlatformFixture(out double stationNow);
-                return new object[] { station, stationNow, FreeCell(station) };
-            });
-            assertions += OpsWindowUnityCheck.Assertions;
-            File.WriteAllText("result.txt", "PASS: " + (Pages.Length * 3) + " real OPS MFD page layouts painted by their production refresh paths; " + window + "; " + assertions +
-                " geometry/readability/facts assertions. Production DLL builders with offline model/fixture data; no live game, state replication or input integration claimed.");
-            EditorApplication.Exit(0);
-        }
-        catch (Exception ex)
-        {
-            File.WriteAllText("result.txt", "FAIL: " + ex);
-            Debug.LogException(ex);
-            EditorApplication.Exit(1);
-        }
-    }
-
-    private static void Render(string page, float height)
-    {
-        var canvasObject = new GameObject("OpsPreview", typeof(RectTransform), typeof(Canvas));
-        Canvas canvas = canvasObject.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        var root = (RectTransform)canvasObject.transform;
-        root.sizeDelta = new Vector2(480f, height);
-        AvKit.Panel(root, new Rect(0f, 0f, 480f, height), AvTheme.SurfaceInert);
-        AvScreen shell = AvScreen.Build(root, "OPS", new[] { "SPACE", "CYBER", "SPEC OPS" },
-            new[] { new[] { "ALLOCATION", "" }, new[] { "ORBIT", "MOD" }, new[] { "CYBER", "NET" }, new[] { "SPEC OPS", "RDY" } },
-            3, 480f, height, _ => { });
-        string domainName = page == "Station" || page == "SpaceOps" ? "SPACE"
+        string domain = page == "Station" || page == "SpaceOps" ? "SPACE"
             : page == "Status" || page == "CyberOps" ? "CYBER" : "SPEC OPS";
-        string modeName = page == "SpaceOps" || page == "CyberOps" || page == "SpecActions" ? "ACTIONS" : "STATUS";
-        shell.DataBar.State.text = domainName + " / " + modeName + " · OFFLINE QA";
-        shell.DataBar.SetChip(0, "OFFLINE QA", "info");
-        shell.DataBar.SetChip(1, "FIXTURE", "inert");
-        shell.DataBar.SetChip(2, "NO ORDERS", "inert");
-        shell.Metrics[0].Set("8,089", "AVAILABLE", 1f, AvTheme.RailReady);
-        shell.Metrics[1].Set("8/15", "STATION", .53f, AvTheme.RailInfo);
-        shell.Metrics[2].Set("6/8", "INFOCON 3", .75f, AvTheme.RailCaution);
-        shell.Metrics[3].Set("1/3", "1 POST", .25f, AvTheme.RailReady);
-        shell.WriteStatus(null, null, "Offline layout check · no live game state or orders.");
-
-        var panelObject = new GameObject("SupportPanel");
-        object panel = panelObject.AddComponent(Mod.GetType("BoscaliSummer.Features.Support.Presentation.SupportPanel", true));
-        ((Behaviour)panel).enabled = false;
-        var managerObject = new GameObject("SupportManager");
-        object manager = managerObject.AddComponent(Mod.GetType("BoscaliSummer.Features.Support.Runtime.SupportManager", true));
-        ((Behaviour)manager).enabled = false;
-        Type settingsType = Mod.GetType("BoscaliSummer.Features.Support.Configuration.SupportSettings", true);
-        object settings = Activator.CreateInstance(settingsType, new ConfigFile(Path.GetFullPath("fixture.cfg"), false));
-        Type catalogType = Mod.GetType("BoscaliSummer.Features.Support.Runtime.SupportCatalog", true);
-        object catalog = Activator.CreateInstance(catalogType, Hidden, null, new[] { settings, null }, null);
-        Set(manager, "settings", settings);
-        Set(manager, "catalog", catalog);
-        Set(panel, "support", manager);
-        Set(panel, "shell", shell);
-        Call(panel, "DecorateDomainTabs");
-        overlaySupport = manager;
-        int index = Array.IndexOf(Pages, page);
-        int tab = index < 2 ? 0 : index < 4 ? 1 : 2;
-        var pageRoot = (RectTransform)shell.CreatePage(tab, page).transform;
-        // The page builds its own title row and STATUS / ACTIONS toggle inside the whole body (M1).
-        Call(panel, tab == 2 ? "Build" + page : "Build" + page + "Page", pageRoot, shell.Body);
-        shell.SetPage(tab);
-        Paint(panel, page);
-        Call(panel, "RefreshActionRows", tab, false);
-        Canvas.ForceUpdateCanvases();
-        foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
-        string prefix = "ops-" + page.ToLowerInvariant() + "-" + height;
-        // Capture before asserting, so a failing page still leaves its picture.
-        Capture(canvasObject, height, prefix + ".png");
-
-        // Readability on every page: nothing ellipsized, nothing under the 10 px floor.
-        foreach (TMP_Text text in pageRoot.GetComponentsInChildren<TMP_Text>(false))
-        {
-            if (!text.enabled || string.IsNullOrEmpty(text.text)) continue;
-            Check(!text.isTextTruncated, page + " " + height + ": text must be complete: " + text.text);
-            Check(text.fontSize >= 9.99f, page + " " + height + ": text under the 10 px floor: " + text.text);
-        }
-        if (page == "SpecStatus" && height == 420f)
-            foreach (object row in (IEnumerable)Get(panel, "teamRows"))
-            {
-                var name = (TMP_Text)Get(row, "Name");
-                var line = (TMP_Text)Get(row, "Line");
-                var nameCorners = new Vector3[4];
-                var lineCorners = new Vector3[4];
-                name.rectTransform.GetWorldCorners(nameCorners);
-                line.rectTransform.GetWorldCorners(lineCorners);
-                Check(nameCorners[2].x + 1f <= lineCorners[0].x,
-                    "Compact team callsign and status must have separate columns.");
-            }
-        CheckFacts(panel, page);
-        if (height >= 896f)
-        {
-            // M2: at 896 the page fills the body; no empty band over 12 % of it.
-            float band = LargestEmptyBand(pageRoot, shell.Body, height);
-            Check(band <= shell.Body.height * 0.12f, page + " leaves an empty band of " + band + " px at 896.");
-            if (page == "SpaceOps" || page == "CyberOps" || page == "SpecActions") actionSignatures[page] = Signature(pageRoot);
-        }
-
-        bool scrolled = false;
-        foreach (ScrollRect scroll in root.GetComponentsInChildren<ScrollRect>(true))
-        {
-            if (!scroll.gameObject.activeInHierarchy) continue;
-            Check(scroll.content.rect.height >= scroll.viewport.rect.height, "Scroll content must cover viewport.");
-            scroll.verticalNormalizedPosition = 0f;
-            scrolled = true;
-        }
-        if (scrolled) Capture(canvasObject, height, prefix + "-bottom.png");
-        if (page == "Station")
-        {
-            // No station: one card, one call to action (M6).
-            Call(panel, "RefreshStationPage", null, 0.0);
-            Canvas.ForceUpdateCanvases();
-            Check(!((RectTransform)Get(panel, "stationHero")).gameObject.activeSelf, "The pass dial must hide with no station.");
-            Check(((RectTransform)Get(panel, "stationEmptyCard")).gameObject.activeSelf, "The empty card must show with no station.");
-            if (height >= 896f)
-            {
-                float band = LargestEmptyBand(pageRoot, shell.Body, height);
-                Check(band <= shell.Body.height * 0.12f, "SPACE STATUS with no station leaves an empty band of " + band + " px.");
-            }
-            Capture(canvasObject, height, prefix + "-empty.png");
-        }
-        // Do not call gameplay component teardown against an absent game session.
-        Object.DestroyImmediate(canvasObject);
-        panelObject.SetActive(false);
-        managerObject.SetActive(false);
+        tab = domain == "SPACE" ? 0 : domain == "CYBER" ? 1 : 2;
+        sub = page == "SpaceOps" || page == "CyberOps" || page == "SpecActions" ? 1 : 0;
+        buildMethod = domain == "SPACE" ? "BuildSpacePage" : domain == "CYBER" ? "BuildCyberPage" : "BuildSpecOpsPage";
+        subField = domain == "SPACE" ? "spacePage" : domain == "CYBER" ? "cyberPage" : "specPage";
     }
 
-    private static readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>> actionSignatures =
-        new System.Collections.Generic.Dictionary<string, System.Collections.Generic.HashSet<string>>();
-
-    /// <summary>The real page painters, fed production-model fixtures.</summary>
-    private static void Paint(object panel, string page)
-    {
-        switch (page)
-        {
-            case "Station":
-            {
-                object station = PlatformFixture(out double now);
-                // The voice loop as a session fills it (the page never logs by itself offline).
-                Call(panel, "Log", "LIFTOFF CONFIRMED · BASTION CORE CLIMBING");
-                Call(panel, "Log", "ORBIT INSERTION CONFIRMED · LOW EARTH ORBIT");
-                Call(panel, "Log", "HARD DOCK · IMG PORT");
-                Call(panel, "Log", "LINK · BASTION ON STATION · CENTRE");
-                Call(panel, "RefreshStationPage", station, now);
-                break;
-            }
-            case "SpaceOps":
-            {
-                object station = PlatformFixture(out double now);
-                Call(panel, "RefreshSpaceOpsPage", false, station, now);
-                break;
-            }
-            case "Status":
-            {
-                object network = CyberFixture(out int held, out double now);
-                Call(panel, "SelectSite", held);
-                Check((int)Get(panel, "selectedSite") == held, "A node click must select that slot.");
-                Call(panel, "CyberLog", "WATCH FLOOR ONLINE · AEGIS NET STANDING BY");
-                Call(panel, "CyberLog", "C2 UP · CENTRAL AIRBASE");
-                Call(panel, "CyberLog", "BREACH OPEN · CITY 11");
-                Call(panel, "CyberLog", "STAGE 1 · CITY 11 · FOOTHOLD");
-                Call(panel, "CyberLog", "STAGE 2 · CITY 11 · RADIUS 8 KM");
-                Call(panel, "CyberLog", "BREACH OPEN · AIRFIELD 12 · TRACE 18%");
-                Call(panel, "RefreshStatusPage", network, now);
-                break;
-            }
-            case "CyberOps":
-            {
-                object network = CyberFixture(out _, out double now);
-                Call(panel, "RefreshCyberOpsPage", false, network, now);
-                break;
-            }
-            case "SpecStatus":
-            {
-                object detachment = DetachmentFixture(out double now);
-                Call(panel, "SpecLog", "DETACHMENT ON THE NET · ALPHA AND BRAVO STANDING BY");
-                Call(panel, "SpecLog", "CHARLIE RAISED · RECRUIT");
-                Call(panel, "SpecLog", "ALPHA · INSERTED · RECON KERSEY");
-                Call(panel, "SpecLog", "ALPHA · OBSERVATION POST OVER KERSEY");
-                Call(panel, "SpecLog", "BRAVO · EN ROUTE · AIR DEFENCE 26/-4");
-                Call(panel, "SpecLog", "CHARLIE · ON TASK · NORTH RIDGE AIRFIELD");
-                Call(panel, "RefreshSpecStatus", detachment, now);
-                int rows = 0;
-                foreach (object row in (IEnumerable)Get(panel, "teamRows")) if (row != null) rows++;
-                Check(rows == 4, "SPEC OPS STATUS must show all four team lanes.");
-                break;
-            }
-            default:
-                Call(panel, "RefreshSpecActions", DetachmentFixture(out _));
-                break;
-        }
-    }
-
-    /// <summary>M5: every ability surface prints the cost and readiness words <c>AbilityStatus</c> decided.</summary>
+    /// <summary>Every ability surface prints the cost and readiness words <c>AbilityStatus</c> decided.</summary>
     private static void CheckFacts(object panel, string page)
     {
         Type status = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Viz.AbilityStatus", true);
         MethodInfo facts = status.GetMethod("For", BindingFlags.Static | BindingFlags.Public);
         object support = Get(panel, "support");
         if (page == "SpaceOps")
-            foreach (object row in (IEnumerable)Get(panel, "spaceRows"))
+            foreach (object row in (IEnumerable)Get(panel, "spaceStrikeRows"))
             {
                 object action = Get(row, "Action");
-                string readiness = ((TMP_Text)Get(row, "Readiness")).text;
-                string cost = ((TMP_Text)Get(row, "Cost")).text;
-                Check(!string.IsNullOrEmpty(readiness) && !string.IsNullOrEmpty(cost), "M3: a SPACE row must show cost and readiness.");
-                if (action == null) continue;
+                object avRow = Get(row, "Row");
+                string readiness = ((TMP_Text)Field(avRow, "sub")).text;
+                string cost = ((TMP_Text)Field(avRow, "value")).text;
+                Check(!string.IsNullOrEmpty(readiness), "M3: a SPACE row must show readiness.");
                 object f = facts.Invoke(null, new[] { support, action, (object)false });
                 Check(readiness == (string)Field(f, "Readiness"), "SPACE readiness must be AbilityStatus's: " + readiness);
                 string price = (string)Field(f, "CostText");
-                Check(price == "\u2014" || cost.Contains(price), "SPACE cost must carry AbilityStatus's price: " + cost);
-                object sw = Get(row, "Switch");
-                bool enabled = (bool)Field(Get(sw, "Control"), "Enabled");
-                Check(enabled == (bool)Field(f, "Enabled"), "The guarded switch must follow AbilityStatus.");
+                Check(cost == price, "SPACE cost must be AbilityStatus's: " + cost);
+                object button = Get(row, "Button");
+                bool enabled = (bool)Property(button, "Interactable");
+                Check(enabled == (bool)Field(f, "Enabled"), "The row's trailing control must follow AbilityStatus.");
             }
         if (page == "CyberOps")
-            foreach (object row in (IEnumerable)Get(panel, "abilityRows"))
+            foreach (object row in (IEnumerable)Get(panel, "cyberAbilityRows"))
             {
-                object f = facts.Invoke(null, new[] { support, Get(row, "Definition"), (object)false });
-                Check(((TMP_Text)Get(row, "Coverage")).text == (string)Field(f, "Readiness"), "CYBER readiness must be AbilityStatus's.");
-                Check(((TMP_Text)Get(row, "Cost")).text == (string)Field(f, "CostText"), "CYBER cost must be AbilityStatus's.");
+                object avRow = Get(row, "Row");
+                object f = facts.Invoke(null, new[] { support, Get(row, "Action"), (object)false });
+                string sub = ((TMP_Text)Field(avRow, "sub")).text;
+                Check(sub.StartsWith((string)Field(f, "Readiness"), StringComparison.Ordinal), "CYBER readiness must lead with AbilityStatus's.");
+                Check(((TMP_Text)Field(avRow, "value")).text == (string)Field(f, "CostText"), "CYBER cost must be AbilityStatus's.");
             }
         if (page == "SpecActions")
             foreach (object row in (IEnumerable)Get(panel, "actionRows"))
             {
+                object avRow = Get(row, "View");
                 object f = facts.Invoke(null, new[] { support, Get(row, "Definition"), (object)false });
-                Check(((TMP_Text)Get(Get(row, "View"), "Value")).text == (string)Field(f, "CostText"), "SPEC OPS cost must be AbilityStatus's.");
+                Check(((TMP_Text)Field(avRow, "value")).text == (string)Field(f, "CostText"), "SPEC OPS cost must be AbilityStatus's.");
             }
     }
 
@@ -285,37 +87,10 @@ public static class SupportPanelUnityCheck
         return field != null ? field.GetValue(target) : Property(target, name);
     }
 
-    /// <summary>The tallest vertical run of the body that no visible graphic of the page covers.</summary>
-    private static float LargestEmptyBand(RectTransform pageRoot, Rect body, float height)
-    {
-        var spans = new System.Collections.Generic.List<Vector2>();
-        var corners = new Vector3[4];
-        foreach (Graphic graphic in pageRoot.GetComponentsInChildren<Graphic>(false))
-        {
-            if (!graphic.enabled || graphic.color.a < 0.02f) continue;
-            var text = graphic as TMP_Text;
-            if (text != null && string.IsNullOrEmpty(text.text)) continue;
-            graphic.rectTransform.GetWorldCorners(corners);
-            float top = height * 0.5f - Mathf.Max(corners[1].y, corners[2].y);
-            float bottom = height * 0.5f - Mathf.Min(corners[0].y, corners[3].y);
-            spans.Add(new Vector2(top, bottom));
-        }
-        spans.Sort((a, b) => a.x.CompareTo(b.x));
-        float cursor = -body.y, end = -body.y + body.height, largest = 0f;
-        foreach (Vector2 span in spans)
-        {
-            if (span.y <= cursor) continue;
-            if (span.x > cursor) largest = Mathf.Max(largest, Mathf.Min(span.x, end) - cursor);
-            cursor = Mathf.Max(cursor, span.y);
-            if (cursor >= end) break;
-        }
-        return Mathf.Max(largest, end - cursor);
-    }
-
     /// <summary>Quantised image rects: two pages that share a form share most of these.</summary>
-    private static System.Collections.Generic.HashSet<string> Signature(RectTransform pageRoot)
+    private static HashSet<string> Signature(RectTransform pageRoot)
     {
-        var set = new System.Collections.Generic.HashSet<string>();
+        var set = new HashSet<string>();
         var corners = new Vector3[4];
         foreach (Image image in pageRoot.GetComponentsInChildren<Image>(false))
         {
@@ -326,19 +101,70 @@ public static class SupportPanelUnityCheck
         return set;
     }
 
+    /// <summary>
+    /// The ACTIONS pages are one shared row vocabulary (spec 6.2), so their forms are not compared: what
+    /// must differ, and be right, is the content. For each ACTIONS page: every row names its ability, the
+    /// trailing control's enabled/armed state and label follow <c>AbilityStatus</c>, and the row carries
+    /// hover help that leads with the ability's name (the footer line the player reads on hover). The
+    /// domain sub-page's STATUS / ACTIONS tabs carry their help too.
+    /// </summary>
+    private static void CheckActionRows(object panel, string page)
+    {
+        if (page != "SpaceOps" && page != "CyberOps" && page != "SpecActions") return;
+        Type status = Mod.GetType("BoscaliSummer.Features.Support.Presentation.Viz.AbilityStatus", true);
+        MethodInfo facts = status.GetMethod("For", BindingFlags.Static | BindingFlags.Public);
+        object support = Get(panel, "support");
+        PageInfo(page, out _, out _, out _, out string subField);
+        object subPage = Get(panel, subField);
+        foreach (string tab in new[] { "statusTab", "actionsTab" })
+            Check(!string.IsNullOrEmpty((string)Property(Field(subPage, tab), "Help")), page + ": the " + tab + " must carry hover help.");
+
+        var rows = new List<(object action, object row, object button, bool orbital)>();
+        if (page == "SpaceOps")
+            foreach (object r in (IEnumerable)Get(panel, "spaceStrikeRows")) rows.Add((Get(r, "Action"), Get(r, "Row"), Get(r, "Button"), true));
+        else if (page == "CyberOps")
+            foreach (object r in (IEnumerable)Get(panel, "cyberAbilityRows")) rows.Add((Get(r, "Action"), Get(r, "Row"), Get(r, "Button"), false));
+        else
+            foreach (object r in (IEnumerable)Get(panel, "actionRows"))
+                if ((int)Get(r, "Tab") == 2) rows.Add((Get(r, "Definition"), Get(r, "View"), Get(r, "Trailing"), false));
+        Check(rows.Count > 0, page + ": the ACTIONS page must list abilities.");
+
+        var names = new HashSet<string>();
+        foreach ((object action, object avRow, object button, bool orbital) in rows)
+        {
+            string name = (string)Field(action, "Name");
+            string shown = ((TMP_Text)Field(avRow, "name")).text;
+            Check(orbital ? shown.StartsWith(name, StringComparison.Ordinal) : shown == name, page + ": row must name '" + name + "', shows '" + shown + "'");
+            Check(names.Add(name), page + ": ability '" + name + "' is listed twice.");
+            object f = facts.Invoke(null, new[] { support, action, (object)false });
+            Check((bool)Property(button, "Interactable") == (bool)Field(f, "Enabled"), page + ": '" + name + "' enabled state must follow AbilityStatus.");
+            bool armed = (bool)Field(f, "Armed");
+            Check((string)Property(button, "Label") == (armed ? "ABORT" : "ARM"), page + ": '" + name + "' verb must be ARM, or ABORT while armed.");
+            string help = (string)Property(button, "Help");
+            Check(!string.IsNullOrEmpty(help) && help.StartsWith(name, StringComparison.Ordinal), page + ": '" + name + "' must carry hover help that leads with its name: " + help);
+            var tip = ((Component)Field(avRow, "frame")).GetComponent<AvHelpTip>();
+            Check(tip != null && tip.Text == help, page + ": '" + name + "' row body must share the control's hover help.");
+        }
+        if (page == "SpaceOps")
+        {
+            Check(((string)Property(Get(panel, "spaceUplinkOpen"), "Help") ?? "").Contains("sensor feed"), "The uplink OPEN control must carry its help.");
+            Check(((string)Property(Get(panel, "spaceUplinkAim"), "Help") ?? "").Contains("Right-click the map"), "The uplink AIM control must carry its help.");
+            Check(((string)Property(Get(panel, "spaceRephaseOpen"), "Help") ?? "").Contains("Relocation uses"), "The relocation OPEN control must carry its help.");
+        }
+        ActionNamesByPage[page] = names;
+    }
+
+    /// <summary>Across the three ACTIONS pages: every catalogue ability has exactly one home page.</summary>
     private static void CheckActionForms()
     {
-        string[] pages = { "SpaceOps", "CyberOps", "SpecActions" };
-        for (int a = 0; a < pages.Length; a++)
-            for (int b = a + 1; b < pages.Length; b++)
-            {
-                var shared = new System.Collections.Generic.HashSet<string>(actionSignatures[pages[a]]);
-                shared.IntersectWith(actionSignatures[pages[b]]);
-                var union = new System.Collections.Generic.HashSet<string>(actionSignatures[pages[a]]);
-                union.UnionWith(actionSignatures[pages[b]]);
-                float jaccard = union.Count == 0 ? 1f : (float)shared.Count / union.Count;
-                Check(jaccard < 0.5f, pages[a] + " and " + pages[b] + " share a layout (" + jaccard + ").");
-            }
+        Check(ActionNamesByPage.Count == 3, "All three ACTIONS pages must have been checked.");
+        var seen = new HashSet<string>();
+        foreach (KeyValuePair<string, HashSet<string>> page in ActionNamesByPage)
+            foreach (string name in page.Value)
+                Check(seen.Add(name), "Ability '" + name + "' is listed on more than one ACTIONS page.");
+        int catalogued = 0;
+        foreach (object action in (IEnumerable)Property(overlaySupport, "Actions")) catalogued++;
+        Check(seen.Count == catalogued, "Every catalogue ability needs a home ACTIONS page: " + seen.Count + " of " + catalogued);
     }
 
     /// <summary>A real station fitted through the production model: the RECON loadout launched
@@ -398,7 +224,7 @@ public static class SupportPanelUnityCheck
     }
 
     /// <summary>A real CyberNetwork fixture — the home backbone, cities in and out of reach, one
-    /// location breached to stage 2 and a live breach — driven through the production host tick
+    /// real location with one live access lease — driven through the production model
     /// and console painter, so the offline render shows the board the player actually sees.</summary>
     private static object CyberFixture(out int held, out double clock)
     {
@@ -417,17 +243,18 @@ public static class SupportPanelUnityCheck
         Invoke(network, "ReportLocation", 13, city, 52000f, 38000f, clock);
         Check(held >= 0 && reachable >= 0, "The CYBER fixture must place its hackable locations.");
 
-        // Host time: accrue resources, breach the near city twice (stage 2 gives it a radius and
-        // intel), then open a quiet breach on the airfield so the strip and the board are live.
+        // Host time: accrue resources, complete one quiet city operation, and choose its optional
+        // payload so the fixture exercises the live 75-second, one-effect lease.
         for (int i = 0; i < 1200; i++) Call(network, "Tick", clock += 0.25, 0.25f, 1f);
-        for (int pass = 0; pass < 2; pass++)
-        {
-            Invoke(network, "TryStartBreach", held, true, clock);
-            for (int i = 0; i < 600 && (bool)Property(network, "BreachActive"); i++)
-                Call(network, "Tick", clock += 0.25, 0.25f, 1f);
-        }
-        Check((int)Invoke(network, "Stage", held) >= 2, "The fixture breach must lift the city to stage 2.");
-        Invoke(network, "TryStartBreach", reachable, true, clock);
+        Check(Convert.ToInt32(Invoke(network, "TryStartBreach", held, true, clock)) == 0,
+            "The fixture must start a first real-site operation.");
+        for (int i = 0; i < 600 && (bool)Property(network, "BreachActive"); i++)
+            Call(network, "Tick", clock += 0.25, 0.25f, 1f);
+        Check((int)Invoke(network, "Stage", held) == 3 && (float)Invoke(network, "AccessRemaining", clock) > 70f,
+            "One completed operation must leave one live lease.");
+        Type capstoneType = Mod.GetType("BoscaliSummer.Features.Support.Domain.Cyber.Capstone", true);
+        Invoke(network, "TryChooseCapstone", Enum.Parse(capstoneType, "Reveal"), clock);
+        Check((int)Property(network, "AccessSlot") == held, "The lease site should remain the active target.");
         return network;
     }
 
@@ -456,17 +283,27 @@ public static class SupportPanelUnityCheck
         };
         foreach (var o in fixture)
             Call(detachment, "ReportObjective", Enum.Parse(kindType, o.Kind), o.Anchor, o.X, o.Z, o.Threat, o.Radars, o.Hostile, o.Name, false);
-        Call(detachment, "EndObjectives");
+        Call(detachment, "EndObjectives", 0.0);
         Func<double> lucky = () => 0.0;
         Check((bool)Invoke(detachment, "TryRaise", 2), "The fixture must raise CHARLIE.");
-        Invoke(detachment, "TryLaunch", 0, Enum.Parse(missionType, "Recon"), 101, 12000f, 0.0);
+        Invoke(detachment, "TryLaunch", 0, Enum.Parse(missionType, "Recon"), 101, 12000f, 0.0,
+            0f, 0f, "MARIS AIRPORT");
         Call(detachment, "Tick", 50.0, lucky, null);
+        Type directiveType = Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.SpecOpsDirective", true);
+        Check((bool)Invoke(detachment, "TryDirective", 0, Enum.Parse(directiveType, "Execute"), 50.0),
+            "ALPHA must execute from its arrival decision window.");
         Call(detachment, "Tick", 90.0, lucky, null);
-        Invoke(detachment, "TryLaunch", 1, Enum.Parse(missionType, "Sabotage"), 102, 60000f, 90.0);
-        Invoke(detachment, "TryLaunch", 2, Enum.Parse(missionType, "Seize"), 103, 8000f, 90.0);
+        Invoke(detachment, "TryLaunch", 1, Enum.Parse(missionType, "Sabotage"), 102, 60000f, 90.0,
+            0f, 0f, "MARIS AIRPORT");
+        Invoke(detachment, "TryLaunch", 2, Enum.Parse(missionType, "Seize"), 103, 8000f, 90.0,
+            0f, 0f, "MARIS AIRPORT");
         now = 140.0;
         Call(detachment, "Tick", now, lucky, null);
         Check(Property(detachment, "Formed").Equals(3), "The fixture must field three teams.");
+        object charlie = Invoke(detachment, "Team", 2);
+        Check(Convert.ToInt32(Get(charlie, "State")) == Convert.ToInt32(Enum.Parse(
+            Mod.GetType("BoscaliSummer.Features.Support.Domain.SpecOps.TeamState", true), "Deciding")),
+            "CHARLIE remains visible at the arrival decision stage.");
         return detachment;
     }
 
@@ -479,11 +316,6 @@ public static class SupportPanelUnityCheck
     private static object Get(object target, string field) => target.GetType().GetField(field, Hidden).GetValue(target);
     private static void Set(object target, string field, object value) => target.GetType().GetField(field, Hidden).SetValue(target, value);
     private static void Call(object target, string method, params object[] args) => target.GetType().GetMethod(method, Hidden).Invoke(target, args);
-    private static void Text(object target, string field, string value)
-    {
-        TMP_Text label = target.GetType().GetField(field, Hidden)?.GetValue(target) as TMP_Text;
-        if (label != null) label.text = value;
-    }
     private static void Check(bool value, string message) { assertions++; if (!value) throw new Exception(message); }
 
     private static void Capture(GameObject canvas, float height, string file, float width = 480f)
@@ -494,7 +326,7 @@ public static class SupportPanelUnityCheck
         camera.orthographic = true;
         camera.orthographicSize = height * .5f;
         camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.backgroundColor = AvTheme.SurfaceInert;
+        camera.backgroundColor = AvStyleHost.FuiColor("ground", Color.black);
         camera.clearFlags = CameraClearFlags.SolidColor;
         var target = new RenderTexture((int)width * 2, (int)height * 2, 24);
         camera.targetTexture = target;
