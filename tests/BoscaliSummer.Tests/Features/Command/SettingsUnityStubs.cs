@@ -31,7 +31,8 @@ namespace BoscaliSummer.Runtime
     public static class MfdSlots { public const string Set = "SET"; public const string Str = "STR"; }
     public static class GameAccess
     {
-        public static bool IsServer() => false;
+        public static bool ForceServer;
+        public static bool IsServer() => ForceServer;
         public static bool MfdAvailable => false;
         public static bool HqSensorsAvailable => false;
     }

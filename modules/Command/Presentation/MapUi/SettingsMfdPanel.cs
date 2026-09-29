@@ -17,24 +17,30 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The SET console (kit v2). One flat icon-tab strip carries every page instead of a
-    /// nested CLIENT/SERVER tab pair: audience is still enforced per row (host-authoritative
-    /// rows disable and explain themselves for a remote client), so the extra tab tier added
-    /// nothing kit v2's per-row gating doesn't already say.
+    /// The SET console (kit v2). A THIS PILOT / SERVER switch under the header picks one of two
+    /// consoles, each with at most four icon tabs: CLIENT pages hold only settings stored on this
+    /// machine; SERVER pages are host-authoritative and read-only (locked, with the reason on every
+    /// row) for a remote client. Both consoles are built once and only one is shown, so scroll
+    /// position and page survive a switch and the hidden one does not tick.
     /// </summary>
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
-        private const int PageMap = 0, PageDisplay = 1, PageBackdrop = 2, PageCamera = 3, PageHud = 4, PagePerf = 5,
-                           PageTasking = 6, PageHostSettings = 7, PageEffects = 8;
-        private const int PageCount = 9;
+        // Page indices are per console (each console has its own ticker and page set).
+        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CPerf = 3;
+        private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
-        private static readonly string[] PageNames =
+        private static readonly string[] ClientPageNames =
         {
-            "TACTICAL DISPLAY", "DISPLAY STYLE", "BACKGROUND IMAGERY", "CAMERA & CONTROLS",
-            "HUD OVERLAYS", "PERFORMANCE", "FACTION TASKING", "HOST SETTINGS", "WORLD EFFECTS"
+            "PILOT · DISPLAY STYLE", "PILOT · MAP & BACKDROP", "PILOT · COCKPIT", "PILOT · PERFORMANCE"
         };
 
-        private static string PageName(int page) => page >= 0 && page < PageNames.Length ? PageNames[page] : PageNames[0];
+        private static readonly string[] ServerPageNames =
+        {
+            "SERVER · WORLD RULES", "SERVER · FORCES & ECONOMY", "SERVER · WORLD EFFECTS", "SERVER · FACTION TASKING"
+        };
+
+        /// <summary>The last mode the pilot picked; kept for the session, across map opens and scene reloads.</summary>
+        private static bool lastServerMode;
 
         private CommandSettings settings;
         private ComMapOverlay overlay;
@@ -45,8 +51,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private GameObject surface;
         private MFDScreen screen;
         private AvConsole con;
-        private AvChip savedChip;
-        private AvChip roleChip;
+        private AvConsole clientCon;
+        private AvConsole serverCon;
+        private bool serverMode;
         private List<MFDScreen> boundScreens;
         private int boundSlot = -1;
         private bool claimed;
@@ -128,19 +135,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static bool HostAuthority() => GameAccess.IsServer();
 
-        private string AmbientStatus()
+        private string AmbientStatus(bool server, int page)
         {
-            int page = con?.CurrentPage ?? PageMap;
-            if (page == PageTasking)
-                return HostAuthority()
-                    ? "Host tasking board. Refreshes while visible."
-                    : "Host only. The host issues faction tasking.";
-            if (page == PageHostSettings || page == PageEffects)
+            if (server)
+            {
+                if (page == STasking)
+                    return HostAuthority()
+                        ? "Host tasking board. Refreshes while visible."
+                        : "Locked. The host issues faction tasking.";
                 return HostAuthority()
                     ? "Host controls are saved automatically."
-                    : "Host only. The host's values apply to this server.";
-            if (page == PageBackdrop) return MfdMapDeck.WallpaperStatus;
-            if (page == PagePerf) return "Changes apply now. No mission or game restart.";
+                    : "Locked. These are the host's values for this server.";
+            }
+            if (page == CPerf) return "Changes apply now. No mission or game restart.";
             return "Saved automatically. Hover a control for help.";
         }
 
@@ -192,49 +199,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvLay.Fill(body);
             surface = content;
 
-            con = AvConsole.Build(body, "SET", PageName(0), PageCount, AvTokens.PanelWidth, height);
-            con.PageChanged += index => con.SetTitle(PageName(index));
-
-            AvChip[] chips = con.Chips(2);
-            savedChip = chips[0];
-            roleChip = chips[1];
-            savedChip.Set("SAVED", AvState.Ready);
-
-            AvTabBar tabBar = con.Tabs(
-                (AvIcon.Map2, "MAP"),
-                (AvIcon.Typography, "DISPLAY"),
-                (AvIcon.Stack2, "BACKDROP"),
-                (AvIcon.Camera, "CAMERA"),
-                (AvIcon.Eye, "HUD"),
-                (AvIcon.Gauge, "PERF"),
-                (AvIcon.ListDetails, "TASKING"),
-                (AvIcon.Settings, "HOST"),
-                (AvIcon.CloudRain, "EFFECTS"));
-            // Hover help per tab (the v1 sub-tab hints; CAMERA had none that still matches).
-            ApplyTabHelp(tabBar,
-                "Map layout, field refresh and terrain.",
-                "Console surface, backdrop decoration and dispatches.",
-                "Local background imagery and its rescans.",
-                null,
-                "Status stack, readable contrast, placement and individual feeds.",
-                "Client-local work budgets. Each switch applies during this mission. " +
-                "Installing a disabled Weather module requires a game restart.",
-                "Faction tasking and host settings. Remote clients can read the host's values.",
-                "Faction tasking and host settings. Remote clients can read the host's values.",
-                null);
-
-            BuildMapPage(con.Page(PageMap), PageMap);
-            BuildDisplayPage(con.Page(PageDisplay), PageDisplay);
-            BuildBackdropPage(con.Page(PageBackdrop), PageBackdrop);
-            BuildCameraPage(con.Page(PageCamera), PageCamera);
-            BuildHudPage(con.Page(PageHud), PageHud);
-            BuildPerformancePage(con.Page(PagePerf), PagePerf);
-            BuildTaskingPage(con.Page(PageTasking), PageTasking);
-            BuildHostSettingsPage(con.Page(PageHostSettings), PageHostSettings, HostSettingsPage.Settings, "HOST SETTINGS");
-            BuildHostSettingsPage(con.Page(PageEffects), PageEffects, HostSettingsPage.Effects, "EFFECTS");
-
-            con.Ticker.Add(-1, AvTickRate.Slow, RefreshChrome);
-            con.Finish();
+            BuildConsoles(body, height);
 
             screen = root.AddComponent<MFDScreen>();
             screen.shortName = MfdSlots.Set;
@@ -264,13 +229,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (hints[i] != null) tabs[i].Help = hints[i];
         }
 
-        private void RefreshChrome()
+        private void RefreshChrome(AvConsole c, AvChip saved, AvChip role, ModeSwitch mode, bool server)
         {
             AvUiSound.Volume = settings.UiSoundVolume.Value;
             bool host = HostAuthority();
-            roleChip.Set(host ? "HOST" : "CLIENT", host ? AvState.Ready : AvState.Inert);
+            role.Set(host ? "HOST" : "CLIENT", host ? AvState.Ready : AvState.Inert);
+            if (server && !host) saved.Set("READ-ONLY", AvState.Inert);
+            else saved.Set("SAVED", AvState.Ready);
+            mode.Set(serverMode, host);
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
-            con.Footer.Set(echo ?? AmbientStatus(), echo != null ? AvState.Info : AvState.Inert);
+            c.Footer.Set(echo ?? AmbientStatus(server, c.CurrentPage), echo != null ? AvState.Info : AvState.Inert);
         }
 
         private static Image FindHighlight(Button button)
@@ -351,6 +319,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Changed();
             });
             flow.Add(row);
+            row.Help = help;
             RefreshRow();
             flow.Ticker.Add(page, AvTickRate.Slow, RefreshRow);
             return row;
@@ -426,187 +395,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
         }
 
-        // ------------------------------------------------------------------ CLIENT pages
-
-        private void BuildMapPage(AvFlow flow, int page)
-        {
-            flow.Section(AvIcon.Map2, "DISPLAY", "CONSOLE");
-            Toggle(flow, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
-                () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
-
-            flow.Section(AvIcon.Refresh, "SECTOR FIELD", "REFRESH");
-            Stepper(flow, page, "UPDATE INTERVAL",
-                () => AvNum.Seconds(settings.GridRefreshInterval.Value, 1),
-                d => settings.GridRefreshInterval.Value = Mathf.Clamp(
-                    Mathf.Round((settings.GridRefreshInterval.Value + d * .1f) * 10f) / 10f, .2f, 2f),
-                () => settings.GridRefreshInterval.Value > .201f,
-                () => settings.GridRefreshInterval.Value < 1.999f,
-                "Longer intervals reduce CPU work. Recommended: 0.5 s.");
-
-            flow.Section(AvIcon.Satellite, "TERRAIN", "SATELLITE");
-            Toggle(flow, page, "3D RELIEF",
-                "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
-                () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Turn on expanded layout and terrain image first.");
-            Toggle(flow, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
-                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Percent(flow, page, "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Enable expanded layout and terrain image first.");
-        }
-
-        private void BuildDisplayPage(AvFlow flow, int page)
-        {
-            flow.Section(AvIcon.Typography, "DISPLAY FILTER", "LOCAL");
-            Toggle(flow, page, "DISPLAY EFFECTS", "OFF removes glass and overlays. Your tuning is retained.",
-                () => settings.DisplayEffects.Value, v => settings.DisplayEffects.Value = v);
-            Percent(flow, page, "GLASS REFLECTION", settings.DisplayGlass, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
-            Toggle(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
-                () => settings.DisplayAutoLight.Value, v => settings.DisplayAutoLight.Value = v,
-                EffectsEnabled, EffectsDisabled);
-            Percent(flow, page, "CRT SCANLINES", settings.DisplayScanlines, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
-            Percent(flow, page, "EDGE SHADING", settings.DisplayVignette, 0f, 1f, .1f, EffectsEnabled, EffectsDisabled);
-            string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
-            Stepper(flow, page, "COLOR TINT",
-                () => tints[Mathf.Clamp(settings.DisplayTint.Value, 0, 4)],
-                d => settings.DisplayTint.Value = (settings.DisplayTint.Value + d + tints.Length) % tints.Length,
-                () => true, () => true, "A gentle color wash across the maximized MFD; warning colors remain distinct.",
-                EffectsEnabled, EffectsDisabled);
-            Percent(flow, page, "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
-                () => EffectsEnabled() && settings.DisplayTint.Value != 0, () => "Enable effects and choose a color tint first.");
-            AvControl resetDisplay = flow.Buttons(new AvControl.Spec("RESET DISPLAY FILTER", () =>
-            {
-                settings.DisplayEffects.Value = true;
-                settings.DisplayGlass.Value = .6f;
-                settings.DisplayAutoLight.Value = true;
-                settings.DisplayScanlines.Value = 0f;
-                settings.DisplayVignette.Value = 0f;
-                settings.DisplayTint.Value = 0;
-                settings.DisplayTintStrength.Value = .25f;
-                Echo("Display filter reset.");
-                Changed();
-            })).Controls[0];
-            resetDisplay.Help = "Restore the default glass finish and remove CRT, edge shading and tint.";
-
-            flow.Section(AvIcon.Settings, "PANEL THEME", "AVIONICS");
-            var themeSeg = flow.Add(new AvSegmented(flow.Content, "THEME", new[] { "STEEL", "ACE", "PHOSPHOR" },
-                () => (int)settings.AvionicsTheme.Value,
-                i => { settings.AvionicsTheme.Value = (AvThemeId)i; Echo("THEME — " + settings.AvionicsTheme.Value); }));
-            var motionCell = flow.Add(AvCell.Toggle(flow.Content, "REDUCED MOTION",
-                "Snap every panel animation to its end state.",
-                () => settings.AvionicsReducedMotion.Value,
-                v => { settings.AvionicsReducedMotion.Value = v; Echo("REDUCED MOTION — " + (v ? "ON" : "OFF")); }));
-            flow.Ticker.Add(page, AvTickRate.Slow, () => { themeSeg.Refresh(); motionCell.Refresh(); });
-
-            flow.Section(AvIcon.Stack2, "SURFACE", "DECK");
-            Percent(flow, page, "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Stepper(flow, page, "BACKGROUND",
-                () => SettingsChoices.BackgroundName(settings.DeckGrid.Value, settings.CheckerboardOverlay.Value,
-                    settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value),
-                d => SetBackground(SettingsChoices.CycleBackground(settings.DeckGrid.Value,
-                    settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value, d)),
-                () => true, () => true,
-                "Choose one decoration: plain, grid, checker, hexagon, carbon, radar or custom image. MIXED preserves your old combination.",
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Percent(flow, page, "CHECKER STRENGTH", settings.CheckerboardOpacity, .02f, .4f, .02f,
-                () => settings.ExpandedMapUi.Value && settings.CheckerboardOverlay.Value,
-                () => "Choose CHECKER on DISPLAY first.");
-            Percent(flow, page, "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-
-            flow.Section(AvIcon.Message2, "DISPATCHES", "WIRE");
-            Toggle(flow, page, "NEWS TICKER", "Show theater dispatches above the map.",
-                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v,
-                () => settings.ExpandedMapUi.Value, () => "Turn on expanded layout first.");
-            Stepper(flow, page, "TICKER SPEED",
-                () => AvNum.Fixed(settings.NewsTickerSpeed.Value, 0) + " px/s",
-                d => settings.NewsTickerSpeed.Value = Mathf.Clamp(settings.NewsTickerSpeed.Value + d * 15f, 15f, 150f),
-                () => settings.NewsTickerSpeed.Value > 15f, () => settings.NewsTickerSpeed.Value < 150f,
-                "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
-                () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
-                () => "Enable expanded layout and news ticker first.");
-
-            flow.Section(AvIcon.Volume, "INTERFACE AUDIO", "LOCAL");
-            Percent(flow, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f, () => true, () => "");
-        }
-
-        private void SetBackground(int mode)
-        {
-            settings.DeckGrid.Value = mode == 1;
-            settings.CheckerboardOverlay.Value = mode == 2;
-            settings.BackgroundImage.Value = mode >= 3;
-            if (mode >= 3) settings.BackgroundImagePreset.Value = mode - 3;
-        }
-
-        private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value;
-        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
-
-        private void BuildBackdropPage(AvFlow flow, int page)
-        {
-            flow.Section(AvIcon.Satellite, "LOCAL IMAGERY", "PNG / JPEG");
-            var cue = flow.Add(new NoteLine(flow.Content));
-            AvControl openButton = flow.Buttons(new AvControl.Spec("OPEN MAP",
-                () => con.SetPage(settings.ExpandedMapUi.Value ? PageDisplay : PageMap))).Controls[0];
-            flow.Ticker.Add(page, AvTickRate.Slow, () =>
-            {
-                bool ready = CustomEnabled();
-                openButton.Rect.gameObject.SetActive(!ready);
-                openButton.Label = settings.ExpandedMapUi.Value ? "OPEN STYLE" : "OPEN MAP";
-                string cueText = ready ? "ADD PNG/JPEG FILES, THEN RESCAN"
-                    : settings.ExpandedMapUi.Value ? "SELECT CUSTOM BACKGROUND ON DISPLAY"
-                    : "TURN ON EXPANDED LAYOUT ON MAP";
-                cue.Set(cueText);
-                openButton.Help = cueText;
-            });
-
-            Percent(flow, page, "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
-                ImageEnabled, () => "Choose an image background on DISPLAY first.");
-            Stepper(flow, page, "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
-                MfdMapDeck.CycleCustomWallpaper,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
-                () => "Choose CUSTOM on DISPLAY. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
-            string[] fits = { "COVER", "FIT", "STRETCH" };
-            Stepper(flow, page, "IMAGE FIT",
-                () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
-                d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
-                () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
-                CustomEnabled, () => "Choose CUSTOM on DISPLAY first.");
-            AvControl scan = flow.Buttons(new AvControl.Spec("RESCAN LOCAL FILES", () =>
-            {
-                MfdMapDeck.RescanWallpapers();
-                Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
-                Changed();
-            }, AvButtonStyle.Primary)).Controls[0];
-            flow.Ticker.Add(page, AvTickRate.Slow, () =>
-            {
-                bool custom = CustomEnabled();
-                scan.Interactable = custom;
-                scan.Help = custom
-                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
-                    : "Choose CUSTOM on DISPLAY first.";
-            });
-        }
-
-        private void BuildCameraPage(AvFlow flow, int page)
-        {
-            ModServices.TryGet(out IHudBoard board);
-            flow.Section(AvIcon.Camera, "CAMERA", "TARGET");
-            Toggle(flow, page, "TARGET CAMERA",
-                "Show the native target camera feed inset on the status panel while a target is selected.",
-                () => board != null && board.CameraFeedEnabled, v => { if (board != null) board.CameraFeedEnabled = v; },
-                () => board != null, () => "HUD service unavailable in this scene.");
-
-            flow.Section(AvIcon.Target, "TARGETING", "RADIAL");
-            Toggle(flow, page, "RADIAL PRESETS",
-                "Offer the TGT quick slots as a page in the native cockpit radial menu.",
-                () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
-        }
-
         public void ResetForScene()
         {
             ReleaseClaim();
@@ -620,6 +408,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             tasking = null;
             taskCards = null;
             nextTaskingRefresh = 0f;
+            clientCon = null;
+            serverCon = null;
             AvUiSound.Reset();
         }
 
@@ -638,8 +428,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             claimed = false;
             surface = null;
             con = null;
-            savedChip = null;
-            roleChip = null;
+            clientCon = null;
+            serverCon = null;
             taskRequest = null;
             taskNote = null;
             taskList = null;

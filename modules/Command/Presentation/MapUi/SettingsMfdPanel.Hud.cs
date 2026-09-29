@@ -9,23 +9,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 {
     internal sealed partial class SettingsMfdPanel
     {
-        private void BuildHudPage(AvFlow flow, int page)
-        {
-            ModServices.TryGet(out IHudBoard board);
-            flow.Section(AvIcon.Eye, "STATUS & NOTICES", "LOCAL DISPLAY");
-            BuildHudRows(flow, page, board);
-        }
-
         /// <summary>
-        /// The common HUD element's own rows. Everything here is client-local presentation and
-        /// applies on the board's next tick, so the pilot sees the change while flying. The
-        /// feeds below are listed from whatever modules declared one, not from a list kept here.
+        /// The common HUD element's own rows, in the COCKPIT page. Everything here is client-local
+        /// presentation and applies on the board's next tick, so the pilot sees the change while
+        /// flying. The feeds are listed from whatever modules declared one, not from a list kept here.
         /// </summary>
         private void BuildHudRows(AvFlow flow, int page, IHudBoard board)
         {
             Func<bool> on = () => board != null && board.Enabled;
             Func<string> off = () => "Turn the common HUD element on first.";
 
+            flow.Section(AvIcon.Eye, "HUD ELEMENT", "STATUS STACK");
             Toggle(flow, page, "HUD ELEMENT",
                 "Draw the one cockpit HUD element every feature shares for status lines and notices.",
                 () => on(), v => { if (board != null) board.Enabled = v; });
@@ -44,6 +38,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "How solid the element reads over a bright sky. OFF hides it without unloading it.",
                 on, off);
 
+            Stepper(flow, page, "CONTRAST",
+                () => HudLayout.ContrastName(board?.Contrast ?? 1),
+                d => { if (board != null) board.Contrast = HudLayout.Cycle(board.Contrast, 3, d); },
+                () => true, () => true, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
+
             Stepper(flow, page, "MAX LINES",
                 () => board != null ? AvNum.Fixed(board.MaxRows, 0) : "--",
                 d => { if (board != null) board.MaxRows = Mathf.Clamp(board.MaxRows + d, HudLayout.MinRows, HudLayout.MaxRows); },
@@ -52,6 +51,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "How many lines the element may show at once. Two are kept for live notices.",
                 on, off);
 
+            Toggle(flow, page, "DETAIL LINES", "Supporting text and progress gauges; off uses compact single-line rows.",
+                () => board != null && board.ShowDetails, v => { if (board != null) board.ShowDetails = v; }, on, off);
+
+            flow.Section(AvIcon.Message2, "NOTICES", "TRANSIENT ALERTS");
             Toggle(flow, page, "NOTICES",
                 "Show transient notices, including ace hunt and mission alerts.",
                 () => board != null && board.NoticesEnabled,
@@ -66,12 +69,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 "How long a transient notice stays up.",
                 () => on() && board.NoticesEnabled, () => "Turn notices on first.");
 
-            Stepper(flow, page, "CONTRAST",
-                () => HudLayout.ContrastName(board?.Contrast ?? 1),
-                d => { if (board != null) board.Contrast = HudLayout.Cycle(board.Contrast, 3, d); },
-                () => true, () => true, "CLEAR floating ink, GLASS backing, or SOLID for bright sky.", on, off);
-            Toggle(flow, page, "DETAIL LINES", "Supporting text and progress gauges; off uses compact single-line rows.",
-                () => board != null && board.ShowDetails, v => { if (board != null) board.ShowDetails = v; }, on, off);
+            flow.Section(AvIcon.Maximize, "PLACEMENT", "SAFE AREA");
             HudOffset(flow, page, "HORIZONTAL", () => board?.OffsetX ?? 0,
                 v => { if (board != null) board.OffsetX = v; }, -600, on, off);
             HudOffset(flow, page, "VERTICAL", () => board?.OffsetY ?? 0,
@@ -80,6 +78,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             { board?.ResetLayout(); Echo("Status layout restored. Feed preferences kept."); Changed(); }))
                 .Controls[0].Help = "Restore the status layout. Feed preferences are kept.";
 
+            flow.Section(AvIcon.ListDetails, "FEEDS", board == null ? "UNAVAILABLE" : "PER FEATURE");
             if (board == null)
             {
                 Toggle(flow, page, "FEEDS",
