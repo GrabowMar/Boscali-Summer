@@ -62,8 +62,9 @@
 .control:latched      { background: surface-raised; border: 1 select; color: ink; rail: 2 select; }
 .control:armed        { background: select 22; border: 1 select; color: ink; }
 .control:disabled     { background: surface-inert; border: 1 hairline; color: ink-muted; }
-.control.primary          { background: select; border: 1 select; color: ground; }
-.control.primary:hover    { background: select; border: 1 ink; color: ground; }
+/* Primary = strongest call to action without a solid accent slab: tinted fill, accent edge and rail. */
+.control.primary          { background: select 24; border: 1 select; color: ink; rail: 2 select; }
+.control.primary:hover    { background: select 40; border: 1 ink; color: ink; rail: 2 select; }
 .control.primary:disabled { background: surface-inert; border: 1 hairline; color: ink-muted; }
 .control.quiet            { background: surface-inert; border: 1 hairline; color: ink-dim; }
 .control.quiet:hover      { background: surface; border: 1 frame; color: ink; }
