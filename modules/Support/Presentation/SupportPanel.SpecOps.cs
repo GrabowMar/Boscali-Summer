@@ -1,6 +1,7 @@
 using BoscaliSummer.Features.Support.Domain;
 using BoscaliSummer.Features.Support.Domain.Layout;
 using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Features.Support.Presentation.Viz;
 using NOAvionics;
 using NOAvionics.Ui;
 using NuclearOption.Networking;
@@ -9,23 +10,22 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// SPEC OPS — the detachment, shaped like SPACE and CYBER. STATUS is the glance: the four
-    /// teams in words, four annunciators, the theatre board and the event log. ACTIONS is the
-    /// flying half: SPOT and SUPPRESS (earned by held posts) and FORTIFY, plus what each held
-    /// post grants. Every decision that grows those abilities — raising teams, choosing
-    /// objectives, launching and recalling — lives at the briefing table
-    /// (<see cref="Views.DeskView"/>). The MFD never spends allocation except by arming an
-    /// ability. The log keeps running with the page closed.
+    /// SPEC OPS — the detachment, shaped like SPACE and CYBER. STATUS leads with the four squad cards
+    /// (state, where, rank, phase clock, EXECUTE / EXTRACT at a decision), then OPEN DESK, the
+    /// readiness summary and advice, the theatre plot, four chips and the event log. ACTIONS is the
+    /// flying half: SPOT and SUPPRESS (earned by held posts) and FORTIFY, as tiles, plus what each held
+    /// post grants. Every decision that grows those abilities — raising teams, choosing objectives,
+    /// launching and recalling — lives at the briefing table (<see cref="Views.DeskView"/>). The MFD
+    /// never spends allocation except by arming an ability. The log keeps running with the page closed.
     /// </summary>
     internal sealed partial class SupportPanel
     {
         private const string SpecStatusHelp = "Watch floor: the teams, their clocks, the posts they hold and the event log.";
         private const string SpecActionsHelp = "The map abilities your held posts grant, plus zone fortification.";
 
-        private static readonly string[] SpecTileKeys = { "READY", "IN FIELD", "POSTS", "READINESS" };
+        private static readonly string[] SpecTileKeys = { "READY", "IN FIELD", "POSTS", "GROUND READINESS" };
 
-        /// <summary>Hosts the other agent's <see cref="Views.MiniTheatre"/> board inside a kit v2
-        /// part (spec §9.2: genuinely-data visuals stay as they are, hosted in a kit v2 wrapper).</summary>
+        /// <summary>Hosts the <see cref="Views.MiniTheatre"/> board inside a kit v2 part.</summary>
         private sealed class TheatrePart : AvPart
         {
             private const float H = 176f;
@@ -49,18 +49,18 @@ namespace BoscaliSummer.Features.Support.Presentation
         }
 
         private OpsSubPage specPage;
-        private AvSection specSection;
+        private AvSection specSection, specTheatreSection, specTilesSection;
+        private AvButtons specButtons;
         private AvControl openDeskButton;
-        private readonly AvRow[] specTeamRows = new AvRow[SpecOpsDetachment.TeamCount];
-        private readonly AvControl[] specExecute = new AvControl[SpecOpsDetachment.TeamCount];
-        private readonly AvControl[] specExtract = new AvControl[SpecOpsDetachment.TeamCount];
-        private HintLine specSummary;
-        private NoteText specAdvice;
+        private SquadDeck specDeck;
+        private BriefCard specBrief;
         private TheatrePart specTheatre;
         private AvChip[] specTiles;
-        private LogLines specLog;
-        private HintLine specActionsHint;
+        private LogTape specLog;
+        private BriefCard specBanner;
+        private AvSection specAbilitiesSection, specPostsSection;
         private readonly AvRow[] specPostRows = new AvRow[SpecOpsDetachment.TeamCount];
+        private BriefCard specPostsEmpty;
 
         private readonly string[] specLoop = new string[LoopLines];
         private readonly float[] homeXs = new float[8];
@@ -70,21 +70,18 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void ResetSpecOpsPage()
         {
             specPage = null;
-            specSection = null;
+            specSection = specTheatreSection = specTilesSection = null;
+            specButtons = null;
             openDeskButton = null;
-            for (int i = 0; i < specTeamRows.Length; i++)
-            {
-                specTeamRows[i] = null;
-                specExecute[i] = null;
-                specExtract[i] = null;
-                specPostRows[i] = null;
-            }
-            specSummary = null;
-            specAdvice = null;
+            specDeck = null;
+            specBrief = null;
             specTheatre = null;
             specTiles = null;
             specLog = null;
-            specActionsHint = null;
+            specBanner = null;
+            specAbilitiesSection = specPostsSection = null;
+            specPostsEmpty = null;
+            for (int i = 0; i < specPostRows.Length; i++) specPostRows[i] = null;
             for (int i = 0; i < specLoop.Length; i++) specLoop[i] = null;
             specLoggedSerial = -1;
         }
@@ -93,11 +90,8 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void BuildSpecOpsPage(AvFlow page)
         {
-            specPage = page.Add(new OpsSubPage(page.Content, page.Ticker, page.Inner, AvIcon.UsersGroup, "SPEC OPS", sub =>
-            {
-                nextRefresh = 0f;
-                shell.Page(TabSpecOps).RequestRelayout();
-            }, SpecStatusHelp, SpecActionsHelp));
+            specPage = page.Add(new OpsSubPage(page.Content, page.Ticker, page.Inner, AvIcon.UsersGroup, "SPEC OPS",
+                sub => nextRefresh = 0f, SpecStatusHelp, SpecActionsHelp));
             BuildSpecStatusPage(specPage.Status);
             BuildSpecActionsPage(specPage.Actions);
             SpecLog("DETACHMENT ON THE NET · ALPHA AND BRAVO STANDING BY");
@@ -106,45 +100,37 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void BuildSpecStatusPage(AvFlow status)
         {
             specSection = status.Section(AvIcon.UsersGroup, FieldWords.Title, "");
-            AvButtons deskButtons = status.Buttons(new AvControl.Spec("OPEN DESK", OpenDesk, AvButtonStyle.Primary, AvIcon.ListDetails));
-            openDeskButton = deskButtons.Controls[0];
+            specDeck = status.Add(new SquadDeck(status.Content, RequestSpecOpsDirectiveByIndex));
+            specButtons = status.Buttons(new AvControl.Spec("OPEN DESK", OpenDesk, AvButtonStyle.Primary, AvIcon.ListDetails));
+            openDeskButton = specButtons.Controls[0];
             openDeskButton.Help = "The briefing table: raise teams, pick objectives, launch and recall missions. " + FieldWords.Legend();
+            specBrief = status.Add(new BriefCard(status.Content));
 
-            for (int i = 0; i < specTeamRows.Length; i++)
-            {
-                int team = i;
-                specTeamRows[i] = status.Add(new AvRow(status.Content));
-                specExecute[i] = specTeamRows[i].AddTrailing(new AvControl.Spec("EXECUTE",
-                    () => RequestSpecOpsDirective(team, SpecOpsDirective.Execute), AvButtonStyle.Primary));
-                specExtract[i] = specTeamRows[i].AddTrailing(new AvControl.Spec("EXTRACT",
-                    () => RequestSpecOpsDirective(team, SpecOpsDirective.Extract), AvButtonStyle.Danger));
-                specExecute[i].Help = "Execute at the site using the latest host threat forecast.";
-                specExtract[i].Help = "Extract safely now; no task roll. A held post ends but earned rank stays.";
-            }
-
-            specSummary = status.Add(new HintLine(status.Content));
-            specAdvice = status.Add(new NoteText(status.Content));
-
-            status.Section(AvIcon.Map2, "THEATRE");
+            specTheatreSection = status.Section(AvIcon.Map2, "THEATRE", "");
             specTheatre = status.Add(new TheatrePart(status.Content));
 
-            status.Section(AvIcon.Flag, "DETACHMENT · TEAMS · POSTS · GROUND READINESS");
-            specTiles = BuildChipRow(status, SpecTileKeys);
+            specTilesSection = status.Section(AvIcon.Flag, "READINESS", "");
+            specTiles = BuildChipRow(status, SpecTileKeys, 2);
 
-            status.Section(AvIcon.ListDetails, "EVENT LOG · DETACHMENT NET · NEWEST FIRST");
-            specLog = status.Add(new LogLines(status.Content, LoopLines));
+            status.Section(AvIcon.ListDetails, "EVENT LOG · DETACHMENT NET");
+            specLog = status.Add(new LogTape(status.Content, LoopLines));
         }
 
         private void BuildSpecActionsPage(AvFlow actions)
         {
-            actions.Section(AvIcon.Bolt, "FIELD ABILITIES", "");
-            specActionsHint = actions.Add(new HintLine(actions.Content));
+            specBanner = BuildArmedBanner(actions);
+            specAbilitiesSection = actions.Section(AvIcon.Bolt, "FIELD ABILITIES", "");
             BuildActionRows(actions, TabSpecOps, "ARM");
 
-            actions.Section(AvIcon.Flag, "HELD POSTS · WHAT EACH GRANTS");
+            specPostsSection = actions.Section(AvIcon.Flag, "HELD POSTS");
             for (int i = 0; i < specPostRows.Length; i++)
                 specPostRows[i] = actions.Add(new AvRow(actions.Content));
+            specPostsEmpty = actions.Add(new BriefCard(actions.Content));
+            specPostsEmpty.Set("NO POST HELD", "A desk mission that succeeds leaves one; it grants the abilities above.", AvState.Inert);
         }
+
+        private void RequestSpecOpsDirectiveByIndex(int team, bool execute) =>
+            RequestSpecOpsDirective(team, execute ? SpecOpsDirective.Execute : SpecOpsDirective.Extract);
 
         private void RequestSpecOpsDirective(int team, SpecOpsDirective directive)
         {
@@ -205,42 +191,52 @@ namespace BoscaliSummer.Features.Support.Presentation
             else RefreshSpecActionsPage(detachment);
         }
 
+        private void SetSpecStatusParts(bool live)
+        {
+            specDeck.SetShown(live);
+            specButtons.SetShown(live);
+            specTheatreSection.SetShown(live);
+            specTheatre.SetShown(live);
+            specTilesSection.SetShown(live);
+            foreach (AvChip chip in specTiles) chip.SetShown(live);
+        }
+
         private void RefreshSpecStatusPage(SpecOpsDetachment detachment, double now)
         {
-            if (specSummary == null) return;
+            if (specBrief == null) return;
             bool live = detachment != null && detachment.Enabled && support.SpecOpsEnabled;
-            string summary = !support.SpecOpsEnabled || (detachment != null && !detachment.Enabled)
-                ? "OFFLINE · DISABLED IN HOST CONFIG" : FieldWords.Summary(detachment);
-            AvState tone = !live ? AvState.Inert
-                : detachment.Posts() > 0 ? AvState.Ready
-                : detachment.Count(TeamState.Ready) > 0 ? AvState.Info : AvState.Caution;
-            specSummary.Set(summary, tone);
-            specAdvice.Set(FieldWords.Advice(detachment, now), tone);
-            specSection.SetCaption(detachment == null ? "AWAITING THEATER DATA"
-                : detachment.Formed + "/" + SpecOpsDetachment.TeamCount + " FORMED · BEST " + FieldWords.Rank(detachment.BestRank));
-
-            for (int i = 0; i < specTeamRows.Length; i++) PaintTeamRow(i, detachment, now);
-
+            SetSpecStatusParts(live);
+            specLog.Write(specLoop);
             if (!live)
             {
-                for (int i = 0; i < specTiles.Length; i++) SetChip(specTiles[i], SpecTileKeys[i], "—", AvState.Inert);
-            }
-            else
-            {
-                int ready = detachment.Count(TeamState.Ready);
-                int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.Deciding) +
-                    detachment.Count(TeamState.OnTask) + detachment.Count(TeamState.Holding);
-                int posts = detachment.Posts();
-                SetChip(specTiles[0], SpecTileKeys[0], ready + (ready == 1 ? " TEAM" : " TEAMS"), ready > 0 ? AvState.Ready : AvState.Info);
-                SetChip(specTiles[1], SpecTileKeys[1], field > 0 ? field + " DEPLOYED" : "NONE", field > 0 ? AvState.Info : AvState.Inert);
-                SetChip(specTiles[2], SpecTileKeys[2], posts > 0 ? PostTiles(detachment) : "NONE", posts > 0 ? AvState.Ready : AvState.Inert);
-                SetChip(specTiles[3], SpecTileKeys[3], detachment.GroundReadiness + " PER ORDER", detachment.BestRank > 0 ? AvState.Ready : AvState.Info);
+                bool off = detachment != null || !support.SpecOpsEnabled;
+                specBrief.Set(off ? "SPEC OPS OFFLINE" : "AWAITING THEATER DATA",
+                    off ? "The host has switched special operations off." : "The detachment appears once the host lists the theatre.",
+                    AvState.Inert);
+                specSection.SetCaption(off ? "OFFLINE" : "AWAITING DATA");
+                return;
             }
 
+            AvState tone = detachment.Posts() > 0 ? AvState.Ready
+                : detachment.Count(TeamState.Ready) > 0 ? AvState.Info : AvState.Caution;
+            specBrief.Set(FieldWords.Summary(detachment), FieldWords.Advice(detachment, now), tone);
+            specSection.SetCaption(detachment.Formed + "/" + SpecOpsDetachment.TeamCount + " FORMED · BEST " + FieldWords.Rank(detachment.BestRank));
+
+            for (int i = 0; i < SquadDeck.Slots; i++) PaintSquad(i, detachment, now);
+
+            int ready = detachment.Count(TeamState.Ready);
+            int field = detachment.Count(TeamState.EnRoute) + detachment.Count(TeamState.Deciding) +
+                detachment.Count(TeamState.OnTask) + detachment.Count(TeamState.Holding);
+            int posts = detachment.Posts();
+            SetChip(specTiles[0], SpecTileKeys[0], ready + (ready == 1 ? " TEAM" : " TEAMS"), ready > 0 ? AvState.Ready : AvState.Info);
+            SetChip(specTiles[1], SpecTileKeys[1], field > 0 ? field + " DEPLOYED" : "NONE", field > 0 ? AvState.Info : AvState.Inert);
+            SetChip(specTiles[2], SpecTileKeys[2], posts > 0 ? PostTiles(detachment) : "NONE", posts > 0 ? AvState.Ready : AvState.Inert);
+            SetChip(specTiles[3], SpecTileKeys[3], detachment.GroundReadiness + " PER ORDER", detachment.BestRank > 0 ? AvState.Ready : AvState.Info);
+
+            specTheatreSection.SetCaption(detachment.ObjectiveCount + (detachment.ObjectiveCount == 1 ? " OBJECTIVE" : " OBJECTIVES"));
             LocalHomes(out int homes);
             specTheatre.SetHomes(homeXs, homeZs, homes);
-            specTheatre.Paint(detachment, now, !live ? "SPEC OPS OFFLINE" : "NO OBJECTIVE LISTED YET");
-            specLog.Write(specLoop);
+            specTheatre.Paint(detachment, now, "NO OBJECTIVE LISTED YET");
         }
 
         private static string PostTiles(SpecOpsDetachment detachment)
@@ -255,98 +251,137 @@ namespace BoscaliSummer.Features.Support.Presentation
             return text;
         }
 
-        private void PaintTeamRow(int index, SpecOpsDetachment detachment, double now)
+        private void PaintSquad(int index, SpecOpsDetachment detachment, double now)
         {
-            AvRow row = specTeamRows[index];
-            if (row == null) return;
-            FieldTeam team = detachment != null ? detachment.Team(index) : default;
-            bool formed = detachment != null && team.Formed;
-            bool deciding = formed && team.State == TeamState.Deciding;
-            string line = detachment == null ? "AWAITING THEATER DATA"
-                : deciding ? "ARRIVED · " + FieldWords.Clock(detachment.Remaining(index, now))
-                : TeamGlance(team, detachment.Remaining(index, now));
-            string rank = !formed ? "—" : FieldWords.Rank(team.Rank) +
-                (team.Rank < FieldCatalog.MaxRank ? " · " + FieldCatalog.WinsToNext(team.Wins) + " TO NEXT" : "");
-            AvState tone = formed ? SpecTeamTone(team.State) : team.Last == MissionOutcome.Lost ? AvState.Danger : AvState.Inert;
-            row.Set(FieldWords.Callsign(index), line, rank, tone);
-
-            bool canOrder = deciding && detachment != null && !support.CommandPending && support.OpsStateFresh;
-            specExecute[index].Rect.gameObject.SetActive(deciding);
-            specExtract[index].Rect.gameObject.SetActive(deciding);
-            specExecute[index].Interactable = canOrder && support.SpecOpsEnabled;
-            specExtract[index].Interactable = canOrder;
-        }
-
-        /// <summary>The same hue every SPEC OPS surface uses for a team state
-        /// (<see cref="FieldTones.State"/>), expressed as an <see cref="AvState"/> (R1).</summary>
-        private static AvState SpecTeamTone(TeamState state)
-        {
-            switch (state)
+            FieldTeam team = detachment.Team(index);
+            bool formed = team.Formed;
+            double remaining = detachment.Remaining(index, now);
+            double total = team.PhaseEnd - team.PhaseStart;
+            float elapsed = total > 0.0 ? Mathf.Clamp01((float)(1.0 - remaining / total)) : 1f;
+            string target = PlaceNames.Shorten(string.IsNullOrEmpty(team.Target) ? "OBJECTIVE" : team.Target, 22);
+            var card = new SquadCardData
             {
-                case TeamState.Ready: return AvState.Ready;
-                case TeamState.Holding: return AvState.Ready;
-                case TeamState.EnRoute: return AvState.Info;
-                case TeamState.Deciding: return AvState.Caution;
-                case TeamState.OnTask: return AvState.Caution;
-                default: return AvState.Inert;
+                Callsign = FieldWords.Callsign(index),
+                Formed = formed,
+                Rank = team.Rank,
+                RankWord = FieldWords.Rank(team.Rank),
+                NextText = team.Rank < FieldCatalog.MaxRank ? FieldCatalog.WinsToNext(team.Wins) + " TO NEXT" : "",
+                Clock = "",
+            };
+            switch (team.State)
+            {
+                case TeamState.Unformed:
+                    bool lost = team.Last == MissionOutcome.Lost;
+                    card.StateWord = lost ? "LOST" : "EMPTY";
+                    card.Tone = lost ? AvState.Danger : AvState.Inert;
+                    card.Icon = lost ? AvIcon.Skull : AvIcon.Minus;
+                    card.Line = lost ? "LOST · RAISE A NEW TEAM" : "EMPTY SLOT · RAISE IN THE DESK";
+                    break;
+                case TeamState.Ready:
+                    card.StateWord = "READY";
+                    card.Tone = AvState.Ready;
+                    card.Icon = AvIcon.CircleCheck;
+                    card.Line = detachment.ObjectiveCount > 0 ? "AWAITING ORDERS · " + detachment.ObjectiveCount + " LISTED" : "AWAITING ORDERS";
+                    card.ShowBar = true;
+                    card.Progress = 1f;
+                    break;
+                case TeamState.EnRoute:
+                    card.StateWord = "EN ROUTE";
+                    card.Tone = AvState.Info;
+                    card.Icon = AvIcon.ArrowUpRight;
+                    card.Line = FieldWords.Mission(team.Mission) + " · " + target;
+                    card.ShowBar = true;
+                    card.Progress = elapsed;
+                    card.Clock = FieldWords.Clock(remaining);
+                    break;
+                case TeamState.Deciding:
+                    card.StateWord = "AT SITE " + FieldWords.Clock(remaining);
+                    card.Tone = AvState.Caution;
+                    card.Icon = AvIcon.AlertTriangle;
+                    card.Line = FieldWords.Mission(team.Mission) + " · " + target;
+                    card.Deciding = true;
+                    card.CanExecute = !support.CommandPending && support.OpsStateFresh && support.SpecOpsEnabled;
+                    card.CanExtract = !support.CommandPending && support.OpsStateFresh;
+                    break;
+                case TeamState.OnTask:
+                    card.StateWord = "ON TASK";
+                    card.Tone = AvState.Caution;
+                    card.Icon = AvIcon.Focus2;
+                    card.Line = FieldWords.Mission(team.Mission) + " · " + target;
+                    card.ShowBar = true;
+                    card.Progress = elapsed;
+                    card.Clock = FieldWords.Clock(remaining);
+                    break;
+                case TeamState.Holding:
+                    card.StateWord = "HOLDING";
+                    card.Tone = AvState.Ready;
+                    card.Icon = AvIcon.Flag;
+                    card.Line = FieldWords.PostCode(team.Mission) + " · " + target;
+                    card.ShowBar = true;
+                    card.Progress = 1f - elapsed;
+                    card.Clock = FieldWords.Clock(remaining);
+                    break;
+                default:
+                    card.StateWord = "RECOVERING";
+                    card.Tone = AvState.Inert;
+                    card.Icon = AvIcon.Refresh;
+                    card.Line = FieldWords.TeamLine(team, remaining);
+                    card.ShowBar = true;
+                    card.Progress = elapsed;
+                    card.Clock = FieldWords.Clock(remaining);
+                    break;
             }
-        }
-
-        private static string TeamGlance(in FieldTeam team, double remaining)
-        {
-            if (team.State != TeamState.EnRoute && team.State != TeamState.OnTask)
-                return FieldWords.TeamLine(team, remaining);
-            return FieldWords.State(team.State) + " · " + FieldWords.Mission(team.Mission) + " · " +
-                PlaceNames.Shorten(team.Target, 28) + " · " + FieldWords.Clock(remaining);
+            specDeck.Set(index, card);
         }
 
         private void RefreshSpecActionsPage(SpecOpsDetachment detachment)
         {
-            if (specActionsHint == null) return;
+            if (specBanner == null) return;
             int posts = detachment != null ? detachment.Posts() : 0;
-            string hint;
+            string headline, text;
             AvState tone;
-            if (detachment == null || !detachment.Enabled || !support.SpecOpsEnabled)
+            bool live = detachment != null && detachment.Enabled && support.SpecOpsEnabled;
+            if (!live)
             {
-                hint = "SPEC OPS IS OFF ON THIS SERVER";
+                headline = "SPEC OPS IS OFF";
+                text = "The host has switched special operations off on this server.";
                 tone = AvState.Inert;
             }
             else if (posts == 0)
             {
-                hint = "NO POST HELD · A DESK MISSION THAT SUCCEEDS LEAVES ONE";
+                headline = "NO POST HELD";
+                text = "A desk mission that succeeds leaves one. FORTIFY still works on owned ground.";
                 tone = AvState.Inert;
             }
             else
             {
-                hint = "ARM, RIGHT-CLICK INSIDE A POST'S REACH · " + PostTiles(detachment) + " HELD";
+                headline = posts + (posts == 1 ? " POST HELD" : " POSTS HELD") + " · " + PostTiles(detachment);
+                text = "Arm an ability, then right-click inside a post's reach.";
                 tone = AvState.Ready;
             }
-            specActionsHint.Set(hint, tone);
-            PaintPostRows(detachment, support.OrbitNow);
+            PaintBanner(specBanner, TabSpecOps, headline, text, tone);
+            PaintPostRows(detachment, support.OrbitNow, live);
         }
 
-        /// <summary>One row per team: a holding team's post, place, time left and what it grants.</summary>
-        private void PaintPostRows(SpecOpsDetachment detachment, double now)
+        /// <summary>One row per holding team: its post, the place, what it grants and the time left.</summary>
+        private void PaintPostRows(SpecOpsDetachment detachment, double now, bool live)
         {
+            int held = 0;
             for (int t = 0; t < specPostRows.Length; t++)
             {
                 if (specPostRows[t] == null) continue;
-                FieldTeam team = detachment != null ? detachment.Team(t) : default;
-                bool holding = detachment != null && team.State == TeamState.Holding;
-                string sub, value;
-                if (holding)
-                {
-                    sub = FieldWords.PostCode(team.Mission) + " " + (string.IsNullOrEmpty(team.Target) ? "OBJECTIVE" : team.Target) +
-                          " · " + FieldWords.PostGrant(team.Mission).ToUpperInvariant();
-                    value = FieldWords.Clock(detachment.Remaining(t, now));
-                }
-                else
-                {
-                    sub = "NO POST" + (detachment != null && team.Formed ? " · " + FieldWords.State(team.State) : " · NOT RAISED");
-                    value = "";
-                }
-                specPostRows[t].Set(FieldWords.Callsign(t), sub, value, holding ? AvState.Ready : AvState.Inert);
+                FieldTeam team = live ? detachment.Team(t) : default;
+                bool holding = live && team.State == TeamState.Holding;
+                specPostRows[t].SetShown(holding);
+                if (!holding) continue;
+                held++;
+                specPostRows[t].Set(FieldWords.Callsign(t) + " · " + FieldWords.PostCode(team.Mission) + " " +
+                        PlaceNames.Shorten(string.IsNullOrEmpty(team.Target) ? "OBJECTIVE" : team.Target, 22),
+                    FieldWords.PostGrant(team.Mission).ToUpperInvariant(), FieldWords.Clock(detachment.Remaining(t, now)), AvState.Ready);
             }
+            specPostsEmpty.SetShown(held == 0 && live);
+            specPostsSection.SetShown(live);
+            specAbilitiesSection.SetShown(true);
         }
 
         /// <summary>The local faction's held airbases, for the board's orientation squares.</summary>

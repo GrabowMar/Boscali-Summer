@@ -10,7 +10,8 @@ New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets/Harness", "$
 Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value 'm_EditorVersion: 2022.3.62f3'
 Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}'
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$PSScriptRoot/SupportPanelUnityCheck.cs", "$PSScriptRoot/OpsWindowUnityCheck.cs", "$PSScriptRoot/BoscaliSupportPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/SupportPanelUnityCheck.cs", "$PSScriptRoot/SupportPanelUnityCheck.Gate.cs", "$PSScriptRoot/OpsWindowUnityCheck.cs", "$PSScriptRoot/BoscaliSupportPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/"
 if ($TerrainImage) { Copy-Item -LiteralPath $TerrainImage -Destination "$PreviewDirectory/terrain-fixture.png" }
 Get-ChildItem -LiteralPath "$game/NuclearOption_Data/Managed" -Filter '*.dll' | Where-Object {
     $_.Name -notmatch '^(System|Mono\.|UnityEngine|UnityEditor|mscorlib|netstandard|Unity\.TextMeshPro|Unity\.Timeline|Unity\.VisualScripting)'

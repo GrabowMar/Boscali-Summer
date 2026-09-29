@@ -285,7 +285,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private sealed class ActionRow
         {
             public SupportActionDefinition Definition;
-            public AvRow View;
+            public ActionTile View;
             public AvControl Trailing;
             public int Tab;
             public string Verb;
@@ -308,7 +308,54 @@ namespace BoscaliSummer.Features.Support.Presentation
             return count;
         }
 
-        /// <summary>Build every action row this tab hosts into <paramref name="flow"/>, post-gated
+        /// <summary>The tile icon for an ability (a lock is drawn instead while it is locked).</summary>
+        private static AvIcon AbilityIcon(SupportActionDefinition action)
+        {
+            switch (action.Id)
+            {
+                case SupportActionId.Recon: return AvIcon.Radar2;
+                case SupportActionId.MtiSweep: return AvIcon.Activity;
+                case SupportActionId.ElintSweep: return AvIcon.Antenna;
+                case SupportActionId.Artillery: return AvIcon.ArrowDown;
+                case SupportActionId.Emp: return AvIcon.Bolt;
+                case SupportActionId.FlareMissile: return AvIcon.Flame;
+                case SupportActionId.Fortify: return AvIcon.Shield;
+                case SupportActionId.HackPing: return AvIcon.WaveSine;
+                case SupportActionId.HackScan: return AvIcon.Radar2;
+                case SupportActionId.HackTrack: return AvIcon.Target;
+                case SupportActionId.HackBlackout: return AvIcon.Cloud;
+                case SupportActionId.HackGhost: return AvIcon.Eye;
+                case SupportActionId.HackSpoof: return AvIcon.Focus2;
+                case SupportActionId.HackHijack: return AvIcon.Link;
+                case SupportActionId.HackOverload: return AvIcon.Bolt;
+                case SupportActionId.CapReveal: return AvIcon.Eye;
+                case SupportActionId.CapJammer: return AvIcon.WaveSine;
+                case SupportActionId.CapSabotage: return AvIcon.Skull;
+                case SupportActionId.SpecSpot: return AvIcon.Focus2;
+                case SupportActionId.SpecSuppress: return AvIcon.WaveSine;
+                case SupportActionId.SpecSkywatch: return AvIcon.Plane;
+                case SupportActionId.SpecEavesdrop: return AvIcon.Antenna;
+                case SupportActionId.SpecHunt: return AvIcon.Target;
+                default: return AvIcon.Bolt;
+            }
+        }
+
+        /// <summary>The one paint for an ability tile on every ACTIONS page: name, the words
+        /// <see cref="AbilityStatus"/> decided, the cost in mono, and the control's verb / enabled / armed state.</summary>
+        private static void PaintAbilityTile(ActionTile tile, AvControl button, SupportActionDefinition action,
+            in AbilityFacts facts, string sub, string verb, string nameOverride = null)
+        {
+            bool cost = !action.IsCyber && facts.CostText != "—";
+            tile.Set(nameOverride ?? action.Name, sub, facts.CostText, cost ? "ALLOC" : "", ToState(facts.Tone),
+                facts.Tone == AbilityTone.Locked ? AvIcon.Lock : AbilityIcon(action));
+            tile.Armed = facts.Armed;
+            tile.Dim = !facts.Enabled && !facts.Armed;
+            button.Interactable = facts.Enabled;
+            button.Latched = facts.Armed;
+            button.Label = facts.Armed ? "ABORT" : verb;
+        }
+
+        /// <summary>Build every action tile this tab hosts into <paramref name="flow"/>, post-gated
         /// SPEC OPS abilities first.</summary>
         private void BuildActionRows(AvFlow flow, int tab, string verb)
         {
@@ -317,12 +364,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             {
                 if (HomeTab(action) != tab || action.IsField != (pass == 0)) continue;
                 SupportActionId id = action.Id;
-                string code = action.IsHack ? CyberCatalog.Code(action.Hack.Value)
-                    : action.IsCapstone ? Capstones.Code(action.Cap.Value)
-                    : action.IsField ? FieldWords.AbilityCode(action.Field.Value) : ActionCode(id);
-
-                AvRow view = flow.Add(new AvRow(flow.Content));
-                view.Set(code + "  " + action.Name, "", "", AvState.Inert);
+                ActionTile view = flow.Add(new ActionTile(flow.Content, AbilityIcon(action)));
+                view.Set(action.Name, "", "", "", AvState.Inert, AbilityIcon(action));
                 AvControl trailing = view.AddTrailing(new AvControl.Spec(verb, () =>
                 {
                     if (support.ArmedAction.HasValue && support.ArmedAction.Value == id) support.Disarm();
@@ -330,20 +373,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                     nextRefresh = 0f;
                 }));
                 actionRows.Add(new ActionRow { Definition = action, View = view, Trailing = trailing, Tab = tab, Verb = verb });
-            }
-        }
-
-        private static string ActionCode(SupportActionId id)
-        {
-            switch (id)
-            {
-                case SupportActionId.MtiSweep: return "MTI";
-                case SupportActionId.Recon: return "SAR";
-                case SupportActionId.Artillery: return "ROD";
-                case SupportActionId.Emp: return "EMP";
-                case SupportActionId.FlareMissile: return "FLR";
-                case SupportActionId.Fortify: return "FTF";
-                default: return "OPS";
             }
         }
 
@@ -355,7 +384,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (row.Tab != tab) continue;
 
                 SupportActionDefinition action = row.Definition;
-                bool armed = support.ArmedAction.HasValue && support.ArmedAction.Value == action.Id;
                 AbilityFacts facts = AbilityStatus.For(support, action, bypass);
                 string sub = facts.Readiness;
                 if (action.Id == SupportActionId.Fortify)
@@ -368,14 +396,11 @@ namespace BoscaliSummer.Features.Support.Presentation
                                " · BEST " + FieldWords.Rank(detachment.BestRank);
                     }
                 }
-                row.View.Set(action.Name, sub, facts.CostText, ToState(facts.Tone));
-                row.Trailing.Interactable = facts.Enabled;
-                row.Trailing.Latched = armed;
-                row.Trailing.Label = armed ? "ABORT" : row.Verb;
+                PaintAbilityTile(row.View, row.Trailing, action, facts, sub, row.Verb);
                 bool cyber = action.IsCyber;
                 float cost = cyber ? 0f : support.Cost(action);
                 float intel = AbilityStatus.Intel(action);
-                SetRowHelp(row.View, row.Trailing, action.Name + " — " +
+                SetTileHelp(row.View, row.Trailing, action.Name + " — " +
                     (cyber ? AvNum.Thousands(Mathf.Round(intel)) + " INTEL. " : cost > 0f ? AvNum.Thousands(Mathf.Round(cost)) + " ALLOC. " : "") +
                     action.Description + " " + facts.Readiness + ".");
             }
