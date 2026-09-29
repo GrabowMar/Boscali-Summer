@@ -24,12 +24,6 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
             TestAssert.That(UrbanRuinMath.DamageStage(0.75f) == UrbanRuinMath.StageRavaged, "0.75 ravages");
             TestAssert.That(UrbanRuinMath.DamageStage(1f) == UrbanRuinMath.StageRavaged, "full damage ravages");
             TestAssert.That(UrbanRuinMath.DamageStage(-1f) == UrbanRuinMath.StageIntact, "negative is intact");
-
-            // Strongpoint value survives scarring, not ravaging.
-            TestAssert.That(UrbanRuinMath.CountsAsStrongpoint(0f), "intact shell holds the floor");
-            TestAssert.That(UrbanRuinMath.CountsAsStrongpoint(0.74f), "scarred shell holds the floor");
-            TestAssert.That(!UrbanRuinMath.CountsAsStrongpoint(0.75f), "ravaged shell drops the floor");
-            TestAssert.That(!UrbanRuinMath.CountsAsStrongpoint(1f), "destroyed shell drops the floor");
         }
     }
 }

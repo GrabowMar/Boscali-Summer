@@ -21,6 +21,10 @@ namespace BoscaliSummer.Garrisons
         private string nestZone;
         private float nextCheck;
         private string bannerIdentity;
+        private FactionHQ bannerOwner;
+        private float bannerIdentityAt;
+        private int lastHitStage = -1;
+        private float hitFlashUntil;
 
         public static OccupiedBuildingMarking Apply(GameObject target, FactionHQ owner)
         {
@@ -242,10 +246,24 @@ namespace BoscaliSummer.Garrisons
         private static Color ViewerAccent(FactionHQ owner)
         {
             if (GameAssets.i == null) return new Color(0.92f, 0.9f, 0.78f);
-            if (owner != null && GameManager.GetLocalPlayer<Player>(out Player local) &&
-                local != null && local.HQ != null)
-                return local.HQ == owner ? GameAssets.i.HUDFriendly : GameAssets.i.HUDHostile;
+            FactionHQ localHq = LocalHq();
+            if (owner != null && localHq != null)
+                return localHq == owner ? GameAssets.i.HUDFriendly : GameAssets.i.HUDHostile;
             return GameAssets.i.HUDNeutral;
+        }
+
+        private static FactionHQ localHq;
+        private static int localHqFrame = -1;
+
+        private static FactionHQ LocalHq()
+        {
+            int frame = Time.frameCount;
+            if (frame == localHqFrame) return localHq;
+            localHqFrame = frame;
+            localHq = null;
+            if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+                localHq = local.HQ;
+            return localHq;
         }
 
         private void Update()
@@ -265,19 +283,23 @@ namespace BoscaliSummer.Garrisons
                 shellDamage = StrongpointHitPolicy.DugoutStage(dugoutPart.hitPoints) / 3f;
             if (nestZone != null)
                 zoneHealth = NestRegistry.ZoneHealth(nestZone);
+            int hitStage = shellDamage >= 0.75f ? 3 : shellDamage >= 0.5f ? 2 : shellDamage >= 0.25f ? 1 : 0;
+            if (lastHitStage >= 0 && hitStage > lastHitStage) hitFlashUntil = Time.unscaledTime + 1.2f;
+            lastHitStage = hitStage;
             if (flagMaterial != null)
             {
                 FactionHQ owner = building.NetworkHQ;
                 Color color = FactionColor(owner);
-                if (FactionBannerTexture.Identity(owner) != bannerIdentity) ApplyBanner(owner);
+                if (owner != bannerOwner || (Time.unscaledTime >= bannerIdentityAt && FactionBannerTexture.Identity(owner) != bannerIdentity)) ApplyBanner(owner);
                 float dim = 0.35f + 0.65f * zoneHealth;
                 float scorch = Mathf.Clamp01(shellDamage);
+                float flash = Time.unscaledTime < hitFlashUntil ? 1f : 0f;
                 Color battle = Color.Lerp(color, new Color(0.16f, 0.14f, 0.13f), scorch * 0.8f);
-                flagMaterial.SetColor("_EmissionColor", battle * (0.18f * dim * (1f - 0.7f * scorch)));
+                flagMaterial.SetColor("_EmissionColor", battle * (0.18f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.35f);
                 if (bandMaterial != null)
                 {
                     bandMaterial.color = battle;
-                    bandMaterial.SetColor("_EmissionColor", battle * (0.35f * dim * (1f - 0.7f * scorch)));
+                    bandMaterial.SetColor("_EmissionColor", battle * (0.35f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.5f);
                 }
                 if (accentMaterial != null)
                 {
@@ -293,6 +315,8 @@ namespace BoscaliSummer.Garrisons
         private void ApplyBanner(FactionHQ owner)
         {
             if (flagMaterial == null) return;
+            bannerOwner = owner;
+            bannerIdentityAt = Time.unscaledTime + 5f;
             bannerIdentity = FactionBannerTexture.Identity(owner);
             Texture2D texture = FactionBannerTexture.Get(bannerIdentity, FactionColor(owner));
             if (flagMaterial.HasProperty("_BaseMap")) flagMaterial.SetTexture("_BaseMap", texture);

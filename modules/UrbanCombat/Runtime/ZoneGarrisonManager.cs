@@ -24,6 +24,26 @@ namespace BoscaliSummer.Garrisons
             public int Attempts;
         }
 
+        private sealed class CaptureJob
+        {
+            public Airbase Airbase;
+            public FactionHQ Owner;
+            public int Key;
+            public int Tier;
+            public int Count;
+            public int Generation;
+            public string ZoneName;
+            public string OwnerName;
+            public int Seed;
+            public List<GameObject> Candidates;
+            public int Next;
+            public int Tries;
+            public int OccupiedSkips;
+            public int RoofSkips;
+            public int SpawnSkips;
+            public GarrisonRecord Record;
+        }
+
         private sealed class GarrisonRecord
         {
             public FactionHQ Owner;
@@ -72,7 +92,6 @@ namespace BoscaliSummer.Garrisons
             {
                 Building defense = record.Defenses[i];
                 if (defense == null || defense.disabled || defense.NetworkHQ != record.Owner) continue;
-                if (i < record.Shells.Count && IsRavaged(record.Shells[i])) continue;
                 intact++;
             }
             return intact;
@@ -177,6 +196,7 @@ namespace BoscaliSummer.Garrisons
             GameObject go = shell.gameObject;
             if (go == null || !Instance.shellStates.TryGetValue(go, out ShellState state)) return;
             Instance.shellStates.Remove(go);
+            Instance.shellBounds.Remove(go.GetInstanceID());
             Instance.strongpoints.Remove(go.GetInstanceID());
             if (!Instance.records.TryGetValue(state.Key, out GarrisonRecord record)) return;
             int index = record.Shells.IndexOf(go);
@@ -190,14 +210,6 @@ namespace BoscaliSummer.Garrisons
                 Plugin.Logger.LogInfo("[GARRISON] Nest lost with destroyed shell " + go.name + ".");
         }
 
-        private static bool IsRavaged(GameObject shell)
-        {
-            if (shell == null || Instance == null) return false;
-            if (!Instance.shellStates.TryGetValue(shell, out ShellState state)) return false;
-            if (state.Map == null) return false;
-            return !UrbanRuinMath.CountsAsStrongpoint(
-                UrbanRuinMath.DamageFraction(state.MaxHp, GameAccess.GetMapBuildingHitPoints(state.Map)));
-        }
 
         private void SeedShellState(GameObject shell, Building defense, int key)
         {
@@ -259,7 +271,7 @@ namespace BoscaliSummer.Garrisons
 
             if (!Urban.GarrisonsEnabled.Value || NetworkSceneSingleton<Spawner>.i == null)
                 return false;
-            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0);
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0, 0, 0);
             if (defense == null || defense.unitPrefab == null) return false;
             List<GameObject> candidates = FindCandidates(airbase, out _);
             if (candidates.Count == 0 && RefreshCatalogue()) candidates = FindCandidates(airbase, out _);
@@ -350,7 +362,14 @@ namespace BoscaliSummer.Garrisons
             if (slot >= RooftopPlacement.MaxPerZone || CountDefenses() >= RooftopPlacement.MaxBuildings)
                 return false;
             Bounds bounds = GetShellBounds(shell);
-            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(slot);
+            int seed = shell.GetInstanceID() % 3;
+            int tier = 0;
+            if (airbase != null)
+            {
+                seed = GarrisonComposition.ZoneSeed(GetAirbaseName(airbase));
+                urbanTiers.TryGetValue(airbase.GetInstanceID(), out tier);
+            }
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(slot, seed, tier);
             if (defense == null || !RooftopPlacement.TryPlace(shell, bounds, defense,
                 out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) return false;
             int generation = generations.TryGetValue(key, out int current) ? current + 1 : 1;
@@ -388,6 +407,10 @@ namespace BoscaliSummer.Garrisons
         }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
+        private readonly Queue<CaptureJob> captureJobs = new Queue<CaptureJob>();
+        private const int MaxCaptureJobs = 16;
+        private const int RoofTriesPerFrame = 6;
+        private const int JobStepsPerFrame = 32;
         private readonly List<KeyValuePair<float, GameObject>> seizeCandidates = new List<KeyValuePair<float, GameObject>>(64);
         private readonly HashSet<int> seizedKeys = new HashSet<int>();
         private readonly HashSet<int> barrenZones = new HashSet<int>();
@@ -442,6 +465,7 @@ namespace BoscaliSummer.Garrisons
         public void ResetForScene()
         {
             pending.Clear();
+            captureJobs.Clear();
             barrenZones.Clear();
             nestPeaks.Clear();
             shellStates.Clear();
@@ -526,6 +550,25 @@ namespace BoscaliSummer.Garrisons
                 break; // At most one zone in a frame.
             }
 
+            if (captureJobs.Count > 0)
+            {
+                int triesBudget = RoofTriesPerFrame;
+                int stepsBudget = JobStepsPerFrame;
+                while (triesBudget > 0 && stepsBudget > 0 && captureJobs.Count > 0)
+                {
+                    CaptureJob job = captureJobs.Peek();
+                    int triesBefore = job.Tries;
+                    if (!StepCaptureJob(job))
+                    {
+                        captureJobs.Dequeue();
+                        FinalizeCaptureJob(job);
+                        continue;
+                    }
+                    stepsBudget--;
+                    triesBudget -= job.Tries - triesBefore;
+                }
+            }
+
             if (Time.unscaledTime >= nextLifecycleCheck)
             {
                 nextLifecycleCheck = Time.unscaledTime + 2f;
@@ -543,7 +586,7 @@ namespace BoscaliSummer.Garrisons
             if (barrenZones.Contains(key)) return;
             if (owner == null || !Urban.GarrisonsEnabled.Value || airbase.AttachedAirbase) return;
 
-            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0);
+            BuildingDefinition defense = RooftopPlacement.ResolveDefinition(0, 0, 0);
             if (defense == null || defense.unitPrefab == null || NetworkSceneSingleton<Spawner>.i == null)
             {
                 if (capture.Attempts < 4) { Retry(capture); return; }
@@ -582,52 +625,83 @@ namespace BoscaliSummer.Garrisons
                 0, Mathf.Min(RooftopPlacement.MaxPerZone, RooftopPlacement.MaxBuildings - CountDefenses()));
             var record = new GarrisonRecord { Owner = owner };
             records[key] = record;
-            int occupiedSkips = 0;
-            int roofSkips = 0;
-            int spawnSkips = 0;
-            // Try the remaining catalogue candidates when a roof is too small or stepped.
-            int tries = 0;
-            for (int candidate = 0; candidate < Mathf.Min(candidates.Count, 128) && record.Defenses.Count < count &&
-                tries < MaxRoofTries; candidate++)
+            string zoneName = GetAirbaseName(airbase);
+            var job = new CaptureJob
             {
-                GameObject shell = candidates[candidate];
-                if (shell == null || GarrisonOccupancy.IsOccupied(shell)) { occupiedSkips++; continue; }
-                if (!FitsNest(shell)) { roofSkips++; continue; }
-                tries++;
-                int slot = record.Defenses.Count;
-                BuildingDefinition roofDefense = RooftopPlacement.ResolveDefinition(slot);
-                Bounds bounds = GetShellBounds(shell);
-                if (roofDefense == null || !RooftopPlacement.TryPlace(shell, bounds, roofDefense,
-                    out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) { roofSkips++; continue; }
-                Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
-                    roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
-                    RooftopPlacement.BuildMarkerName(
-                        RooftopPlacement.NamePrefix + Sanitize(GetAirbaseName(airbase)) + ":" + generation + ":" + slot + ":t" + tier,
-                        roofExtents),
-                    false, null);
-                if (spawned == null) { spawnSkips++; continue; }
-                NestRegistry.Add(spawned);
-                Building shellBuilding = shell.GetComponentInParent<Building>();
-                if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
-                GarrisonOccupancy.Set(shell, owner);
-                GarrisonVisual.Apply(spawned);
-                record.Defenses.Add(spawned);
-                record.Shells.Add(shell);
-                SeedShellState(shell, spawned, key);
+                Airbase = airbase,
+                Owner = owner,
+                Key = key,
+                Tier = tier,
+                Count = count,
+                Generation = generation,
+                ZoneName = zoneName,
+                Seed = GarrisonComposition.ZoneSeed(zoneName),
+                OwnerName = owner.ToString(),
+                Candidates = candidates,
+                Record = record
+            };
+            if (captureJobs.Count >= MaxCaptureJobs)
+            {
+                // Past the cap a zone still garrisons at once rather than being dropped.
+                while (StepCaptureJob(job)) { }
+                FinalizeCaptureJob(job);
+                return;
             }
-            if (!nestPeaks.TryGetValue(key, out int peak) || record.Defenses.Count > peak)
-                nestPeaks[key] = record.Defenses.Count;
-            int rejected = occupiedSkips + roofSkips + spawnSkips;
+            captureJobs.Enqueue(job);
+        }
+
+        /// <summary>
+        /// One candidate of a capture job: cheap skips return at once, a roof search costs
+        /// a try. Returns false when the job is done (candidates, count or try budget spent).
+        /// </summary>
+        private bool StepCaptureJob(CaptureJob job)
+        {
+            if (job.Next >= Mathf.Min(job.Candidates.Count, 128) ||
+                job.Record.Defenses.Count >= job.Count || job.Tries >= MaxRoofTries)
+                return false;
+            // Try the remaining catalogue candidates when a roof is too small or stepped.
+            GameObject shell = job.Candidates[job.Next++];
+            if (shell == null || GarrisonOccupancy.IsOccupied(shell)) { job.OccupiedSkips++; return true; }
+            if (!FitsNest(shell)) { job.RoofSkips++; return true; }
+            job.Tries++;
+            int slot = job.Record.Defenses.Count;
+            BuildingDefinition roofDefense = RooftopPlacement.ResolveDefinition(slot, job.Seed, job.Tier);
+            Bounds bounds = GetShellBounds(shell);
+            if (roofDefense == null || !RooftopPlacement.TryPlace(shell, bounds, roofDefense,
+                out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) { job.RoofSkips++; return true; }
+            Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
+                roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, job.Owner, job.Airbase,
+                RooftopPlacement.BuildMarkerName(
+                    RooftopPlacement.NamePrefix + Sanitize(job.ZoneName) + ":" + job.Generation + ":" + slot + ":t" + job.Tier,
+                    roofExtents),
+                false, null);
+            if (spawned == null) { job.SpawnSkips++; return true; }
+            NestRegistry.Add(spawned);
+            Building shellBuilding = shell.GetComponentInParent<Building>();
+            if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = job.Owner;
+            GarrisonOccupancy.Set(shell, job.Owner);
+            GarrisonVisual.Apply(spawned);
+            job.Record.Defenses.Add(spawned);
+            job.Record.Shells.Add(shell);
+            SeedShellState(shell, spawned, job.Key);
+            return true;
+        }
+
+        private void FinalizeCaptureJob(CaptureJob job)
+        {
+            if (!nestPeaks.TryGetValue(job.Key, out int peak) || job.Record.Defenses.Count > peak)
+                nestPeaks[job.Key] = job.Record.Defenses.Count;
+            int rejected = job.OccupiedSkips + job.RoofSkips + job.SpawnSkips;
             string rejectionSuffix = string.Empty;
             if (rejected > 0)
             {
                 string details = string.Empty;
-                if (roofSkips > 0) details += roofSkips + " no roof fit";
-                if (occupiedSkips > 0) details += (details.Length > 0 ? ", " : string.Empty) + occupiedSkips + " occupied";
-                if (spawnSkips > 0) details += (details.Length > 0 ? ", " : string.Empty) + spawnSkips + " spawn null";
+                if (job.RoofSkips > 0) details += job.RoofSkips + " no roof fit";
+                if (job.OccupiedSkips > 0) details += (details.Length > 0 ? ", " : string.Empty) + job.OccupiedSkips + " occupied";
+                if (job.SpawnSkips > 0) details += (details.Length > 0 ? ", " : string.Empty) + job.SpawnSkips + " spawn null";
                 rejectionSuffix = ", " + rejected + " rejected (" + details + ")";
             }
-            Plugin.Logger.LogInfo($"Occupied {record.Defenses.Count} building(s) around {GetAirbaseName(airbase)} for {owner} with visible MG/AT/AA rooftop nests (requested {count}, urban tier {tier}){rejectionSuffix}.");
+            Plugin.Logger.LogInfo($"Occupied {job.Record.Defenses.Count} building(s) around {job.ZoneName} for {job.OwnerName} with visible MG/AT/AA rooftop nests (requested {job.Count}, urban tier {job.Tier}){rejectionSuffix}.");
         }
 
         private int CountDefenses()
@@ -665,6 +739,7 @@ namespace BoscaliSummer.Garrisons
                     record.Defenses.RemoveAt(i);
                     record.Shells.RemoveAt(i);
                     shellStates.Remove(shell);
+                    if (shell != null) shellBounds.Remove(shell.GetInstanceID());
                     if (shell != null) strongpoints.Remove(shell.GetInstanceID());
                 }
                 if (record.Defenses.Count == 0) { emptyKeys.Add(entry.Key); continue; }
@@ -695,12 +770,14 @@ namespace BoscaliSummer.Garrisons
             if (!records.TryGetValue(key, out GarrisonRecord record)) return;
             // Detach first so a failed teardown can never pin the record into every later reset.
             records.Remove(key);
+            CancelCaptureJob(key);
             nestPeaks.Remove(key);
             for (int i = 0; i < record.Defenses.Count; i++) DestroyNetworked(record.Defenses[i]);
             for (int i = 0; i < record.Shells.Count; i++)
             {
                 GameObject shell = record.Shells[i];
                 shellStates.Remove(shell);
+                if (shell != null) shellBounds.Remove(shell.GetInstanceID());
                 if (shell != null) strongpoints.Remove(shell.GetInstanceID());
                 // Unity's == (not ?.) catches shells the scene unload already destroyed.
                 if (shell == null) continue;
@@ -708,6 +785,18 @@ namespace BoscaliSummer.Garrisons
                 if (shellBuilding != null && shellBuilding.NetworkHQ == record.Owner)
                     shellBuilding.NetworkHQ = null;
                 GarrisonOccupancy.Clear(shell, record.Owner);
+            }
+        }
+
+        private void CancelCaptureJob(int key)
+        {
+            if (captureJobs.Count == 0) return;
+            int count = captureJobs.Count;
+            for (int i = 0; i < count; i++)
+            {
+                CaptureJob job = captureJobs.Dequeue();
+                if (job == null || job.Key == key) continue;
+                captureJobs.Enqueue(job);
             }
         }
 
@@ -826,6 +915,7 @@ namespace BoscaliSummer.Garrisons
         private void RebuildShellCatalogue()
         {
             shellCatalogue.Clear();
+            shellBounds.Clear();
             var seen = new HashSet<int>();
             MapBuilding[] mapBuildings = Resources.FindObjectsOfTypeAll<MapBuilding>();
             for (int i = 0; i < mapBuildings.Length && shellCatalogue.Count < MaxCatalogue; i++)

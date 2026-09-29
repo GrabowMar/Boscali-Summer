@@ -31,9 +31,11 @@ namespace BoscaliSummer.Garrisons
         private readonly Dictionary<int, float> nextDropTimes = new Dictionary<int, float>();
         private int pendingDrops;
         private int doorWaits;
+        private int rappelWaves;
         private const int MaximumTrackedAircraft = 64;
         private const int MaximumPendingDrops = 16;
         private const int MaximumDoorWaits = 8;
+        private const int MaximumRappelWaves = 4;
         private const float MinFireInterval = 0.8f;
         private const float DoorOpenTimeout = 3.5f;
         private const float CargoDoorHoldSeconds = 10f;
@@ -58,6 +60,7 @@ namespace BoscaliSummer.Garrisons
             StopAllCoroutines();
             pendingDrops = 0;
             doorWaits = 0;
+            rappelWaves = 0;
             nextDropTimes.Clear();
             cachedAirbases = null;
             AirAssaultVisuals.ResetForScene();
@@ -225,8 +228,31 @@ namespace BoscaliSummer.Garrisons
 
             Vector3 global = landing.AsVector3();
             Landed?.Invoke(owner.GetInstanceID(), global.x, global.z, landingShellId);
-            bool deployed = InfantryEncampmentBuilder.DeployRappelEncampment(landing.ToLocalPosition(), owner, airbase);
-            Plugin.Logger.LogInfo(deployed
+            if (rappelWaves >= MaximumRappelWaves)
+            {
+                bool deployed = InfantryEncampmentBuilder.DeployRappelEncampment(landing.ToLocalPosition(), owner, airbase);
+                Plugin.Logger.LogInfo(deployed
+                    ? "[AIR ASSAULT] Eight troops established MG / AT / AA / MG encampment."
+                    : "[AIR ASSAULT] Encampment placement unavailable after insertion.");
+                return;
+            }
+            rappelWaves++;
+            StartCoroutine(ResolveRappelCamps(landing.ToLocalPosition(), owner, airbase));
+        }
+
+        private IEnumerator ResolveRappelCamps(Vector3 position, FactionHQ owner, Airbase airbase)
+        {
+            // One camp per frame: a full stick no longer bursts ~150 raycasts at once.
+            int wanted = InfantryEncampmentBuilder.RappelWanted(owner);
+            InfantryEncampmentBuilder.PruneFallenSites();
+            int placed = 0;
+            for (int camp = 0; camp < wanted && InfantryEncampmentBuilder.ActiveSiteCount < InfantryEncampmentBuilder.MaximumSites; camp++)
+            {
+                if (InfantryEncampmentBuilder.TryCreateRappelCamp(position, owner, airbase)) placed++;
+                yield return null;
+            }
+            rappelWaves--;
+            Plugin.Logger.LogInfo(placed > 0
                 ? "[AIR ASSAULT] Eight troops established MG / AT / AA / MG encampment."
                 : "[AIR ASSAULT] Encampment placement unavailable after insertion.");
         }

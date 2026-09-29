@@ -12,10 +12,10 @@ namespace BoscaliSummer.Garrisons
         internal const float MinRoofSpan = 10f;
         private static readonly string[] Keys = { "Emplacement1_MG", "Emplacement1_ATGM", "Emplacement1_23mm" };
 
-        internal static BuildingDefinition ResolveDefinition(int slot)
+        internal static BuildingDefinition ResolveDefinition(int slot, int seed, int tier)
         {
             if (Encyclopedia.i?.buildings == null) return null;
-            string key = Keys[Math.Abs(slot % Keys.Length)];
+            string key = Keys[GarrisonComposition.DefinitionIndex(slot, seed, tier, Keys.Length)];
             foreach (BuildingDefinition definition in Encyclopedia.i.buildings)
                 if (definition != null && definition.buildingType == BuildingType.DEF &&
                     definition.unitPrefab != null && string.Equals(definition.jsonKey, key, StringComparison.OrdinalIgnoreCase))
@@ -26,6 +26,10 @@ namespace BoscaliSummer.Garrisons
         internal static string BuildMarkerName(string name, Vector4 roofExtents) =>
             GarrisonMarkerInfo.Append(name, roofExtents.x, roofExtents.y, roofExtents.z, roofExtents.w);
 
+        private static readonly System.Collections.Generic.List<Collider> scratchProbes = new System.Collections.Generic.List<Collider>(8);
+        private static readonly System.Collections.Generic.List<GameObject> scratchTemporary = new System.Collections.Generic.List<GameObject>(8);
+        private static readonly Vector3[] scratchFootprint = new Vector3[9];
+
         internal static bool TryPlace(GameObject shell, Bounds bounds, BuildingDefinition definition,
             out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)
         {
@@ -35,8 +39,10 @@ namespace BoscaliSummer.Garrisons
             float halfX = Mathf.Max(4f, definition.width * 0.5f + 1.5f);
             float halfZ = Mathf.Max(4f, definition.length * 0.5f + 1.5f);
             MeshFilter[] filters = shell.GetComponentsInChildren<MeshFilter>(true);
-            var probes = new System.Collections.Generic.List<Collider>(8);
-            var temporary = new System.Collections.Generic.List<GameObject>(8);
+            var probes = scratchProbes;
+            probes.Clear();
+            var temporary = scratchTemporary;
+            temporary.Clear();
             try
             {
                 // Player builds discard native mesh CPU data. Reuse cooked colliders;
@@ -87,6 +93,9 @@ namespace BoscaliSummer.Garrisons
                 float bestDistance = float.MaxValue;
                 // A world-space grid avoids rotating an already rotated AABB twice.
                 // Search all candidates so a podium does not win over a higher tower roof.
+                for (int fz = -1; fz <= 1; fz++)
+                    for (int fx = -1; fx <= 1; fx++)
+                        scratchFootprint[(fz + 1) * 3 + fx + 1] = rotation * new Vector3(fx * halfX, 0f, fz * halfZ);
                 for (int candidate = 0; candidate < 49; candidate++)
                 {
                     int gx = candidate % 7 - 3, gz = candidate / 7 - 3;
@@ -97,7 +106,7 @@ namespace BoscaliSummer.Garrisons
                     for (int z = -1; z <= 1 && valid; z++)
                         for (int x = -1; x <= 1; x++)
                         {
-                            var ray = new Ray(center + rotation * new Vector3(x * halfX, 0f, z * halfZ), Vector3.down);
+                            var ray = new Ray(center + scratchFootprint[(z + 1) * 3 + x + 1], Vector3.down);
                             bool found = false;
                             RaycastHit top = default;
                             foreach (Collider probe in probes)

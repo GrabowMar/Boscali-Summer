@@ -3,8 +3,8 @@ using System;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Pure staging for occupied-shell damage: hits scar the rooftop nest's markings, and a
-    /// ravaged shell stops counting as a siege strongpoint even before it collapses.
+    /// Pure staging for occupied-shell damage: hits scar the rooftop nest's markings.
+    /// Staging is visual only: the siege floor holds until the nest dies.
     /// Fractions are occupy-relative (damage sustained while garrisoned), so re-occupying a
     /// battered building starts a fresh assessment instead of guessing vanilla max HP.
     /// </summary>
@@ -30,7 +30,5 @@ namespace BoscaliSummer.Garrisons
             return Math.Max(0f, Math.Min(1f, 1f - currentHp / maxHp));
         }
 
-        public static bool CountsAsStrongpoint(float damageFraction) =>
-            DamageStage(damageFraction) < StageRavaged;
     }
 }

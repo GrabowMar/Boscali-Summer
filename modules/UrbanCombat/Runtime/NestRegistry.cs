@@ -18,7 +18,6 @@ namespace BoscaliSummer.Garrisons
             public GameObject Shell;
             public string Zone;
             public int Tier;
-            public UnitPart Dugout;
         }
 
         private const int MaxEntries = 96;
@@ -26,6 +25,9 @@ namespace BoscaliSummer.Garrisons
         private static readonly Dictionary<int, Entry> byNest = new Dictionary<int, Entry>(MaxEntries);
         private static readonly Dictionary<int, Entry> byShell = new Dictionary<int, Entry>(MaxEntries);
         private static readonly Dictionary<string, int> zonePeaks = new Dictionary<string, int>();
+        private struct ZoneHealthSample { public float Value; public float At; }
+        private static readonly Dictionary<string, ZoneHealthSample> zoneHealthCache = new Dictionary<string, ZoneHealthSample>();
+        private const float ZoneHealthCacheSeconds = 2f;
         private static readonly RaycastHit[] rayHits = new RaycastHit[4];
 
         /// <summary>
@@ -54,8 +56,7 @@ namespace BoscaliSummer.Garrisons
                 Nest = nest,
                 Zone = zone,
                 Tier = tier,
-                Shell = ResolveShell(nest),
-                Dugout = ResolveDugout(nest)
+                Shell = ResolveShell(nest)
             };
             if (byNest.TryGetValue(nestId, out Entry previous) &&
                 previous.Shell != null && previous.Shell != entry.Shell)
@@ -115,7 +116,6 @@ namespace BoscaliSummer.Garrisons
                 if (entry.Nest == null || entry.Nest.disabled) continue;
                 if (!zone.Equals(entry.Zone, System.StringComparison.Ordinal)) continue;
                 if (entry.Nest.NetworkHQ != owner) continue;
-                if (StrongpointHitPolicy.DugoutStage(DugoutHitPoints(entry)) >= 3) continue;
                 intact++;
             }
             return intact;
@@ -125,14 +125,23 @@ namespace BoscaliSummer.Garrisons
         public static float ZoneHealth(string zone)
         {
             if (string.IsNullOrEmpty(zone)) return 1f;
+            float now = Time.unscaledTime;
+            if (zoneHealthCache.TryGetValue(zone, out ZoneHealthSample cached) && now - cached.At < ZoneHealthCacheSeconds)
+                return cached.Value;
             int live = 0;
             foreach (KeyValuePair<int, Entry> candidate in byNest)
             {
                 if (candidate.Value.Nest == null || candidate.Value.Nest.disabled) continue;
                 if (zone.Equals(candidate.Value.Zone, System.StringComparison.Ordinal)) live++;
             }
-            if (!zonePeaks.TryGetValue(zone, out int peak) || peak < 1) return 1f;
-            return Mathf.Clamp01(live / (float)peak);
+            if (!zonePeaks.TryGetValue(zone, out int peak) || peak < 1)
+            {
+                zoneHealthCache[zone] = new ZoneHealthSample { Value = 1f, At = now };
+                return 1f;
+            }
+            float value = Mathf.Clamp01(live / (float)peak);
+            zoneHealthCache[zone] = new ZoneHealthSample { Value = value, At = now };
+            return value;
         }
 
         /// <summary>Fills the destination with live nests for the dressing rebuild.</summary>
@@ -152,22 +161,26 @@ namespace BoscaliSummer.Garrisons
             return count;
         }
 
+        private static readonly List<int> pruneNests = new List<int>(MaxEntries);
+        private static readonly List<int> pruneShells = new List<int>(MaxEntries);
+        private static readonly List<string> pruneZones = new List<string>(16);
+
         public static void Prune()
         {
-            var deadNests = new List<int>();
+            pruneNests.Clear();
             foreach (KeyValuePair<int, Entry> candidate in byNest)
-                if (candidate.Value.Nest == null) deadNests.Add(candidate.Key);
-            for (int i = 0; i < deadNests.Count; i++)
+                if (candidate.Value.Nest == null) pruneNests.Add(candidate.Key);
+            for (int i = 0; i < pruneNests.Count; i++)
             {
-                if (byNest.TryGetValue(deadNests[i], out Entry entry) && entry.Shell != null)
+                if (byNest.TryGetValue(pruneNests[i], out Entry entry) && entry.Shell != null)
                     byShell.Remove(entry.Shell.GetInstanceID());
-                byNest.Remove(deadNests[i]);
+                byNest.Remove(pruneNests[i]);
             }
-            var deadShells = new List<int>();
+            pruneShells.Clear();
             foreach (KeyValuePair<int, Entry> candidate in byShell)
-                if (candidate.Value.Shell == null) deadShells.Add(candidate.Key);
-            for (int i = 0; i < deadShells.Count; i++) byShell.Remove(deadShells[i]);
-            var emptyZones = new List<string>();
+                if (candidate.Value.Shell == null) pruneShells.Add(candidate.Key);
+            for (int i = 0; i < pruneShells.Count; i++) byShell.Remove(pruneShells[i]);
+            pruneZones.Clear();
             foreach (KeyValuePair<string, int> peak in zonePeaks)
             {
                 bool any = false;
@@ -176,9 +189,9 @@ namespace BoscaliSummer.Garrisons
                     if (candidate.Value.Nest == null) continue;
                     if (peak.Key.Equals(candidate.Value.Zone, System.StringComparison.Ordinal)) { any = true; break; }
                 }
-                if (!any) emptyZones.Add(peak.Key);
+                if (!any) pruneZones.Add(peak.Key);
             }
-            for (int i = 0; i < emptyZones.Count; i++) zonePeaks.Remove(emptyZones[i]);
+            for (int i = 0; i < pruneZones.Count; i++) { zonePeaks.Remove(pruneZones[i]); zoneHealthCache.Remove(pruneZones[i]); }
         }
 
         public static void Reset()
@@ -186,10 +199,8 @@ namespace BoscaliSummer.Garrisons
             byNest.Clear();
             byShell.Clear();
             zonePeaks.Clear();
+            zoneHealthCache.Clear();
         }
-
-        private static float DugoutHitPoints(Entry entry) =>
-            entry.Dugout != null ? entry.Dugout.hitPoints : 100f;
 
         private static GameObject ResolveShell(Building nest)
         {
@@ -208,20 +219,5 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
-        private static UnitPart ResolveDugout(Building nest)
-        {
-            Transform dugout = nest.transform.Find("dugout");
-            if (dugout != null)
-            {
-                UnitPart part = dugout.GetComponent<UnitPart>();
-                if (part != null) return part;
-            }
-            UnitPart[] parts = nest.GetComponentsInChildren<UnitPart>(true);
-            for (int i = 0; i < parts.Length; i++)
-                if (parts[i] != null &&
-                    parts[i].name.IndexOf("dugout", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    return parts[i];
-            return null;
-        }
     }
 }

@@ -11,7 +11,7 @@ namespace BoscaliSummer.Garrisons
     internal static class InfantryEncampmentBuilder
     {
         internal const string NamePrefix = "BoscaliSummer:Encampment:";
-        private const int MaximumSites = 12;
+        internal const int MaximumSites = 12;
 
         public enum EncampmentType
         {
@@ -62,7 +62,7 @@ namespace BoscaliSummer.Garrisons
         private static bool IsStanding(Building building) => building != null && !building.disabled;
 
         /// <summary>Drops sites whose emplacements are all gone: at most 12 sites x 4 slots.</summary>
-        private static void PruneFallenSites()
+        internal static void PruneFallenSites()
         {
             for (int i = ActiveSites.Count - 1; i >= 0; i--)
                 if (!ActiveSites[i].Standing) ActiveSites.RemoveAt(i);
@@ -115,10 +115,11 @@ namespace BoscaliSummer.Garrisons
 
         public static EncampmentSite FindNearbySite(Vector3 pos, float maxDistance = 150f)
         {
+            float limitSq = maxDistance * maxDistance;
             for (int i = 0; i < ActiveSites.Count; i++)
             {
                 EncampmentSite site = ActiveSites[i];
-                if (site != null && Vector3.Distance(site.Center, pos) <= maxDistance)
+                if (site != null && (site.Center - pos).sqrMagnitude <= limitSq)
                     return site;
             }
             return null;
@@ -138,13 +139,21 @@ namespace BoscaliSummer.Garrisons
             return CreateNewSite(dropPos, owner, airbase, troopCount);
         }
 
+        internal static int ActiveSiteCount => ActiveSites.Count;
+
+        /// <summary>How many camps one stick establishes, per base-of-operations doctrine.</summary>
+        internal static int RappelWanted(FactionHQ owner)
+        {
+            BoscaliSummer.Framework.Features.ModServices.TryGet(
+                out BoscaliSummer.Framework.Contracts.IGroundForceReadiness readiness);
+            return Mathf.Clamp(readiness != null ? readiness.InsertionCamps(owner) : 1, 1, MaximumSites);
+        }
+
         public static bool DeployRappelEncampment(Vector3 position, FactionHQ owner, Airbase airbase)
         {
             if (!BoscaliSummer.Runtime.GameAccess.IsServer() || owner == null) return false;
             // Base-of-operations doctrine decides how many camps one stick establishes.
-            BoscaliSummer.Framework.Features.ModServices.TryGet(
-                out BoscaliSummer.Framework.Contracts.IGroundForceReadiness readiness);
-            int wanted = Mathf.Clamp(readiness != null ? readiness.InsertionCamps(owner) : 1, 1, MaximumSites);
+            int wanted = RappelWanted(owner);
             PruneFallenSites();
             int placed = 0;
             for (int camp = 0; camp < wanted && ActiveSites.Count < MaximumSites; camp++)
@@ -156,7 +165,7 @@ namespace BoscaliSummer.Garrisons
         /// One camp near the LZ. Repeated insertions at the same place get distinct
         /// four-position camps; at most twelve candidate positions, matching the site ceiling.
         /// </summary>
-        private static bool TryCreateRappelCamp(Vector3 position, FactionHQ owner, Airbase airbase)
+        internal static bool TryCreateRappelCamp(Vector3 position, FactionHQ owner, Airbase airbase)
         {
             for (int i = 0; i < MaximumSites; i++)
             {
@@ -239,7 +248,7 @@ namespace BoscaliSummer.Garrisons
                 // Ids name the emplacements, so a pruned site's id is never handed out again.
                 Id = nextSiteId,
                 Rappel = rappel,
-                Type = rappel ? EncampmentType.MGNest : (EncampmentType)(nextSiteId % 3)
+                Type = rappel ? EncampmentType.MGNest : (EncampmentType)GarrisonComposition.EncampmentTypeIndex(groundCenter.x, groundCenter.z)
             };
             nextSiteId++;
             site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
