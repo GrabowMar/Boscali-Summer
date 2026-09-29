@@ -77,15 +77,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 threats[i].sprite = OpsSprites.Glyph(OpsSprites.G.Alert);
                 threats[i].enabled = false;
             }
-            Chrome.Label(parent, "CLICK A NODE TO OPEN IT IN THE CONSOLE", new Rect(view.x + 6f, view.y - view.height + 17f,
-                view.width - 12f, 16f), AvTheme.Dim, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.MidlineLeft);
+            OpsText.Plot(parent, "CLICK A NODE TO OPEN IT IN THE CONSOLE", new Rect(view.x + 8f, view.y - view.height + 17f,
+                view.width - 16f, 16f), AvTheme.Dim, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             Image osd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - 1f, view.width - 2f, 16f),
                 AvTheme.SurfaceInert.WithAlpha(0.88f));
             osd.raycastTarget = false;
-            Chrome.Label(parent, "AEGIS NET / NODE MESH", new Rect(view.x + 8f, view.y - 3f,
-                view.width - 16f, 14f), AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold);
-            empty = Chrome.Label(parent, "", new Rect(view.x + 8f, view.y - (view.height - 18f) * 0.5f + 8f, view.width - 16f, 16f),
-                AvTheme.Dim, AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            OpsText.Plot(parent, "AEGIS NET / NODE MESH", new Rect(view.x + 8f, view.y - 1f,
+                view.width - 16f, 16f), AvTheme.RailInfo, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+            empty = OpsText.Plot(parent, "", new Rect(view.x + 8f, view.y - (view.height - 18f) * 0.5f + 8f, view.width - 16f, 16f),
+                AvTheme.Dim, AvTextRole.Label, TextAlignmentOptions.Center);
         }
 
         public void Paint(CyberNetwork network, double now, int selected)

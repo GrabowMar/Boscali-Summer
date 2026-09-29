@@ -1,4 +1,6 @@
 using System;
+using BoscaliSummer.Features.Support.Presentation.Viz;
+using BoscaliSummer.Features.Support.Runtime;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -7,27 +9,28 @@ using UnityEngine;
 namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
-    /// What every OPS page shares inside the MFD shell, on kit v2 (spec §9.2): a compact
-    /// STATUS / ACTIONS toggle beside the domain icon and title instead of a second full-width
-    /// tab row, one always-visible hint/armed line (status is a word, never colour alone), and a
-    /// small newest-first log bound to the caller-owned ring buffer (SPACE/CYBER/SPEC OPS loops,
-    /// which the OPS window rooms also take by reference — the array identity must not change).
+    /// What every OPS page shares inside the MFD shell, on kit v2: a compact STATUS / ACTIONS toggle
+    /// beside the domain icon and title (no second full-width tab row), the armed-ability banner, the
+    /// chip rows, and the helpers that put an ability's help sentence on its tile and control. The
+    /// hero parts, meters, tiles and the log tape live in <c>Viz/</c>.
     /// </summary>
     internal sealed partial class SupportPanel
     {
         /// <summary>
         /// Per-domain STATUS / ACTIONS switch. Kit v2 has no "page inside a page" component for
-        /// this (a console's own <see cref="AvTabBar"/> would be a second full-width tab row,
-        /// which spec §9.2 forbids), so this hosts two independent nested <see cref="AvFlow"/>s —
-        /// built once, toggled by GameObject activity — behind a compact two-segment header. Noted
-        /// as a kit gap in the slice report.
+        /// this (a console's own <see cref="AvTabBar"/> would be a second full-width tab row), so this
+        /// hosts two independent nested <see cref="AvFlow"/>s, built once and toggled by GameObject
+        /// activity, behind a compact two-segment header. The nested flows are widened by the outer
+        /// pad and shifted back, so their content lines up with the header and the tab bar above and a
+        /// nested page does not lose 28 px to a second inset.
         /// </summary>
         private sealed class OpsSubPage : AvPart
         {
-            private const float HeaderH = 26f, ToggleW = 176f;
+            private const float HeaderH = 26f, ToggleW = 176f, BodyGap = 8f, Pad = AvGridTokens.Pad;
             private readonly TMP_Text icon, title;
             private readonly AvControl statusTab, actionsTab;
             private readonly RectTransform statusHost, actionsHost;
+            private bool statusLaid, actionsLaid;
             private int sub;
 
             public AvFlow Status { get; }
@@ -44,8 +47,10 @@ namespace BoscaliSummer.Features.Support.Presentation
                 actionsTab = AvControl.Make(Rect, new AvControl.Spec("ACTIONS", () => Select(1, onSelect), AvButtonStyle.Default, AvIcon.Bolt), "tab");
                 statusTab.Help = statusHelp;
                 actionsTab.Help = actionsHelp;
-                statusHost = AvLay.Child(Rect, "Status"); Status = new AvFlow(statusHost, ticker, width, 0f);
-                actionsHost = AvLay.Child(Rect, "Actions"); Actions = new AvFlow(actionsHost, ticker, width, 0f);
+                statusHost = AvLay.Child(Rect, "Status");
+                Status = new AvFlow(statusHost, ticker, width + 2f * Pad, 0f) { Host = this };
+                actionsHost = AvLay.Child(Rect, "Actions");
+                Actions = new AvFlow(actionsHost, ticker, width + 2f * Pad, 0f) { Host = this };
                 Select(0, null);
                 Restyle();
             }
@@ -59,14 +64,24 @@ namespace BoscaliSummer.Features.Support.Presentation
                 actionsTab.Latched = sub == 1;
                 statusHost.gameObject.SetActive(sub == 0);
                 actionsHost.gameObject.SetActive(sub == 1);
+                if (Owner != null)
+                {
+                    (sub == 0 ? Status : Actions).Relayout();
+                    Changed();
+                }
                 onSelect?.Invoke(sub);
             }
 
             public override float Measure(float width)
             {
                 AvFlow active = sub == 0 ? Status : Actions;
-                active.Relayout();
-                return HeaderH + active.ContentHeight;
+                if (sub == 0 ? !statusLaid : !actionsLaid)
+                {
+                    active.Relayout();
+                    if (sub == 0) statusLaid = true; else actionsLaid = true;
+                }
+                // The nested flow carries its own 14 px pad above and below; the header has none.
+                return HeaderH + BodyGap + Mathf.Max(0f, active.ContentHeight - 2f * Pad);
             }
 
             public override void Place(AvSlot s)
@@ -77,9 +92,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 float half = (ToggleW - 2f) * 0.5f;
                 AvLay.Place(statusTab.Rect, s.W - ToggleW, 0f, half, HeaderH);
                 AvLay.Place(actionsTab.Rect, s.W - ToggleW + half + 2f, 0f, half, HeaderH);
-                float bodyY = HeaderH + 4f, bodyH = Mathf.Max(0f, s.H - bodyY);
-                AvLay.Place(statusHost, 0f, bodyY, s.W, bodyH);
-                AvLay.Place(actionsHost, 0f, bodyY, s.W, bodyH);
+                float bodyY = HeaderH + BodyGap, bodyH = Mathf.Max(0f, s.H - bodyY);
+                AvLay.Place(statusHost, -Pad, bodyY - Pad, s.W + 2f * Pad, bodyH + 2f * Pad);
+                AvLay.Place(actionsHost, -Pad, bodyY - Pad, s.W + 2f * Pad, bodyH + 2f * Pad);
             }
 
             public override void Restyle()
@@ -91,150 +106,74 @@ namespace BoscaliSummer.Features.Support.Presentation
             }
         }
 
-        /// <summary>
-        /// One always-visible status/hint line: the page's normal hint, or (when an ability of
-        /// this domain is armed) "ARMED · name · right-click the map". Fixed height regardless of
-        /// text so switching between the two never reflows the page around it (rows stay put).
-        /// </summary>
-        private sealed class HintLine : AvPart
-        {
-            private readonly TMP_Text text;
-            private AvState state = AvState.Info;
-
-            public HintLine(RectTransform parent)
-            {
-                Rect = AvLay.Child(parent, "Hint");
-                text = AvText.Make(Rect, "Text", AvTextRole.Label, "", TextAlignmentOptions.MidlineLeft, true);
-                Restyle();
-            }
-
-            public void Set(string value, AvState s)
-            {
-                string composed = AvStates.Glyph(s) + (value ?? "");
-                if (text.text == composed && state == s) return;
-                text.text = composed;
-                state = s;
-                Restyle();
-            }
-
-            public override float Measure(float width) => Mathf.Max(20f, AvText.Height(text, width));
-            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
-
-            public override void Restyle() =>
-                text.color = state == AvState.Inert
-                    ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim)
-                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Dim);
-        }
-
-        /// <summary>
-        /// A small fixed-height newest-first log bound to a caller-owned ring buffer (the
-        /// SPACE/CYBER/SPEC OPS loops the OPS window rooms take by array reference); written only
-        /// when a line actually changes.
-        /// </summary>
-        private sealed class LogLines : AvPart
-        {
-            private readonly TMP_Text[] lines;
-            private readonly string[] shown;
-
-            public LogLines(RectTransform parent, int count)
-            {
-                Rect = AvLay.Child(parent, "Log");
-                lines = new TMP_Text[count];
-                shown = new string[count];
-                for (int i = 0; i < count; i++)
-                    lines[i] = AvText.Make(Rect, "Line" + i, AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void Write(string[] source)
-            {
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string v = source != null && i < source.Length ? source[i] : null;
-                    if (shown[i] == v) continue;
-                    shown[i] = v;
-                    lines[i].text = v ?? "";
-                }
-            }
-
-            public override float Measure(float width) => lines.Length * 17f;
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                for (int i = 0; i < lines.Length; i++)
-                    AvLay.Place(lines[i].rectTransform, 0f, i * 17f, s.W, 17f);
-            }
-
-            public override void Restyle()
-            {
-                for (int i = 0; i < lines.Length; i++)
-                    lines[i].color = i == 0
-                        ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
-                        : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            }
-        }
-
-        /// <summary>Hover help for an ability row: on the trailing control and the row body, re-set only
+        /// <summary>Hover help for an ability tile: on the trailing control and the tile body, re-set only
         /// when the sentence changes (the help follows state, e.g. the readiness word).</summary>
-        private static void SetRowHelp(AvRow row, AvControl button, string text)
+        private static void SetTileHelp(ActionTile tile, AvControl button, string text)
         {
             if (button != null)
             {
                 if (button.Help == text) return;
                 button.Help = text;
             }
-            row.Help = text;
-        }
-
-        /// <summary>Monospaced text for the terminal-flavoured CYBER shell log.</summary>
-        private static string Mono(string text) => string.IsNullOrEmpty(text) ? "" : "<mspace=0.6em>" + text;
-
-        /// <summary>A wrapped paragraph (briefing copy, advice text) that grows the flow rather than
-        /// clipping. Sentence case is the caller's, per spec §5.2 (prose keeps its authored case).</summary>
-        private sealed class NoteText : AvPart
-        {
-            private readonly TMP_Text text;
-            private AvState state = AvState.Inert;
-
-            public NoteText(RectTransform parent, AvTextRole role = AvTextRole.Prose)
-            {
-                Rect = AvLay.Child(parent, "Note");
-                text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void Set(string value, AvState s = AvState.Inert)
-            {
-                string v = value ?? "";
-                if (text.text == v && state == s) return;
-                text.text = v;
-                state = s;
-                Restyle();
-            }
-
-            public override float Measure(float width) => text.text.Length == 0 ? 0f : AvText.Height(text, width);
-            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
-
-            public override void Restyle() =>
-                text.color = state == AvState.Inert
-                    ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim)
-                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Dim);
+            tile.Help = text;
         }
 
         /// <summary>
-        /// A small bank of read-only annunciators (health, resources, holdings), reusing kit v2's
-        /// own <see cref="AvChip"/> (rail + word, R1 glyph) in rows of up to four rather than a
-        /// bespoke tile widget.
+        /// The armed-ability banner every ACTIONS page pins at its top: the page's own state line, or,
+        /// while an ability of this domain is armed, "ARMED · name" with ABORT on the right.
         /// </summary>
-        private static AvChip[] BuildChipRow(AvFlow flow, string[] keys)
+        private BriefCard BuildArmedBanner(AvFlow actions)
+        {
+            BriefCard banner = actions.Add(new BriefCard(actions.Content));
+            AvControl abort = banner.AddControl(new AvControl.Spec("ABORT", () =>
+            {
+                support.Disarm();
+                nextRefresh = 0f;
+            }, AvButtonStyle.Danger));
+            abort.Help = "Disarm the armed ability. No allocation is spent.";
+            return banner;
+        }
+
+        /// <summary>Paint a page's banner: armed beats the page's own state line.</summary>
+        private void PaintBanner(BriefCard banner, int tab, string headline, string text, AvState tone)
+        {
+            SupportActionId? armed = support.ArmedAction;
+            bool mine = false;
+            string name = null;
+            if (armed.HasValue)
+            {
+                foreach (SupportActionDefinition action in support.Actions)
+                {
+                    if (action.Id != armed.Value || HomeTab(action) != tab) continue;
+                    mine = true;
+                    name = action.Name;
+                    break;
+                }
+            }
+            if (mine)
+            {
+                banner.Set("▲ ARMED · " + name, "Right-click the map to fire. ABORT spends nothing.", AvState.Caution);
+                banner.ShowControl(true);
+            }
+            else
+            {
+                banner.Set(headline, text, tone);
+                banner.ShowControl(false);
+            }
+        }
+
+        /// <summary>
+        /// A small bank of read-only annunciators (health, resources, holdings), reusing kit v2's own
+        /// <see cref="AvChip"/> (rail + word, R1 glyph) in rows of <paramref name="perRow"/>.
+        /// </summary>
+        private static AvChip[] BuildChipRow(AvFlow flow, string[] keys, int perRow = 4)
         {
             var chips = new AvChip[keys.Length];
             for (int i = 0; i < chips.Length; i++) chips[i] = new AvChip(flow.Content);
             int at = 0;
             while (at < chips.Length)
             {
-                int n = Mathf.Min(4, chips.Length - at);
+                int n = Mathf.Min(perRow, chips.Length - at);
                 var line = new AvPart[n];
                 for (int k = 0; k < n; k++) line[k] = chips[at + k];
                 flow.Row(line);

@@ -19,17 +19,21 @@ namespace BoscaliSummer.Features.Support.Presentation
         private sealed class AbilityActionRow
         {
             public SupportActionDefinition Action;
-            public AvRow Row;
+            public ActionTile Row;
             public AvControl Button;
+            public AvSection Section;
+            public int Tier;
         }
 
-        private HintLine cyberOpsHint;
+        private BriefCard cyberBanner;
         private readonly List<AbilityActionRow> cyberAbilityRows = new List<AbilityActionRow>(12);
+        private readonly List<KeyValuePair<int, AvSection>> cyberTierSections = new List<KeyValuePair<int, AvSection>>(3);
 
         private void ResetCyberOpsPage()
         {
-            cyberOpsHint = null;
+            cyberBanner = null;
             cyberAbilityRows.Clear();
+            cyberTierSections.Clear();
         }
 
         private void BuildCyberOpsPage(AvFlow actions)
@@ -39,31 +43,36 @@ namespace BoscaliSummer.Features.Support.Presentation
                 if (HomeTab(action) == TabCyber) page.Add(action);
             page.Sort((a, b) => AbilityTier(a).CompareTo(AbilityTier(b)));
 
-            actions.Section(AvIcon.Bolt, "MAP ABILITIES", "");
-            cyberOpsHint = actions.Add(new HintLine(actions.Content));
-
+            cyberBanner = BuildArmedBanner(actions);
             if (page.Count == 0)
             {
-                actions.Add(new NoteText(actions.Content)).Set("This server resolves none of the catalogue.", AvState.Inert);
+                actions.Add(new BriefCard(actions.Content)).Set("NO ABILITIES", "This server resolves none of the catalogue.", AvState.Inert);
                 return;
             }
 
             int lastTier = -1;
+            AvSection section = null;
             foreach (SupportActionDefinition action in page)
             {
                 if (AbilityTier(action) != lastTier)
                 {
                     lastTier = AbilityTier(action);
-                    actions.Section(AvIcon.ListDetails, AbilityGroup(lastTier));
+                    section = actions.Section(AbilityGroupIcon(lastTier), AbilityGroup(lastTier));
+                    cyberTierSections.Add(new KeyValuePair<int, AvSection>(lastTier, section));
                 }
                 SupportActionId id = action.Id;
-                var row = new AbilityActionRow { Action = action, Row = actions.Add(new AvRow(actions.Content)) };
+                var row = new AbilityActionRow
+                {
+                    Action = action, Tier = lastTier, Section = section,
+                    Row = actions.Add(new ActionTile(actions.Content, AbilityIcon(action)))
+                };
                 row.Button = row.Row.AddTrailing(new AvControl.Spec("ARM", () =>
                 {
-                    support.Arm(id);
+                    if (support.ArmedAction.HasValue && support.ArmedAction.Value == id) support.Disarm();
+                    else support.Arm(id);
                     nextRefresh = 0f;
                 }));
-                SetRowHelp(row.Row, row.Button, action.Name + " — " + (action.Description ?? "") +
+                SetTileHelp(row.Row, row.Button, action.Name + " — " + (action.Description ?? "") +
                     " The host accepts it only when an online location's radius covers the point.");
                 cyberAbilityRows.Add(row);
             }
@@ -71,20 +80,37 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void RefreshCyberOpsPage(bool bypass, CyberNetwork network, double now)
         {
-            if (cyberOpsHint == null) return;
-            int count = CountActions(TabCyber);
-            string hint;
+            if (cyberBanner == null) return;
+            bool built = network != null && network.HasCommand;
+            string headline, text;
             AvState tone = AvState.Inert;
-            if (network == null || !network.HasCommand) hint = "HOLD AN AIRBASE · THE NETWORK COMES UP ON IT BY ITSELF";
-            else if (network.CommandCompromised) { hint = "C2 BREACHED · ABILITIES OFFLINE UNTIL PATCHED"; tone = AvState.Danger; }
+            if (!built)
+            {
+                headline = "NO NETWORK";
+                text = "Hold an airbase and the network comes up on it by itself. Base support below still works.";
+            }
+            else if (network.CommandCompromised)
+            {
+                headline = "✕ C2 BREACHED";
+                text = "Access abilities are offline until Cyber Command is patched.";
+                tone = AvState.Danger;
+            }
             else
             {
                 float access = network.AccessRemaining(now);
-                hint = "INTEL " + Mathf.FloorToInt(network.Intel) + "/" + Mathf.RoundToInt(network.IntelCapacity()) +
-                       (access > 0f ? " · ACCESS " + CyberWords.Seconds(access) + " · ONE USE" : " · NO ACCESS") + " · ARM MAP";
+                headline = "INTEL " + Mathf.FloorToInt(network.Intel) + "/" + Mathf.RoundToInt(network.IntelCapacity()) +
+                           (access > 0f ? " · ACCESS " + CyberWords.Seconds(access) : " · NO ACCESS");
+                text = access > 0f ? "One effect per window. Arm an ability, then right-click the map."
+                    : "Breach a real site in the console to open a " + Mathf.RoundToInt(CyberLocations.AccessSeconds) + " s effect window.";
+                tone = access > 0f ? AvState.Ready : AvState.Inert;
             }
-            cyberOpsHint.Set(count + " ABILITIES · " + hint, tone);
-            foreach (AbilityActionRow row in cyberAbilityRows) PaintAbilityRow(row, network, now, bypass);
+            PaintBanner(cyberBanner, TabCyber, headline, text, tone);
+            foreach (KeyValuePair<int, AvSection> group in cyberTierSections) group.Value.SetShown(built || group.Key >= 4);
+            foreach (AbilityActionRow row in cyberAbilityRows)
+            {
+                row.Row.SetShown(built || row.Tier >= 4);
+                PaintAbilityRow(row, network, now, bypass);
+            }
         }
 
         private void PaintAbilityRow(AbilityActionRow row, CyberNetwork network, double now, bool bypass)
@@ -93,11 +119,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             SupportActionDefinition action = row.Action;
             AbilityFacts facts = AbilityStatus.For(support, action, bypass);
             string where = network != null && network.HasCommand ? Coverage(action, network, now) : action.Description ?? "";
-            string sub = where.Length > 0 ? facts.Readiness + " — " + where : facts.Readiness;
-            row.Row.Set(action.Name, sub, facts.CostText, ToState(facts.Tone));
-            row.Button.Interactable = facts.Enabled;
-            row.Button.Latched = facts.Armed;
-            row.Button.Label = facts.Armed ? "ABORT" : "ARM";
+            bool usable = facts.Enabled || facts.Armed;
+            string sub = usable && where.Length > 0 ? facts.Readiness + "\n" + where : facts.Readiness;
+            PaintAbilityTile(row.Row, row.Button, action, facts, sub, "ARM");
         }
 
         /// <summary>How many locations can run this ability, and how far their radius reaches.
@@ -136,6 +160,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             action.Hack.HasValue ? 2
             : action.Cap.HasValue ? 3
             : 4;
+
+        private static AvIcon AbilityGroupIcon(int tier) =>
+            tier == 2 ? AvIcon.Unlink : tier == 3 ? AvIcon.Database : AvIcon.Shield;
 
         private static string AbilityGroup(int tier)
         {
