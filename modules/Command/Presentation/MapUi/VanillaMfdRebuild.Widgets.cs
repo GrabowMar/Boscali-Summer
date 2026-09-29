@@ -83,7 +83,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// </summary>
         private sealed class MfdIconCell : AvPart
         {
-            private const float PadX = 10f, PadY = 7f, Led = 6f, StateW = 34f, IconSize = 16f, IconGap = 6f;
+            private const float PadX = 10f, PadY = 7f, Led = 6f, StateW = 34f, IconSize = 20f, IconGap = 6f;
             private AvFrame frame;
             private Image led, icon;
             private TMP_Text title, sub, stateWord;
@@ -165,11 +165,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float iconW = hasIcon ? IconSize + IconGap : 0f;
                 float x = PadX + Led + 6f + iconW, textW = s.W - x - PadX - StateW;
                 float th = AvText.Height(title, textW);
-                AvLay.Place(led.rectTransform, PadX, PadY + 4f, Led, Led);
-                if (hasIcon) AvLay.Place(icon.rectTransform, PadX + Led + 6f, PadY, IconSize, IconSize);
-                AvLay.Place(title.rectTransform, x, PadY, textW, th);
-                AvLay.Place(sub.rectTransform, x, PadY + th + 2f, textW, AvText.Height(sub, textW));
-                AvLay.Place(stateWord.rectTransform, s.W - PadX - StateW, PadY, StateW, 16f);
+                bool hasSub = sub.text.Length > 0;
+                float sh = hasSub ? AvText.Height(sub, textW) : 0f;
+                // A cell with a sub-line keeps the MAP layout (text block pinned to the top pad); a title-only
+                // cell centres its single line instead of leaving the bottom half of the frame empty.
+                float y0 = hasSub ? PadY : Mathf.Max(PadY - 2f, (s.H - th) * 0.5f);
+                AvLay.Place(led.rectTransform, PadX, y0 + 4f, Led, Led);
+                if (hasIcon) AvLay.Place(icon.rectTransform, PadX + Led + 6f, (s.H - IconSize) * 0.5f, IconSize, IconSize);
+                AvLay.Place(title.rectTransform, x, y0, textW, th);
+                AvLay.Place(sub.rectTransform, x, y0 + th + 2f, textW, sh);
+                AvLay.Place(stateWord.rectTransform, s.W - PadX - StateW, y0, StateW, 16f);
             }
 
             public override void Restyle()

@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private MfdPagingGrid factionGrid;
             private MfdPagingGrid unitGrid;
             private MfdPagingGrid vehicleGrid;
-            private AvGauge filterGauge;
+            private AvMetric[] filterMetrics;
             private MfdPagingGrid selectedGrid;
             private MfdPagingGrid candidateGrid;
             private readonly List<TargetCandidate> candidates = new List<TargetCandidate>(128);
@@ -74,7 +74,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // Camera surface mark: state lives in Support through a narrow contract.
             private ICameraTargetService cameraService;
             private AvRow cameraStatusRow;
-            private readonly AvRow[] cameraRows = new AvRow[5];
+            private AvMetric[] cameraTiles;
+            private readonly AvRow[] cameraRows = new AvRow[2];
             private AvRow cameraReticleRow;
             private AvControl cameraCapture;
             private AvControl cameraCall;
@@ -129,7 +130,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (!Ready)
                 {
                     SetFilterInput(false);
-                    filterGauge.Set(0f, "—", AvState.Inert);
+                    foreach (AvMetric tile in filterMetrics) tile.Set("—", "NO LINK", 0f, AvState.Inert);
                     chips[0].Set("LINK", AvState.Inert);
                     chips[1].Set("DATA", AvState.Inert);
                     chips[2].Set("—", AvState.Inert);
@@ -150,11 +151,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 int filters = CountEnabled(selector.toggleFactionItems) +
                               CountEnabled(selector.toggleUnitTypesItems) +
                               CountEnabled(selector.toggleVehicleTypesItems);
-                int total = selector.toggleFactionItems.Count + selector.toggleUnitTypesItems.Count +
-                            selector.toggleVehicleTypesItems.Count;
-                filterGauge.Set(total > 0 ? filters / (float)total : 0f,
-                    AvNum.Fixed(filters, 0) + " / " + AvNum.Fixed(total, 0),
-                    filters > 0 ? AvState.Ready : AvState.Inert);
+                SetFilterTile(filterMetrics[0], selector.toggleFactionItems);
+                SetFilterTile(filterMetrics[1], selector.toggleUnitTypesItems);
+                SetFilterTile(filterMetrics[2], selector.toggleVehicleTypesItems);
 
                 chips[0].Set(filters + " FILTERS", filters > 0 ? AvState.Ready : AvState.Inert);
                 chips[1].Set(activePreset, activePreset != TargetPresetLibrary.CustomProfile ? AvState.Ready : AvState.Inert);
@@ -206,7 +205,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void BuildFiltersPage(AvFlow page)
             {
                 page.Section(AvIcon.Filter, "ACQUISITION GATE", "SENSOR LOGIC");
-                filterGauge = page.Add(new AvGauge(page.Content, "ENABLED FILTERS", AvGaugeShape.Bar));
+                // Three compact tiles (faction / class / platform) instead of one dial: each shows how much of
+                // its mask is open, so the gate reads at a glance without a big empty gauge block.
+                filterMetrics = new[]
+                {
+                    new AvMetric(page.Content, "FACTION"),
+                    new AvMetric(page.Content, "UNIT CLASS"),
+                    new AvMetric(page.Content, "PLATFORM"),
+                };
+                page.Row(filterMetrics);
 
                 page.Section(AvIcon.Filter, "FILTER ACTIONS", "L TOGGLE / R SOLO");
                 AvButtons actionRow = page.Buttons(
@@ -662,6 +669,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     index => catalog[index] != null && catalog[index].Name == activePreset,
                     ApplyCatalog,
                     icons: index => null,
+                    subs: index => TargetPresetRuntime.IsBuiltIn(index) ? "Built-in profile" : "Saved preset",
                     details: index =>
                     {
                         TargetPresetSnapshot preset = catalog[index];
@@ -998,6 +1006,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 cameraClear = cameraActions.Controls[2];
 
                 page.Section(AvIcon.ChartLine, "TARGET TELEMETRY", "COORDINATES & RANGE");
+                cameraTiles = new[]
+                {
+                    new AvMetric(page.Content, "SLANT RANGE"),
+                    new AvMetric(page.Content, "ELEVATION"),
+                    new AvMetric(page.Content, "MARK AGE"),
+                };
+                page.Row(cameraTiles);
                 for (int i = 0; i < cameraRows.Length; i++) cameraRows[i] = page.Add(new AvRow(page.Content));
 
                 page.Section(AvIcon.Radar2, "SENSOR ALIGNMENT", "LINE-OF-SIGHT DATUM");
@@ -1036,10 +1051,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         "", AvState.Ready);
                     SetCameraTelemetry(
                         "X " + AvNum.Fixed(point.X, 0) + " · Z " + AvNum.Fixed(point.Z, 0),
-                        AvNum.Fixed(point.Y, 0) + " m ASL",
+                        AvNum.Fixed(point.Y, 0),
                         AvNum.Fixed(point.Range / 1000f, 1) + " km",
                         AvNum.Fixed(service.AgeSeconds, 0) + "s",
-                        armed ? service.ArmedActionName : "NONE (ARM IN OPS)");
+                        armed ? service.ArmedActionName : "NONE (ARM IN OPS)",
+                        Mathf.Max(0f, point.Range / 1000f), Mathf.Max(0f, service.AgeSeconds));
                     cameraReticleRow?.Set("SENSOR ALIGNMENT", "SURFACE MARK LOCKED · REFERENCE RECORDED", "", AvState.Ready);
                 }
                 else
@@ -1068,13 +1084,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (cameraClear != null) cameraClear.Help = marked ? "Clear the active mark." : "No mark to clear.";
             }
 
-            private void SetCameraTelemetry(string position, string elevation, string range, string age, string armed)
+            /// <summary>Range, elevation and age are numbers (tiles); grid and armed call-in are longer text, so
+            /// they sit on a row's second line where they can wrap instead of squeezing into the value column.</summary>
+            private void SetCameraTelemetry(string position, string elevation, string range, string age, string armed,
+                float rangeKm = -1f, float ageSeconds = -1f)
             {
-                cameraRows[0]?.Set("GRID (X / Z)", null, position, AvState.Info);
-                cameraRows[1]?.Set("ELEVATION (Y)", null, elevation, AvState.Info);
-                cameraRows[2]?.Set("SLANT RANGE", null, range, AvState.Info);
-                cameraRows[3]?.Set("MARK AGE", null, age, AvState.Info);
-                cameraRows[4]?.Set("ARMED CALL-IN", null, armed, armed.StartsWith("NONE") ? AvState.Inert : AvState.Caution);
+                bool marked = rangeKm >= 0f;
+                cameraTiles[0].Set(marked ? AvNum.Fixed(rangeKm, 1) : "\u2014", marked ? "KM" : "NO MARK",
+                    marked ? Mathf.Clamp01(rangeKm / 20f) : 0f, marked ? AvState.Info : AvState.Inert);
+                cameraTiles[1].Set(marked ? elevation : "\u2014", marked ? "M ASL" : "NO MARK", 0f, marked ? AvState.Info : AvState.Inert);
+                cameraTiles[2].Set(marked ? AvNum.Fixed(ageSeconds, 0) : "\u2014", marked ? "S \u00b7 EXPIRES AT 120" : "NO MARK",
+                    marked ? Mathf.Clamp01(1f - ageSeconds / 120f) : 0f,
+                    !marked ? AvState.Inert : ageSeconds > 90f ? AvState.Caution : AvState.Info);
+                cameraRows[0]?.Set("GRID (X / Z)", position, "", marked ? AvState.Info : AvState.Inert);
+                cameraRows[1]?.Set("ARMED CALL-IN", armed, "", armed.StartsWith("NONE") ? AvState.Inert : AvState.Caution);
             }
 
             // ------------------------------------------------------------ plumbing
@@ -1085,7 +1108,45 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 grid.SetData(entries == null ? 0 : entries.Count,
                     i => NativeTargetLabel(entries[i]),
                     i => entries[i] != null && entries[i].status,
-                    onClick, icons: i => entries[i] == null || entries[i].image == null ? null : entries[i].image.sprite);
+                    onClick, icons: i => entries[i] == null || entries[i].image == null ? null : entries[i].image.sprite,
+                    subs: i => FilterNote(NativeTargetLabel(entries[i])));
+            }
+
+            /// <summary>One line under each filter name, MAP-style, so every switch reads the same height and weight.</summary>
+            private static string FilterNote(string label)
+            {
+                switch (label)
+                {
+                    case "FRIENDLY": return "Friendly contacts";
+                    case "ENEMY": return "Hostile contacts";
+                    case "AIRCRAFT": return "Airborne tracks";
+                    case "MISSILES": return "Missiles in flight";
+                    case "GROUND": return "Vehicles & troops";
+                    case "BUILDINGS": return "Bases & structures";
+                    case "SHIPS": return "Naval contacts";
+                    case "TRUCK": return "Supply trucks";
+                    case "UGV": return "Unmanned ground";
+                    case "LCV": return "Light combat";
+                    case "AFV": return "Armored vehicles";
+                    case "MBT": return "Main battle tanks";
+                    case "ART": return "Field artillery";
+                    case "AAA": return "Anti-air guns";
+                    case "IR SAM": return "Heat-seeking SAM";
+                    case "R SAM": return "Radar-guided SAM";
+                    case "RDR":
+                    case "RADAR": return "Search radars";
+                    default: return null;
+                }
+            }
+
+            private static void SetFilterTile(AvMetric tile, List<TargetListSelector_ToggleButton> entries)
+            {
+                int total = entries == null ? 0 : entries.Count;
+                int open = CountEnabled(entries);
+                string word = total == 0 ? "NO DATA" : open == total ? "ALL OPEN" : open == 0 ? "NONE OPEN" : (total - open) + " MASKED";
+                tile.Set(AvNum.Fixed(open, 0) + "/" + AvNum.Fixed(total, 0), word,
+                    total > 0 ? open / (float)total : 0f,
+                    total == 0 ? AvState.Inert : open == total ? AvState.Ready : open == 0 ? AvState.Caution : AvState.Info);
             }
 
             private static void AddRightClickActions(MfdPagingGrid grid, int slots, Action<int> onOnly)
