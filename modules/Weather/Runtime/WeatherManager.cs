@@ -367,7 +367,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 TryMissionTime(out float missionTime);
                 Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
                 flightClouds.Update(LevelInfo.i, Field, worldCamera, currentCloudHeight,
-                    missionTime);
+                    missionTime, false);
                 if (flightClouds.Active)
                 {
                     if (clouds.Applied) clouds.Restore();
