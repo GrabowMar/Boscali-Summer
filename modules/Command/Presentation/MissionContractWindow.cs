@@ -198,7 +198,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             for (int i = 0; i < roster.Count; i++)
                 if (roster[i].Id == selectedId) { current = roster[i]; break; }
             ShowDetail(current);
-            window.Body.Relayout();
         }
 
         private void ShowDetail(SecondaryObjectiveView entry)
