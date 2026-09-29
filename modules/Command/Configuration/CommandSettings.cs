@@ -28,6 +28,7 @@ namespace BoscaliSummer.Features.Command.Configuration
 
         public ConfigEntry<bool> MapTerrainImage { get; }
         public ConfigEntry<bool> MapRelief3D { get; }
+        public ConfigEntry<bool> MapSymbology { get; }
         public ConfigEntry<float> MapTerrainOpacity { get; }
         public ConfigEntry<float> MapTrayOpacity { get; }
 
@@ -154,6 +155,9 @@ namespace BoscaliSummer.Features.Command.Configuration
 
             MapRelief3D = config.Bind("Command", "MapRelief3D", true,
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");
+
+            MapSymbology = config.Bind("Command", "MapSymbology", true,
+                "Draw expanded-map contacts as framed symbols: a frame shape for allegiance (square friendly, diamond hostile, circle unknown), a glyph per platform class and a dark plate that lifts them off the terrain. Off keeps the game's bare icons.");
 
             MapTerrainOpacity = config.Bind("Command", "MapTerrainOpacity", 1.0f,
                 new ConfigDescription(
