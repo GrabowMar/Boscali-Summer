@@ -50,7 +50,10 @@ namespace BoscaliSummer.Features.Trenches.Configuration
             ShowOnTacticalMap = config.Bind("Trenches", "ShowOnTacticalMap", true,
                 "Display NATO APP-6 crenellated entrenchment marks and strongpoints on the theater map.");
 
-            BarrageEnabled = config.Bind("Trenches", "BarrageEnabled", false,
+            // Renamed from BarrageEnabled (default false) so existing installs pick up the
+            // new default: BepInEx applies a default only to a new key, and a blind bump would
+            // also flip players who deliberately opted out. The old key is ignored.
+            BarrageEnabled = config.Bind("Trenches", "HarassingBarrage", true,
                 "Harassing mortar and artillery fire between opposing matured positions: the server " +
                 "fires vanilla shells at no man's land with a radial miss. Immersive churn and " +
                 "suppression; a short round can still damage the ditch like any other hit.");

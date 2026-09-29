@@ -17,6 +17,9 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestTraverseWave();
             TestDensifyAndWave();
             TestRoutePlanning();
+            TestBuildSteps();
+            TestWireValidation();
+            TestSapGap();
             TestDefensibleSiting();
             TestSitingNudges();
             TestPressureOrder();
@@ -398,6 +401,74 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(excursion > TrenchTraceMath.TraverseAmplitude * 0.5f &&
                 excursion <= TrenchTraceMath.TraverseAmplitude + 0.001f,
                 "The ditch weaves through traverses within a trench width");
+        }
+
+        private static void TestSapGap()
+        {
+            TestAssert.That(TrenchTraceMath.WithinSapGap(6.9f, 0f, 0f, 0f), "Wire breaks at the sap head");
+            TestAssert.That(!TrenchTraceMath.WithinSapGap(7.1f, 0f, 0f, 0f), "Wire stands past the gap");
+            TestAssert.That(!TrenchTraceMath.WithinSapGap(7f, 0f, 0f, 0f), "The gap edge holds wire");
+            TestAssert.That(TrenchTraceMath.WithinSapGap(4f, 4f, 0f, 0f), "The gap is radial, not axial");
+        }
+
+        private static void TestWireValidation()
+        {
+            TestAssert.That(TrenchWire.ProtocolVersion == 1, "The trench wire starts at protocol 1");
+            TestAssert.That(TrenchWire.MaximumStations == 320, "The wire cap pins the planner cap");
+            TestAssert.That(TrenchWire.ValidTraceCounts(2, 2, 0, 0, 0, 0), "A lone fire trace is valid");
+            TestAssert.That(TrenchWire.ValidTraceCounts(320, 320, 320, 320, 3, 2), "A full belt at cap is valid");
+            TestAssert.That(!TrenchWire.ValidTraceCounts(1, 1, 0, 0, 0, 0), "A single station is no trace");
+            TestAssert.That(!TrenchWire.ValidTraceCounts(321, 321, 0, 0, 0, 0), "Over-cap curves are refused");
+            TestAssert.That(!TrenchWire.ValidTraceCounts(10, 9, 0, 0, 0, 0), "Threat must match the curve");
+            TestAssert.That(!TrenchWire.ValidTraceCounts(10, 10, 0, 0, 4, 0), "Over-cap links are refused");
+            TestAssert.That(!TrenchWire.ValidTraceCounts(10, 10, 0, 0, 0, 3), "Over-cap spurs are refused");
+            TestAssert.That(TrenchWire.ValidLinkStations(3) && !TrenchWire.ValidLinkStations(-1) &&
+                !TrenchWire.ValidLinkStations(9), "Link stations stay capped");
+            TestAssert.That(TrenchWire.ValidSpurStations(3) && !TrenchWire.ValidSpurStations(9),
+                "Spur stations stay capped");
+            TestAssert.That(TrenchWire.ValidDefenders(8) && !TrenchWire.ValidDefenders(-1) &&
+                !TrenchWire.ValidDefenders(9), "Defenders stay capped");
+            TestAssert.That(TrenchWire.ValidStage(0) && TrenchWire.ValidStage(4) &&
+                !TrenchWire.ValidStage(5) && !TrenchWire.ValidStage(-1), "Stages stay in range");
+            TestAssert.That(TrenchWire.OwnerHashFor("Coalition") == TrenchWire.OwnerHashFor("Coalition"),
+                "Owner hash is stable");
+            TestAssert.That(TrenchWire.OwnerHashFor("Coalition") != 0, "Owner hash never reads unknown");
+            TestAssert.That(TrenchWire.OwnerHashFor("Coalition") != TrenchWire.OwnerHashFor("Crimson"),
+                "Factions hash apart");
+            TestAssert.That(TrenchWire.Finite(1f) && !TrenchWire.Finite(float.NaN) &&
+                !TrenchWire.Finite(float.PositiveInfinity), "Finite rejects NaN and infinity");
+        }
+
+        private static void TestBuildSteps()
+        {
+            var steps = new TrenchBuildStep[TrenchTraceMath.MaximumBuildSteps];
+            int full = TrenchTraceMath.PlanBuildSteps(true, true, 3, 2, steps);
+            TestAssert.That(full == 14, "A full belt plans every trace step");
+            TestAssert.That(steps[0] == TrenchBuildStep.Fire && steps[1] == TrenchBuildStep.Colliders &&
+                steps[2] == TrenchBuildStep.Wire && steps[3] == TrenchBuildStep.WireOuter,
+                "The fire ditch, its colliders and wire build first");
+            TestAssert.That(steps[4] == TrenchBuildStep.Support && steps[5] == TrenchBuildStep.Redoubt &&
+                steps[6] == TrenchBuildStep.Links && steps[7] == TrenchBuildStep.Spurs,
+                "The belt builds at full detail before any coarse pass");
+            TestAssert.That(steps[8] == TrenchBuildStep.FireLod1 && steps[9] == TrenchBuildStep.SupportLod1 &&
+                steps[10] == TrenchBuildStep.RedoubtLod1 && steps[11] == TrenchBuildStep.FireLod2 &&
+                steps[12] == TrenchBuildStep.SupportLod2 && steps[13] == TrenchBuildStep.RedoubtLod2,
+                "Mid passes precede far passes, fire before belt");
+
+            int bare = TrenchTraceMath.PlanBuildSteps(false, false, 0, 0, steps);
+            TestAssert.That(bare == 6 && steps[0] == TrenchBuildStep.Fire &&
+                steps[4] == TrenchBuildStep.FireLod1 && steps[5] == TrenchBuildStep.FireLod2,
+                "A lone fire trench skips every belt and belt-LOD step");
+
+            int supportOnly = TrenchTraceMath.PlanBuildSteps(true, false, 0, 0, steps);
+            TestAssert.That(supportOnly == 9, "A missing redoubt drops its three steps, not the stage");
+
+            TestAssert.That(TrenchTraceMath.PlanBuildSteps(true, true, 1, 1, null) == 0,
+                "A null buffer plans nothing");
+            var small = new TrenchBuildStep[2];
+            TestAssert.That(TrenchTraceMath.PlanBuildSteps(true, true, 1, 1, small) == 2 &&
+                small[0] == TrenchBuildStep.Fire && small[1] == TrenchBuildStep.Colliders,
+                "A short buffer truncates instead of overrunning");
         }
 
         private static void TestRoutePlanning()

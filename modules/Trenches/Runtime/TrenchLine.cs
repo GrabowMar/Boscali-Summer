@@ -17,6 +17,8 @@ namespace BoscaliSummer.Features.Trenches.Runtime
         public int Id { get; }
         public string Name { get; set; }
         public FactionHQ OwnerHq { get; set; }
+        /// <summary>Faction identity on the wire; clients tint the map from it.</summary>
+        public int OwnerHash { get; set; }
         public TrenchStage Stage { get; set; }
         public float Pressure { get; }
         public Vector3 Center { get; private set; }
@@ -114,6 +116,29 @@ namespace BoscaliSummer.Features.Trenches.Runtime
 
         public bool Contains(Vector3 position)
             => Validator == null || Validator(position);
+
+        /// <summary>
+        /// Client-side line from a geometry message: curves only, anchors and nodes derived
+        /// locally, planning inputs left empty. Never plans, never spawns.
+        /// </summary>
+        public static TrenchLine FromNetwork(int id, int ownerHash, TrenchStage stage,
+            Vector3[] curve, Vector3[] threat, Vector3[] support, Vector3[] redoubt,
+            Vector3[][] links, Vector3[][] spurs)
+        {
+            var line = new TrenchLine(id, "Trench_" + id, null, 0f, 10f,
+                Array.Empty<Vector3>(), Array.Empty<Vector3>(), Array.Empty<float>(), curve, threat);
+            line.OwnerHash = ownerHash;
+            line.Stage = stage;
+            line.Support = support;
+            line.Redoubt = redoubt;
+            line.Links = links;
+            line.Spurs = spurs;
+            line.Anchors = TrenchPlanner.SampleAnchors(curve, TrenchPlanner.AnchorSpacing);
+            line.SupportAnchors = TrenchPlanner.SampleAnchors(support, TrenchPlanner.AnchorSpacing);
+            line.RedoubtAnchors = TrenchPlanner.SampleAnchors(redoubt, TrenchPlanner.AnchorSpacing);
+            line.Validate();
+            return line;
+        }
 
         /// <summary>Enemy direction at the curve station nearest a position.</summary>
         public Vector3 ThreatAt(Vector3 position)

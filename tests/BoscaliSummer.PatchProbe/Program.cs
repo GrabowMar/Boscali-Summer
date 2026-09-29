@@ -900,6 +900,9 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Features.Events.Networking.ActiveEventChanged", new[] { "Protocol:System.Byte", "CatalogIndex:System.SByte", "TargetFactionHash:System.Int32", "StartedAtMissionTime:System.Single", "EndsAtMissionTime:System.Single", "EffectStrength:System.Single", "FactionResponseHashes:System.Int32[]", "FactionResponseKinds:System.Byte[]" }),
     ("BoscaliSummer.Features.Events.Networking.EventIntent", new[] { "Protocol:System.Byte", "Token:System.UInt32", "Action:System.Byte", "CatalogIndex:System.SByte" }),
     ("BoscaliSummer.Features.Events.Networking.EventReply", new[] { "Protocol:System.Byte", "Token:System.UInt32", "CatalogIndex:System.SByte", "Result:System.Byte", "Kind:System.Byte", "Cost:System.Int32" }),
+    ("BoscaliSummer.Features.Trenches.Networking.TrenchGeometryMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32", "Stage:System.Byte", "OwnerHash:System.Int32", "Curve:UnityEngine.Vector3[]", "Threat:UnityEngine.Vector3[]", "Support:UnityEngine.Vector3[]", "Redoubt:UnityEngine.Vector3[]", "Links:UnityEngine.Vector3[][]", "Spurs:UnityEngine.Vector3[][]" }),
+    ("BoscaliSummer.Features.Trenches.Networking.TrenchStateMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32", "Stage:System.Byte", "Defenders:System.Byte", "Suppressed:System.Boolean", "Overrun:System.Boolean" }),
+    ("BoscaliSummer.Features.Trenches.Networking.TrenchLineRemovedMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32" }),
     ("BoscaliSummer.Features.Session.Networking.SessionHello", new[] { "Protocol:System.Byte", "Version:System.String" }),
     ("BoscaliSummer.Features.Session.Networking.HostSettingsMessage", new[] { "Protocol:System.Byte", "Version:System.String", "Flags:System.Byte", "Keys:System.String[]", "Values:System.String[]" }),
     ("BoscaliSummer.Features.TheaterOps.Networking.TheaterPriorityQuery", new[] { "Protocol:System.Byte" }),
@@ -922,6 +925,7 @@ ProbeSquadSerialization(pluginAssembly, mirageAssembly);
 ProbeSupportSerialization(pluginAssembly, mirageAssembly);
 ProbeEventsSerialization(pluginAssembly, mirageAssembly);
 ProbeFactionMoraleSerialization(pluginAssembly, mirageAssembly);
+ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 CustomAttributeData dependency = pluginAssembly.GetType("BoscaliSummer.Plugin", true)!.CustomAttributes
@@ -1856,6 +1860,111 @@ static void ProbeFactionMoraleSerialization(Assembly plugin, Assembly mirage)
     }
     finally { ((IDisposable)reader).Dispose(); }
     Console.WriteLine("  Faction morale protocol-1 snapshot roundtrip");
+}
+
+static void ProbeTrenchSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Type net = plugin.GetType("BoscaliSummer.Features.Trenches.Networking.TrenchNet", true)!;
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 1)
+        throw new InvalidOperationException("Trench protocol changed without updating its probe");
+    net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+
+    object Roundtrip(Type message, object sample, string label)
+    {
+        var write = (Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(message)
+            .GetProperty("Write", flags)!.GetValue(null)!;
+        object writer = Activator.CreateInstance(writerType, 512)!;
+        write.DynamicInvoke(writer, sample);
+        byte[] bytes = (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            var read = (Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(message)
+                .GetProperty("Read", flags)!.GetValue(null)!;
+            return read.DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+
+    Type geometryType = plugin.GetType("BoscaliSummer.Features.Trenches.Networking.TrenchGeometryMessage", true)!;
+    object geometry = Activator.CreateInstance(geometryType)!;
+    Type v3 = Type.GetType("UnityEngine.Vector3, UnityEngine.CoreModule", true)!;
+    object Station(float x, float z) => Activator.CreateInstance(v3, x, 0f, z)!;
+    Array curve = Array.CreateInstance(v3, 2);
+    curve.SetValue(Station(10f, 20f), 0);
+    curve.SetValue(Station(30f, 40f), 1);
+    Array threat = Array.CreateInstance(v3, 2);
+    threat.SetValue(Station(0f, 1f), 0);
+    threat.SetValue(Station(0f, 1f), 1);
+    Array link = Array.CreateInstance(v3, 3);
+    link.SetValue(Station(10f, 20f), 0);
+    link.SetValue(Station(11f, 25f), 1);
+    link.SetValue(Station(12f, 30f), 2);
+    Array links = Array.CreateInstance(v3.MakeArrayType(), 1);
+    links.SetValue(link, 0);
+    geometryType.GetField("Protocol")!.SetValue(geometry, (byte)1);
+    geometryType.GetField("LineId")!.SetValue(geometry, 7);
+    geometryType.GetField("Stage")!.SetValue(geometry, (byte)2);
+    geometryType.GetField("OwnerHash")!.SetValue(geometry, -1234567);
+    geometryType.GetField("Curve")!.SetValue(geometry, curve);
+    geometryType.GetField("Threat")!.SetValue(geometry, threat);
+    geometryType.GetField("Support")!.SetValue(geometry, Array.CreateInstance(v3, 0));
+    geometryType.GetField("Redoubt")!.SetValue(geometry, null);
+    geometryType.GetField("Links")!.SetValue(geometry, links);
+    geometryType.GetField("Spurs")!.SetValue(geometry, null);
+    object geometryBack = Roundtrip(geometryType, geometry, "geometry");
+    Array curveBack = (Array)geometryType.GetField("Curve")!.GetValue(geometryBack)!;
+    Array threatBack = (Array)geometryType.GetField("Threat")!.GetValue(geometryBack)!;
+    Array supportBack = (Array)geometryType.GetField("Support")!.GetValue(geometryBack)!;
+    Array redoubtBack = (Array)geometryType.GetField("Redoubt")!.GetValue(geometryBack)!;
+    Array linksBack = (Array)geometryType.GetField("Links")!.GetValue(geometryBack)!;
+    Array spursBack = (Array)geometryType.GetField("Spurs")!.GetValue(geometryBack)!;
+    float X(object station) => (float)v3.GetField("x")!.GetValue(station)!;
+    float Z(object station) => (float)v3.GetField("z")!.GetValue(station)!;
+    float Y(object station) => (float)v3.GetField("y")!.GetValue(station)!;
+    if ((byte)geometryType.GetField("Protocol")!.GetValue(geometryBack)! != 1 ||
+        (int)geometryType.GetField("LineId")!.GetValue(geometryBack)! != 7 ||
+        (byte)geometryType.GetField("Stage")!.GetValue(geometryBack)! != 2 ||
+        (int)geometryType.GetField("OwnerHash")!.GetValue(geometryBack)! != -1234567 ||
+        curveBack.Length != 2 || X(curveBack.GetValue(0)!) != 10f || Z(curveBack.GetValue(1)!) != 40f ||
+        Y(curveBack.GetValue(0)!) != 0f || threatBack.Length != 2 || X(threatBack.GetValue(1)!) != 0f ||
+        supportBack.Length != 0 || redoubtBack.Length != 0 ||
+        linksBack.Length != 1 || ((Array)linksBack.GetValue(0)!).Length != 3 ||
+        Z(((Array)linksBack.GetValue(0)!).GetValue(2)!) != 30f || spursBack.Length != 0)
+        throw new InvalidOperationException("Trench geometry roundtrip changed");
+    Console.WriteLine("  Trench protocol-1 geometry roundtrip");
+
+    Type stateType = plugin.GetType("BoscaliSummer.Features.Trenches.Networking.TrenchStateMessage", true)!;
+    object state = Activator.CreateInstance(stateType)!;
+    stateType.GetField("Protocol")!.SetValue(state, (byte)1);
+    stateType.GetField("LineId")!.SetValue(state, 7);
+    stateType.GetField("Stage")!.SetValue(state, (byte)3);
+    stateType.GetField("Defenders")!.SetValue(state, (byte)6);
+    stateType.GetField("Suppressed")!.SetValue(state, true);
+    stateType.GetField("Overrun")!.SetValue(state, false);
+    object stateBack = Roundtrip(stateType, state, "state");
+    if ((byte)stateType.GetField("Protocol")!.GetValue(stateBack)! != 1 ||
+        (int)stateType.GetField("LineId")!.GetValue(stateBack)! != 7 ||
+        (byte)stateType.GetField("Stage")!.GetValue(stateBack)! != 3 ||
+        (byte)stateType.GetField("Defenders")!.GetValue(stateBack)! != 6 ||
+        (bool)stateType.GetField("Suppressed")!.GetValue(stateBack)! != true ||
+        (bool)stateType.GetField("Overrun")!.GetValue(stateBack)! != false)
+        throw new InvalidOperationException("Trench state roundtrip changed");
+    Console.WriteLine("  Trench protocol-1 state roundtrip");
+
+    Type removedType = plugin.GetType("BoscaliSummer.Features.Trenches.Networking.TrenchLineRemovedMessage", true)!;
+    object removed = Activator.CreateInstance(removedType)!;
+    removedType.GetField("Protocol")!.SetValue(removed, (byte)1);
+    removedType.GetField("LineId")!.SetValue(removed, 7);
+    object removedBack = Roundtrip(removedType, removed, "removed");
+    if ((byte)removedType.GetField("Protocol")!.GetValue(removedBack)! != 1 ||
+        (int)removedType.GetField("LineId")!.GetValue(removedBack)! != 7)
+        throw new InvalidOperationException("Trench removal roundtrip changed");
+    Console.WriteLine("  Trench protocol-1 removal roundtrip");
 }
 
 static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)

@@ -30,6 +30,25 @@ namespace BoscaliSummer.Features.Trenches.Domain
     /// owned side, the traversed ditch polyline, and the stages a position matures through.
     /// Unit-testable without the game running.
     /// </summary>
+    /// <summary>One trace of a staged chunk rebuild, ordered near-visible first by PlanBuildSteps.</summary>
+    internal enum TrenchBuildStep
+    {
+        Fire = 0,
+        Colliders,
+        Wire,
+        WireOuter,
+        Support,
+        Redoubt,
+        Links,
+        Spurs,
+        FireLod1,
+        SupportLod1,
+        RedoubtLod1,
+        FireLod2,
+        SupportLod2,
+        RedoubtLod2
+    }
+
     internal static class TrenchTraceMath
     {
         // The contour arrives one point per control-grid cell, so the trace is resampled
@@ -103,6 +122,9 @@ namespace BoscaliSummer.Features.Trenches.Domain
         public const float UndulationWeight = 6f;
         public const float SapDepth = 45f;
         public const float SapLateralFraction = 0.3f;
+        public const int MaximumLinkTraces = 3;
+        public const int MaximumSpurTraces = 2;
+        public const float SapGapRadius = 7f;
 
         // Siting: a real position is dug for observation and drainage, not for shelter. The
         // fire line belongs on a crest or knoll standing above the ground either side of the
@@ -581,6 +603,51 @@ namespace BoscaliSummer.Features.Trenches.Domain
         /// dug, and an unbuildable stretch breaks the line instead of failing it whole.
         /// <paramref name="route"/> receives one candidate index per station, or -1.
         /// </summary>
+        private static float[,] routeCumulative;
+        private static int[,] routeBack;
+
+        /// <summary>Wire leaves a gap where a sap pushes through the belt.</summary>
+        public static bool WithinSapGap(float x, float z, float headX, float headZ)
+        {
+            float dx = x - headX, dz = z - headZ;
+            return dx * dx + dz * dz < SapGapRadius * SapGapRadius;
+        }
+
+        public const int MaximumBuildSteps = 14;
+
+        /// <summary>
+        /// Build order for one chunk rebuild, near-visible first: the fire ditch, its
+        /// colliders and wire, the belt at full detail, then the coarser LOD passes. One
+        /// step per trace keeps every frame of a staged rebuild under budget. Writes at
+        /// most <paramref name="steps"/> entries and returns the number written.
+        /// </summary>
+        public static int PlanBuildSteps(bool support, bool redoubt, int links, int spurs,
+            TrenchBuildStep[] steps)
+        {
+            if (steps == null) return 0;
+            int count = 0;
+            PlanBuildStep(TrenchBuildStep.Fire, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.Colliders, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.Wire, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.WireOuter, steps, ref count);
+            if (support) PlanBuildStep(TrenchBuildStep.Support, steps, ref count);
+            if (redoubt) PlanBuildStep(TrenchBuildStep.Redoubt, steps, ref count);
+            if (links > 0) PlanBuildStep(TrenchBuildStep.Links, steps, ref count);
+            if (spurs > 0) PlanBuildStep(TrenchBuildStep.Spurs, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.FireLod1, steps, ref count);
+            if (support) PlanBuildStep(TrenchBuildStep.SupportLod1, steps, ref count);
+            if (redoubt) PlanBuildStep(TrenchBuildStep.RedoubtLod1, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.FireLod2, steps, ref count);
+            if (support) PlanBuildStep(TrenchBuildStep.SupportLod2, steps, ref count);
+            if (redoubt) PlanBuildStep(TrenchBuildStep.RedoubtLod2, steps, ref count);
+            return count;
+        }
+
+        private static void PlanBuildStep(TrenchBuildStep step, TrenchBuildStep[] steps, ref int count)
+        {
+            if (count < steps.Length) steps[count++] = step;
+        }
+
         public static bool PlanRoute(float[,] groundHeight, float[,] positionCost, int stations,
             float undulationWeight, int[] route)
         {
@@ -588,8 +655,14 @@ namespace BoscaliSummer.Features.Trenches.Domain
             int candidates = groundHeight.GetLength(1);
             if (stations <= 0 || candidates == 0 || route.Length < stations) return false;
 
-            var cumulative = new float[stations, candidates];
-            var back = new int[stations, candidates];
+            float[,] cumulative = routeCumulative;
+            int[,] back = routeBack;
+            if (cumulative == null || cumulative.GetLength(0) < stations || cumulative.GetLength(1) < candidates)
+            {
+                cumulative = routeCumulative = new float[stations, candidates];
+                back = routeBack = new int[stations, candidates];
+            }
+
             for (int k = 0; k < candidates; k++)
             {
                 cumulative[0, k] = RouteValid(groundHeight, positionCost, 0, k)

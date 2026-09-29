@@ -101,6 +101,16 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             catch { Remove(); throw; }
         }
 
+        /// <summary>
+        /// A new stage digs new ground: uncommitted slots get a fresh attempt budget so one
+        /// bad stage never starves the finished position.
+        /// </summary>
+        internal void ResetAttempts()
+        {
+            for (int i = 0; i < attempts.Length; i++)
+                if (!committed[i]) attempts[i] = 0;
+        }
+
         internal void Reinforce()
         {
             if (Overrun) return;

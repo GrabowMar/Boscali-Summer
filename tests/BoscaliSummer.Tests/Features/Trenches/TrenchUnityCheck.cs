@@ -164,10 +164,17 @@ public static class TrenchUnityCheck
                 "A null or all-zero ringExtra must reproduce the plain profile exactly at vertex " + i);
         Object.DestroyImmediate(zeroExtra);
 
-        var wire = TrenchMeshBuilder.BuildWireBeltMesh(new[] { Vector3.zero, Vector3.forward * 60f }, 1.15f);
+        var wirePath = new Vector3[16];
+        for (int i = 0; i < wirePath.Length; i++) wirePath[i] = new Vector3(0f, 0f, i * 4f);
+        var wire = TrenchMeshBuilder.BuildWireBeltMesh(wirePath, 1.15f, null);
         Check(wire != null && wire.vertexCount >= 16 && wire.bounds.size.z > 50f,
             "The wire belt runs pickets and strands the whole length of the front");
+        var gapped = TrenchMeshBuilder.BuildWireBeltMesh(wirePath, 1.15f,
+            new[] { new[] { new Vector3(0f, 0f, 32f) } });
+        Check(gapped != null && gapped.vertexCount < wire.vertexCount,
+            "The wire belt breaks where a sap pushes through");
         Object.DestroyImmediate(wire);
+        Object.DestroyImmediate(gapped);
 
         var conform = TrenchMeshBuilder.BuildEdgeMesh(new[] { Vector3.zero, Vector3.forward * 30f },
             2.6f, 2.4f, 1.4f, Vector3.right, p => new Vector3(p.x, p.x * 0.25f, p.z));
@@ -735,12 +742,14 @@ public static class TrenchUnityCheck
 
         var chunk = new GameObject("LodChunk").AddComponent<TrenchVisualChunk>();
         chunk.Initialize(line);
+        chunk.CompleteBuild();
         Check(chunk.transform.Find("LOD0_FullDetail/WireBelt") != null &&
             chunk.transform.Find("LOD0_FullDetail/WireBelt_Outer") != null,
             "The wired approach must read as two belts in front of the parapet");
         Datum.originPosition = new Vector3(-6400f, 0f, -7300f);
         camera.transform.position = new GlobalPosition(chunk.WorldCenter).ToLocalPosition();
         chunk.Rebuild();
+        chunk.CompleteBuild();
         Check(chunk.CameraDistance < chunk.Lod0Distance,
             "LOD distance must be measured in one frame; a camera on the earthwork read " +
             chunk.CameraDistance + "m against Lod0Distance " + chunk.Lod0Distance);
@@ -749,12 +758,14 @@ public static class TrenchUnityCheck
         NetworkSceneSingleton<Spawner>.i = new Spawner { IsServer = true };
         camera.transform.position += Vector3.up * 13000f;
         chunk.Rebuild();
+        chunk.CompleteBuild();
         var barriers = chunk.GetComponentsInChildren<BoxCollider>(true);
         Check(chunk.ActiveLod == 3 && barriers.Length > 0 &&
             Array.Exists(barriers, barrier => barrier.enabled),
             "Host parapet collision must persist when the camera culls the visual trench");
         NetworkSceneSingleton<Spawner>.i.IsServer = false;
         chunk.Rebuild();
+        chunk.CompleteBuild();
         barriers = chunk.GetComponentsInChildren<BoxCollider>(true);
         Check(barriers.Length > 0 && Array.TrueForAll(barriers, barrier => !barrier.enabled),
             "A client-side visual chunk must not own parapet collision");
@@ -764,6 +775,7 @@ public static class TrenchUnityCheck
         // A scene without a live CameraStateManager must still cull through Camera.main.
         SceneSingleton<CameraStateManager>.i = null;
         chunk.Rebuild();
+        chunk.CompleteBuild();
         Check(chunk.CameraDistance < chunk.Lod0Distance && chunk.ActiveLod == 0,
             "LOD must fall back to Camera.main when CameraStateManager is absent");
 
@@ -810,10 +822,12 @@ public static class TrenchUnityCheck
         chunk.Lod2Distance = 12000f;
         chunk.Lod1Distance = Mathf.Max(chunk.Lod0Distance * 2f, chunk.Lod2Distance * 0.22f);
         chunk.Initialize(line);
+        chunk.CompleteBuild();
         for (int stage = 0; stage <= 4; stage++)
         {
             if (stage > 0 && !TrenchPlanner.TryGrowBelt(line, front)) break;
             chunk.Rebuild();
+            chunk.CompleteBuild();
             camera.Render();
             RenderTexture.active = target;
             WriteRender(target, "stage-" + stage + ".png");
@@ -887,6 +901,7 @@ public static class TrenchUnityCheck
         camera.transform.position = position;
         camera.transform.LookAt(new Vector3(-60, 0, 0));
         chunk.Rebuild();
+        chunk.CompleteBuild();
         camera.Render();
         RenderTexture.active = target;
         WriteRender(target, file);

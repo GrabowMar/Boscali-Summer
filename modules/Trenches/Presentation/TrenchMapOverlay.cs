@@ -198,6 +198,8 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         private static readonly Color32 SuppressedInk = new Color32(255, 195, 65, 235);
         private static readonly Color32 NeutralizedInk = new Color32(150, 150, 150, 190);
 
+        private static IMapProjection populateProjection;
+
         private TrenchManager manager;
         private DynamicMap map;
 
@@ -215,12 +217,13 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
             float factor = map.mapDisplayFactor;
             if (!(factor > 0.0001f)) return;
+            ModServices.TryGet(out populateProjection);
 
             float scale = Mathf.Abs(transform.lossyScale.x);
             if (!(scale > 1e-4f)) scale = 1f;
             float pixel = 1f / scale;
 
-            IReadOnlyList<TrenchLine> lines = manager.Lines;
+            IReadOnlyList<TrenchLine> lines = manager.DisplayLines;
 
             // Zoomed in, the belt is far longer on screen than the segment budget. Widening
             // every step keeps all of it drawn, a little coarser, instead of spending the
@@ -286,7 +289,10 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         {
             if (line.Overrun) return NeutralizedInk;
             if (line.Suppressed) return SuppressedInk;
-            return line.OwnerHq != null && line.OwnerHq == map.HQ ? FriendlyInk : HostileInk;
+            if (line.OwnerHq != null) return line.OwnerHq == map.HQ ? FriendlyInk : HostileInk;
+            if (map.HQ != null && line.OwnerHash != 0 && line.OwnerHash == TrenchWire.OwnerHashFor(map.HQ.name))
+                return FriendlyInk;
+            return HostileInk;
         }
 
         /// <summary>Strongpoints: one per living defender, spread over the bays, plus the
@@ -406,8 +412,8 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
         private static Vector2 ToLocal(Vector3 world, float factor)
         {
-            if (ModServices.TryGet(out IMapProjection projection) &&
-                projection.TryProject(world.x, world.z, out float x, out float y))
+            if (populateProjection != null &&
+                populateProjection.TryProject(world.x, world.z, out float x, out float y))
                 return new Vector2(x, y);
             return new Vector2(world.x * factor, world.z * factor);
         }
