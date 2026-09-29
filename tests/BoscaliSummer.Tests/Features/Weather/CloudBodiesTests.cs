@@ -33,6 +33,53 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(inside > 25, "altostratus is a near-continuous middle sheet, got " + inside + "/40");
             TestAssert.That(alto.MidLayer(0f, 1500f, 0f) == 0f && alto.MidLayer(0f, 7000f, 0f) == 0f,
                 "the middle layer stays in its altitude band");
+
+            // Set-pieces are mirrored as smooth envelopes: each formation reads as cloud on
+            // the CPU where the shader draws it, with no effect far away. An empty weather
+            // point isolates the hero contribution (no low deck, below the middle layer).
+            var key = new WeatherKey(12345u, 0f, false, (byte)WeatherRegimeType.Storm, 5f, 60f,
+                (byte)(Superstructures.StormEyeSet | Superstructures.LenticularSet), 0, true, 0f, 25000f, 0);
+            var field = new WeatherField();
+            field.Build(key, 900f, 60000f, 60000f, 13f);
+            TestAssert.That(field.SuperstructureCount >= 2, "a storm holds set-pieces, got " + field.SuperstructureCount);
+            var withHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, field.Split, 0f, field);
+            var withoutHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, field.Split);
+            var empty = new WeatherPoint();
+            for (int i = 0; i < field.SuperstructureCount; i++)
+            {
+                Superstructure s = field.SuperstructureAt(i);
+                float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
+                if (s.Kind == SuperstructureKind.ShelfLine)
+                {
+                    float v = -s.Extent * 0.5f;
+                    float d = withHeroes.Density(empty, s.X + dirZ * v, 3000f, s.Z - dirX * v, 0f);
+                    TestAssert.That(d > 0.5f * s.Strength, $"shelf storm mass reads as cloud, got {d:F2}");
+                }
+                else if (s.Kind == SuperstructureKind.Supercell)
+                {
+                    float d = withHeroes.Density(empty, s.X, 3000f, s.Z, 0f);
+                    TestAssert.That(d > 0.5f * s.Strength, $"supercell tower reads as cloud, got {d:F2}");
+                }
+                else if (s.Kind == SuperstructureKind.StormEye)
+                {
+                    float inner = s.Size * 1.04f;
+                    float wallR = (inner + 2750f + s.Size + s.Extent * 0.8f) * 0.5f;
+                    float wall = withHeroes.Density(empty, s.X + wallR, 3000f, s.Z, 0f);
+                    TestAssert.That(wall > 0.5f * s.Strength, $"eyewall reads as cloud, got {wall:F2}");
+                    float floorD = withHeroes.Density(empty, s.X, 1000f, s.Z, 0f);
+                    TestAssert.That(floorD > 0.3f * s.Strength, $"eye floor reads as cloud, got {floorD:F2}");
+                    float band = withHeroes.Density(empty, s.X + s.Size + s.Extent * 2f, 2000f, s.Z, 0f);
+                    TestAssert.That(band > 0.2f * s.Strength, $"rain band reads as cloud, got {band:F2}");
+                }
+                else
+                {
+                    float d = withHeroes.Density(empty, s.X + dirX * s.Extent, s.Top + 700f, s.Z + dirZ * s.Extent, 0f);
+                    TestAssert.That(d > 0.4f * s.Strength, $"lenticular reads as cloud, got {d:F2}");
+                }
+                float far = withHeroes.Density(empty, s.X + 200000f, 3000f, s.Z, 0f);
+                float farPlain = withoutHeroes.Density(empty, s.X + 200000f, 3000f, s.Z, 0f);
+                TestAssert.That(far == farPlain, "set-pieces stay inside their bounds");
+            }
         }
 
         /// <summary>Share of columns with cloud 300 m above the base, over a 60 km square.</summary>

@@ -124,17 +124,8 @@ public sealed class CloudBench : MonoBehaviour
         camera.depthTextureMode = DepthTextureMode.Depth;
         var target = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { name = "Bench" };
         camera.targetTexture = target;
-        var lowColour = new RenderTexture(Width / 2, Height / 2, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear)
-        { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-        var lowDepth = new RenderTexture(Width / 2, Height / 2, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear)
-        { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-        lowColour.Create();
-        lowDepth.Create();
-        composite.SetTexture("_CloudLowResColour", lowColour);
-        composite.SetTexture("_CloudLowResDepth", lowDepth);
-        var lowSize = new Vector4(lowColour.width, lowColour.height, 1f / lowColour.width, 1f / lowColour.height);
-        composite.SetVector("_CloudLowResSize", lowSize);
-        march.SetVector("_CloudLowResSize", lowSize);
+        var lowRes = new CloudLowRes();
+        lowRes.Ensure(Width, Height);
         var cmd = new CommandBuffer { name = "Clouds" };
         camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, cmd);
         var readback = new Texture2D(Width, Height, TextureFormat.RGB24, false);
@@ -183,7 +174,7 @@ public sealed class CloudBench : MonoBehaviour
             Vector3 sun = new Vector3(0.35f, 0.55f, -0.65f).normalized;
 
             uniforms.Settle(field);
-            foreach (string mode in new[] { "old", "full", "half" })
+            foreach (string mode in new[] { "old", "full", "half", "temporal" })
             {
                 if (mode == "old" && old == null) continue;
                 Material m = mode == "old" ? old : march;
@@ -193,7 +184,7 @@ public sealed class CloudBench : MonoBehaviour
                     CameraPosition = camera.transform.position,
                     CameraForward = camera.transform.forward,
                     FieldOfView = camera.fieldOfView,
-                    PixelHeight = mode == "half" ? Height / 2 : Height,
+                    PixelHeight = mode == "half" || mode == "temporal" ? Height / 2 : Height,
                     Bottom = maps.Bottom, Top = maps.Top,
                     HorizonCover = maps.HorizonCover,
                     SunDirection = sun,
@@ -219,24 +210,30 @@ public sealed class CloudBench : MonoBehaviour
                 m.SetTexture("_WeatherFarProfileTex", farProfiles);
                 m.SetTexture("_WeatherEnvelopeTex", envelope);
                 m.SetFloat("_WeatherEnvelopeOn", Environment.GetEnvironmentVariable("CLOUD_BENCH_NOENVELOPE") == "1" ? 0f : 1f);
-                uniforms.ApplyFrustum(m, camera);
-
-                Matrix4x4 box = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * 1000f);
-                cmd.Clear();
-                if (mode == "half")
+                Quaternion start = Quaternion.Euler(-s.Pitch, yaw, 0f);
+                // One frame: the command buffer is re-recorded each time (the temporal targets
+                // ping-pong), and the camera turns half a degree a frame, as in a gentle turn,
+                // so the temporal mode shows its reprojection rather than a still image.
+                void RenderFrame(int index)
                 {
-                    cmd.SetRenderTarget(new RenderTargetIdentifier[] { lowColour, lowDepth }, lowColour.depthBuffer);
-                    cmd.ClearRenderTarget(false, true, Color.clear);
-                    cmd.DrawProcedural(Matrix4x4.identity, m, 2, MeshTopology.Triangles, 3);
-                    cmd.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-                    cmd.DrawMesh(cube, box, composite, 0, 0);
+                    camera.transform.rotation = Quaternion.AngleAxis(index * 0.5f, Vector3.up) * start;
+                    uniforms.ApplyView(camera, camera.transform.position);
+                    Matrix4x4 box = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * 1000f);
+                    cmd.Clear();
+                    if (mode == "half" || mode == "temporal")
+                    {
+                        lowRes.Record(cmd, m, composite, mode == "temporal");
+                        cmd.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+                        cmd.DrawMesh(cube, box, composite, 0, 0);
+                    }
+                    else cmd.DrawMesh(cube, box, m, 0, 0);
+                    camera.Render();
                 }
-                else if (mode != "none") cmd.DrawMesh(cube, box, m, 0, 0);
-
-                for (int i = 0; i < 3; i++) camera.Render();
+                lowRes.InvalidateHistory();
+                for (int i = 0; i < 4; i++) RenderFrame(i - 4);
                 Sync(target, readback);
                 watch.Restart();
-                for (int i = 0; i < Frames; i++) camera.Render();
+                for (int i = 0; i < Frames; i++) RenderFrame(i);
                 Sync(target, readback);
                 double ms = watch.Elapsed.TotalMilliseconds / Frames;
                 RenderTexture.active = target;
@@ -248,6 +245,7 @@ public sealed class CloudBench : MonoBehaviour
                     "  (maps " + mapMs + " ms, heroes " + field.SuperstructureCount + ")");
             }
             cmd.Clear();
+            camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
             camera.Render();
             Sync(target, readback);
             watch.Restart();

@@ -367,7 +367,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 TryMissionTime(out float missionTime);
                 Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
                 flightClouds.Update(LevelInfo.i, Field, worldCamera, currentCloudHeight,
-                    missionTime);
+                    missionTime, settings.CloudHalfResolution.Value,
+                    settings.CloudTemporalUpdate.Value, lightning.FlashNow);
                 if (flightClouds.Active)
                 {
                     if (clouds.Applied) clouds.Restore();
@@ -885,11 +886,20 @@ namespace BoscaliSummer.Features.Weather.Runtime
         // summary each minute, so a visual glitch leaves evidence in LogOutput.log.
         private string traceState;
         private float nextTraceSummary;
+        private int traceSignature;
         private int traceLines;
 
         private void Trace()
         {
             if (logger == null || Application.isBatchMode || traceLines > 400) return;
+            // The state line is only built when something in it changed (or once a minute):
+            // building it every frame allocated about half a kilobyte per frame.
+            WeatherField traced = Field;
+            int signature = (flightClouds == null ? 0 : flightClouds.Active ? 1 : 2) + (clouds.NativeHidden ? 4 : 0) +
+                (isManualOverride ? 8 : 0) + ((fieldKey?.GetHashCode() ?? 0) << 4) ^
+                (traced == null ? -1 : (int)traced.Timeline.From * 16 + (int)traced.Timeline.To);
+            if (signature == traceSignature && traceState != null && Time.unscaledTime < nextTraceSummary) return;
+            traceSignature = signature;
             TryMissionTime(out float missionTime);
             string renderer = flightClouds == null ? "off" :
                 flightClouds.Active ? "volume" : "native (" + (flightClouds.HideReason ?? "?") + ")";

@@ -31,7 +31,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int EnvelopeOnId = Shader.PropertyToID("_WeatherEnvelopeOn");
         private static readonly int MapBlendId = Shader.PropertyToID("_WeatherMapBlend");
         private static readonly int MapTargetId = Shader.PropertyToID("_CloudMapTarget");
-        private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
         private static byte[] sharedNoise;
         private static int generatingNoise;
         private static Mesh cube;
@@ -122,7 +121,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         }
 
         internal void Update(LevelInfo level, WeatherField field, Camera camera,
-            float currentCloudHeight, float missionTime, bool wantHalfResolution)
+            float currentCloudHeight, float missionTime, bool wantHalfResolution, bool temporalUpdate,
+            float flash = 0f)
         {
             if (Application.isBatchMode || level == null || field == null || !field.IsBuilt || camera == null)
             {
@@ -200,7 +200,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             bool passAvailable = wantHalfResolution && compositeMaterial != null;
             bool passRunning = pass.ExecutedFrame >= Time.frameCount - 2;
             halfResolution = passAvailable && passRunning;
-            pass.Bind(camera, renderer, material, compositeMaterial, passAvailable, onRender);
+            pass.Bind(camera, renderer, material, compositeMaterial, passAvailable, temporalUpdate, onRender);
             renderer.sharedMaterial = halfResolution ? compositeMaterial : material;
 
             Vector3 sunDirection = level.sun != null ? -level.sun.transform.forward : Vector3.up;
@@ -229,6 +229,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 // mountain view into a uniformly pale cloud wall. RainAtmosphere has
                 // already applied the local precipitation response this frame.
                 Extinction = RenderSettings.fog ? Mathf.Clamp(RenderSettings.fogDensity, 0.000008f, 0.00055f) : 0.000008f,
+                Flash = flash,
                 LowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f,
                 CameraInCloud = cameraInCloud,
                 DeltaTime = Time.deltaTime,
@@ -272,8 +273,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private void RenderTimeCamera(Camera camera)
         {
             if (material == null || camera == null) return;
-            material.SetVector(CameraPosId, camera.transform.position);
-            uniforms.ApplyFrustum(material, camera);
+            GlobalPosition global = camera.transform.GlobalPosition();
+            uniforms.ApplyView(camera, new Vector3((float)global.x, (float)global.y, (float)global.z));
         }
 
         internal bool InCloud(float x, float y, float z) => Active && DensityHere(x, y, z) > 0.08f;
@@ -289,7 +290,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             byte[] data = NoiseData;
             if (data == null || data.Length != NoiseTexels * 4) return 0f;
             densityHere = new CloudBodies(data, NoiseSize, activeField.Params, activeField.PrevailingHeading,
-                activeField.Split, uniforms.FogShown).Density(activeField.Sample(x, z), x, y, z, cloudShift);
+                activeField.Split, uniforms.FogShown, activeField).Density(activeField.Sample(x, z), x, y, z, cloudShift);
             return densityHere;
         }
 

@@ -21,6 +21,7 @@ namespace BoscaliSummer.Features.Weather.Configuration
         public ConfigEntry<bool> RainAudioEnabled { get; }
         public ConfigEntry<bool> CinematicCloudsEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
+        public ConfigEntry<bool> CloudTemporalUpdate { get; }
         public ConfigEntry<float> RainDensity { get; }
         public ConfigEntry<bool> CanopyRainEnabled { get; }
         public ConfigEntry<bool> CanopyShaderEnabled { get; }
@@ -90,6 +91,10 @@ namespace BoscaliSummer.Features.Weather.Configuration
             CloudHalfResolution = config.Bind(section, "CloudHalfResolution", true,
                 "March the volumetric clouds at half resolution and upsample them along scene depth " +
                 "(about four times cheaper on the GPU). Off draws every pixel at full resolution. Applies now.");
+
+            CloudTemporalUpdate = config.Bind(section, "CloudTemporalUpdate", true,
+                "With half-resolution clouds: march a quarter of the cloud pixels each frame and reproject " +
+                "the rest from the last frame (about four times cheaper again). Applies now.");
 
             RainDensity = config.Bind(section, "RainDensity", 1.0f,
                 new ConfigDescription(

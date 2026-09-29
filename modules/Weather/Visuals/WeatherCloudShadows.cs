@@ -35,6 +35,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private ShadowResult ready;
         private string failureReason;
         private bool attached;
+        private float uploadedStrength = -1f, uploadedBlend = -1f;
 
         internal bool Active => attached && texture != null;
         internal int UpdateCount { get; private set; }
@@ -117,9 +118,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave
                 };
                 nextUpload = 0f;
+                uploadedStrength = uploadedBlend = -1f;
             }
             if (now >= nextUpload)
             {
+                nextUpload = now + UploadSeconds;
                 float strength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.06f, 0.20f, elevation));
                 WeatherPoint local = field.Sample((float)eye.x, (float)eye.z);
                 float bottom = local.CloudBase + shift;
@@ -128,15 +131,23 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 // through the deck so aircraft above the clouds lose the ground shadows.
                 strength *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bottom, top, (float)eye.y));
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
+                // The cookie is static between weather steps: rebuild its 64k pixels only
+                // while a new map fades in or the strength has moved.
+                bool changed = blend != uploadedBlend || Mathf.Abs(strength - uploadedStrength) > 0.004f;
+                uploadedBlend = blend;
+                if (changed) uploadedStrength = strength;
+                if (changed)
                 for (int i = 0; i < blended.Length; i++)
                 {
                     float value = target == null ? 255f : Mathf.Lerp(previous[i], target[i], blend);
                     byte transmit = (byte)Mathf.RoundToInt(Mathf.Lerp(255f, value, strength));
                     blended[i] = new Color32(transmit, transmit, transmit, 255);
                 }
-                texture.SetPixels32(blended);
-                texture.Apply(false, false);
-                nextUpload = now + UploadSeconds;
+                if (changed)
+                {
+                    texture.SetPixels32(blended);
+                    texture.Apply(false, false);
+                }
             }
 
             // SetCookie normalizes the sun's roll. Match that basis before computing the
@@ -203,7 +214,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 {
                     var snapshot = new WeatherField();
                     snapshot.Build(requestKey, time, halfX, halfZ, hour, haze);
-                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Params, snapshot.PrevailingHeading, snapshot.Split);
+                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Params, snapshot.PrevailingHeading, snapshot.Split, 0f, snapshot);
                     var pixels = new byte[Size * Size];
                     const int samples = 14;
                     float baseY = snapshot.Params.CloudBase + shift;

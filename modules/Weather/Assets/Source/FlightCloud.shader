@@ -23,6 +23,8 @@ Shader "Boscali/FlightCloud"
         float _CloudSteps, _CloudFarSteps, _CloudStorm, _WeatherMapSpan, _WeatherFarSpan;
         float _CloudBase, _CloudHeightShift;
         float _CloudAirExtinction;
+        // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
+        float _CloudFlash;
         // Cloud genera: low-deck depth/smoothness, middle and high layers.
         float _LayerDepth, _LayerSmooth, _MidCover, _MidSheet, _HighCover, _HighVeil;
         float2 _CloudWindDir;
@@ -46,6 +48,10 @@ Shader "Boscali/FlightCloud"
         // bottom-left, bottom-right, top-left, top-right) and the target size (w, h, 1/w, 1/h).
         float4x4 _CloudFrustum;
         float4 _CloudLowResSize;
+        // Temporal update: xy the texel of each 2x2 block marched this frame, z the
+        // per-frame dither offset; _CloudCheckerOn turns the quarter-resolution march on.
+        float4 _CloudChecker;
+        float _CloudCheckerOn;
 
         // Pixel footprint of the current march sample in metres: noise is filtered to it,
         // and to the step length, so sparse samples never pick out single speckles.
@@ -444,11 +450,15 @@ Shader "Boscali/FlightCloud"
                 smoothstep(0.04, 0.20, front);
 
             // Towers keep the weather field's shape; noise only erodes their boundary.
-            float erode = (broad.r - 0.5) * 0.25 + (detail - 0.5) * 0.10;
-            float towerThreshold = 0.25 + 0.43 * height01 * height01;
+            // Lobes of the body noise break the column's sides into turrets, and each turret
+            // tops out at its own height, so a distant tower is a cauliflower, not a cake.
+            float erode = (broad.r - 0.5) * 0.25 + (detail - 0.5) * 0.10 + (body - 0.5) * 0.22;
+            float crownH = 0.82 + 0.22 * (broad.g - 0.5) + 0.18 * (body - 0.5);
+            float towerThreshold = 0.25 + 0.43 * height01 * height01 +
+                0.45 * smoothstep(crownH - 0.3, crownH + 0.05, height01);
             float towerFootprint = smoothstep(towerThreshold - 0.16,
                 towerThreshold + 0.16, cell + erode);
-            float towerProfile = baseFlat * (1.0 - smoothstep(0.84, 1.0, height01));
+            float towerProfile = baseFlat * (1.0 - smoothstep(crownH, crownH + 0.14, height01));
             float cellSupport = smoothstep(0.04, 0.20, cell);
             float towerDensity = towerFootprint * towerProfile * (0.76 + broad.r * 0.24) * cellSupport;
             float anvil = smoothstep(0.68, 0.83, height01) *
@@ -530,7 +540,8 @@ Shader "Boscali/FlightCloud"
             }
             // Cloud streets: cumuliform rows along the wind over ascending air.
             float street = 0.55 + 0.45 * sin(w.y / (scale * 0.85) * 6.2831853 + warp.x / scale * 2.0);
-            cells *= lerp(1.0, street, 0.8);
+            float streetKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, scale * 0.85));
+            cells *= lerp(1.0, street, 0.8 * streetKeep);
             float raw = lerp(streak, cells, ripple);
             float body = saturate(0.5 + (raw - 0.52) * 3.16);
             body = lerp(body, 0.7 + 0.3 * body, sheet);
@@ -558,6 +569,8 @@ Shader "Boscali/FlightCloud"
             // grazing chords get up to ten.
             float samples = clamp(ceil(span / 6000.0), 1.0, 10.0);
             float stepLength = span / samples;
+            float slant = length(ray.xz);
+            float patternFoot = stepLength * 0.5 * slant;
             float yMid = (y0 + y1) * 0.5;
             float toSun = (y1 - y0) * 0.5 / max(0.12, _CloudSunDirection.y);
             float3 colour = 0.0;
@@ -570,7 +583,7 @@ Shader "Boscali/FlightCloud"
                 float3 g = ro + ray * t;
                 g.y = yMid;
                 float d = Slab(g, cover, sheet, scale, stretch, ripple,
-                    max(t * _CloudPixelAngle, stepLength * 0.06), splitMul) * strength;
+                    max(t * _CloudPixelAngle, patternFoot), splitMul) * strength;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float direct = exp(-d * toSun * 0.003);
@@ -654,7 +667,7 @@ Shader "Boscali/FlightCloud"
         // The whole sky along one view ray: premultiplied colour and opacity.
         // origin: local camera position; ray: unit view direction; sceneDistance: metres to the
         // first opaque surface (or CLOUD_HORIZON_LIMIT for sky); pixel: screen pixel (dither).
-        float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float2 pixel)
+        float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float2 pixel, out float cloudDistance)
         {
             float3 ro = origin + _CloudWorldOffset;
             float2 bounds = _CloudAltitudeBounds;
@@ -684,7 +697,12 @@ Shader "Boscali/FlightCloud"
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
             // Stable spatial dither (interleaved gradient noise) breaks coherent marching
             // bands without any temporal history, ghosting, or camera-motion dependency.
-            float jitter = lerp(0.1, 0.9, frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715)))));
+            float ign = frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));
+            // Temporal accumulation: the dither cycles each frame, so carried values average
+            // the march noise away instead of freezing one dither pattern in. Full and half
+            // resolution keep the stable dither (nothing averages it there).
+            if (_CloudCheckerOn > 0.5) ign = frac(ign + _CloudChecker.z);
+            float jitter = lerp(0.1, 0.9, ign);
 
             // Up to four segments along the ray: full detail to the near limit, a coarse march
             // through the far level of detail out to the horizon, and a fine march across the
@@ -708,14 +726,14 @@ Shader "Boscali/FlightCloud"
             {
                 float s0 = segment == 0 ? start : segment == 1 ? b1 : segment == 2 ? b2 : b3;
                 float s1 = segment == 0 ? b1 : segment == 1 ? b2 : segment == 2 ? b3 : finish;
-                if (finish <= start || s1 <= s0 + 1.0 || transmittance < 0.025) continue;
+                if (finish <= start || s1 <= s0 + 1.0 || transmittance < 0.05) continue;
                 float mid = 0.5 * (s0 + s1);
                 bool hero = mid > h0 && mid < h1;
                 bool farSeg = !hero && mid > CLOUD_NEAR_LIMIT;
                 float farPass = farSeg ? 1.0 : 0.0;
                 float span = s1 - s0;
                 float steps;
-                if (hero) steps = min(96.0, _CloudSteps * 0.35 * saturate(span / 20000.0 + 0.4));
+                if (hero) steps = 96.0;
                 else if (farSeg) steps = _CloudFarSteps * span / farTotal;
                 else
                 {
@@ -723,19 +741,32 @@ Shader "Boscali/FlightCloud"
                     if (s0 > 25000.0) steps *= 0.68;
                 }
                 steps = clamp(floor(steps), 4.0, 96.0);
+                // Set-pieces: adaptive steps of about 0.6 % of the distance (a fraction of a
+                // tower's width at any range), four at a time through empty air, backing up to
+                // fine steps where cloud begins.
+                float tHero = s0 + jitter * clamp(s0 * 0.006, 150.0, 900.0);
+                float fineUntil = -1.0;
+                bool stride = false;
                 [loop]
                 for (int n = 0; n < 96; n++)
                 {
-                    if (n >= steps || transmittance < 0.025) break;
+                    if ((hero ? tHero >= s1 : n >= steps) || transmittance < 0.05) break;
                     float a = n / steps, b = (n + 1.0) / steps;
-                    // Near and far pieces space their steps quadratically (fine close in);
-                    // a set-piece is marched evenly across its whole width.
-                    float stepLength = hero ? span / steps : span * (b * b - a * a);
-                    float t = hero ? s0 + (n + jitter) * stepLength : s0 + span * lerp(a * a, b * b, jitter);
+                    // Near and far pieces space their steps quadratically (fine close in).
+                    float fine = clamp(tHero * 0.006, 150.0, 900.0);
+                    float stepLength = hero ? fine : span * (b * b - a * a);
+                    float t = hero ? tHero : s0 + span * lerp(a * a, b * b, jitter);
                     float3 world = origin + ray * t;
                     gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
                     gVert = farSeg ? 0.5 * abs(ray.y) * stepLength : 0.0;
                     float d = DensityOrEmpty(world, farSeg ? 1.2 : hero ? 1.0 : 0.0);
+                    if (hero)
+                    {
+                        if (d <= 0.003 && tHero > fineUntil) { tHero += fine * 4.0; stride = true; continue; }
+                        if (d > 0.003 && stride) { fineUntil = tHero; tHero -= fine * 3.0; stride = false; continue; }
+                        stride = false;
+                        tHero += fine;
+                    }
                     if (d > 0.003)
                     {
                         // Light taps in one loop, so the (large) density function is compiled
@@ -773,6 +804,9 @@ Shader "Boscali/FlightCloud"
                         float3 light = _CloudAmbientColor * skyAccess * 0.72 +
                             _CloudGroundColor * (1.0 - h) * exp(-d) +
                             _CloudSunColor * (direct * phase * 0.65 + scattered);
+                        // Lightning: the bolt's light scattering off the droplets around it. It
+                        // reaches the shadowed cores the sun cannot, so the whole storm flickers.
+                        if (_CloudFlash > 0.001) light += float3(0.65, 0.75, 1.1) * (_CloudFlash * d * 2.0);
                         // Inside cloud, droplets limit visibility to tens or hundreds of
                         // metres: the cloud right around the camera is far denser.
                         float nearField = 1.0 + 7.0 * _CameraInCloud * exp(-t / 450.0);
@@ -786,7 +820,7 @@ Shader "Boscali/FlightCloud"
             }
             gVert = 0.0;
             float opacity = 1.0 - transmittance;
-            float cloudDistance = weightedDistance / max(0.0001, opacity);
+            cloudDistance = opacity > 0.01 ? weightedDistance / opacity : CLOUD_FAR_LIMIT;
             float air = AirTransmittance(cloudDistance, ro.y, ro.y + ray.y * cloudDistance);
             // Opacity-weighted cloud depth puts airlight in front of the visible
             // cloud surface, with one atmospheric integral per pixel.
@@ -827,7 +861,7 @@ Shader "Boscali/FlightCloud"
             float midTop = midBase + lerp(400.0, 1700.0, _MidSheet);
             float highBase = 8600.0;
             float highTop = highBase + lerp(500.0, 900.0, _HighVeil);
-            if (ro.y < 330.0 || transmit > 0.02)
+            if (ro.y < 330.0 || transmit > 0.06)
             {
                 float4 fogLayer = MarchSlab(ro, ray, slabLimit, -30.0, 330.0, _FogBank,
                     0.85, 3200.0, 1.6, 0.0, 0.55, phase, jitter, float2(1.0, 1.0));
@@ -835,7 +869,7 @@ Shader "Boscali/FlightCloud"
                 else { colour += transmit * fogLayer.rgb; }
                 transmit *= fogLayer.a;
             }
-            if (ro.y > midTop || transmit > 0.02)
+            if (ro.y > midTop || transmit > 0.06)
             {
                 float4 midLayer = MarchSlab(ro, ray, slabLimit, midBase, midTop, _MidCover,
                     smoothstep(0.4, 1.0, _MidSheet), 2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.42, phase, jitter,
@@ -844,7 +878,7 @@ Shader "Boscali/FlightCloud"
                 else { colour += transmit * midLayer.rgb; }
                 transmit *= midLayer.a;
             }
-            if (ro.y > highTop || transmit > 0.02)
+            if (ro.y > highTop || transmit > 0.06)
             {
                 float4 highLayer = MarchSlab(ro, ray, slabLimit, highBase, highTop, _HighCover,
                     smoothstep(0.6, 1.0, _HighVeil), 5000.0, lerp(7.0, 1.0, _HighVeil),
@@ -906,7 +940,8 @@ Shader "Boscali/FlightCloud"
                 float3 origin = _WorldSpaceCameraPos.xyz;
                 float3 ray = normalize(i.world - origin);
                 float rawDepth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv);
-                float4 sky = MarchSky(origin, ray, SceneDistance(rawDepth, dot(ray, -UNITY_MATRIX_V[2].xyz)), i.pos.xy);
+                float cloudDistance;
+                float4 sky = MarchSky(origin, ray, SceneDistance(rawDepth, dot(ray, -UNITY_MATRIX_V[2].xyz)), i.pos.xy, cloudDistance);
                 if (sky.a < 0.002) discard;
                 return sky;
             }
@@ -966,7 +1001,10 @@ Shader "Boscali/FlightCloud"
             {
                 // Texture-space uv of this texel: Unity's convention (v up), which is also how
                 // the depth texture and the composite's screen uv address the screen.
-                float2 uv = i.pos.xy * _CloudLowResSize.zw;
+                // With temporal update on, this quarter-size target marches one texel of each
+                // 2x2 block of the half-size sky; the resolve fills in the other three.
+                float2 texel = _CloudCheckerOn > 0.5 ? floor(i.pos.xy) * 2.0 + _CloudChecker.xy + 0.5 : i.pos.xy;
+                float2 uv = texel * _CloudLowResSize.zw;
                 float3 bottom = lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x);
                 float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
                 float3 view = lerp(bottom, top, uv.y);
@@ -982,8 +1020,10 @@ Shader "Boscali/FlightCloud"
                 float sceneDistance = rawDepth >= 0.999999 ? CLOUD_HORIZON_LIMIT : eyeDepth * viewLength;
                 #endif
                 LowOut o;
-                o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, i.pos.xy);
-                o.depth = float4(eyeDepth, 0.0, 0.0, 0.0);
+                float cloudDistance;
+                o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, texel, cloudDistance);
+                // Scene eye depth for the upsample; cloud distance for reprojection.
+                o.depth = float4(eyeDepth, cloudDistance, 0.0, 0.0);
                 return o;
             }
             ENDHLSL

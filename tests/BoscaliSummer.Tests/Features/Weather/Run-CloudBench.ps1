@@ -16,7 +16,7 @@ Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022
 Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.imageconversion":"1.0.0"}}'
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Deterministic.cs" "$fixture/Assets/Code/"
-foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudVolumeUniforms.cs') { Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/" }
+foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs') { Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/" }
 Copy-Item "$PSScriptRoot/CloudBench.cs" "$fixture/Assets/Code/"
 function Copy-Shader([string]$from, [string]$to, [string]$rename = '') {
     $text = Get-Content -Raw $from

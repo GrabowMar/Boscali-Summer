@@ -5,10 +5,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
 {
     /// <summary>
     /// CPU mirror of the volume shader's cloud density (FlightCloud.shader: Bodies, CoverMask,
-    /// the low deck, fronts, towers and the middle layer; without detail erosion or the thin
-    /// high layer). The shadow cookie and the in-cloud test use it, so each visible cloud
-    /// casts its own shadow. Pure System.Math over the shared noise bytes, so it runs on a
-    /// worker and in tests. Keep it in step with the shader.
+    /// the low deck, fronts, towers, the middle layer and the set-piece envelopes; without
+    /// detail erosion or the thin high layer). The shadow cookie and the in-cloud test use it,
+    /// so each visible cloud casts its own shadow. Pure System.Math over the shared noise bytes,
+    /// so it runs on a worker and in tests. Keep it in step with the shader.
     /// </summary>
     internal readonly struct CloudBodies
     {
@@ -18,15 +18,17 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private readonly float windX, windZ;
         private readonly SkySplit split;
         private readonly float fog;
+        private readonly WeatherField field;
 
         public CloudBodies(byte[] noise, int size, StateParams sky, float prevailingHeading = 0f, SkySplit split = default,
-            float fog = 0f)
+            float fog = 0f, WeatherField field = null)
         {
             this.fog = fog;
             this.noise = noise;
             this.size = size;
             this.sky = sky;
             this.split = split;
+            this.field = field;
             WeatherMath.HeadingToVector(prevailingHeading, out windX, out windZ);
         }
 
@@ -34,9 +36,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
         /// renderer's cloud-height shift, <paramref name="p"/> the weather at that column.</summary>
         public float Density(WeatherPoint p, float x, float y, float z, float shift)
         {
+            float heroes = Heroes(x, y, z);
             float mid = Math.Max(MidLayer(x, y, z), FogBank(y));
             float layer = p.BackgroundCover, front = p.FrontCover, cell = p.CellShape;
-            if (Math.Max(layer, Math.Max(front, cell)) < 0.025f) return mid;
+            if (Math.Max(layer, Math.Max(front, cell)) < 0.025f) return Math.Max(mid, heroes);
             float baseY = p.CloudBase + shift;
             float topY = Math.Max(baseY + 1600f, p.CloudTop + shift);
 
@@ -84,7 +87,133 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 WeatherMath.Smoothstep(-100f, 170f, y - baseY) * (1f - WeatherMath.Smoothstep(0.84f, 1f, h)) *
                 WeatherMath.Smoothstep(0.04f, 0.20f, cell);
 
-            return Math.Max(mid, Math.Max(layerDensity * 0.52f, Math.Max(frontDensity * 0.58f, tower * 0.78f)));
+            return Math.Max(heroes, Math.Max(mid, Math.Max(layerDensity * 0.52f, Math.Max(frontDensity * 0.58f, tower * 0.78f))));
+        }
+
+        /// <summary>The set-pieces (shelf line, supercell, storm eye, lenticulars) as smooth
+        /// envelopes: the shader's shapes without noise erosion, so flying into a storm eye or
+        /// a supercell reads as cloud and casts a shadow. Strengths are the field's (they ramp
+        /// over minutes with the state); a console toggle leads the GPU's 20 s fade briefly.</summary>
+        public float Heroes(float x, float y, float z)
+        {
+            if (field == null || y < 0f) return 0f;
+            float hero = 0f;
+            int count = field.SuperstructureCount;
+            for (int i = 0; i < count; i++)
+            {
+                Superstructure s = field.SuperstructureAt(i);
+                if (s.Strength <= 0.001f || y > s.Top + 1600f) continue;
+                // Bounding circle (mirror of the shader's HeroReach): a point culled here
+                // holds no set-piece cloud.
+                HeroReach(s, out float cx, out float cz, out float radius);
+                float dx = x - cx, dz = z - cz;
+                if (dx * dx + dz * dz > radius * radius) continue;
+                float h = s.Kind == SuperstructureKind.ShelfLine ? ShelfEnvelope(s, x, y, z)
+                    : s.Kind == SuperstructureKind.Supercell ? CellEnvelope(s, x, y, z)
+                    : s.Kind == SuperstructureKind.StormEye ? EyeEnvelope(s, x, y, z)
+                    : LensEnvelope(s, x, y, z);
+                if (h > hero) hero = h;
+            }
+            return hero;
+        }
+
+        private static void HeroReach(Superstructure s, out float cx, out float cz, out float radius)
+        {
+            float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
+            if (s.Kind == SuperstructureKind.ShelfLine)
+            {
+                float lengthHalf = s.Size + 9000f, depthHalf = (s.Extent + 17000f) * 0.5f;
+                float off = 10000f - depthHalf;
+                cx = s.X + dirZ * off;
+                cz = s.Z - dirX * off;
+                radius = (float)Math.Sqrt(lengthHalf * lengthHalf + depthHalf * depthHalf);
+            }
+            else if (s.Kind == SuperstructureKind.Supercell)
+            {
+                cx = s.X;
+                cz = s.Z;
+                radius = Math.Max(s.Extent * 2.8f, s.Size * 1.4f + 4000f) + 1000f;
+            }
+            else if (s.Kind == SuperstructureKind.StormEye)
+            {
+                cx = s.X;
+                cz = s.Z;
+                radius = s.Size + s.Extent * 4f;
+            }
+            else
+            {
+                float lengthHalf = s.Extent + 1.5f * s.Size;
+                cx = s.X + dirX * s.Extent;
+                cz = s.Z + dirZ * s.Extent;
+                radius = (float)Math.Sqrt(lengthHalf * lengthHalf + s.Size * s.Size);
+            }
+        }
+
+        private static float ShelfEnvelope(Superstructure s, float x, float y, float z)
+        {
+            float alongX = (float)Math.Cos(s.Heading), alongZ = (float)Math.Sin(s.Heading);
+            float dx = x - s.X, dz = z - s.Z;
+            float u = dx * alongX + dz * alongZ, v = dx * alongZ - dz * alongX;
+            float taper = 1f - WeatherMath.Smoothstep(s.Size * 0.55f, s.Size + 7000f, Math.Abs(u));
+            if (taper <= 0f) return 0f;
+            float mass = WeatherMath.Envelope(v, -s.Extent - 5000f, -s.Extent * 0.55f, -700f, 500f) *
+                WeatherMath.Envelope(y, 1250f, 1600f, s.Top - 1200f, s.Top + 300f) * 0.85f;
+            float topV = 3850f - 2980f * WeatherMath.Clamp01(v / 7000f);
+            float shelf = WeatherMath.Envelope(v, -400f, 0f, 6400f, 7000f) *
+                WeatherMath.Smoothstep(410f, 540f, y) * (1f - WeatherMath.Smoothstep(topV - 350f, topV, y)) * 0.72f;
+            return Math.Max(mass, shelf) * taper * s.Strength;
+        }
+
+        private static float CellEnvelope(Superstructure s, float x, float y, float z)
+        {
+            float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
+            float h = WeatherMath.Clamp01(y / s.Top);
+            float lean = h * 4000f;
+            float dx = x - s.X - dirX * lean, dz = z - s.Z - dirZ * lean;
+            float dome = (float)Math.Sqrt(WeatherMath.Clamp01(1f - (float)Math.Pow(Math.Max(0f, h - 0.6f) / 0.45f, 2f)));
+            float radius = s.Size * 0.95f * dome;
+            float tower = (1f - WeatherMath.Smoothstep(radius * 0.7f, radius * 1.1f + 1f,
+                    (float)Math.Sqrt(dx * dx + dz * dz))) *
+                WeatherMath.Smoothstep(1100f, 1450f, y) * 0.9f;
+            float ax = x - s.X, az = z - s.Z;
+            float along = ax * dirX + az * dirZ - s.Extent * 0.35f;
+            float across = -ax * dirZ + az * dirX;
+            float e = (float)Math.Sqrt(along * along * 0.3025f + across * across) / s.Extent;
+            float anvilTop = s.Top + 250f - 500f * e * e;
+            float anvilBase = anvilTop - WeatherMath.Lerp(2600f, 450f, WeatherMath.Clamp01(e)) - 150f;
+            float anvil = (1f - WeatherMath.Smoothstep(0.4f, 0.78f, e)) *
+                WeatherMath.Envelope(y, anvilBase - 50f, anvilBase + 260f, anvilTop - 350f, anvilTop + 120f) * 0.34f;
+            return Math.Max(tower, anvil) * s.Strength;
+        }
+
+        private static float EyeEnvelope(Superstructure s, float x, float y, float z)
+        {
+            float dx = x - s.X, dz = z - s.Z;
+            float r = (float)Math.Sqrt(dx * dx + dz * dz);
+            float eye = s.Size, wall = s.Extent;
+            float h = WeatherMath.Clamp01(y / s.Top);
+            float inner = eye * (1f + 0.9f * h * h);
+            float crown = s.Top * 0.91f;
+            float wallM = WeatherMath.Smoothstep(inner - 1500f, inner + 2750f, r) *
+                (1f - WeatherMath.Smoothstep(eye + wall * 0.8f, eye + wall * 1.6f + 1500f, r)) *
+                WeatherMath.Envelope(y, 300f, 900f, crown - 1500f, crown);
+            float floorM = (1f - WeatherMath.Smoothstep(inner * 0.7f, inner, r)) *
+                WeatherMath.Envelope(y, 500f, 700f, 1300f, 1800f) * 0.6f;
+            float bands = WeatherMath.Envelope(r, eye + wall, eye + wall * 1.4f, eye + wall * 2.5f, eye + wall * 4f) *
+                WeatherMath.Envelope(y, 400f, 900f, 5000f, 8500f) * 0.4f;
+            return Math.Max(wallM, Math.Max(floorM, bands)) * s.Strength;
+        }
+
+        private static float LensEnvelope(Superstructure s, float x, float y, float z)
+        {
+            float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
+            float dx = x - s.X, dz = z - s.Z;
+            float along = dx * dirX + dz * dirZ, across = -dx * dirZ + dz * dirX;
+            float acrossM = 1f - WeatherMath.Smoothstep(s.Size * 0.8f, s.Size, Math.Abs(across));
+            float alongM = WeatherMath.Envelope(along, -s.Size * 1.5f - 1000f, -s.Size * 1.5f + 1000f,
+                s.Extent * 2f + s.Size * 1.5f - 1000f, s.Extent * 2f + s.Size * 1.5f + 1000f);
+            float yM = WeatherMath.Envelope(y, s.Top - 400f, s.Top, s.Top + 1400f, s.Top + 1800f);
+            return acrossM * alongM * yM * 0.7f * s.Strength;
         }
 
         /// <summary>The console fog bank (-30..330 m), near-continuous, for the in-cloud feel.</summary>

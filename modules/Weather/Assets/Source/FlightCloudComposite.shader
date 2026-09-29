@@ -75,6 +75,104 @@ Shader "Boscali/FlightCloudComposite"
             }
             ENDHLSL
         }
+
+        // Temporal resolve (drawn by the render pass only): the half-size sky from this frame's
+        // quarter-size march. The three texels of each 2x2 block not marched this frame are
+        // last frame's sky, reprojected along the cloud's distance and clamped to the range
+        // of the fresh texels around them, so a cloud that moved or appeared never leaves a
+        // ghost. The marched texel blends toward that carried value instead of replacing it,
+        // so the per-frame march dither averages out instead of drawing a checkerboard grid
+        // on thin cloud. Where last frame did not see the point, the fresh texels are
+        // upsampled instead.
+        Pass
+        {
+            Name "CloudResolve"
+            Tags { "LightMode"="BoscaliCloudResolve" }
+            Blend Off
+            ZWrite Off
+            ZTest Always
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex resolveVert
+            #pragma fragment resolveFrag
+            #pragma target 3.5
+            #include "UnityCG.cginc"
+
+            sampler2D _CameraDepthTexture;
+            sampler2D _CloudQuarterColour;
+            sampler2D _CloudQuarterData;
+            sampler2D _CloudHistoryTex;
+            float4 _CloudLowResSize, _CloudQuarterSize;
+            float4x4 _CloudFrustum, _CloudPrevMatrix;
+            float3 _CloudCamDelta;
+            float4 _CloudChecker;
+            float _CloudHistoryValid;
+
+            struct rv2f { float4 pos : SV_POSITION; };
+            struct ResolveOut
+            {
+                float4 colour : SV_Target0;
+                float4 depth : SV_Target1;
+            };
+
+            rv2f resolveVert(uint id : SV_VertexID)
+            {
+                rv2f o;
+                float2 p = float2((id << 1) & 2, id & 2);
+                o.pos = float4(p * 2.0 - 1.0, 0.5, 1.0);
+                return o;
+            }
+
+            ResolveOut resolveFrag(rv2f i)
+            {
+                float2 texel = floor(i.pos.xy);
+                float2 uv = (texel + 0.5) * _CloudLowResSize.zw;
+                float2 block = floor(texel * 0.5);
+                float2 quv = (block + 0.5) * _CloudQuarterSize.zw;
+                ResolveOut o;
+                o.depth = float4(LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r), 0, 0, 0);
+
+                bool fresh = all(texel - block * 2.0 == _CloudChecker.xy);
+                float4 freshVal = tex2Dlod(_CloudQuarterColour, float4(quv, 0, 0));
+                float4 upsampled = tex2Dlod(_CloudQuarterColour, float4(uv, 0, 0));
+                // No history (first frame, a cut, a zoom): fresh texels are sharp, the rest
+                // fall back to the upsampled march. Sharpness returns over the next frames.
+                if (_CloudHistoryValid < 0.5 || _CloudChecker.w < 0.5) { o.colour = fresh ? freshVal : upsampled; return o; }
+
+                // This texel's ray, out to the cloud distance its fresh neighbour measured,
+                // seen from last frame's camera.
+                float3 bottom = lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x);
+                float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
+                float3 ray = normalize(lerp(bottom, top, uv.y));
+                float distance = tex2Dlod(_CloudQuarterData, float4(quv, 0, 0)).g;
+                float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta, 1.0));
+                float2 previous = clip.xy / clip.w * 0.5 + 0.5;
+                if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) { o.colour = fresh ? freshVal : upsampled; return o; }
+                float4 history = tex2Dlod(_CloudHistoryTex, float4(previous, 0, 0));
+
+                // Neighbourhood clamp against the fresh texels around this one.
+                float4 low = 1e5, high = -1e5;
+                [unroll]
+                for (int y = -1; y <= 1; y++)
+                {
+                    [unroll]
+                    for (int x = -1; x <= 1; x++)
+                    {
+                        float4 n = tex2Dlod(_CloudQuarterColour, float4(quv + float2(x, y) * _CloudQuarterSize.zw, 0, 0));
+                        low = min(low, n);
+                        high = max(high, n);
+                    }
+                }
+                float4 carried = clamp(history, low, high);
+                if (!fresh) { o.colour = carried; return o; }
+                // The clamp already pulled the carried value into the fresh range, so new and
+                // vanished cloud still converge within a few frames; dense texels track the
+                // fresh march faster to keep their detail crisp.
+                o.colour = lerp(carried, freshVal, 0.10 + 0.40 * freshVal.a);
+                return o;
+            }
+            ENDHLSL
+        }
     }
     Fallback Off
 }

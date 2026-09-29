@@ -18,6 +18,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         public Vector3 SunDirection;
         public Color SunColor, Ambient, Ground, Fog;
         public float Extinction;
+        /// <summary>Lightning flash envelope, 0..1: lights the cloud cores the sun cannot reach.</summary>
+        public float Flash;
         public bool LowDetail;
         public float CameraInCloud;
         public float DeltaTime;
@@ -49,6 +51,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int GroundId = Shader.PropertyToID("_CloudGroundColor");
         private static readonly int FogId = Shader.PropertyToID("_CloudFogColor");
         private static readonly int ExtinctionId = Shader.PropertyToID("_CloudAirExtinction");
+        private static readonly int FlashId = Shader.PropertyToID("_CloudFlash");
         private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
         private static readonly int LayerDepthId = Shader.PropertyToID("_LayerDepth");
         private static readonly int LayerSmoothId = Shader.PropertyToID("_LayerSmooth");
@@ -67,6 +70,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int StepsId = Shader.PropertyToID("_CloudSteps");
         private static readonly int FarStepsId = Shader.PropertyToID("_CloudFarSteps");
         private static readonly int FrustumId = Shader.PropertyToID("_CloudFrustum");
+        private static readonly int PrevMatrixId = Shader.PropertyToID("_CloudPrevMatrix");
+        private static readonly int CamDeltaId = Shader.PropertyToID("_CloudCamDelta");
+        private static readonly int CheckerId = Shader.PropertyToID("_CloudChecker");
+        private static readonly Vector2[] CheckerOrder = { new Vector2(0, 0), new Vector2(1, 1), new Vector2(1, 0), new Vector2(0, 1) };
 
         private readonly Vector4[] heroA = new Vector4[Superstructures.MaxCount];
         private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
@@ -74,6 +81,12 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private readonly Vector2[] heroSite = new Vector2[Superstructures.MaxCount];
         private readonly Vector3[] corners = new Vector3[4];
         private float fogShown;
+        private Matrix4x4 previousRotation = Matrix4x4.identity;
+        private Vector3 previousPosition;
+        private float previousFov;
+        private bool hasPrevious;
+        private int checkerFrame;
+        private float jitterPhase;
 
         /// <summary>0..1 how far the console fog bank has built up.</summary>
         internal float FogShown => fogShown;
@@ -105,7 +118,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetFloat(ShiftId, frame.CloudShift);
             material.SetVector(OffsetId, frame.WorldOffset);
             material.SetVector(ForwardId, frame.CameraForward);
-            material.SetVector(CameraPosId, frame.CameraPosition);
 
             // Scenery storms: static set-pieces the state builds up. They keep their own altitude
             // range, so rays that miss them keep the weather's tight march bounds.
@@ -141,6 +153,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetColor(GroundId, frame.Ground);
             material.SetColor(FogId, frame.Fog);
             material.SetFloat(ExtinctionId, frame.Extinction);
+            material.SetFloat(FlashId, frame.Flash);
             material.SetFloat(StormId, sky.Severity);
             // Cloud genera for the current state (they fade with it).
             material.SetFloat(LayerDepthId, sky.LayerDepth);
@@ -163,7 +176,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetFloat(InCloudId, frame.CameraInCloud);
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
-            material.SetFloat(StepsId, frame.LowDetail ? 56f : 80f);
+            // 64 near steps: temporal accumulation averages the per-frame dither, which
+            // also supersamples the step quantization over frames, so 64 accumulated steps
+            // resolve as well as 80 static ones did (see the bench PNGs).
+            material.SetFloat(StepsId, frame.LowDetail ? 56f : 64f);
             material.SetFloat(FarStepsId, frame.LowDetail ? 14f : 20f);
         }
 
@@ -173,9 +189,14 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetFloat(FarSpanId, farHalf * 2f);
         }
 
-        /// <summary>World-space view rays through the four screen corners (bottom-left,
-        /// bottom-right, top-left, top-right, as texture uv), for the reduced-resolution march.</summary>
-        internal void ApplyFrustum(Material material, Camera camera)
+        /// <summary>At render time, with the camera's final pose: the reduced-resolution march's
+        /// view (rays through the four screen corners, as texture uv: bottom-left, bottom-right,
+        /// top-left, top-right), the checkerboard texel this frame marches (xy) with the
+        /// per-frame dither offset (z), and last frame's view for reprojection.
+        /// <paramref name="globalPosition"/> is the camera in the map frame (unaffected by
+        /// floating-origin shifts). Returns false when last frame's view cannot be reused
+        /// (first frame, a cut, a zoom).</summary>
+        internal bool ApplyView(Camera camera, Vector3 globalPosition)
         {
             camera.CalculateFrustumCorners(new Rect(0f, 0f, 1f, 1f), 1f, Camera.MonoOrStereoscopicEye.Mono, corners);
             // CalculateFrustumCorners: bottom-left, top-left, top-right, bottom-right (view space).
@@ -187,7 +208,27 @@ namespace BoscaliSummer.Features.Weather.Visuals
             m.SetRow(1, br);
             m.SetRow(2, tl);
             m.SetRow(3, tr);
-            material.SetMatrix(FrustumId, m);
+            Shader.SetGlobalMatrix(FrustumId, m);
+            Shader.SetGlobalVector(CameraPosId, t.position);
+
+            // Last frame's rotation and projection (OpenGL convention: uv v up, like the
+            // targets), applied to points relative to last frame's camera.
+            Vector3 delta = globalPosition - previousPosition;
+            bool reusable = hasPrevious && delta.sqrMagnitude < 2000f * 2000f &&
+                Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f;
+            Shader.SetGlobalMatrix(PrevMatrixId, camera.projectionMatrix * previousRotation);
+            Shader.SetGlobalVector(CamDeltaId, delta);
+            Vector2 offset = CheckerOrder[checkerFrame & 3];
+            // The march dither cycles each frame (golden-ratio steps never line up with the
+            // 4-frame checkerboard period), so temporal accumulation converges to smooth cloud.
+            jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
+            Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, jitterPhase, reusable ? 1f : 0f));
+            checkerFrame++;
+            previousRotation = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.Rotate(Quaternion.Inverse(t.rotation));
+            previousPosition = globalPosition;
+            previousFov = camera.fieldOfView;
+            hasPrevious = true;
+            return reusable;
         }
     }
 }
