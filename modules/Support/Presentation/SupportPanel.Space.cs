@@ -68,11 +68,8 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void BuildSpacePage(AvFlow page)
         {
-            spacePage = page.Add(new OpsSubPage(page.Content, page.Ticker, page.Inner, AvIcon.Satellite, "SPACE", sub =>
-            {
-                nextRefresh = 0f;
-                shell.Page(TabSpace).RequestRelayout();
-            }, StationStatusHelp, StationActionsHelp));
+            spacePage = page.Add(new OpsSubPage(page.Content, page.Ticker, page.Inner, AvIcon.Satellite, "SPACE",
+                sub => nextRefresh = 0f, StationStatusHelp, StationActionsHelp));
             BuildStationPage(spacePage.Status);
             BuildSpaceOpsPage(spacePage.Actions);
             Log("CONSOLE ONLINE · FLIGHT HAS THE ROOM");
@@ -95,6 +92,14 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
             OpenRoom(TaskingRoom(), null, stationConsoleButton != null ? stationConsoleButton.Rect : null);
             Log("FLIGHT · " + OrbitalPlatform.Callsign + " TASKING MAP OPEN");
+        }
+
+        /// <summary>Open the engineering wall, where the core launch and every module launch live.</summary>
+        private void OpenEngineering()
+        {
+            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
+            OpenRoom(StationRoom(), null, null);
+            Log("FLIGHT · " + OrbitalPlatform.Callsign + " ENGINEERING OPEN");
         }
 
         private void OpenUplink(GlobalPosition? aim)

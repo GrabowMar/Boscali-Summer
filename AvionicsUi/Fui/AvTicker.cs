@@ -49,6 +49,14 @@ namespace NOAvionics.Ui
             if (!fast && !slow) return;
             if (fast) nextFast = now + 0.1f;
             if (slow) nextSlow = now + 0.5f;
+            Run(fast, slow);
+        }
+
+        /// <summary>Runs one fast (and optionally slow) tick now: offline harnesses, where time does not advance.</summary>
+        public void TickNow(bool slow = true) => Run(true, slow);
+
+        private void Run(bool fast, bool slow)
+        {
             using (TickMarker.Auto())
             {
                 for (int i = 0; i < entries.Count; i++)

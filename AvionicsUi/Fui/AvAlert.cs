@@ -34,12 +34,13 @@ namespace NOAvionics.Ui
             body.text = b ?? "";
             bool was = Rect.gameObject.activeSelf;
             Rect.gameObject.SetActive(true);
+            Changed();
             if (!was) fx.Play(AvFxKind.Dissolve, 0.8f, 6f);
             railFx.Set(state == AvState.Danger ? AvFxKind.Pulse : AvFxKind.None, 0.35f);
             Restyle();
         }
 
-        public void Hide() => Rect.gameObject.SetActive(false);
+        public void Hide() => SetShown(false);
 
         public override float Measure(float width) =>
             !Rect.gameObject.activeSelf ? 0f : 10f + AvText.Height(title, width - 52f) + 4f + AvText.Height(body, width - 52f) + 10f;

@@ -57,7 +57,7 @@ public static class PresentationUnityCheck
                 foreach (float height in new[] { 420f, 596f, 896f })
                 {
                     RenderSqd(height);
-                    if (!sqdOnly && height >= 896f) RenderArchive();
+                    // The EVN field archive has its own harness (Features/Events/Run-EventsUnityCheck.ps1).
                 }
             }
             if (!sqdOnly) RenderEventAlert();
@@ -100,7 +100,7 @@ public static class PresentationUnityCheck
         Call(manager, "Configure", settings, null, null, null);
         Set(manager, "localRank", 3);
         Set(manager, "localScore", 2450);
-        Set(manager, "localEarnedPoints", 4);
+        Set(manager, "localEarnedPoints", 0);
         Set(manager, "localMaximumPoints", 7);
         Set(manager, "localScorePerPoint", 750);
         Set(panel, "progression", manager);
@@ -115,121 +115,307 @@ public static class PresentationUnityCheck
         string[] names = { "pilot", "skills", "wings", "studio", "plane" };
         for (int i = 0; i < methods.Length; i++) Call(panel, methods[i], console.Page(i));
         console.Finish();
-        // Hover help survives the kit v2 conversion: plane pager (2), skills confirm (1), studio buttons, rows and fields (18).
-        int helpTips = root.GetComponentsInChildren<AvHelpTip>(true).Length;
-        Check(helpTips >= 21, "SQD pages must carry their hover help, found " + helpTips);
-        SeedSqd(panel);
-        ValidateSkillRows(panel);
+        // Content binds AFTER Finish and the page re-lays through the ticker, exactly as in the game.
+        Settle(console);
 
-        for (int page = 0; page < names.Length; page++)
-        {
-            console.SetPage(page);
-            console.Page(page).Relayout();
-            ValidateReadable(root, "SQD " + names[page]);
-            ValidateFit(console, "SQD " + names[page]);
-            CaptureConsole(canvasObject, height, "sqd-" + names[page] + "-" + height);
-            if (page == 4)
-            {
-                SeedPlane(panel);
-                console.Page(page).Relayout();
-                ValidateReadable(root, "SQD plane populated");
-                ValidateFit(console, "SQD plane populated");
-                CaptureConsole(canvasObject, height, "sqd-plane-populated-" + height);
-            }
-        }
+        // Hover help survives the conversion: skills confirm (1), studio buttons, rows and fields, plane pager (1).
+        int helpTips = root.GetComponentsInChildren<AvHelpTip>(true).Length;
+        Check(helpTips >= 14, "SQD pages must carry their hover help, found " + helpTips);
+
+        var portrait = FixtureSprite(72, 90, new Color(.10f, .18f, .16f), new Color(.02f, .05f, .05f));
+        var crest = FixtureSprite(64, 64, new Color(.16f, .12f, .05f), new Color(.05f, .04f, .02f));
+        object perksEmpty = Perks(manager, 0u, 0);
+
+        // ---- PILOT -----------------------------------------------------------------------
+        console.SetPage(0);
+        SeedPilot(panel, false, portrait, crest);
+        Call(panel, "RefreshCommittedSkills", perksEmpty);
+        Gate(console, root, "SQD pilot empty");
+        CaptureConsole(canvasObject, height, "sqd-pilot-empty-" + height);
+        object perksHeld = Perks(manager, HeldMask, 6);
+        SeedPilot(panel, true, portrait, crest);
+        Call(panel, "RefreshCommittedSkills", perksHeld);
+        Gate(console, root, "SQD pilot populated");
+        CaptureConsole(canvasObject, height, "sqd-pilot-" + height);
+
+        // ---- SKILLS: the real refresh path against a real manager --------------------------
+        console.SetPage(1);
+        Perks(manager, 0u, 1); // a fresh career: one earned pick, so every lane's tool is open
+        Call(panel, "RefreshSkillsPage");
+        Gate(console, root, "SQD skills empty");
+        ValidateSkillNodes(panel);
+        CaptureConsole(canvasObject, height, "sqd-skills-empty-" + height);
+        Perks(manager, HeldMask, 6);
+        Set(panel, "skillAwaitingConfirmation", (byte?)3);
+        Call(panel, "RefreshSkillsPage");
+        Gate(console, root, "SQD skills populated");
+        ValidateSkillNodes(panel);
+        CaptureConsole(canvasObject, height, "sqd-skills-" + height);
+        Set(panel, "skillAwaitingConfirmation", null);
+
+        // ---- ACES ------------------------------------------------------------------------
+        console.SetPage(2);
+        Call(panel, "RefreshWingsPage");
+        Gate(console, root, "SQD aces empty");
+        CaptureConsole(canvasObject, height, "sqd-wings-empty-" + height);
+        SeedWings(panel, portrait, crest);
+        Gate(console, root, "SQD aces populated");
+        CaptureConsole(canvasObject, height, "sqd-wings-" + height);
+
+        // ---- STUDIO ----------------------------------------------------------------------
+        console.SetPage(3);
+        Call(panel, "RefreshStudioPage");
+        Gate(console, root, "SQD studio empty");
+        CaptureConsole(canvasObject, height, "sqd-studio-empty-" + height);
+        SeedStudio(panel, portrait, crest);
+        Gate(console, root, "SQD studio populated");
+        CaptureConsole(canvasObject, height, "sqd-studio-" + height);
+
+        // ---- PLANE -----------------------------------------------------------------------
+        console.SetPage(4);
+        Call(panel, "RefreshPlanePage");
+        Gate(console, root, "SQD plane empty");
+        CaptureConsole(canvasObject, height, "sqd-plane-empty-" + height);
+        SeedPlane(panel);
+        Gate(console, root, "SQD plane populated");
+        CaptureConsole(canvasObject, height, "sqd-plane-populated-" + height);
+
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(panelObject);
         Object.DestroyImmediate(managerObject);
     }
 
+    // Strike tool + two grades, Recon tool: two tools held, so SIGNALS and ENGINEER close.
+    private const uint HeldMask = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 6);
+
+    /// <summary>Sets the manager's career (held grades, earned picks) and returns its real PerkView list.</summary>
+    private static object Perks(object manager, uint mask, int earned)
+    {
+        Set(manager, "localState", Activator.CreateInstance(
+            TypeOf("BoscaliSummer.Features.Progression.Runtime.PerkState"), mask));
+        Set(manager, "localEarnedPoints", earned);
+        Type view = TypeOf("BoscaliSummer.Framework.Contracts.IProgressionView");
+        return view.GetMethod("GetPerks").Invoke(manager, null);
+    }
+
+    private static void Settle(AvConsole console)
+    {
+        for (int i = 0; i < 3; i++) console.Ticker.TickNow();
+        Canvas.ForceUpdateCanvases();
+    }
+
+    /// <summary>Settle, then the readable, fit and overlap gates for the current page.</summary>
+    private static void Gate(AvConsole console, RectTransform root, string name)
+    {
+        Settle(console);
+        ValidateReadable(root, name);
+        ValidateFit(console, name);
+        ValidateNoTextOverlap(console, name);
+    }
+
+    private static Sprite FixtureSprite(int w, int h, Color top, Color bottom)
+    {
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float t = y / (float)(h - 1);
+                Color c = Color.Lerp(bottom, top, t);
+                float hx = (x - w * .5f) / (w * .5f), hy = (y - h * .62f) / (h * .22f);
+                if (hx * hx * 1.6f + hy * hy < 1f) c = new Color(.62f, .55f, .48f);
+                float sx = (x - w * .5f) / (w * .46f), sy = (y - h * .18f) / (h * .34f);
+                if (sx * sx + sy * sy < 1f) c = new Color(.24f, .30f, .27f);
+                tex.SetPixel(x, y, c);
+            }
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(.5f, .5f));
+    }
+
+    private static void SeedPilot(object panel, bool populated, Sprite portrait, Sprite crest)
+    {
+        object id = Get(panel, "pilotIdentity");
+        if (populated)
+            Call(id, "Set", "LOCAL PROFILE", "DAYMAN", "M. FONTAINE", "3", "FLIGHT OFFICER", "GEN 1",
+                "Awaiting aircraft", AvState.Info, portrait, crest, "BOSCALI SUMMER", AvState.Ready, "ACTIVE");
+        else
+            Call(id, "Set", "PILOT DOSSIER", "RECORD PENDING", "—", "0", "ROOKIE", "GEN 1",
+                "NO STATUS ON FILE", AvState.Info, null, null, "NO SQUADRON NAME", AvState.Ready, "ACTIVE");
+
+        string[] tiles = { "tileSortie", "tileTime", "tileFuel", "tileDeaths" };
+        string[] full = { "1,240", "10:39", "62%", "1" }, none = { "—", "0:00", "—", "0" };
+        for (int i = 0; i < tiles.Length; i++)
+            Call(Get(panel, tiles[i]), "Set", populated ? full[i] : none[i],
+                populated && i == 3 ? AvState.Caution : AvState.Inert);
+        Call(Get(panel, "pilotBackground"), "Set", populated
+            ? "Flew medical supply routes along the coast before joining the reserves. Precise on the radio, calm under pressure, and never once late for a briefing."
+            : "No service background on file.");
+
+        object sortie = Get(panel, "sortieGrid"), career = Get(panel, "careerGrid");
+        string[] sortieKeys = { "sortieAirframe", "sortieCondition", "sortieLife", "sortieMission" };
+        string[] sortieValues = populated
+            ? new[] { "SAF-22 CHICANE", "AIRBORNE", "RESPAWNING", "18,450" }
+            : new[] { "NO AIRCRAFT", "GROUND", "ONE LIFE", "0" };
+        for (int i = 0; i < sortieKeys.Length; i++)
+            Call(sortie, "Set", (int)Get(panel, sortieKeys[i]), sortieValues[i],
+                populated && i == 1 ? AvState.Ready : AvState.Inert);
+        string[] careerKeys = { "careerPilot", "careerBonus", "careerNext", "careerEarned", "careerSpent", "careerUnspent" };
+        string[] careerValues = populated
+            ? new[] { "2,450", "+1P", "550", "6/7", "4", "2" }
+            : new[] { "0", "+0P", "750", "0/7", "0", "0" };
+        for (int i = 0; i < careerKeys.Length; i++)
+            Call(career, "Set", (int)Get(panel, careerKeys[i]), careerValues[i],
+                populated && i == 5 ? AvState.Ready : AvState.Inert);
+    }
+
+    private static void SeedWings(object panel, Sprite portrait, Sprite crest)
+    {
+        Call(Get(panel, "huntRow"), "Set", "ACE HUNT ACTIVE — YOU ARE THE TARGET",
+            "Revenant is closing on your sector.", null, null, AvState.Danger);
+        object lead = Get(panel, "wingLeadRow");
+        Call(lead, "Set", "DAYMAN", "M. FONTAINE   ·   FLIGHT LEAD", "SAF-22 CHICANE", "AIRBORNE", AvState.Ready);
+        Call(lead, "SetThumb", portrait);
+        Call(Get(panel, "friendlySection"), "SetCaption", "2 WINGMEN · 1 AIRBORNE");
+        Call(Get(panel, "wingTeamNote"), "SetShown", false);
+        var slots = (Array)Get(panel, "wingmanSlots");
+        string[] airframes = { "SAF-22 CHICANE", "COMP-2 ULTIMATE" }, status = { "AIRBORNE", "LANDED" };
+        for (int i = 0; i < slots.Length; i++)
+        {
+            object slot = slots.GetValue(i);
+            Call(slot, "SetShown", i < 2);
+            if (i < 2)
+                Call(slot, "Set", "WINGMAN " + (i + 1), airframes[i], status[i], null, i == 0 ? AvState.Ready : AvState.Caution);
+        }
+        string[] tiles = { "wingsTotalTile", "wingsActiveTile", "wingsAliveTile" }, values = { "4", "2", "5" };
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            Call(Get(panel, tiles[i]), "SetShown", true);
+            Call(Get(panel, tiles[i]), "Set", values[i], i == 0 ? AvState.Inert : AvState.Caution);
+        }
+        Call(Get(panel, "hostileSection"), "SetCaption", "1–2 OF 4 WINGS");
+        Call(Get(panel, "hostileEmpty"), "SetShown", false);
+        Call(Get(panel, "wingsPager"), "SetShown", true);
+        int index = 0;
+        foreach (object card in (IEnumerable)Get(panel, "wingRows"))
+        {
+            Call(card, "SetShown", true);
+            Call(card, "Set", index == 0 ? "▲" : "◆", index == 0 ? "NIGHT LANCE" : "BLACK TIDE",
+                index == 0 ? "REVENANT / VOSS" : "MARROW / KADE",
+                index == 0 ? "TIER 3 · SKILL VETERAN · FIRST ENCOUNTER" : "TIER 2 · SKILL TRAINED · RETURN #1",
+                index == 0 ? "HUNTING" : "PATROLLING", index == 0 ? 3 : 0, index == 0 ? 4 : 3,
+                index == 0 ? "YOU" : "", index == 0 ? 3 : 2, index == 0 ? 15 : 5);
+            Call(card, "SetCrest", crest);
+            Call(card, "SetPortrait", portrait);
+            index++;
+        }
+    }
+
+    private static void SeedStudio(object panel, Sprite portrait, Sprite crest)
+    {
+        Call(Get(panel, "studioSection"), "SetCaption", "1–2 OF 4 · WING COMMAND");
+        Call(Get(panel, "studioEmpty"), "SetShown", false);
+        Call(Get(panel, "studioPager"), "SetShown", true);
+        string[] calls = { "DAYMAN", "VIXEN" };
+        int index = 0;
+        foreach (object row in (Array)Get(panel, "studioRows"))
+        {
+            Call(row, "SetShown", true);
+            Call(row, "Set", calls[index], "M. Fontaine   ·   ROOKIE " + (index + 1),
+                index == 0 ? "IN SQUADRON" : "READY", index == 0 ? "EDITING" : null,
+                index == 0 ? AvState.Ready : AvState.Info);
+            Call(row, "set_Armed", index == 0);
+            index++;
+        }
+        Call(Get(panel, "studioPortrait"), "Set", portrait);
+        Call(Get(panel, "studioEmblem"), "Set", crest);
+        Call(Get(panel, "studioMessageText"), "Set", "Saved DAYMAN to the custom pilots folder.");
+    }
+
     private static void SeedPlane(object panel)
     {
-        Call(Get(panel, "planeIdentity"), "Set", "SAF-22 CHICANE", null, "AIRBORNE", AvState.Ready);
-        Call(Get(panel, "planeSelected"), "Set", "AAM-10", null, "4 / 6", AvState.Info);
-        Call(Get(panel, "planeStoreOverflow"), "Set", "1–4 OF 8");
+        Call(panel, "SetPlaneLive", true);
+        Call(Get(panel, "planeIdentity"), "Set", "SAF-22 CHICANE", "AIRBORNE", AvState.Ready, .36f, .82f);
         Call(Get(panel, "planeTuneName"), "Set", "RANGE");
         Call(Get(panel, "planeTuneState"), "Set", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
         string[] flight = { "940 km/h", "870 km/h", "6,120m", "+18.2m/s", "287°", "3.4 G" };
-        string[] systems = { "36%", "82%", "UP", "ON", "12 READY", "2 TRACKED" };
+        Array tiles = (Array)Get(panel, "planeFlight");
+        for (int i = 0; i < tiles.Length; i++) Call(tiles.GetValue(i), "Set", flight[i], AvState.Inert);
+        object systems = Get(panel, "planeSystems");
+        string[] systemValues = { "UP", "ON", "12 READY", "2 TRACKED" };
+        for (int i = 0; i < systemValues.Length; i++)
+            Call(systems, "Set", i, systemValues[i], i == 3 ? AvState.Danger : AvState.Inert);
+        Call(Get(panel, "planeSelected"), "Set", "AAM-10", "SELECTED STATION", "4 / 6", null, AvState.Info);
+        Call(Get(panel, "planeStoresSection"), "SetCaption", "1–4 OF 8");
+        Call(Get(panel, "planeStorePager"), "SetShown", true);
+        string[] storeNames = { "1  AAM-10", "2  AAM-10", "3  CBU-12", "4  20MM CANNON" };
+        string[] ammo = { "4 / 6", "2 / 4", "3 / 3", "320" };
+        var stores = (Array)Get(panel, "planeStores");
+        for (int i = 0; i < stores.Length; i++)
+            Call(stores.GetValue(i), "Set", storeNames[i], null, ammo[i], i == 0 ? "SELECTED" : null,
+                i == 0 ? AvState.Info : AvState.Inert);
         string[] faults = { "LEFT WINGROOT", "ENGINE RIGHT", "RUDDER", "COCKPIT" };
         string[] values = { "42%", "67%", "88%", "100%" };
-        Array tiles = (Array)Get(panel, "planeFlight");
-        Array rows = (Array)Get(panel, "planeSystems");
-        AvRow[] stores = (AvRow[])Get(panel, "planeStores");
-        AvRow[] faultRows = (AvRow[])Get(panel, "planeFaults");
-        for (int i = 0; i < tiles.Length; i++) Call(tiles.GetValue(i), "Set", flight[i]);
-        for (int i = 0; i < rows.Length; i++) Call(rows.GetValue(i), "Set", systems[i], AvState.Inert);
-        string[] storeNames = { "01  AAM-10", "02  AAM-10", "03  CBU-12", "04  20MM CANNON" };
-        string[] ammo = { "4 / 6  SELECTED", "2 / 4", "3 / 3", "320" };
-        for (int i = 0; i < stores.Length; i++)
-            stores[i].Set(storeNames[i], null, ammo[i], i == 0 ? AvState.Info : AvState.Inert);
+        float[] fractions = { .42f, .67f, .88f, 1f };
+        var faultRows = (Array)Get(panel, "planeFaults");
         for (int i = 0; i < faultRows.Length; i++)
-            faultRows[i].Set(faults[i], null, values[i], i == 3 ? AvState.Ready : AvState.Caution);
+        {
+            object row = faultRows.GetValue(i);
+            AvState state = i == 0 ? AvState.Danger : i == 3 ? AvState.Ready : AvState.Caution;
+            Call(row, "SetShown", true);
+            Call(row, "Set", faults[i], null, values[i], null, state);
+            Call(row, "SetMeter", fractions[i], AvTheme.RailCaution);
+        }
     }
 
-    private static void SeedSqd(object panel)
+    /// <summary>Every skill node is wide and tall enough for its name, and none overlap.</summary>
+    private static void ValidateSkillNodes(object panel)
     {
-        Call(Get(panel, "pilotIdentity"), "Set", "LOCAL PROFILE", "DAYMAN", "M. FONTAINE",
-            "RANK 3   ·   GEN 1   ·   FLIGHT LEAD", "AWAITING AIRCRAFT", (Sprite)null, (Sprite)null,
-            "BOSCALI SUMMER", AvState.Ready, "ACTIVE");
-        foreach (string tile in new[] { "tileSortie", "tileTime", "tileFuel", "tileDeaths" })
-            Call(Get(panel, tile), "Set", tile == "tileTime" ? "10:39" : "—");
-        Call(Get(panel, "pilotBackground"), "Set",
-            "Flew medical supply routes before joining the reserves. Precise on the radio and calm under pressure.");
-        string[] kv = { "pilotMode", "pilotStatus", "pilotDeaths", "pilotGeneration", "runAirframeValue", "runTimeValue",
-            "runFlightStatusValue", "runFuelValue", "runSortieScoreValue", "runRankValue", "runMissionScoreValue",
-            "pilotScoreValue", "aceBonusValue", "runNextPerkValue", "earnedValue", "spentValue", "availableValue" };
-        string[] kvText = { "RESPAWNING", "AWAITING AIRCRAFT", "0", "1", "NO AIRCRAFT", "10:39", "GROUND", "—",
-            "—", "3", "2,450", "2,450", "+0P", "550", "4/7", "2", "2" };
-        for (int i = 0; i < kv.Length; i++) Call(Get(panel, kv[i]), "Set", kvText[i], AvState.Inert);
-        AvChip[] committed = (AvChip[])Get(panel, "committedChips");
-        string[] words = { "STK", "COMBAT", "SURVEILLANCE" };
-        for (int i = 0; i < committed.Length; i++)
-        {
-            committed[i].Rect.gameObject.SetActive(i < words.Length);
-            if (i < words.Length) committed[i].Set(words[i], i == 0 ? AvState.Info : AvState.Ready);
-        }
-        Call(Get(panel, "committedSkillsEmpty"), "Set", "No skills committed yet. Open SKILLS to choose one.");
-
-        Call(Get(panel, "skillBudgetNote"), "Set", "2 PICKS UNSPENT · 550 TO NEXT GRADE");
-        Call(Get(panel, "skillStripTitle"), "Set", "SELECT A QUALIFICATION");
-        Call(Get(panel, "skillStripDetail"), "Set", "Compare the same tier across lanes, then unlock the selected grade.");
+        Canvas.ForceUpdateCanvases();
+        var rects = new List<Vector3[]>();
         foreach (object row in (IEnumerable)Get(panel, "skillRows"))
-            ((AvRow)Get(row, "Row")).Set("ENGINEER QUALIFICATION", "AVAILABLE", null, AvState.Info);
-        foreach (object branch in (IEnumerable)Get(panel, "skillBranches")) Text(branch, "Note", "0/6 OPEN");
-
-        ((AvRow)Get(panel, "huntRow")).Set("ACE HUNT STANDBY", "No hostile ace is currently assigned to this pilot.", null, AvState.Info);
-        ((AvRow)Get(panel, "wingLeadRow")).Set("DAYMAN", "M. FONTAINE   ·   FLIGHT LEAD", "NO AIRCRAFT", AvState.Inert);
-        ((AvRow)Get(panel, "wingCountRow")).Set("NO RECRUITED WING", "WMC OFFLINE", null, AvState.Inert);
-        foreach (AvRow slot in (AvRow[])Get(panel, "wingmanSlots")) slot.Rect.gameObject.SetActive(false);
-        Call(Get(panel, "rosterPage"), "Set", "1–2 OF 4 WINGS");
-        int index = 0;
-        foreach (object row in (IEnumerable)Get(panel, "wingRows"))
         {
-            Text(row, "Symbol", index == 0 ? "▲" : "◆");
-            Text(row, "Wing", index == 0 ? "NIGHT LANCE" : "BLACK TIDE");
-            Text(row, "Ace", index == 0 ? "ACE  REVENANT" : "ACE  MARROW");
-            Text(row, "Skill", index == 0 ? "TIER 3 · SKILL VETERAN · FIRST ENCOUNTER" : "TIER 2 · SKILL TRAINED · RETURN #1");
-            Text(row, "Status", index == 0 ? "HUNTING" : "PATROLLING");
-            Text(row, "Members", index == 0 ? "3 / 4 ALIVE" : "2 / 3 ALIVE");
-            Text(row, "Target", index == 0 ? "TARGET: YOU" : "TARGET: NORMAL OPERATIONS");
-            foreach (TMP_Text badge in (IEnumerable)Get(row, "Badges")) badge.gameObject.SetActive(true);
-            TMP_Text noSkills = Get(row, "NoSkills") as TMP_Text;
-            if (noSkills != null) noSkills.gameObject.SetActive(false);
-            index++;
+            RectTransform cell = ((AvPart)Get(row, "Node")).Rect;
+            var corners = new Vector3[4];
+            cell.GetWorldCorners(corners);
+            Check(corners[2].x - corners[0].x >= 88f && corners[2].y - corners[0].y >= 44f,
+                "SQD skill node is too small to hold a name and its state glyph.");
+            // A name breaks between words, never inside one: no more lines than words.
+            var label = (TMP_Text)Get(Get(row, "Node"), "label");
+            label.ForceMeshUpdate();
+            int words = label.text.Split(' ').Length;
+            Check(label.textInfo.lineCount <= Math.Min(2, words),
+                "SQD skill node name breaks inside a word or runs past two lines: " + label.text);
+            foreach (Vector3[] other in rects)
+                Check(corners[2].x <= other[0].x + .5f || corners[0].x >= other[2].x - .5f ||
+                      corners[2].y <= other[0].y + .5f || corners[0].y >= other[2].y - .5f,
+                    "SQD skill nodes overlap.");
+            rects.Add(corners);
         }
+    }
 
-        Call(Get(panel, "studioStatus"), "Set", "Wing Command connected · 4 local custom pilots.");
-        Call(Get(panel, "studioPagerLabel"), "Set", "1–4 OF 4 · PAGE 1/1");
-        string[] calls = { "DAYMAN", "VIXEN" };
-        index = 0;
-        foreach (AvRow row in (AvRow[])Get(panel, "studioRows"))
+    /// <summary>No two rendered texts of the current page may share glyph area (the double-print bug).</summary>
+    private static void ValidateNoTextOverlap(AvConsole console, string name)
+    {
+        var boxes = new List<KeyValuePair<TMP_Text, Rect>>();
+        foreach (TMP_Text t in console.Page(console.CurrentPage).Content.GetComponentsInChildren<TMP_Text>(false))
         {
-            row.Set(calls[index], "CUSTOM PILOT " + (index + 1) + "   ·   RANK " + (index + 1),
-                index == 0 ? "IN SQUADRON" : "READY", index == 0 ? AvState.Ready : AvState.Info);
-            index++;
+            if (!t.gameObject.activeInHierarchy || string.IsNullOrWhiteSpace(t.text) || t.name.StartsWith("Icon")) continue;
+            if (t.GetComponentInParent<TMP_InputField>() != null) continue; // the field's own zero-width caret text
+            t.ForceMeshUpdate();
+            Bounds b = t.textBounds;
+            Vector3 a = t.transform.TransformPoint(b.min), c = t.transform.TransformPoint(b.max);
+            boxes.Add(new KeyValuePair<TMP_Text, Rect>(t, Rect.MinMaxRect(
+                Mathf.Min(a.x, c.x), Mathf.Min(a.y, c.y), Mathf.Max(a.x, c.x), Mathf.Max(a.y, c.y))));
         }
-        Call(Get(panel, "studioMessageText"), "Set", "Custom pilots stay local. Nothing is uploaded.");
+        var bad = new List<string>();
+        for (int i = 0; i < boxes.Count; i++)
+            for (int j = i + 1; j < boxes.Count; j++)
+            {
+                Rect x = boxes[i].Value, y = boxes[j].Value;
+                float w = Mathf.Min(x.xMax, y.xMax) - Mathf.Max(x.xMin, y.xMin);
+                float h = Mathf.Min(x.yMax, y.yMax) - Mathf.Max(x.yMin, y.yMin);
+                if (w > 1.5f && h > 2f) bad.Add(name + ": \"" + boxes[i].Key.text + "\" overlaps \"" + boxes[j].Key.text + "\"");
+            }
+        Check(bad.Count == 0, "text overlap (" + bad.Count + "): " + string.Join(" | ", bad.GetRange(0, Math.Min(20, bad.Count))));
     }
 
     /// <summary>Kit v2 fit gate for a console page: no wrapped-off text, no text into the scroll gutter.</summary>
@@ -258,44 +444,17 @@ public static class PresentationUnityCheck
         foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
             if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 1f;
         Capture(canvas, 480f, height, prefix + "-top.png");
+        if (height >= 800f)
+        {
+            foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
+                if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = .5f;
+            Capture(canvas, 480f, height, prefix + "-mid.png");
+        }
         foreach (ScrollRect scroll in canvas.GetComponentsInChildren<ScrollRect>(true))
             if (scroll.gameObject.activeInHierarchy) scroll.verticalNormalizedPosition = 0f;
         Capture(canvas, 480f, height, prefix + "-bottom.png");
     }
 
-    private static void RenderArchive()
-    {
-        object archive = CallStatic(TypeOf("BoscaliSummer.Features.Events.Presentation.EventDeskArchive"), "Create");
-        Call(archive, "Show", 2);
-        GameObject archiveObject = ((Component)archive).gameObject;
-        PrepareWorldCanvas(archiveObject.GetComponent<Canvas>(), 1920f, 1080f);
-        archiveObject.GetComponent<CanvasScaler>().enabled = false;
-        RectTransform archiveRoot = (RectTransform)archiveObject.transform;
-        archiveRoot.pivot = new Vector2(0f, 1f);
-        archiveRoot.position = new Vector3(-960f, 540f, 0f);
-        Set(archive, "fitted", Vector2.zero);
-        Call(archive, "Fit");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-world.png");
-        Call(archive, "SelectSection", 1);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-events.png");
-        Call(archive, "SelectSection", 0);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-empty.png");
-        var aircraftDefinition = ScriptableObject.CreateInstance<AircraftDefinition>();
-        aircraftDefinition.unitName = "MODEL PREVIEW FIXTURE";
-        aircraftDefinition.code = "QA-1";
-        aircraftDefinition.description = "Mesh only. No aircraft simulation is created in the field archive.";
-        GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        prefab.name = "PreviewMeshFixture";
-        aircraftDefinition.unitPrefab = prefab;
-        ((List<AircraftDefinition>)Get(archive, "aircraft")).Add(aircraftDefinition);
-        Call(archive, "SelectSection", 0);
-        Check(Get(archive, "preview") != null, "EVN aircraft preview must create a mesh-only viewer.");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-model.png");
-        Call(archive, "Close");
-        Object.DestroyImmediate(archiveObject);
-        Object.DestroyImmediate(prefab);
-        Object.DestroyImmediate(aircraftDefinition);
-    }
 
     private static void RenderEventAlert()
     {
@@ -350,14 +509,13 @@ public static class PresentationUnityCheck
         Sprite poster = (Sprite)cache.GetMethod("Get", All).Invoke(null,
             new object[] { "ceasefire_ultimatum", "tier_super" });
         Check(poster != null, "The superevent dispatch must load its embedded poster.");
-        Image art = (Image)Get(alert, "art"); art.sprite = poster; art.enabled = poster != null;
-        Image compactArt = (Image)Get(alert, "compactArt"); compactArt.sprite = poster;
-        compactArt.enabled = poster != null;
-        Component glyph = (Component)Get(alert, "glyph"); glyph.gameObject.SetActive(poster == null);
-        Component compactGlyph = (Component)Get(alert, "compactGlyph");
-        compactGlyph.gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "stripes")).gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "compactStripes")).gameObject.SetActive(poster == null);
+        // The alert draws its art through two EventPlateArt plates (poster or category glyph).
+        foreach (string plateField in new[] { "plate", "compactPlate" })
+        {
+            object plate = Get(alert, plateField);
+            Check(plate != null, "The superevent alert must build its " + plateField + ".");
+            plate.GetType().GetMethod("Bind", All).Invoke(plate, new object[] { poster, NOAvionics.AvIcon.AlertTriangle, Color.white });
+        }
         TMP_Text title = (TMP_Text)Get(alert, "title");
         TMP_Text next = (TMP_Text)Get(alert, "nextOrder");
         TMP_Text flavor = (TMP_Text)Get(alert, "flavor");
@@ -389,25 +547,6 @@ public static class PresentationUnityCheck
         ValidateReadable((RectTransform)root.transform, "EVN compact alert");
         Capture(root, 1920f, 1080f, "evn-alert-compact.png");
         Object.DestroyImmediate(root); Object.DestroyImmediate(componentObject);
-    }
-
-    private static void ValidateSkillRows(object panel)
-    {
-        Canvas.ForceUpdateCanvases();
-        var rects = new List<Vector3[]>();
-        foreach (object row in (IEnumerable)Get(panel, "skillRows"))
-        {
-            RectTransform cell = ((AvRow)Get(row, "Row")).Rect;
-            var corners = new Vector3[4];
-            cell.GetWorldCorners(corners);
-            Check(corners[2].x - corners[0].x >= 88f && corners[2].y - corners[0].y >= 68f,
-                "SQD skill cell is too small to hold a name and its state.");
-            foreach (Vector3[] other in rects)
-                Check(corners[2].x <= other[0].x + .5f || corners[0].x >= other[2].x - .5f ||
-                      corners[2].y <= other[0].y + .5f || corners[0].y >= other[2].y - .5f,
-                    "SQD skill cells overlap.");
-            rects.Add(corners);
-        }
     }
 
     private static GameObject MakeCanvas(string name, float height, out RectTransform root)

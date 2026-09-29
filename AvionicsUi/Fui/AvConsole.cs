@@ -172,7 +172,7 @@ namespace NOAvionics.Ui
                 for (int i = 0; i < metrics.Length; i++) metrics[i].Place(new AvSlot(pad + i * (mw + 4f), y, mw, AvGridTokens.Metric));
                 y += AvGridTokens.Metric + 6f;
             }
-            if (tabs != null) { tabs.Place(new AvSlot(pad, y, inner, AvGridTokens.Tab)); y += AvGridTokens.Tab + 4f; }
+            if (tabs != null) { float th = tabs.Measure(inner); tabs.Place(new AvSlot(pad, y, inner, th)); y += th + 4f; }
 
             float footerH = Footer.Measure(width);
             Footer.Place(new AvSlot(0f, height - footerH, width, footerH));
@@ -217,7 +217,7 @@ namespace NOAvionics.Ui
             scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
         }
 
-        private static Scrollbar MakeScrollbar(RectTransform parent)
+        internal static Scrollbar MakeScrollbar(RectTransform parent)
         {
             RectTransform bar = AvLay.Child(parent, "Scrollbar");
             var track = bar.gameObject.AddComponent<Image>();

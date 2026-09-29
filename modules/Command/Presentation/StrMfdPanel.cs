@@ -70,16 +70,19 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         // ---- SITUATION page ----------------------------------------------------------------
 
-        private AvRow airRow;
+        private StrThreatBanner threat;
+        private AvSection balanceSection;
+        private StrForceBar forceBar;
         private AvSection sortieSection;
-        private readonly AvRow[] sortieRows = new AvRow[5];
-        private AvRow groundRow, airbaseRow, radarRow, knownAdRow;
+        private StrAtoBoard atoBoard;
+        private StrNote atoNote;
+        private StrTile groundTile, airbaseTile, radarTile, adTile;
         private float nextKnownAdRefresh;
         private readonly AirDefenceRing[] knownAdRings = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
 
-        private AvRow alliedRow, contestedRow, hostileRow, unclaimedRow, frontlineRow, nodesRow;
         private AvSection contestedSection;
         private AvList nodeList;
+        private StrNote nodeNote;
         private readonly TacticalSectorGrid.TacticalNode[] ranked =
             new TacticalSectorGrid.TacticalNode[NodeRankCap];
         private int rankedCount;
@@ -113,15 +116,18 @@ namespace BoscaliSummer.Features.Command.Presentation
             theaterWar = null;
             threatPicture = null;
 
-            airRow = null;
+            threat = null;
+            balanceSection = null;
+            forceBar = null;
             sortieSection = null;
-            Array.Clear(sortieRows, 0, sortieRows.Length);
-            groundRow = airbaseRow = radarRow = knownAdRow = null;
+            atoBoard = null;
+            atoNote = null;
+            groundTile = airbaseTile = radarTile = adTile = null;
             nextKnownAdRefresh = 0f;
 
-            alliedRow = contestedRow = hostileRow = unclaimedRow = frontlineRow = nodesRow = null;
             contestedSection = null;
             nodeList = null;
+            nodeNote = null;
             rankedCount = 0;
 
             ResetCoc();
@@ -308,29 +314,31 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildSaPage(AvFlow p)
         {
-            p.Section(AvIcon.Radar2, "AIR PICTURE", "C4ISR");
-            airRow = p.Add(new AvRow(p.Content));
+            p.Section(AvIcon.AlertTriangle, "THREAT CONDITION", "C4ISR");
+            threat = p.Add(new StrThreatBanner(p.Content));
 
-            sortieSection = p.Section(AvIcon.Plane, "SORTIE BOARD", "FRIENDLY AI");
-            for (int i = 0; i < Roles.Length; i++)
-                sortieRows[i] = p.Add(new AvRow(p.Content));
+            balanceSection = p.Section(AvIcon.Scale, "THEATER BALANCE", "SECTOR CONTROL");
+            forceBar = p.Add(new StrForceBar(p.Content));
+
+            sortieSection = p.Section(AvIcon.Plane, "AIR TASKING ORDER", "FRIENDLY AI");
+            atoBoard = p.Add(new StrAtoBoard(p.Content, Roles.Length));
+            atoNote = p.Add(new StrNote(p.Content, AvIcon.Plane));
 
             p.Section(AvIcon.Shield, "SURFACE & INFRASTRUCTURE", "ALLIED / HOSTILE");
-            groundRow = p.Add(new AvRow(p.Content));
-            airbaseRow = p.Add(new AvRow(p.Content));
-            radarRow = p.Add(new AvRow(p.Content));
-            knownAdRow = p.Add(new AvRow(p.Content));
+            groundTile = new StrTile(p.Content, AvIcon.Shield, "GROUND FORCES");
+            airbaseTile = new StrTile(p.Content, AvIcon.Plane, "AIRBASES");
+            radarTile = new StrTile(p.Content, AvIcon.Antenna, "RADARS ON NET");
+            adTile = new StrTile(p.Content, AvIcon.Target, "KNOWN ENEMY AD");
+            groundTile.Help = "Allied and hostile ground units on the theater.";
+            airbaseTile.Help = "Airbases by owner. Contested bases are being captured.";
+            radarTile.Help = "Friendly radars and emitters sharing the network.";
+            adTile.Help = "Enemy air-defence sites this faction knows about.";
+            p.Row(groundTile, airbaseTile);
+            p.Row(radarTile, adTile);
 
-            p.Section(AvIcon.Map2, "SECTOR CONTROL", "LIVE FIELD");
-            alliedRow = p.Add(new AvRow(p.Content));
-            contestedRow = p.Add(new AvRow(p.Content));
-            hostileRow = p.Add(new AvRow(p.Content));
-            unclaimedRow = p.Add(new AvRow(p.Content));
-            frontlineRow = p.Add(new AvRow(p.Content));
-            nodesRow = p.Add(new AvRow(p.Content));
-
-            contestedSection = p.Section(AvIcon.AlertTriangle, "CONTESTED GROUND", "BY PRESSURE");
+            contestedSection = p.Section(AvIcon.MapPin, "CONTESTED GROUND", "BY PRESSURE");
             nodeList = p.Add(new AvList(p.Content, console.Ticker, NodeListPageSize, BindNodeRow));
+            nodeNote = p.Add(new StrNote(p.Content, AvIcon.MapPin));
         }
 
         private void BindNodeRow(int index, AvRow row)
@@ -353,71 +361,92 @@ namespace BoscaliSummer.Features.Command.Presentation
                        pressureState.ToLowerInvariant() + ".";
         }
 
+        private static string AtoCode(SortieRole role) =>
+            role == SortieRole.Sead ? "SEAD" : SortieClassifier.Code(role);
+
+        private static string AtoTask(SortieRole role)
+        {
+            switch (role)
+            {
+                case SortieRole.Cap: return "COMBAT AIR PATROL";
+                case SortieRole.Sead: return "AIR DEFENCE SUPPRESSION";
+                case SortieRole.Cas: return "CLOSE AIR SUPPORT";
+                case SortieRole.Strike: return "STRIKE";
+                default: return "TRANSIT";
+            }
+        }
+
         private void RefreshSa(TacticalTheaterState state)
         {
-            if (airRow == null) return;
-
-            AvState defconState = state.DefconLevel <= 2 ? AvState.Danger
-                : state.DefconLevel == 3 ? AvState.Caution : AvState.Ready;
+            if (threat == null) return;
 
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
-            AvState airState = !airKnown ? AvState.Inert
-                : state.AirSuperiorityRatio >= 0.5f ? AvState.Ready : AvState.Caution;
-            airRow.Set("DEFCON " + state.DefconLevel,
-                state.PrimaryThreatDescription +
-                (string.IsNullOrEmpty(state.ActiveThreatWarning) ? "" : " — " + state.ActiveThreatWarning) +
-                " · ALLIED " + state.FriendlyAircraftCount + " / HOSTILE " + state.HostileAircraftCount,
-                airKnown ? Glyphed(TheaterReadout.Percent(state.AirSuperiorityRatio), airState) : "—",
-                defconState);
+            string assessment = state.PrimaryThreatDescription +
+                (string.IsNullOrEmpty(state.ActiveThreatWarning) ? "" : " — " + state.ActiveThreatWarning);
+            threat.Set(state.DefconLevel, assessment,
+                "AIRCRAFT · ALLIED " + state.FriendlyAircraftCount + " · HOSTILE " + state.HostileAircraftCount +
+                (airKnown ? " · AIR DOMINANCE " + TheaterReadout.Percent(state.AirSuperiorityRatio) : ""));
+
+            RefreshFront(state);
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
             sortieSection.SetCaption(known
                 ? tally.Observed + " OBSERVED · " + tally.Tasked + " TASKED"
                 : "NO AI DATA");
-
-            int observed = Mathf.Max(1, tally.Observed);
-            for (int i = 0; i < Roles.Length; i++)
+            atoBoard.SetShown(known);
+            atoNote.SetShown(!known);
+            if (known)
             {
-                int count = tally.Of(Roles[i]);
-                sortieRows[i].Set(
-                    SortieClassifier.Code(Roles[i]) + " · " + SortieClassifier.Name(Roles[i]),
-                    known ? "SHARE " + TheaterReadout.Percent(count / (float)observed) : "",
-                    known ? count.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
-                    known ? AvState.Info : AvState.Inert);
+                int observed = Mathf.Max(1, tally.Observed), hot = -1, best = 0;
+                for (int i = 0; i < Roles.Length; i++)
+                {
+                    int count = tally.Of(Roles[i]);
+                    if (count > best) { best = count; hot = i; }
+                    atoBoard.Set(i, AtoCode(Roles[i]), AtoTask(Roles[i]), count, count / (float)observed);
+                }
+                atoBoard.SetHot(hot);
             }
+            else atoNote.Set("NO AI SORTIE DATA", "Friendly AI pilots are not observable on this peer yet.");
 
-            groundRow.Set("GROUND FORCES", null,
-                state.FriendlyGroundUnitsCount + " / " + state.HostileGroundUnitsCount, AvState.Info);
+            int friendlyGround = state.FriendlyGroundUnitsCount, hostileGround = state.HostileGroundUnitsCount;
+            groundTile.Set(friendlyGround + " / " + hostileGround, "ALLIED / HOSTILE", AvState.Info,
+                friendlyGround + hostileGround > 0 ? friendlyGround / (float)(friendlyGround + hostileGround) : -1f);
 
             bool contestedBases = state.ContestedAirbaseCount > 0;
-            airbaseRow.Set("AIRBASES", "ALLIED / HOSTILE / NEUTRAL",
-                Glyphed(state.FriendlyAirbaseCount + " / " + state.HostileAirbaseCount + " / " +
-                    state.NeutralAirbaseCount +
-                    (contestedBases ? "  (" + state.ContestedAirbaseCount + " CONTESTED)" : ""),
-                    contestedBases ? AvState.Caution : AvState.Info),
-                contestedBases ? AvState.Caution : AvState.Info);
+            int bases = state.FriendlyAirbaseCount + state.HostileAirbaseCount + state.NeutralAirbaseCount;
+            airbaseTile.Set(
+                state.FriendlyAirbaseCount + " / " + state.HostileAirbaseCount + " / " + state.NeutralAirbaseCount,
+                "ALLIED / HOSTILE / NEUTRAL" + (contestedBases ? " · " + state.ContestedAirbaseCount + " CONTESTED" : ""),
+                contestedBases ? AvState.Caution : AvState.Info,
+                bases > 0 ? state.FriendlyAirbaseCount / (float)bases : -1f);
 
-            radarRow.Set("FRIENDLY RADARS ON NET", null,
-                GameAccess.HqSensorsAvailable ? state.FriendlyRadarCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
-                AvState.Info);
-
-            RefreshFront(state);
+            bool radars = GameAccess.HqSensorsAvailable;
+            radarTile.Set(radars ? state.FriendlyRadarCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
+                radars ? "FRIENDLY EMITTERS ON NET" : "SENSOR NET UNAVAILABLE",
+                radars ? AvState.Info : AvState.Inert);
         }
 
-        /// <summary>The one SA line that reads Intel: this faction's known enemy air defence, at 1 Hz and
+        /// <summary>The one SA tile that reads Intel: this faction's known enemy air defence, at 1 Hz and
         /// only while the SITUATION page shows. Asking is what makes a client build its own picture.</summary>
         private void RefreshKnownAirDefence(FactionHQ hq)
         {
-            if (knownAdRow == null || Time.unscaledTime < nextKnownAdRefresh) return;
+            if (adTile == null || Time.unscaledTime < nextKnownAdRefresh) return;
             nextKnownAdRefresh = Time.unscaledTime + KnownAdInterval;
             if (threatPicture == null) ModServices.TryGet(out threatPicture);
             int observer = hq != null ? hq.GetInstanceID() : 0;
             bool ready = hq != null && threatPicture != null && threatPicture.IsReady(observer);
             int count = ready ? threatPicture.CopyAirDefence(observer, knownAdRings) : 0;
-            knownAdRow.Set("KNOWN ENEMY AD", null,
-                TheaterReadout.KnownAirDefence(ready, knownAdRings, count),
-                ready ? AvState.Info : AvState.Inert);
+            string line = TheaterReadout.KnownAirDefence(ready, knownAdRings, count);
+            if (!ready) adTile.Set("—", "NO THREAT PICTURE YET", AvState.Inert);
+            else if (line == "NONE KNOWN") adTile.Set("NONE", "NO ENEMY SITES KNOWN", AvState.Info);
+            else
+            {
+                // "57 SITES · 11 RADAR (45 PRE-WAR, 1 STALE)": the figure, then what it is made of.
+                int split = line.IndexOf(" · ", StringComparison.Ordinal);
+                adTile.Set(split < 0 ? line : line.Substring(0, split),
+                    split < 0 ? "" : line.Substring(split + 3), AvState.Info);
+            }
         }
 
         private void RefreshFront(TacticalTheaterState state)
@@ -427,22 +456,16 @@ namespace BoscaliSummer.Features.Command.Presentation
                 state.HostileSectorCount, state.NeutralSectorCount,
                 out float friendly, out float contested, out float hostile);
             float unclaimed = Mathf.Clamp01(1f - friendly - contested - hostile);
+            int sectors = state.FriendlySectorCount + state.ContestedSectorCount +
+                          state.HostileSectorCount + state.NeutralSectorCount;
 
-            alliedRow.Set("ALLIED", TheaterReadout.Percent(friendly), state.FriendlySectorCount.ToString(
-                System.Globalization.CultureInfo.InvariantCulture), AvState.Ready);
-            contestedRow.Set("CONTESTED", TheaterReadout.Percent(contested), state.ContestedSectorCount.ToString(
-                System.Globalization.CultureInfo.InvariantCulture),
-                state.ContestedSectorCount > 0 ? AvState.Caution : AvState.Inert);
-            hostileRow.Set("HOSTILE", TheaterReadout.Percent(hostile), state.HostileSectorCount.ToString(
-                System.Globalization.CultureInfo.InvariantCulture), AvState.Danger);
-            unclaimedRow.Set("UNCLAIMED", TheaterReadout.Percent(unclaimed), state.NeutralSectorCount.ToString(
-                System.Globalization.CultureInfo.InvariantCulture), AvState.Inert);
-
-            frontlineRow.Set("FRONTLINE LENGTH", null,
-                state.FrontlineSegmentCount > 0 ? TheaterReadout.Kilometres(state.FrontlineLengthMetres) : "NO CONTACT",
-                AvState.Info);
-            nodesRow.Set("TRACKED NODES", null,
-                state.TotalNodesCount + " / " + TacticalSectorGrid.MaximumNodes, AvState.Info);
+            forceBar.Set(sectors > 0, friendly, contested, hostile,
+                state.FriendlySectorCount, state.ContestedSectorCount, state.HostileSectorCount);
+            balanceSection.SetCaption(sectors <= 0 ? "NO SECTOR FIELD"
+                : (state.FrontlineSegmentCount > 0
+                    ? "FRONT " + TheaterReadout.Kilometres(state.FrontlineLengthMetres).ToUpperInvariant()
+                    : "NO CONTACT") +
+                  (unclaimed >= 0.005f ? " · " + TheaterReadout.Percent(unclaimed) + " UNCLAIMED" : ""));
 
             RefreshNodeList();
         }
@@ -454,7 +477,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 rankedCount = 0;
                 nodeList.SetCount(0);
-                contestedSection.SetCaption("SECTOR FIELD NOT RUNNING");
+                nodeList.SetShown(false);
+                nodeNote.SetShown(true);
+                nodeNote.Set("SECTOR FIELD NOT RUNNING", "Contested ground appears here once the theater map is live.");
+                contestedSection.SetCaption("NO FIELD");
                 return;
             }
 
@@ -480,6 +506,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             rankedCount = shown;
             nodeList.SetCount(shown);
 
+            nodeList.SetShown(shown > 0);
+            nodeNote.SetShown(shown == 0);
+            if (shown == 0) nodeNote.Set("NO CONTACT", "No node is being contested. Pressure builds here as the front moves.");
             contestedSection.SetCaption(contestedTotal == 0
                 ? "NO CONTACT"
                 : contestedTotal + " IN CONTACT" + (pressingTotal > 0 ? " · " + pressingTotal + " PRESSING" : ""));
@@ -529,10 +558,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             AvState footerState = state.DefconLevel <= 2 ? AvState.Danger
                 : state.DefconLevel == 3 ? AvState.Caution : AvState.Inert;
             console.Footer.Set(status, footerState);
-
-            // Row counts, wrapped copy and hidden rows change what each part measures; the flow
-            // only re-measures when asked, so ask once per refresh (4 Hz) for the page in view.
-            console.Page(console.CurrentPage).Relayout();
         }
 
         private void RefreshChrome(TacticalTheaterState state)

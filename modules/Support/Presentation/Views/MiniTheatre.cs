@@ -63,24 +63,24 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             for (int i = 0; i < Teams; i++)
             {
                 plates[i] = Chrome.Panel(parent, new Rect(0f, 0f, 13f, 12f), AvTheme.RailInfo, AvSprites.Control);
-                letters[i] = Chrome.Label(plates[i].rectTransform, FieldWords.Callsign(i).Substring(0, 1), new Rect(0f, 0f, 13f, 12f),
-                    AvTheme.TextInk, AvTokens.FontMicro, FontStyles.Bold, TextAlignmentOptions.Center);
+                letters[i] = OpsText.Plot(plates[i].rectTransform, FieldWords.Callsign(i).Substring(0, 1), new Rect(0f, 0f, 13f, 12f),
+                    AvTheme.TextInk, AvTextRole.Micro, TextAlignmentOptions.Center);
                 Chrome.Stretch(letters[i].rectTransform);
                 plates[i].gameObject.SetActive(false);
             }
-            empty = Chrome.Label(parent, "", new Rect(view.x + 8f, view.y - view.height * 0.5f + 8f, view.width - 16f, 16f), AvTheme.Dim,
-                AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Center);
+            empty = OpsText.Plot(parent, "", new Rect(view.x + 8f, view.y - view.height * 0.5f + 8f, view.width - 16f, 16f), AvTheme.Dim,
+                AvTextRole.Label, TextAlignmentOptions.Center);
             Image topOsd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - 1f, view.width - 2f, 16f),
                 AvTheme.SurfaceInert.WithAlpha(0.88f));
             topOsd.raycastTarget = false;
             Image bottomOsd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - view.height + 17f,
                 view.width - 2f, 16f), AvTheme.SurfaceInert.WithAlpha(0.88f));
             bottomOsd.raycastTarget = false;
-            Chrome.Label(parent, "FIELD PLOT / LIVE CONTACTS", new Rect(view.x + 8f, view.y - 3f,
-                view.width - 16f, 14f), AvTheme.RailInfo, AvTokens.FontMicro, FontStyles.Bold);
-            Chrome.Label(parent, "TEAM   /   OBJECTIVE   /   POST REACH", new Rect(view.x + 8f,
-                view.y - view.height + 16f, view.width - 16f, 13f), AvTheme.Dim, AvTokens.FontMicro,
-                FontStyles.Bold);
+            OpsText.Plot(parent, "FIELD PLOT / LIVE CONTACTS", new Rect(view.x + 8f, view.y - 1f,
+                view.width - 16f, 16f), AvTheme.RailInfo, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+            OpsText.Plot(parent, "TEAM   /   OBJECTIVE   /   POST REACH", new Rect(view.x + 8f,
+                view.y - view.height + 17f, view.width - 16f, 16f), AvTheme.Dim, AvTextRole.Micro,
+                TextAlignmentOptions.MidlineLeft);
         }
 
         public void SetHomes(float[] xs, float[] zs, int count)

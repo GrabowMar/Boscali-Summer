@@ -743,14 +743,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
             symbol.localPosition = new Vector3(parentPoint.x, parentPoint.y, fix.Depth);
             symbol.localScale = fix.NativeScale;
-            RectTransform symbolRect = symbol as RectTransform;
-            float pixels = symbolRect != null
-                ? Mathf.Max(symbolRect.rect.width, symbolRect.rect.height) : 15f;
-            float size = pixels * Mathf.Max(Mathf.Abs(symbol.lossyScale.x),
-                Mathf.Abs(symbol.lossyScale.y));
-            float cap = icon is AirbaseMapIcon ? 18f :
-                owner.selectedIcons.Contains(icon) ? 17f : 11f;
-            if (size > cap && size > .01f) symbol.localScale *= cap / size;
+            // Framed contacts size themselves on the shared symbol grid; anything else keeps the old cap.
+            if (!(icon is UnitMapIcon framed &&
+                    MapSymbology.Fit(framed, owner.selectedIcons.Contains(icon))))
+            {
+                RectTransform symbolRect = symbol as RectTransform;
+                float pixels = symbolRect != null
+                    ? Mathf.Max(symbolRect.rect.width, symbolRect.rect.height) : 15f;
+                float size = pixels * Mathf.Max(Mathf.Abs(symbol.lossyScale.x),
+                    Mathf.Abs(symbol.lossyScale.y));
+                float cap = icon is AirbaseMapIcon ? 18f :
+                    owner.selectedIcons.Contains(icon) ? 17f : 11f;
+                if (size > cap && size > .01f) symbol.localScale *= cap / size;
+            }
             if (icon is UnitMapIcon unitIcon && headings.TryGetValue(unitIcon, out HeadingMark mark))
             {
                 float heading = mark.Native * Mathf.Deg2Rad;
@@ -767,6 +772,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
             }
             PlaceStem(icon, symbol, groundPoint, parentPoint, lift > .5f);
+            if (icon is UnitMapIcon plated) MapSymbology.Sync(plated);
         }
 
         internal static void ProjectMarker(Transform marker, float mapDisplayFactor)
@@ -1160,8 +1166,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal static class MfdReliefUnitIconPatch
     {
         [HarmonyPostfix]
-        private static void Postfix(UnitMapIcon __instance, float mapDisplayFactor) =>
+        private static void Postfix(UnitMapIcon __instance, float mapDisplayFactor)
+        {
+            MapSymbology.Apply(__instance, MfdTerrainRelief.IsDrawing);
             MfdTerrainRelief.ProjectIcon(__instance, mapDisplayFactor);
+        }
     }
 
     [HarmonyPatch(typeof(AirbaseMapIcon), nameof(AirbaseMapIcon.UpdateIcon))]

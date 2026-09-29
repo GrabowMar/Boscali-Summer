@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections;
 using System.IO;
 using System.Reflection;
 using NOAvionics;
@@ -44,7 +45,7 @@ public static class StockMfdUnityCheck
             // TMP_Settings' default face.
             new GameObject("Events", typeof(EventSystem));
             foreach (float height in new[] { 896f, 596f, 420f })
-                foreach (string name in new[] { "Map", "Target", "Faction", "Hud", "Mission" })
+                foreach (string name in new[] { "Map", "Target", "Faction", "Hud", "Mission", "MissionEmpty" })
                     Render(name, height);
             File.WriteAllText("result.txt", "PASS: " + captures + " stock presenter page captures at 896/596/420 (kit v2 AvConsole pages), " + assertions +
                 " reachability/overflow assertions. Production built DLL and game metadata; synthetic labels and grids, no game launch or native adapter claim. " +
@@ -62,9 +63,9 @@ public static class StockMfdUnityCheck
     private static void Render(string name, float height)
     {
         Assembly assembly = typeof(AvConsole).Assembly;
-        Type type = assembly.GetType(Owner + "+" + name + "Presenter", true);
+        Type type = assembly.GetType(Owner + "+" + (name == "MissionEmpty" ? "Mission" : name) + "Presenter", true);
         object[] args = new object[] { null, null };
-        if (name == "Mission") args = new object[] { null };
+        if (name.StartsWith("Mission")) args = new object[] { null };
         if (name == "Faction")
         {
             Type id = assembly.GetType("BoscaliSummer.Features.Command.Presentation.MapUi.VanillaMfdPanelId", true);
@@ -87,8 +88,9 @@ public static class StockMfdUnityCheck
 
         Chips(presenter, "PREVIEW", "DATA STUB", "OFFLINE");
         Seed(presenter, name);
-        // Seeding mutates parts after the build-time relayout; the ticker is not pumped offline.
-        for (int page = 0; page < console.PageCount; page++) console.Page(page).Relayout();
+        // Seeding happens after Finish(), as it does in the game; the ticker is pumped by hand (Unity time does
+        // not advance offline), which is what re-measures every part whose content changed.
+        for (int i = 0; i < 3; i++) console.Ticker.TickNow();
 
         for (int page = 0; page < console.PageCount; page++)
         {
@@ -96,10 +98,12 @@ public static class StockMfdUnityCheck
             Check(console.CurrentPage == page, name + ": SetPage(" + page + ") must land on that page.");
             console.SetTitle(Title(name, page));
             console.Footer.Set("OFFLINE LAYOUT PREVIEW \u00b7 SYNTHETIC DATA", AvState.Inert);
+            for (int i = 0; i < 2; i++) console.Ticker.TickNow();
             Canvas.ForceUpdateCanvases();
             string prefix = name + "-" + height + "-" + page;
             // Capture before asserting, so a failing page still leaves its picture.
             Capture(canvasObject, height, prefix + ".png");
+            if (name == "Target" || name.StartsWith("Mission")) Gate(console, prefix);
 
             ScrollRect scroll = console.Root.GetComponentInChildren<ScrollRect>();
             Check(scroll != null && scroll.vertical, name + " page " + page + ": the console body must scroll vertically.");
@@ -129,7 +133,7 @@ public static class StockMfdUnityCheck
             case "Target": return new[] { "FILTERS / ACQUISITION", "ACQUIRE / CONTACTS", "PRESETS / LIBRARY", "TARGETS / TRACKED", "CAMERA / SENSOR MARK" };
             case "Faction": return new[] { "ECONOMY", "FORCES", "LEDGER", "POLITICS" };
             case "Hud": return new[] { "MODE", "VEHICLES", "BUILDINGS" };
-            default: return new[] { "MISSION", "OBJECTIVES", "SECONDARY" };
+            default: return new[] { "MISSION", "OBJECTIVES", "CONTRACTS" };
         }
     }
 
@@ -140,6 +144,7 @@ public static class StockMfdUnityCheck
         {
             case "Faction": return "BOSCALI GENERAL AVIATION  /  " + label;
             case "Target": return "TARGETING  /  " + label;
+            case "MissionEmpty": return "MISSION (NO DATA)  /  " + label;
             default: return name.ToUpperInvariant() + "  /  " + label;
         }
     }
@@ -157,7 +162,7 @@ public static class StockMfdUnityCheck
             Grid(presenter, "sizes", new[] { "SMALL 60%", "MEDIUM 80%", "LARGE 100%" }, new[] { "COMPACT", "BALANCED", "FULL SIZE" }, true);
             Note(presenter, "overlayNote", "Sector control follows real ground presence; the front is its zero contour.");
             Note(presenter, "detailSummary", "UNIT INFO is selected. Hover a map unit to inspect it.");
-            Note(presenter, "previewCaption", "MEDIUM 80% \u2022 Actual icons vary by unit; preview is illustrative.");
+            Note(presenter, "previewCaption", "MEDIUM 80% \u2022 Frame shape marks the side; jets keep the game's own silhouette.");
             foreach (object tile in (Array)Field(presenter, "previewTiles")) Call(tile, "SetState", true, .8f);
             Chips(presenter, "LAYERS 8/10", "TOOLTIP INFO", "MEDIUM 80%");
             var metrics = (AvMetric[])Field(presenter, "metrics");
@@ -168,25 +173,35 @@ public static class StockMfdUnityCheck
         }
         if (name == "Target")
         {
-            Grid(presenter, "factionGrid", new[] { "FRIENDLY", "ENEMY" }, null);
-            Grid(presenter, "unitGrid", new[] { "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS", "SHIPS" }, null);
-            Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" }, null);
+            Grid(presenter, "factionGrid", new[] { "FRIENDLY", "ENEMY" }, new[] { "Friendly contacts", "Hostile contacts" });
+            Grid(presenter, "unitGrid", new[] { "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS", "SHIPS" },
+                new[] { "Airborne tracks", "Missiles in flight", "Vehicles & troops", "Bases & structures", "Naval contacts" });
+            Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" },
+                new[] { "Supply trucks", "Unmanned ground", "Light combat", "Armored vehicles", "Main battle tanks", "Field artillery",
+                    "Anti-air guns", "Heat-seeking SAM", "Radar-guided SAM", "Search radars" }, false, true);
             Grid(presenter, "selectedGrid", new[] { "DARKREACH 21", "REVETMENT EAST AIRBASE", "TANK COMPANY NORTH" }, null);
             Grid(presenter, "candidateGrid", new[] { "RAVEN 3", "AAA BATTERY SOUTH", "SAM SITE ECHO", "CHICANE 11", "PATROL BOAT" },
                 new[] { "3.2 KM \u00b7 KNOWN POSITION", "8.9 KM \u00b7 KNOWN POSITION", "12.4 KM \u00b7 KNOWN POSITION", "18.0 KM \u00b7 KNOWN POSITION", "31.5 KM \u00b7 KNOWN POSITION" });
             Grid(presenter, "groupGrid", new[] { "GROUP 1", "GROUP 2", "GROUP 3" }, new[] { "3 STORED", "0 STORED", "1 STORED" });
             Grid(presenter, "quickGrid", new[] { "AIR DEFENCE", "HOSTILE GROUND", "EMPTY" }, new[] { "SLOT 1 \u00b7 F5", "SLOT 2 \u00b7 F6", "SLOT 3 \u00b7 F7" });
-            Grid(presenter, "presetGrid", new[] { "ALL", "AIR DEFENCE", "HOSTILE GROUND", "NAVAL", "AIRCRAFT", "CUSTOM" }, null);
-            ((AvGauge)Field(presenter, "filterGauge")).Set(.8f, "17 / 21", AvState.Ready);
+            Grid(presenter, "presetGrid", new[] { "ALL", "AIR DEFENCE", "HOSTILE GROUND", "NAVAL", "AIRCRAFT", "CUSTOM" },
+                new[] { "Built-in profile", "Built-in profile", "Built-in profile", "Built-in profile", "Built-in profile", "Saved preset" });
+            var filterTiles = (AvMetric[])Field(presenter, "filterMetrics");
+            filterTiles[0].Set("2/2", "ALL OPEN", 1f, AvState.Ready);
+            filterTiles[1].Set("4/5", "1 MASKED", .8f, AvState.Info);
+            filterTiles[2].Set("0/10", "NONE OPEN", 0f, AvState.Caution);
             Section(presenter, "contactsSection", "5 MATCH");
             Section(presenter, "presetSection", "1 / 8 SAVED");
             Section(presenter, "selectedSection", "3 TRACKED");
             ((AvReadout)Field(presenter, "presetReadout")).Set("ALL", "ACTIVE PROFILE", "Built-in. Every known contact, friend and foe.");
             ((AvRow)Field(presenter, "cameraStatusRow")).Set("RECON SURFACE MARK", "Surface reference recorded; expires 120 seconds after capture.", "", AvState.Ready);
+            var cameraTiles = (AvMetric[])Field(presenter, "cameraTiles");
+            cameraTiles[0].Set("6.3", "KM", .31f, AvState.Info);
+            cameraTiles[1].Set("412", "M ASL", 0f, AvState.Info);
+            cameraTiles[2].Set("18", "S \u00b7 EXPIRES AT 120", .85f, AvState.Info);
             var camera = (AvRow[])Field(presenter, "cameraRows");
-            string[] cameraKeys = { "GRID (X / Z)", "ELEVATION (Y)", "SLANT RANGE", "MARK AGE", "ARMED CALL-IN" };
-            string[] cameraValues = { "X 12040 \u00b7 Z -8810", "412 m ASL", "6.3 km", "18s", "NONE (ARM IN OPS)" };
-            for (int i = 0; i < camera.Length; i++) camera[i].Set(cameraKeys[i], null, cameraValues[i], AvState.Info);
+            camera[0].Set("GRID (X / Z)", "X 12040 \u00b7 Z -8810", "", AvState.Info);
+            camera[1].Set("ARMED CALL-IN", "NONE (ARM IN OPS)", "", AvState.Inert);
             ((AvRow)Field(presenter, "cameraReticleRow")).Set("SENSOR ALIGNMENT", "SURFACE MARK LOCKED \u00b7 REFERENCE RECORDED", "", AvState.Ready);
             Chips(presenter, "17 FILTERS", "ALL", "HUD LINK");
         }
@@ -257,23 +272,87 @@ public static class StockMfdUnityCheck
             ((AvRow)Field(presenter, "strikeRow")).Set("STRIKE TARGETS", null, "4 OF 4 ACTIVE", AvState.Ready);
             ((AvRow)Field(presenter, "civilianRow")).Set("CIVILIAN ASSETS", null, "OFF (PROTECTED)", AvState.Inert);
         }
-        if (name == "Mission")
+        if (name == "Mission") SeedMission(presenter);
+        if (name == "MissionEmpty") Call(presenter, "Render");
+    }
+
+    private const string Ns = "BoscaliSummer.Features.Command.Presentation.MapUi.";
+
+    /// <summary>A populated MIS board: two done and four live objectives, escalation holding at tactical,
+    /// four offered contracts (two pages), a lead contract and a log.</summary>
+    private static void SeedMission(object presenter)
+    {
+        Assembly assembly = typeof(AvConsole).Assembly;
+        object model = Field(presenter, "model");
+        SetField(model, "MissionName", "OPERATION DARKREACH");
+        SetField(model, "Brief", "Secure the northern airbase, suppress the SAM belt along the ridge and hold the highway strip until relief arrives. " +
+            "Expect armour from the east after the first hour; keep the tanker on station.");
+        SetField(model, "HasBrief", true);
+        SetField(model, "Mode", "MULTIPLAYER");
+        SetField(model, "Clock", "00:42:10");
+        SetField(model, "HasHq", true);
+        SetField(model, "Score", 41.5f);
+        SetField(model, "HasEscalation", true);
+        SetField(model, "Current", 42f);
+        SetField(model, "Tactical", 60f);
+        SetField(model, "Strategic", 120f);
+
+        Type lineType = presenter.GetType().GetNestedType("ObjectiveLine", All);
+        Type phase = assembly.GetType(Ns + "MissionPhase", true);
+        var lines = (IList)Field(model, "Objectives");
+        string[] titles = { "Capture Northern Airbase", "Destroy SAM Battery Ridge", "Destroy Armoured Column East", "Reach Highway Strip", "Hold Relief Corridor", "Survey Depot Fire", "Destroy Fuel Depot Ostrov", "Capture Highway Junction" };
+        string[] kinds = { "CAPTURE", "DESTROY", "DESTROY", "REACH", "HOLD", "SURVEIL", "DESTROY", "CAPTURE" };
+        AvIcon[] icons = { AvIcon.Flag, AvIcon.Target, AvIcon.Target, AvIcon.MapPin, AvIcon.Clock, AvIcon.Eye, AvIcon.Target, AvIcon.Flag };
+        float[] fractions = { 1f, 1f, .4f, .15f, 0f, .7f, .05f, 0f };
+        float[] distances = { -1f, -1f, 18400f, 6200f, 850f, -1f, 41250f, 112000f };
+        for (int i = 0; i < titles.Length; i++)
         {
-            Chips(presenter, "3 PRIMARY", "1/2 SECONDARY", "00:42:10");
-            Call(Field(presenter, "briefPart"), "Set", "OPERATION DARKREACH",
-                "Secure the northern airbase, suppress the SAM belt along the ridge and hold the highway strip until relief arrives.",
-                true, "MISSION TIME 00:42:10   \u00b7   CAMPAIGN");
-            ((AvSection)Field(presenter, "ladderSection")).SetCaption("HOLDING \u00b7 TACTICAL AT 60%");
-            ((AvGauge)Field(presenter, "ladderGauge")).Set(.4f, "40%", AvState.Caution);
-            var rungs = (AvRow[])Field(presenter, "ladderRows");
-            string[] rungNames = { "CONVENTIONAL", "TACTICAL NUCLEAR", "STRATEGIC NUCLEAR" };
-            string[] rungStates = { "CURRENT", "PENDING", "PENDING" };
-            for (int i = 0; i < rungs.Length; i++) rungs[i].Set(rungNames[i], i == 0 ? "BASELINE \u2014 ALWAYS ACTIVE" : "THRESHOLD " + (i * 60), rungStates[i], i == 0 ? AvState.Caution : AvState.Inert);
-            ((AvRow)Field(presenter, "contractPreviewRow")).Set("HOLD NORTHERN AIRBASE", "$1,800   +   150 XP", "OFFERED", AvState.Info);
-            ((AvSection)Field(presenter, "objectivesSection")).SetCaption("3 ACTIVE");
-            ((AvSection)Field(presenter, "boardSection")).SetCaption("1 / 2 ACTIVE");
-            ((AvRow)Field(presenter, "boardSummaryRow")).Set("CONTRACT BOARD", "2 offers \u00b7 1 accepted", "OPEN", AvState.Info);
+            object line = Activator.CreateInstance(lineType);
+            SetField(line, "Key", "obj" + i);
+            SetField(line, "Title", titles[i]);
+            SetField(line, "Kind", kinds[i]);
+            SetField(line, "Source", "Objective " + (i + 1));
+            SetField(line, "Icon", icons[i]);
+            SetField(line, "Fraction", fractions[i]);
+            SetField(line, "DistanceM", distances[i]);
+            SetField(line, "Phase", Enum.Parse(phase, i < 2 ? "Done" : "Active"));
+            lines.Add(line);
         }
+        SetField(model, "ObjectivesDone", 2);
+        SetField(model, "ObjectivesActive", 6);
+        SetField(model, "ObjectiveSummary", "DESTROY 2   \u00b7   CAPTURE 1   \u00b7   REACH 1");
+
+        SetField(model, "Installed", true);
+        SetField(model, "Streamed", true);
+        SetField(model, "Limit", 2);
+        SetField(model, "ActiveContracts", 1);
+        SetField(model, "Offers", 4);
+        SetField(model, "Closed", 2);
+        SetField(model, "AtStake", 1500);
+        SetField(model, "Offered", 6400);
+        SetField(model, "Paid", 2400);
+        Type viewType = assembly.GetType("BoscaliSummer.Framework.Contracts.SecondaryObjectiveView", true);
+        var contracts = (IList)Field(model, "Contracts");
+        string[] cTitles = { "SURVEY THE AFTERMATH", "ROOFTOP INSERTION", "HOLD THE LINE", "SILENCE THE RADAR" };
+        for (int i = 0; i < cTitles.Length; i++)
+        {
+            object[] values =
+            {
+                i + 26, cTitles[i],
+                "Recon patrol requests a clear visual report near the northern depot. Approach from a safe angle and hold the mark while the faction tasking clock runs.",
+                "Northern Depot / Observation Sector", "AWAITING ACCEPTANCE", "$1,500 + 125 XP", 0f, i == 2 ? 95f : 240f + i * 60f,
+                1500 + i * 500, 125, false, true, false, true, 0f, 0f, 1f, ""
+            };
+            object view = Activator.CreateInstance(viewType, All, null, values, null);
+            contracts.Add(view);
+            if (i == 0) SetField(model, "Lead", view);
+        }
+        SetField(presenter, "secondaryHasCapacity", true);
+        object log = Field(presenter, "log");
+        Call(log, "Add", "CONTRACT ACCEPTED  \u00b7  #26 SURVEY THE AFTERMATH", "00:41:52", AvState.Info);
+        Call(log, "Add", "OBJECTIVE COMPLETE  \u00b7  Destroy SAM Battery Ridge", "00:38:05", AvState.Ready);
+        Call(log, "Add", "CONTRACT CLOSED  \u00b7  #24 HOLD THE LINE", "00:31:40", AvState.Caution);
+        Call(presenter, "Render");
     }
 
     // ---------------------------------------------------------------- reflection helpers
@@ -319,15 +398,97 @@ public static class StockMfdUnityCheck
 
     /// <summary>MfdPagingGrid.SetData with labels, optional second-line subs, and either exclusive
     /// (radio) or mixed selection so both lit and unlit cells are painted.</summary>
-    private static void Grid(object owner, string field, string[] labels, string[] subs, bool exclusive = false)
+    private static void Grid(object owner, string field, string[] labels, string[] subs, bool exclusive = false, bool icons = false)
     {
         object grid = Field(owner, field);
         Func<int, string> subFn = subs == null ? (Func<int, string>)null : (i => i < subs.Length ? subs[i] : null);
+        Func<int, Sprite> iconFn = icons ? (Func<int, Sprite>)(_ => IconSprite()) : null;
         grid.GetType().GetMethod("SetData", All).Invoke(grid, new object[]
         {
             labels.Length, (Func<int, string>)(i => labels[i]), (Func<int, bool>)(i => exclusive ? i == 0 : i % 3 != 2),
-            (Action<int>)(_ => { }), null, null, null, subFn
+            (Action<int>)(_ => { }), null, iconFn, null, subFn
         });
+    }
+
+    private static Sprite iconSprite;
+
+    /// <summary>A stand-in for a NATO/vehicle-class mapIcon: a framed box, so the icon cell's geometry is exercised.</summary>
+    private static Sprite IconSprite()
+    {
+        if (iconSprite != null) return iconSprite;
+        var tex = new Texture2D(32, 32, TextureFormat.RGBA32, false);
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 32; x++)
+                tex.SetPixel(x, y, x < 3 || y < 3 || x > 28 || y > 28 || (x > 8 && x < 24 && y > 12 && y < 19) ? Color.white : Color.clear);
+        tex.Apply();
+        iconSprite = Sprite.Create(tex, new Rect(0, 0, 32, 32), new Vector2(.5f, .5f));
+        return iconSprite;
+    }
+
+    /// <summary>Pages other than the current one are hidden by disabling their canvas, not by deactivating them.</summary>
+    private static bool CanvasOn(Transform t)
+    {
+        foreach (Canvas c in t.GetComponentsInParent<Canvas>(false))
+            if (!c.enabled) return false;
+        return true;
+    }
+
+    /// <summary>Text must fit its rect, stay out of the scroll gutter and never overlap a sibling part.</summary>
+    private static void Gate(AvConsole con, string where)
+    {
+        float gutterLeft = AvTokens.PanelWidth - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
+        foreach (TMP_Text t in con.Root.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (!t.isActiveAndEnabled || t.text.Length == 0 || t.name.StartsWith("Icon") || !CanvasOn(t.transform)) continue;
+            t.ForceMeshUpdate();
+            Rect r = t.rectTransform.rect;
+            Bounds b = t.textBounds;
+            if (b.size.x > r.width + 1.5f)
+                throw new Exception(where + ": text overflows its width (" + b.size.x.ToString("0") + " > " + r.width.ToString("0") + ") '" + t.text + "'");
+            if (b.size.y > r.height + 1.5f)
+                throw new Exception(where + ": text overflows its height (" + b.size.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
+            if (t.fontSize < AvTypeScale.Floor - 0.01f)
+                throw new Exception(where + ": text below the 11 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
+            if (t.GetComponentInParent<ScrollRect>() != null)
+            {
+                var corners = new Vector3[4];
+                t.rectTransform.GetWorldCorners(corners);
+                float right = con.Root.InverseTransformPoint(corners[2]).x;
+                if (right > gutterLeft) throw new Exception(where + ": text enters the scroll gutter (" + right.ToString("0") + ") '" + t.text + "'");
+            }
+        }
+        // Sibling parts of the page flow must not overlap.
+        ScrollRect scroll = con.Root.GetComponentInChildren<ScrollRect>();
+        RectTransform content = scroll != null ? scroll.content : null;
+        if (content == null) return;
+        // scroll.content is the current page's rect; its children are the flow's parts.
+        RectTransform page = content;
+        for (int i = 0; i < page.childCount; i++)
+        {
+            var a = page.GetChild(i) as RectTransform;
+            if (a == null || !a.gameObject.activeSelf) continue;
+            for (int j = i + 1; j < page.childCount; j++)
+            {
+                var b = page.GetChild(j) as RectTransform;
+                if (b == null || !b.gameObject.activeSelf) continue;
+                float ax0 = a.anchoredPosition.x, ax1 = ax0 + a.rect.width, ay0 = -a.anchoredPosition.y, ay1 = ay0 + a.rect.height;
+                float bx0 = b.anchoredPosition.x, bx1 = bx0 + b.rect.width, by0 = -b.anchoredPosition.y, by1 = by0 + b.rect.height;
+                if (ax0 < bx1 - .5f && bx0 < ax1 - .5f && ay0 < by1 - .5f && by0 < ay1 - .5f)
+                    throw new Exception(where + ": '" + a.name + "' overlaps '" + b.name + "'");
+            }
+        }
+    }
+
+    private static void SetField(object owner, string field, object value)
+    {
+        for (Type t = owner.GetType(); t != null; t = t.BaseType)
+        {
+            FieldInfo f = t.GetField(field, All | BindingFlags.DeclaredOnly);
+            if (f == null) continue;
+            f.SetValue(owner, value);
+            return;
+        }
+        throw new Exception(owner.GetType().Name + " has no field " + field + " (harness out of date with the presenter).");
     }
 
     private static void Check(bool value, string message)

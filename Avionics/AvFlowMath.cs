@@ -15,7 +15,7 @@ namespace NOAvionics
     {
         public const float Pad = 14f, Gap = 8f, Gutter = 8f;
         public const float RowDense = 28f, Row = 32f, ToolCell = 44f;
-        public const float Tab = 32f, Header = 30f, ChipStrip = 22f, Metric = 64f, Footer = 26f;
+        public const float Tab = 32f, Header = 30f, ChipStrip = 22f, Metric = 64f, Footer = 34f;
         public const float IconInline = 14f, IconHead = 16f, IconTool = 20f;
     }
 

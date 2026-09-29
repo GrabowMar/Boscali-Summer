@@ -19,6 +19,8 @@ namespace NOAvionics.Ui
         private readonly List<AvControl> trailing = new List<AvControl>(3);
         private AvState state = AvState.Info;
         private bool hover, armed, interactable = true;
+        private AvSlot lastSlot;
+        private bool placed;
 
         public AvRow(RectTransform parent, Action onClick = null)
         {
@@ -46,10 +48,21 @@ namespace NOAvionics.Ui
 
         public void Set(string n, string s, string v, AvState st = AvState.Info)
         {
-            if (name.text != (n ?? "")) name.text = n ?? "";
-            if (sub.text != (s ?? "")) sub.text = s ?? "";
-            if (value.text != (v ?? "")) value.text = v ?? "";
+            bool grew = false;
+            if (name.text != (n ?? "")) { name.text = n ?? ""; grew = true; }
+            if (sub.text != (s ?? "")) { sub.text = s ?? ""; grew = true; }
+            if (value.text != (v ?? ""))
+            {
+                // The value column only narrows the text when it appears or disappears.
+                grew |= value.text.Length == 0 || string.IsNullOrEmpty(v);
+                value.text = v ?? "";
+            }
             if (st != state) { state = st; Restyle(); }
+            if (!grew) return;
+            // Re-arrange inside the current slot right away: a value that appears without changing the row's
+            // height would otherwise never be placed (the flow only re-lays when the height moves).
+            if (placed) Place(lastSlot);
+            Changed();
         }
 
         public AvControl AddTrailing(AvControl.Spec spec)
@@ -87,6 +100,7 @@ namespace NOAvionics.Ui
         public override void Place(AvSlot s)
         {
             base.Place(s);
+            lastSlot = s; placed = true;
             float w = TextWidth(s.W), nh = AvText.Height(name, w);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
             float x0 = PadX + 4f + BadgeSpace;

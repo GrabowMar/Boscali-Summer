@@ -252,49 +252,152 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Map2, "MAP LEGEND", "BOSCALI OVERLAYS");
                 page.Add(new LegendCard(page.Content));
+                page.Section(AvIcon.Focus2, "CONTACT SYMBOLS", "FRAME = SIDE  /  GLYPH = TYPE");
+                page.Add(new SymbolKey(page.Content));
             }
 
-            /// <summary>One unit-type sample: the platform glyph (data, not chrome — see
-            /// <see cref="MfdGlyph"/>) over its label. A local AvPart because the kit has no
-            /// data-icon-plus-caption tile; scale is applied around the glyph's own centre so the
+            /// <summary>The colour a contact side wears on the map: the tints the game gives friendly and
+            /// hostile icons, and a neutral grey. Shape carries the same distinction without colour.</summary>
+            private static Color SideTint(MapSide side) =>
+                side == MapSide.Friendly ? AvTheme.RailInfo
+                : side == MapSide.Hostile ? AvTheme.RailDanger
+                : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+
+            /// <summary>Builds one framed contact symbol exactly as the map draws it: plate, then glyph.</summary>
+            private static void MakeSymbol(RectTransform parent, MapSide side, MapGlyph glyph,
+                out Image plate, out Image mark)
+            {
+                plate = NewSymbolImage(parent, "Plate", MapSymbolAtlas.Plate(side), SideTint(side));
+                mark = NewSymbolImage(parent, "Glyph", MapSymbolAtlas.Glyph(glyph), SideTint(side));
+            }
+
+            private static Image NewSymbolImage(RectTransform parent, string name, Sprite sprite, Color tint)
+            {
+                var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+                go.transform.SetParent(parent, false);
+                Image image = go.GetComponent<Image>();
+                image.sprite = sprite;
+                image.color = tint;
+                image.raycastTarget = false;
+                RectTransform rect = image.rectTransform;
+                rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+                rect.pivot = new Vector2(.5f, .5f);
+                return image;
+            }
+
+            private static void PlaceSymbol(Image plate, Image mark, float centreX, float centreY, float size)
+            {
+                plate.rectTransform.anchoredPosition = mark.rectTransform.anchoredPosition =
+                    new Vector2(centreX, -centreY);
+                plate.rectTransform.sizeDelta = new Vector2(size, size);
+                float inner = size / MapSymbology.PlateRatio;
+                mark.rectTransform.sizeDelta = new Vector2(inner, inner);
+            }
+
+            /// <summary>One sample of the map's own contact symbols (the real atlas sprites, so the preview
+            /// cannot drift from the map) over its label. A local AvPart because the kit has no
+            /// symbol-plus-caption tile; scale is applied around the symbol's own centre so the
             /// symbol-size preview grows and shrinks in place instead of drifting.</summary>
             private sealed class SymbolTile : AvPart
             {
-                private readonly MfdGlyph glyph;
+                private readonly Image plate, mark;
+                private readonly MapSide side;
                 private readonly TMP_Text label;
 
                 public SymbolTile(RectTransform parent, string kind, string labelText)
                 {
                     Rect = AvLay.Child(parent, "Symbol " + kind);
-                    var go = new GameObject("Glyph", typeof(RectTransform), typeof(MfdGlyph));
-                    go.transform.SetParent(Rect, false);
-                    glyph = go.GetComponent<MfdGlyph>();
-                    glyph.raycastTarget = false;
-                    glyph.rectTransform.anchorMin = glyph.rectTransform.anchorMax = new Vector2(0f, 1f);
-                    glyph.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-                    glyph.Set(kind);
+                    side = kind == "GND" ? MapSide.Hostile : kind == "SHP" ? MapSide.Neutral : MapSide.Friendly;
+                    MapGlyph glyph = kind == "GND" ? MapGlyph.Armor : kind == "SHP" ? MapGlyph.Hull : MapGlyph.Aircraft;
+                    MakeSymbol(Rect, side, glyph, out plate, out mark);
                     label = AvText.Make(Rect, "Label", AvTextRole.Micro, labelText, TextAlignmentOptions.Center);
                 }
 
                 public void SetState(bool available, float scale)
                 {
-                    glyph.enabled = available;
-                    glyph.rectTransform.localScale = Vector3.one * Mathf.Clamp(scale, .1f, 2f);
+                    plate.enabled = mark.enabled = available;
+                    Vector3 grown = Vector3.one * Mathf.Clamp(scale, .1f, 2f);
+                    plate.rectTransform.localScale = mark.rectTransform.localScale = grown;
                 }
 
-                public override float Measure(float width) => 74f;
+                public override float Measure(float width) => 82f;
 
                 public override void Place(AvSlot s)
                 {
                     base.Place(s);
-                    float size = Mathf.Clamp(s.W * 0.5f, 28f, 48f);
-                    glyph.rectTransform.anchoredPosition = new Vector2(s.W * 0.5f, -(4f + size * 0.5f));
-                    glyph.rectTransform.sizeDelta = new Vector2(size, size);
-                    AvLay.Place(label.rectTransform, 0f, 4f + size + 6f, s.W, 16f);
+                    float size = Mathf.Clamp(s.W * 0.5f, 34f, 52f);
+                    PlaceSymbol(plate, mark, s.W * 0.5f, 4f + size * 0.5f, size);
+                    AvLay.Place(label.rectTransform, 0f, 4f + size + 8f, s.W, 16f);
                 }
 
-                public override void Restyle() =>
+                public override void Restyle()
+                {
                     label.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
+                    plate.color = mark.color = SideTint(side);
+                }
+            }
+
+            /// <summary>Key to every contact symbol: the three frames (allegiance) and the glyph per platform
+            /// class. Painted from the same sprites the map draws with.</summary>
+            private sealed class SymbolKey : AvPart
+            {
+                private const int Columns = 4;
+                private const float Pitch = 64f, Inset = 12f, Size = 32f;
+                private static readonly (string Label, MapSide Side, MapGlyph Glyph)[] Entries =
+                {
+                    ("FRIENDLY", MapSide.Friendly, MapGlyph.Armor), ("HOSTILE", MapSide.Hostile, MapGlyph.Armor),
+                    ("UNKNOWN", MapSide.Neutral, MapGlyph.Armor), ("AIRCRAFT", MapSide.Friendly, MapGlyph.Aircraft),
+                    ("ARMOUR", MapSide.Friendly, MapGlyph.Armor), ("LIGHT", MapSide.Friendly, MapGlyph.Light),
+                    ("SUPPLY", MapSide.Friendly, MapGlyph.Supply), ("ARTILLERY", MapSide.Friendly, MapGlyph.Artillery),
+                    ("ANTI-AIR", MapSide.Friendly, MapGlyph.AntiAir), ("SAM", MapSide.Friendly, MapGlyph.Sam),
+                    ("RADAR", MapSide.Friendly, MapGlyph.Radar), ("SHIP", MapSide.Friendly, MapGlyph.Hull),
+                };
+                private readonly AvFrame frame;
+                private readonly Image[] plates = new Image[Entries.Length];
+                private readonly Image[] marks = new Image[Entries.Length];
+                private readonly TMP_Text[] labels = new TMP_Text[Entries.Length];
+
+                public SymbolKey(RectTransform parent)
+                {
+                    Rect = AvLay.Child(parent, "Symbol Key");
+                    frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                    AvLay.Fill(frame.rectTransform);
+                    for (int i = 0; i < Entries.Length; i++)
+                    {
+                        MakeSymbol(Rect, Entries[i].Side, Entries[i].Glyph, out plates[i], out marks[i]);
+                        labels[i] = AvText.Make(Rect, "Label " + i, AvTextRole.Micro, Entries[i].Label,
+                            TextAlignmentOptions.Center);
+                    }
+                    Restyle();
+                }
+
+                public override float Measure(float width) =>
+                    Mathf.CeilToInt(Entries.Length / (float)Columns) * Pitch + Inset * 2f;
+
+                public override void Place(AvSlot s)
+                {
+                    base.Place(s);
+                    float cell = (s.W - Inset * 2f) / Columns;
+                    for (int i = 0; i < Entries.Length; i++)
+                    {
+                        float x = Inset + (i % Columns) * cell;
+                        float y = Inset + (i / Columns) * Pitch;
+                        PlaceSymbol(plates[i], marks[i], x + cell * .5f, y + Size * .5f, Size);
+                        AvLay.Place(labels[i].rectTransform, x, y + Size + 4f, cell, 14f);
+                    }
+                }
+
+                public override void Restyle()
+                {
+                    frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
+                                AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
+                    Color ink = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    for (int i = 0; i < Entries.Length; i++)
+                    {
+                        labels[i].color = ink;
+                        plates[i].color = marks[i].color = SideTint(Entries[i].Side);
+                    }
+                }
             }
 
             /// <summary>The map's own live ink (sector tints, front-line trace, threat rails) painted as
@@ -460,7 +563,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     ? Mathf.Clamp(options.iconSize, .1f, 2f) : 1f;
                 foreach (SymbolTile tile in previewTiles) tile.SetState(available, scale);
                 previewCaption.Set(available
-                    ? SizeLabel() + " • Actual icons vary by unit; preview is illustrative."
+                    ? SizeLabel() + " • Frame shape marks the side; jets keep the game's own silhouette."
                     : "Symbol size unavailable.");
             }
 

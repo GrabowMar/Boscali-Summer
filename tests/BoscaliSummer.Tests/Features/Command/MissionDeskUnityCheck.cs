@@ -112,6 +112,9 @@ public static class MissionDeskUnityCheck
     private static void Capture(MonoBehaviour view, Type type, string file,
         float width, float height)
     {
+        // The window re-measures changed parts on its ticker, as in the game; offline Unity time does not advance.
+        foreach (AvTicker ticker in view.GetComponentsInChildren<AvTicker>(true))
+            for (int i = 0; i < 3; i++) ticker.TickNow();
         Canvas canvas = view.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         canvas.GetComponent<CanvasScaler>().enabled = false;
