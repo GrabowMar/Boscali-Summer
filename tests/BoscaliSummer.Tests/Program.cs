@@ -35,6 +35,7 @@ namespace BoscaliSummer.Tests
             ForestIndexTests.Run();
             TroopDeploymentTests.Run();
             GarrisonMarkerInfoTests.Run();
+            GarrisonCompositionTests.Run();
             StrongpointHitPolicyTests.Run();
             SiegeMathTests.Run();
             UrbanRuinMathTests.Run();

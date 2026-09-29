@@ -113,9 +113,11 @@
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\SiegeMath.cs" Link="Features\UrbanCombat\SiegeMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonComposition.cs" Link="Features\UrbanCombat\GarrisonComposition.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\UrbanRuinMath.cs" Link="Features\UrbanCombat\UrbanRuinMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Visuals\WarzoneDressingMath.cs" Link="Features\UrbanCombat\WarzoneDressingMath.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchTraceMath.cs" Link="Features\Trenches\TrenchTraceMath.cs" />
+    <Compile Include="..\..\modules\Trenches\Domain\TrenchWire.cs" Link="Features\Trenches\TrenchWire.cs" />
     <Compile Include="..\..\Framework\Features\FeatureMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Framework\Features\FeatureGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Framework\Features\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
