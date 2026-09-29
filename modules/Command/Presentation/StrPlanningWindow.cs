@@ -14,16 +14,22 @@ namespace BoscaliSummer.Features.Command.Presentation
     internal sealed class StrPlanningWindow : MonoBehaviour
     {
         private const float Width = 900f;
-        private const float Height = 860f;
+        private const float Height = 980f;
         private const int SortOrder = 30001;
         private const int MaxProposals = 3;
-        private const int MaxFronts = 6;
+        private const int MaxFronts = 4;
 
         private AvWindow window;
-        private AvRow operationRow;
-        private AvRowStack proposals;
-        private AvList fronts;
+        private StrOpCard operationCard;
+        private StrNote operationNote;
+        private AvButtons callOff;
+        private StrProposalDeck proposals;
+        private StrNote proposalNote;
+        private AvSection frontsSection;
+        private StrFrontBoard fronts;
+        private StrNote frontsNote;
         private AvSegmented postureControl;
+        private ProseText postureText;
         private TheaterMapPart map;
         private ITheaterWarView war;
         private ComMapOverlay overlay;
@@ -69,6 +75,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
             IsOpen = true;
             Refresh();
+            window.Body.Relayout();   // the first frame after opening must already be laid out
+            ScrollRect scroll = window.Root.GetComponentInChildren<ScrollRect>(true);
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;   // always open on the map
         }
 
         internal void Close()
@@ -104,35 +113,44 @@ namespace BoscaliSummer.Features.Command.Presentation
             body.Section(AvIcon.Map2, "LIVE THEATER MAP", "FRONT / CONTROL / STAFF INTENT");
             map = body.Add(new TheaterMapPart(body.Content, overlay));
 
-            body.Section(AvIcon.Flag, "PRIMARY OPERATION", "STAFF DIRECTED");
-            operationRow = body.Add(new AvRow(body.Content));
-            body.Buttons(new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X))
-                .Controls[0].Help = "Call off this operation and request fresh staff choices.";
+            // Two columns under the map keep the room on one screen: the operation and the staff's offers
+            // side by side, then the fronts beside the posture.
+            var opStack = new StrStack(body.Content);
+            operationCard = opStack.Add(new StrOpCard(body.Content));
+            operationNote = opStack.Add(new StrNote(body.Content, AvIcon.Flag));
+            callOff = opStack.Add(new AvButtons(body.Content,
+                new[] { new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X) }));
+            callOff.Controls[0].Help = "Call off this operation and request fresh staff choices.";
 
-            body.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES");
-            proposals = body.Add(new AvRowStack(body.Content, MaxProposals, Pick));
+            var offerStack = new StrStack(body.Content);
+            proposals = offerStack.Add(new StrProposalDeck(body.Content, MaxProposals, Pick));
+            proposalNote = offerStack.Add(new StrNote(body.Content, AvIcon.ListDetails));
 
-            body.Section(AvIcon.MapPin, "FRONTS", "FIELD REPORTS");
-            fronts = body.Add(new AvList(body.Content, window.Ticker, MaxFronts, BindFront));
+            var frontStack = new StrStack(body.Content);
+            fronts = frontStack.Add(new StrFrontBoard(body.Content, MaxFronts, BindFront));
+            frontsNote = frontStack.Add(new StrNote(body.Content, AvIcon.MapPin));
 
-            body.Section(AvIcon.AdjustmentsHorizontal, "STAFF POSTURE", "BROAD INTENT");
-            postureControl = body.Add(new AvSegmented(body.Content, "POSTURE",
+            var postureStack = new StrStack(body.Content);
+            postureControl = postureStack.Add(new AvSegmented(body.Content, "POSTURE",
                 new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetPosture((TheaterWarPosture)i)));
+            postureText = postureStack.Add(new ProseText(body.Content));
+
+            body.Row(new AvSection(body.Content, AvIcon.Flag, "PRIMARY OPERATION", "STAFF DIRECTED"),
+                new AvSection(body.Content, AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES"));
+            body.Row(opStack, offerStack);
+            frontsSection = new AvSection(body.Content, AvIcon.MapPin, "FRONTS", "FIELD REPORTS");
+            body.Row(frontsSection, new AvSection(body.Content, AvIcon.AdjustmentsHorizontal, "STAFF POSTURE", "BROAD INTENT"));
+            body.Row(frontStack, postureStack);
 
             AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
             if (closeButton != null) closeButton.Help = "Close operations room (Esc).";
             window.Footer.Set("Staff log · awaiting report.");
         }
 
-        private void BindFront(int index, AvRow row)
+        private void BindFront(int index, StrFrontBoard.Row row)
         {
             IReadOnlyList<TheaterFrontView> list = war?.Available == true ? war.Fronts : null;
-            TheaterFrontView front = list != null && index < list.Count ? list[index] : null;
-            if (front == null) { row.Set("—", "", "", AvState.Inert); return; }
-            row.Set(front.Label, front.Observed
-                    ? front.Status + " · " + TheaterReadout.Percent(Mathf.Clamp01(front.Pressure)) + " PRESSURE"
-                    : "RUMOR / UNCONFIRMED",
-                "", front.Observed ? AvState.Caution : AvState.Inert);
+            StrMfdPanel.FillFront(row, list != null && index < list.Count ? list[index] : null);
         }
 
         private void Refresh()
@@ -140,36 +158,45 @@ namespace BoscaliSummer.Features.Command.Presentation
             bool ready = war != null && war.Available;
             IReadOnlyList<TheaterProposalView> proposalList = ready ? war.Proposals : null;
             int count = proposalList != null ? Mathf.Min(proposalList.Count, MaxProposals) : 0;
-            for (int i = 0; i < MaxProposals; i++)
-            {
-                if (i >= count) { proposals.Hide(i); continue; }
-                TheaterProposalView proposal = proposalList[i];
-                proposals.Show(i);
-                AvRow row = proposals.Row(i);
-                row.Set(proposal.Kind + " / " + proposal.Label,
-                    proposal.Brief + "  ·  " + proposal.Forces + "  ·  RISK " + proposal.Risk,
-                    Mathf.CeilToInt(Mathf.Max(0f, proposal.SecondsRemaining)) + "S", AvState.Ready);
-                row.Interactable = war.CanCommand;
-                row.Help = "Choose this staff proposal; the host validates the current offer.";
-            }
+            proposals.SetShown(count > 0);
+            proposalNote.SetShown(count == 0);
+            if (count > 0) StrMfdPanel.FillProposals(proposals, proposalList, MaxProposals, war.CanCommand);
+            else
+                proposalNote.Set(ready ? "NO OPENINGS ON OFFER" : "NO STAFF PROPOSALS",
+                    ready ? "The staff spends from the faction pool and acts on its own until it sees an opening."
+                        : "Proposals appear here once theater staff is available.");
 
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;
-            operationRow.Set(active == null ? "NO PRIMARY OPERATION" : active.Label,
-                active == null ? "The staff is monitoring several fronts for an opening."
-                    : active.Kind + " / " + active.Phase + " · " + active.Summary + "  ·  " +
-                      active.GroundGroups + " GROUND / " + active.AirGroups + " AIR / " + active.NavalGroups + " NAVAL",
-                "", AvState.Info);
+            operationCard.SetShown(active != null);
+            operationNote.SetShown(active == null);
+            callOff.SetShown(active != null);
+            if (active != null)
+            {
+                operationCard.Set(active.Kind, active.Label, active.Phase, active.Summary,
+                    active.GroundGroups, active.AirGroups, active.NavalGroups);
+                callOff.Controls[0].Interactable = war.CanCommand;
+            }
+            else
+                operationNote.Set(ready ? "NO PRIMARY OPERATION" : "THEATER STAFF UNAVAILABLE",
+                    ready ? "The staff is monitoring several fronts for an opening."
+                        : "No staff is running for this faction.");
 
             IReadOnlyList<TheaterFrontView> frontList = ready ? war.Fronts : null;
-            fronts.SetCount(frontList?.Count ?? 0);
+            int frontCount = frontList?.Count ?? 0;
+            fronts.SetCount(frontCount);
+            fronts.SetShown(frontCount > 0);
+            frontsNote.SetShown(frontCount == 0);
+            frontsSection.SetCaption(frontCount == 0 ? "NO REPORTS" : frontCount + " TRACKED");
+            if (frontCount == 0)
+                frontsNote.Set("NO FRONTS REPORTED", "Verified fronts appear here with their pressure once staff has contact.");
 
             selectedPosture = ready ? war.Posture : TheaterWarPosture.Steady;
             postureControl.Refresh();
+            postureText.Set(StrMfdPanel.PostureBrief(selectedPosture));
 
             IReadOnlyList<string> log = ready ? war.StaffLog : null;
             window.Footer.Set(log != null && log.Count > 0 ? "Staff log · " + log[0] : "Staff log · no recent report.");
 
-            window.Body.Relayout();
             map.Refresh(active, proposalList, frontList);
         }
 
@@ -267,7 +294,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 return img;
             }
 
-            public override float Measure(float width) => Mathf.Round(width * 0.5f) + 16f;
+            public override float Measure(float width) => Mathf.Round(width * 0.34f) + 16f;
 
             public override void Place(AvSlot s)
             {

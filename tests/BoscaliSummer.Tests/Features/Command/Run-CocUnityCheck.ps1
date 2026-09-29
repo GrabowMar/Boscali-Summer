@@ -17,6 +17,9 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/StrMfdPanel.Cmd.cs", `
     "$repo/modules/Command/Presentation/StrPlanningWindow.cs", `
     "$repo/modules/Command/Presentation/StrConsoleParts.cs", `
+    "$repo/modules/Command/Presentation/StrSituationParts.cs", `
+    "$repo/modules/Command/Presentation/StrCommandParts.cs", `
+    "$repo/modules/Command/Presentation/StrOperationsParts.cs", `
     "$repo/modules/Command/Domain/CommandRosterOrder.cs", `
     "$repo/modules/Command/Domain/TacticalTheaterState.cs", `
     "$repo/modules/Command/Domain/TheaterReadout.cs", `

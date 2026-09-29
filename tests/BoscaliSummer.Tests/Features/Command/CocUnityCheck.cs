@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using BoscaliSummer.Features.Command.Configuration;
+using BoscaliSummer.Features.Command.Domain;
 using BoscaliSummer.Features.Command.Presentation;
 using BoscaliSummer.Features.Command.Runtime;
 using BoscaliSummer.Framework.Contracts;
@@ -17,9 +18,11 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Standalone render check for the STR console — SITUATION, COMMAND (chain of command) and
-/// OPERATIONS pages, plus the operations-room floating window — all on kit v2 (AvConsole /
-/// AvFlow / AvSection / AvRow / AvRowStack / AvList / AvWindow). None of this can be exercised
+/// Standalone render check for the STR console — SITUATION (threat ladder, force balance, air tasking
+/// order, readout tiles), COMMAND (org chart, dossier, staff log) and OPERATIONS (op card, proposal cards,
+/// front rows, posture) pages, plus the operations-room floating window — all on kit v2 with the STR
+/// module's own parts. The run FAILS on text overflow, 11 px floor breaches, gutter entry, contrast below
+/// 4.5 or overlapping parts (the same gate as the kit gallery). None of this can be exercised
 /// by the pure net8 tests. This check builds the real console and the real page builders from
 /// the production sources, feeds them a deterministic stubbed IHighCommandView staff and writes
 /// one PNG per scenario so the page can be reviewed without launching the game.
@@ -60,44 +63,68 @@ public static class CocUnityCheck
 
             IHighCommandView staff = Staff();
 
-            RenderScenario(staff, 420f, 0, false, "coc-420-long.png",
-                "height 420 (compact bay), ALLIED side, long-file selection");
+            // ---- COMMAND page: org chart, dossier, staff log ("tall" renders show the whole page in one PNG).
+            RenderScenario(staff, 1500f, 0, false, "coc-tall-allied.png",
+                "tall, ALLIED side, dossier GEN. D. HALVERSON (tier 0, long bio, two traits)");
             RenderScenario(staff, 596f, 0, false, "coc-596.png",
-                "height 596 (AvTokens.PanelHeight), ALLIED side, dossier: GEN. D. HALVERSON (tier 0 theater commander, long bio, two-entry bonus)");
+                "height 596 (AvTokens.PanelHeight), ALLIED side, dossier open");
             RenderScenario(staff, 896f, 3, false, "coc-896.png",
-                "height 896 (AvTokens.PanelHeightMax), ALLIED side, dossier: MAJ. T. VOSSBERG (tier 2 base commander, InTransit)");
-            RenderScenario(staff, 896f, 6, true, "coc-hostile.png",
-                "height 896, HOSTILE side latched, dossier: COL. V. KRUPIN (known enemy, IntelAge 41s)");
-            RenderScenario(staff, 596f, -1, false, "coc-nopost.png",
-                "height 596, ALLIED side, no post open (cocSelectedId=-1), placeholder file shown");
-            RenderScenario(staff, 896f, 0, false, "coc-896-long.png",
-                "height 896, ALLIED side, dossier: GEN. D. HALVERSON (longest bio and two bonus entries)");
-            // No staff at all: the page must read as unavailable and must not leave a stale
-            // selection bracketed on the map.
+                "height 896 (AvTokens.PanelHeightMax), ALLIED side, dossier MAJ. T. VOSSBERG (tier 2, InTransit)");
+            RenderScenario(staff, 1500f, 6, true, "coc-tall-hostile.png",
+                "tall, HOSTILE side, dossier COL. V. KRUPIN (known enemy, IntelAge 41s)");
+            RenderScenario(staff, 1500f, 7, true, "coc-tall-hostile-sealed.png",
+                "tall, HOSTILE side, dossier MAJ. E. ROUX (unconfirmed, sealed file)");
+            RenderScenario(staff, 1500f, -1, false, "coc-tall-nopost.png",
+                "tall, ALLIED side, no post open: one compact note instead of a dossier");
             RenderScenario(Staff(available: false), 596f, -1, false, "coc-nostaff.png",
-                "height 596, no staff running (stub Available=false), dossier hidden and the map highlight cleared");
+                "height 596, no staff running: one note, the map highlight cleared");
 
-            foreach (float height in new[] { 420f, 596f, 896f })
-                foreach (int page in new[] { 0, 2 })
+            // ---- SITUATION + OPERATIONS: populated and empty states, tall and at the real panel heights.
+            foreach (bool populated in new[] { true, false })
+            {
+                string tag = populated ? "populated" : "empty";
+                GameObject sa = Build(1500f, staff, -1, false, 0, populated: populated);
+                Capture(sa, 1500f, "situation-tall-" + tag + ".png");
+                Gate(sa, "situation-" + tag, 0);
+                Object.DestroyImmediate(sa);
+
+                foreach (float height in new[] { 596f, 896f })
                 {
-                    GameObject canvas = Build(height, staff, -1, false, page);
-                    string prefix = (page == 0 ? "situation-" : "operations-") + height;
-                    Capture(canvas, height, prefix + ".png");
-                    ScrollRect scroll = canvas.GetComponentInChildren<ScrollRect>();
+                    GameObject page = Build(height, staff, -1, false, 0, populated: populated);
+                    string prefix = "situation-" + tag + "-" + height;
+                    Capture(page, height, prefix + ".png");
+                    ScrollRect scroll = page.GetComponentInChildren<ScrollRect>();
                     if (scroll != null && scroll.content.rect.height > scroll.viewport.rect.height + 1f)
                     {
                         scroll.verticalNormalizedPosition = 0f;
-                        Capture(canvas, height, prefix + "-bottom.png");
+                        Capture(page, height, prefix + "-bottom.png");
                     }
-                    Object.DestroyImmediate(canvas);
+                    Object.DestroyImmediate(page);
                 }
+            }
 
-            var war = new WarStub();
-            GameObject operationsCanvas = Build(596f, staff, -1, false, 2, war: war);
-            Capture(operationsCanvas, 596f, "operations-live-596.png");
-            Check(Array.Exists(operationsCanvas.GetComponentsInChildren<TMP_Text>(true), t => t.text.Contains("RIDGE")),
-                "STR must show the staff's current proposal.");
-            Object.DestroyImmediate(operationsCanvas);
+            foreach (WarMode mode in new[] { WarMode.Rich, WarMode.Basic, WarMode.Idle, WarMode.Unavailable })
+            {
+                string tag = mode.ToString().ToLowerInvariant();
+                GameObject ops = Build(1500f, staff, -1, false, 2, war: new WarStub(mode));
+                Capture(ops, 1500f, "operations-tall-" + tag + ".png");
+                Gate(ops, "operations-" + tag, 2);
+                Object.DestroyImmediate(ops);
+            }
+            foreach (float height in new[] { 596f, 896f })
+            {
+                GameObject ops = Build(height, staff, -1, false, 2, war: new WarStub(WarMode.Rich));
+                Capture(ops, height, "operations-rich-" + height + ".png");
+                ScrollRect scroll = ops.GetComponentInChildren<ScrollRect>();
+                if (scroll != null && scroll.content.rect.height > scroll.viewport.rect.height + 1f)
+                {
+                    scroll.verticalNormalizedPosition = 0f;
+                    Capture(ops, height, "operations-rich-" + height + "-bottom.png");
+                }
+                Check(Array.Exists(ops.GetComponentsInChildren<TMP_Text>(true), t => t.text.Contains("RIDGE")),
+                    "STR must show the staff's current proposal.");
+                Object.DestroyImmediate(ops);
+            }
 
             var mapRoot = new GameObject("MapCheck");
             DynamicMap liveMap = mapRoot.AddComponent<DynamicMap>();
@@ -117,34 +144,49 @@ public static class CocUnityCheck
                 new Rect(0f, 0f, 64f, 48f), new Vector2(.5f, .5f));
             SceneSingleton<DynamicMap>.i = liveMap;
 
-            StrPlanningWindow room = StrPlanningWindow.Create(war, new ComMapOverlay());
-            room.Show();
-            Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
-                t.text.Contains("OPERATIONS ROOM")), "Room must keep the AvWindow title chrome.");
-            Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
-                t.text.Contains("NORTH RIDGE")), "Room must name the active operation.");
-            object mapPart = GetFieldValue(room, "map");
-            Image[] frontPins = (Image[])mapPart.GetType().GetField("frontMarkers", Private).GetValue(mapPart);
-            Check(frontPins[0].enabled && !frontPins[1].enabled,
-                "Only observed fronts may receive an exact map marker.");
-            CaptureWindow(room, "war-room-1920.png");
-            CaptureWindow(room, "war-room-1280.png", 1280f, 720f);
-            room.Close();
-            Check(!StrPlanningWindow.IsOpen, "Closing the room must release the input guard.");
-            Object.DestroyImmediate(room.gameObject);
+            foreach (WarMode mode in new[] { WarMode.Rich, WarMode.Idle, WarMode.Unavailable })
+            {
+                string tag = mode.ToString().ToLowerInvariant();
+                StrPlanningWindow room = StrPlanningWindow.Create(new WarStub(mode), new ComMapOverlay());
+                room.Show();
+                var roomWindow = (AvWindow)GetFieldValue(room, "window");
+                for (int i = 0; i < 4; i++) roomWindow.Ticker.TickNow();
+                Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
+                    t.text.Contains("OPERATIONS ROOM")), "Room must keep the AvWindow title chrome.");
+                if (mode == WarMode.Rich)
+                {
+                    Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
+                        t.text.Contains("NORTH RIDGE")), "Room must name the active operation.");
+                    object mapPart = GetFieldValue(room, "map");
+                    Image[] frontPins = (Image[])mapPart.GetType().GetField("frontMarkers", Private).GetValue(mapPart);
+                    Check(frontPins[0].enabled && !frontPins[1].enabled,
+                        "Only observed fronts may receive an exact map marker.");
+                }
+                CaptureWindow(room, "war-room-" + tag + "-1920.png");
+                GateWindow(room, "war-room-" + tag);
+                if (mode == WarMode.Rich) CaptureWindow(room, "war-room-rich-1280.png", 1280f, 720f);
+                room.Close();
+                Check(!StrPlanningWindow.IsOpen, "Closing the room must release the input guard.");
+                Object.DestroyImmediate(room.gameObject);
+            }
             SceneSingleton<DynamicMap>.i = null;
             Object.DestroyImmediate(mapRoot);
             Object.DestroyImmediate(mapTexture);
 
+            if (Failures.Count > 0)
+            {
+                File.WriteAllText("result.txt", "FAIL: " + Failures.Count + " gate failure(s)\n" + string.Join("\n", Failures));
+                EditorApplication.Exit(1);
+                return;
+            }
+
             var report = new System.Text.StringBuilder();
-            report.AppendLine("PASS: the real STR console pages and live operations room rendered offline on kit v2.");
-            report.AppendLine(captures + " captures: COC roster/file scenarios, SITUATION and OPERATIONS at 420/596/896, plus live war room at two screen sizes.");
-            report.AppendLine("The stub IHighCommandView records Highlight(id); every scenario asserts the map highlight matches the open file (or -1 when none is open).");
-            report.AppendLine("Staff stub: 8 posts - theater cmdr (tier 0), air/ground component cmdrs (tier 1), three base cmdrs (tier 2; one InTransit, one KIA, one Disrupted), one known enemy (IntelAge 41s) and one unconfirmed enemy.");
+            report.AppendLine("PASS: the real STR console pages and live operations room rendered offline on kit v2; gate clean (" + checkedTexts + " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part overlap).");
+            report.AppendLine(captures + " captures: COMMAND allied/hostile/sealed/no-post/no-staff, SITUATION populated+empty, OPERATIONS rich/basic/idle/unavailable, operations room x3 modes.");
+            report.AppendLine("Content is bound after Finish() and advanced with Ticker.TickNow(), as the game does; the stub IHighCommandView records Highlight(id) and every COMMAND scenario asserts it matches the open file.");
             report.AppendLine("Renders (path | bytes | setup):");
             foreach (string note in Notes) report.AppendLine(note);
-            report.AppendLine("Reflection used: fields console/highCommand/settings/command/theaterWar, cocShowHostile, cocSelectedId, cocBuilt; methods BuildSaPage(AvFlow)/BuildCocPage(AvFlow)/BuildCmdPage(AvFlow), Refresh(), RefreshCoc(), SelectCoc(int).");
-            report.AppendLine("Skipped/worked around: CommandTree (HighCommand domain) unused by the contract; CommandSettings/CommandManager/TacticalSectorGrid/SectorControl/FactionHQ/UnitConverter stubbed. Dropped: the v1 scroll-to-selected-file auto-scroll and per-row portraits (kit v2 AvConsole scrolls the whole page; no readout was lost).");
+            report.AppendLine("Reflection used: fields console/highCommand/settings/command/overlay/theaterWar, cocShowHostile, cocSelectedId, cocBuilt, radarTile/adTile; methods BuildSaPage/BuildCocPage/BuildCmdPage, Refresh(), SelectCoc(int).");
             File.WriteAllText("result.txt", report.ToString());
             EditorApplication.Exit(0);
         }
@@ -158,31 +200,58 @@ public static class CocUnityCheck
 
     // ------------------------------------------------------------------ scenarios
 
+    private enum WarMode { Rich, Basic, Idle, Unavailable }
+
     private sealed class WarStub : ITheaterWarView
     {
-        public bool Available => true;
-        public bool CanCommand => true;
-        public TheaterWarPosture Posture => TheaterWarPosture.Steady;
-        public IReadOnlyList<TheaterFrontView> Fronts { get; } =
-            new[] {
-                new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f,
-                    "IN CONTACT", .75f, .1f, true, 0f),
-                new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN,
-                    "UNCONFIRMED", .2f, 0f, false, 45f),
-            };
-        public IReadOnlyList<TheaterProposalView> Proposals { get; } =
-            new[] {
-                new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge",
-                    1200f, 1700f, "Pressure is shifting.", "MEDIUM",
-                    "2 ground, 1 air", 38f),
-                new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor",
-                    -1400f, -800f, "Reinforce the approach.", "LOW",
-                    "1 ground, 1 naval", 38f),
-            };
-        public TheaterLiveOperationView ActiveOperation { get; } =
-            new TheaterLiveOperationView(7, 3, "ASSAULT", "ridge", "NORTH RIDGE",
-                1200f, 1700f, "IN CONTACT", "Ground and air groups are pressing.",
-                2, 1, 0);
+        private readonly WarMode mode;
+        public WarStub(WarMode mode)
+        {
+            this.mode = mode;
+            bool rich = mode == WarMode.Rich, basic = mode == WarMode.Basic;
+            Fronts = rich ? new[]
+                {
+                    new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f, "IN CONTACT", .75f, .1f, true, 0f),
+                    new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN, "UNCONFIRMED", .2f, 0f, false, 45f),
+                    new TheaterFrontView("depot", "WEST DEPOT", -2000f, 900f, "UNDER PRESSURE", .62f, .05f, true, 0f),
+                    new TheaterFrontView("pass", "EASTERN PASS", 2800f, -600f, "HOLDING", .18f, -.05f, true, 0f),
+                    new TheaterFrontView("strip", "CAPTURE AIRSTRIP", -500f, -2200f, "UNCONFIRMED", 0f, 0f, false, -1f),
+                    new TheaterFrontView("f45", "FRONT -5/-4", -5000f, -4000f, "UNCONFIRMED", 0f, 0f, false, -1f),
+                    new TheaterFrontView("f81", "FRONT -8/-1", -8000f, -1000f, "UNDER PRESSURE", 1f, .1f, true, 0f),
+                }
+                : basic ? new[]
+                {
+                    new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f, "IN CONTACT", .75f, .1f, true, 0f),
+                    new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN, "UNCONFIRMED", .2f, 0f, false, 45f),
+                }
+                : new TheaterFrontView[0];
+            Proposals = rich ? new[]
+                {
+                    new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge", 1200f, 1700f,
+                        "Pressure is shifting toward the ridge; a combined push could take it before the line reforms.", "MEDIUM", "2 ground, 1 air", 38f),
+                    new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor", -1400f, -800f,
+                        "Reinforce the approach.", "LOW", "1 ground, 1 naval", 31f),
+                    new TheaterProposalView(3, 3, "ASSAULT", "WEST DEPOT", "depot", -2000f, 900f,
+                        "Depot garrison is thin but the road is covered by known air defence.", "HIGH", "MISSION FORCES", 12f),
+                }
+                : basic ? new[]
+                {
+                    new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge", 1200f, 1700f, "Pressure is shifting.", "MEDIUM", "2 ground, 1 air", 38f),
+                    new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor", -1400f, -800f, "Reinforce the approach.", "LOW", "1 ground, 1 naval", 38f),
+                }
+                : new TheaterProposalView[0];
+            ActiveOperation = mode == WarMode.Rich || basic
+                ? new TheaterLiveOperationView(7, 3, "ASSAULT", "ridge", "NORTH RIDGE", 1200f, 1700f,
+                    "IN CONTACT", "Ground and air groups are pressing the ridge from two axes.", rich ? 7 : 2, rich ? 3 : 1, 0)
+                : null;
+        }
+
+        public bool Available => mode != WarMode.Unavailable;
+        public bool CanCommand => mode != WarMode.Unavailable;
+        public TheaterWarPosture Posture => mode == WarMode.Rich ? TheaterWarPosture.Bold : TheaterWarPosture.Steady;
+        public IReadOnlyList<TheaterFrontView> Fronts { get; }
+        public IReadOnlyList<TheaterProposalView> Proposals { get; }
+        public TheaterLiveOperationView ActiveOperation { get; }
         public IReadOnlyList<string> StaffLog { get; } = new[] { "Ridge pressure rose." };
         public void Refresh() { }
         public bool RequestPick(int proposalId, int revision) => true;
@@ -195,12 +264,13 @@ public static class CocUnityCheck
     {
         GameObject canvas = Build(height, staff, selectedId, hostile);
         string path = Capture(canvas, height, file);
+        Gate(canvas, file, 1);
         if (selectedId >= 0)
         {
             StrMfdPanel panel = canvas.GetComponentInChildren<StrMfdPanel>();
             Call(panel, "SelectCoc", selectedId);
             Call(panel, "Refresh");
-            Capture(canvas, height, Path.GetFileNameWithoutExtension(file) + "-file.png");
+            SettleTicker(canvas);
 
             SetField(panel, "cocSelectedId", -1);
             Call(panel, "Refresh");
@@ -221,8 +291,63 @@ public static class CocUnityCheck
         Debug.Log("[CocUnityCheck] " + path + " (" + bytes + " bytes)");
     }
 
+    private static void SettleTicker(GameObject canvas)
+    {
+        StrMfdPanel panel = canvas.GetComponentInChildren<StrMfdPanel>();
+        var con = (AvConsole)GetFieldValue(panel, "console");
+        for (int i = 0; i < 4; i++) con.Ticker.TickNow();
+    }
+
+    private static TacticalTheaterState PopulatedState()
+    {
+        var s = new TacticalTheaterState
+        {
+            FriendlyAircraftCount = 3,
+            HostileAircraftCount = 3,
+            FriendlyAirbaseCount = 6,
+            HostileAirbaseCount = 6,
+            NeutralAirbaseCount = 0,
+            ContestedAirbaseCount = 1,
+            FriendlyRadarCount = 3,
+            FriendlyGroundUnitsCount = 219,
+            HostileGroundUnitsCount = 13,
+            FriendlySectorCount = 3211,
+            ContestedSectorCount = 236,
+            HostileSectorCount = 3277,
+            NeutralSectorCount = 240,
+            TotalNodesCount = 132,
+            FrontlineSegmentCount = 41,
+            FrontlineLengthMetres = 112700f,
+            TerritoryControlRatio = .49f,
+            AirSuperiorityRatio = .5f,
+            DefconLevel = 2,
+            PrimaryThreatDescription = "ACTIVE GROUND BATTLE",
+            ActiveThreatWarning = "AMBER ALERT: 236 CONTESTED SECTORS IN CONFLICT",
+        };
+        s.Sorties = new SortieTally { Cap = 4, Sead = 1, Cas = 6, Strike = 2, Transit = 3, Observed = 16 };
+        return s;
+    }
+
+    private static void FillNodes(ComMapOverlay overlay)
+    {
+        var grid = overlay.Grid;
+        var nodes = (List<TacticalSectorGrid.TacticalNode>)typeof(TacticalSectorGrid)
+            .GetField("nodes", Private).GetValue(grid);
+        nodes.Clear();
+        string[] names = { "NORTH RIDGE AIRBASE", "KESTREL CROSSING", "WEST DEPOT", "HARBOR STRONGPOINT", "IRON PASS", "SOUTH FORD", "RADAR HILL" };
+        for (int i = 0; i < names.Length; i++)
+            nodes.Add(new TacticalSectorGrid.TacticalNode
+            {
+                IsContested = true,
+                CaptureProgress = .9f - i * .12f,
+                Faction = i % 2 == 0 ? SectorControl.Friendly : SectorControl.Hostile,
+                Name = names[i],
+                IsAirbase = i % 3 == 0,
+            });
+    }
+
     private static GameObject Build(float height, IHighCommandView staff, int selectedId, bool hostile,
-        int pageIndex = 1, WarStub war = null)
+        int pageIndex = 1, WarStub war = null, bool populated = false)
     {
         var canvasObject = new GameObject("CocCanvas", typeof(RectTransform), typeof(Canvas));
         Canvas canvas = canvasObject.GetComponent<Canvas>();
@@ -238,13 +363,27 @@ public static class CocUnityCheck
         AvChip[] chips = con.Chips(3);
         AvMetric[] metrics = con.Metrics("THEATER CONTROL", "AIR DOMINANCE", "COMMAND");
 
+        var manager = new CommandManager();
+        if (populated)
+        {
+            TacticalTheaterState st = PopulatedState();
+            var target = manager.TheaterState;
+            foreach (FieldInfo f in typeof(TacticalTheaterState).GetFields()) f.SetValue(target, f.GetValue(st));
+        }
+
         SetField(panel, "console", con);
         SetField(panel, "chips", chips);
         SetField(panel, "metrics", metrics);
         SetField(panel, "highCommand", staff);
         SetField(panel, "settings", new CommandSettings());
-        SetField(panel, "command", new CommandManager());
-        if (pageIndex == 2) SetField(panel, "theaterWar", war ?? new WarStub());
+        SetField(panel, "command", manager);
+        if (populated)
+        {
+            var overlay = new ComMapOverlay();
+            FillNodes(overlay);
+            SetField(panel, "overlay", overlay);
+        }
+        if (pageIndex == 2) SetField(panel, "theaterWar", war ?? new WarStub(WarMode.Basic));
 
         if (pageIndex == 0) Call(panel, "BuildSaPage", con.Page(0));
         else if (pageIndex == 1)
@@ -259,9 +398,17 @@ public static class CocUnityCheck
         if (hostile) SetField(panel, "cocShowHostile", true);
         if (selectedId >= 0) SetField(panel, "cocSelectedId", selectedId);
 
-        // Refresh() fills the shared chrome (chips, metrics, footer) and routes through the
-        // page's own refresh, exactly as the panel does on its own tick.
+        // Content binds AFTER Finish(), exactly as the game's 4 Hz refresh does, and the ticker advances
+        // the way the game's does (offline, Unity time does not advance, so TickNow stands in).
         Call(panel, "Refresh");
+        if (populated && pageIndex == 0)
+        {
+            // Tiles fed by Intel / the HQ sensor net cannot be reached offline; feed them the way the
+            // panel would with a ready picture so the populated render shows the real figures.
+            ((StrTile)GetFieldValue(panel, "radarTile")).Set("3", "FRIENDLY EMITTERS ON NET", AvState.Info);
+            ((StrTile)GetFieldValue(panel, "adTile")).Set("57 SITES", "11 RADAR (45 PRE-WAR, 1 STALE)", AvState.Info);
+        }
+        for (int i = 0; i < 4; i++) con.Ticker.TickNow();
         return canvasObject;
     }
 
@@ -314,6 +461,8 @@ public static class CocUnityCheck
         Canvas canvas = window.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.WorldSpace;
         canvas.GetComponent<CanvasScaler>().enabled = false;
+        canvas.transform.localScale = Vector3.one;
+        canvas.transform.position = Vector3.zero;
         ((RectTransform)canvas.transform).sizeDelta = new Vector2(width, height);
         Capture(window.gameObject, height, file, width, canvas.transform.position);
     }
@@ -323,6 +472,119 @@ public static class CocUnityCheck
         FieldInfo info = target.GetType().GetField(field, Private);
         Check(info != null, "missing field " + field);
         return info.GetValue(target);
+    }
+
+    // ------------------------------------------------------------------ gate
+
+    private static readonly List<string> Failures = new List<string>();
+    private static int checkedTexts;
+
+    /// <summary>Console gate: overflow, floor, gutter, contrast and part overlap on the page in view.</summary>
+    private static void Gate(GameObject canvas, string where, int page)
+    {
+        StrMfdPanel panel = canvas.GetComponentInChildren<StrMfdPanel>();
+        var con = (AvConsole)GetFieldValue(panel, "console");
+        float gutterLeft = AvTokens.PanelWidth - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
+        GateTexts(con.Root, where, gutterLeft, con.Root);
+        PartOverlap(con.Page(page).Content, where);
+        foreach (Transform s in con.Root.GetComponentsInChildren<Transform>(true))
+            if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
+                Failures.Add(where + ": section without icon " + s.name);
+    }
+
+    private static void GateWindow(StrPlanningWindow room, string where)
+    {
+        var window = (AvWindow)GetFieldValue(room, "window");
+        GateTexts(window.Root, where, float.MaxValue, window.Root);
+        PartOverlap(window.Body.Content, where);
+        RectTransform root = window.Root;
+        if (root.rect.width > 1880.5f || root.rect.height > 1040.5f)
+            Failures.Add(where + ": window " + root.rect.size + " does not fit the 1080p reference screen");
+    }
+
+    private static void GateTexts(RectTransform scope, string where, float gutterLeft, RectTransform space)
+    {
+        Color ground = AvStyleHost.FuiColor("ground", Color.black);
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (!t.isActiveAndEnabled || t.text.Length == 0 || !CanvasOn(t)) continue;
+            checkedTexts++;
+            t.ForceMeshUpdate();
+            Rect r = t.rectTransform.rect;
+            bool icon = t.name.StartsWith("Icon");
+            if (!icon)
+            {
+                Bounds b = t.textBounds;
+                if (b.size.x > r.width + 1.5f)
+                    Failures.Add(where + ": overflows width (" + b.size.x.ToString("0") + " > " + r.width.ToString("0") + ") '" + t.text + "'");
+                if (b.size.y > r.height + 1.5f)
+                    Failures.Add(where + ": overflows height (" + b.size.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
+                if (t.fontSize < AvTypeScale.Floor - 0.01f && t.name != "Number")
+                    Failures.Add(where + ": below the 11 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
+            }
+            if (gutterLeft < float.MaxValue && t.GetComponentInParent<ScrollRect>() != null)
+            {
+                var corners = new Vector3[4];
+                t.rectTransform.GetWorldCorners(corners);
+                float right = space.InverseTransformPoint(corners[2]).x;
+                if (right > gutterLeft) Failures.Add(where + ": enters the gutter (" + right.ToString("0") + ") '" + t.text + "'");
+            }
+            if (!icon && t.color.a > 0.5f)
+            {
+                Color back = BackgroundOf(t, ground);
+                float contrast = Rgba.Contrast(t.color.ToRgba().WithAlpha(1f).Over(back.ToRgba()), back.ToRgba());
+                if (contrast < 4.5f) Failures.Add(where + ": contrast " + contrast.ToString("0.00") + " for '" + t.text + "' (" + t.name + ")");
+            }
+        }
+    }
+
+    /// <summary>No two active top-level parts of a page may intersect.</summary>
+    private static void PartOverlap(RectTransform content, string where)
+    {
+        var rects = new List<RectTransform>();
+        foreach (Transform child in content)
+            if (child.gameObject.activeSelf) rects.Add((RectTransform)child);
+        for (int i = 0; i < rects.Count; i++)
+            for (int j = i + 1; j < rects.Count; j++)
+            {
+                RectTransform a = rects[i], b = rects[j];
+                float ax0 = a.anchoredPosition.x, ax1 = ax0 + a.rect.width, ay0 = -a.anchoredPosition.y, ay1 = ay0 + a.rect.height;
+                float bx0 = b.anchoredPosition.x, bx1 = bx0 + b.rect.width, by0 = -b.anchoredPosition.y, by1 = by0 + b.rect.height;
+                bool overlap = ax0 < bx1 - 0.5f && bx0 < ax1 - 0.5f && ay0 < by1 - 0.5f && by0 < ay1 - 0.5f;
+                if (overlap && a.rect.height > 0.5f && b.rect.height > 0.5f)
+                    Failures.Add(where + ": part '" + a.name + "' overlaps '" + b.name + "'");
+            }
+    }
+
+    private static bool CanvasOn(TMP_Text t)
+    {
+        for (Transform x = t.transform; x != null; x = x.parent)
+        {
+            var c = x.GetComponent<Canvas>();
+            if (c != null && !c.enabled) return false;
+        }
+        return true;
+    }
+
+    // The nearest opaque-ish fill behind a label: an AvFrame sibling/ancestor fill, else an Image, else ground.
+    private static Color BackgroundOf(TMP_Text t, Color ground)
+    {
+        for (Transform x = t.transform.parent; x != null; x = x.parent)
+        {
+            foreach (Transform child in x)
+            {
+                var f = child.GetComponent<AvFrame>();
+                if (f != null && f.enabled && f.Fill && f.FillColor.a > 0.35f && child != t.transform)
+                {
+                    Rgba o = f.FillColor.ToRgba().Over(ground.ToRgba());
+                    return new Color(o.R, o.G, o.B);
+                }
+            }
+            var img = x.GetComponent<Image>();
+            if (img != null && img.enabled && img.color.a > 0.35f)
+                return new Color(img.color.r, img.color.g, img.color.b);
+        }
+        return ground;
     }
 
     // ---------------------------------------------------------------------- staff
