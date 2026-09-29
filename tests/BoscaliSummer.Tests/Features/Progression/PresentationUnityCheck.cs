@@ -57,7 +57,7 @@ public static class PresentationUnityCheck
                 foreach (float height in new[] { 420f, 596f, 896f })
                 {
                     RenderSqd(height);
-                    if (!sqdOnly && height >= 896f) RenderArchive();
+                    // The EVN field archive has its own harness (Features/Events/Run-EventsUnityCheck.ps1).
                 }
             }
             if (!sqdOnly) RenderEventAlert();
@@ -455,39 +455,6 @@ public static class PresentationUnityCheck
         Capture(canvas, 480f, height, prefix + "-bottom.png");
     }
 
-    private static void RenderArchive()
-    {
-        object archive = CallStatic(TypeOf("BoscaliSummer.Features.Events.Presentation.EventDeskArchive"), "Create");
-        Call(archive, "Show", 2);
-        GameObject archiveObject = ((Component)archive).gameObject;
-        PrepareWorldCanvas(archiveObject.GetComponent<Canvas>(), 1920f, 1080f);
-        archiveObject.GetComponent<CanvasScaler>().enabled = false;
-        RectTransform archiveRoot = (RectTransform)archiveObject.transform;
-        archiveRoot.pivot = new Vector2(0f, 1f);
-        archiveRoot.position = new Vector3(-960f, 540f, 0f);
-        Set(archive, "fitted", Vector2.zero);
-        Call(archive, "Fit");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-world.png");
-        Call(archive, "SelectSection", 1);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-events.png");
-        Call(archive, "SelectSection", 0);
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-empty.png");
-        var aircraftDefinition = ScriptableObject.CreateInstance<AircraftDefinition>();
-        aircraftDefinition.unitName = "MODEL PREVIEW FIXTURE";
-        aircraftDefinition.code = "QA-1";
-        aircraftDefinition.description = "Mesh only. No aircraft simulation is created in the field archive.";
-        GameObject prefab = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        prefab.name = "PreviewMeshFixture";
-        aircraftDefinition.unitPrefab = prefab;
-        ((List<AircraftDefinition>)Get(archive, "aircraft")).Add(aircraftDefinition);
-        Call(archive, "SelectSection", 0);
-        Check(Get(archive, "preview") != null, "EVN aircraft preview must create a mesh-only viewer.");
-        Capture(archiveObject, 1920f, 1080f, "evn-archive-aircraft-model.png");
-        Call(archive, "Close");
-        Object.DestroyImmediate(archiveObject);
-        Object.DestroyImmediate(prefab);
-        Object.DestroyImmediate(aircraftDefinition);
-    }
 
     private static void RenderEventAlert()
     {
@@ -542,14 +509,13 @@ public static class PresentationUnityCheck
         Sprite poster = (Sprite)cache.GetMethod("Get", All).Invoke(null,
             new object[] { "ceasefire_ultimatum", "tier_super" });
         Check(poster != null, "The superevent dispatch must load its embedded poster.");
-        Image art = (Image)Get(alert, "art"); art.sprite = poster; art.enabled = poster != null;
-        Image compactArt = (Image)Get(alert, "compactArt"); compactArt.sprite = poster;
-        compactArt.enabled = poster != null;
-        Component glyph = (Component)Get(alert, "glyph"); glyph.gameObject.SetActive(poster == null);
-        Component compactGlyph = (Component)Get(alert, "compactGlyph");
-        compactGlyph.gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "stripes")).gameObject.SetActive(poster == null);
-        ((Image)Get(alert, "compactStripes")).gameObject.SetActive(poster == null);
+        // The alert draws its art through two EventPlateArt plates (poster or category glyph).
+        foreach (string plateField in new[] { "plate", "compactPlate" })
+        {
+            object plate = Get(alert, plateField);
+            Check(plate != null, "The superevent alert must build its " + plateField + ".");
+            plate.GetType().GetMethod("Bind", All).Invoke(plate, new object[] { poster, NOAvionics.AvIcon.AlertTriangle, Color.white });
+        }
         TMP_Text title = (TMP_Text)Get(alert, "title");
         TMP_Text next = (TMP_Text)Get(alert, "nextOrder");
         TMP_Text flavor = (TMP_Text)Get(alert, "flavor");
