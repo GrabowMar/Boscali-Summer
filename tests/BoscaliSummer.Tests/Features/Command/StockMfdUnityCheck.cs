@@ -157,7 +157,7 @@ public static class StockMfdUnityCheck
             Grid(presenter, "sizes", new[] { "SMALL 60%", "MEDIUM 80%", "LARGE 100%" }, new[] { "COMPACT", "BALANCED", "FULL SIZE" }, true);
             Note(presenter, "overlayNote", "Sector control follows real ground presence; the front is its zero contour.");
             Note(presenter, "detailSummary", "UNIT INFO is selected. Hover a map unit to inspect it.");
-            Note(presenter, "previewCaption", "MEDIUM 80% \u2022 Actual icons vary by unit; preview is illustrative.");
+            Note(presenter, "previewCaption", "MEDIUM 80% \u2022 Frame shape marks the side; jets keep the game's own silhouette.");
             foreach (object tile in (Array)Field(presenter, "previewTiles")) Call(tile, "SetState", true, .8f);
             Chips(presenter, "LAYERS 8/10", "TOOLTIP INFO", "MEDIUM 80%");
             var metrics = (AvMetric[])Field(presenter, "metrics");

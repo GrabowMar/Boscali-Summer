@@ -71,6 +71,7 @@ public sealed class DynamicMap : MonoBehaviour
 {
     public static bool mapMaximized = true;
     public GameObject mapImage;
+    public GameObject iconLayer;
     public UnityEngine.UI.Image mapBackground;
     public Transform mapScaleCenter;
     public Transform mapScaleProxy;
@@ -105,8 +106,8 @@ public sealed class DynamicMap : MonoBehaviour
             if (icon is UnitMapIcon track && track.unit == unit && !selectedIcons.Contains(icon))
                 selectedIcons.Add(icon);
     }
-    public static FactionMode GetFactionMode(FactionHQ hq) =>
-        hq != null && hq.Friendly ? FactionMode.Friendly : FactionMode.Enemy;
+    public static FactionMode GetFactionMode(FactionHQ hq = null, bool checkNoFactionBeforeSpectator = false) =>
+        hq == null ? FactionMode.NoFaction : hq.Friendly ? FactionMode.Friendly : FactionMode.Enemy;
     public bool IsCursorInMapRectangle() => true;
     private void JumptoTarget() { }
 }
@@ -119,16 +120,21 @@ public class MapIcon : MonoBehaviour
     public UnityEngine.UI.Image iconImage;
     protected Vector3 globalPosition;
 }
-public enum FactionMode { Friendly, Enemy }
+public enum FactionMode { NoFaction = 0, Spectator = 1, Friendly = 2, Enemy = 4 }
+public sealed class MapOptions : MonoBehaviour { public float iconSize = .8f; }
 public sealed class FactionHQ { public bool Friendly; }
 public sealed class TargetListSelector { public bool CheckExclusions(Unit unit) => false; }
 public class Unit
 {
-    public TestDefinition definition;
+    public UnitDefinition definition;
     public bool disabled;
     public FactionHQ NetworkHQ;
 }
 public sealed class Aircraft : Unit { }
+public sealed class Ship : Unit { }
+public sealed class GroundVehicle : Unit { }
+public enum VehicleType { TRUCK, UGV, LCV, AFV, MBT, ART, AAA, IR_SAM, R_SAM, RDR }
+public class VehicleDefinition : UnitDefinition { public VehicleType vehicleType; }
 public sealed class Missile : Unit { }
 public static class GameManager
 {
@@ -146,7 +152,8 @@ public sealed class UnitMapIcon : MapIcon
     public string GetInfoText() => "TEST TRACK";
 }
 public sealed class TestUnit : Unit { }
-public sealed class TestDefinition { public bool mapOrient; }
+public class UnitDefinition { public bool mapOrient; public float mapIconSize = 1f; public Sprite mapIcon; }
+public sealed class TestDefinition : UnitDefinition { }
 public sealed class AirbaseMapIcon : MapIcon { public void UpdateIcon(float factor, float inverse, Transform parent, bool large) { } }
 public sealed class ObjectiveMarker : MonoBehaviour { public void UpdateMarker() { } }
 public sealed class TargetMarker : MonoBehaviour { public UnitMapIcon Icon; private void Update() { } }
@@ -168,6 +175,7 @@ public sealed class TestEntry<T> { public T Value; public TestEntry(T value) { V
 public sealed class TestCommandSettings
 {
     public TestEntry<bool> MapRelief3D = new TestEntry<bool>(true);
+    public TestEntry<bool> MapSymbology = new TestEntry<bool>(true);
     public TestEntry<bool> MapTerrainImage = new TestEntry<bool>(true);
     public TestEntry<bool> FrontlinesOverlay = new TestEntry<bool>(true);
     public TestEntry<bool> ThreatHeat = new TestEntry<bool>(true);

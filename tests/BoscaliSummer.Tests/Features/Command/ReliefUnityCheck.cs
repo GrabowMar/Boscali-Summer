@@ -65,6 +65,7 @@ public static class ReliefUnityCheck
             threat.texture = MakeThreat();
             var map = new GameObject("DynamicMap", typeof(DynamicMap)).GetComponent<DynamicMap>();
             map.mapImage = image;
+            map.iconLayer = image;
             map.mapBackground = background.GetComponent<Image>();
             map.mapScaleCenter = scaleCenter.transform;
             map.mapScaleProxy = scaleProxy.transform;
@@ -281,6 +282,7 @@ public static class ReliefUnityCheck
                 background.transform.Find("NOAvionics.ContactCount") == null)
                 throw new Exception("Dense contacts did not collapse to one selectable glyph and a count.");
             Airbase(image.transform, -18000f, 17000f);
+            CheckSymbology(image.transform, map);
             Marker(image.transform, ((RectTransform)image.transform).rect, 22000f, 14000f,
                 new Color(0.15f, 0.67f, 0.98f), 15f);
             Marker(image.transform, ((RectTransform)image.transform).rect, 15000f, -11000f,
@@ -416,6 +418,62 @@ public static class ReliefUnityCheck
         if (root.transform.Find("NOAvionics.MapStem") == null ||
             root.transform.Find("NOAvionics.MapFoot") == null)
             throw new Exception("Airbase did not receive a terrain anchor.");
+    }
+
+    private static UnitMapIcon Plated(Transform parent, DynamicMap map, float x, float z, Unit unit, bool friendly)
+    {
+        UnitMapIcon icon = Track(parent, map, x, z);
+        unit.NetworkHQ = new FactionHQ { Friendly = friendly };
+        unit.definition = unit.definition ?? new TestDefinition();
+        icon.unit = unit;
+        icon.iconImage.color = friendly ? new Color(.20f, .60f, 1f) : new Color(1f, .28f, .24f);
+        MapSymbology.Apply(icon, true);
+        MfdTerrainRelief.ProjectIcon(icon, map.mapDisplayFactor);
+        return icon;
+    }
+
+    /// <summary>Framed contacts: glyph per ground class, plate under every glyph, shape by allegiance, sized on the grid.</summary>
+    private static void CheckSymbology(Transform parent, DynamicMap map)
+    {
+        var tank = new GroundVehicle { definition = new VehicleDefinition { vehicleType = VehicleType.MBT } };
+        var sam = new GroundVehicle { definition = new VehicleDefinition { vehicleType = VehicleType.R_SAM } };
+        var truck = new GroundVehicle { definition = new VehicleDefinition { vehicleType = VehicleType.TRUCK } };
+        UnitMapIcon tankIcon = Plated(parent, map, -3000f, -6000f, tank, true);
+        UnitMapIcon samIcon = Plated(parent, map, 3000f, -6000f, sam, false);
+        UnitMapIcon truckIcon = Plated(parent, map, 9000f, -6000f, truck, false);
+        UnitMapIcon shipIcon = Plated(parent, map, -9000f, -6000f, new Ship { definition = new TestDefinition { mapOrient = true } }, true);
+        UnitMapIcon jetIcon = Plated(parent, map, -15000f, -6000f, new Aircraft { definition = new TestDefinition { mapOrient = true } }, false);
+        foreach (UnitMapIcon icon in new[] { tankIcon, samIcon, truckIcon, shipIcon, jetIcon })
+        {
+            Image plate = parent.Find("NOAvionics.MapSymbols")?.GetComponentInChildren<Image>();
+            if (plate == null) throw new Exception("Framed contacts got no plate layer.");
+        }
+        if (tankIcon.iconImage.sprite == null || tankIcon.iconImage.sprite == samIcon.iconImage.sprite ||
+            samIcon.iconImage.sprite == truckIcon.iconImage.sprite)
+            throw new Exception("Ground classes did not get distinct glyphs.");
+        Transform layer = parent.Find("NOAvionics.MapSymbols");
+        if (layer == null || layer.childCount < 5) throw new Exception("Expected one plate per framed contact.");
+        for (int i = 0; i < layer.childCount; i++)
+        {
+            Image plate = layer.GetChild(i).GetComponent<Image>();
+            if (!plate.enabled || plate.sprite == null) throw new Exception("A framed contact has no visible plate.");
+        }
+        Transform glyph = tankIcon.iconImage.transform;
+        float glyphSize = Mathf.Max(glyph.lossyScale.x, glyph.lossyScale.y) * glyph.GetComponent<RectTransform>().rect.width;
+        if (glyphSize < 9f || glyphSize > 22f) throw new Exception("Glyph size off the symbol grid: " + glyphSize);
+        MapSymbology.Sync(tankIcon);
+        Image tankPlate = null;
+        foreach (Image candidate in layer.GetComponentsInChildren<Image>())
+            if (Vector3.Distance(candidate.transform.position, glyph.position) < .05f) tankPlate = candidate;
+        if (tankPlate == null) throw new Exception("The plate does not sit under its glyph.");
+        if (tankPlate.sprite == samIcon.iconImage.sprite) throw new Exception("Plate and glyph share a sprite.");
+        Plugin.Settings.Command.MapSymbology.Value = false;
+        MapSymbology.Apply(tankIcon, true);
+        if (tankPlate.enabled) throw new Exception("Turning symbology off left the plate up.");
+        Plugin.Settings.Command.MapSymbology.Value = true;
+        MapSymbology.Apply(tankIcon, true);
+        MfdTerrainRelief.ProjectIcon(tankIcon, map.mapDisplayFactor);
+        if (!tankPlate.enabled) throw new Exception("Turning symbology back on did not restore the plate.");
     }
 
     private static UnitMapIcon Track(Transform parent, DynamicMap map, float x, float z)
