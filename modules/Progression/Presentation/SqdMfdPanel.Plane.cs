@@ -13,14 +13,18 @@ namespace BoscaliSummer.Features.Progression.Presentation
     {
         private const int PlaneFaultRows = 4;
         private const int PlaneStoreRows = 4;
+        private const int SystemGear = 0, SystemAssist = 1, SystemCountermeasure = 2, SystemWarning = 3;
         private readonly AvStatTile[] planeFlight = new AvStatTile[6];
-        private readonly AvKeyValue[] planeSystems = new AvKeyValue[6];
-        private readonly AvRow[] planeStores = new AvRow[PlaneStoreRows];
-        private readonly AvRow[] planeFaults = new AvRow[PlaneFaultRows];
+        private readonly SqdRosterRow[] planeStores = new SqdRosterRow[PlaneStoreRows];
+        private readonly SqdRosterRow[] planeFaults = new SqdRosterRow[PlaneFaultRows];
         private readonly UnitPart[] planeWorstParts = new UnitPart[PlaneFaultRows];
-        private AvRow planeIdentity;
-        private AvRow planeSelected;
-        private AvTextBlock planeStoreOverflow;
+        private readonly List<AvPart> planeLiveParts = new List<AvPart>(32);
+        private SqdStatGrid planeSystems;
+        private PlaneHero planeIdentity;
+        private SqdEmptyCard planeEmpty;
+        private AvSection planeStoresSection;
+        private AvButtons planeStorePager;
+        private SqdRosterRow planeSelected;
         private AvControl planePreviousStores;
         private AvControl planeNextStores;
         private int planeStorePage;
@@ -31,13 +35,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private AvControl planeApplyTune;
         private Aircraft planeTuneAircraft;
         private int planeTuneMode = -1;
+        private bool planeLive;
         private string planeStatus = "No aircraft assigned.";
 
         private void ResetPlanePage()
         {
             planeIdentity = null;
             planeSelected = null;
-            planeStoreOverflow = null;
+            planeEmpty = null;
+            planeSystems = null;
+            planeStoresSection = null;
+            planeStorePager = null;
             planeDamage?.Clear();
             planeDamage = null;
             planeTuneName = null;
@@ -46,26 +54,42 @@ namespace BoscaliSummer.Features.Progression.Presentation
             planeApplyTune = null;
             planeTuneAircraft = null;
             planeTuneMode = -1;
+            planeLive = false;
             planeStatus = "No aircraft assigned.";
             planePreviousStores = planeNextStores = null;
             planeStorePage = 0;
+            planeLiveParts.Clear();
             Array.Clear(planeFlight, 0, planeFlight.Length);
-            Array.Clear(planeSystems, 0, planeSystems.Length);
             Array.Clear(planeStores, 0, planeStores.Length);
             Array.Clear(planeFaults, 0, planeFaults.Length);
             Array.Clear(planeWorstParts, 0, planeWorstParts.Length);
         }
 
+        private T Live<T>(T part) where T : AvPart { planeLiveParts.Add(part); return part; }
+
+        /// <summary>
+        /// Without an aircraft the page is one compact card, not a wall of empty readouts: every live part
+        /// collapses out of the flow and the empty card takes its place, and back again on entering one.
+        /// </summary>
+        private void SetPlaneLive(bool live)
+        {
+            if (planeEmpty == null || (live == planeLive && planeEmpty.Shown == !live)) return;
+            planeLive = live;
+            planeEmpty.SetShown(!live);
+            for (int i = 0; i < planeLiveParts.Count; i++) planeLiveParts[i].SetShown(live);
+        }
+
         private void BuildPlanePage(AvFlow p)
         {
-            p.Section(AvIcon.Plane, "AIRCRAFT DOSSIER", "OWN AIRCRAFT · LIVE");
-            planeIdentity = p.Add(new AvRow(p.Content));
-            planeIdentity.Set("NO AIRCRAFT", "Pilot not in an aircraft.", null, AvState.Inert);
+            Live(p.Section(AvIcon.Plane, "AIRCRAFT DOSSIER", "OWN AIRCRAFT · LIVE"));
+            planeEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Plane, "NO AIRCRAFT",
+                "Enter or be assigned an aircraft to open its live dossier: flight data, systems, stores and damage."));
+            planeIdentity = p.Add(Live(new PlaneHero(p.Content)));
 
-            p.Section(AvIcon.Gauge, "AIRFRAME STATUS", "NATIVE HUD DAMAGE MODEL");
-            planeDamage = new PlaneDamagePart(p.Content);
+            Live(p.Section(AvIcon.Gauge, "AIRFRAME STATUS", "NATIVE HUD DAMAGE MODEL"));
+            planeDamage = Live(new PlaneDamagePart(p.Content));
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
-            AvCard engineCard = new AvCard(p.Content, console.Ticker, half, "ENGINE MAP");
+            AvCard engineCard = Live(new AvCard(p.Content, console.Ticker, half, "ENGINE MAP"));
             planeTuneName = engineCard.Flow.Add(new AvTextBlock(engineCard.Flow.Content, AvTextRole.DataStrong));
             planeTuneName.Set("STOCK");
             planeTuneSegmented = engineCard.Flow.Add(new AvSegmented(engineCard.Flow.Content, "MAP",
@@ -78,22 +102,25 @@ namespace BoscaliSummer.Features.Progression.Presentation
             planeTuneState.Set("Enter an aircraft to select an engine map.");
             p.Row(planeDamage, engineCard);
 
-            p.Section(AvIcon.ChartLine, "FLIGHT DATA", "NATIVE UNITS");
+            Live(p.Section(AvIcon.ChartLine, "FLIGHT DATA", "NATIVE UNITS"));
             string[] flightKeys = { "TRUE AIRSPEED", "GROUND SPEED", "ALTITUDE MSL", "VERTICAL SPEED", "HEADING", "G LOAD" };
-            for (int i = 0; i < planeFlight.Length; i++) planeFlight[i] = new AvStatTile(p.Content, flightKeys[i]);
+            for (int i = 0; i < planeFlight.Length; i++) planeFlight[i] = Live(new AvStatTile(p.Content, flightKeys[i]));
             p.Row(planeFlight[0], planeFlight[1], planeFlight[2]);
             p.Row(planeFlight[3], planeFlight[4], planeFlight[5]);
 
-            p.Section(AvIcon.Settings, "AIRCRAFT SYSTEMS", "READ ONLY");
-            string[] systemKeys = { "FUEL", "THROTTLE", "LANDING GEAR", "FLIGHT ASSIST", "COUNTERMEASURE", "MISSILE WARNING" };
-            for (int i = 0; i < planeSystems.Length; i++) planeSystems[i] = new AvKeyValue(p.Content, systemKeys[i]);
-            AvCellGrid systemsGrid = p.Grid(2);
-            for (int i = 0; i < planeSystems.Length; i++) systemsGrid.Add(planeSystems[i]);
+            Live(p.Section(AvIcon.Settings, "AIRCRAFT SYSTEMS", "READ ONLY"));
+            planeSystems = p.Add(Live(new SqdStatGrid(p.Content)));
+            planeSystems.Add("LANDING GEAR");
+            planeSystems.Add("FLIGHT ASSIST");
+            planeSystems.Add("COUNTERMEASURE");
+            planeSystems.Add("MISSILE WARNING");
 
-            p.Section(AvIcon.Stack2, "STORES", "CURRENT LOADOUT");
-            planeSelected = p.Add(new AvRow(p.Content));
-            planeSelected.Set("NO STATION SELECTED", null, null, AvState.Inert);
-            AvButtons storePager = p.Buttons(
+            planeStoresSection = Live(p.Section(AvIcon.Stack2, "STORES", "CURRENT LOADOUT"));
+            planeSelected = p.Add(Live(new SqdRosterRow(p.Content)));
+            planeSelected.Set("NO STATION SELECTED", null, null, null, AvState.Inert);
+            for (int i = 0; i < PlaneStoreRows; i++) planeStores[i] = p.Add(Live(new SqdRosterRow(p.Content)));
+            planeStorePager = p.Add(Live(new AvButtons(p.Content, new[]
+            {
                 new AvControl.Spec("PREVIOUS", () => { planeStorePage = Math.Max(0, planeStorePage - 1); nextRefresh = 0f; },
                     AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec("NEXT", () =>
@@ -101,20 +128,22 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     int count = CurrentPlaneStoreCount();
                     if ((planeStorePage + 1) * PlaneStoreRows < count) planeStorePage++;
                     nextRefresh = 0f;
-                }, AvButtonStyle.Quiet, AvIcon.ChevronRight));
-            planePreviousStores = storePager.Controls[0];
-            planeNextStores = storePager.Controls[1];
+                }, AvButtonStyle.Quiet, AvIcon.ChevronRight)
+            })));
+            planePreviousStores = planeStorePager.Controls[0];
+            planeNextStores = planeStorePager.Controls[1];
             planePreviousStores.Help = "Show earlier weapon stations.";
             planeNextStores.Help = "Show later weapon stations.";
-            planeStoreOverflow = p.Add(new AvTextBlock(p.Content, AvTextRole.Label));
-            planeStoreOverflow.Set("NO STATIONS");
-            for (int i = 0; i < PlaneStoreRows; i++) planeStores[i] = p.Add(new AvRow(p.Content));
 
-            p.Section(AvIcon.AlertTriangle, "AIRFRAME INSPECTION", "WORST FOUR PARTS");
-            for (int i = 0; i < PlaneFaultRows; i++) planeFaults[i] = p.Add(new AvRow(p.Content));
+            Live(p.Section(AvIcon.AlertTriangle, "AIRFRAME INSPECTION", "WORST FOUR PARTS"));
+            for (int i = 0; i < PlaneFaultRows; i++) planeFaults[i] = p.Add(Live(new SqdRosterRow(p.Content)));
 
-            AvTextBlock note = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall));
+            AvTextBlock note = p.Add(Live(new AvTextBlock(p.Content, AvTextRole.ProseSmall)));
             note.Set("Damage reflects the aircraft's measured parts. Missing parts read as unavailable.");
+
+            // Start on the empty card: there is no aircraft until the first refresh proves otherwise.
+            planeLive = true;
+            SetPlaneLive(false);
         }
 
         private void RefreshPlanePage()
@@ -125,32 +154,30 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 aircraft = local.Aircraft;
             if (aircraft == null)
             {
-                planeIdentity.Set("NO AIRCRAFT", "Pilot not in an aircraft.", null, AvState.Inert);
                 planeStatus = "Assign or enter an aircraft to see its live dossier.";
-                for (int i = 0; i < planeFlight.Length; i++) planeFlight[i].Set(null);
-                for (int i = 0; i < planeSystems.Length; i++) planeSystems[i].Set(null);
-                for (int i = 0; i < planeStores.Length; i++) planeStores[i].Set(null, null, null, AvState.Inert);
-                planeStoreOverflow.Set("");
                 planeStorePage = 0;
                 planePreviousStores.Interactable = false;
                 planeNextStores.Interactable = false;
-                planeSelected.Set("NO STATION SELECTED", null, null, AvState.Inert);
                 planeDamage.Clear();
                 planeTuneAircraft = null;
                 planeTuneMode = -1;
                 planeTuneName.Set("NO AIRCRAFT");
                 planeTuneState.Set("Enter an aircraft to select an engine map.");
                 planeApplyTune.Interactable = false;
-                for (int i = 0; i < PlaneFaultRows; i++) PaintPlanePart(i, null);
+                SetPlaneLive(false);
                 return;
             }
+            SetPlaneLive(true);
 
             string model = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             bool disabled = aircraft.disabled;
-            planeIdentity.Set(string.IsNullOrEmpty(model) ? "AIRCRAFT" : model.ToUpperInvariant(), null,
+            float fuel = Mathf.Clamp01(aircraft.fuelLevel);
+            ControlInputs inputs = aircraft.GetInputs();
+            planeIdentity.Set(string.IsNullOrEmpty(model) ? "AIRCRAFT" : model.ToUpperInvariant(),
                 disabled ? "DISABLED" : aircraft.HasEjected() ? "PILOT EJECTED"
                     : aircraft.IsLanded() ? "ON GROUND" : "AIRBORNE",
-                disabled ? AvState.Danger : AvState.Ready);
+                disabled ? AvState.Danger : aircraft.IsLanded() ? AvState.Info : AvState.Ready,
+                fuel, inputs != null ? Mathf.Clamp01(inputs.throttle) : (float?)null);
             planeDamage.Refresh(aircraft);
             RefreshPlaneTune(aircraft);
 
@@ -164,17 +191,13 @@ namespace BoscaliSummer.Features.Progression.Presentation
             planeFlight[4].Set(AvNum.Thousands(Mathf.RoundToInt(Mathf.Repeat(aircraft.transform.eulerAngles.y, 360f))) + "°");
             planeFlight[5].Set(AvNum.Fixed(aircraft.gForce, 1) + " G");
 
-            float fuel = Mathf.Clamp01(aircraft.fuelLevel);
-            planeSystems[0].Set(AvNum.Percent(fuel));
-            ControlInputs inputs = aircraft.GetInputs();
-            planeSystems[1].Set(inputs != null ? AvNum.Percent(Mathf.Clamp01(inputs.throttle)) : null);
-            planeSystems[2].Set(aircraft.gearDeployed ? "DOWN" : "UP");
-            planeSystems[3].Set(aircraft.flightAssist ? "ON" : "OFF");
+            planeSystems.Set(SystemGear, aircraft.gearDeployed ? "DOWN" : "UP");
+            planeSystems.Set(SystemAssist, aircraft.flightAssist ? "ON" : "OFF");
             Countermeasure countermeasure = aircraft.countermeasureManager?.GetActiveCountermeasure();
-            planeSystems[4].Set(countermeasure != null ? AvNum.Thousands(countermeasure.ammo) + " READY" : "NONE");
+            planeSystems.Set(SystemCountermeasure, countermeasure != null ? AvNum.Thousands(countermeasure.ammo) + " READY" : "NONE");
             MissileWarning warning = aircraft.GetMissileWarningSystem();
             int inbound = warning?.knownMissiles != null ? warning.knownMissiles.Count : 0;
-            planeSystems[5].Set(inbound > 0 ? AvNum.Thousands(inbound) + " TRACKED" : "CLEAR",
+            planeSystems.Set(SystemWarning, inbound > 0 ? AvNum.Thousands(inbound) + " TRACKED" : "CLEAR",
                 inbound > 0 ? AvState.Danger : AvState.Ready);
 
             WeaponManager manager = aircraft.weaponManager;
@@ -182,7 +205,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             WeaponInfo selectedInfo = selected?.WeaponInfo;
             planeSelected.Set(
                 selectedInfo != null ? (string.IsNullOrEmpty(selectedInfo.shortName) ? selectedInfo.weaponName : selectedInfo.shortName) : "NO STATION SELECTED",
-                null, selectedInfo != null ? selected.GetAmmoReadout() : null,
+                selectedInfo != null ? "SELECTED STATION" : null, selectedInfo != null ? selected.GetAmmoReadout() : null, null,
                 selectedInfo != null ? AvState.Info : AvState.Inert);
             List<WeaponStation> stations = aircraft.weaponStations;
             int count = stations != null ? stations.Count : 0;
@@ -194,12 +217,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 WeaponStation station = index < count ? stations[index] : null;
                 WeaponInfo info = station?.WeaponInfo;
                 string name = info != null ? (string.IsNullOrEmpty(info.shortName) ? info.weaponName : info.shortName) : "EMPTY";
-                planeStores[i].Set(index < count ? AvNum.Thousands(index + 1) + "  " + name : null,
-                    null, index < count ? station.GetAmmoReadout() + (station == selected ? "  SELECTED" : "") : null,
-                    station == selected ? AvState.Info : AvState.Inert);
+                planeStores[i].SetShown(index < count);
+                if (index < count)
+                    planeStores[i].Set(AvNum.Thousands(index + 1) + "  " + name, null, station.GetAmmoReadout(),
+                        station == selected ? "SELECTED" : null, station == selected ? AvState.Info : AvState.Inert);
             }
-            planeStoreOverflow.Set(count == 0 ? "NO STATIONS"
+            planeStoresSection.SetCaption(count == 0 ? "NO STATIONS"
                 : AvNum.Thousands(first + 1) + "–" + AvNum.Thousands(Mathf.Min(first + PlaneStoreRows, count)) + " OF " + AvNum.Thousands(count));
+            planeStorePager.SetShown(count > PlaneStoreRows);
             planePreviousStores.Interactable = planeStorePage > 0;
             planeNextStores.Interactable = first + PlaneStoreRows < count;
 
@@ -239,18 +264,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void PaintPlanePart(int row, UnitPart part)
         {
-            if (part == null)
-            {
-                planeFaults[row].Set("NO MEASURED PART", null, null, AvState.Inert);
-                return;
-            }
+            planeFaults[row].SetShown(part != null);
+            if (part == null) return;
             float condition = PartCondition(part);
             string name = part.gameObject.name.Replace('_', ' ').Replace('-', ' ').ToUpperInvariant();
             if (name.Length > 28) name = name.Substring(0, 28);
             bool detached = part.IsDetached();
             AvState state = detached || condition < .25f ? AvState.Danger
                 : condition < .995f ? AvState.Caution : AvState.Ready;
-            planeFaults[row].Set(name, null, detached ? "LOST" : AvNum.Percent(condition), state);
+            planeFaults[row].Set(name, null, detached ? "LOST" : AvNum.Percent(condition), null, state);
+            planeFaults[row].SetMeter(condition, SqdTone.Rail(state));
         }
 
         private static float PartCondition(UnitPart part)
@@ -303,6 +326,85 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 !PlaneEngineMap.IsDefined((byte)planeTuneMode)) return;
             planeTuneState.Set("ENGINE MAP REQUEST SENT TO HOST");
             progression.RequestTune(aircraft, planeTuneMode);
+        }
+
+        /// <summary>
+        /// The aircraft dossier hero: airframe name in title type, a state chip, and fuel / throttle
+        /// bars with their mono readouts. Every text has a fixed slot.
+        /// </summary>
+        private sealed class PlaneHero : AvPart
+        {
+            private const float CardH = 92f, Pad = 12f;
+            private readonly AvFrame frame;
+            private readonly TMP_Text name, fuelKey, fuelValue, throttleKey, throttleValue;
+            private readonly SqdBar fuelBar, throttleBar;
+            private readonly AvChip stateChip;
+            private float fuel, throttle;
+            private AvState state = AvState.Ready;
+
+            public PlaneHero(RectTransform parent)
+            {
+                Rect = AvLay.Child(parent, "PlaneHero");
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                AvLay.Fill(frame.rectTransform);
+                frame.Bracket = 6f;
+                name = AvText.Make(Rect, "Name", AvTextRole.Title);
+                AvText.Fit(name, false);
+                stateChip = new AvChip(Rect);
+                fuelKey = AvText.Make(Rect, "FuelKey", AvTextRole.Micro, "FUEL");
+                fuelValue = AvText.Make(Rect, "FuelValue", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+                AvText.Fit(fuelValue, false);
+                throttleKey = AvText.Make(Rect, "ThrottleKey", AvTextRole.Micro, "THROTTLE");
+                throttleValue = AvText.Make(Rect, "ThrottleValue", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+                AvText.Fit(throttleValue, false);
+                fuelBar = new SqdBar(Rect, "Fuel");
+                throttleBar = new SqdBar(Rect, "Throttle");
+                Restyle();
+            }
+
+            public void Set(string airframe, string stateWord, AvState st, float fuelFraction, float? throttleFraction)
+            {
+                name.text = airframe ?? "";
+                stateChip.Set(stateWord, st);
+                state = st;
+                fuel = fuelFraction;
+                throttle = throttleFraction ?? 0f;
+                fuelValue.text = AvNum.Percent(fuelFraction);
+                throttleValue.text = throttleFraction.HasValue ? AvNum.Percent(throttleFraction.Value) : "—";
+                Restyle();
+            }
+
+            public override float Measure(float width) => CardH;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(name.rectTransform, Pad, 8f, s.W - 2f * Pad - 118f, 26f);
+                stateChip.Place(new AvSlot(s.W - Pad - 108f, 10f, 108f, AvGridTokens.ChipStrip));
+                const float keyW = 70f, valueW = 56f;
+                float barX = Pad + keyW, barW = s.W - 2f * Pad - keyW - valueW - 8f;
+                AvLay.Place(fuelKey.rectTransform, Pad, 44f, keyW, 16f);
+                fuelBar.Place(barX, 50f, barW, 5f);
+                AvLay.Place(fuelValue.rectTransform, s.W - Pad - valueW, 42f, valueW, 20f);
+                AvLay.Place(throttleKey.rectTransform, Pad, 66f, keyW, 16f);
+                throttleBar.Place(barX, 72f, barW, 5f);
+                AvLay.Place(throttleValue.rectTransform, s.W - Pad - valueW, 64f, valueW, 20f);
+            }
+
+            public override void Restyle()
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card raised");
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
+                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
+                fuelKey.color = throttleKey.color = SqdTone.Caption;
+                fuelValue.color = throttleValue.color = SqdTone.Ink;
+                stateChip.Restyle();
+                fuelBar.Restyle();
+                throttleBar.Restyle();
+                fuelBar.Set(fuel, SqdTone.Rail(fuel <= .15f ? AvState.Caution : AvState.Info));
+                throttleBar.Set(throttle, SqdTone.Rail(AvState.Info));
+            }
         }
 
         /// <summary>

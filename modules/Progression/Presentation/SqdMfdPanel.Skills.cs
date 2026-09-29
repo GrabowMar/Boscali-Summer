@@ -7,21 +7,25 @@ using NOAvionics.Ui;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
-        // The board is a matrix: one row per grade, one column per qualification. All four
-        // lanes fit side by side, so picking compares classes instead of scrolling a list.
-        // Geometry lives in SkillBoardLayout (which a test pins); SkillBoard draws it.
-        private const string SkillIdleTitle = "SELECT A CELL";
+        // The board is a tech tree: one column per qualification, one aligned tier row per
+        // grade. All four lanes fit side by side, so picking compares classes instead of
+        // scrolling a list. Geometry lives in SkillBoardLayout (which a test pins); SkillBoard
+        // draws it and SkillNode is one grade.
+        private const string SkillIdleTitle = "SELECT A GRADE";
         private const string SkillHint =
-            "Scroll grades. Compare lanes at the same tier, then unlock one pick.";
+            "Compare lanes at the same tier, tap an open grade, then unlock it. One pick, no undo.";
 
-        private AvTextBlock skillBudgetNote;
+        private AvChip skillBudgetPicks;
+        private AvChip skillBudgetNext;
         private SkillBoard skillBoard;
         private AvTextBlock skillStripTitle;
+        private AvTextBlock skillStripEffect;
         private AvTextBlock skillStripDetail;
         private AvControl skillConfirmButton;
         private string skillIdleTitle = SkillIdleTitle;
@@ -34,9 +38,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             skillRows.Clear();
             skillBranches.Clear();
-            skillBudgetNote = null;
+            skillBudgetPicks = null;
+            skillBudgetNext = null;
             skillBoard = null;
             skillStripTitle = null;
+            skillStripEffect = null;
             skillStripDetail = null;
             skillConfirmButton = null;
             skillIdleTitle = SkillIdleTitle;
@@ -61,8 +67,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
             p.Section(AvIcon.Star, "QUALIFICATION BOARD", "HOST PROGRESSION");
             if (perks.Length == 0)
             {
-                AvTextBlock empty = p.Add(new AvTextBlock(p.Content, AvTextRole.Prose));
-                empty.Set("This host has not configured a qualification catalog.");
+                p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO QUALIFICATION CATALOG",
+                    "This host has not configured a qualification catalog, so there is nothing to unlock."));
                 return;
             }
 
@@ -70,32 +76,49 @@ namespace BoscaliSummer.Features.Progression.Presentation
             for (int i = 0; i < perks.Length; i++)
                 LaneOf(lanes, perks[i].Branch).Nodes.Add(perks[i]);
 
-            skillBudgetNote = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall));
+            skillBudgetPicks = new AvChip(p.Content);
+            skillBudgetNext = new AvChip(p.Content);
+            p.Row(skillBudgetPicks, skillBudgetNext);
             skillBoard = p.Add(new SkillBoard(p.Content, console.Ticker, lanes, SelectSkill));
             skillRows.AddRange(skillBoard.Rows);
             skillBranches.AddRange(skillBoard.Branches);
 
             p.Section(AvIcon.CircleCheck, "SELECTED GRADE", null);
-            skillStripTitle = p.Add(new AvTextBlock(p.Content, AvTextRole.Head));
-            skillStripDetail = p.Add(new AvTextBlock(p.Content, AvTextRole.Prose));
-            AvButtons buttons = p.Buttons(new AvControl.Spec("UNLOCK SELECTED", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
+            AvCard detail = new AvCard(p.Content, console.Ticker, p.Inner, null, true, "raised");
+            skillStripTitle = detail.Flow.Add(new AvTextBlock(detail.Flow.Content, AvTextRole.Head));
+            skillStripEffect = detail.Flow.Add(new AvTextBlock(detail.Flow.Content, AvTextRole.DataStrong));
+            skillStripDetail = detail.Flow.Add(new AvTextBlock(detail.Flow.Content, AvTextRole.Prose));
+            AvButtons buttons = detail.Flow.Buttons(
+                new AvControl.Spec("UNLOCK SELECTED", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
             skillConfirmButton = buttons.Controls[0];
             skillConfirmButton.Interactable = false;
             skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
+            p.Add(detail);
         }
 
-        /// <summary>The budget as the board's own note: how many picks are unspent, and the wait.</summary>
-        private string BudgetNote()
+        /// <summary>The budget as two chips: how many picks are unspent, and the wait for the next.</summary>
+        private void PaintBudget()
         {
             IProgressionView view = Progress;
-            if (progression.BypassRequirements) return "DEBUG BYPASS · EVERY GRADE OPEN";
+            if (progression.BypassRequirements)
+            {
+                skillBudgetPicks.Set("DEBUG BYPASS", AvState.Caution);
+                skillBudgetNext.Set("EVERY GRADE OPEN", AvState.Info);
+                return;
+            }
 
             int available = view.AvailablePoints;
-            string picks = AvNum.Thousands(available) + (available == 1 ? " PICK UNSPENT · " : " PICKS UNSPENT · ");
-            if (view.EarnedPoints >= view.MaximumPoints) return picks + "GRADE LADDER COMPLETE";
+            skillBudgetPicks.Set(AvNum.Thousands(available) + (available == 1 ? " PICK UNSPENT" : " PICKS UNSPENT"),
+                available > 0 ? AvState.Ready : AvState.Inert);
+            if (view.EarnedPoints >= view.MaximumPoints)
+            {
+                skillBudgetNext.Set("GRADE LADDER COMPLETE", AvState.Info);
+                return;
+            }
 
             int remaining = PerkPoints.RemainingToNext(MissionScore(), view.ScorePerPoint);
-            return remaining < 0 ? picks + "GRADE LADDER COMPLETE" : picks + AvNum.Thousands(remaining) + " TO NEXT GRADE";
+            skillBudgetNext.Set(remaining < 0 ? "GRADE LADDER COMPLETE" : AvNum.Thousands(remaining) + " TO NEXT GRADE",
+                AvState.Info);
         }
 
         private int MissionScore()
@@ -116,13 +139,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
         }
 
         /// <summary>
-        /// A tool sells its code - STK, SAT, EW, ENG are the support codes the OPS page and the
-        /// wing badges already use - and its state line says TOOL or HELD. A passive grade gets
-        /// its own name.
+        /// A tool's node reads "STK TOOL" - STK, SAT, EW, ENG are the support codes the OPS page and
+        /// the wing badges already use. A passive grade gets its own name. One name per node, ever.
         /// </summary>
         private static string CellName(PerkView view, PerkDefinition definition) =>
             definition.IsTool
-                ? PerkCatalog.CapabilityCode(definition.Capability)
+                ? PerkCatalog.CapabilityCode(definition.Capability) + " TOOL"
                 : view.Name.ToUpperInvariant();
 
         private void CommitSelected()
@@ -138,28 +160,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             for (int i = 0; i < PerkCatalog.All.Length; i++)
                 if (PerkCatalog.All[i].Id == view.Id) return PerkCatalog.All[i];
             return default;
-        }
-
-        /// <summary>
-        /// The cell's own line: why it is shut, else what it is. A passive grade sells its
-        /// effect here - "+15% COMBAT" - so the board reads as a comparison of what each pick
-        /// buys instead of a wall of identical "PICK" labels. A tool has no multiplier to sell,
-        /// so it keeps its state word.
-        /// </summary>
-        private static string CellLine(PerkView perk, byte id)
-        {
-            if (perk.Unlocked || perk.Affordable)
-                return PerkDefinitionOf(perk).IsTool
-                    ? (perk.Unlocked ? "HELD" : "TOOL")
-                    : PerkCatalog.EffectLabel(id);
-            return BlockWord(perk);
-        }
-
-        private static string BlockWord(PerkView perk)
-        {
-            if (perk.Block == PerkView.BlockCap) return "CLOSED";
-            if (perk.Block == PerkView.BlockGrade) return "GRADE FIRST";
-            return "NO PICK";
         }
 
         private void SelectSkill(byte id)
@@ -217,7 +217,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (skillStripTitle == null || progression == null) return;
 
             IProgressionView view = Progress;
-            skillBudgetNote?.Set(BudgetNote());
+            PaintBudget();
             bool requestPending = view.UnlockPending;
             if (requestPending) skillAwaitingConfirmation = null;
 
@@ -240,44 +240,49 @@ namespace BoscaliSummer.Features.Progression.Presentation
             {
                 skillStripTitle.Set("WAITING FOR THE HOST");
                 skillStripTitle.Color = AvTheme.RailCaution;
+                skillStripEffect.SetShown(false);
                 skillStripDetail.Set("The pick is sent. The host answers on the next tick.");
             }
             else if (hasSelection)
             {
                 PerkDefinition definition = PerkDefinitionOf(selected);
-                skillStripTitle.Set("G" + AvNum.Thousands(definition.Grade) + " · " + selected.Name.ToUpperInvariant());
-                skillStripTitle.Color = AvTheme.RailCaution;
+                skillStripTitle.Set(definition.Lane + " · G" + AvNum.Thousands(definition.Grade) + " · " +
+                    selected.Name.ToUpperInvariant());
+                skillStripTitle.Color = SqdTone.Select;
+                skillStripEffect.Set(definition.IsTool
+                    ? "SUPPORT TOOL · " + PerkCatalog.CapabilityCode(definition.Capability)
+                    : PerkCatalog.EffectLabel(selected.Id));
+                skillStripEffect.Color = SqdTone.Text(AvState.Ready);
+                skillStripEffect.SetShown(true);
                 skillStripDetail.Set(selected.Description);
             }
             else
             {
                 skillStripTitle.Set(skillIdleTitle);
                 skillStripTitle.Color = AvTheme.TextPrimary;
+                skillStripEffect.SetShown(false);
                 skillStripDetail.Set(skillIdleDetail);
             }
         }
 
-        /// <summary>Rail for state, words for anyone the colour misses.</summary>
+        /// <summary>Glyph and word for anyone the colour misses; the node carries one name only.</summary>
         private void PaintSkill(SkillRow row, PerkView[] perks)
         {
             if (!TryFind(perks, row.Id, out PerkView perk)) return;
 
             bool armed = skillAwaitingConfirmation == row.Id && !perk.Unlocked && perk.Affordable;
-            string word = armed ? "SELECTED" : CellLine(perk, row.Id);
-            AvState state = perk.Unlocked ? AvState.Ready
-                : armed ? AvState.Caution
-                : perk.Affordable ? AvState.Info
-                : AvState.Inert;
+            SkillNodeState state = perk.Unlocked ? SkillNodeState.Held
+                : armed ? SkillNodeState.Selected
+                : perk.Affordable ? SkillNodeState.Open
+                : SkillNodeState.Locked;
 
             PerkDefinition definition = PerkDefinitionOf(perk);
-            // Cells are ~95 px wide: AvRow's 88 px value column would leave the name no room, so the state word rides the sub-line.
-            row.Row.Set(CellName(perk, definition), word, null, state);
-            row.Row.Armed = armed;
-            // A shut cell answers "why not" on hover instead of only after a click.
-            bool live = perk.Unlocked || perk.Affordable || armed;
-            row.Row.Help = live
-                ? perk.Name + " — " + perk.Description
+            // A shut node answers "why not" on hover instead of only after a click.
+            string effect = definition.IsTool ? "Support tool" : PerkCatalog.EffectLabel(row.Id);
+            string help = perk.Unlocked ? perk.Name + " — held. " + perk.Description
+                : perk.Affordable || armed ? perk.Name + " (" + effect + ") — " + perk.Description
                 : perk.Name + " — " + BlockReason(perk);
+            row.Node.Paint(CellName(perk, definition), state, help);
         }
 
         private static void PaintLane(SkillBranchRow lane, PerkView[] perks)
@@ -291,24 +296,134 @@ namespace BoscaliSummer.Features.Progression.Presentation
             bool closed = !toolHeld && lane.Ids.Count > 0 &&
                 TryFind(perks, lane.Ids[0], out PerkView tool) && tool.Block == PerkView.BlockCap;
 
-            lane.Note.text = AvNum.Thousands(taken) + "/" + AvNum.Thousands(lane.Ids.Count) + " " +
-                (toolHeld ? "HELD" : closed ? "CLOSED" : "OPEN");
-            lane.Note.color = toolHeld ? AvTheme.RailReady : closed ? AvTheme.Dim : AvTheme.TextPrimary;
-            lane.Caption.color = closed ? AvTheme.Dim : AvTheme.TextPrimary;
+            lane.Paint(taken, lane.Ids.Count, toolHeld ? "HELD" : closed ? "CLOSED" : "OPEN",
+                toolHeld ? AvState.Ready : closed ? AvState.Inert : AvState.Info);
+        }
+
+        /// <summary>How a node reads: colour, glyph and hover help all follow from this.</summary>
+        internal enum SkillNodeState : byte { Locked, Open, Held, Selected }
+
+        /// <summary>
+        /// One grade of one lane: a state glyph and exactly one name (wrapping to two lines, sized
+        /// to fit). Clicking an open node selects it; the detail card below says what it buys.
+        /// </summary>
+        internal sealed class SkillNode : AvPart
+        {
+            private readonly AvFrame frame;
+            private readonly Image rail;
+            private readonly TMP_Text glyph, label;
+            private readonly Action<byte> onSelect;
+            private readonly byte id;
+            private SkillNodeState state = SkillNodeState.Locked;
+            private bool hover;
+            private string lastHelp;
+
+            /// <summary>The connector line hanging below this node; owned and placed by the board.</summary>
+            public Image Connector;
+
+            public SkillNode(RectTransform parent, byte perkId, Action<byte> select)
+            {
+                id = perkId;
+                onSelect = select;
+                Rect = AvLay.Child(parent, "Node " + perkId);
+                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(5f)); AvLay.Fill(frame.rectTransform);
+                rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                glyph = AvIcons.Make(Rect, AvIcon.Lock, AvGridTokens.IconInline, Color.white);
+                label = AvText.Make(Rect, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
+                label.characterSpacing = 1f; // a long word (SURVEILLANCE) must fit the node without breaking mid-word
+                AvText.Fit(label, true);
+                AvHit hit = AvHit.On(frame);
+                hit.Hover = h => { hover = h; Restyle(); };
+                hit.Click = e => { if (state == SkillNodeState.Open || state == SkillNodeState.Selected) onSelect?.Invoke(id); };
+                Restyle();
+            }
+
+            public SkillNodeState State => state;
+
+            public void Paint(string name, SkillNodeState next, string help)
+            {
+                // Repainted on every refresh tick: do nothing unless something the eye can see changed.
+                if (next == state && glyph.text.Length > 0 && label.text == (name ?? "") && help == lastHelp) return;
+                label.text = name ?? "";
+                if (help != lastHelp) { lastHelp = help; AvHelpTip.Attach(frame.gameObject, help); }
+                if (next == state && glyph.text.Length > 0) { Restyle(); return; }
+                state = next;
+                AvIcons.Set(glyph, GlyphFor(next), AvGridTokens.IconInline);
+                Restyle();
+            }
+
+            private static AvIcon GlyphFor(SkillNodeState s)
+            {
+                switch (s)
+                {
+                    case SkillNodeState.Held: return AvIcon.CircleCheck;
+                    case SkillNodeState.Selected: return AvIcon.Target;
+                    case SkillNodeState.Open: return AvIcon.Circle;
+                    default: return AvIcon.Lock;
+                }
+            }
+
+            public override float Measure(float width) => SkillBoardLayout.NodeHeight;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
+                AvLay.Place(glyph.rectTransform, 9f, 5f, 14f, 14f);
+                AvLay.Place(label.rectTransform, 8f, 21f, s.W - 11f, s.H - 24f);
+            }
+
+            public override void Restyle()
+            {
+                AvStyle inert = AvStyleHost.FuiStyle("card inert");
+                Color fill = AvStyleHost.Resolve(inert.Background, AvTheme.SurfaceInert);
+                Color stroke = AvTheme.Hairline;
+                Color accent = AvTheme.RailInert;
+                Color ink = SqdTone.Ink;
+                switch (state)
+                {
+                    case SkillNodeState.Held:
+                        accent = AvTheme.RailReady;
+                        fill = accent.WithAlpha(.16f);
+                        stroke = accent.WithAlpha(.75f);
+                        break;
+                    case SkillNodeState.Open:
+                        accent = AvTheme.RailInfo;
+                        stroke = accent.WithAlpha(.7f);
+                        if (hover) fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row", "hover").Background, fill);
+                        break;
+                    case SkillNodeState.Selected:
+                        accent = SqdTone.Select;
+                        fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell", "on").Background, accent.WithAlpha(.16f));
+                        stroke = accent;
+                        break;
+                    default:
+                        accent = AvTheme.RailInert;
+                        ink = AvTheme.Disabled;
+                        break;
+                }
+                frame.Paint(fill, stroke);
+                rail.color = accent;
+                glyph.color = state == SkillNodeState.Locked ? AvTheme.Disabled : accent;
+                label.color = ink;
+                if (Connector != null)
+                    Connector.color = state == SkillNodeState.Held ? AvTheme.RailReady.WithAlpha(.8f) : AvTheme.Hairline;
+            }
         }
 
         /// <summary>
-        /// The lane x grade matrix. Built once from the catalogue's fixed shape and repainted
-        /// (never rebuilt) as grades unlock. Cells are <see cref="AvRow"/>s placed on an explicit
-        /// grid rather than a vertical <see cref="AvFlow"/>, driven by <see cref="SkillBoardLayout"/>
-        /// (kept unchanged: <c>SqdPanelTests.TestBoardGeometry</c> pins its arithmetic).
+        /// The qualification tech tree. Built once from the catalogue's fixed shape and repainted
+        /// (never rebuilt) as grades unlock: a legend row of glyph+word chips, four lane headers
+        /// (name, held count, progress bar, state word) and one aligned row of nodes per tier,
+        /// joined by connector lines. Placed on explicit rects by <see cref="SkillBoardLayout"/>.
         /// </summary>
         private sealed class SkillBoard : AvPart
         {
             private readonly List<SkillLane> lanes;
             private readonly int grades;
-            private readonly TMP_Text legendKey;
-            private readonly TMP_Text[] legendWords;
+            private readonly TMP_Text[] legendIcons = new TMP_Text[4];
+            private readonly TMP_Text[] legendWords = new TMP_Text[4];
+            private readonly TMP_Text[] tierLabels;
 
             public readonly List<SkillRow> Rows = new List<SkillRow>(24);
             public readonly List<SkillBranchRow> Branches = new List<SkillBranchRow>(4);
@@ -319,74 +434,89 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 for (int i = 0; i < lanes.Count; i++) grades = Math.Max(grades, lanes[i].Nodes.Count);
 
                 Rect = AvLay.Child(parent, "SkillBoard");
-                legendKey = AvText.Make(Rect, "LegendKey", AvTextRole.Micro, "RAIL STATE");
-                string[] words = { "HELD", "PICK", "SELECTED", "LOCKED" };
-                legendWords = new TMP_Text[words.Length];
+                AvIcon[] icons = { AvIcon.CircleCheck, AvIcon.Circle, AvIcon.Target, AvIcon.Lock };
+                string[] words = { "HELD", "OPEN", "SELECTED", "LOCKED" };
                 for (int i = 0; i < words.Length; i++)
+                {
+                    legendIcons[i] = AvIcons.Make(Rect, icons[i], AvGridTokens.IconInline, Color.white);
                     legendWords[i] = AvText.Make(Rect, "Legend" + i, AvTextRole.Micro, words[i]);
+                    AvText.Fit(legendWords[i], false);
+                }
+
+                tierLabels = new TMP_Text[grades];
+                for (int g = 0; g < grades; g++)
+                    tierLabels[g] = AvText.Make(Rect, "Tier" + (g + 1), AvTextRole.DataSmall,
+                        (g + 1).ToString(), TextAlignmentOptions.Center);
 
                 for (int l = 0; l < lanes.Count; l++)
                 {
-                    var branch = new SkillBranchRow
-                    {
-                        Caption = AvText.Make(Rect, "Lane " + lanes[l].Name, AvTextRole.Head, lanes[l].Name),
-                        Note = AvText.Make(Rect, "LaneNote " + lanes[l].Name, AvTextRole.Micro, ""),
-                    };
+                    var branch = new SkillBranchRow(Rect, lanes[l].Name);
                     for (int n = 0; n < lanes[l].Nodes.Count; n++) branch.Ids.Add(lanes[l].Nodes[n].Id);
                     Branches.Add(branch);
 
                     for (int g = 0; g < lanes[l].Nodes.Count; g++)
                     {
                         byte id = lanes[l].Nodes[g].Id;
-                        var avRow = new AvRow(Rect, () => onSelect(id));
-                        ticker?.Register(avRow);
-                        Rows.Add(new SkillRow { Id = id, Row = avRow });
+                        var node = new SkillNode(Rect, id, onSelect);
+                        if (g < lanes[l].Nodes.Count - 1)
+                            node.Connector = AvLay.Solid(Rect, "Connector " + id, AvTheme.Hairline);
+                        ticker?.Register(node);
+                        Rows.Add(new SkillRow { Id = id, Node = node });
                     }
                 }
                 Restyle();
             }
 
-            public override float Measure(float width) =>
-                SkillBoardLayout.LegendHeight + SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap +
-                grades * (SkillBoardLayout.MinCellHeight + SkillBoardLayout.Gap);
+            public override float Measure(float width) => SkillBoardLayout.ContentHeight(grades);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
                 float cellWidth = SkillBoardLayout.CellWidth(s.W, lanes.Count);
-                float y = 0f;
-                AvLay.Place(legendKey.rectTransform, 0f, y, 78f, 12f);
-                float pitch = (s.W - 84f) / Math.Max(1, legendWords.Length);
+
+                float pitch = s.W / legendWords.Length;
                 for (int i = 0; i < legendWords.Length; i++)
-                    AvLay.Place(legendWords[i].rectTransform, 84f + i * pitch, y, Math.Max(0f, pitch - 4f), 12f);
-                y += SkillBoardLayout.LegendHeight;
+                {
+                    AvLay.Place(legendIcons[i].rectTransform, i * pitch + 2f, 3f, 14f, 14f);
+                    AvLay.Place(legendWords[i].rectTransform, i * pitch + 22f, 0f, Math.Max(0f, pitch - 26f), SkillBoardLayout.LegendHeight);
+                }
 
                 for (int l = 0; l < lanes.Count; l++)
-                {
-                    float laneX = SkillBoardLayout.CellX(0f, cellWidth, l);
-                    AvLay.Place(Branches[l].Caption.rectTransform, laneX, y, cellWidth, 16f);
-                    AvLay.Place(Branches[l].Note.rectTransform, laneX, y + 16f, cellWidth, 13f);
-                }
-                y += SkillBoardLayout.LaneHeaderHeight + SkillBoardLayout.Gap;
+                    Branches[l].Place(SkillBoardLayout.CellX(0f, cellWidth, l), SkillBoardLayout.HeaderTop, cellWidth);
 
-                int rowIndex = 0;
+                for (int g = 0; g < grades; g++)
+                {
+                    float y = SkillBoardLayout.NodeTop(g);
+                    AvLay.Place(tierLabels[g].rectTransform, 0f, y, SkillBoardLayout.Gutter, SkillBoardLayout.NodeHeight);
+                }
+
+                int index = 0;
                 for (int l = 0; l < lanes.Count; l++)
                 {
                     float laneX = SkillBoardLayout.CellX(0f, cellWidth, l);
                     for (int g = 0; g < lanes[l].Nodes.Count; g++)
                     {
-                        float cellY = y + g * (SkillBoardLayout.MinCellHeight + SkillBoardLayout.Gap);
-                        Rows[rowIndex].Row.Place(new AvSlot(laneX, cellY, cellWidth, SkillBoardLayout.MinCellHeight));
-                        rowIndex++;
+                        float y = SkillBoardLayout.NodeTop(g);
+                        SkillNode node = Rows[index].Node;
+                        node.Place(new AvSlot(laneX, y, cellWidth, SkillBoardLayout.NodeHeight));
+                        if (node.Connector != null)
+                            AvLay.Place(node.Connector.rectTransform, laneX + cellWidth * .5f - 1f,
+                                y + SkillBoardLayout.NodeHeight, 2f, SkillBoardLayout.NodeGap);
+                        index++;
                     }
                 }
             }
 
             public override void Restyle()
             {
-                Color dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-                legendKey.color = dim;
-                for (int i = 0; i < legendWords.Length; i++) legendWords[i].color = dim;
+                Color[] tones = { AvTheme.RailReady, AvTheme.RailInfo, SqdTone.Select, AvTheme.Disabled };
+                for (int i = 0; i < legendWords.Length; i++)
+                {
+                    legendIcons[i].color = tones[i];
+                    legendWords[i].color = SqdTone.Dim;
+                }
+                foreach (TMP_Text tier in tierLabels) tier.color = SqdTone.Caption;
+                foreach (SkillBranchRow branch in Branches) branch.Restyle();
             }
         }
     }
