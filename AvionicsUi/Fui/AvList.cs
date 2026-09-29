@@ -23,7 +23,7 @@ namespace NOAvionics.Ui
             for (int i = 0; i < rows.Length; i++)
             {
                 int slot = i;
-                rows[i] = new AvRow(Rect, () => RowClicked?.Invoke(Page * rows.Length + slot));
+                rows[i] = new AvRow(Rect, () => RowClicked?.Invoke(Page * rows.Length + slot)) { Parent = this };
                 if (ticker != null) ticker.Register(rows[i]);
             }
             prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
@@ -55,6 +55,7 @@ namespace NOAvionics.Ui
             }
             range.text = count == 0 ? "0 OF 0" : (first + 1) + "\u2013" + Math.Min(count, first + rows.Length) + " OF " + count;
             prev.Interactable = Page > 0; next.Interactable = Page < Pages - 1;
+            Changed();
         }
 
         public override float Measure(float width)

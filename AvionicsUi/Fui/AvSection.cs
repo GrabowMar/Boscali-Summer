@@ -12,6 +12,7 @@ namespace NOAvionics.Ui
         private readonly TMP_Text icon, title, caption;
         private readonly Image rule;
         private bool twoLines;
+        private float captionH = Line;
 
         public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText)
         {
@@ -24,13 +25,17 @@ namespace NOAvionics.Ui
             Restyle();
         }
 
-        public void SetCaption(string c) { caption.text = c ?? ""; }
+        public void SetCaption(string c) { if (caption.text == (c ?? "")) return; caption.text = c ?? ""; Changed(); }
 
         public override float Measure(float width)
         {
             float need = 22f + AvText.Width(title) + 12f + AvText.Width(caption);
             twoLines = caption.text.Length > 0 && need > width;
-            return (twoLines ? Line * 2f : Line) + 1f;
+            if (!twoLines) return Line + 1f;
+            // A second-line caption wraps under the title instead of running past the panel edge.
+            caption.enableWordWrapping = true;
+            captionH = Mathf.Max(Line, AvText.Height(caption, width - 22f) + 4f);
+            return Line + captionH + 1f;
         }
 
         public override void Place(AvSlot slot)
@@ -38,8 +43,9 @@ namespace NOAvionics.Ui
             base.Place(slot);
             AvLay.Place(icon.rectTransform, 0f, 3f, 16f, 16f);
             AvLay.Place(title.rectTransform, 22f, 0f, slot.W - 22f, Line);
-            AvLay.Place(caption.rectTransform, twoLines ? 22f : 0f, twoLines ? Line : 0f, twoLines ? slot.W - 22f : slot.W, Line);
-            caption.alignment = twoLines ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.MidlineRight;
+            caption.enableWordWrapping = twoLines;
+            AvLay.Place(caption.rectTransform, twoLines ? 22f : 0f, twoLines ? Line : 0f, twoLines ? slot.W - 22f : slot.W, twoLines ? captionH : Line);
+            caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
         }
 

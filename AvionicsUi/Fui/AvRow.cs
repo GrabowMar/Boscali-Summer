@@ -46,10 +46,17 @@ namespace NOAvionics.Ui
 
         public void Set(string n, string s, string v, AvState st = AvState.Info)
         {
-            if (name.text != (n ?? "")) name.text = n ?? "";
-            if (sub.text != (s ?? "")) sub.text = s ?? "";
-            if (value.text != (v ?? "")) value.text = v ?? "";
+            bool grew = false;
+            if (name.text != (n ?? "")) { name.text = n ?? ""; grew = true; }
+            if (sub.text != (s ?? "")) { sub.text = s ?? ""; grew = true; }
+            if (value.text != (v ?? ""))
+            {
+                // The value column only narrows the text when it appears or disappears.
+                grew |= value.text.Length == 0 || string.IsNullOrEmpty(v);
+                value.text = v ?? "";
+            }
             if (st != state) { state = st; Restyle(); }
+            if (grew) Changed();
         }
 
         public AvControl AddTrailing(AvControl.Spec spec)

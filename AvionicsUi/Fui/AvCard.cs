@@ -24,6 +24,7 @@ namespace NOAvionics.Ui
             body = AvLay.Child(Rect, "Body");
             // The nested flow uses the card's inner width; it keeps its own pad = Inset and no gutter.
             Flow = new AvFlow(body, ticker, width, 0f);
+            Flow.Host = this;
             Restyle();
         }
 

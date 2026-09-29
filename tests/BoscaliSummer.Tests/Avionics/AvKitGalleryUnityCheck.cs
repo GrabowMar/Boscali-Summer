@@ -61,6 +61,7 @@ public static class AvKitGalleryUnityCheck
             CheckLiveThemeSwitch();
             CheckHoverHelp();
             CheckPopup();
+            CheckLateFill();
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
         File.WriteAllText("result.txt", Failures.Count == 0
@@ -358,6 +359,55 @@ public static class AvKitGalleryUnityCheck
         if (picked != 1) Failures.Add("popup click picked " + picked + ", expected 1");
         if (popup.IsOpen) Failures.Add("popup did not close after a pick");
         UnityEngine.Object.DestroyImmediate(hostGo);
+    }
+
+    // In game, content arrives after Finish() (ticks bind data). Parts must grow and hidden parts collapse on
+    // the next ticks without anybody calling Relayout: this is the case the rendered gallery never exercised.
+    private static void CheckLateFill()
+    {
+        var hostGo = new GameObject("late-fill", typeof(RectTransform), typeof(Canvas));
+        var host = (RectTransform)hostGo.transform;
+        host.sizeDelta = new Vector2(AvTokens.PanelWidth, AvTokens.PanelHeight);
+        AvConsole con = AvConsole.Build(host, "LATE", "LATE FILL", 1);
+        con.Tabs((AvIcon.ListDetails, "ROWS"));
+        AvFlow p = con.Page(0);
+        AvSection section = p.Section(AvIcon.ListDetails, "SERVICE RECORD");
+        AvRow note = p.Add(new AvRow(p.Content));
+        AvAlert alert = p.Add(new AvAlert(p.Content));
+        AvCard card = p.Add(new AvCard(p.Content, con.Ticker, p.Inner, "CURRENT LIFE"));
+        AvRow inner = card.Flow.Add(new AvRow(card.Flow.Content));
+        const string longSub = "Transferred from a coastal patrol unit after its airstrip closed. Keeps a folded map in a pocket even when the navigation system works.";
+        AvList list = p.Add(new AvList(p.Content, con.Ticker, 4, (i, r) => r.Set("TRACK " + (i + 1), i % 2 == 0 ? longSub : null, "12 km")));
+        AvRow tail = p.Add(new AvRow(p.Content));
+        tail.Set("TAIL", null, "1");
+        con.Finish();
+
+        section.SetCaption("LOCAL PROFILE · HOST DATA · SYNCED A MOMENT AGO FROM THE SQUADRON ROSTER");
+        note.Set("SERVICE NOTE", longSub, null);
+        alert.Show(AvIcon.AlertTriangle, "NO STATION ON ORBIT", longSub, AvState.Caution);
+        inner.Set("STATUS", longSub, "GROUND");
+        list.SetCount(4);
+        for (int i = 0; i < 3; i++) con.Ticker.TickNow();
+        Gate(con, 0, "late-fill");
+        NoOverlap(p, "late-fill", note, alert, card, list, tail);
+
+        float tailBefore = tail.Rect.anchoredPosition.y;
+        alert.Hide();
+        for (int i = 0; i < 2; i++) con.Ticker.TickNow();
+        if (Mathf.Abs(tail.Rect.anchoredPosition.y - tailBefore) < 1f) Failures.Add("late-fill: hiding the alert did not close its gap");
+        NoOverlap(p, "late-fill/hidden", note, card, list, tail);
+        UnityEngine.Object.DestroyImmediate(hostGo);
+    }
+
+    private static void NoOverlap(AvFlow p, string where, params AvPart[] parts)
+    {
+        for (int i = 0; i + 1 < parts.Length; i++)
+        {
+            RectTransform a = parts[i].Rect, b = parts[i + 1].Rect;
+            float aBottom = -a.anchoredPosition.y + a.rect.height, bTop = -b.anchoredPosition.y;
+            if (aBottom > bTop + 0.5f)
+                Failures.Add(where + ": " + a.name + " (bottom " + aBottom.ToString("0") + ") overlaps " + b.name + " (top " + bTop.ToString("0") + ")");
+        }
     }
 
     private static void CheckLiveThemeSwitch()

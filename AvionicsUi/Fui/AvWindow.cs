@@ -19,6 +19,9 @@ namespace NOAvionics.Ui
         private readonly TMP_Text titleText;
         private readonly RawImage blur;
         private readonly Image frost;
+        private readonly GameObject host;
+        private bool glassy = true;
+        private readonly Scrollbar scrollbar;
         private bool visible;
         private readonly Vector3[] corners = new Vector3[4];
 
@@ -33,21 +36,31 @@ namespace NOAvionics.Ui
 
         private AvWindow(Transform uiRoot, string id, string title, float w, float h, int order)
         {
+            if (uiRoot == null || uiRoot.GetComponentInParent<Canvas>() == null)
+            {
+                // Not under a UI canvas: host the window in its own scaled overlay canvas. The window must not
+                // BE that root canvas — Unity drives a root canvas's rect to full screen, so the frame would
+                // cover the screen while the content kept its w×h layout (the EVN field-archive bug).
+                var hostGo = new GameObject("AvWindowHost " + id, typeof(RectTransform));
+                if (uiRoot != null) hostGo.transform.SetParent(uiRoot, false);
+                var hostCanvas = hostGo.AddComponent<Canvas>();
+                hostCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                hostCanvas.sortingOrder = order;
+                var scaler = hostGo.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+                uiRoot = hostGo.transform;
+                host = hostGo;
+            }
+            // Never taller or wider than the 1080p reference screen, whoever hosts the window.
+            w = Mathf.Min(w, 1880f); h = Mathf.Min(h, 1040f);
             var go = new GameObject("AvWindow " + id, typeof(RectTransform));
             Root = (RectTransform)go.transform;
             Root.SetParent(uiRoot, false);
             var canvas = go.AddComponent<Canvas>();
             canvas.overrideSorting = true; canvas.sortingOrder = order;
-            if (uiRoot == null || uiRoot.GetComponentInParent<Canvas>() == null)
-            {
-                // Not under an existing UI canvas: become a scaled overlay canvas ourselves.
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                var scaler = go.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920f, 1080f);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-                w = Mathf.Min(w, 1880f); h = Mathf.Min(h, 1040f);
-            }
+            if (host != null) go.AddComponent<HostReaper>().Host = host;
             canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
             go.AddComponent<GraphicRaycaster>();
             Root.anchorMin = Root.anchorMax = Root.pivot = new Vector2(0.5f, 0.5f);
@@ -86,6 +99,10 @@ namespace NOAvionics.Ui
             RectTransform viewport = AvLay.Child(body, "Viewport"); viewport.gameObject.AddComponent<RectMask2D>();
             RectTransform content = AvLay.Child(viewport, "Content");
             scroll.viewport = viewport; scroll.content = content;
+            Scrollbar bar = AvConsole.MakeScrollbar(body);
+            scroll.verticalScrollbar = bar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            AvInput.StripNavigation(bar);
             Body = new AvFlow(content, Ticker, w);
             Footer = new AvFooter(Root);
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
@@ -93,6 +110,8 @@ namespace NOAvionics.Ui
             float footerH = AvGridTokens.Footer;
             AvLay.Place(body, 0f, TitleH, w, h - TitleH - footerH);
             AvLay.Place(viewport, 0f, 0f, w, h - TitleH - footerH);
+            AvLay.Place((RectTransform)bar.transform, w - AvGridTokens.Pad - AvGridTokens.Gutter + 2f, 2f, 4f, h - TitleH - footerH - 4f);
+            scrollbar = bar;
             Footer.Place(new AvSlot(0f, h - footerH, w, footerH));
             Ticker.Add(-1, AvTickRate.Fast, UpdateBlur);
             Ticker.Register(new Hook(this));
@@ -127,6 +146,9 @@ namespace NOAvionics.Ui
             RenderTexture rt = AvBlurSource.Enabled ? AvBlurSource.Texture : null;
             blur.enabled = rt != null;
             frost.enabled = rt == null && frost.material != null && AvFxDriver.Tier != AvFxTier.Off;
+            // Without blur or frost behind it the frame is the only thing between the window and the MFD.
+            bool nowGlassy = blur.enabled || frost.enabled;
+            if (nowGlassy != glassy) { glassy = nowGlassy; Restyle(); }
             if (rt == null) return;
             blur.texture = rt;
             Vector3[] c = corners;
@@ -137,7 +159,12 @@ namespace NOAvionics.Ui
         private void Restyle()
         {
             AvStyle w = AvStyleHost.FuiStyle("window");
-            frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(0.82f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
+            frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(glassy ? 0.82f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
+            if (scrollbar != null)
+            {
+                scrollbar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
+                scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
+            }
             frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
             AvStyle t = AvStyleHost.FuiStyle("window-title");
             titleBack.color = AvStyleHost.Resolve(t.Background, AvTheme.SurfaceRaised);
@@ -156,6 +183,13 @@ namespace NOAvionics.Ui
         {
             public RectTransform Target;
             public void OnDrag(PointerEventData e) { Target.anchoredPosition += e.delta / (Target.lossyScale.x > 0f ? Target.lossyScale.x : 1f); AvLay.ClampIntoCanvas(Target); }
+        }
+
+        /// <summary>Destroys a window-owned host canvas together with the window.</summary>
+        private sealed class HostReaper : MonoBehaviour
+        {
+            public GameObject Host;
+            private void OnDestroy() { if (Host != null) Destroy(Host); }
         }
     }
 }

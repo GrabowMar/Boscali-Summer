@@ -64,6 +64,9 @@ namespace NOAvionics.Ui
         public bool Interactable { get => interactable; set { interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
         public string Label { get => text.text; set => text.text = value ?? ""; }
 
+        /// <summary>Label shrinks toward the floor but never wraps (tabs, where a break would split a word).</summary>
+        public void SingleLine() => AvText.Fit(text, false);
+
         /// <summary>Hover help shown in the console footer (null/empty = none).</summary>
         public string Help { get => tip != null ? tip.Text : null; set => tip = AvHelpTip.Attach(frame.gameObject, value); }
         private AvHelpTip tip;
