@@ -1,3 +1,4 @@
+using System;
 using NOAvionics;
 using NOAvionics.Ui;
 using TMPro;
@@ -6,12 +7,55 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Features.Progression.Presentation
 {
+    /// <summary>State colours for the local parts: rail hue, value ink, and the selection accent.</summary>
+    internal static class SqdTone
+    {
+        public static Color Rail(AvState state)
+        {
+            switch (state)
+            {
+                case AvState.Ready: return AvTheme.RailReady;
+                case AvState.Caution: return AvTheme.RailCaution;
+                case AvState.Danger: return AvTheme.RailDanger;
+                case AvState.Info: return AvTheme.RailInfo;
+                default: return AvTheme.RailInert;
+            }
+        }
+
+        public static Color Text(AvState state)
+        {
+            if (state == AvState.Info)
+                return AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip info").Color, AvTheme.RailInfo);
+            return AvStyleHost.Resolve(AvStyleHost.FuiStyle(
+                state == AvState.Inert ? "row-value" : "row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary);
+        }
+
+        public static Color Select =>
+            AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell", "on").Border, AvTheme.Selected);
+
+        public static Color Ink => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+        public static Color Dim => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+        public static Color Key => AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-title").Color, AvTheme.RailInfo);
+        public static Color Caption => AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Disabled);
+
+        /// <summary>Tabler glyph that says the state without colour.</summary>
+        public static AvIcon Glyph(AvState state)
+        {
+            switch (state)
+            {
+                case AvState.Ready: return AvIcon.CircleCheck;
+                case AvState.Caution: return AvIcon.AlertTriangle;
+                case AvState.Danger: return AvIcon.AlertCircle;
+                default: return AvIcon.Circle;
+            }
+        }
+    }
+
     /// <summary>
     /// Small local kit v2 parts (built from <c>AvPart</c>/<c>AvFrame</c>/<c>AvText</c>/<c>AvLay</c>)
-    /// that the SQD console's five pages share. Kit v2 has no ready-made equivalent for a wrapped
-    /// prose line, a label/value pair or a portrait-with-fallback, so these are built locally per
-    /// the P2 brief ("build it locally in your module from kit primitives") rather than invented
-    /// inside the shared kit.
+    /// that the SQD console's pages share. Every one of them reports <see cref="AvPart.Changed"/>
+    /// when its text can change its height, so a value that arrives after the first layout never
+    /// spills into the part below it.
     /// </summary>
     internal sealed class AvTextBlock : AvPart
     {
@@ -26,82 +70,19 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         public Color Color { set => text.color = value; }
 
-        public void Set(string value) { string v = value ?? ""; if (text.text != v) text.text = v; }
+        public void Set(string value)
+        {
+            string v = value ?? "";
+            if (text.text == v) return;
+            text.text = v;
+            Changed();
+        }
 
         public override float Measure(float width) => Mathf.Max(14f, AvText.Height(text, width));
 
         public override void Place(AvSlot slot) { base.Place(slot); AvLay.Fill(text.rectTransform); }
 
-        public override void Restyle() =>
-            text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-    }
-
-    /// <summary>
-    /// One field: a caps label at left, a value at right. When either side does not fit its
-    /// share of the line the field stacks (label above, value below and wrapped) instead of
-    /// shrinking or clipping. Replaces the v1 FormRow.
-    /// </summary>
-    internal sealed class AvKeyValue : AvPart
-    {
-        private const float Line = 20f;
-        private readonly TMP_Text key, value;
-        private AvState state = AvState.Inert;
-        private bool stacked;
-
-        public AvKeyValue(RectTransform parent, string keyText)
-        {
-            Rect = AvLay.Child(parent, "Field " + keyText);
-            key = AvText.Make(Rect, "Key", AvTextRole.Label, keyText ?? "");
-            value = AvText.Make(Rect, "Value", AvTextRole.Data, "—", TextAlignmentOptions.MidlineRight);
-            Restyle();
-        }
-
-        public void Set(string v, AvState st = AvState.Inert)
-        {
-            string body = string.IsNullOrEmpty(v) ? "—" : v;
-            if (value.text != body) value.text = body;
-            if (st != state) { state = st; Restyle(); }
-        }
-
-        private bool NeedsStack(float width)
-        {
-            float kw = width * 0.46f;
-            return AvText.Width(value) > width - kw - 2f || AvText.Width(key) > kw - 2f;
-        }
-
-        public override float Measure(float width)
-        {
-            stacked = NeedsStack(width);
-            return stacked ? Line + Mathf.Max(Line - 4f, AvText.Height(value, width)) + 4f : AvGridTokens.RowDense;
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            stacked = NeedsStack(s.W);
-            value.enableWordWrapping = stacked;
-            if (stacked)
-            {
-                AvLay.Place(key.rectTransform, 0f, 0f, s.W, Line);
-                AvLay.Place(value.rectTransform, 0f, Line, s.W, Mathf.Max(0f, s.H - Line));
-                value.alignment = TextAlignmentOptions.TopRight;
-            }
-            else
-            {
-                float kw = s.W * 0.46f;
-                AvLay.Place(key.rectTransform, 0f, 0f, kw, s.H);
-                AvLay.Place(value.rectTransform, kw, 0f, s.W - kw, s.H);
-                value.alignment = TextAlignmentOptions.MidlineRight;
-            }
-        }
-
-        public override void Restyle()
-        {
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            value.color = state == AvState.Inert
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value").Color, AvTheme.TextPrimary)
-                : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary);
-        }
+        public override void Restyle() => text.color = SqdTone.Dim;
     }
 
     /// <summary>A small read-only stat: caption over a mono value. Used for compact tile rows.</summary>
@@ -109,6 +90,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
     {
         private readonly AvFrame frame;
         private readonly TMP_Text caption, value;
+        private AvState state = AvState.Inert;
 
         public AvStatTile(RectTransform parent, string captionText)
         {
@@ -120,23 +102,28 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Restyle();
         }
 
-        public void Set(string v) { string body = string.IsNullOrEmpty(v) ? "—" : v; if (value.text != body) value.text = body; }
+        public void Set(string v, AvState st = AvState.Inert)
+        {
+            string body = string.IsNullOrEmpty(v) ? "—" : v;
+            if (value.text != body) value.text = body;
+            if (st != state) { state = st; Restyle(); }
+        }
 
         public override float Measure(float width) => AvGridTokens.ToolCell;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            AvLay.Place(caption.rectTransform, 6f, 4f, s.W - 12f, 14f);
-            AvLay.Place(value.rectTransform, 6f, 19f, s.W - 12f, s.H - 23f);
+            AvLay.Place(caption.rectTransform, 8f, 4f, s.W - 16f, 14f);
+            AvLay.Place(value.rectTransform, 8f, 19f, s.W - 16f, s.H - 23f);
         }
 
         public override void Restyle()
         {
             frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Background, AvTheme.SurfaceInert),
                 AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Border, AvTheme.Hairline));
-            caption.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value").Color, AvTheme.TextPrimary);
+            caption.color = SqdTone.Caption;
+            value.color = SqdTone.Text(state);
         }
     }
 
@@ -146,9 +133,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private readonly AvFrame frame;
         private readonly Image image;
         private readonly TMP_Text fallback;
+        private readonly float height;
 
-        public AvPortrait(RectTransform parent, string name, string fallbackWord = "NO VISUAL")
+        public AvPortrait(RectTransform parent, string name, string fallbackWord = "NO VISUAL",
+            float measuredHeight = AvGridTokens.Metric)
         {
+            height = measuredHeight;
             Rect = AvLay.Child(parent, "Portrait " + name);
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(4f)); AvLay.Fill(frame.rectTransform);
             var go = new GameObject("Image", typeof(RectTransform), typeof(CanvasRenderer));
@@ -162,19 +152,36 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Restyle();
         }
 
+        private Vector2 area;
+
         public void Set(Sprite sprite)
         {
             image.sprite = sprite;
             image.enabled = sprite != null;
             fallback.gameObject.SetActive(sprite == null);
+            PlaceImage();
         }
 
-        public override float Measure(float width) => AvGridTokens.Metric;
+        /// <summary>The sprite is fitted inside the frame and centred (a corner-pivoted image would hug the top-left).</summary>
+        private void PlaceImage()
+        {
+            float w = area.x, h = area.y;
+            Sprite sprite = image.sprite;
+            if (sprite != null && sprite.rect.height > 0f && w > 0f && h > 0f)
+            {
+                float aspect = sprite.rect.width / sprite.rect.height;
+                if (w / h > aspect) w = h * aspect; else h = w / aspect;
+            }
+            AvLay.Place((RectTransform)image.transform, 3f + (area.x - w) * .5f, 3f + (area.y - h) * .5f, w, h);
+        }
+
+        public override float Measure(float width) => height;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            AvLay.Place((RectTransform)image.transform, 3f, 3f, s.W - 6f, s.H - 6f);
+            area = new Vector2(Mathf.Max(0f, s.W - 6f), Mathf.Max(0f, s.H - 6f));
+            PlaceImage();
             AvLay.Place(fallback.rectTransform, 4f, 4f, s.W - 8f, s.H - 8f);
         }
 
@@ -182,7 +189,354 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Background, AvTheme.SurfaceInert),
                 AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Border, AvTheme.Hairline));
-            fallback.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
+            fallback.color = SqdTone.Caption;
+        }
+    }
+
+    /// <summary>A thin progress bar drawn from two solid images; placed by its owning part.</summary>
+    internal sealed class SqdBar
+    {
+        private readonly Image track, fill;
+        private float x, y, w, h, fraction;
+
+        public SqdBar(RectTransform parent, string name)
+        {
+            track = AvLay.Solid(parent, name + " Track", Color.clear);
+            fill = AvLay.Solid(parent, name + " Fill", Color.clear);
+            Restyle();
+        }
+
+        public void Place(float px, float py, float pw, float ph)
+        {
+            x = px; y = py; w = pw; h = ph;
+            Apply();
+        }
+
+        public void Set(float value, Color color)
+        {
+            fraction = Mathf.Clamp01(value);
+            fill.color = color;
+            Apply();
+        }
+
+        public void SetShown(bool shown) { track.gameObject.SetActive(shown); fill.gameObject.SetActive(shown); }
+
+        private void Apply()
+        {
+            AvLay.Place(track.rectTransform, x, y, w, h);
+            AvLay.Place(fill.rectTransform, x, y, Mathf.Round(w * fraction), h);
+        }
+
+        public void Restyle() => track.color = AvTheme.Hairline;
+    }
+
+    /// <summary>
+    /// A prose block set as a quotation: a rail at the left and the text measured at the
+    /// width it will really be drawn at. Used for the pilot's service note.
+    /// </summary>
+    internal sealed class SqdQuote : AvPart
+    {
+        private const float PadLeft = 16f, PadRight = 8f, PadY = 8f;
+        private readonly AvFrame frame;
+        private readonly Image bar;
+        private readonly TMP_Text text;
+
+        public SqdQuote(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "Quote");
+            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer)); AvLay.Fill(frame.rectTransform);
+            bar = AvLay.Solid(Rect, "Bar", Color.clear);
+            text = AvText.Make(Rect, "Text", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
+            Restyle();
+        }
+
+        public void Set(string value)
+        {
+            string v = value ?? "";
+            if (text.text == v) return;
+            text.text = v;
+            Changed();
+        }
+
+        public override float Measure(float width) =>
+            Mathf.Max(AvGridTokens.Row, PadY + AvText.Height(text, width - PadLeft - PadRight) + PadY);
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            AvLay.Place(bar.rectTransform, 0f, 0f, 3f, s.H);
+            AvLay.Place(text.rectTransform, PadLeft, PadY, s.W - PadLeft - PadRight, s.H - 2f * PadY);
+        }
+
+        public override void Restyle()
+        {
+            AvStyle c = AvStyleHost.FuiStyle("card inert");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), Color.clear);
+            bar.color = AvTheme.RailInfo;
+            text.color = SqdTone.Ink;
+        }
+    }
+
+    /// <summary>
+    /// One compact card for "nothing here yet": an icon, what is missing, what to do, and
+    /// optionally the button that does it. Replaces empty section bodies and stray captions.
+    /// </summary>
+    internal sealed class SqdEmptyCard : AvPart
+    {
+        private const float PadX = 12f, PadY = 10f, IconW = 20f, ActionH = 26f;
+        private readonly AvFrame frame;
+        private readonly TMP_Text icon, title, hint;
+        private readonly AvControl action;
+
+        public SqdEmptyCard(RectTransform parent, AvIcon glyph, string titleText, string hintText,
+            string actionLabel = null, Action onAction = null, AvIcon actionIcon = AvIcon.None)
+        {
+            Rect = AvLay.Child(parent, "Empty " + titleText);
+            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f)); AvLay.Fill(frame.rectTransform);
+            icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconTool, Color.white);
+            title = AvText.Make(Rect, "Title", AvTextRole.Label, titleText, TextAlignmentOptions.TopLeft, true);
+            hint = AvText.Make(Rect, "Hint", AvTextRole.ProseSmall, hintText, TextAlignmentOptions.TopLeft, true);
+            if (!string.IsNullOrEmpty(actionLabel))
+                action = AvControl.Make(Rect, new AvControl.Spec(actionLabel, onAction, AvButtonStyle.Quiet, actionIcon));
+            Restyle();
+        }
+
+        public void Set(string titleText, string hintText)
+        {
+            bool grew = false;
+            if (title.text != (titleText ?? "")) { title.text = titleText ?? ""; grew = true; }
+            if (hint.text != (hintText ?? "")) { hint.text = hintText ?? ""; grew = true; }
+            if (grew) Changed();
+        }
+
+        private float TextWidth(float width) => width - 2f * PadX - IconW - 8f;
+
+        public override float Measure(float width)
+        {
+            float w = TextWidth(width);
+            float h = PadY + AvText.Height(title, w) + (hint.text.Length > 0 ? 3f + AvText.Height(hint, w) : 0f);
+            if (action != null) h += 8f + ActionH;
+            return Mathf.Max(AvGridTokens.Row + 8f, h + PadY);
+        }
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float w = TextWidth(s.W), x = PadX + IconW + 8f;
+            float th = AvText.Height(title, w);
+            float hh = AvText.Height(hint, w);
+            AvLay.Place(icon.rectTransform, PadX, PadY - 1f, IconW, IconW);
+            AvLay.Place(title.rectTransform, x, PadY, w, th);
+            AvLay.Place(hint.rectTransform, x, PadY + th + 3f, w, hh);
+            if (action != null)
+                AvLay.Place(action.Rect, x, PadY + th + (hint.text.Length > 0 ? 3f + hh : 0f) + 8f, Mathf.Min(170f, w), ActionH);
+        }
+
+        public override void Restyle()
+        {
+            AvStyle c = AvStyleHost.FuiStyle("card inert");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            icon.color = SqdTone.Caption;
+            title.color = SqdTone.Ink;
+            hint.color = SqdTone.Dim;
+            action?.Restyle();
+        }
+    }
+
+    /// <summary>
+    /// A compact two-column readout grid inside one frame: a small caps label over a mono
+    /// value in every cell, with hairline dividers. Replaces long label/value tables.
+    /// </summary>
+    internal sealed class SqdStatGrid : AvPart
+    {
+        private const float CellH = 40f, PadX = 12f;
+        private const int Columns = 2;
+        private readonly AvFrame frame;
+        private readonly System.Collections.Generic.List<TMP_Text> keys = new System.Collections.Generic.List<TMP_Text>(12);
+        private readonly System.Collections.Generic.List<TMP_Text> values = new System.Collections.Generic.List<TMP_Text>(12);
+        private readonly System.Collections.Generic.List<AvState> states = new System.Collections.Generic.List<AvState>(12);
+        private readonly System.Collections.Generic.List<Image> rules = new System.Collections.Generic.List<Image>(8);
+        private readonly Image divider;
+
+        public SqdStatGrid(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "StatGrid");
+            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f)); AvLay.Fill(frame.rectTransform);
+            divider = AvLay.Solid(Rect, "Divider", Color.clear);
+            Restyle();
+        }
+
+        public int Count => keys.Count;
+
+        public int Add(string label)
+        {
+            TMP_Text key = AvText.Make(Rect, "Key " + label, AvTextRole.Micro, label ?? "");
+            TMP_Text value = AvText.Make(Rect, "Value " + label, AvTextRole.DataStrong, "—");
+            AvText.Fit(key, false); AvText.Fit(value, false);
+            keys.Add(key); values.Add(value); states.Add(AvState.Inert);
+            if (keys.Count > Columns && (keys.Count - 1) % Columns == 0) rules.Add(AvLay.Solid(Rect, "Rule", Color.clear));
+            Restyle();
+            Changed();
+            return keys.Count - 1;
+        }
+
+        public void Set(int index, string value, AvState state = AvState.Inert)
+        {
+            if (index < 0 || index >= values.Count) return;
+            string body = string.IsNullOrEmpty(value) ? "—" : value;
+            if (values[index].text != body) values[index].text = body;
+            if (states[index] != state) { states[index] = state; values[index].color = SqdTone.Text(state); }
+        }
+
+        private int Rows => (keys.Count + Columns - 1) / Columns;
+
+        public override float Measure(float width) => Mathf.Max(CellH, Rows * CellH);
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float col = s.W / Columns;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                float x = (i % Columns) * col + PadX, y = (i / Columns) * CellH;
+                AvLay.Place(keys[i].rectTransform, x, y + 5f, col - PadX - 6f, 14f);
+                AvLay.Place(values[i].rectTransform, x, y + 19f, col - PadX - 6f, 18f);
+            }
+            AvLay.Place(divider.rectTransform, col, 6f, 1f, Mathf.Max(0f, s.H - 12f));
+            for (int r = 0; r < rules.Count; r++)
+                AvLay.Place(rules[r].rectTransform, 8f, (r + 1) * CellH, s.W - 16f, 1f);
+        }
+
+        public override void Restyle()
+        {
+            AvStyle c = AvStyleHost.FuiStyle("card inert");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            divider.color = AvTheme.Hairline;
+            foreach (Image rule in rules) rule.color = AvTheme.Hairline;
+            for (int i = 0; i < keys.Count; i++)
+            {
+                keys[i].color = SqdTone.Caption;
+                values[i].color = SqdTone.Text(states[i]);
+            }
+        }
+    }
+
+    /// <summary>
+    /// One roster line: state rail, optional portrait thumb, a name, a wrapped sub line, and a
+    /// right-hand value with its own sub word. Every text is placed at construction-independent
+    /// slots on each layout, so a value that arrives late can never float unplaced. Replaces
+    /// AvRow where the right column is filled in after the first layout.
+    /// </summary>
+    internal sealed class SqdRosterRow : AvPart
+    {
+        private const float PadX = 10f, PadY = 6f, ThumbW = 34f, ThumbH = 44f, MaxRight = 150f;
+        private readonly AvFrame frame;
+        private readonly Image rail;
+        private readonly AvPortrait thumb;
+        private readonly TMP_Text title, sub, value, valueSub;
+        private readonly SqdBar meter;
+        private AvState state = AvState.Inert;
+        private bool hover, armed, interactable = true, hasMeter;
+
+        public SqdRosterRow(RectTransform parent, bool withThumb = false, Action onClick = null)
+        {
+            Rect = AvLay.Child(parent, "RosterRow");
+            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer)); AvLay.Fill(frame.rectTransform);
+            rail = AvLay.Solid(Rect, "Rail", Color.clear);
+            if (withThumb) thumb = new AvPortrait(Rect, "Thumb", "");
+            title = AvText.Make(Rect, "Title", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
+            sub = AvText.Make(Rect, "Sub", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+            value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.TopRight);
+            valueSub = AvText.Make(Rect, "ValueSub", AvTextRole.Micro, "", TextAlignmentOptions.TopRight);
+            AvText.Fit(value, false); AvText.Fit(valueSub, false);
+            meter = new SqdBar(Rect, "Meter");
+            meter.SetShown(false);
+            if (onClick != null)
+            {
+                AvHit hit = AvHit.On(frame);
+                hit.Hover = h => { hover = h; Restyle(); };
+                hit.Click = e => onClick();
+            }
+            Restyle();
+        }
+
+        /// <summary>Hover help shown in the console footer.</summary>
+        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
+
+        public bool Armed { get => armed; set { if (armed == value) return; armed = value; Restyle(); } }
+
+        public void SetThumb(Sprite sprite) => thumb?.Set(sprite);
+
+        /// <summary>A thin condition bar along the bottom edge; null hides it.</summary>
+        public void SetMeter(float? fraction, Color color)
+        {
+            bool show = fraction.HasValue;
+            if (show != hasMeter) { hasMeter = show; meter.SetShown(show); Changed(); }
+            if (show) meter.Set(fraction.Value, color);
+        }
+
+        public void Set(string titleText, string subText, string valueText, string valueSubText, AvState st)
+        {
+            bool grew = false;
+            if (title.text != (titleText ?? "")) { title.text = titleText ?? ""; grew = true; }
+            if (sub.text != (subText ?? "")) { sub.text = subText ?? ""; grew = true; }
+            if (value.text != (valueText ?? "")) { value.text = valueText ?? ""; grew = true; }
+            if (valueSub.text != (valueSubText ?? "")) { valueSub.text = valueSubText ?? ""; grew = true; }
+            if (st != state) { state = st; Restyle(); }
+            if (grew) Changed();
+        }
+
+        private float RightWidth() =>
+            Mathf.Min(MaxRight, Mathf.Max(value.text.Length > 0 ? AvText.Width(value) : 0f,
+                valueSub.text.Length > 0 ? AvText.Width(valueSub) : 0f));
+
+        private float LeftInset => PadX + 4f + (thumb != null ? ThumbW + 8f : 0f);
+
+        private float TextWidth(float width)
+        {
+            float right = RightWidth();
+            return width - LeftInset - PadX - (right > 0f ? right + 8f : 0f);
+        }
+
+        public override float Measure(float width)
+        {
+            float tw = TextWidth(width);
+            float h = PadY + AvText.Height(title, tw) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, tw) : 0f) + PadY;
+            float rightH = PadY + (value.text.Length > 0 ? 18f : 0f) + (valueSub.text.Length > 0 ? 14f : 0f) + PadY;
+            float min = thumb != null ? ThumbH + 2f * PadY : AvGridTokens.Row + 4f;
+            return Mathf.Max(min, Mathf.Max(h, rightH)) + (hasMeter ? 6f : 0f);
+        }
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float right = RightWidth();
+            float tw = TextWidth(s.W);
+            float x0 = LeftInset;
+            float th = AvText.Height(title, tw);
+            AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
+            if (thumb != null) thumb.Place(new AvSlot(PadX + 2f, PadY, ThumbW, s.H - 2f * PadY - (hasMeter ? 6f : 0f)));
+            AvLay.Place(title.rectTransform, x0, PadY, tw, th);
+            AvLay.Place(sub.rectTransform, x0, PadY + th + 2f, tw, AvText.Height(sub, tw));
+            float rx = s.W - PadX - right;
+            AvLay.Place(value.rectTransform, rx, PadY, right, 18f);
+            AvLay.Place(valueSub.rectTransform, rx, PadY + (value.text.Length > 0 ? 18f : 0f), right, 14f);
+            meter.Place(PadX + 4f, s.H - 7f, s.W - 2f * PadX - 4f, 3f);
+        }
+
+        public override void Restyle()
+        {
+            string st = !interactable ? "disabled" : armed ? "armed" : hover ? "hover" : null;
+            AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), st);
+            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
+                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
+            title.color = SqdTone.Ink;
+            sub.color = SqdTone.Dim;
+            value.color = SqdTone.Text(state);
+            valueSub.color = SqdTone.Dim;
+            meter.Restyle();
+            thumb?.Restyle();
         }
     }
 }

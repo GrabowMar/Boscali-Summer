@@ -476,21 +476,64 @@ namespace BoscaliSummer.Features.Progression.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Row pooling -----------------------------------------------------------------
+        // ---- Board rows ------------------------------------------------------------------
 
         private sealed class SkillRow
         {
             public byte Id;
-            public AvRow Row;
+            public SkillNode Node;
         }
 
-        /// <summary>One lane's caption and committed count, refreshed as grades are taken.</summary>
+        /// <summary>
+        /// One lane's header: its name, a held-count bar and state word ("HELD", "OPEN",
+        /// "CLOSED"), repainted as grades are taken. Every text owns a fixed slot.
+        /// </summary>
         private sealed class SkillBranchRow
         {
-            public TMP_Text Caption;
-            public TMP_Text Note;
+            private const float HeaderName = 18f, BarY = 21f, StatusY = 27f;
+            private readonly TMP_Text name, count, status;
+            private readonly SqdBar bar;
+            private AvState state = AvState.Info;
+            private float fraction;
             public readonly List<byte> Ids = new List<byte>(PerkCatalog.MaximumDepth);
-        }
 
+            public SkillBranchRow(RectTransform parent, string laneName)
+            {
+                name = AvText.Make(parent, "Lane " + laneName, AvTextRole.Head, laneName);
+                AvText.Fit(name, false);
+                count = AvText.Make(parent, "LaneCount " + laneName, AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+                AvText.Fit(count, false);
+                status = AvText.Make(parent, "LaneState " + laneName, AvTextRole.Micro, "");
+                AvText.Fit(status, false);
+                bar = new SqdBar(parent, "Lane " + laneName);
+            }
+
+            public void Place(float x, float y, float width)
+            {
+                AvLay.Place(name.rectTransform, x, y, width, HeaderName);
+                bar.Place(x, y + BarY, width, 3f);
+                AvLay.Place(status.rectTransform, x, y + StatusY, Mathf.Max(0f, width - 34f), 14f);
+                AvLay.Place(count.rectTransform, x + width - 34f, y + StatusY, 34f, 14f);
+            }
+
+            public void Paint(int taken, int total, string word, AvState next)
+            {
+                count.text = AvNum.Thousands(taken) + "/" + AvNum.Thousands(total);
+                status.text = word;
+                state = next;
+                fraction = total <= 0 ? 0f : taken / (float)total;
+                Restyle();
+            }
+
+            public void Restyle()
+            {
+                bool closed = state == AvState.Inert;
+                name.color = closed ? AvTheme.Disabled : SqdTone.Ink;
+                count.color = closed ? AvTheme.Disabled : SqdTone.Ink;
+                status.color = closed ? AvTheme.Disabled : SqdTone.Text(state);
+                bar.Restyle();
+                bar.Set(fraction, closed ? AvTheme.RailInert : SqdTone.Rail(state));
+            }
+        }
     }
 }
