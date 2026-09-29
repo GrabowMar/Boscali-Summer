@@ -91,9 +91,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return flightCloudShader;
         }
 
-        // TEMP build shim (fui-wave3): another session is finishing this; reverted before merge.
-        internal static Shader GetFlightCloudCompositeShader() => null;
-
         internal static Shader GetShader()
         {
             if (shader != null) return shader;
