@@ -41,10 +41,10 @@ namespace BoscaliSummer.Features.Hud.Domain
     /// </summary>
     internal static class ThirdPersonHudLayout
     {
-        public const float BoxWidth = 84f, BoxHeight = 28f;
-        public const float HdgWidth = 64f, HdgHeight = 24f;
+        public const float BoxWidth = 110f, BoxHeight = 44f;
+        public const float HdgWidth = 72f, HdgHeight = 28f;
         public const float SubLineHeight = 14f;
-        public const float BarWidth = 6f, BarHeight = 28f, BarGap = 4f;
+        public const float BarWidth = 5f, BarHeight = 44f, BarGap = 4f;
 
         public const float BoxOffsetXFraction = 0.17f;
         public const float HdgOffsetYFraction = 0.30f;
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Features.Hud.Domain
             KeepClear(new RectF(BoxOffsetXFraction * width, 0f, BoxWidth, BoxHeight), AircraftFrame(width, height));
 
         public static RectF HeadingBox(float width, float height) =>
-            KeepClear(new RectF(0f, -HdgOffsetYFraction * height, HdgWidth, HdgHeight), AircraftFrame(width, height));
+            KeepClear(new RectF(0f, HdgOffsetYFraction * height, HdgWidth, HdgHeight), AircraftFrame(width, height));
 
         /// <summary>The thin sub-line under a box (e.g. "M .46  G 1.0" under SPD).</summary>
         public static RectF SubLine(RectF box) => new RectF(box.CenterX, box.Bottom - SubLineHeight * 0.5f - 2f, box.Width, SubLineHeight);

@@ -28,7 +28,10 @@ namespace BoscaliSummer.Features.Hud.Runtime
         private float prevYawDeg;
         private float smoothedYawRate;
 
+        private const float DistanceScale = 1.7f;
         private float idleTimer;
+        private bool hasLastView;
+        private float lastPan, lastTilt;
 
         /// <summary>Snaps every smoothing state: camera state change, ownship change, scene reset
         /// or feature teardown. The next active frame starts from vanilla's own placement with no
@@ -42,6 +45,7 @@ namespace BoscaliSummer.Features.Hud.Runtime
             hasPrevYaw = false;
             smoothedYawRate = 0f;
             idleTimer = 0f;
+            hasLastView = false;
         }
 
         /// <summary>Local player's own live, undetached, unejected aircraft only.</summary>
@@ -96,13 +100,16 @@ namespace BoscaliSummer.Features.Hud.Runtime
             float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f);
             if (dt <= 0f) return;
 
-            bool freeLooking = !Cursor.visible && GameManager.flightControlsEnabled &&
-                (Mathf.Abs(GameManager.playerInput.GetAxis("Pan View")) > 0.01f ||
-                 Mathf.Abs(GameManager.playerInput.GetAxis("Tilt View")) > 0.01f);
+            // Free-look = vanilla's own input moved pan/tilt since we last wrote them. Reading the
+            // raw "Pan View"/"Tilt View" axes instead counted mouse flight as free-look forever,
+            // so Wingview never took the pose (seen in game 2026-09-29).
+            bool freeLooking = hasLastView &&
+                (Mathf.Abs(Mathf.DeltaAngle(lastPan, panView)) > 0.05f || Mathf.Abs(tiltView - lastTilt) > 0.05f);
 
             if (freeLooking)
             {
                 idleTimer = 0f;
+                RememberView(panView, tiltView);
                 return; // Hold: vanilla's own pan/tilt placement stands for this frame.
             }
 
@@ -110,8 +117,10 @@ namespace BoscaliSummer.Features.Hud.Runtime
             float recentreAlpha = WingviewMath.SmoothingAlpha(1f / WingviewMath.RecentreTau, dt);
             panView = Mathf.LerpAngle(panView, 0f, recentreAlpha);
             tiltView = Mathf.Lerp(tiltView, 0f, recentreAlpha);
+            RememberView(panView, tiltView);
 
-            if (idleTimer < WingviewMath.RecentreIdleSeconds) return; // Still in the hold grace window.
+            // Grace window applies only after a real free-look; from rest Wingview owns the pose at once.
+            if (idleTimer < WingviewMath.RecentreIdleSeconds && (Mathf.Abs(panView) > 1f || Mathf.Abs(tiltView) > 1f)) return;
 
             ApplyPose(cam, aircraft, viewDistAdjust, lookAheadEnabled, dt);
         }
@@ -141,15 +150,22 @@ namespace BoscaliSummer.Features.Hud.Runtime
                 hasPrevYaw = false;
             }
 
-            float distance = WingviewMath.FollowDistance(aircraft.maxRadius, viewDistAdjust);
+            // Vanilla's orbit distance frames the aircraft too tight once Wingview's own lag is gone
+            // (sim capture 2026-09-29): pull back so it sits small in the lower third.
+            float distance = WingviewMath.FollowDistance(aircraft.maxRadius, viewDistAdjust) * DistanceScale;
             WingviewMath.Pose pose = WingviewMath.ComputePose(FromUnity(nose.position), dir, WVVec3.Up, distance);
 
+            // Smooth the eye as an offset from the aircraft, not an absolute world position: the
+            // floating origin shifts mid-flight, and an absolute smoothed eye was left kilometres
+            // behind (the aircraft vanished off-screen in a turn, seen in the sim 2026-09-29).
+            WVVec3 target = FromUnity(nose.position);
+            WVVec3 offset = pose.Eye - target;
             smoothedEye = hasEye
-                ? WingviewMath.ExpSmooth(smoothedEye, pose.Eye, WingviewMath.PositionSmoothingRate, dt)
-                : pose.Eye;
+                ? WingviewMath.ExpSmooth(smoothedEye, offset, WingviewMath.PositionSmoothingRate, dt)
+                : offset;
             hasEye = true;
 
-            Vector3 eye = ToUnity(smoothedEye);
+            Vector3 eye = ToUnity(target + smoothedEye);
             Vector3 look = ToUnity(pose.LookTarget);
 
             // Re-run vanilla's own pivot-to-camera linecast against Wingview's own placement so a
@@ -175,6 +191,8 @@ namespace BoscaliSummer.Features.Hud.Runtime
 
             cam.transform.SetPositionAndRotation(eye, smoothedRotation);
         }
+
+        private void RememberView(float pan, float tilt) { lastPan = pan; lastTilt = tilt; hasLastView = true; }
 
         private static WVVec3 FromUnity(Vector3 v) => new WVVec3(v.x, v.y, v.z);
         private static Vector3 ToUnity(WVVec3 v) => new Vector3(v.X, v.Y, v.Z);

@@ -199,7 +199,8 @@ namespace BoscaliSummer.Features.Hud.Presentation
             {
                 Rigidbody rb = ownAircraft.rb;
                 float speed = ownAircraft.speed;
-                float altitude = ownAircraft.transform.position.y;
+                // Global (floating-origin independent) height; transform.position.y is origin-local.
+                float altitude = ownAircraft.transform.position.GlobalY();
                 float climb = rb != null ? rb.velocity.y : 0f;
                 float heading = ownAircraft.transform.eulerAngles.y;
                 float soundSpeed = LevelInfo.GetSpeedOfSound(altitude);

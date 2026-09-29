@@ -2,6 +2,7 @@ using System.Reflection;
 using BoscaliSummer.Features.Hud.Domain;
 using HarmonyLib;
 using NOAvionics;
+using NOAvionics.Ui;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -98,14 +99,14 @@ namespace BoscaliSummer.Features.Hud.Presentation
 
             spd = BuildBox("SPD");
             alt = BuildBox("ALT");
-            hdg = BuildBox("HDG");
+            hdg = BuildBox("HDG", withBar: false);
             card = BuildTargetCard();
 
             rootObject.SetActive(false);
             builtActive = false;
         }
 
-        private Box BuildBox(string name)
+        private Box BuildBox(string name, bool withBar = true)
         {
             var boxObject = new GameObject(name, typeof(RectTransform), typeof(Image));
             RectTransform rect = (RectTransform)boxObject.transform;
@@ -115,29 +116,35 @@ namespace BoscaliSummer.Features.Hud.Presentation
             backing.raycastTarget = false;
             backing.color = new Color(0f, 0f, 0f, 0.35f);
 
-            TextMeshProUGUI value = BuildText(rect, "Value", TextAlignmentOptions.Center, 18f);
-            value.rectTransform.anchorMin = new Vector2(0f, 0.35f);
+            TextMeshProUGUI value = BuildText(rect, "Value", TextAlignmentOptions.Center, 22f);
+            value.rectTransform.anchorMin = new Vector2(0f, 0.4f);
             value.rectTransform.anchorMax = new Vector2(1f, 1f);
             value.rectTransform.offsetMin = Vector2.zero;
             value.rectTransform.offsetMax = Vector2.zero;
 
-            TextMeshProUGUI sub = BuildText(rect, "SubLine", TextAlignmentOptions.Center, 10f);
+            TextMeshProUGUI sub = BuildText(rect, "SubLine", TextAlignmentOptions.Center, 13f);
             sub.rectTransform.anchorMin = new Vector2(0f, 0f);
-            sub.rectTransform.anchorMax = new Vector2(1f, 0.35f);
+            sub.rectTransform.anchorMax = new Vector2(1f, 0.4f);
             sub.rectTransform.offsetMin = Vector2.zero;
             sub.rectTransform.offsetMax = Vector2.zero;
             sub.color = new Color(1f, 1f, 1f, 0.7f);
 
+            Image bar = null;
+            if (withBar)
+            {
             var barObject = new GameObject("Bar", typeof(RectTransform), typeof(Image));
             RectTransform barRect = (RectTransform)barObject.transform;
             barRect.SetParent(root, false);
             barRect.pivot = new Vector2(0.5f, 0f);
-            Image bar = barObject.GetComponent<Image>();
+            bar = barObject.GetComponent<Image>();
             bar.raycastTarget = false;
+            // Filled needs a sprite: without one Unity ignores fillAmount and draws the full rect.
+            bar.sprite = AvSprites.White;
             bar.type = Image.Type.Filled;
             bar.fillMethod = Image.FillMethod.Vertical;
             bar.fillOrigin = 0;
             bar.fillAmount = 0f;
+            }
 
             return new Box { Root = rect, Backing = backing, Value = value, SubLine = sub, Bar = bar, LastValue = float.NaN, LastSub = float.NaN };
         }
@@ -169,15 +176,17 @@ namespace BoscaliSummer.Features.Hud.Presentation
             var borderObject = new GameObject("Border", typeof(RectTransform), typeof(Image));
             RectTransform borderRect = (RectTransform)borderObject.transform;
             borderRect.SetParent(rect, false);
-            borderRect.anchorMin = Vector2.zero;
-            borderRect.anchorMax = Vector2.one;
-            borderRect.offsetMin = Vector2.zero;
-            borderRect.offsetMax = Vector2.zero;
+            // A thin header strip, not a full tinted overlay behind the feed.
+            borderRect.anchorMin = new Vector2(0f, 1f);
+            borderRect.anchorMax = new Vector2(1f, 1f);
+            borderRect.pivot = new Vector2(0.5f, 1f);
+            borderRect.anchoredPosition = Vector2.zero;
+            borderRect.sizeDelta = new Vector2(0f, ThirdPersonHudLayout.TargetCardHeaderHeight);
             Image border = borderObject.GetComponent<Image>();
             border.raycastTarget = false;
             border.color = new Color(1f, 1f, 1f, 0f); // tinted per theme in Present()
 
-            TextMeshProUGUI header = BuildText(rect, "Header", TextAlignmentOptions.MidlineLeft, 10f);
+            TextMeshProUGUI header = BuildText(rect, "Header", TextAlignmentOptions.MidlineLeft, 12f);
             header.rectTransform.anchorMin = new Vector2(0f, 1f);
             header.rectTransform.anchorMax = new Vector2(1f, 1f);
             header.rectTransform.pivot = new Vector2(0f, 1f);
@@ -238,8 +247,8 @@ namespace BoscaliSummer.Features.Hud.Presentation
             alt.Bar.color = fuelFraction < 0.2f ? theme.Warning : allClear;
 
             spd.Value.color = alt.Value.color = hdg.Value.color = allClear;
-            spd.SubLine.color = alt.SubLine.color = hdg.SubLine.color = new Color(allClear.r, allClear.g, allClear.b, 0.7f);
-            spd.Backing.color = alt.Backing.color = hdg.Backing.color = new Color(0f, 0f, 0f, 0.35f);
+            spd.SubLine.color = alt.SubLine.color = hdg.SubLine.color = new Color(allClear.r, allClear.g, allClear.b, 0.9f);
+            spd.Backing.color = alt.Backing.color = hdg.Backing.color = new Color(0.01f, 0.03f, 0.05f, 0.55f);
 
             WriteSpeed(speedMps, units);
             WriteAltitude(altitudeM, climbMps, units);
@@ -334,7 +343,7 @@ namespace BoscaliSummer.Features.Hud.Presentation
 
             RectF rect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
             PositionRect(card.Root, rect);
-            card.Border.color = new Color(allClear.r, allClear.g, allClear.b, 0.8f);
+            card.Border.color = new Color(allClear.r, allClear.g, allClear.b, 0.18f);
             card.Backing.color = new Color(0f, 0f, 0f, 0.55f);
             if (!ReferenceEquals(card.Feed.texture, cameraTexture)) card.Feed.texture = cameraTexture;
 

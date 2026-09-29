@@ -2,6 +2,7 @@ using System.Reflection;
 using BoscaliSummer.Features.Hud.Domain;
 using BoscaliSummer.Framework.Contracts;
 using HarmonyLib;
+using NOAvionics.Ui;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -25,11 +26,13 @@ namespace BoscaliSummer.Features.Hud.Presentation
     /// </summary>
     internal sealed class StatusPanel
     {
-        private const float RowHeight = 15f;
+        private const float RowHeight = 18f;
+        private const float RowFontSize = 13f;
+        private const float HeaderFontSize = 11f;
         private const float RowPad = 3f;
         private const float GlyphSize = 6f;
         private const float DockGap = 4f;
-        private const float HeaderHeight = 12f;
+        private const float HeaderHeight = 14f;
 
         private static readonly FieldInfo TopRightPanelField = AccessTools.Field(typeof(CombatHUD), "topRightPanel");
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
@@ -131,13 +134,14 @@ namespace BoscaliSummer.Features.Hud.Presentation
             var borderObject = new GameObject("Border", typeof(RectTransform), typeof(Image));
             RectTransform borderRect = (RectTransform)borderObject.transform;
             borderRect.SetParent(root, false);
-            borderRect.anchorMin = Vector2.zero;
-            borderRect.anchorMax = Vector2.one;
-            borderRect.offsetMin = Vector2.zero;
-            borderRect.offsetMax = Vector2.zero;
+            // One hairline under the header, not a tinted copy of the whole panel.
+            borderRect.anchorMin = new Vector2(0f, 1f);
+            borderRect.anchorMax = new Vector2(1f, 1f);
+            borderRect.pivot = new Vector2(0.5f, 1f);
+            borderRect.anchoredPosition = new Vector2(0f, -HeaderHeight);
+            borderRect.sizeDelta = new Vector2(-RowPad * 2f, 1f);
             border = borderObject.GetComponent<Image>();
             border.raycastTarget = false;
-            if (nativeImage != null) { border.sprite = nativeImage.sprite; border.type = nativeImage.type; }
             border.color = new Color(0f, 0f, 0f, 0f); // filled with the tone colour per Present()
 
             header = BuildLabel("Header", TextAlignmentOptions.MidlineLeft);
@@ -147,7 +151,9 @@ namespace BoscaliSummer.Features.Hud.Presentation
             header.rectTransform.anchoredPosition = new Vector2(RowPad, 0f);
             header.rectTransform.sizeDelta = new Vector2(-RowPad * 2f, HeaderHeight);
             header.text = "STATUS";
-            header.fontSize = Mathf.Max(9f, baseFontSize * 0.7f);
+            // Fixed sizes in this canvas's units: the native label's own size (the HUD text
+            // setting, ~40) ellipsised every row away in a short row.
+            header.fontSize = HeaderFontSize;
 
             for (int i = 0; i < rows.Length; i++) rows[i] = BuildRow(i);
         }
@@ -197,7 +203,7 @@ namespace BoscaliSummer.Features.Hud.Presentation
             TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
             text.font = font;
             text.fontSharedMaterial = fontMaterial;
-            text.fontSize = baseFontSize;
+            text.fontSize = RowFontSize;
             text.alignment = TextAlignmentOptions.MidlineLeft;
             text.enableWordWrapping = false;
             text.overflowMode = TextOverflowModes.Ellipsis;
@@ -213,6 +219,7 @@ namespace BoscaliSummer.Features.Hud.Presentation
             barRect.offsetMax = new Vector2(-RowPad, 2f);
             Image bar = barObject.GetComponent<Image>();
             bar.raycastTarget = false;
+            bar.sprite = AvSprites.White;
             bar.type = Image.Type.Filled;
             bar.fillMethod = Image.FillMethod.Horizontal;
             bar.fillOrigin = 0;
@@ -256,7 +263,7 @@ namespace BoscaliSummer.Features.Hud.Presentation
             if (header.color != themeAllClear) header.color = themeAllClear;
 
             float rowHeight = RowHeight * scale;
-            float fontSize = baseFontSize * scale;
+            float fontSize = RowFontSize * scale;
             const float headerHeight = HeaderHeight;
             for (int i = 0; i < rows.Length; i++)
             {
@@ -284,7 +291,7 @@ namespace BoscaliSummer.Features.Hud.Presentation
                     rows[i].Glyph.color = toneColor;
                     rows[i].Text.color = toneColor;
                     rows[i].Text.text = showDetails && !string.IsNullOrEmpty(message.Detail)
-                        ? message.Text + "  <alpha=#99>" + message.Detail + "</alpha>"
+                        ? message.Text + "  <alpha=#99>" + message.Detail
                         : message.Text;
                     rows[i].LastTone = message.Tone;
                     rows[i].LastText = message.Text;
