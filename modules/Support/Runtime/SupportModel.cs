@@ -27,7 +27,11 @@ namespace BoscaliSummer.Features.Support.Runtime
         MtiSweep = 24,
         SpecSkywatch = 25,
         SpecEavesdrop = 26,
-        SpecHunt = 27
+        SpecHunt = 27,
+        JtacMark = 28,
+        JtacUnlase = 29,
+        Prsm = 30,
+        Cruise = 31
     }
 
     internal enum SupportResult : byte
@@ -90,6 +94,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         PlatformRetasking = 42,
         NeedsTargetSolution = 43,
         PlatformOutOfReach = 44,
+
+        /// <summary>No hostile unit (or no lased one, for UNLASE) inside the mark radius.</summary>
+        NoMarkTarget = 45,
+
+        /// <summary>The HQ-known position at the target is missing or older than the intel window.</summary>
+        StaleIntel = 46,
+
+        /// <summary>The faction's tasking window is closed; the MFD names the next opening.</summary>
+        WindowClosed = 47,
 
         /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
         CyberRefused = 64,

@@ -51,7 +51,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 Status = new AvFlow(statusHost, ticker, width + 2f * Pad, 0f) { Host = this };
                 actionsHost = AvLay.Child(Rect, "Actions");
                 Actions = new AvFlow(actionsHost, ticker, width + 2f * Pad, 0f) { Host = this };
-                Select(0, null);
+                // PAW S1: ACTIONS first — the Tier-1 matrix must arm with zero sub-navigation.
+            Select(1, null);
                 Restyle();
             }
 

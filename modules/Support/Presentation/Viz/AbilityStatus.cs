@@ -138,6 +138,25 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                 int posts = detachment != null && detachment.Enabled ? detachment.Posts(FieldMission.Seize) : 0;
                 reason = posts > 0 ? "OWNED GROUND OR SAFEHOUSE REACH" : "OWNED GROUND ONLY";
             }
+            if (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise ||
+                action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp)
+            {
+                if (support.LocalIntelStale)
+                {
+                    reason = "STALE INTEL · TASK RADAR SCAN";
+                    return false;
+                }
+            }
+            if (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp ||
+                action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
+                action.Id == SupportActionId.MtiSweep)
+            {
+                if (!support.LocalWindowOpen)
+                {
+                    reason = "OUTSIDE WINDOW · OPENS T-" + PlatformWords.Clock(support.LocalWindowChangeIn);
+                    return false;
+                }
+            }
             PlatformAbility? ability = SupportManager.OrbitalAbility(action.Id);
             if (!ability.HasValue) return true;
             PlatformDenial denial = support.PlatformCheck(ability.Value);

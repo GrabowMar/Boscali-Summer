@@ -147,9 +147,10 @@ public static partial class SupportPanelUnityCheck
         }
         if (page == "SpaceOps")
         {
-            Check(((string)Property(Get(panel, "spaceUplinkOpen"), "Help") ?? "").Contains("sensor feed"), "The uplink OPEN control must carry its help.");
-            Check(((string)Property(Get(panel, "spaceUplinkAim"), "Help") ?? "").Contains("Right-click the map"), "The uplink AIM control must carry its help.");
-            Check(((string)Property(Get(panel, "spaceRephaseOpen"), "Help") ?? "").Contains("Relocation uses"), "The relocation OPEN control must carry its help.");
+            Check(Get(panel, "strikeStrip") != null, "SPACE must carry the strike strip.");
+            Check(Get(panel, "spaceLaunch") != null, "SPACE must carry LAUNCH CORE.");
+            object launchFirst = ((System.Collections.IList)Property(Get(panel, "spaceLaunch"), "Controls"))[0];
+            Check(((string)Property(launchFirst, "Help") ?? "").Contains("directly"), "LAUNCH CORE must offer the direct launch.");
         }
         ActionNamesByPage[page] = names;
     }

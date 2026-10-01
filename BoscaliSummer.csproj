@@ -98,8 +98,8 @@
     <EmbeddedResource Include="AvionicsUi\avionics.steel.avss"><LogicalName>NOAvionics.avionics.steel.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.ace.avss"><LogicalName>NOAvionics.avionics.ace.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.phosphor.avss"><LogicalName>NOAvionics.avionics.phosphor.avss</LogicalName></EmbeddedResource>
-    <!-- The OPS rooms' own literal palettes (SPACE, CYBER, SPEC OPS, imager), read by Support's RoomPaint. -->
-    <EmbeddedResource Include="modules\Support\Presentation\Views\rooms.avss"><LogicalName>BoscaliSummer.Support.rooms.avss</LogicalName></EmbeddedResource>
+
+
   </ItemGroup>
 
   <ItemGroup Label="Avionics UI bundle">

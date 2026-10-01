@@ -10,10 +10,11 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// <summary>
     /// CYBER — the faction's cyber network. STATUS is the watch floor: the INFOCON rail and advice,
     /// the node mesh, the resource meters with the live breach or lease, six status chips and the
-    /// event tape. ACTIONS holds the map abilities the network has earned. All hacking lives in the
-    /// full-screen console. This file is the shell plus STATUS and the work that keeps running with
-    /// the page closed: the event log and the alarm. Every figure comes from the network model;
-    /// every control is a host request. With no network the page is its one card and the log.
+    /// event tape. ACTIONS holds the map abilities the network has earned. PAW S1 deleted the
+    /// full-screen console: breach and incident answers return as the Tier-2 spectrum tab in S3.
+    /// This file is the shell plus STATUS and the work that keeps running with the page closed:
+    /// the event log and the alarm. Every figure comes from the network model; every control is
+    /// a host request. With no network the page is its one card and the log.
     /// </summary>
     internal sealed partial class SupportPanel
     {
@@ -54,8 +55,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private OpsSubPage cyberPage;
         private InfoconHero cyberHero;
-        private AvButtons cyberButtons;
-        private AvControl openConsoleButton;
         private AvSection cyberMeshSection, cyberResourceSection;
         private NetmapPart cyberMap;
         private MeterRow cyberComputing, cyberIntel, cyberLease;
@@ -70,8 +69,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             cyberPage = null;
             cyberHero = null;
-            cyberButtons = null;
-            openConsoleButton = null;
             cyberMeshSection = cyberResourceSection = null;
             cyberMap = null;
             cyberComputing = cyberIntel = cyberLease = null;
@@ -97,7 +94,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             CyberLog("WATCH FLOOR ONLINE · " + CyberWords.NetworkName + " STANDING BY");
         }
 
-        /// <summary>The board's node click: remember it and open the console on it.</summary>
+        /// <summary>The board's node click: remember the selected site (S3 restores the console).</summary>
         private void SelectSite(int slot)
         {
             selectedSite = slot;
@@ -107,16 +104,9 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void BuildCyberStatusPage(AvFlow status)
         {
             cyberHero = status.Add(new InfoconHero(status.Content));
-            cyberButtons = status.Buttons(new AvControl.Spec("OPEN CONSOLE", OpenConsole, AvButtonStyle.Primary, AvIcon.Typography));
-            openConsoleButton = cyberButtons.Controls[0];
-            openConsoleButton.Help = "The network-ops terminal: breach locations, answer incidents, buy network upgrades.";
 
             cyberMeshSection = status.Section(AvIcon.Map2, "NODE MESH", "");
-            cyberMap = status.Add(new NetmapPart(status.Content, slot =>
-            {
-                SelectSite(slot);
-                OpenConsole();
-            }));
+            cyberMap = status.Add(new NetmapPart(status.Content, SelectSite));
 
             cyberResourceSection = status.Section(AvIcon.Gauge, "RESOURCES", "");
             cyberComputing = status.Add(new MeterRow(status.Content, "COMPUTING"));
@@ -130,23 +120,14 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void SetCyberStatusParts(bool live)
         {
-            cyberButtons.SetShown(live);
             cyberMeshSection.SetShown(live);
             cyberMap.SetShown(live);
             cyberResourceSection.SetShown(live);
             cyberComputing.SetShown(live);
             cyberIntel.SetShown(live);
+            cyberLease.SetShown(live);
             foreach (AvChip chip in cyberTiles) chip.SetShown(live);
             if (!live) cyberLease.SetShown(false);
-        }
-
-        // ---- Console and loop --------------------------------------------------------------------
-
-        private void OpenConsole()
-        {
-            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(CyberRoom(), selectedSite, openConsoleButton != null ? openConsoleButton.Rect : null);
-            CyberLog("CONSOLE · " + CyberWords.NetworkName + " ON THE BIG BOARD");
         }
 
         /// <summary>Work that must not wait for the CYBER page: the loop and the alarm.</summary>

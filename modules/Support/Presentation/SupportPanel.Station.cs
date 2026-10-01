@@ -8,52 +8,48 @@ namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
     /// SPACE status: the orbit schematic as the hero (or, with no station, its one empty-state card
-    /// with LAUNCH CORE), the door into the task map and engineering, health as labelled meters,
-    /// the module roster and the voice loop. Orders belong to the rooms; this page is the glance.
+    /// with LAUNCH CORE), health as labelled meters, the module roster and the voice loop. PAW S1
+    /// deleted the rooms: orders belong to the ACTIONS page and return as Tier-2 tabs in S2; this
+    /// page is the glance.
     /// </summary>
     internal sealed partial class SupportPanel
     {
         private static readonly string[] TileKeys = { "THERMAL", "LINK", "CREW", "DEBRIS", "SUN", "DARK" };
 
-        private AvFlow stationFlow;
         private OrbitHero stationHero;
-        private AvButtons stationButtons;
         private AvSection healthSection, moduleSection;
         private MeterRow meterEnergy, meterFuel, meterRods, meterMass;
         private AvChip[] stationTiles;
         private RosterGrid roster;
         private LogTape stationLog;
-        private AvControl stationConsoleButton;
+        private BriefCard windowCard;
         private readonly byte[] heroCells = new byte[OrbitHero.Cells];
 
         private void ResetStationPage()
         {
-            stationFlow = null;
             stationHero = null;
-            stationButtons = null;
             healthSection = moduleSection = null;
             meterEnergy = meterFuel = meterRods = meterMass = null;
             stationTiles = null;
             roster = null;
             stationLog = null;
-            stationConsoleButton = null;
+            windowCard = null;
         }
 
         // ---- Build -----------------------------------------------------------------------------
 
         private void BuildStationPage(AvFlow status)
         {
-            stationFlow = status;
             stationHero = status.Add(new OrbitHero(status.Content));
-            stationHero.AddCta(new AvControl.Spec("LAUNCH CORE", OpenEngineering, AvButtonStyle.Primary, AvIcon.Satellite))
-                .Help = "Open Engineering and launch " + OrbitalPlatform.Callsign + "'s core; every other module docks to it.";
+            stationHero.AddCta(new AvControl.Spec("LAUNCH CORE", () =>
+            {
+                support.RequestCoreLaunch();
+                nextRefresh = 0f;
+            }, AvButtonStyle.Primary, AvIcon.Satellite))
+                .Help = "Launch " + OrbitalPlatform.Callsign + "'s core directly; every other module docks to it.";
 
-            stationButtons = status.Buttons(
-                new AvControl.Spec("OPEN TASKING", OpenStationConsole, AvButtonStyle.Primary, AvIcon.Map2),
-                new AvControl.Spec("ENGINEERING", OpenEngineering, AvButtonStyle.Default, AvIcon.Settings));
-            stationConsoleButton = stationButtons.Controls[0];
-            stationConsoleButton.Help = "The tasking map: power focus, targeting solution and quick map actions.";
-            stationButtons.Controls[1].Help = "The engineering wall: loadouts, the blueprint, the module rack and every launch.";
+            status.Section(AvIcon.Clock, "TASKING WINDOW", "");
+            windowCard = status.Add(new BriefCard(status.Content));
 
             healthSection = status.Section(AvIcon.Activity, "STATION HEALTH", "");
             meterEnergy = status.Add(new MeterRow(status.Content, "ENERGY"));
@@ -71,7 +67,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void SetStationParts(bool station)
         {
-            stationButtons.SetShown(station);
             healthSection.SetShown(station);
             meterEnergy.SetShown(station);
             meterFuel.SetShown(station);
@@ -88,12 +83,13 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             if (stationHero == null) return;
             bool station = platform != null && platform.Exists;
+            PaintWindowCard();
             SetStationParts(station);
             stationLog.Write(loop);
             if (!station)
             {
                 stationHero.ShowEmpty("NO STATION ON ORBIT",
-                    "Launch " + OrbitalPlatform.Callsign + "'s core from Engineering; every other module docks to it, " +
+                    "Launch " + OrbitalPlatform.Callsign + "'s core with LAUNCH CORE; every other module docks to it, " +
                     "giving persistent coverage from a fixed sector.", "NO CONTACT");
                 return;
             }
@@ -104,6 +100,16 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshStationHealth(platform, stats, state, now);
             RefreshStationResources(platform, stats);
             RefreshRoster(platform, stats, now);
+        }
+
+        private void PaintWindowCard()
+        {
+            if (windowCard == null) return;
+            if (support.LocalWindowOpen)
+                windowCard.Set("WINDOW OPEN · CLOSES T-" + PlatformWords.Clock(support.LocalWindowChangeIn),
+                    "Rod, EMP and the sweeps release.", AvState.Ready);
+            else windowCard.Set("WINDOW CLOSED · OPENS T-" + PlatformWords.Clock(support.LocalWindowChangeIn),
+                    "Rod, EMP and the sweeps hold. PRSM and cruise need no window.", AvState.Inert);
         }
 
         private void RefreshStationHero(OrbitalPlatform platform, in PlatformStats stats, double now)
@@ -157,7 +163,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                 down >= 0 ? AvState.Danger : deflected ? AvState.Info : AvState.Ready);
 
             SetChip(stationTiles[4], "SUN", PlatformWords.Kilowatts(stats.NetSunKw), stats.NetSunKw >= 0f ? AvState.Ready : AvState.Caution);
-            SetChip(stationTiles[5], "DARK", PlatformWords.Kilowatts(stats.NetEclipseKw), stats.NetEclipseKw >= 0f ? AvState.Ready : AvState.Info);
+            SetChip(stationTiles[5], "DARK", PlatformWords.Kilowatts(stats.NetEclipseKw), stats.NetEclipseKw >= 0f ? AvState.Info : AvState.Info);
 
             string caption = platform.Brownout ? "✕ BROWNOUT" : down >= 0 ? "✕ MODULE DOWN" : hot != null ? "▲ RUNNING HOT" : "NOMINAL";
             healthSection.SetCaption(caption);

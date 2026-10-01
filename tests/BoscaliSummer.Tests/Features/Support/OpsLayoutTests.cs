@@ -5,21 +5,17 @@ using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Support
 {
-    /// <summary>Pure layout maths for the OPS window: names, geometry, motion, boards.</summary>
+    /// <summary>Pure layout maths for the OPS MFD and map overlays: names, geometry, boards.</summary>
     internal static class OpsLayoutTests
     {
         public static void Run()
         {
             CheckTownNames();
-            CheckWindow();
-            CheckMotion();
             CheckBoardFit();
             CheckLabels();
             CheckShorten();
             CheckTimeline();
-            CheckStack();
             CheckContrast();
-            CheckRoomInk();
         }
 
         private static void CheckTownNames()
@@ -39,52 +35,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(PlaceNames.Clean("city_kersey (2)") == "CITY KERSEY", "clean strips the parenthetical and underscores");
             TestAssert.That(PlaceNames.Clean(null) == "", "clean of null is empty");
             TestAssert.That(PlaceNames.Clean(PlaceNames.Clean("A--B")) == PlaceNames.Clean("A--B"), "clean is idempotent");
-        }
-
-        private static void CheckWindow()
-        {
-            Box hd = WindowGeometry.Window(1920f, 1080f);
-            Same(hd, new Box(48f, 72f, 1824f, 968f), "1920x1080 window clears theater wire");
-            Box wide = WindowGeometry.Window(2560f, 1080f);
-            Same(wide, new Box(360f, 72f, 1840f, 968f), "21:9 clamps width and clears theater wire");
-            Box floor = WindowGeometry.Window(1280f, 720f);
-            Same(floor, new Box(0f, 0f, 1280f, 720f), "the floor wins on a small canvas");
-            Same(WindowGeometry.Window(float.NaN, 1080f), hd, "non-finite canvas uses the centred default");
-
-            Box mark = new Box(10f, 20f, 30f, 40f);
-            TestAssert.That(mark.Contains(10f, 20f) && !mark.Contains(40f, 20f), "contains is half-open");
-            TestAssert.That(mark.Intersects(new Box(39f, 59f, 5f, 5f)) && !mark.Intersects(new Box(40f, 20f, 5f, 5f)),
-                "touching edges do not intersect");
-            Same(mark.Inflate(2f, 3f), new Box(8f, 17f, 34f, 46f), "inflate");
-        }
-
-        private static void CheckMotion()
-        {
-            TestAssert.That(Motion.EaseOutCubic(0f) == 0f && Motion.EaseOutCubic(1f) == 1f, "ease endpoints");
-            float previous = -1f;
-            for (int i = 0; i <= 10; i++)
-            {
-                float value = Motion.EaseOutCubic(i / 10f);
-                TestAssert.That(value >= previous, "ease is monotonic");
-                previous = value;
-            }
-            TestAssert.That(Motion.Progress(-4f, 0.16f, true) == 1f, "reduced motion is immediate");
-            TestAssert.That(Motion.Progress(0.01f, 0f, false) == 1f, "a zero duration is immediate");
-            TestAssert.That(Motion.Progress(-1f, 0.16f, false) == 0f, "negative elapsed has not started");
-            TestAssert.That(Motion.BackdropIn == 0.12f && Motion.WindowIn == 0.16f &&
-                            Motion.WindowOut == 0.09f && Motion.RoomSwitch == 0.12f, "root motion tokens");
-
-            var tween = new TweenState();
-            tween.Retarget(1f, 1f, false);
-            tween.Tick(0.5f);
-            float mid = tween.Value;
-            TestAssert.That(mid > 0.5f && mid < 1f, "ease-out is ahead of linear at the midpoint");
-            tween.Retarget(0f, 1f, false);
-            TestAssert.That(Math.Abs(tween.Value - mid) < 0.0001f, "a retarget starts from the current value");
-            tween.Tick(0.01f);
-            TestAssert.That(Math.Abs(tween.Value - mid) < 0.05f, "the next sample does not jump");
-            tween.Retarget(1f, 1f, true);
-            TestAssert.That(tween.Value == 1f, "reduced motion snaps");
         }
 
         private static void CheckBoardFit()
@@ -233,27 +183,6 @@ namespace BoscaliSummer.Tests.Features.Support
             Near(lanes[0].End, 1f, "the clip ends at the window");
         }
 
-        private static void CheckStack()
-        {
-            var pieces = new[]
-            {
-                new StackPiece(1, 200f, 200f, false),
-                new StackPiece(2, 180f, 180f, false),
-                new StackPiece(3, 160f, 160f, false),
-                new StackPiece(4, 48f, 48f, true)
-            };
-            var heights = new float[4];
-            float used = AdaptiveStack.Fit(pieces, 4, 420f, heights);
-            TestAssert.That(heights[0] == 200f && heights[1] == 180f && heights[2] == 0f && heights[3] == 0f, "420 keeps P1 and P2");
-            TestAssert.That(used <= 420f, "420 does not overflow");
-            used = AdaptiveStack.Fit(pieces, 4, 596f, heights);
-            TestAssert.That(heights[2] == 160f && heights[3] >= 48f, "596 fits P3 and gives P4 at least three lines");
-            Near(used, 596f, "596 fills with the log");
-            used = AdaptiveStack.Fit(pieces, 4, 896f, heights);
-            Near(heights[3], 896f - 540f, "896 gives the fill section every leftover pixel");
-            TestAssert.That(used <= 896f + 0.01f, "896 does not overflow");
-        }
-
         private static void CheckContrast()
         {
             Near(Contrast.Ratio(1f, 1f, 1f, 0f, 0f, 0f), 21f, "white on black");
@@ -266,62 +195,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(primary >= 4.5f, "primary text clears 4.5:1");
             TestAssert.That(muted >= 4.5f && muted < 7f, "muted text passes, around 5.6");
             TestAssert.That(inert < 3f, "an inert rail fails as body text");
-        }
-
-        /// <summary>
-        /// Every room reads its own surface: body ink at least 4.5:1 on the surface it sits on,
-        /// strokes and accents at least 3:1. Parsed from the shipped sheet, so a retune that breaks
-        /// a pair fails here rather than on screen.
-        /// </summary>
-        private static void CheckRoomInk()
-        {
-            string text;
-            using (System.IO.Stream stream = typeof(OpsLayoutTests).Assembly
-                .GetManifestResourceStream("BoscaliSummer.Tests.rooms.avss"))
-            {
-                TestAssert.That(stream != null, "the shipped rooms sheet must be embedded for the room ink check");
-                using (var reader = new System.IO.StreamReader(stream)) text = reader.ReadToEnd();
-            }
-            AvStyleSheet sheet = AvStyleSheet.Parse(text);
-            Ink(sheet, "room-space-ink", "room-space-surface", 4.5f);
-            Ink(sheet, "room-space-dim", "room-space-surface", 4.5f);
-            Ink(sheet, "room-space-ink", "room-space-console", 4.5f);
-            Ink(sheet, "room-space-dim", "room-space-console", 4.5f);
-            Ink(sheet, "room-space-line", "room-space-surface", 3f);
-            Ink(sheet, "room-cyber-ink", "room-cyber-surface", 4.5f);
-            Ink(sheet, "room-cyber-ink", "room-cyber-pane", 4.5f);
-            Ink(sheet, "room-cyber-dim", "room-cyber-pane", 4.5f);
-            Ink(sheet, "room-cyber-title", "room-cyber-bar", 4.5f);
-            Ink(sheet, "room-cyber-accent", "room-cyber-pane", 3f);
-            Ink(sheet, "room-cyber-lattice", "room-cyber-surface", 1.5f);
-            Ink(sheet, "room-specops-ink", "room-specops-paper", 4.5f);
-            Ink(sheet, "room-specops-khaki", "room-specops-paper", 4.5f);
-            Ink(sheet, "room-specops-stamp", "room-specops-paper", 4.5f);
-            Ink(sheet, "room-specops-map", "room-specops-map", 4.5f);
-            Ink(sheet, "room-specops-banner", "room-specops-banner", 4.5f);
-            Ink(sheet, "room-imager-ink", "room-imager-pod", 4.5f);
-            Ink(sheet, "room-imager-dim", "room-imager-pod", 4.5f);
-        }
-
-        private static void Ink(AvStyleSheet sheet, string inkClass, string surfaceClass, float minimum)
-        {
-            AvStyle ink = sheet.Resolve(inkClass);
-            AvStyle surface = sheet.Resolve(surfaceClass);
-            TestAssert.That(ink.Color.Kind == AvColorRef.Fixed, "." + inkClass + " declares a literal colour");
-            TestAssert.That(surface.Background.Kind == AvColorRef.Fixed, "." + surfaceClass + " declares a literal background");
-            if (ink.Color.Kind != AvColorRef.Fixed || surface.Background.Kind != AvColorRef.Fixed) return;
-            Rgba a = ink.Color.Value, b = surface.Background.Value;
-            float ratio = Contrast.Ratio(a.R, a.G, a.B, b.R, b.G, b.B);
-            TestAssert.That(ratio >= minimum, "." + inkClass + " on ." + surfaceClass + " is " + ratio.ToString("0.0") +
-                                             ":1, needs " + minimum + ":1");
-        }
-
-        private static void Same(Box actual, Box expected, string message)
-        {
-            Near(actual.X, expected.X, message + " x");
-            Near(actual.Y, expected.Y, message + " y");
-            Near(actual.Width, expected.Width, message + " w");
-            Near(actual.Height, expected.Height, message + " h");
         }
 
         private static void Near(float actual, float expected, string message)

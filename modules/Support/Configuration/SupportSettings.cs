@@ -8,6 +8,8 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<bool> ReconEnabled { get; }
         public ConfigEntry<bool> FortifyEnabled { get; }
         public ConfigEntry<bool> ArtilleryEnabled { get; }
+        public ConfigEntry<bool> PrsmEnabled { get; }
+        public ConfigEntry<bool> CruiseEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> MtiEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
@@ -31,12 +33,22 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> ReconCost { get; }
         public ConfigEntry<float> FortifyCost { get; }
         public ConfigEntry<float> ArtilleryCost { get; }
+        public ConfigEntry<float> PrsmCost { get; }
+        public ConfigEntry<float> CruiseCost { get; }
+        public ConfigEntry<int> CruiseSalvo { get; }
+        public ConfigEntry<int> CruiseLiveCap { get; }
+        public ConfigEntry<float> IntelFreshSeconds { get; }
+        public ConfigEntry<float> IntelGateRadius { get; }
+        public ConfigEntry<float> WindowOpenSeconds { get; }
+        public ConfigEntry<float> WindowClosedSeconds { get; }
         public ConfigEntry<float> EmpCost { get; }
         public ConfigEntry<float> EmpRadius { get; }
         public ConfigEntry<float> FlareBarrageCost { get; }
         public ConfigEntry<float> FlareBarrageRadius { get; }
         public ConfigEntry<int> FlareBarrageCount { get; }
         public ConfigEntry<float> FlareBarrageDuration { get; }
+        public ConfigEntry<float> JtacMarkCost { get; }
+        public ConfigEntry<float> JtacMarkDuration { get; }
 
         public ConfigEntry<float> MaximumRange { get; }
         public ConfigEntry<float> RequestCooldown { get; }
@@ -55,6 +67,8 @@ namespace BoscaliSummer.Features.Support.Configuration
         public ConfigEntry<float> SpecOpsCostScale { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
+        public ConfigEntry<string> PrsmDefinitionKey { get; }
+        public ConfigEntry<string> CruiseDefinitionKey { get; }
 
         public SupportSettings(ConfigFile config)
         {
@@ -74,6 +88,13 @@ namespace BoscaliSummer.Features.Support.Configuration
             ArtilleryEnabled = config.Bind("Support", "RodFromGod", true,
                 "Orbital kinetic strike from the station's rod magazine: one high-velocity projectile onto " +
                 "the mark, scattered by orbit band. Uses the FireMissionDefinitionKey missile.");
+            PrsmEnabled = config.Bind("Support", "PrsmStrike", true,
+                "PRSM strike: one offboard ballistic missile onto the mark. Needs fresh HQ intel " +
+                "at the target, not a station. Uses the PrsmDefinitionKey missile.");
+            CruiseEnabled = config.Bind("Support", "CruiseStrike", true,
+                "Cruise strike: a bounded salvo of offboard cruise missiles onto the mark, separated " +
+                "by the seeker's native formation spacing. Needs fresh HQ intel at the target, not a " +
+                "station. Uses the CruiseDefinitionKey missile.");
             EmpEnabled = config.Bind("Support", "EmpShock", true,
                 "EMP shock: a high-altitude airburst. The prompt pulse upsets electronics; the " +
                 "geomagnetic disturbance jams hostile radars across a wide area while friendly " +
@@ -102,7 +123,7 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "air-defence sabotage, seizing buildings) and the SPOT and SUPPRESS abilities their posts grant. " +
                 "Host-authoritative.");
             ReduceMotion = config.Bind("Support", "ReduceMotion", false,
-                "Client-local. OPS windows and rooms open on their final frame, with no motion. " +
+                "Client-local. OPS panels paint on their final frame, with no motion. " +
                 "Does not change host rules, prices or what a peer sees.");
 
             PlatformCostScale = config.Bind("Support", "PlatformCostScale", 1f,
@@ -169,6 +190,43 @@ namespace BoscaliSummer.Features.Support.Configuration
                     "Allocation charged for one Rod from God strike, before CostMultiplier and " +
                     "the Logistics Officer perk.",
                     new AcceptableValueRange<float>(0f, 20000f)));
+            PrsmCost = config.Bind("Support", "PrsmStrikeCost", 1100f,
+                new ConfigDescription(
+                    "Allocation charged for one PRSM strike, before CostMultiplier and " +
+                    "the Logistics Officer perk.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            CruiseCost = config.Bind("Support", "CruiseStrikeCost", 1600f,
+                new ConfigDescription(
+                    "Allocation charged for one cruise salvo, before CostMultiplier and " +
+                    "the Logistics Officer perk.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            CruiseSalvo = config.Bind("Support", "CruiseSalvoSize", 4,
+                new ConfigDescription(
+                    "Missiles per cruise salvo. Host-authoritative.",
+                    new AcceptableValueRange<int>(1, 8)));
+            CruiseLiveCap = config.Bind("Support", "CruiseLiveCapPerFaction", 8,
+                new ConfigDescription(
+                    "Most cruise missiles of one faction alive at once, counted on the HQ registry. " +
+                    "A salvo that would pass it is refused. Host-authoritative.",
+                    new AcceptableValueRange<int>(1, 32)));
+            IntelFreshSeconds = config.Bind("Support", "IntelFreshSeconds", 120f,
+                new ConfigDescription(
+                    "Seconds an HQ track near the grid stays fresh enough to release a strike. " +
+                    "Older intel denies with STALE INTEL naming the sweep. Host-authoritative.",
+                    new AcceptableValueRange<float>(10f, 600f)));
+            WindowOpenSeconds = config.Bind("Support", "WindowOpenSeconds", 180f,
+                new ConfigDescription(
+                    "Seconds a tasking window stays open; the heaviest fires and the sweeps release inside it. Host-authoritative.",
+                    new AcceptableValueRange<float>(30f, 600f)));
+            WindowClosedSeconds = config.Bind("Support", "WindowClosedSeconds", 90f,
+                new ConfigDescription(
+                    "Seconds between windows. Keep it under IntelFreshSeconds so a sweep can always re-fresh " +
+                    "stale intel before the next opening. 0 leaves the window always open. Host-authoritative.",
+                    new AcceptableValueRange<float>(0f, 600f)));
+            IntelGateRadius = config.Bind("Support", "IntelGateRadiusMeters", 1000f,
+                new ConfigDescription(
+                    "Radius around the grid searched for a fresh HQ track before a strike releases.",
+                    new AcceptableValueRange<float>(100f, 10000f)));
             EmpCost = config.Bind("Support", "EmpShockCost", 1500f,
                 new ConfigDescription(
                     "Allocation charged for one EMP shock, before CostMultiplier and the " +
@@ -196,6 +254,15 @@ namespace BoscaliSummer.Features.Support.Configuration
                 new ConfigDescription(
                     "Total duration in seconds of the continuous flare countermeasure barrage.",
                     new AcceptableValueRange<float>(5f, 45f)));
+            JtacMarkCost = config.Bind("Support", "JtacMarkCost", 400f,
+                new ConfigDescription(
+                    "Allocation charged for one JTAC mark or unlase, before CostMultiplier and " +
+                    "the Logistics Officer perk. Recovery costs the same as the mark.",
+                    new AcceptableValueRange<float>(0f, 20000f)));
+            JtacMarkDuration = config.Bind("Support", "JtacMarkDurationSeconds", 120f,
+                new ConfigDescription(
+                    "Seconds a JTAC lase lives before the host clears it. Host-authoritative.",
+                    new AcceptableValueRange<float>(30f, 300f)));
 
             MaximumRange = config.Bind("Support", "MaximumRangeMeters", 30000f,
                 new ConfigDescription(
@@ -272,6 +339,15 @@ namespace BoscaliSummer.Features.Support.Configuration
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +
                 "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
                 "less and a ballistic aimpoint seeker are accepted. Check the startup log for the definitions this game build loaded.");
+            PrsmDefinitionKey = config.Bind("Support", "PrsmDefinitionKey", string.Empty,
+                "Exact jsonKey of the missile used by the PRSM strike. Empty auto-picks " +
+                "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
+                "less and a ballistic aimpoint seeker are accepted. Check the startup log for the definitions this game build loaded.");
+            CruiseDefinitionKey = config.Bind("Support", "CruiseDefinitionKey", string.Empty,
+                "Exact jsonKey of the missile used by the cruise strike. Empty auto-picks " +
+                "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
+                "less and a cruise seeker are accepted. The trajectory (dive vs skim) is fixed by the " +
+                "chosen definition and read live off the missile; pick a top-attack definition for dive. Check the startup log for the definitions this game build loaded.");
 
         }
     }

@@ -40,6 +40,18 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Number of contacts a sweep produced, echoed to the requester's reply.</summary>
         void ReportContacts(int requestId, int contacts);
 
+        /// <summary>Live time-of-flight of the strike's first missile, echoed to the reply.</summary>
+        void ReportTti(int requestId, float seconds);
+
+        /// <summary>Records a cruise salvo for Tier-2 tasking; the first missile seeds the record.</summary>
+        void TrackCruiseStrike(int requestId, ulong requesterId, FactionHQ owner, GlobalPosition target, Missile first);
+
+        /// <summary>Appends a later salvo missile to its strike record.</summary>
+        void AddCruiseMissile(int requestId, Missile missile);
+
+        /// <summary>Tasking window for a faction: the derived schedule, identical on every peer.</summary>
+        bool WindowOpen(FactionHQ owner);
+
         /// <summary>Host-side entry for the two track-deception operations.</summary>
         bool BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration);
 
