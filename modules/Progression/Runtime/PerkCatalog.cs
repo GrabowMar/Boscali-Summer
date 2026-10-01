@@ -111,7 +111,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
                 "15% faster support re-tasking.", PerkEffect.SupportCooldown, 0.85f, "logistics"),
 
             new PerkDefinition(6, Recon, 1, "Recon Qualification",
-                "Authorises satellite reconnaissance sweeps.", SupportCapabilities.Recon, "recon"),
+                "Authorises reconnaissance sweeps and JTAC target marking.", SupportCapabilities.Recon, "recon"),
             new PerkDefinition(7, Recon, 2, "Lean Cruise",
                 "5% lower fuel consumption.", PerkEffect.FuelUse, 0.95f, "fuel"),
             new PerkDefinition(8, Recon, 3, "Surveillance Loop",

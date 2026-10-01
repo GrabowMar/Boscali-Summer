@@ -50,6 +50,8 @@ namespace BoscaliSummer.Features.Support.Networking
         public float OpsReserve;
         /// <summary>One own home node under an opposing live breach; 255 means no alert.</summary>
         public byte CyberThreatSlot;
+        /// <summary>Faction intel picture cold: no hostile track spotted within the window.</summary>
+        public bool IntelStale;
 
         public bool PlatformActive;
 

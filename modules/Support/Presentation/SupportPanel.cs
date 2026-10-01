@@ -85,7 +85,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             chipNet = chipLink = chipMap = null;
             allocationMetric = orbitMetric = stationMetric = reserveMetric = null;
             actionRows.Clear();
-            ResetOpsWindow();
+
             ResetSpacePage();
             ResetCyberPage();
             ResetSpecOpsPage();
@@ -296,6 +296,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             if (action.IsCyber) return TabCyber;
             if (SupportManager.OrbitalAbility(action.Id).HasValue) return TabSpace;
+            if (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) return TabSpace;
             if (action.Id == SupportActionId.FlareMissile) return TabCyber;
             return TabSpecOps;
         }
@@ -318,6 +319,8 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case SupportActionId.ElintSweep: return AvIcon.Antenna;
                 case SupportActionId.Artillery: return AvIcon.ArrowDown;
                 case SupportActionId.Emp: return AvIcon.Bolt;
+                case SupportActionId.Prsm: return AvIcon.CurrentLocation;
+                case SupportActionId.Cruise: return AvIcon.Wind;
                 case SupportActionId.FlareMissile: return AvIcon.Flame;
                 case SupportActionId.Fortify: return AvIcon.Shield;
                 case SupportActionId.HackPing: return AvIcon.WaveSine;

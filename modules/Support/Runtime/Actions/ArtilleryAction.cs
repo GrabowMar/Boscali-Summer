@@ -35,6 +35,16 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                 if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
                     return SupportResult.OutOfRange;
             }
+            if (!context.Host.WindowOpen(context.Owner))
+            {
+                context.Logger.LogInfo("[Support] Rod from God refused: tasking window closed.");
+                return SupportResult.WindowClosed;
+            }
+            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
+            {
+                context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
+                return SupportResult.StaleIntel;
+            }
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RodStrike, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;

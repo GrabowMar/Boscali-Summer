@@ -49,6 +49,16 @@ namespace BoscaliSummer.Features.Support.Runtime
                 SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction()));
 
             actions.Add(new SupportActionDefinition(
+                SupportActionId.Prsm, "PRSM STRIKE",
+                "One offboard ballistic missile onto the mark. Needs fresh HQ intel at the target.",
+                SupportCapabilities.Artillery, settings.PrsmEnabled, new PrsmAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Cruise, "CRUISE SALVO",
+                "Bounded salvo of offboard cruise missiles onto the mark, counted against the faction live cap.",
+                SupportCapabilities.Artillery, settings.CruiseEnabled, new CruiseAction()));
+
+            actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
                 "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hostile units only.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
@@ -83,6 +93,15 @@ namespace BoscaliSummer.Features.Support.Runtime
                 settings.SpecOpsEnabled, new FieldAbilityAction(FieldAbility.Eavesdrop)));
             actions.Add(new SupportActionDefinition(SupportActionId.SpecHunt, FieldAbility.Hunt,
                 settings.SpecOpsEnabled, new FieldAbilityAction(FieldAbility.Hunt)));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.JtacMark, "JTAC MARK",
+                "SOF team lases the nearest hostile unit at the mark; friendly laser-guided weapons see it.",
+                SupportCapabilities.Recon, settings.SpecOpsEnabled, new MarkAction()));
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.JtacUnlase, "JTAC UNLASE",
+                "Clears one lase reference on the nearest hostile unit at the mark.",
+                SupportCapabilities.Recon, settings.SpecOpsEnabled, new UnlaseAction()));
         }
 
         public IReadOnlyList<SupportActionDefinition> Actions => actions;

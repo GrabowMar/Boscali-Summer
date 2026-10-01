@@ -39,6 +39,16 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
+            if (!context.Host.WindowOpen(context.Owner))
+            {
+                context.Logger.LogInfo("[Support] EMP shock refused: tasking window closed.");
+                return SupportResult.WindowClosed;
+            }
+            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
+            {
+                context.Logger.LogInfo("[Support] EMP shock refused: stale intel at the grid.");
+                return SupportResult.StaleIntel;
+            }
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.EmpBurst, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
 

@@ -11,12 +11,12 @@ namespace BoscaliSummer.Features.Support.Presentation
 {
     /// <summary>
     /// SPEC OPS — the detachment, shaped like SPACE and CYBER. STATUS leads with the four squad cards
-    /// (state, where, rank, phase clock, EXECUTE / EXTRACT at a decision), then OPEN DESK, the
-    /// readiness summary and advice, the theatre plot, four chips and the event log. ACTIONS is the
-    /// flying half: SPOT and SUPPRESS (earned by held posts) and FORTIFY, as tiles, plus what each held
-    /// post grants. Every decision that grows those abilities — raising teams, choosing objectives,
-    /// launching and recalling — lives at the briefing table (<see cref="Views.DeskView"/>). The MFD
-    /// never spends allocation except by arming an ability. The log keeps running with the page closed.
+    /// (state, where, rank, phase clock, EXECUTE / EXTRACT at a decision), the readiness summary
+    /// and advice, the theatre plot, four chips and the event log. ACTIONS is the flying half:
+    /// SPOT and SUPPRESS (earned by held posts) and FORTIFY, as tiles, plus what each held post
+    /// grants. PAW S1 deleted the briefing table: raising teams and launching missions return as
+    /// the Tier-2 tac-net tab in S4. The MFD never spends allocation except by arming an ability.
+    /// The log keeps running with the page closed.
     /// </summary>
     internal sealed partial class SupportPanel
     {
@@ -50,8 +50,6 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private OpsSubPage specPage;
         private AvSection specSection, specTheatreSection, specTilesSection;
-        private AvButtons specButtons;
-        private AvControl openDeskButton;
         private SquadDeck specDeck;
         private BriefCard specBrief;
         private TheatrePart specTheatre;
@@ -71,8 +69,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             specPage = null;
             specSection = specTheatreSection = specTilesSection = null;
-            specButtons = null;
-            openDeskButton = null;
             specDeck = null;
             specBrief = null;
             specTheatre = null;
@@ -101,9 +97,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             specSection = status.Section(AvIcon.UsersGroup, FieldWords.Title, "");
             specDeck = status.Add(new SquadDeck(status.Content, RequestSpecOpsDirectiveByIndex));
-            specButtons = status.Buttons(new AvControl.Spec("OPEN DESK", OpenDesk, AvButtonStyle.Primary, AvIcon.ListDetails));
-            openDeskButton = specButtons.Controls[0];
-            openDeskButton.Help = "The briefing table: raise teams, pick objectives, launch and recall missions. " + FieldWords.Legend();
             specBrief = status.Add(new BriefCard(status.Content));
 
             specTheatreSection = status.Section(AvIcon.Map2, "THEATRE", "");
@@ -126,7 +119,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             for (int i = 0; i < specPostRows.Length; i++)
                 specPostRows[i] = actions.Add(new AvRow(actions.Content));
             specPostsEmpty = actions.Add(new BriefCard(actions.Content));
-            specPostsEmpty.Set("NO POST HELD", "A desk mission that succeeds leaves one; it grants the abilities above.", AvState.Inert);
+            specPostsEmpty.Set("NO POST HELD", "Posts are earned on successful field missions.", AvState.Inert);
         }
 
         private void RequestSpecOpsDirectiveByIndex(int team, bool execute) =>
@@ -140,14 +133,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (detachment.CheckDirective(team, directive) != SpecOpsDenial.None) return;
             support.RequestSpecOpsDirective(team, directive);
             nextRefresh = 0f;
-        }
-
-        // ---- Desk and log ------------------------------------------------------------------------
-
-        private void OpenDesk()
-        {
-            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(DeskRoom(), null, openDeskButton != null ? openDeskButton.Rect : null);
         }
 
         /// <summary>Work that must not wait for the page: turn new host notices into log lines.</summary>
@@ -194,7 +179,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void SetSpecStatusParts(bool live)
         {
             specDeck.SetShown(live);
-            specButtons.SetShown(live);
             specTheatreSection.SetShown(live);
             specTheatre.SetShown(live);
             specTilesSection.SetShown(live);
@@ -275,7 +259,7 @@ namespace BoscaliSummer.Features.Support.Presentation
                     card.StateWord = lost ? "LOST" : "EMPTY";
                     card.Tone = lost ? AvState.Danger : AvState.Inert;
                     card.Icon = lost ? AvIcon.Skull : AvIcon.Minus;
-                    card.Line = lost ? "LOST · RAISE A NEW TEAM" : "EMPTY SLOT · RAISE IN THE DESK";
+                    card.Line = lost ? "LOST · AWAITS TASKING" : "EMPTY SLOT · AWAITS TASKING";
                     break;
                 case TeamState.Ready:
                     card.StateWord = "READY";
@@ -350,7 +334,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             else if (posts == 0)
             {
                 headline = "NO POST HELD";
-                text = "A desk mission that succeeds leaves one. FORTIFY still works on owned ground.";
+                text = "Posts are earned on successful field missions. FORTIFY still works on owned ground.";
                 tone = AvState.Inert;
             }
             else

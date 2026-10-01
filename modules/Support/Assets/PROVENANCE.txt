@@ -1,0 +1,27 @@
+A1 tasking satellite — provenance (Boscali Summer, PAW S2, 2026-10-01)
+
+Built headless in Blender 5.2, no generative tooling, no sourced geometry:
+every vertex below comes from BuildSatellite.py in this folder.
+
+  blender -b --python BuildSatellite.py -- <Source/>
+
+Model: bus box (2 x 3 x 2 m), two panel boxes (5 x 0.15 x 2 m), two struts,
+nadir dish cone (r 0.8 m, 16 sides). Metres, transforms applied, bus long
+axis +Y, dish facing -Z. 6 objects, 57 verts, 90 tris, 2 materials
+(Hull, Panel) — inside the A1 budget (<= 2k tris, 1-2 mats, no colliders).
+
+  Satellite.blend       working file (metres, applied transforms)
+  Satellite.fbx         normative export (bake_space_transform=False,
+                        FBX_SCALE_NONE, Mikktspace tangents, EDGE smoothing)
+  Satellite.mesh.json   runtime mesh data in the Blender frame
+  BuildSatellite.py     the headless build script (this provenance's method)
+  ExportMeshData.py     mesh.json -> SatelliteMeshData.cs (Unity frame
+                        (x, z, y) with matching winding, merged per material)
+
+Verified with `nomod blender inspect Satellite.fbx`: 6 MESH objects,
+Hull + Panel materials, 47 faces. Runtime form: generated mesh only
+(Visuals/SatelliteMeshData.cs + Visuals/SatelliteSky.cs); no bundle, no
+colliders, no LOD. The sky object renders the real window schedule: it is
+only visible while the local faction's tasking window is open. Map icon:
+the existing procedural SatIcon (SupportTacticalIcons), used by the
+coverage strip at the station sub-point.

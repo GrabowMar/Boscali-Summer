@@ -18,9 +18,9 @@ namespace BoscaliSummer.Features.Support
         {
             typeof(Patches.SupportMissileDetonatePatch),
             typeof(Patches.SupportMissileAuthorityPatch),
-            typeof(Patches.SupportMissileDescentPatch),
-            typeof(Patches.UplinkMapControlsGuardPatch),
-            typeof(Patches.UplinkMapCursorGuardPatch)
+            typeof(Patches.SupportMissileDescentPatch)
+
+
         };
 
         public void Install(FeatureContext context)
@@ -35,6 +35,8 @@ namespace BoscaliSummer.Features.Support
             SupportPanel panel = context.AddSceneService<SupportPanel>(55);
             Visuals.PlatformSky sky = context.AddSceneService<Visuals.PlatformSky>(59);
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
+            Visuals.WindowMapStrip strip = context.AddSceneService<Visuals.WindowMapStrip>(57);
+            Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
@@ -46,6 +48,8 @@ namespace BoscaliSummer.Features.Support
             panel.Configure(manager, progression, context.Logger, baseAlarm);
             sky.Configure(manager);
             hudLine.Configure(manager);
+            strip.Configure(manager);
+            satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));
         }

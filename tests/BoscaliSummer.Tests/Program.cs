@@ -53,6 +53,8 @@ namespace BoscaliSummer.Tests
             SpecOpsLifecycleTests.Run();
             SpecOpsBalanceTests.Run();
             OpsLayoutTests.Run();
+            JtacMarkTests.Run();
+            FiresTests.Run();
             Features.QoL.ObservationTests.Run();
             Features.PlayerSpawnPriority.PlayerSpawnPriorityTests.Run();
             Features.Autopilot.AutopilotLandTests.Run();

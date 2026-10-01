@@ -105,6 +105,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (Finite(state.OpsReserve))
                 reserveMirror = Mathf.Clamp(state.OpsReserve, 0f, FactionOpsReserve.Maximum);
             threatMirror = state.CyberThreatSlot < CyberNetwork.SlotCount ? state.CyberThreatSlot : byte.MaxValue;
+            intelStaleMirror = state.IntelStale;
 
             opsReceived = Time.unscaledTime;
         }
@@ -142,6 +143,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly float[] teamMirror = new float[TeamGates.Count];
         private float reserveMirror = FactionOpsReserve.Starting;
         private byte threatMirror = byte.MaxValue;
+        private bool intelStaleMirror;
         private float nextReserveTick;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
@@ -151,6 +153,11 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly Dictionary<FactionHQ, TeamLedger> teamLedgers = new Dictionary<FactionHQ, TeamLedger>();
         private readonly TeamLedger fallbackLedger = new TeamLedger();
         private readonly Dictionary<int, int> contactReplies = new Dictionary<int, int>();
+        private readonly Dictionary<int, float> ttiReplies = new Dictionary<int, float>();
+        private CruiseTasking cruiseTasking;
+        private readonly Dictionary<int, CruiseLegMirror> cruiseLegs = new Dictionary<int, CruiseLegMirror>();
+        private int pendingWaypoint = -1;
+        private float pendingWaypointUntil;
 
         private SupportSettings settings;
         private IPlayerPerks perks;
@@ -195,7 +202,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                 if (!strike.IsActive(now) ||
                     (strike.ActionId != SupportActionId.Artillery &&
                      strike.ActionId != SupportActionId.FlareMissile &&
-                     strike.ActionId != SupportActionId.Emp)) continue;
+                     strike.ActionId != SupportActionId.Emp &&
+                     strike.ActionId != SupportActionId.Prsm &&
+                     strike.ActionId != SupportActionId.Cruise)) continue;
                 GlobalPosition point = strike.Target;
                 if (float.IsNaN(point.x) || float.IsNaN(point.z) ||
                     float.IsInfinity(point.x) || float.IsInfinity(point.z) ||
@@ -208,11 +217,55 @@ namespace BoscaliSummer.Features.Support.Runtime
                 soonest = eta;
                 secondsToImpact = eta;
                 label = strike.ActionId == SupportActionId.FlareMissile ? "FLARE BARRAGE"
-                    : strike.ActionId == SupportActionId.Artillery ? "KINETIC ROD" : "EMP STRIKE";
+                    : strike.ActionId == SupportActionId.Artillery ? "KINETIC ROD"
+                    : strike.ActionId == SupportActionId.Prsm ? "PRSM"
+                    : strike.ActionId == SupportActionId.Cruise ? "CRUISE" : "EMP STRIKE";
             }
             return label != null;
         }
         public SupportSettings Settings => settings;
+
+        bool ISupportHost.WindowOpen(FactionHQ owner) => WindowOpenFor(owner);
+
+        /// <summary>Tasking window for a faction, projected locally from the host's durations.</summary>
+        public bool WindowOpenFor(FactionHQ owner)
+        {
+            if (settings == null) return true;
+            double anchor = WindowMath.Stagger(FactionKey(owner),
+                settings.WindowOpenSeconds.Value + settings.WindowClosedSeconds.Value);
+            return WindowMath.Open(anchor, OrbitNow,
+                settings.WindowOpenSeconds.Value, settings.WindowClosedSeconds.Value, out _);
+        }
+
+        public bool LocalWindowOpen => WindowOpenFor(LocalHQ());
+
+        /// <summary>Seconds until the local window opens or closes, for the MFD clocks.</summary>
+        public float LocalWindowChangeIn
+        {
+            get
+            {
+                if (settings == null) return 0f;
+                double anchor = WindowMath.Stagger(FactionKey(LocalHQ()),
+                    settings.WindowOpenSeconds.Value + settings.WindowClosedSeconds.Value);
+                WindowMath.Open(anchor, OrbitNow,
+                    settings.WindowOpenSeconds.Value, settings.WindowClosedSeconds.Value, out float changeIn);
+                return changeIn;
+            }
+        }
+
+        /// <summary>Faction intel picture for the FIRES pre-check: live on the server, the host mirror on clients.</summary>
+        public bool LocalIntelStale
+        {
+            get
+            {
+                if (GameAccess.IsServer())
+                {
+                    FactionHQ hq = LocalHQ();
+                    return hq == null || SupportTargeting.FactionIntelCold(hq, settings.IntelFreshSeconds.Value);
+                }
+                return intelStaleMirror;
+            }
+        }
         public bool CommandPending => pendingCommand != 0;
 
         /// <summary>The local faction's station for the console, the uplink, the sky and the map.</summary>
@@ -514,6 +567,10 @@ namespace BoscaliSummer.Features.Support.Runtime
             ledger.Clear();
             commandLedger.Clear();
             contactReplies.Clear();
+            if (cruiseTasking != null) cruiseTasking.Clear();
+            cruiseLegs.Clear();
+            pendingWaypoint = -1;
+            intelStaleMirror = false;
             teamLedgers.Clear();
             fallbackLedger.Clear();
             StopAllCoroutines();
@@ -582,9 +639,28 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             // Publish the armed state for Wing Command to read (BoscaliLink), so a wing
             // point-order and a support call-in never both fire on one right-click.
+            // Drop leg mirrors whose strike left the board, one per tick, allocation-free.
+            if (cruiseLegs.Count > 0)
+            {
+                int stale = 0;
+                bool found = false;
+                foreach (int key in cruiseLegs.Keys)
+                {
+                    bool alive = false;
+                    for (int i = 0; i < activeStrikes.Count; i++)
+                        if (activeStrikes[i].RequestId == key) { alive = true; break; }
+                    if (!alive) { stale = key; found = true; break; }
+                }
+                if (found) cruiseLegs.Remove(stale);
+            }
             bool anyArmed = ArmedAction.HasValue || localPick != null;
             SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
+            if (pendingWaypoint != -1 && Time.unscaledTime > pendingWaypointUntil)
+            {
+                pendingWaypoint = -1;
+                Status = "No response from host.";
+            }
             if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
             {
                 pending = false;
@@ -1257,12 +1333,14 @@ namespace BoscaliSummer.Features.Support.Runtime
                     Status = name + " accepted: imaging, " + RadarScanContacts +
                         (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
                 }
-                float eta = action != null && action.Id == SupportActionId.Artillery ? 8f :
+                float eta = action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) ? message.Duration :
+                            action != null && action.Id == SupportActionId.Artillery ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
                 if (!Finite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
                     !Finite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
                     !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;
+                if (eta <= 0f && action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise)) return;
                 RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action,
                     new GlobalPosition(message.X, message.Y, message.Z), message.Radius, eta, name, message.Duration);
             }
@@ -1302,6 +1380,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                 case SupportResult.Disabled: return "action disabled";
                 case SupportResult.NotUnlocked: return "not authorised";
                 case SupportResult.InvalidTarget: return "unusable target";
+                case SupportResult.NoMarkTarget: return "no unit at the mark - re-mark on a contact";
+                case SupportResult.StaleIntel: return "stale intel at the grid - task RADAR SCAN first";
+                case SupportResult.WindowClosed: return "outside the tasking window - see the window clock in SPACE";
                 case SupportResult.OutOfRange: return "target out of range";
                 case SupportResult.NotAirborne: return "you must be in an aircraft";
                 case SupportResult.InsufficientAllocation: return "not enough allocation";
@@ -1795,11 +1876,30 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
 
+        void ISupportHost.ReportTti(int requestId, float seconds)
+        {
+            if (ttiReplies.Count >= MaximumContactReplies) ttiReplies.Clear();
+            ttiReplies[requestId] = seconds;
+        }
+
         void ISupportHost.ReportContacts(int requestId, int contacts)
         {
             if (contactReplies.Count >= MaximumContactReplies) contactReplies.Clear();
             contactReplies[requestId] = contacts;
         }
+
+        internal float TakeTti(int requestId)
+        {
+            if (!ttiReplies.TryGetValue(requestId, out float seconds)) return -1f;
+            ttiReplies.Remove(requestId);
+            return seconds;
+        }
+
+        void ISupportHost.TrackCruiseStrike(int requestId, ulong requesterId, FactionHQ owner, GlobalPosition target, Missile first) =>
+            Tasking.Track(requestId, requesterId, owner, target, first);
+
+        void ISupportHost.AddCruiseMissile(int requestId, Missile missile) =>
+            Tasking.AddMissile(requestId, missile);
 
         internal int TakeContacts(int requestId)
         {
@@ -1816,6 +1916,125 @@ namespace BoscaliSummer.Features.Support.Runtime
             network.BroadcastCyberEffect(kind, caster.HQ.faction != null ? caster.HQ.faction.factionName : string.Empty,
                 target.x, target.z, duration);
             return true;
+        }
+
+        // ---- Cruise tasking ----------------------------------------------------------------
+
+        internal CruiseTasking Tasking => cruiseTasking ?? (cruiseTasking =
+            new CruiseTasking(routine => ((ISupportHost)this).Run(routine), BroadcastLegs));
+
+        internal CruiseLegMirror LegsFor(int requestId)
+        {
+            cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror);
+            return mirror;
+        }
+
+        /// <summary>Client: chains a waypoint onto a live cruise strike, or clears its legs.</summary>
+        public void SendWaypoint(int requestId, GlobalPosition point, bool clear)
+        {
+            if (network == null)
+            {
+                ReportOffline();
+                return;
+            }
+            pendingWaypoint = requestId;
+            pendingWaypointUntil = Time.unscaledTime + ReplyTimeout;
+            network.SendWaypoint(requestId, point, clear);
+        }
+
+        /// <summary>Server: validates a leg intent; every event broadcasts the strike's legs.</summary>
+        internal void ApplyWaypoint(Player player, int requestId, GlobalPosition leg, bool clear)
+        {
+            CruiseTasking.Strike strike = Tasking.Find(requestId);
+            if (strike == null || player == null || player.HQ == null || player.HQ != strike.Owner)
+            {
+                BroadcastShell(player, requestId,
+                    strike == null ? SupportResult.SpawnFailed : SupportResult.NotUnlocked);
+                return;
+            }
+            if (clear) Tasking.ClearLegs(strike);
+            else Tasking.QueueLeg(strike, leg, Time.timeSinceLevelLoad, settings.MaximumRange.Value);
+        }
+
+        private void BroadcastLegs(CruiseTasking.Strike strike, SupportResult result)
+        {
+            if (strike == null || network == null) return;
+            var message = new CruiseLegsMessage
+            {
+                Protocol = SupportNet.ProtocolVersion,
+                RequestId = strike.RequestId,
+                OwnerId = strike.RequesterId,
+                Result = (byte)result,
+                FactionName = FactionKey(strike.Owner),
+                Dive = strike.Dive,
+                Tti = Tasking.RouteTti(strike)
+            };
+            int legs = Math.Min(strike.Legs.Count, StrikeBallistics.MaxLegs);
+            message.LegCount = (byte)legs;
+            message.X = new float[StrikeBallistics.MaxLegs];
+            message.Z = new float[StrikeBallistics.MaxLegs];
+            for (int i = 0; i < legs; i++)
+            {
+                message.X[i] = strike.Legs[i].x;
+                message.Z[i] = strike.Legs[i].z;
+            }
+            network.BroadcastCruiseLegs(message);
+            if (GameAccess.IsServer()) ReceiveCruiseLegs(message);
+        }
+
+        private void BroadcastShell(Player player, int requestId, SupportResult result)
+        {
+            if (network == null) return;
+            var message = new CruiseLegsMessage
+            {
+                Protocol = SupportNet.ProtocolVersion,
+                RequestId = requestId,
+                OwnerId = player != null ? PlayerIdentity.Of(player) : 0UL,
+                Result = (byte)result,
+                FactionName = player != null ? FactionKey(player.HQ) : string.Empty,
+                Tti = -1f,
+                X = new float[StrikeBallistics.MaxLegs],
+                Z = new float[StrikeBallistics.MaxLegs]
+            };
+            network.BroadcastCruiseLegs(message);
+            if (GameAccess.IsServer()) ReceiveCruiseLegs(message);
+        }
+
+        internal void ReceiveCruiseLegs(CruiseLegsMessage message)
+        {
+            GameManager.GetLocalPlayer<Player>(out Player player);
+            if (player == null || player.HQ == null || message.FactionName != FactionKey(player.HQ)) return;
+            if (message.OwnerId != PlayerIdentity.Of(player)) return;
+            if (message.RequestId == pendingWaypoint)
+            {
+                pendingWaypoint = -1;
+                SupportResult result = (SupportResult)message.Result;
+                Status = result == SupportResult.Accepted ? "Waypoint accepted." :
+                    "Waypoint denied: " + Explain(result) + ".";
+            }
+            ActiveStrikeInfo? known = null;
+            for (int i = 0; i < activeStrikes.Count; i++)
+                if (activeStrikes[i].RequestId == message.RequestId && activeStrikes[i].ActionId == SupportActionId.Cruise)
+                    known = activeStrikes[i];
+            if (!known.HasValue) return;
+            if (cruiseLegs.Count >= CruiseTasking.MaxStrikes && !cruiseLegs.ContainsKey(message.RequestId))
+                cruiseLegs.Clear();
+            var mirror = new CruiseLegMirror { Dive = message.Dive, Tti = message.Tti };
+            int legs = Math.Min((int)message.LegCount, StrikeBallistics.MaxLegs);
+            if (message.X != null && message.Z != null)
+                for (int i = 0; i < legs && i < message.X.Length && i < message.Z.Length; i++)
+                {
+                    if (!Finite(message.X[i]) || !Finite(message.Z[i])) continue;
+                    mirror.Legs.Add(new GlobalPosition(message.X[i], 0f, message.Z[i]));
+                }
+            cruiseLegs[message.RequestId] = mirror;
+            if (Finite(message.Tti) && message.Tti > 0f)
+            {
+                SupportActionDefinition def = catalog != null ? catalog.Find(SupportActionId.Cruise) : null;
+                float linger = Math.Max(0f, known.Value.ExpiryTime - known.Value.ImpactTime);
+                RegisterActiveStrike(known.Value.RequestId, known.Value.ActionId, known.Value.Target,
+                    known.Value.Radius, message.Tti, def != null ? def.Name : "CRUISE", linger);
+            }
         }
 
         internal void ReceiveCyberEffect(CyberEffectMessage message)
@@ -1914,6 +2133,8 @@ namespace BoscaliSummer.Features.Support.Runtime
                 ? TeamLedgerFor(player.HQ).Reserve.Balance : 0f;
             int threatened = player != null ? ThreatenedHome(player.HQ) : -1;
             message.CyberThreatSlot = threatened >= 0 ? (byte)threatened : byte.MaxValue;
+            message.IntelStale = player == null || player.HQ == null ||
+                SupportTargeting.FactionIntelCold(player.HQ, settings.IntelFreshSeconds.Value);
             if (platform != null)
             {
                 platform.Export(now, exportSnapshot);

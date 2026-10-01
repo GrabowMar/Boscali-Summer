@@ -10,12 +10,11 @@ namespace BoscaliSummer.Features.Support.Presentation
     /// <summary>
     /// SPACE — the orbital platform, split the same way CYBER is.
     ///
-    /// <para>STATUS is the glance: where the station is, what it is made of, what is wrong with
-    /// it, and one button to the full-screen console. ACTIONS is the flying half — the map
-    /// abilities the station has earned, armed in one click. Everything that <em>grows</em> the
-    /// station (mission loadouts, the truss, the catalogue, launches, jettisons) lives in
-    /// the task map (<see cref="Views.StationTaskingView"/>), with the station wall one step deeper because it has
-    /// no business competing for attention with the aircraft.</para>
+    /// <para>STATUS is the glance: where the station is, what it is made of and what is wrong
+    /// with it. ACTIONS is the flying half — the map abilities the station has earned, armed
+    /// in one click. PAW S1 deleted the full-screen rooms: everything that <em>grows</em> the
+    /// station (loadouts, launches, relocation) returns as Tier-2 MFD tabs in S2; core launch
+    /// is a direct host request from the LAUNCH CORE button.</para>
     ///
     /// <para>This file is the shell: sub-page wiring, the work that must keep running with the
     /// page closed (the radar product and the voice loop) and the state the two SPACE sub-pages
@@ -30,14 +29,12 @@ namespace BoscaliSummer.Features.Support.Presentation
         private OpsSubPage spacePage;
 
         /// <summary>
-        /// The voice loop, newest line first. <see cref="Views.StationView"/> and
-        /// <see cref="Views.StationTaskingView"/> take this array by reference (Window.cs), so its
-        /// identity and ring-buffer semantics must not change.
+        /// The voice loop, newest line first. Ring-buffer semantics: the newest line is always
+        /// at index 0 and older lines shift down.
         /// </summary>
         private readonly string[] loop = new string[LoopLines];
         private readonly PlatformProducts products = new PlatformProducts();
         private readonly PlatformPlan plan = new PlatformPlan();
-        private float nextBackground;
 
         private string loggedStatus;
         private bool loggedExists;
@@ -57,7 +54,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             loggedPending = ModuleKind.None;
             loggedNotice = 0;
             loggedBrownout = false;
-            nextBackground = 0f;
             products.Reset();
             plan.Reset();
             ResetStationPage();
@@ -72,61 +68,30 @@ namespace BoscaliSummer.Features.Support.Presentation
                 sub => nextRefresh = 0f, StationStatusHelp, StationActionsHelp));
             BuildStationPage(spacePage.Status);
             BuildSpaceOpsPage(spacePage.Actions);
-            Log("CONSOLE ONLINE · FLIGHT HAS THE ROOM");
+            Log("SPACE ONLINE · " + OrbitalPlatform.Callsign + " LINK READY");
         }
 
         private void RefreshSpace(bool bypass)
         {
-            if (spacePage == null) return;
             OrbitalPlatform platform = support.LocalPlatform;
             double now = support.OrbitNow;
             if (spacePage.Sub == 0) RefreshStationPage(platform, now);
             else RefreshSpaceOpsPage(bypass, platform, now);
         }
 
-        // ---- Full-screen instruments ---------------------------------------------------------
-
-        /// <summary>Open the station task map; engineering remains one step deeper.</summary>
-        private void OpenStationConsole()
-        {
-            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(TaskingRoom(), null, stationConsoleButton != null ? stationConsoleButton.Rect : null);
-            Log("FLIGHT · " + OrbitalPlatform.Callsign + " TASKING MAP OPEN");
-        }
-
-        /// <summary>Open the engineering wall, where the core launch and every module launch live.</summary>
-        private void OpenEngineering()
-        {
-            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(StationRoom(), null, null);
-            Log("FLIGHT · " + OrbitalPlatform.Callsign + " ENGINEERING OPEN");
-        }
-
-        private void OpenUplink(GlobalPosition? aim)
-        {
-            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
-            OpenRoom(ImagerRoom(), aim.HasValue ? (object)aim.Value : null, null);
-            Log("UPLINK · " + OrbitalPlatform.Callsign + " FEED ON THE MAIN SCREEN");
-        }
-
-        // ---- Background ----------------------------------------------------------------------
-
-        /// <summary>Work that must not wait for the SPACE page to be on screen.</summary>
+        /// <summary>Work that must not wait for the SPACE page: the sensor product and the loop.</summary>
         private void TickSpaceBackground()
         {
             if (spacePage == null) return;
-            // The SAR scene is expensive (rays, raster, texture upload), so it only forms
-            // while the OPS screen or the uplink feed is actually on screen.
-            if (viewOpen || ImagerOpen)
+            OrbitalPlatform platform = support.LocalPlatform;
+            double now = support.OrbitNow;
+            TrackLoopEvents(platform, now);
+            // The product forms while the OPS screen is actually on screen.
+            if (viewOpen)
             {
                 if (products.Tick(support, UnityEngine.Time.unscaledDeltaTime))
                     Log("RADAR SCAN · SCENE FORMING · " + support.RadarScanContacts + " STATIONARY CONTACT(S)");
             }
-
-            if (UnityEngine.Time.unscaledTime < nextBackground) return;
-            nextBackground = UnityEngine.Time.unscaledTime + 0.2f;
-            OrbitalPlatform platform = support.LocalPlatform;
-            TrackLoopEvents(platform, support.OrbitNow);
         }
 
         private void TrackLoopEvents(OrbitalPlatform platform, double now)

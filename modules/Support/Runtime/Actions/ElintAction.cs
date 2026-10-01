@@ -17,6 +17,11 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
         public SupportResult Execute(in SupportContext context)
         {
+            if (!context.Host.WindowOpen(context.Owner))
+            {
+                context.Logger.LogInfo("[Support] ELINT sweep refused: tasking window closed.");
+                return SupportResult.WindowClosed;
+            }
             OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.Elint, out PlatformDenial denial);
             if (platform == null) return SupportContext.Refusal(denial);
 

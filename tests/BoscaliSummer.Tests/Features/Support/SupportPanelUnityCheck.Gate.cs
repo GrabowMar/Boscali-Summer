@@ -50,8 +50,7 @@ public static partial class SupportPanelUnityCheck
             setPaths.Invoke(null, arguments);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             // The real faces and icon font when the kit bundle is beside the project (the game always has
-            // it): the panel renders and their text gates measure what the player sees. The window check
-            // below keeps the vanilla fallback face it was tuned with.
+            // it): the panel renders and their text gates measure what the player sees.
             AvBundle.ResetForTests();
             bool bundled = File.Exists("avionics-ui.bundle");
             if (bundled) AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
@@ -61,19 +60,9 @@ public static partial class SupportPanelUnityCheck
                 foreach (string page in Pages) Render(page, height);
             CheckActionForms();
             AvBundle.ResetForTests();
-            string window = OpsWindowUnityCheck.Run(overlaySupport, _ => DetachmentFixture(out _), () =>
-            {
-                object network = CyberFixture(out int held, out double clock);
-                return new object[] { network, clock, held };
-            }, () =>
-            {
-                object station = PlatformFixture(out double stationNow);
-                return new object[] { station, stationNow, FreeCell(station) };
-            });
-            assertions += OpsWindowUnityCheck.Assertions;
             if (Failures.Count > 0) throw new Exception(Failures.Count + " visual gate failures:\n" + string.Join("\n", Failures.GetRange(0, Math.Min(80, Failures.Count))));
             File.WriteAllText("result.txt", "PASS: " + (Pages.Length * 3) + " real OPS MFD page layouts (" + (bundled ? "kit bundle faces" : "fallback face") +
-                ", populated and empty states, content bound after Finish and settled by TickNow) painted by their production refresh paths; " + window + "; " + assertions +
+                ", populated and empty states, content bound after Finish and settled by TickNow) painted by their production refresh paths; " + assertions +
                 " geometry/readability/overlap/facts assertions over " + gatedTexts + " gated texts. Production DLL builders with offline model/fixture data; no live game, state replication or input integration claimed.");
             EditorApplication.Exit(0);
         }
@@ -418,11 +407,25 @@ public static partial class SupportPanelUnityCheck
                 Check(!Shown(panel, "healthSection"), "No station: no empty HEALTH header.");
                 Check(!Shown(panel, "moduleSection"), "No station: no empty MODULES header.");
                 Check((float)Invoke(Get(panel, "stationHero"), "Measure", 444f) > 190f, "No station: the hero is the empty-state card with its call to action.");
+                Check(Shown(panel, "windowCard"), "No station: the window clock stays.");
                 break;
             case "SpaceOps":
-                Check(!Shown(panel, "spaceUplinkRow"), "No station: no locked uplink tile.");
+            {
+                int shownRows = 0;
+                bool onlyOffboard = true;
+                foreach (object row in (IEnumerable)Get(panel, "spaceStrikeRows"))
+                {
+                    if (!(bool)Property(Get(row, "Row"), "Shown")) continue;
+                    shownRows++;
+                    string id = Get(Get(row, "Action"), "Id").ToString();
+                    if (id != "Prsm" && id != "Cruise") onlyOffboard = false;
+                }
+                Check(shownRows == 2 && onlyOffboard, "No station: only the offboard FIRES rows show.");
                 Check(!Shown(panel, "spaceAbilitiesSection"), "No station: no empty ABILITIES header.");
+                Check(Shown(panel, "spaceFiresSection"), "No station: the OFFBOARD FIRES header stays.");
+                Check(Shown(panel, "strikeStrip"), "No station: the strip still reports no fires.");
                 break;
+            }
             case "Status":
                 Check(!Shown(panel, "cyberMap"), "No network: the mesh plot must collapse.");
                 Check(!Shown(panel, "cyberMeshSection"), "No network: no empty MESH header.");

@@ -110,6 +110,10 @@
     <Compile Include="..\..\modules\Progression\Runtime\EmblemDesign.cs" Link="Features\Progression\EmblemDesign.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\PilotDraft.cs" Link="Features\Progression\PilotDraft.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\StrikeBallistics.cs" Link="Features\Support\StrikeBallistics.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\IntelGate.cs" Link="Features\Support\IntelGate.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\WindowMath.cs" Link="Features\Support\WindowMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\SiegeMath.cs" Link="Features\UrbanCombat\SiegeMath.cs" />
@@ -205,7 +209,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- The shipped stylesheet is parsed here: a typo in it only warns at runtime. -->
-    <EmbeddedResource Include="..\..\modules\Support\Presentation\Views\rooms.avss" LogicalName="BoscaliSummer.Tests.rooms.avss" />
+
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.fui.avss" LogicalName="BoscaliSummer.Tests.avionics.fui.avss" />
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.steel.avss" LogicalName="BoscaliSummer.Tests.avionics.steel.avss" />
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.ace.avss" LogicalName="BoscaliSummer.Tests.avionics.ace.avss" />
