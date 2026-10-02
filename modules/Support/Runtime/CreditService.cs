@@ -31,7 +31,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private readonly SupportNet network;
         private readonly List<float> balances = new List<float>();
-        private readonly Dictionary<ulong, long> sent = new Dictionary<ulong, long>();
+        private readonly Dictionary<ulong, (long key, float at)> sent = new Dictionary<ulong, (long, float)>();
+        private readonly HashSet<ulong> seen = new HashSet<ulong>();
+        private readonly List<ulong> gone = new List<ulong>();
+        private const float ResendSeconds = 10f;
+
+        /// <summary>Host's combined price factor for a player (knob x events x perk); sent so clients quote like the host.</summary>
+        public System.Func<Player, float> PriceFactor { get; set; }
         private readonly Dictionary<FactionHQ, (float at, ObjectiveCount count)> census =
             new Dictionary<FactionHQ, (float, ObjectiveCount)>();
 
@@ -46,6 +52,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void Tick(float now, float dt)
         {
             if (FactionRegistry.GetAllHQs() == null) return;
+            seen.Clear();
             foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
                 if (hq == null) continue;
@@ -54,6 +61,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (player == null || player.HQ == null) continue;
                     ulong id = PlayerIdentity.Of(player);
                     if (id == PlayerIdentity.None) continue;
+                    seen.Add(id);
                     int faction = FactionKey(player.HQ);
                     if (!Ledger.Has(id))
                     {
@@ -68,6 +76,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     SendIfChanged(player, id, now);
                 }
             }
+
+            // A player who left must get a fresh state when they rejoin.
+            gone.Clear();
+            foreach (ulong id in sent.Keys) if (!seen.Contains(id)) gone.Add(id);
+            for (int i = 0; i < gone.Count; i++) sent.Remove(gone[i]);
         }
 
         public bool TrySpend(Player player, float cost, float now)
@@ -136,10 +149,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             int balance = (int)Ledger.Balance(id);
             int frozen = (int)Ledger.FrozenRemaining(id, now);
-            long key = (long)balance * 100000L + frozen;
-            if (sent.TryGetValue(id, out long last) && last == key) return;
-            sent[id] = key;
-            network?.SendCredit(player, balance, frozen);
+            float factor = PriceFactor != null ? PriceFactor(player) : 1f;
+            long key = ((long)balance * 100000L + frozen) * 31L + System.BitConverter.ToInt32(System.BitConverter.GetBytes(factor), 0);
+            float clock = Time.unscaledTime;
+            if (sent.TryGetValue(id, out var last) && last.key == key && clock - last.at < ResendSeconds) return;
+            sent[id] = (key, clock);
+            network?.SendCredit(player, balance, frozen, factor);
         }
     }
 }

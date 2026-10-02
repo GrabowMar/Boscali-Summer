@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         public byte Protocol;
         public int Balance;
         public int FrozenSeconds;
+        public float PriceFactor;
     }
 
     [NetworkMessage]
@@ -218,9 +219,9 @@ namespace BoscaliSummer.Modules.Support.Networking
         }
 
         /// <summary>Server to owner: the player's CR balance and wallet freeze.</summary>
-        internal void SendCredit(Player player, int balance, int frozenSeconds)
+        internal void SendCredit(Player player, int balance, int frozenSeconds, float priceFactor)
         {
-            var message = new CreditStateMessage { Protocol = ProtocolVersion, Balance = balance, FrozenSeconds = frozenSeconds };
+            var message = new CreditStateMessage { Protocol = ProtocolVersion, Balance = balance, FrozenSeconds = frozenSeconds, PriceFactor = priceFactor };
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
             {
                 manager.ReceiveCredit(message); // the host's own player is served in-process
@@ -348,12 +349,13 @@ namespace BoscaliSummer.Modules.Support.Networking
                 w.WriteByte(v.Protocol);
                 w.WriteInt32(v.Balance);
                 w.WriteInt32(v.FrozenSeconds);
+                w.WriteSingle(v.PriceFactor);
             });
             SetReader<CreditStateMessage>(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new CreditStateMessage { Protocol = protocol };
-                return new CreditStateMessage { Protocol = protocol, Balance = r.ReadInt32(), FrozenSeconds = r.ReadInt32() };
+                return new CreditStateMessage { Protocol = protocol, Balance = r.ReadInt32(), FrozenSeconds = r.ReadInt32(), PriceFactor = r.ReadSingle() };
             });
             SetWriter<CruiseWaypointMessage>((w, v) =>
             {
