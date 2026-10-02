@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>Which contacts a sweep is allowed to stamp into native faction tracking.</summary>
     internal enum RevealFilter : byte

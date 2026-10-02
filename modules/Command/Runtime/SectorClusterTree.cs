@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Clusters the sector field into maximal uniform rectangles with a binary partition

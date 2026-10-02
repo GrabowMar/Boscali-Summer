@@ -1,8 +1,8 @@
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Features.Support.Visuals;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Modules.Support.Visuals;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// The local player's latest radar product. A radar scan accepted from anywhere — the map,

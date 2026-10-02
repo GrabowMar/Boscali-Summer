@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// The arithmetic and copy behind the strategic readouts, kept free of Unity so it can

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>A carrier the waterfall should draw: where it is, and how strong it reads.</summary>
     internal readonly struct RadioSignal

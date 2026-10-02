@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// Procedurally synthesizes crisp, high-contrast NATO tactical vector icons, range rings,

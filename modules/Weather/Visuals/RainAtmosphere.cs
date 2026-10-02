@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Rain haze layered on vanilla's lighting without a patch. LevelInfo rewrites fog and
@@ -56,14 +56,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
         /// <param name="shade">0..1 how much cloud deck hangs overhead; dims and greys the air
         /// under overcast even when it is dry.</param>
-        /// <param name="inCloud">0..1 how deep the camera is inside cloud: droplets cut
-        /// visibility to a few hundred metres and the air turns cloud-lit white.</param>
-        internal void Apply(float rain, bool underwater, float shade = 0f, float inCloud = 0f)
+        internal void Apply(float rain, bool underwater, float shade = 0f)
         {
             rain = Mathf.Clamp01(rain);
             shade = Mathf.Clamp01(shade);
-            inCloud = Mathf.Clamp01(inCloud);
-            if (underwater || (rain <= 0.001f && shade <= 0.001f && inCloud <= 0.001f)) { Restore(); return; }
+            if (underwater || (rain <= 0.001f && shade <= 0.001f)) { Restore(); return; }
 
             fog.Track(RenderSettings.fogDensity, applied);
             ambient.Track(RenderSettings.ambientIntensity, applied);
@@ -79,18 +76,12 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float dim = RainSkyMath.AmbientMultiplier(rain) * RainSkyMath.ShadeAmbient(shade);
             // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
             // must still be able to navigate by. Heavy rain keeps several km of contrast.
-            fog.Written = Mathf.Min(fog.Base * LastFogMultiplier, 0.00055f);
-            // Cloud droplets: extinction of ~0.01 /m, a few hundred metres of visibility.
-            fog.Written = Mathf.Lerp(fog.Written, 0.011f, inCloud * inCloud);
+            // Forced local showers also need haze when the mission starts with zero fog.
+            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, rain * 0.00012f), 0.00055f);
+            // Cloud extinction belongs to the ray-marched volume. Applying it to global
+            // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             ambient.Written = ambient.Base * dim;
             fogColor.Written = Tint(fogColor.Base, Mathf.Max(rain, 0.4f * shade));
-            if (inCloud > 0f)
-            {
-                // Multiple scattering inside cloud: a bright, nearly neutral white-grey.
-                Color sky = skyColor.Base;
-                float lum = Mathf.Clamp(0.2126f * sky.r + 0.7152f * sky.g + 0.0722f * sky.b, 0.25f, 1.2f) * 1.25f;
-                fogColor.Written = Color.Lerp(fogColor.Written, new Color(lum * 0.94f, lum * 0.96f, lum, fogColor.Base.a), inCloud * 0.85f);
-            }
             skyColor.Written = Dim(skyColor.Base, dim);
             equatorColor.Written = Dim(equatorColor.Base, dim);
             groundColor.Written = Dim(groundColor.Base, dim);

@@ -1,9 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// The two track-deception operations. Both rewrite what hostile factions believe about
@@ -17,12 +18,39 @@ namespace BoscaliSummer.Features.Support.Runtime
         private const int MaximumActive = 4;
         private const int MaximumUnits = 64;
         private const float ApplyInterval = 0.25f;
+        internal const float ProtectionRadius = 3000f;
+
+        /// <summary>One host pulse breaks up to four ordinary active-radar missile target links.
+        /// Native networking and seekers own the resulting coast/reacquisition; never steer,
+        /// transfer ownership, detonate, or rewrite nuclear weapons.</summary>
+        internal static int BreakSeekerLocks(FactionHQ owner, GlobalPosition target)
+        {
+            if (!GameAccess.IsServer() || owner == null) return 0;
+            List<Unit> units = UnitRegistry.allUnits;
+            if (units == null) return 0;
+            Vector3 point = target.ToLocalPosition();
+            int broken = 0;
+            for (int i = 0; i < units.Count && i < 512 && broken < 4; i++)
+            {
+                // Fresh missiles are appended to the registry; inspect the newest 512 first.
+                if (!(units[units.Count - 1 - i] is Missile missile) || missile == null || missile.disabled ||
+                    missile.NetworkHQ == null || missile.NetworkHQ == owner || missile.targetID.NotValid ||
+                    missile.seekerMode != Missile.SeekerMode.activeLock) continue;
+                WeaponInfo info = missile.GetWeaponInfo();
+                if (info == null || info.nuclear || missile.GetComponent<ARHSeeker>() == null ||
+                    (missile.transform.position - point).sqrMagnitude > ProtectionRadius * ProtectionRadius) continue;
+                missile.SetTarget(null);
+                broken++;
+            }
+            return broken;
+        }
 
         private sealed class Active
         {
             public HackKind Kind;
             public FactionHQ Attacker;
             public float X, Z, Until;
+            public int Cursor;
             public readonly Dictionary<PersistentID, GlobalPosition> Frozen =
                 new Dictionary<PersistentID, GlobalPosition>();
         }
@@ -72,14 +100,19 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             bool spoof = effect.Kind == HackKind.Spoof;
             int processed = 0;
-            for (int i = 0; i < units.Count && processed < MaximumUnits; i++)
+            for (int examined = 0; examined < Mathf.Min(128, units.Count) && processed < MaximumUnits; examined++)
             {
-                if (!(units[i] is Aircraft aircraft) || aircraft.disabled) continue;
+                if (effect.Cursor >= units.Count) effect.Cursor = 0;
+                if (!(units[effect.Cursor++] is Aircraft aircraft) || aircraft.disabled) continue;
                 if (aircraft.NetworkHQ != effect.Attacker) continue;
+                GlobalPosition position = aircraft.GlobalPosition();
+                float dx = position.x - effect.X, dz = position.z - effect.Z;
+                if (dx * dx + dz * dz > ProtectionRadius * ProtectionRadius) continue;
                 processed++;
 
                 if (!effect.Frozen.TryGetValue(aircraft.persistentID, out GlobalPosition frozen))
                 {
+                    if (effect.Frozen.Count >= MaximumUnits) continue;
                     frozen = aircraft.GlobalPosition();
                     effect.Frozen[aircraft.persistentID] = frozen;
                 }
@@ -98,9 +131,9 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>False formation position: the targeted point with a stable per-aircraft offset.</summary>
         private static GlobalPosition Decoy(Active effect, Aircraft aircraft, GlobalPosition real)
         {
-            int seed = aircraft.GetInstanceID();
-            float jitterX = ((seed % 7) - 3) * 400f;
-            float jitterZ = (((seed / 7) % 7) - 3) * 400f;
+            uint seed = unchecked((uint)aircraft.persistentID.Id);
+            float jitterX = ((int)(seed % 7) - 3) * 400f;
+            float jitterZ = ((int)((seed / 7) % 7) - 3) * 400f;
             return new GlobalPosition(effect.X + jitterX, real.y, effect.Z + jitterZ);
         }
     }

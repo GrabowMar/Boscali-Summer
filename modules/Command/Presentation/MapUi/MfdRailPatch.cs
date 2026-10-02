@@ -1,11 +1,10 @@
+using NOAvionics;
 using System.Collections.Generic;
 using HarmonyLib;
-using NOAvionics;
-using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Lays the maximised tactical map out in three columns: mod panels on the left, the map
@@ -405,8 +404,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var area = new Rect(0f, 0f, columns.Map.width, columns.Map.height);
             Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
             AvFrame viewportFrame = MfdChromeLay.Outline(rt, "ViewportFrame", area, hairline, AvChamfer.All(0f));
-            viewportFrame.Bracket = 6f;
-            viewportFrame.BracketColor = hairline;
+            viewportFrame.Bracket = 12f;
+            viewportFrame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.85f);
 
             rt.SetAsLastSibling();
         }

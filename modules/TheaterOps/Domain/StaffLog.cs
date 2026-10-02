@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
     /// The staff's own voice: a bounded newest-first ring of what the director decided and

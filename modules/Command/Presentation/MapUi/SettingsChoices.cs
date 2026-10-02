@@ -1,29 +1,15 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static class SettingsChoices
     {
-        private static readonly string[] Backgrounds = { "PLAIN", "GRID", "CHECKER", "HEXAGON", "CARBON", "RADAR", "CUSTOM" };
+        // Legacy procedural presets intentionally resolve to matte. Custom keeps its persisted id (3).
+        public static string BackgroundName(bool grid, bool checker, bool image, int preset) =>
+            image && preset == 3 ? "CUSTOM" : "MATTE";
 
-        private static int Background(bool grid, bool checker, bool image, int preset)
-        {
-            if ((grid ? 1 : 0) + (checker ? 1 : 0) + (image ? 1 : 0) > 1) return -1;
-            return image ? 3 + Math.Max(0, Math.Min(3, preset)) : checker ? 2 : grid ? 1 : 0;
-        }
-
-        public static string BackgroundName(bool grid, bool checker, bool image, int preset)
-        {
-            int mode = Background(grid, checker, image, preset);
-            return mode < 0 ? "MIXED" : Backgrounds[mode];
-        }
-
-        public static int CycleBackground(bool grid, bool checker, bool image, int preset, int direction)
-        {
-            int current = Background(grid, checker, image, preset);
-            if (current < 0) return direction < 0 ? 6 : 0;
-            return (current + (direction < 0 ? 6 : 1)) % 7;
-        }
+        public static int CycleBackground(bool grid, bool checker, bool image, int preset, int direction) =>
+            image && preset == 3 ? 0 : 1;
 
         // Inspect dimensions before Unity allocates a decoded image.
         public static bool SupportedImage(byte[] data)

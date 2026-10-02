@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>
     /// One reception result for a tuned frequency: where the signal came from, how far it

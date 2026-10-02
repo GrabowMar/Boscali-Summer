@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     internal sealed class FactionMoraleState
     {

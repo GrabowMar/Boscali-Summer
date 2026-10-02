@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// Places small infantry-scale game scenery along a position's ditches — HESCO, sandbag,

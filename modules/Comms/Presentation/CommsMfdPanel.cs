@@ -1,18 +1,18 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Comms.Configuration;
-using BoscaliSummer.Features.Comms.Domain;
-using BoscaliSummer.Features.Comms.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Comms.Configuration;
+using BoscaliSummer.Modules.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     /// <summary>
     /// "COM" — the multiplayer comms screen. Five pages, one job each: MAP arms the pen, the
@@ -269,7 +269,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             }
 
             string alert = comms.HostSilent
-                ? "NO ANSWER FROM THE HOST — COMMS NEEDS BOSCALI SUMMER ON THE HOST TOO"
+                ? "HOST NOT ANSWERING \u00b7 NEEDS BOSCALI SUMMER"
                 : state.Notice != null && state.NoticeIsError && now - state.NoticeAt < NoticeSeconds ? state.Notice : null;
             string prompt = comms.Tool != CommsTool.None ? comms.Prompt(comms.Tool) : null;
             string ambient = state.Notice != null && !state.NoticeIsError && now - state.NoticeAt < NoticeSeconds
@@ -392,7 +392,8 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private static void Show(AvPart part, bool visible)
         {
-            if (part?.Rect != null && part.Rect.gameObject.activeSelf != visible) part.Rect.gameObject.SetActive(visible);
+            // SetShown also tells the owning flow, so the page re-lays on the next tick instead of on the slow sweep.
+            part?.SetShown(visible);
         }
 
         private static void Show(Component component, bool visible)
@@ -409,5 +410,17 @@ namespace BoscaliSummer.Features.Comms.Presentation
         }
 
         private string Who(ulong author, string name) => author == comms.LocalId ? "YOU" : name;
+
+        /// <summary>
+        /// How many rows of a paged/pooled list fit the page: everything else on it is
+        /// <paramref name="fixedHeight"/>, a row is 33 px with its gap. A short console gets fewer rows
+        /// instead of a scrollbar; a tall one gets more, so the list is what soaks up the height.
+        /// </summary>
+        private static int FitRows(AvFlow page, float fixedHeight, int max, int min)
+        {
+            float viewport = page.ViewportHeight;
+            if (viewport <= 0f) return max;
+            return Mathf.Clamp(Mathf.FloorToInt((viewport - fixedHeight) / 33f), min, max);
+        }
     }
 }

@@ -1,17 +1,18 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.HighCommand.Configuration;
-using BoscaliSummer.Features.HighCommand.Domain;
-using BoscaliSummer.Features.HighCommand.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.HighCommand.Configuration;
+using BoscaliSummer.Modules.HighCommand.Domain;
+using BoscaliSummer.Modules.HighCommand.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.HighCommand.Runtime
+namespace BoscaliSummer.Modules.HighCommand.Runtime
 {
     /// <summary>
     /// Host-authoritative chain of command. Generates one staff per faction, puts each post

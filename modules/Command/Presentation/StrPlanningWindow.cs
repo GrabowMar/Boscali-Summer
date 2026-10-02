@@ -1,14 +1,13 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Framework.Contracts;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Core.Contracts;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>A live theater map with staff proposals and the operation's actual state.</summary>
     internal sealed class StrPlanningWindow : MonoBehaviour
@@ -29,7 +28,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private StrFrontBoard fronts;
         private StrNote frontsNote;
         private AvSegmented postureControl;
-        private ProseText postureText;
+        private AvSection logSection;
+        private StrLogBoard staffLog;
+        private StrNote staffLogNote;
         private TheaterMapPart map;
         private ITheaterWarView war;
         private ComMapOverlay overlay;
@@ -110,17 +111,23 @@ namespace BoscaliSummer.Features.Command.Presentation
             window = AvWindow.Build(transform, "operations-room", "THEATER / OPERATIONS ROOM", Width, Height, SortOrder);
 
             AvFlow body = window.Body;
-            body.Section(AvIcon.Map2, "LIVE THEATER MAP", "FRONT / CONTROL / STAFF INTENT");
-            map = body.Add(new TheaterMapPart(body.Content, overlay));
+            // The window is a fixed size, so the flow is told its viewport: the map soaks up what the two
+            // rows of cards under it leave, and nothing ends in a blank band.
+            body.ViewportHeight = Height - 30f - AvGridTokens.Footer;
+            body.Section(AvIcon.Map2, "LIVE THEATER MAP");
+            map = body.Add(new TheaterMapPart(body.Content, overlay), 1f);
 
-            // Two columns under the map keep the room on one screen: the operation and the staff's offers
-            // side by side, then the fronts beside the posture.
+            // Two columns under the map keep the room on one screen: the operation (with the staff's posture)
+            // beside the staff's offers, then the fronts beside the staff log.
             var opStack = new StrStack(body.Content);
             operationCard = opStack.Add(new StrOpCard(body.Content));
             operationNote = opStack.Add(new StrNote(body.Content, AvIcon.Flag));
             callOff = opStack.Add(new AvButtons(body.Content,
                 new[] { new AvControl.Spec("CALL OFF / REPLAN", CancelOperation, AvButtonStyle.Danger, AvIcon.X) }));
             callOff.Controls[0].Help = "Call off this operation and request fresh staff choices.";
+            postureControl = opStack.Add(new AvSegmented(body.Content, "POSTURE",
+                new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetPosture((TheaterWarPosture)i)));
+            for (int i = 0; i < 3; i++) postureControl.Options[i].Help = StrMfdPanel.PostureBrief((TheaterWarPosture)i);
 
             var offerStack = new StrStack(body.Content);
             proposals = offerStack.Add(new StrProposalDeck(body.Content, MaxProposals, Pick));
@@ -130,17 +137,19 @@ namespace BoscaliSummer.Features.Command.Presentation
             fronts = frontStack.Add(new StrFrontBoard(body.Content, MaxFronts, BindFront));
             frontsNote = frontStack.Add(new StrNote(body.Content, AvIcon.MapPin));
 
-            var postureStack = new StrStack(body.Content);
-            postureControl = postureStack.Add(new AvSegmented(body.Content, "POSTURE",
-                new[] { "CAUTIOUS", "STEADY", "BOLD" }, () => (int)selectedPosture, i => SetPosture((TheaterWarPosture)i)));
-            postureText = postureStack.Add(new ProseText(body.Content));
+            var logStack = new StrStack(body.Content);
+            staffLog = logStack.Add(new StrLogBoard(body.Content, 8, null, 3));
+            staffLog.Grow = 1f;
+            staffLogNote = logStack.Add(new StrNote(body.Content, AvIcon.ListDetails));
+            staffLogNote.Grow = 1f;
 
-            body.Row(new AvSection(body.Content, AvIcon.Flag, "PRIMARY OPERATION", "STAFF DIRECTED"),
-                new AvSection(body.Content, AvIcon.ListDetails, "STAFF PROPOSALS", "CHOOSE OR STAFF DECIDES"));
+            body.Row(new AvSection(body.Content, AvIcon.Flag, "OPERATION"),
+                new AvSection(body.Content, AvIcon.ListDetails, "PROPOSALS", "PICK"));
             body.Row(opStack, offerStack);
-            frontsSection = new AvSection(body.Content, AvIcon.MapPin, "FRONTS", "FIELD REPORTS");
-            body.Row(frontsSection, new AvSection(body.Content, AvIcon.AdjustmentsHorizontal, "STAFF POSTURE", "BROAD INTENT"));
-            body.Row(frontStack, postureStack);
+            frontsSection = new AvSection(body.Content, AvIcon.MapPin, "FRONTS");
+            logSection = new AvSection(body.Content, AvIcon.ListDetails, "STAFF LOG", "NEWEST FIRST");
+            body.Row(frontsSection, logSection);
+            body.Row(frontStack, logStack);
 
             AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
             if (closeButton != null) closeButton.Help = "Close operations room (Esc).";
@@ -162,9 +171,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             proposalNote.SetShown(count == 0);
             if (count > 0) StrMfdPanel.FillProposals(proposals, proposalList, MaxProposals, war.CanCommand);
             else
-                proposalNote.Set(ready ? "NO OPENINGS ON OFFER" : "NO STAFF PROPOSALS",
-                    ready ? "The staff spends from the faction pool and acts on its own until it sees an opening."
-                        : "Proposals appear here once theater staff is available.");
+                proposalNote.Set(ready ? "NO OPENINGS" : "NO PROPOSALS", "");
 
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;
             operationCard.SetShown(active != null);
@@ -177,9 +184,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 callOff.Controls[0].Interactable = war.CanCommand;
             }
             else
-                operationNote.Set(ready ? "NO PRIMARY OPERATION" : "THEATER STAFF UNAVAILABLE",
-                    ready ? "The staff is monitoring several fronts for an opening."
-                        : "No staff is running for this faction.");
+                operationNote.Set(ready ? "NO OPERATION" : "STAFF OFFLINE", "");
 
             IReadOnlyList<TheaterFrontView> frontList = ready ? war.Fronts : null;
             int frontCount = frontList?.Count ?? 0;
@@ -188,14 +193,22 @@ namespace BoscaliSummer.Features.Command.Presentation
             frontsNote.SetShown(frontCount == 0);
             frontsSection.SetCaption(frontCount == 0 ? "NO REPORTS" : frontCount + " TRACKED");
             if (frontCount == 0)
-                frontsNote.Set("NO FRONTS REPORTED", "Verified fronts appear here with their pressure once staff has contact.");
+                frontsNote.Set("NO FRONTS", "");
 
             selectedPosture = ready ? war.Posture : TheaterWarPosture.Steady;
             postureControl.Refresh();
-            postureText.Set(StrMfdPanel.PostureBrief(selectedPosture));
 
             IReadOnlyList<string> log = ready ? war.StaffLog : null;
-            window.Footer.Set(log != null && log.Count > 0 ? "Staff log · " + log[0] : "Staff log · no recent report.");
+            int lines = log == null ? 0 : Mathf.Min(log.Count, staffLog.Capacity);
+            staffLog.Begin();
+            for (int i = 0; i < lines; i++)
+                staffLog.Add((i + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture), log[i],
+                    AvState.Info, false, "Staff log entry " + (i + 1) + ", newest first.");
+            staffLog.End();
+            staffLog.SetShown(lines > 0);
+            staffLogNote.SetShown(lines == 0);
+            if (lines == 0) staffLogNote.Set(ready ? "NO STAFF TRAFFIC" : "STAFF OFFLINE", "");
+            window.Footer.Set(lines > 0 ? "Staff log · " + log[0] : "Staff log · no recent report.");
 
             map.Refresh(active, proposalList, frontList);
         }
@@ -333,7 +346,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
 
             private void PlaceMarker(Image marker, bool known, float x, float z,
-                BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid grid)
+                BoscaliSummer.Modules.Command.Runtime.TacticalSectorGrid grid)
             {
                 if (!known || grid == null || !(grid.WorldSizeX > 0f) || !(grid.WorldSizeY > 0f) ||
                     float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z))
@@ -358,10 +371,10 @@ namespace BoscaliSummer.Features.Command.Presentation
                 new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
             private readonly int[] lengths = new int[FrontlineTraceLimits.MaximumTraces];
             private readonly float[] pressure = new float[FrontlineTraceLimits.MaximumTraces];
-            private BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid source;
+            private BoscaliSummer.Modules.Command.Runtime.TacticalSectorGrid source;
             private ulong drawnHash;
 
-            public void SetSource(BoscaliSummer.Features.Command.Runtime.TacticalSectorGrid grid)
+            public void SetSource(BoscaliSummer.Modules.Command.Runtime.TacticalSectorGrid grid)
             {
                 ulong hash = grid != null ? grid.FrontlineHash : 0UL;
                 if (ReferenceEquals(grid, source) && hash == drawnHash) return;

@@ -1,13 +1,12 @@
-using System;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Runtime;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Modules.Command.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Scrolling theater news marquee ("Theater Wire / WarNet") positioned directly
@@ -113,7 +112,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             bool logLive = MfdLogPanel.HasTraffic;
             if (deskLabel != null && logLive != lastLogLive)
             {
-                deskLabel.text = logLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY";
+                deskLabel.text = logLive ? "// LOG LIVE" : "// LOG STANDBY";
                 lastLogLive = logLive;
             }
 
@@ -238,10 +237,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvLay.Fill(chrome, 0f);
 
             var area = new Rect(0f, 0f, size.x, size.y);
-            MfdChromeLay.Panel(chrome, "Backing", area,
+            AvFrame backing = MfdChromeLay.Panel(chrome, "Backing", area,
                 AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.94f),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f),
                 AvChamfer.Diagonal(6f));
+            backing.Bracket = 7f;
+            backing.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.8f);
             alertRail = MfdChromeLay.Rule(chrome, "AlertRail",
                 new Rect(badgeWidth, -size.y + 2f, size.x - badgeWidth, 2f),
                 AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.30f));
@@ -265,7 +266,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             lastLogLive = MfdLogPanel.HasTraffic;
             deskLabel = AvText.Make(badgeRt, "Desk", AvTextRole.Micro,
-                lastLogLive ? "FIELD LOG / LIVE" : "FIELD LOG / STANDBY", TextAlignmentOptions.MidlineRight);
+                lastLogLive ? "// LOG LIVE" : "// LOG STANDBY", TextAlignmentOptions.MidlineRight);
             MfdChromeLay.Place(deskLabel.rectTransform, new Rect(badgeWidth - 145f, 0f, 112f, size.y));
             deskLabel.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
 

@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Events.Configuration
+namespace BoscaliSummer.Modules.Events.Configuration
 {
     /// <summary>
     /// World-event rotation tuning. The host owns rotation and broadcasts one active event

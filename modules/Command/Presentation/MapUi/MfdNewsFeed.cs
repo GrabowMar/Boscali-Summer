@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Pure, deterministic headline generator and event processor for the theater news wire.

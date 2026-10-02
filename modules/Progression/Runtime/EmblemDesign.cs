@@ -2,7 +2,7 @@ using System;
 using System.Globalization;
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Progression.Runtime
+namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>
     /// Local cosmetic squadron emblem: one silhouette, one centre charge and a two-colour

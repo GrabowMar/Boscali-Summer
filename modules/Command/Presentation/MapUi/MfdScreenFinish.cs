@@ -1,9 +1,9 @@
-using NOAvionics.Ui;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>One input-transparent screen finish over the complete maximized MFD.</summary>
     internal static class MfdScreenFinish

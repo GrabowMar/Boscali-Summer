@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Patches
+namespace BoscaliSummer.Modules.Command.Patches
 {
     /// <summary>
     /// Dynamically anchors map grid coordinate labels, minor tick labels, and corner

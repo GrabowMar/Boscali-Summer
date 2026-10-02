@@ -1,6 +1,6 @@
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>
     /// Known hostile ground power around a point: ground vehicles and buildings in the

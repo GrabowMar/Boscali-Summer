@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>
     /// What goes on a post's map marker, kept pure so the map obeys the same fog as the

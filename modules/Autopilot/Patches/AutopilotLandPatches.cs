@@ -1,7 +1,7 @@
-using BoscaliSummer.Features.Autopilot.Runtime;
+using BoscaliSummer.Modules.Autopilot.Runtime;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Autopilot.Patches
+namespace BoscaliSummer.Modules.Autopilot.Patches
 {
     /// <summary>Takes over the local player's fixed-step input pass while the landing autopilot
     /// is engaged, so the native autopilot writes the same inputs the player would.</summary>

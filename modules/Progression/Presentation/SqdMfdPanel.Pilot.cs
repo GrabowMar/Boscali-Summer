@@ -1,44 +1,41 @@
-using System;
-using BoscaliSummer.Features.Progression.Domain;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
-        private const int PilotChipColumns = 2; // two columns: the longest grade name (SPECTRUM EFFICIENCY) shrinks into one chip
-
         private PilotIdCard pilotIdentity;
         private AvStatTile tileSortie, tileTime, tileFuel, tileDeaths;
         private SqdQuote pilotBackground;
-        private SqdStatGrid sortieGrid, careerGrid;
+        private SqdStatGrid sortieGrid;
         private int sortieAirframe, sortieCondition, sortieLife, sortieMission;
-        private int careerPilot, careerBonus, careerNext, careerEarned, careerSpent, careerUnspent;
-        private SqdEmptyCard committedSkillsEmpty;
-        private AvSection committedSection;
-        private readonly AvChip[] committedChips = new AvChip[PerkCatalog.All.Length];
+        private const int AceBonusCeiling = 20; // matches the host's ace bonus point ceiling
+        private AvGauge ringScore, ringBonus, ringPicks, ringFree;
+        private SkillLaneStrip committedLanes;
+        private string[] committedLaneNames;
+        private readonly bool[][] committedHeld = new bool[8][];
 
         private void ResetPilotPage()
         {
             pilotIdentity = null;
             tileSortie = tileTime = tileFuel = tileDeaths = null;
             pilotBackground = null;
-            sortieGrid = careerGrid = null;
-            committedSkillsEmpty = null;
-            committedSection = null;
-            Array.Clear(committedChips, 0, committedChips.Length);
+            sortieGrid = null;
+            ringScore = ringBonus = ringPicks = ringFree = null;
+            committedLanes = null;
+            committedLaneNames = null;
         }
 
         private void BuildPilotPage(AvFlow p)
         {
-            p.Section(AvIcon.User, "PILOT RECORD", "LOCAL + HOST DATA");
             pilotIdentity = p.Add(new PilotIdCard(p.Content));
 
             tileSortie = new AvStatTile(p.Content, "SORTIE");
@@ -47,37 +44,34 @@ namespace BoscaliSummer.Features.Progression.Presentation
             tileDeaths = new AvStatTile(p.Content, "DEATHS");
             p.Row(tileSortie, tileTime, tileFuel, tileDeaths);
 
-            p.Section(AvIcon.Typography, "SERVICE NOTE", "LOCAL PROFILE");
             pilotBackground = p.Add(new SqdQuote(p.Content));
             pilotBackground.Set("No service background on file.");
 
-            p.Section(AvIcon.Plane, "CURRENT SORTIE", null);
             sortieGrid = p.Add(new SqdStatGrid(p.Content));
             sortieAirframe = sortieGrid.Add("AIRFRAME");
             sortieCondition = sortieGrid.Add("CONDITION");
             sortieLife = sortieGrid.Add("LIFE MODE");
             sortieMission = sortieGrid.Add("MISSION SCORE");
+            sortieGrid.Help = "This sortie: the airframe you fly, its condition, whether you respawn or have one life, and the mission score the pick ladder is built from.";
 
-            p.Section(AvIcon.ChartLine, "CAREER", "THIS PILOT");
-            careerGrid = p.Add(new SqdStatGrid(p.Content));
-            careerPilot = careerGrid.Add("PILOT SCORE");
-            careerBonus = careerGrid.Add("ACE BONUS");
-            careerNext = careerGrid.Add("NEXT PICK IN");
-            careerEarned = careerGrid.Add("PICKS EARNED");
-            careerSpent = careerGrid.Add("SPENT");
-            careerUnspent = careerGrid.Add("UNSPENT");
+            ringScore = new AvGauge(p.Content, "NEXT", AvGaugeShape.Segments, 64f);
+            ringBonus = new AvGauge(p.Content, "ACE", AvGaugeShape.Segments, 64f);
+            ringPicks = new AvGauge(p.Content, "EARNED", AvGaugeShape.Segments, 64f);
+            ringFree = new AvGauge(p.Content, "FREE", AvGaugeShape.Segments, 64f);
+            ringScore.Help = "NEXT: mission score still needed to earn the next skill pick. The ladder fills as you approach it.";
+            ringBonus.Help = "ACE: bonus score from ace kills and streaks, added to your career score (ceiling " + AceBonusCeiling + ").";
+            ringPicks.Help = "EARNED: skill picks earned so far out of the maximum.";
+            ringFree.Help = "FREE: earned picks not yet spent. Spend them on the SKILLS tab; a pick cannot be undone.";
+            p.Row(ringScore, ringBonus, ringPicks, ringFree);
 
-            committedSection = p.Section(AvIcon.Star, "COMMITTED SKILLS", null);
-            committedSkillsEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Star, "NO SKILLS COMMITTED",
-                "Spend a pick on the qualification board to fly with a tool or a passive grade.",
-                "OPEN SKILLS", () => console.SetPage(TabSkills), AvIcon.ChevronRight));
-            AvCellGrid grid = p.Grid(PilotChipColumns);
-            for (int i = 0; i < committedChips.Length; i++)
-            {
-                committedChips[i] = new AvChip(p.Content);
-                committedChips[i].SetShown(false);
-                grid.Add(committedChips[i]);
-            }
+            // The lanes come from the catalogue, in table order: one row per qualification, one pip per grade.
+            var names = new System.Collections.Generic.List<string>(4);
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
+                if (!names.Contains(PerkCatalog.All[i].Lane)) names.Add(PerkCatalog.All[i].Lane);
+            committedLaneNames = names.ToArray();
+            for (int i = 0; i < committedHeld.Length; i++) committedHeld[i] = new bool[PerkCatalog.MaximumDepth];
+            committedLanes = p.Add(new SkillLaneStrip(p.Content, committedLaneNames, PerkCatalog.MaximumDepth) { Grow = 1f });
+            committedLanes.Help = "HELD: every qualification lane and its six grades. A lit pip is a grade you hold; a dim lane is closed because the career already carries two support tools.";
         }
 
         // ---- PILOT refresh ---------------------------------------------------------------
@@ -143,53 +137,43 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 pilot.Respawns ? AvState.Info : AvState.Caution);
             sortieGrid.Set(sortieMission, AvNum.Thousands(view.Score));
 
-            careerGrid.Set(careerPilot, AvNum.Thousands(pilotScore));
-            careerGrid.Set(careerBonus, "+" + AvNum.Thousands(bonus) + "P");
-
             int perPoint = Math.Max(1, view.ScorePerPoint);
             int toNext = perPoint - (pilotScore % perPoint);
-            careerGrid.Set(careerNext, bypass ? "BYPASS"
-                : view.EarnedPoints >= view.MaximumPoints ? "COMPLETE" : AvNum.Thousands(toNext));
-
             int earned = view.EarnedPoints;
             int available = view.AvailablePoints;
-            int spent = Math.Max(0, earned - available);
             int ceiling = Math.Max(1, view.MaximumPoints);
+            bool complete = earned >= view.MaximumPoints;
 
-            careerGrid.Set(careerEarned, bypass ? "BYPASS" : earned + "/" + ceiling);
-            careerGrid.Set(careerSpent, bypass ? null : AvNum.Thousands(spent));
-            careerGrid.Set(careerUnspent, bypass ? "UNLIMITED" : AvNum.Thousands(available),
-                !bypass && available > 0 ? AvState.Ready : AvState.Inert);
+            ringScore.Set(bypass || complete ? 1f : 1f - toNext / (float)perPoint,
+                bypass ? "DBG" : complete ? "MAX" : AvNum.Thousands(toNext), bypass ? AvState.Caution : AvState.Info);
+            ringBonus.Set(Mathf.Clamp01(bonus / (float)AceBonusCeiling), "+" + AvNum.Thousands(bonus),
+                bonus > 0 ? AvState.Ready : AvState.Inert);
+            ringPicks.Set(bypass ? 1f : Mathf.Clamp01(earned / (float)ceiling), bypass ? "ALL" : earned + "/" + ceiling,
+                AvState.Info);
+            ringFree.Set(bypass ? 1f : Mathf.Clamp01(available / (float)ceiling), bypass ? "ALL" : AvNum.Thousands(available),
+                bypass || available > 0 ? AvState.Ready : AvState.Inert);
 
             RefreshCommittedSkills(view.GetPerks());
         }
 
         private void RefreshCommittedSkills(PerkView[] perks)
         {
-            int slot = 0;
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
+            if (committedLanes == null || committedLaneNames == null) return;
+            for (int l = 0; l < committedLaneNames.Length && l < committedHeld.Length; l++)
             {
-                PerkDefinition definition = PerkCatalog.All[i];
-                bool unlocked = false;
-                for (int j = 0; j < perks.Length; j++)
+                Array.Clear(committedHeld[l], 0, committedHeld[l].Length);
+                bool closed = false;
+                for (int i = 0; i < PerkCatalog.All.Length; i++)
                 {
-                    if (perks[j].Id != definition.Id) continue;
-                    unlocked = perks[j].Unlocked;
-                    break;
+                    PerkDefinition definition = PerkCatalog.All[i];
+                    if (!string.Equals(definition.Lane, committedLaneNames[l], StringComparison.Ordinal)) continue;
+                    if (!TryFind(perks, definition.Id, out PerkView view)) continue;
+                    int grade = definition.Grade - 1;
+                    if (grade >= 0 && grade < committedHeld[l].Length) committedHeld[l][grade] = view.Unlocked;
+                    if (definition.IsTool && !view.Unlocked && view.Block == PerkView.BlockCap) closed = true;
                 }
-                if (!unlocked || slot >= committedChips.Length) continue;
-
-                committedChips[slot].SetShown(true);
-                string word = definition.IsTool
-                    ? definition.Lane + " TOOL"
-                    : definition.Name.ToUpperInvariant();
-                committedChips[slot].Set(word, definition.IsTool ? AvState.Info : AvState.Ready);
-                slot++;
+                committedLanes.SetLane(l, committedHeld[l], closed);
             }
-
-            for (int i = slot; i < committedChips.Length; i++) committedChips[i].SetShown(false);
-            committedSkillsEmpty?.SetShown(slot == 0);
-            committedSection?.SetCaption(slot == 0 ? null : AvNum.Thousands(slot) + " HELD");
         }
 
         /// <summary>
@@ -201,6 +185,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// </summary>
         private sealed class PilotIdCard : AvPart
         {
+            private static Sprite equipmentArt;
             private const float CardH = 156f, StripH = 26f, PortraitW = 92f, EmblemW = 64f, Pad = 10f;
             private readonly AvFrame frame, rankFrame;
             private readonly Image strip;
@@ -218,6 +203,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
                 AvLay.Fill(frame.rectTransform);
                 frame.Bracket = 6f;
+                AvBundle.Engraving(Rect, 0.75f);
                 strip = AvLay.Solid(Rect, "Rule", Color.clear);
 
                 profileTag = AvText.Make(Rect, "ProfileTag", AvTextRole.Micro);
@@ -225,7 +211,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 stateChip = new AvChip(Rect);
 
                 portrait = new AvPortrait(Rect, "Pilot");
-                callsignText = AvText.Make(Rect, "Callsign", AvTextRole.Display);
+                callsignText = AvText.Make(Rect, "Callsign", AvTextRole.Headline);
                 AvText.Fit(callsignText, false);
                 nameLine = AvText.Make(Rect, "Name", AvTextRole.Prose);
                 AvText.Fit(nameLine, false);
@@ -269,7 +255,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     AvIcons.Set(statusIcon, statusGlyph, AvGridTokens.IconInline);
                     Restyle();
                 }
-                portrait.Set(photo);
+                if (photo == null && equipmentArt == null)
+                {
+                    Texture2D texture = AvBundle.Illustration("pilot-helmet");
+                    if (texture != null) equipmentArt = Sprite.Create(texture,
+                        new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+                }
+                portrait.Set(photo != null ? photo : equipmentArt);
+                portrait.Help = photo != null ? "Pilot portrait from the local profile." : "Generic flight equipment illustration. The callsign and service record beside it identify your pilot.";
                 emblem.Set(emblemSprite);
                 squadronText.text = squadron ?? "";
                 stateChip.Set(stateWord, state);
@@ -297,7 +290,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 AvLay.Place(callsignText.rectTransform, x, top - 2f, w, 30f);
                 AvLay.Place(nameLine.rectTransform, x, top + 30f, w, 18f);
 
-                float rankY = top + 54f;
+                float rankY = Mathf.Max(top + 54f, s.H - Pad - 48f);
                 AvLay.Place(rankFrame.rectTransform, x, rankY, 50f, 48f);
                 AvLay.Place(rankCaption.rectTransform, x, rankY + 3f, 50f, 13f);
                 AvLay.Place(rankNumber.rectTransform, x, rankY + 15f, 50f, 30f);

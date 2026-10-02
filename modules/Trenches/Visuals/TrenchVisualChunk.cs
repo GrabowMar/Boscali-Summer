@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Trenches.Domain;
-using BoscaliSummer.Features.Trenches.Runtime;
+using BoscaliSummer.Modules.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Runtime;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Visuals
+namespace BoscaliSummer.Modules.Trenches.Visuals
 {
     /// <summary>
     /// Renders one position's carved ditches with a 3-tier camera distance LOD. The fire
@@ -167,6 +167,19 @@ namespace BoscaliSummer.Features.Trenches.Visuals
                         AddWireBelt(lod0Root.transform, wireMat ?? earthMat, WireForward, WireHeight, "WireBelt");
                     else
                         AddWireBelt(lod0Root.transform, wireMat ?? earthMat, OuterWireForward, OuterWireHeight, "WireBelt_Outer");
+                    break;
+                case TrenchBuildStep.Cover:
+                    // Roofed lengths between the open firing bays, once the position matures
+                    // past its open stage. Rides the fire ditch like the wire; a stage gate,
+                    // not a rebuild, decides it, so every peer agrees from replicated state.
+                    if (stagedFirePath == null || !TrenchTraceMath.HasOverheadCover(line.Stage)) break;
+                    Mesh cover = TrenchMeshBuilder.BuildOverheadCoverMesh(stagedFirePath, width, line.Nodes);
+                    if (cover == null) break;
+                    proceduralMeshes.Add(cover);
+                    var coverGo = new GameObject("OverheadCover");
+                    coverGo.transform.SetParent(lod0Root.transform, false);
+                    coverGo.AddComponent<MeshFilter>().sharedMesh = cover;
+                    coverGo.AddComponent<MeshRenderer>().sharedMaterial = earthMat;
                     break;
                 case TrenchBuildStep.Support:
                     AddPath(lod0Root.transform, "Support", line.Support, TraceStep, 2.2f, 1.2f, 1.0f, earthMat, true);

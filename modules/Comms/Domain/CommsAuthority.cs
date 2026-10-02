@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Comms.Domain
+namespace BoscaliSummer.Modules.Comms.Domain
 {
     /// <summary>
     /// The host's side of COMMS, with no Unity and no transport in it: a peer's request goes

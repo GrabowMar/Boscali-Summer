@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Pure storm-lightning curves: strike scheduling, the double-pulse flash envelope,

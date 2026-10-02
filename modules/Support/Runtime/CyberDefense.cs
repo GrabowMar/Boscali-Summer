@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Host side of the CYBER network: which airbases are home nodes and whether their anchor

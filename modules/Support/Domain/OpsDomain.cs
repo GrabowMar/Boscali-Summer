@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Support.Domain
+namespace BoscaliSummer.Modules.Support.Domain
 {
     /// <summary>
     /// The three OPS warfare domains, in tab order. Panel-local identity: nothing here

@@ -1,11 +1,11 @@
-using System;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Framework.Lifecycle;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Applies the Avionics.* keys (theme, FX tier, blur-behind, reduced motion) to the shared kit and feeds

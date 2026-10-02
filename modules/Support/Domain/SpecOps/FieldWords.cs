@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace BoscaliSummer.Features.Support.Domain.SpecOps
+namespace BoscaliSummer.Modules.Support.Domain.SpecOps
 {
     /// <summary>
     /// Every word SPEC OPS shows, so the MFD, the desk, the map layer and the host's replies say
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case TeamState.Unformed: return "UNFORMED";
                 case TeamState.Ready: return "READY";
                 case TeamState.EnRoute: return "EN ROUTE";
-                case TeamState.Deciding: return "DECISION WINDOW";
+                case TeamState.Deciding: return "FIELD CONTROL";
                 case TeamState.OnTask: return "ON TASK";
                 case TeamState.Holding: return "HOLDING";
                 default: return "RECOVERING";
@@ -63,14 +63,14 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             }
         }
 
-        /// <summary>What a success does to the world, at the rank the team would go with.</summary>
+        /// <summary>What a success does to the world, at the prepared package quality.</summary>
         public static string Effect(FieldMission mission, int rank)
         {
             switch (mission)
             {
                 case FieldMission.Recon:
                     return "Reveals hostile ground units within " + Km(FieldCatalog.ReconRadius(rank)) +
-                           " and scouts the objective for 10 min (+10% on later missions).";
+                           " and scouts the objective for 10 min (30 starting intel on later operations).";
                 case FieldMission.Sabotage:
                     return "Jams hostile ground radars within " + Km(FieldCatalog.SabotageRadius(rank)) + " for " +
                            Seconds(FieldCatalog.SabotageSeconds(rank)) + ": a window to strike the SAMs.";
@@ -88,7 +88,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             switch (mission)
             {
-                case FieldMission.Recon: return "Reveals ground in " + Km(FieldCatalog.ReconRadius(rank)) + "; scouts +10% odds.";
+                case FieldMission.Recon: return "Reveals ground in " + Km(FieldCatalog.ReconRadius(rank)) + "; supplies 30 starting intel.";
                 case FieldMission.Sabotage: return "Jams radars in " + Km(FieldCatalog.SabotageRadius(rank)) + " for " +
                     Seconds(FieldCatalog.SabotageSeconds(rank)) + ".";
                 case FieldMission.Steal: return "Steals " + FieldCatalog.StealIntel(rank).ToString("0", CultureInfo.InvariantCulture) + " CYBER intel.";
@@ -137,10 +137,10 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             switch (post)
             {
-                case FieldMission.Recon: return "SPOT / SKYWATCH within " + Km(FieldCatalog.PostReach(post));
-                case FieldMission.Sabotage: return "SUPPRESS / HUNT within " + Km(FieldCatalog.PostReach(post));
-                case FieldMission.Steal: return "EAVESDROP within " + Km(FieldCatalog.PostReach(post));
-                default: return "FORTIFY within " + Km(FieldCatalog.PostReach(post));
+                case FieldMission.Recon: return "SPOT / SKYWATCH in the controlled sector";
+                case FieldMission.Sabotage: return "SUPPRESS / HUNT in the controlled sector";
+                case FieldMission.Steal: return "EAVESDROP in the controlled sector";
+                default: return "FORTIFY in the controlled sector";
             }
         }
 
@@ -189,11 +189,11 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             ability == FieldAbility.Hunt ? "HNT" : "SUP";
 
         public static string AbilityDescription(FieldAbility ability) => ability == FieldAbility.Spot
-            ? "An observation post calls out hostile ground units around the mark (2.5 km, +0.5 km per rank)."
+            ? "An observation post calls out hostile ground units around the mark (2.5 km, +0.5 km per quality)."
             : ability == FieldAbility.Skywatch ? "An observation post reveals hostile aircraft around the mark."
             : ability == FieldAbility.Eavesdrop ? "A listening post locates active hostile emitters around the mark."
             : ability == FieldAbility.Hunt ? "A saboteur cell reveals emitters and briefly jams hostile ground radars."
-            : "A saboteur cell jams hostile ground radars around the mark (2 km, 30 s; more with rank).";
+            : "A saboteur cell jams hostile ground radars around the mark (2 km, 30 s; more with operator quality).";
 
         /// <summary>The locked-row reason: which desk mission earns the post.</summary>
         public static string AbilityLocked(FieldAbility ability) => ability == FieldAbility.Spot || ability == FieldAbility.Skywatch
@@ -205,6 +205,11 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             switch (denial)
             {
+                case SpecOpsDenial.Preparing: return "NEED 60 PREPARATION · OBSERVE / ADVANCE";
+                case SpecOpsDenial.Exposed: return "EXPOSURE ABOVE 75 · CONCEAL FIRST";
+                case SpecOpsDenial.OrderCoolingDown: return "TEAM ACKNOWLEDGING LAST ORDER";
+                case SpecOpsDenial.StaleOrder: return "FIELD REPORT CHANGED · RESYNC";
+                case SpecOpsDenial.PostLimit: return "TWO POSTS ALREADY HELD · EXTRACT ONE";
                 case SpecOpsDenial.None: return "READY";
                 case SpecOpsDenial.Disabled: return "SPEC OPS IS OFF ON THIS SERVER";
                 case SpecOpsDenial.BadTeam: return "NO SUCH TEAM";
@@ -224,7 +229,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             }
         }
 
-        /// <summary>Why a successful roll built nothing: SEIZE found no building, SABOTAGE
+        /// <summary>Why a committed package built nothing: SEIZE found no building, SABOTAGE
         /// found every jammer busy (its only host-side failure), anything else is unaccounted.</summary>
         private static string NoEffectWord(FieldMission mission) => mission == FieldMission.Seize ? " FOUND NO BUILDING TO HOLD · RETURNING"
             : mission == FieldMission.Sabotage ? " FOUND EVERY JAMMER BUSY · RETURNING" : " EFFECT UNAVAILABLE · RETURNING";
@@ -239,11 +244,16 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 case FieldNotice.Raised: return who + " FORMED · RECRUIT, READY";
                 case FieldNotice.Launched: return who + " MOVING OUT · " + Mission(mission) + where;
                 case FieldNotice.OnTask: return who + " ON TASK · " + Mission(mission) + where;
-                case FieldNotice.Arrived: return who + " AT SITE · EXECUTE OR EXTRACT · 30 s" + where;
+                case FieldNotice.Arrived: return who + " AT SITE · OPEN DESK / WORK THE OPERATION · 4 MIN LIMIT" + where;
                 case FieldNotice.Executed: return who + " EXECUTING · LIVE PRESSURE" + where;
                 case FieldNotice.Extracted: return who + " EXTRACTING · SAFE RETURN" + where;
                 case FieldNotice.PostLimit: return who + " SUCCESS · POST CAP REACHED · EXTRACTING" + where;
-                case FieldNotice.Success: return who + " SUCCESS · " + Post(mission) + " HELD" + where;
+                case FieldNotice.Success: return who + " PACKAGE READY · " + Post(mission) + " HELD" + where;
+                case FieldNotice.Observed: return who + " EYES ON · INTEL IMPROVED / SIGNATURE RISING";
+                case FieldNotice.Advanced: return who + " MOVING · PREPARATION GAIN / EXPOSURE RISING";
+                case FieldNotice.Concealed: return who + " LYING LOW · SIGNATURE DOWN / PROGRESS GIVEN UP";
+                case FieldNotice.Withdrawn: return who + " SITE COMPROMISED · SAFE WITHDRAWAL";
+                case FieldNotice.Expended: return who + " PACKAGE EXPENDED · EXTRACTING";
                 case FieldNotice.Failed: return who + " FAILED · RETURNING" + where;
                 case FieldNotice.Lost: return who + " LOST" + where + " · SLOT OPEN";
                 case FieldNotice.Recalled: return who + " RECALLED · RETURNING";
@@ -269,15 +279,13 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                     return "READY · " + Rank(team.Rank);
                 case TeamState.EnRoute:
                     return "EN ROUTE · " + Mission(team.Mission) + " · " + Origin(team) + " → " + Target(team) +
-                        " · " + team.CurrentThreat + "U / " + team.CurrentRadars + "R · " + team.Chance + "% / " + team.Loss + "% · " + Clock(remaining);
+                        " · " + Clock(remaining);
                 case TeamState.Deciding:
-                    return "AT SITE · EXECUTE OR EXTRACT · " + Clock(remaining) + " · " + team.CurrentThreat + "U / " +
-                        team.CurrentRadars + "R · " + team.Chance + "% SUCCESS / " + team.Loss + "% LOSS";
+                    return "FIELD CONTROL · PREP " + team.Preparation + " / INTEL " + team.Intel + " / EXP " + team.Exposure + " · " + Clock(remaining);
                 case TeamState.OnTask:
-                    return "EXECUTING · " + Mission(team.Mission) + " · " + team.CurrentThreat + "U / " + team.CurrentRadars +
-                        "R · " + team.Chance + "% SUCCESS / " + team.Loss + "% LOSS · " + Clock(remaining);
+                    return "EXECUTING · " + Mission(team.Mission) + " · QUALITY " + team.Quality + " · " + Clock(remaining);
                 case TeamState.Holding:
-                    return "HOLDING " + PostCode(team.Mission) + " · " + Target(team) + " · " + Clock(remaining);
+                    return "HOLDING " + PostCode(team.Mission) + " · " + team.Charges + " CHARGES / Q" + team.Quality + " · " + Clock(remaining);
                 default:
                     return "RECOVERING · " + LastWord(team.Last, team.Mission) + Clock(remaining);
             }
@@ -310,6 +318,27 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         private static string Target(in FieldTeam team) => string.IsNullOrEmpty(team.Target) ? "OBJECTIVE" : team.Target;
         public static string Origin(in FieldTeam team) => string.IsNullOrEmpty(team.Origin) ? "FRIENDLY BASE" : team.Origin;
 
+        public static string OperatorAdvice(in FieldTeam team, double now)
+        {
+            if (team.State == TeamState.EnRoute) return "BRIEF THE OBJECTIVE · AIRCREW RECON CAN SUPPLY THIS INSERTION";
+            if (team.State == TeamState.OnTask) return "DELIVERING PACKAGE · SUPPRESS DEFENDERS TO PROTECT THE POST";
+            if (team.State == TeamState.Holding)
+                return FieldCatalog.PostSummary(team.Mission, team.Quality) + " · " + team.Charges +
+                    " SHARED CHARGES · PRESSURE WINDOW ≤ " + Clock(SpecOpsDetachment.PostPressureWindow(team, now));
+            if (team.State != TeamState.Deciding) return "SELECT AN OBJECTIVE AND PREVIEW AN OPERATION";
+            if (now < team.OrderReadyAt) return "WAIT FOR TEAM ACKNOWLEDGEMENT · " + Clock(team.OrderReadyAt - now);
+            if (team.RouteStep < 3)
+                return "SCOUT / COVER THE NEXT LEG · CHOOSE FAST OR COVERED · PRESSURE +" +
+                    (team.CurrentThreat == byte.MaxValue || team.CurrentRadars == byte.MaxValue ? "?" :
+                        SpecOpsDetachment.ExposurePerPulse(team).ToString(CultureInfo.InvariantCulture)) +
+                    " EXPOSURE / " + (int)FieldCatalog.OrderSeconds + " S";
+            if (team.Exposure > FieldCatalog.MaximumExecuteExposure)
+                return "APPROACH COMPROMISED · EXTRACT TO PRESERVE THE TEAM";
+            int quality = SpecOpsDetachment.ExecutionQuality(team);
+            return "EXECUTE Q" + quality + " · " + FieldCatalog.PostCharges(quality) + " SHARED CHARGES · " +
+                FieldCatalog.PostSummary(team.Mission, quality);
+        }
+
         public static string Km(float metres) =>
             (metres / 1000f).ToString(metres % 1000f == 0f ? "0" : "0.0", CultureInfo.InvariantCulture) + " km";
 
@@ -331,7 +360,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (detachment.Formed == 0) return "NO TEAMS · RAISE ONE IN THE DESK";
             for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
                 if (detachment.Team(i).State == TeamState.Deciding)
-                    return Callsign(i) + " AT SITE · EXECUTE OR EXTRACT · " + Clock(detachment.Remaining(i, now));
+                    return Callsign(i) + " AT SITE · OPEN DESK / WORK THE OPERATION · " + Clock(detachment.Remaining(i, now));
             if (detachment.Posts(FieldMission.Recon) > 0) return "OBSERVATION POST HELD · SPOT / SKYWATCH LIVE IN ACTIONS";
             if (detachment.Posts(FieldMission.Sabotage) > 0) return "SABOTEUR CELL HELD · SUPPRESS / HUNT LIVE IN ACTIONS";
             if (detachment.Posts(FieldMission.Steal) > 0) return "LISTENING POST HELD · EAVESDROP LIVE IN ACTIONS";

@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.TheaterOps.Configuration
+namespace BoscaliSummer.Modules.TheaterOps.Configuration
 {
     /// <summary>Which factions the host's theater director fights for.</summary>
     internal enum TheaterDirectorFactions

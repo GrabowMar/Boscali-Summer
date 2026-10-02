@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// The watch-floor klaxon: a synthesized two-tone whoop played flat (no 3D) when the

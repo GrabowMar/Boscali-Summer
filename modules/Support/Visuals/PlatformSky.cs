@@ -1,13 +1,14 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// Orbital stations as real objects in the sky. A station on a theatre pass — own and

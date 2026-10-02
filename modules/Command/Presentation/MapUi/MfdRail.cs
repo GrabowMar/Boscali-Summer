@@ -1,11 +1,10 @@
-using System.Collections.Generic;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The control rail: one thin column on the right of the maximised map holding every
@@ -129,6 +128,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 backdrop.Fill = true;
             }
             backdrop.Paint(AvStyleHost.FuiColor("surface", AvTheme.Surface), AvStyleHost.FuiColor("frame", AvTheme.Frame));
+            // Portal: corner brackets on the rail plate.
+            backdrop.Bracket = 8f;
+            backdrop.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.8f);
 
             rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
             rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
@@ -208,7 +210,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         i == 2 ? AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.75f) : AvStyleHost.FuiColor("frame", AvTheme.Frame));
             }
             header.gameObject.SetActive(true);
-            if (headerText != null) headerText.text = "MFD INDEX  /  " + MfdChromeLay.TwoDigits(buttonCount);
+            if (headerText != null) headerText.text = "// MFD INDEX  " + MfdChromeLay.TwoDigits(buttonCount);
         }
 
         public static int Count(List<Button> buttons, List<MFDScreen> screens)
@@ -307,6 +309,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             internal Color RestFill;
             internal Image SelectionRail;
             internal Image StateTick;
+            internal AvFrame Frame;
             private bool latched;
 
             /// <summary>
@@ -325,6 +328,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
                 if (Icon != null) Icon.color = on ? select : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 if (SelectionRail != null) SelectionRail.color = on ? select : Color.clear;
+                if (Frame != null) Frame.BracketColor = on ? select : AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.9f);
                 if (StateTick != null) StateTick.color = on ? select : AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f);
             }
 
@@ -543,8 +547,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             rt.SetAsLastSibling();
 
             // The crisp button frame: one mesh instead of the old baked sliced sprite.
-            MfdChromeLay.Outline(rt, "Frame", new Rect(0f, 0f, slot.width, slot.height),
+            skin.Frame = MfdChromeLay.Outline(rt, "Frame", new Rect(0f, 0f, slot.width, slot.height),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f), AvChamfer.Diagonal(3f));
+            skin.Frame.Bracket = 5f;
+            skin.Frame.BracketColor = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.9f);
             MfdChromeLay.Rule(rt, "IconDivider", new Rect(IconBayWidth, -7f, 1f, slot.height - 14f),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f));
             skin.SelectionRail = MfdChromeLay.Rule(rt, "SelectionRail", new Rect(0f, -2f, 3f, slot.height - 4f), Color.clear);

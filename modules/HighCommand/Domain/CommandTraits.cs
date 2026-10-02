@@ -1,7 +1,7 @@
 using System;
 using System.Text;
 
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     [Flags]
     internal enum CommandTrait

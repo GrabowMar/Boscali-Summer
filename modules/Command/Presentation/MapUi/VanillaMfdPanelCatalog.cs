@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Stable identities for the stock map MFD surfaces Wing Command replaces.

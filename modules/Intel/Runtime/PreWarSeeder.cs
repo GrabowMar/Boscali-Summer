@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Intel.Domain;
+using BoscaliSummer.Modules.Intel.Domain;
 
-namespace BoscaliSummer.Features.Intel.Runtime
+namespace BoscaliSummer.Modules.Intel.Runtime
 {
     /// <summary>
     /// The one pre-war pass (see PreWarRules): every live, mission-placed, static air-defence

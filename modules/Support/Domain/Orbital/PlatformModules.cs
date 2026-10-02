@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>Wire-stable module bytes. <see cref="Cargo"/> is a resupply vehicle, never a cell.</summary>
     internal enum ModuleKind : byte
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public static readonly ModuleInfo[] Designs =
         {
             new ModuleInfo(ModuleKind.Core, "COR", "CORE MODULE", ModuleCategory.Core,
-                "Command, docking hub and body-mounted cells. Everything docks to it.",
+                "Command, docking hub and survey radar. RADAR / MTI work on commissioning; an imager doubles the scene.",
                 12f, 800f, 4f, 0f, 0f, 600f, 0f, 0, false, 1),
             new ModuleInfo(ModuleKind.Solar, "SOL", "SOLAR ARRAY", ModuleCategory.Power,
                 "Deployable wings. +12 kW while sunlit, nothing in eclipse.",
@@ -252,10 +252,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 "Locate enemy ground radars that are emitting.",
                 ModuleKind.Sigint, 180f, 60f, 0f, AbilityWindow.Overhead),
             new AbilityInfo(PlatformAbility.RodStrike, "ROD", "ROD STRIKE",
-                "Strike focus. Spend a fresh recon solution and loaded rods on a precise target.",
+                "Fire loaded rods in station reach. STRIKE fire control optionally tightens precision.",
                 ModuleKind.Rods, 80f, 60f, 0f, AbilityWindow.Overhead),
             new AbilityInfo(PlatformAbility.EmpBurst, "EMP", "EMP BURST",
-                "Screen focus. Spend a fresh recon solution to open a radar suppression window.",
+                "Hostile radar suppression in station reach. SCREEN fire control optionally widens and extends the pulse.",
                 ModuleKind.Emp, 900f, 180f, 0f, AbilityWindow.Overhead),
             new AbilityInfo(PlatformAbility.Rephase, "MOV", "RELOCATE",
                 "Move to a selected sector. Service resumes in 10 s; costs 25 fuel.",

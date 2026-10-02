@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// JTAC mark. The SOF team lases the nearest hostile unit (buildings included)

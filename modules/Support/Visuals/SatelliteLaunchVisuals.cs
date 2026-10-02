@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// A purely cosmetic launch streak: a bright trail climbing away from an off-map launch

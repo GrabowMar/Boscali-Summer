@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// JTAC unlase: the one-press recovery for a mark. Re-resolves the nearest hostile

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.AirSurvival.Domain
+namespace BoscaliSummer.Modules.AirSurvival.Domain
 {
     internal static class AirStationPolicy
     {

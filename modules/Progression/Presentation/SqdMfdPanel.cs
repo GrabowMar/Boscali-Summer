@@ -1,19 +1,19 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Progression.Configuration;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Progression.Configuration;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// "PILOT" (registry id SQD) — pilot status, shared skill board with support authorisations,
@@ -46,7 +46,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private MFDScreen screen;
         private GameObject screenRoot;
         private AvConsole console;
-        private AvChip[] chips;
         private AvMetric[] metrics;
 
         // ---- Cockpit cosmetics (client-local) ---------------------------------------------
@@ -90,7 +89,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             screenRoot = null;
             screen = null;
             console = null;
-            chips = null;
             metrics = null;
 
             ResetSkillRows();
@@ -234,8 +232,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             console = AvConsole.Build(content, "PILOT", "SQUADRON DOSSIER", 5, Width, height);
             console.PageChanged += OnTabChanged;
-            chips = console.Chips(3);
-            metrics = console.Metrics("PILOT SCORE", "QUAL PICKS");
+            metrics = console.Metrics("SCORE", "RANK", "PICKS");
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.User, "PILOT"),
                 (AvIcon.Star, "SKILLS"),
@@ -273,11 +270,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             string[] hints =
             {
-                "Pilot status, current sortie, service background and career totals.",
-                "Compare qualification grades and spend an available pick.",
-                "Review known hostile aces; friendly-wing management stays in Wing Command.",
-                "Manage local pilot profiles and squadron identity.",
-                "Inspect the aircraft you are piloting: flight, systems, stores and damage.",
+                "PILOT: your dossier. ID card, this sortie, the pick rings and every qualification lane at a glance.",
+                "SKILLS: the qualification tree, four lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
+                "ACES: your flight and the known hostile ace wings, with threat, skills and who they are hunting. Wing management stays in Wing Command.",
+                "STUDIO: write custom pilots for Wing Command, set your local profile, and design the squadron emblem. Everything stays on this machine.",
+                "PLANE: a live dossier of the aircraft you fly. Damage, engine map, flight data, systems, stores and the worst parts.",
             };
             AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabs.Length && i < hints.Length; i++) tabs[i].Help = hints[i];
@@ -316,7 +313,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             RefreshCosmetics();
-            RefreshChips(bypass);
             RefreshMetrics(bypass, score, bonus);
 
             switch (console.CurrentPage)
@@ -331,17 +327,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             UpdateFooter();
         }
 
-        private void RefreshChips(bool bypass)
-        {
-            bool hunted = squad != null && squad.HuntActive;
-            chips[0].Set(hunted ? "HUNT ACTIVE" : bypass ? "DEBUG BYPASS" : "PERSONNEL FILE",
-                hunted ? AvState.Danger : bypass ? AvState.Caution : AvState.Ready);
-            chips[1].Set("RANK " + AvNum.Thousands(Progress.Rank), AvState.Info);
-            int available = Progress.AvailablePoints;
-            chips[2].Set(bypass ? "ALL OPEN" : available + " PICK" + (available == 1 ? "" : "S"),
-                available > 0 || bypass ? AvState.Ready : AvState.Inert);
-        }
-
         private void RefreshMetrics(bool bypass, int score, int bonus)
         {
             IProgressionView view = Progress;
@@ -353,19 +338,20 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             metrics[0].Set(
                 bypass ? "BYPASS" : AvNum.Thousands(score),
-                bypass ? "EVERY GRADE OPEN" : capped ? "CEILING REACHED"
-                    : remaining < 0 ? "LADDER COMPLETE"
-                    : "NEXT IN " + AvNum.Thousands(remaining),
+                bypass ? "OPEN" : capped ? "MAX" : remaining < 0 ? "DONE" : "NEXT " + AvNum.Thousands(remaining),
                 bypass || capped || remaining < 0 ? 1f
                     : 1f - remaining / (float)Mathf.Max(1, view.ScorePerPoint * Mathf.Max(1, PerkCatalog.MaximumDepth)),
                 bypass ? AvState.Caution : AvState.Ready);
 
+            PilotView pilot = squad != null ? squad.Pilot : default;
+            metrics[1].Set(AvNum.Thousands(view.Rank), "GEN " + AvNum.Thousands(pilot.Generation), 1f, AvState.Info);
+
             int earned = view.EarnedPoints;
-            metrics[1].Set(
-                bypass ? "FREE" : available + " PICK" + (available == 1 ? "" : "S"),
-                bypass ? "UNLIMITED" : earned + "/" + ceiling + " EARNED · +" + bonus,
+            metrics[2].Set(
+                bypass ? "FREE" : AvNum.Thousands(available),
+                bypass ? "ALL" : earned + "/" + ceiling,
                 bypass ? 1f : earned / (float)ceiling,
-                available > 0 ? AvState.Ready : AvState.Info);
+                available > 0 || bypass ? AvState.Ready : AvState.Info);
         }
 
         private void UpdateFooter()
@@ -377,7 +363,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 : console.CurrentPage == TabPlane ? planeStatus
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
-            console.Footer.Set(baseLine, progression.BypassRequirements ? AvState.Caution : AvState.Inert);
+            // A running ace hunt is the one alert every tab must carry; it used to live in a header chip.
+            bool hunted = squad != null && squad.HuntActive && console.CurrentPage != TabWings;
+            if (hunted) baseLine = "ACE HUNT ACTIVE · " + (string.IsNullOrEmpty(baseLine) ? "an ace is after you." : baseLine);
+            console.Footer.Set(baseLine, hunted ? AvState.Danger : progression.BypassRequirements ? AvState.Caution : AvState.Inert);
         }
 
         // ---- Local cosmetics -------------------------------------------------------------

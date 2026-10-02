@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     internal enum PlatformMission : byte { Recon, PrecisionStrike, Emp }
 
@@ -37,8 +37,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public static string Brief(PlatformMission mission) => mission == PlatformMission.PrecisionStrike
             ? "ROD + GYRO · HALF SCATTER · 80 KJ + 1 ROD / STRIKE"
-            : mission == PlatformMission.Emp ? "EMP + COOLING · 900 KJ / BURST · FRIENDLY FIRE"
-            : "IMAGER + ELINT + RELAY · 240 / 180 KJ PER SWEEP";
+            : mission == PlatformMission.Emp ? "EMP + COOLING · 900 KJ / BURST · HOSTILES ONLY"
+            : "CORE SURVEY NOW · IMAGER EXPANDS IT · ELINT + RELAY";
 
         public static PlatformAbility Ability(PlatformMission mission) => mission == PlatformMission.PrecisionStrike
             ? PlatformAbility.RodStrike : mission == PlatformMission.Emp ? PlatformAbility.EmpBurst : PlatformAbility.RadarScan;

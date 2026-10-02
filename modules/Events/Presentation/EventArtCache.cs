@@ -4,7 +4,7 @@ using System.IO;
 using BepInEx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// Event art, loaded first from loose PNGs a player drops into

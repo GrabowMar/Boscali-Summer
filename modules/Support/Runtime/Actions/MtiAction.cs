@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// MTI sweep. The faction's station, overhead with a spy imager, runs its radar in

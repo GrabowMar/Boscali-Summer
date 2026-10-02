@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// How the field's smooth cover becomes a cloud density texel for vanilla's cloud layer.

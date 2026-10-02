@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// The staff's posture switch: the one standing order the revamped STR keeps.

@@ -2,9 +2,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 

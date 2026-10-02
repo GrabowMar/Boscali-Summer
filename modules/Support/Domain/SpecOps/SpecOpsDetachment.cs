@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.SpecOps
+namespace BoscaliSummer.Modules.Support.Domain.SpecOps
 {
     /// <summary>One team slot. Clocks are the host's absolute scene seconds (rebased on a mirror).</summary>
     internal struct FieldTeam
@@ -15,6 +15,11 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public double PhaseStart, PhaseEnd;
         public byte Chance, Loss;
         public byte CurrentThreat, CurrentRadars;
+        public byte Preparation, Intel, Exposure, Quality, Charges, CrewSupport, RouteStep;
+        public bool Friendly;
+        public uint Revision;
+        public double OrderReadyAt;
+        internal double PressureAt;
         public float OriginX, OriginZ;
         public string Origin;
         public MissionOutcome Last;
@@ -72,17 +77,22 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         Arrived = 11,
         Executed = 12,
         Extracted = 13,
-        PostLimit = 14
+        PostLimit = 14,
+        Observed = 15,
+        Advanced = 16,
+        Concealed = 17,
+        Withdrawn = 18,
+        Expended = 19
     }
 
     /// <summary>
     /// One faction's special-operations detachment: four team slots, the objectives the host has
     /// listed, scouting memory, five ability recharges and a notice ring. Missions resolve in the
-    /// abstract — travel, task, one roll — and the runtime applies what a success does to the
+    /// abstract — insertion, operator field work, deterministic delivery — and the runtime applies what a success does to the
     /// world. The host is the only writer; a client mirrors snapshot bytes and never ticks.
     /// Every value is bounded: four teams, twelve objectives, sixteen scouting marks, eight notices.
     /// </summary>
-    internal sealed class SpecOpsDetachment
+    internal sealed partial class SpecOpsDetachment
     {
         public const int TeamCount = 4;
         public const int StartingTeams = 2;
@@ -103,6 +113,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         private int objectiveCount;
         private int incomingCount;
         private int noticeCount;
+        private uint nextRevision;
+        private double lastTick;
 
         public SpecOpsDetachment() => Clear();
 
@@ -188,12 +200,23 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         public bool Scouted(int anchor, double now) => ScoutRemaining(anchor, now) > 0.0;
 
+        public bool IntelKnown(int anchor, double now)
+        {
+            int slot = SlotOf(anchor);
+            if (slot >= 0 && objectives[slot].Friendly) return true;
+            if (Scouted(anchor, now)) return true;
+            for (int i = 0; i < TeamCount; i++)
+                if (teams[i].Deployed && teams[i].Anchor == anchor && teams[i].Intel >= 20) return true;
+            return false;
+        }
+
         /// <summary>A host-confirmed orbital scan gives the nearest hostile objective a brief
         /// planning advantage. This does not reveal contacts or change the operation itself.</summary>
         public bool ScoutNear(float x, float z, float radius, double now)
         {
             if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z) ||
-                float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0f) return false;
+                float.IsNaN(radius) || float.IsInfinity(radius) || radius <= 0f ||
+                double.IsNaN(now) || double.IsInfinity(now)) return false;
             int nearest = -1;
             double best = (double)radius * radius;
             for (int i = 0; i < objectiveCount; i++)
@@ -205,7 +228,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 if (range < best) { best = range; nearest = i; }
             }
             if (nearest < 0) return false;
-            MarkScouted(objectives[nearest].Anchor, now, 120f);
+            int anchor = objectives[nearest].Anchor;
+            MarkScouted(anchor, now, 120f);
+            for (int i = 0; i < TeamCount; i++)
+            {
+                FieldTeam team = teams[i];
+                if ((team.State != TeamState.EnRoute && team.State != TeamState.Deciding) ||
+                    team.Anchor != anchor || (team.CrewSupport & ReconHandoff) != 0) continue;
+                team.Intel = Percent(team.Intel + 30);
+                team.CrewSupport |= ReconHandoff;
+                teams[i] = team;
+                Notify(FieldNotice.Observed, i, (byte)team.Mission);
+            }
             return true;
         }
 
@@ -215,23 +249,6 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 if (scoutAnchor[i] == anchor && scoutUntil[i] > now) return scoutUntil[i] - now;
             return 0.0;
         }
-
-        // ---- Odds for a prospective launch -----------------------------------------------------
-
-        public int ChanceFor(int team, FieldMission mission, int slot, double now)
-        {
-            if (slot < 0 || slot >= objectiveCount) return 0;
-            FieldObjective objective = objectives[slot];
-            if (objective.Friendly) return FieldCatalog.FriendlyChance(objective.Threat, objective.Radars);
-            return FieldCatalog.SuccessChance(mission, Team(team).Rank, objective.Threat,
-                Scouted(objective.Anchor, now), objective.Radars);
-        }
-
-        public int LossFor(int team, FieldMission mission, int slot, double now) =>
-            slot < 0 || slot >= objectiveCount ? 0
-                : objectives[slot].Friendly ? FieldCatalog.FriendlyLoss(objectives[slot].Threat, objectives[slot].Radars)
-                : FieldCatalog.LossChance(mission, Team(team).Rank, objectives[slot].Threat,
-                    ChanceFor(team, mission, slot, now), objectives[slot].Radars);
 
         // ---- Checks (the host re-runs every one) ------------------------------------------------
 
@@ -253,8 +270,9 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (slot < 0) return SpecOpsDenial.StaleObjective;
             FieldObjective objective = objectives[slot];
             if (!FieldCatalog.Allowed(mission, objective.Kind) ||
-                (objective.Friendly && mission != FieldMission.Recon && mission != FieldMission.Steal))
+                (objective.Friendly && mission != FieldMission.Recon))
                 return SpecOpsDenial.WrongObjective;
+            if (mission == FieldMission.Steal && !objective.Hostile) return SpecOpsDenial.WrongObjective;
             if (mission == FieldMission.Sabotage && objective.Radars == 0) return SpecOpsDenial.NoRadars;
             if (mission == FieldMission.Seize && !SeizeAvailable) return SpecOpsDenial.SeizeUnavailable;
             return WorkingOn(anchor) >= 0 ? SpecOpsDenial.ObjectiveTaken : SpecOpsDenial.None;
@@ -288,7 +306,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             if (denial != SpecOpsDenial.None) return denial;
             int slot = SlotOf(anchor);
             FieldObjective objective = objectives[slot];
-            int chance = ChanceFor(team, mission, slot, now);
+
             FieldTeam value = teams[team];
             value.State = TeamState.EnRoute;
             value.Mission = mission;
@@ -296,10 +314,20 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             value.X = objective.X;
             value.Z = objective.Z;
             value.Target = objective.Name ?? "";
-            value.Chance = (byte)chance;
-            value.Loss = (byte)LossFor(team, mission, slot, now);
+            value.Chance = value.Loss = 0;
+
             value.CurrentThreat = objective.Threat;
             value.CurrentRadars = objective.Radars;
+            value.Preparation = 0;
+            bool recon = Scouted(anchor, now);
+            value.CrewSupport = (byte)(recon ? ReconHandoff : 0);
+            value.RouteStep = 0;
+            value.Intel = (byte)(recon ? 30 : 0);
+            value.Exposure = value.Quality = value.Charges = 0;
+            value.Friendly = objective.Friendly;
+            value.Revision = NextRevision();
+            value.OrderReadyAt = now;
+            value.PressureAt = now;
             value.OriginX = Finite(originX) ? originX : objective.X;
             value.OriginZ = Finite(originZ) ? originZ : objective.Z;
             value.Origin = Clip(origin);
@@ -314,26 +342,74 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public SpecOpsDenial CheckDirective(int team, SpecOpsDirective directive)
         {
             if (team < 0 || team >= TeamCount) return SpecOpsDenial.BadTeam;
-            if (directive != SpecOpsDirective.Execute && directive != SpecOpsDirective.Extract) return SpecOpsDenial.BadDirective;
+            if ((byte)directive > (byte)SpecOpsDirective.Conceal) return SpecOpsDenial.BadDirective;
             if (!teams[team].Deployed) return SpecOpsDenial.NotDeployed;
-            if (directive == SpecOpsDirective.Execute && !Enabled) return SpecOpsDenial.Disabled;
-            if (directive == SpecOpsDirective.Execute && teams[team].State != TeamState.Deciding)
+            if (directive != SpecOpsDirective.Extract && !Enabled) return SpecOpsDenial.Disabled;
+            if (directive != SpecOpsDirective.Extract && teams[team].State != TeamState.Deciding)
                 return SpecOpsDenial.NotAtDecision;
+            if (directive == SpecOpsDirective.Execute)
+            {
+                if (teams[team].Preparation < FieldCatalog.MinimumPreparation) return SpecOpsDenial.Preparing;
+                if (teams[team].Exposure > FieldCatalog.MaximumExecuteExposure) return SpecOpsDenial.Exposed;
+                if (Posts() + Count(TeamState.OnTask) >= FieldCatalog.MaximumHeldPosts) return SpecOpsDenial.PostLimit;
+            }
             return SpecOpsDenial.None;
         }
 
-        public bool TryDirective(int team, SpecOpsDirective directive, double now)
+        public SpecOpsDenial CheckDirective(int team, SpecOpsDirective directive, double now, uint expectedRevision = 0)
         {
-            if (CheckDirective(team, directive) != SpecOpsDenial.None) return false;
+            SpecOpsDenial denial = CheckDirective(team, directive);
+            if (denial != SpecOpsDenial.None) return denial;
             FieldTeam value = teams[team];
+            if (expectedRevision != 0 && expectedRevision != value.Revision) return SpecOpsDenial.StaleOrder;
+            if (directive != SpecOpsDirective.Extract && now >= value.PhaseEnd) return SpecOpsDenial.NotAtDecision;
+            if (directive != SpecOpsDirective.Extract && now < value.OrderReadyAt) return SpecOpsDenial.OrderCoolingDown;
+            return SpecOpsDenial.None;
+        }
+
+        public bool TryDirective(int team, SpecOpsDirective directive, double now, uint expectedRevision = 0)
+        {
+            if (CheckDirective(team, directive, now, expectedRevision) != SpecOpsDenial.None) return false;
+            FieldTeam value = teams[team];
+            value.Revision = NextRevision();
             if (directive == SpecOpsDirective.Execute)
             {
                 if (now >= value.PhaseEnd) return false;
+                value.Quality = (byte)ExecutionQuality(value);
                 value.State = TeamState.OnTask;
                 value.PhaseStart = now;
                 value.PhaseEnd = now + FieldCatalog.TaskSeconds(value.Mission);
                 teams[team] = value;
                 Notify(FieldNotice.Executed, team, (byte)value.Mission);
+                return true;
+            }
+            if (directive != SpecOpsDirective.Extract)
+            {
+                int pressure = FieldCatalog.Pressure(value.CurrentThreat, value.CurrentRadars);
+                FieldNotice notice;
+                if (directive == SpecOpsDirective.Observe)
+                {
+                    value.Intel = Percent(value.Intel + 22);
+                    value.Preparation = Percent(value.Preparation + 5);
+                    value.Exposure = Percent(value.Exposure + 5 + pressure / 4);
+                    notice = FieldNotice.Observed;
+                }
+                else if (directive == SpecOpsDirective.Advance)
+                {
+                    value.Preparation = Percent(value.Preparation + 18 + value.Intel / 10);
+                    value.Exposure = Percent(value.Exposure + 15 + pressure / 2 - value.Intel / 20);
+                    notice = FieldNotice.Advanced;
+                }
+                else
+                {
+                    value.Exposure = Percent(value.Exposure - 28);
+                    value.Preparation = Percent(value.Preparation - 5);
+                    notice = FieldNotice.Concealed;
+                }
+                value.OrderReadyAt = now + FieldCatalog.OrderSeconds;
+                teams[team] = value;
+                Notify(notice, team, (byte)value.Mission);
+                if (value.Exposure >= 100) Withdraw(team, now);
                 return true;
             }
             value.Last = MissionOutcome.Extracted;
@@ -358,15 +434,32 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         }
 
         /// <summary>
-        /// Host: advance every team. A finished task rolls once through <paramref name="roll"/>
-        /// (uniform in [0,1)); a success is handed to <paramref name="apply"/>, which touches the
+        /// Host: advance every team. The legacy roll argument is ignored; operator quality decides the result
+        /// and the committed package is handed to <paramref name="apply"/>, which touches the
         /// world and says whether the effect landed (a SEIZE with no building to take did not).
         /// </summary>
         public void Tick(double now, Func<double> roll, Func<FieldResult, bool> apply)
         {
+            if (double.IsNaN(now) || double.IsInfinity(now)) return;
+            lastTick = now;
             for (int i = 0; i < TeamCount; i++)
             {
                 FieldTeam team = teams[i];
+                if (team.State == TeamState.Deciding || team.State == TeamState.OnTask || team.State == TeamState.Holding)
+                {
+                    if (now >= team.PressureAt + FieldCatalog.OrderSeconds)
+                    {
+                        int intervals = Math.Min(10, (int)((now - team.PressureAt) / FieldCatalog.OrderSeconds));
+                        team.PressureAt = now;
+                        team.Exposure = Percent(team.Exposure + intervals * ExposurePerPulse(team));
+                        teams[i] = team;
+                    }
+                    if (team.Exposure >= 100)
+                    {
+                        Withdraw(i, now);
+                        continue;
+                    }
+                }
                 // At most one transition per team per tick keeps a stalled host from skipping phases silently.
                 if (!PhaseTimed(team.State) || now < team.PhaseEnd) continue;
                 switch (team.State)
@@ -375,6 +468,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                         team.State = TeamState.Deciding;
                         team.PhaseStart = now;
                         team.PhaseEnd = now + FieldCatalog.DecisionSeconds;
+                        team.PressureAt = team.OrderReadyAt = now;
+                        team.Revision = NextRevision();
                         teams[i] = team;
                         Notify(FieldNotice.Arrived, i, (byte)team.Mission);
                         break;
@@ -409,28 +504,13 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         private void Resolve(int index, double now, Func<double> roll, Func<FieldResult, bool> apply)
         {
             FieldTeam team = teams[index];
-            MissionOutcome outcome = FieldCatalog.Resolve(team.Chance, team.Loss, roll != null ? roll() : 0.0);
-            if (outcome == MissionOutcome.Lost)
-            {
-                teams[index] = new FieldTeam { State = TeamState.Unformed, Last = MissionOutcome.Lost, Target = team.Target, Mission = team.Mission };
-                Notify(FieldNotice.Lost, index, (byte)team.Mission);
-                return;
-            }
-            if (outcome == MissionOutcome.Failed)
-            {
-                team.Last = MissionOutcome.Failed;
-                Rest(ref team, now, FieldCatalog.FailedRecoverSeconds);
-                teams[index] = team;
-                Notify(FieldNotice.Failed, index, (byte)team.Mission);
-                return;
-            }
-
-            // The effect lands at the rank the team fought with; a successful landing earns one win.
-            var result = new FieldResult(team.Mission, outcome, team.X, team.Z, team.Rank, team.Anchor);
+            // Quality is earned by field orders. The accepted execute never draws a hidden roll.
+            var result = new FieldResult(team.Mission, MissionOutcome.Success, team.X, team.Z, team.Quality, team.Anchor);
             bool landed = apply == null || apply(result);
             if (landed)
             {
-                if (team.Wins < byte.MaxValue) team.Wins++;
+                int objective = SlotOf(team.Anchor);
+                if (!team.Friendly && objective >= 0 && objectives[objective].Hostile && team.Wins < byte.MaxValue) team.Wins++;
                 team.Rank = (byte)FieldCatalog.RankFor(team.Wins);
                 if (team.Mission == FieldMission.Recon) MarkScouted(team.Anchor, now);
                 team.Last = MissionOutcome.Success;
@@ -439,6 +519,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                     team.State = TeamState.Holding;
                     team.PhaseStart = now;
                     team.PhaseEnd = now + FieldCatalog.HoldSeconds(team.Rank);
+                    team.Charges = (byte)(team.Friendly ? 1 : FieldCatalog.PostCharges(team.Quality));
                 }
                 else
                 {
@@ -484,15 +565,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             {
                 FieldTeam team = teams[i];
                 int slot = SlotOf(team.Anchor);
-                if (!team.Deployed || slot < 0) continue;
+                if (!team.Deployed) continue;
+                if (slot < 0 || (team.Friendly && !objectives[slot].Friendly) ||
+                    (objectives[slot].Friendly && team.Mission != FieldMission.Recon) ||
+                    (team.Mission == FieldMission.Steal && !objectives[slot].Hostile))
+                {
+                    Withdraw(i, now);
+                    continue;
+                }
                 FieldObjective objective = objectives[slot];
+                if (objective.Friendly) team.Friendly = true;
                 team.CurrentThreat = objective.Threat;
                 team.CurrentRadars = objective.Radars;
-                team.Chance = (byte)(objective.Friendly ? FieldCatalog.FriendlyChance(objective.Threat, objective.Radars)
-                    : FieldCatalog.SuccessChance(team.Mission, team.Rank, objective.Threat,
-                        Scouted(objective.Anchor, now), objective.Radars));
-                team.Loss = (byte)(objective.Friendly ? FieldCatalog.FriendlyLoss(objective.Threat, objective.Radars)
-                    : FieldCatalog.LossChance(team.Mission, team.Rank, objective.Threat, team.Chance, objective.Radars));
                 teams[i] = team;
             }
         }
@@ -516,28 +600,105 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             return count;
         }
 
-        /// <summary>The highest-ranked team holding <paramref name="post"/> whose reach covers the point, or -1.</summary>
-        public int Covering(FieldMission post, float x, float z)
+        /// <summary>A live charged post controls its sector until extraction, expiry or stock exhaustion.</summary>
+        public bool ControlsSector(float x, float z, double now)
         {
-            float reach = FieldCatalog.PostReach(post);
+            if (!Enabled || double.IsNaN(now) || double.IsInfinity(now) || now < 0.0) return false;
+            for (int i = 0; i < TeamCount; i++)
+            {
+                FieldTeam team = teams[i];
+                if (team.State == TeamState.Holding && team.Charges > 0 && now < team.PhaseEnd &&
+                    OpsSectors.Same(team.X, team.Z, x, z)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Compatibility query at the most recent host tick or snapshot clock.</summary>
+        public int Covering(FieldMission post, float x, float z, int minimumQuality = 0) =>
+            Covering(post, x, z, lastTick, minimumQuality);
+
+        /// <summary>The highest-quality live matching post controlling the target sector, or -1.</summary>
+        public int Covering(FieldMission post, float x, float z, double now, int minimumQuality = 0)
+        {
+            if (!Enabled || double.IsNaN(now) || double.IsInfinity(now) || now < 0.0 || !Finite(x) || !Finite(z)) return -1;
             int best = -1;
             for (int i = 0; i < TeamCount; i++)
             {
                 FieldTeam team = teams[i];
-                if (team.State != TeamState.Holding || team.Mission != post) continue;
-                float dx = team.X - x, dz = team.Z - z;
-                if (dx * dx + dz * dz > reach * reach) continue;
-                if (best < 0 || team.Rank > teams[best].Rank) best = i;
+                if (team.State != TeamState.Holding || team.Mission != post || team.Charges == 0 ||
+                    team.Quality < minimumQuality || now >= team.PhaseEnd || !OpsSectors.Same(team.X, team.Z, x, z)) continue;
+                if (best < 0 || team.Quality > teams[best].Quality) best = i;
             }
             return best;
         }
 
-        /// <summary>Rank of the team whose post would answer at the point, or -1 for none.</summary>
+        /// <summary>Quality of the team whose post would answer at the point, or -1 for none.</summary>
         public int CoveringRank(FieldMission post, float x, float z)
         {
             int team = Covering(post, x, z);
-            return team < 0 ? -1 : teams[team].Rank;
+            return team < 0 ? -1 : teams[team].Quality;
         }
+
+        public int CoveringRank(FieldMission post, float x, float z, double now)
+        {
+            int team = Covering(post, x, z, now);
+            return team < 0 ? -1 : teams[team].Quality;
+        }
+
+        public bool ConsumePostCharge(FieldMission post, float x, float z, double now)
+        {
+            int index = Covering(post, x, z, now);
+            return ConsumeTeamCharge(index, now);
+        }
+
+        public int CoveringAbility(FieldAbility ability, float x, float z) =>
+            Covering(FieldCatalog.PostFor(ability), x, z, FieldCatalog.RequiredQuality(ability));
+
+        public int CoveringAbility(FieldAbility ability, float x, float z, double now) =>
+            Covering(FieldCatalog.PostFor(ability), x, z, now, FieldCatalog.RequiredQuality(ability));
+
+        public int FindMarket(double now)
+        {
+            for (int i = 0; i < TeamCount; i++)
+            {
+                FieldTeam team = teams[i];
+                int objective = SlotOf(team.Anchor);
+                if (team.State == TeamState.Holding && team.Mission == FieldMission.Steal && !team.Friendly &&
+                    objective >= 0 && objectives[objective].Hostile && team.Quality >= 2 && team.Charges > 0 && now < team.PhaseEnd) return i;
+            }
+            return -1;
+        }
+
+        public bool ConsumeTeamCharge(int index, double now)
+        {
+            if (double.IsNaN(now) || double.IsInfinity(now)) return false;
+            if (index < 0 || index >= TeamCount || teams[index].State != TeamState.Holding ||
+                teams[index].Charges == 0 || now >= teams[index].PhaseEnd) return false;
+            FieldTeam team = teams[index];
+            team.Charges--;
+            team.Revision = NextRevision();
+            if (team.Charges == 0)
+            {
+                Rest(ref team, now, FieldCatalog.ExtractSeconds);
+                Notify(FieldNotice.Expended, index, (byte)team.Mission);
+            }
+            teams[index] = team;
+            return true;
+        }
+
+        private void Withdraw(int index, double now)
+        {
+            FieldTeam team = teams[index];
+            team.Last = MissionOutcome.Extracted;
+            team.Charges = 0;
+            team.Revision = NextRevision();
+            Rest(ref team, now, FieldCatalog.ExtractSeconds);
+            teams[index] = team;
+            Notify(FieldNotice.Withdrawn, index, (byte)team.Mission);
+        }
+
+        private uint NextRevision() { if (++nextRevision == 0) ++nextRevision; return nextRevision; }
+        private static byte Percent(int value) => (byte)Math.Max(0, Math.Min(100, value));
 
         public float AbilityRechargeRemaining(FieldAbility ability, double now)
         {
@@ -588,13 +749,23 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             {
                 FieldTeam team = teams[i];
                 into.TeamState[i] = (byte)team.State;
+                into.TeamCrew[i] = (byte)((team.CrewSupport & 3) | (team.RouteStep << 2));
+                into.TeamPreparation[i] = team.Preparation;
+                into.TeamIntel[i] = team.Intel;
+                into.TeamExposure[i] = team.Exposure;
+                into.TeamQuality[i] = team.Quality;
+                into.TeamCharges[i] = team.Charges;
+                into.TeamFriendly[i] = team.Friendly;
+                into.TeamRevision[i] = team.Revision;
+                into.TeamOrderRemaining[i] = (float)Math.Max(0.0, team.OrderReadyAt - now);
                 into.TeamRank[i] = team.Rank;
                 into.TeamWins[i] = team.Wins;
                 into.TeamMission[i] = (byte)team.Mission;
                 into.TeamChance[i] = team.Chance;
                 into.TeamLoss[i] = team.Loss;
-                into.TeamThreat[i] = team.CurrentThreat;
-                into.TeamRadars[i] = team.CurrentRadars;
+                bool known = IntelKnown(team.Anchor, now);
+                into.TeamThreat[i] = known ? team.CurrentThreat : byte.MaxValue;
+                into.TeamRadars[i] = known ? team.CurrentRadars : byte.MaxValue;
                 into.TeamLast[i] = (byte)team.Last;
                 into.TeamAnchor[i] = team.Anchor;
                 into.TeamX[i] = team.X;
@@ -615,8 +786,9 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 into.ObjectiveAnchor[i] = objective.Anchor;
                 into.ObjectiveX[i] = objective.X;
                 into.ObjectiveZ[i] = objective.Z;
-                into.ObjectiveThreat[i] = objective.Threat;
-                into.ObjectiveRadars[i] = objective.Radars;
+                bool known = IntelKnown(objective.Anchor, now);
+                into.ObjectiveThreat[i] = known ? objective.Threat : byte.MaxValue;
+                into.ObjectiveRadars[i] = known ? objective.Radars : byte.MaxValue;
                 into.ObjectiveHostile[i] = objective.Hostile;
                 into.ObjectiveFriendly[i] = objective.Friendly;
                 into.ObjectiveScout[i] = (float)ScoutRemaining(objective.Anchor, now);
@@ -637,7 +809,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         /// <summary>Client: rebuild from a host snapshot. Out-of-range values are clamped or dropped.</summary>
         public void Mirror(SpecOpsSnapshot from, double now)
         {
-            if (from == null) return;
+            if (from == null || double.IsNaN(now) || double.IsInfinity(now)) return;
+            lastTick = now;
             Enabled = (from.Flags & 1) != 0;
             SeizeAvailable = (from.Flags & 2) != 0;
             for (int i = 0; i < TeamCount; i++)
@@ -645,17 +818,29 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 FieldTeam team = teams[i];
                 byte state = from.TeamState[i];
                 team.State = state <= (byte)TeamState.Deciding ? (TeamState)state : TeamState.Unformed;
+                team.CrewSupport = (byte)(from.TeamCrew[i] & 3);
+                team.RouteStep = (byte)((from.TeamCrew[i] >> 2) & 3);
+                team.Preparation = (byte)Math.Min(100, (int)from.TeamPreparation[i]);
+                team.Intel = (byte)Math.Min(100, (int)from.TeamIntel[i]);
+                team.Exposure = (byte)Math.Min(100, (int)from.TeamExposure[i]);
+                team.Quality = (byte)Math.Min(3, (int)from.TeamQuality[i]);
+                team.Charges = (byte)Math.Min(FieldCatalog.MaximumPostCharges, (int)from.TeamCharges[i]);
+                team.Friendly = from.TeamFriendly[i];
+                team.Revision = from.TeamRevision[i];
+                team.OrderReadyAt = now + (Finite(from.TeamOrderRemaining[i]) ? Math.Max(0f, Math.Min(FieldCatalog.CoveredRouteSeconds, from.TeamOrderRemaining[i])) : 0f);
+                team.PressureAt = now;
                 team.Rank = (byte)Math.Min(FieldCatalog.MaxRank, (int)from.TeamRank[i]);
                 team.Wins = from.TeamWins[i];
                 team.Mission = FieldCatalog.KnownMission(from.TeamMission[i]) ? (FieldMission)from.TeamMission[i] : FieldMission.Recon;
                 team.Chance = (byte)Math.Min(100, (int)from.TeamChance[i]);
                 team.Loss = (byte)Math.Min(100 - team.Chance, (int)from.TeamLoss[i]);
-                team.CurrentThreat = (byte)Math.Min(99, (int)from.TeamThreat[i]);
-                team.CurrentRadars = (byte)Math.Min(99, (int)from.TeamRadars[i]);
+                team.CurrentThreat = from.TeamThreat[i] == byte.MaxValue ? byte.MaxValue : (byte)Math.Min(99, (int)from.TeamThreat[i]);
+                team.CurrentRadars = from.TeamRadars[i] == byte.MaxValue ? byte.MaxValue : (byte)Math.Min(99, (int)from.TeamRadars[i]);
                 team.Last = from.TeamLast[i] <= (byte)MissionOutcome.Extracted ? (MissionOutcome)from.TeamLast[i] : MissionOutcome.None;
                 team.Anchor = from.TeamAnchor[i];
                 team.X = Finite(from.TeamX[i]) ? from.TeamX[i] : 0f;
                 team.Z = Finite(from.TeamZ[i]) ? from.TeamZ[i] : 0f;
+                if (!OpsSectors.TryLocate(from.TeamX[i], from.TeamZ[i], out _)) team.Charges = 0;
                 team.Target = Clip(from.TeamTarget[i]);
                 team.OriginX = Finite(from.TeamOriginX[i]) ? from.TeamOriginX[i] : 0f;
                 team.OriginZ = Finite(from.TeamOriginZ[i]) ? from.TeamOriginZ[i] : 0f;
@@ -687,8 +872,8 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
                 {
                     Kind = (ObjectiveKind)from.ObjectiveKind[i], Anchor = from.ObjectiveAnchor[i],
                     X = from.ObjectiveX[i], Z = from.ObjectiveZ[i],
-                    Threat = (byte)Math.Min(99, (int)from.ObjectiveThreat[i]),
-                    Radars = (byte)Math.Min(99, (int)from.ObjectiveRadars[i]),
+                    Threat = from.ObjectiveThreat[i] == byte.MaxValue ? byte.MaxValue : (byte)Math.Min(99, (int)from.ObjectiveThreat[i]),
+                    Radars = from.ObjectiveRadars[i] == byte.MaxValue ? byte.MaxValue : (byte)Math.Min(99, (int)from.ObjectiveRadars[i]),
                     Hostile = from.ObjectiveHostile[i], Friendly = from.ObjectiveFriendly[i], Name = Clip(from.ObjectiveName[i])
                 };
                 float scout = from.ObjectiveScout[i];
@@ -714,7 +899,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             for (int i = 0; i < NoticeSlots; i++)
             {
                 byte kind = from.NoticeKind[i];
-                noticeKind[i] = i < noticeCount && kind <= (byte)FieldNotice.PostLimit ? (FieldNotice)kind : FieldNotice.None;
+                noticeKind[i] = i < noticeCount && kind <= (byte)FieldNotice.Expended ? (FieldNotice)kind : FieldNotice.None;
                 noticeTeam[i] = (byte)Math.Min(TeamCount - 1, (int)from.NoticeTeam[i]);
                 noticeMission[i] = (byte)Math.Min(FieldCatalog.MissionCount - 1, (int)from.NoticeMission[i]);
             }
@@ -735,6 +920,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             Array.Clear(noticeTeam, 0, NoticeSlots);
             Array.Clear(noticeMission, 0, NoticeSlots);
             objectiveCount = incomingCount = noticeCount = 0;
+            lastTick = 0.0;
             NoticeSerial = 0;
             Enabled = true;
             SeizeAvailable = true;
@@ -781,6 +967,15 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
     {
         public byte Flags;
         public readonly byte[] TeamState = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamCrew = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamPreparation = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamIntel = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamExposure = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamQuality = new byte[SpecOpsDetachment.TeamCount];
+        public readonly byte[] TeamCharges = new byte[SpecOpsDetachment.TeamCount];
+        public readonly bool[] TeamFriendly = new bool[SpecOpsDetachment.TeamCount];
+        public readonly uint[] TeamRevision = new uint[SpecOpsDetachment.TeamCount];
+        public readonly float[] TeamOrderRemaining = new float[SpecOpsDetachment.TeamCount];
         public readonly byte[] TeamRank = new byte[SpecOpsDetachment.TeamCount];
         public readonly byte[] TeamWins = new byte[SpecOpsDetachment.TeamCount];
         public readonly byte[] TeamMission = new byte[SpecOpsDetachment.TeamCount];
@@ -823,6 +1018,15 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         {
             Flags = 0;
             Array.Clear(TeamState, 0, TeamState.Length);
+            Array.Clear(TeamCrew, 0, TeamCrew.Length);
+            Array.Clear(TeamPreparation, 0, TeamPreparation.Length);
+            Array.Clear(TeamIntel, 0, TeamIntel.Length);
+            Array.Clear(TeamExposure, 0, TeamExposure.Length);
+            Array.Clear(TeamQuality, 0, TeamQuality.Length);
+            Array.Clear(TeamCharges, 0, TeamCharges.Length);
+            Array.Clear(TeamFriendly, 0, TeamFriendly.Length);
+            Array.Clear(TeamRevision, 0, TeamRevision.Length);
+            Array.Clear(TeamOrderRemaining, 0, TeamOrderRemaining.Length);
             Array.Clear(TeamRank, 0, TeamRank.Length);
             Array.Clear(TeamWins, 0, TeamWins.Length);
             Array.Clear(TeamMission, 0, TeamMission.Length);

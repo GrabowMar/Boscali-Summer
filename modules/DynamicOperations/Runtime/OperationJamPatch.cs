@@ -1,6 +1,6 @@
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     [HarmonyPatch(typeof(Unit), nameof(Unit.Jam))]
     internal static class OperationJamPatch

@@ -1,0 +1,46 @@
+/* OPS rooms (SPACE, CYBER, SPEC OPS and the imager). Each room owns its surface and ink; the
+   Support module reads this sheet through RoomPaint (embedded as BoscaliSummer.Support.rooms.avss).
+   These are the rooms' own literal palettes, not kit themes. Body ink is at least 4.5:1 on its
+   surface; rules and accents at least 3:1 (OpsLayoutTests.CheckRoomInk pins it). */
+
+.room-space-surface { background: #0B1316; color: #E7E2D4; }
+.room-space-line    { color: #9BBFC8; border: 1 #9BBFC8; }
+.room-space-ink     { color: #E7E2D4; font: 12; tracking: 8; }
+.room-space-display { color: #E7E2D4; font: 28; tracking: 12; }
+.room-space-limb    { color: #9BBFC8; background: #293F45; }
+.room-space-dim     { color: #B9C2BE; font: 11; tracking: 6; }
+.room-space-console { background: #172428; color: #E7E2D4; border: 1 #587079; }
+
+.room-cyber-surface { background: #091710; color: #D2E6D8; }
+.room-cyber-lattice { color: #4C7460; border: 1 #4C7460; }
+.room-cyber-ink     { color: #D2E6D8; font: 12; tracking: 0; }
+.room-cyber-title   { color: #A5D0B2; font: 11 bold; tracking: 4; }
+.room-cyber-accent  { color: #E1BD71; border: 1 #E1BD71; }
+.room-cyber-block   { color: #D2E6D8; font: 32 bold; tracking: 0; }
+.room-cyber-pane    { background: #15291E; color: #D2E6D8; border: 1 #4C7460; }
+.room-cyber-bar     { background: #203B2B; color: #A5D0B2; }
+.room-cyber-dim     { color: #A9C5B2; font: 11; tracking: 0; }
+
+.room-specops-map { background: #151A14; color: #E9E1CB; }
+.room-specops-paper { background: #272D22; color: #E9E1CB; border: 1 #757B5E; }
+.room-specops-ink { color: #E9E1CB; font: 12; tracking: 0; }
+.room-specops-title { color: #E9E1CB; font: 16 bold; tracking: 2; }
+.room-specops-stamp { color: #E9B866; font: 11 bold; tracking: 2; border: 1 #E9B866; }
+.room-specops-khaki { color: #B9BEA5; border: 1 #757B5E; }
+.room-specops-banner { background: #353C2E; color: #D5D4B6; font: 11 bold; tracking: 3; }
+.room-specops-tape { background: #3B4433; }
+
+
+.room-ops-ready { color: #8BE4B5; }
+.room-ops-instrument { color: #78D6FF; }
+.room-ops-command { color: #FFC561; }
+.room-terrain-field-low { color: #343C2E; }
+.room-terrain-field-high { color: #B5AB86; }
+.room-terrain-net-low { color: #23393D; }
+.room-terrain-net-high { color: #8BA7AD; }
+.room-terrain-sea { color: #101F29; }
+
+.room-imager-ink  { color: #EFF5F5; font: 12; tracking: 6; }
+.room-imager-halo { color: #05080C; background: #05080C c0; }
+.room-imager-pod  { background: #05080C; color: #EFF5F5; border: 1 #EFF5F5; }
+.room-imager-dim  { color: #B9C8CD; font: 11; tracking: 4; }

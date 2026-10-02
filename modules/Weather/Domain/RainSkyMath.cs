@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Pure response curves for the rain atmosphere layer: how much local rain thickens
@@ -59,7 +59,7 @@ namespace BoscaliSummer.Features.Weather.Domain
         public static void StreakColor(float fogR, float fogG, float fogB, float lightLevel,
             out float r, out float g, out float b)
         {
-            float light = Clamp01(lightLevel);
+            float light = Math.Max(Clamp01(lightLevel), 0.22f) * 0.55f;
             const float blend = 0.45f;
             r = (fogR + (0.80f - fogR) * blend) * light;
             g = (fogG + (0.86f - fogG) * blend) * light;

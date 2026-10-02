@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>
     /// Who is holding the vanilla soundtrack silent. The receiver holds it from the moment

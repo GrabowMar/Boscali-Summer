@@ -1,9 +1,8 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Chrome-icon lookup for the old free-text glyph keys (kit v2 spec 5.4: "MfdGlyph ... move to AvIcon

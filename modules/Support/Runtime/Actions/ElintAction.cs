@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// ELINT sweep. The faction's station, overhead with a SIGINT array, listens around the

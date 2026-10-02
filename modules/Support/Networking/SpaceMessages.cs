@@ -1,12 +1,12 @@
 using System;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Runtime;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Runtime;
 using Mirage;
 
-namespace BoscaliSummer.Features.Support.Networking
+namespace BoscaliSummer.Modules.Support.Networking
 {
     /// <summary>Client poll for its faction's station and infrastructure state.</summary>
     [NetworkMessage]
@@ -52,6 +52,8 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte CyberThreatSlot;
         /// <summary>Faction intel picture cold: no hostile track spotted within the window.</summary>
         public bool IntelStale;
+        /// <summary>Per-recipient control: station, cyber, and released-to-team access.</summary>
+        public byte OperatorPermissions;
 
         public bool PlatformActive;
 
@@ -88,6 +90,10 @@ namespace BoscaliSummer.Features.Support.Networking
         public byte PlatformNoticeSerial;
         public byte PlatformFocus;
         public float PlatformRetaskIn, PlatformSolutionX, PlatformSolutionZ, PlatformSolutionRadius, PlatformSolutionIn;
+        public float PlatformAlignment, PlatformCapacitor, PlatformHeat, PlatformWorkIn, PlatformBoost, PlatformBoostIn;
+        public byte PlatformBoostFocus;
+        public int PlatformWorkRevision;
+        public byte PlatformCrewBus;
 
         /// <summary>Other factions' stations: orbit and occupied-cell mask only.</summary>
         public byte ForeignCount;
@@ -187,6 +193,15 @@ namespace BoscaliSummer.Features.Support.Networking
             into.PlatformSolutionZ = from.SolutionZ;
             into.PlatformSolutionRadius = from.SolutionRadius;
             into.PlatformSolutionIn = from.SolutionIn;
+            into.PlatformAlignment = from.Alignment;
+            into.PlatformCapacitor = from.Capacitor;
+            into.PlatformHeat = from.Heat;
+            into.PlatformWorkIn = from.WorkIn;
+            into.PlatformBoost = from.Boost;
+            into.PlatformBoostIn = from.BoostIn;
+            into.PlatformBoostFocus = from.BoostFocus;
+            into.PlatformWorkRevision = from.WorkRevision;
+            into.PlatformCrewBus = from.CrewBus;
         }
 
         public static void Read(in OpsStateMessage from, PlatformSnapshot into)
@@ -217,6 +232,15 @@ namespace BoscaliSummer.Features.Support.Networking
             into.SolutionZ = from.PlatformSolutionZ;
             into.SolutionRadius = from.PlatformSolutionRadius;
             into.SolutionIn = from.PlatformSolutionIn;
+            into.Alignment = from.PlatformAlignment;
+            into.Capacitor = from.PlatformCapacitor;
+            into.Heat = from.PlatformHeat;
+            into.WorkIn = from.PlatformWorkIn;
+            into.Boost = from.PlatformBoost;
+            into.BoostIn = from.PlatformBoostIn;
+            into.BoostFocus = from.PlatformBoostFocus;
+            into.WorkRevision = from.PlatformWorkRevision;
+            into.CrewBus = from.PlatformCrewBus;
         }
     }
 

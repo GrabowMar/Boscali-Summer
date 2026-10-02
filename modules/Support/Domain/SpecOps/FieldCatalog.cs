@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.SpecOps
+namespace BoscaliSummer.Modules.Support.Domain.SpecOps
 {
     /// <summary>Where a team is in its cycle. Wire-stable.</summary>
     internal enum TeamState : byte
@@ -15,7 +15,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
     }
 
     /// <summary>Host-authoritative choice after arrival; values are carried by OpsCommand 24.</summary>
-    internal enum SpecOpsDirective : byte { Execute = 0, Extract = 1 }
+    internal enum SpecOpsDirective : byte { Execute = 0, Extract = 1, Observe = 2, Advance = 3, Conceal = 4 }
 
     /// <summary>Team missions; wire-stable values also identify the post left by success.</summary>
     internal enum FieldMission : byte
@@ -75,12 +75,17 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         ObjectiveTaken = 11,
         BadMission = 12,
         BadDirective = 13,
-        NotAtDecision = 14
+        NotAtDecision = 14,
+        Preparing = 15,
+        Exposed = 16,
+        OrderCoolingDown = 17,
+        StaleOrder = 18,
+        PostLimit = 19
     }
 
     /// <summary>
     /// The numbers behind every mission and ability, in one table the host, the MFD and the desk
-    /// share. Rank widens effects; live threat lowers the odds. Posts have a fixed bounded lifetime. Pure: nothing here
+    /// share. Operator quality widens effects; live pressure raises exposure. Posts have finite charges. Pure: nothing here
     /// touches the game.
     /// </summary>
     internal static class FieldCatalog
@@ -103,12 +108,18 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public const float RecoverSeconds = 60f;
         public const float FailedRecoverSeconds = 120f;
         public const float ExtractSeconds = 20f;
-        public const float DecisionSeconds = 30f;
+        public const float DecisionSeconds = 240f;
+        public const float OrderSeconds = 6f;
+        public const float FastRouteSeconds = 3f;
+        public const float CoveredRouteSeconds = 7f;
+        public const int MinimumPreparation = 60;
+        public const int MaximumExecuteExposure = 75;
+        public const int MaximumPostCharges = 3;
         public const int MaximumHeldPosts = 2;
-        public const float PostSeconds = 120f;
-        public const float MinimumTravel = 30f;
-        public const float MaximumTravel = 120f;
-        public const float DefaultTravel = 60f;
+        public const float PostSeconds = 180f;
+        public const float MinimumTravel = 12f;
+        public const float MaximumTravel = 40f;
+        public const float DefaultTravel = 20f;
         public const float OpRefreshSeconds = 30f;
         public const float SeizeRadius = 1500f;
 
@@ -119,17 +130,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
 
         public static bool KnownKind(byte value) => value >= (byte)ObjectiveKind.Airfield && value <= (byte)ObjectiveKind.AirDefence;
 
-        public static int BaseChance(FieldMission mission) =>
-            mission == FieldMission.Recon ? 85 : mission == FieldMission.Sabotage ? 70 :
-            mission == FieldMission.Steal ? 75 : 65;
-
-        public static int LossBase(FieldMission mission) =>
-            mission == FieldMission.Recon ? 4 : mission == FieldMission.Sabotage ? 8 :
-            mission == FieldMission.Steal ? 6 : 10;
-
-        public static float TaskSeconds(FieldMission mission) =>
-            mission == FieldMission.Recon ? 30f : mission == FieldMission.Sabotage ? 45f :
-            mission == FieldMission.Steal ? 45f : 60f;
+        public static float TaskSeconds(FieldMission mission) => 8f;
 
         /// <summary>Base allocation for a mission, before the host's price multipliers.</summary>
         public static float MissionCost(FieldMission mission) =>
@@ -149,56 +150,39 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
             ability == FieldAbility.Spot || ability == FieldAbility.Skywatch ? FieldMission.Recon :
             ability == FieldAbility.Eavesdrop ? FieldMission.Steal : FieldMission.Sabotage;
 
-        /// <summary>How far from a held post its ability (or FORTIFY, for a safehouse) may be used.</summary>
+        /// <summary>Legacy radial display values; current delivery authority is a controlled OPS sector.</summary>
         public static float PostReach(FieldMission post) =>
             post == FieldMission.Recon ? 6000f : post == FieldMission.Sabotage ? 5000f :
             post == FieldMission.Steal ? 5000f : 3000f;
 
         public static float HoldSeconds(int rank) => PostSeconds;
 
-        /// <summary>Travel from the nearest owned airbase: 20 s plus 2 s per kilometre, 30–120 s.</summary>
+        /// <summary>Travel from the nearest owned airbase: 10 s plus 1 s per kilometre, bounded to 12–40 s.</summary>
         public static float TravelSeconds(float metres)
         {
             if (float.IsNaN(metres) || float.IsInfinity(metres) || metres < 0f) return DefaultTravel;
-            return Math.Max(MinimumTravel, Math.Min(MaximumTravel, 20f + metres / 1000f * 2f));
+            return Math.Max(MinimumTravel, Math.Min(MaximumTravel, 10f + metres / 1000f));
         }
+
+        public static int Pressure(int threat, int radars) =>
+            (int)Math.Min(30L, (long)Math.Max(0, threat) * 2 + (long)Math.Max(0, radars) * 3);
+
+        public static int Quality(int preparation, int intel, int exposure) =>
+            preparation >= 95 && intel >= 80 && exposure <= 30 ? 3 :
+            preparation >= 80 && intel >= 60 && exposure <= 45 ? 2 :
+            preparation >= 70 && intel >= 40 && exposure <= 60 ? 1 : 0;
+
+        public static int PostCharges(int quality) => Math.Min(MaximumPostCharges, 1 + Math.Max(0, quality));
+        public static int RequiredQuality(FieldAbility ability) => ability == FieldAbility.Hunt ? 2 :
+            ability == FieldAbility.Skywatch ? 1 : 0;
+
+        public static string PostSummary(FieldMission mission, int quality) =>
+            mission == FieldMission.Recon ? quality >= 1 ? "SPOT + SKYWATCH" : "SPOT" :
+            mission == FieldMission.Sabotage ? quality >= 2 ? "SUPPRESS + HUNT" : "SUPPRESS" :
+            mission == FieldMission.Steal ? quality >= 2 ? "EAVESDROP + BLACK MARKET" : "EAVESDROP" : "SAFEHOUSE / FORTIFY SECTOR";
 
         public static bool Allowed(FieldMission mission, ObjectiveKind kind) =>
             kind != ObjectiveKind.None && (mission != FieldMission.Seize || kind != ObjectiveKind.AirDefence);
-
-        // ---- Odds ------------------------------------------------------------------------------
-
-        public static int SuccessChance(FieldMission mission, int rank, int threat, bool scouted, int radars = 0)
-        {
-            long pressure = 3L * Math.Max(0, threat) + 2L * Math.Max(0, radars);
-            int value = BaseChance(mission) + 8 * Rank(rank) + (scouted ? 10 : 0) - (int)Math.Min(40L, pressure);
-            return Math.Max(5, Math.Min(95, value));
-        }
-
-        /// <summary>Home-ground setup is reliable until enemy ground units contest the site.</summary>
-        public static int FriendlyChance(int threat, int radars = 0) => Math.Max(75,
-            95 - (int)Math.Min(20L, 2L * Math.Max(0, threat) + Math.Max(0, radars)));
-
-        public static int FriendlyLoss(int threat, int radars = 0) => (int)Math.Min(6L,
-            (long)Math.Max(0, threat) + Math.Max(0, radars));
-
-        /// <summary>The probability the team is lost, never more than the failure share.</summary>
-        public static int LossChance(FieldMission mission, int rank, int threat, int success, int radars = 0)
-        {
-            long risk = LossBase(mission) + 2L * Math.Max(0, threat) + Math.Max(0, radars) - 3 * Rank(rank);
-            int value = (int)Math.Max(1L, Math.Min(40L, risk));
-            return Math.Max(0, Math.Min(100 - Math.Max(0, Math.Min(100, success)), value));
-        }
-
-        /// <summary>One roll in [0,1): below success succeeds, the top loss share loses the team.</summary>
-        public static MissionOutcome Resolve(int success, int loss, double roll)
-        {
-            if (double.IsNaN(roll) || roll < 0.0) roll = 0.0;
-            if (roll >= 1.0) roll = 0.999999;
-            if (roll < success / 100.0) return MissionOutcome.Success;
-            if (roll >= 1.0 - loss / 100.0) return MissionOutcome.Lost;
-            return MissionOutcome.Failed;
-        }
 
         public static int RankFor(int wins) => Math.Min(MaxRank, Math.Max(0, wins) / WinsPerRank);
 
@@ -219,7 +203,7 @@ namespace BoscaliSummer.Features.Support.Domain.SpecOps
         public static float EavesdropRadius(int rank) => 3000f + 500f * Rank(rank);
         public static float HuntRadius(int rank) => 2500f + 500f * Rank(rank);
         public static float HuntSeconds(int rank) => 20f + 10f * Rank(rank);
-        public static float StealIntel(int rank) => 100f + 25f * Rank(rank);
+        public static float StealIntel(int rank) => 40f + 20f * Rank(rank);
 
         private static int Rank(int rank) => Math.Max(0, Math.Min(MaxRank, rank));
     }

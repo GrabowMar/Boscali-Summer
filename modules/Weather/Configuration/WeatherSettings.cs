@@ -1,7 +1,7 @@
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Configuration
+namespace BoscaliSummer.Modules.Weather.Configuration
 {
     /// <summary>
     /// Configuration settings for the Weather feature, dynamic transitions, and procedural rain.

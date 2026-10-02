@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     /// <summary>An axis-aligned rectangle. The origin is the top-left and Y grows downward.</summary>
     internal readonly struct Box

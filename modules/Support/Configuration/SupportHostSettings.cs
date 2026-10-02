@@ -1,6 +1,8 @@
-using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Support.Configuration
+namespace BoscaliSummer.Modules.Support.Configuration
 {
     /// <summary>
     /// The host-only support knobs the SET SERVER page exposes. Kept beside the settings it

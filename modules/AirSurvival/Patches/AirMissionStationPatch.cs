@@ -1,14 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.AirSurvival.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.AirSurvival.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.SavedMission;
 
-namespace BoscaliSummer.Features.AirSurvival.Patches
+namespace BoscaliSummer.Modules.AirSurvival.Patches
 {
     [HarmonyPatch]
     internal static class AirMissionStationPatch
@@ -38,7 +40,7 @@ namespace BoscaliSummer.Features.AirSurvival.Patches
 
             // Squad is optional with Progression. When present it owns its ace flights;
             // Wing Command membership is checked independently above.
-            if (ModServices.TryGet(out IAircraftTaskExclusion exclusion) &&
+            if (ModuleServices.TryGet(out IAircraftTaskExclusion exclusion) &&
                 exclusion.IsExcluded(identity))
                 return;
 
@@ -48,7 +50,7 @@ namespace BoscaliSummer.Features.AirSurvival.Patches
             if (rotary && __result) return;
             if (!rotary && __result && IsHiddenOriginal(aircraft.NetworkHQ, destination)) return;
 
-            if (ModServices.TryGet(out ITheaterAirStationView stations) &&
+            if (ModuleServices.TryGet(out ITheaterAirStationView stations) &&
                 stations.TryGetStation(aircraft.NetworkHQ.faction.factionName,
                     out float x, out float z, out float radius) &&
                 AirStationPolicy.TryOperationFix(identity, x, z, radius, out x, out z))

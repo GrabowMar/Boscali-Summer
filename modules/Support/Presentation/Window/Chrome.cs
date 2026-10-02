@@ -1,10 +1,9 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Window
+namespace BoscaliSummer.Modules.Support.Presentation.Window
 {
     /// <summary>
     /// Local kit v2 primitives for the OPS window and its rooms, built from

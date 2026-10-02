@@ -1,22 +1,24 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>A client-local, read-only roster for the faction's secondary contracts.</summary>
     internal sealed class MissionContractWindow : MonoBehaviour
     {
         private const float Width = 860f;
         private const float Height = 780f;
-        private const int Rows = 7;
+        private const int Rows = 6;
         private const int SortOrder = 30002;
 
         private readonly List<SecondaryObjectiveView> roster = new List<SecondaryObjectiveView>(16);
@@ -25,8 +27,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private AvSection rosterSection;
         private AvList list;
         private AvSection detailSection;
-        private AvRow detailHeaderRow, detailTargetRow, detailAcceptedRow, detailRewardRow, detailStatusRow, detailProgressRow;
-        private ProseText detailDescription;
+        private AvRow detailHeaderRow, detailTargetRow, detailRewardRow, detailStatusRow;
+        private AvHazardBar detailProgressBar;
+        private ContractBrief detailBrief;
         private int filter, selectedId = -1;
         private string lastBoardText = "";
         private float nextRefresh;
@@ -110,24 +113,27 @@ namespace BoscaliSummer.Features.Command.Presentation
             window = AvWindow.Build(transform, "mission-desk", "SECONDARY / CONTRACT DESK", Width, Height, SortOrder);
 
             AvFlow body = window.Body;
-            rosterSection = body.Section(AvIcon.Bookmark, "CONTRACT ROSTER", "—");
-            filterControl = body.Add(new AvSegmented(body.Content, "FILTER",
+            // Keep the fixed window's content viewport available to the flow's scroll layout.
+            body.ViewportHeight = Height - 30f - AvGridTokens.Footer;
+            rosterSection = body.Section(AvIcon.Bookmark, "CONTRACTS", "—");
+            filterControl = body.Add(AvSegmented.Strip(body.Content,
                 new[] { "ALL", "OFFERS", "ACTIVE", "CLOSED" }, () => filter, i => { filter = i; selectedId = -1; Refresh(); }));
             list = body.Add(new AvList(body.Content, window.Ticker, Rows, BindRow));
             list.RowClicked = SelectRow;
 
-            detailSection = body.Section(AvIcon.User, "TASK FILE", "—");
+            detailSection = body.Section(AvIcon.User, "TASK", "—");
             detailHeaderRow = body.Add(new AvRow(body.Content));
             detailTargetRow = body.Add(new AvRow(body.Content));
-            detailAcceptedRow = body.Add(new AvRow(body.Content));
             detailRewardRow = body.Add(new AvRow(body.Content));
             detailStatusRow = body.Add(new AvRow(body.Content));
-            detailProgressRow = body.Add(new AvRow(body.Content));
-            detailDescription = body.Add(new ProseText(body.Content));
+            detailProgressBar = body.Add(new AvHazardBar(body.Content, "PROGRESS"));
+            detailProgressBar.Help = "How far the selected contract has come, as the host reports it.";
+            body.Section(AvIcon.ListDetails, "HOST BRIEF");
+            detailBrief = body.Add(new ContractBrief(body.Content));
 
             AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
             if (closeButton != null) closeButton.Help = "Close the contract desk (Esc).";
-            window.Footer.Set("Faction-wide tasking · accept and cancel from the MIS bezel.");
+            window.Footer.Set("Accept and cancel from the MIS bezel.");
         }
 
         private void BindRow(int index, AvRow row)
@@ -153,7 +159,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             roster.Clear();
             string boardText;
-            if (ModServices.TryGet(out ISecondaryObjectivesView view))
+            if (ModuleServices.TryGet(out ISecondaryObjectivesView view))
             {
                 view.Refresh();
                 IReadOnlyList<SecondaryObjectiveView> entries = view.Objectives;
@@ -186,7 +192,7 @@ namespace BoscaliSummer.Features.Command.Presentation
                 else closed++;
             }
             rosterSection.SetCaption((boardText ?? "") + "  ·  " + (filter == 0
-                ? active + " ACTIVE / " + offers + " OFFER / " + closed + " CLOSED"
+                ? active + " ACTIVE / " + offers + (offers == 1 ? " OFFER / " : " OFFERS / ") + closed + " CLOSED"
                 : roster.Count + " IN VIEW"));
             filterControl.Refresh();
 
@@ -204,24 +210,58 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             bool has = entry != null;
             detailSection.SetCaption(has ? "FILE / " + entry.Id : "FILE / —");
+            // Who took the contract rides on the header's second line; it used to be a row of its own.
+            string taker = !has ? "" : !string.IsNullOrWhiteSpace(entry.AcceptedBy) ? entry.AcceptedBy
+                : !entry.IsOffered ? "NOT REPORTED" : "AWAITING ACCEPTANCE";
             detailHeaderRow.Set(has ? MfdSecondaryObjectives.TitleLine(entry.Id, entry.Title) : "NO CONTRACT SELECTED",
-                has ? Phase(entry) : "NO HOST TASK FILE",
+                has ? Phase(entry) + "  ·  " + taker : "",
                 has ? MfdSecondaryObjectives.ChipLabel(entry) : "—",
                 has ? (entry.IsOffered ? AvState.Caution : entry.IsActive ? AvState.Ready : AvState.Info) : AvState.Inert);
             detailTargetRow.Set("TARGET", null,
                 has && !string.IsNullOrWhiteSpace(entry.Target)
                     ? MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(entry.Target)) : "—", AvState.Info);
-            detailAcceptedRow.Set("ACCEPTED BY", null,
-                !has ? "—" : !string.IsNullOrWhiteSpace(entry.AcceptedBy) ? entry.AcceptedBy
-                    : !entry.IsOffered ? "NOT REPORTED" : "AWAITING ACCEPTANCE", AvState.Info);
             detailRewardRow.Set("REWARD", null, has ? MfdSecondaryObjectives.PayoutLabel(entry) : "—", AvState.Ready);
             detailStatusRow.Set("HOST STATUS", null,
                 has && !string.IsNullOrWhiteSpace(entry.Status) ? MfdSecondaryObjectives.PlainObjective(entry.Status) : "—", AvState.Info);
             float progress = has && !float.IsNaN(entry.Progress) && !float.IsInfinity(entry.Progress)
                 ? Mathf.Clamp01(entry.Progress) : 0f;
-            detailProgressRow.Set("TASK PROGRESS", null, has ? TheaterReadout.Percent(progress) : "—", AvState.Info);
-            detailDescription.Set(has && !string.IsNullOrWhiteSpace(entry.Description)
-                ? MfdSecondaryObjectives.PlainObjective(entry.Description) : "Select a row to review the host report.");
+            detailProgressBar.Set(progress, has ? TheaterReadout.Percent(progress) : "—",
+                !has ? AvState.Inert : entry.IsActive ? AvState.Ready : AvState.Info);
+            string description = has && !string.IsNullOrWhiteSpace(entry.Description)
+                ? MfdSecondaryObjectives.PlainObjective(entry.Description)
+                : has ? "No additional briefing supplied by the host." : "Select a contract to review its host briefing.";
+            detailBrief.Set(description);
+            detailHeaderRow.Help = description;
+        }
+
+        private sealed class ContractBrief : AvPart
+        {
+            private readonly TMP_Text text;
+
+            public ContractBrief(RectTransform parent)
+            {
+                Rect = AvLay.Child(parent, "HostBrief");
+                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+                Restyle();
+            }
+
+            public void Set(string value)
+            {
+                if (text.text == value) return;
+                text.text = value;
+                Changed();
+            }
+
+            public override float Measure(float width) => AvText.Height(text, width);
+
+            public override void Place(AvSlot slot)
+            {
+                base.Place(slot);
+                AvLay.Place(text.rectTransform, 0f, 0f, slot.W, slot.H);
+            }
+
+            public override void Restyle() =>
+                text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
         }
 
         private static int CompareContracts(SecondaryObjectiveView a, SecondaryObjectiveView b)
@@ -240,6 +280,6 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private static string Phase(SecondaryObjectiveView entry) =>
             entry.IsActive ? "IN FIELD" : entry.IsOffered ? "AWAITING ACCEPTANCE" :
-            entry.IsComplete ? "COMPLETE / PAID" : "CLOSED";
+            entry.IsComplete ? "COMPLETE" : "CLOSED";
     }
 }

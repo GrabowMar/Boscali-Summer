@@ -1,6 +1,6 @@
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// Client-local design intent: which mission the player is fitting for, which cell is

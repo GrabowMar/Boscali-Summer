@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     internal enum RadioDaypart
     {

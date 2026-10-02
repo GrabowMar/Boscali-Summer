@@ -1,20 +1,19 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
         private const int StudioRowsPerPage = 2;
-        private const float StudioPortraitHeight = 184f;
-        private const float StudioEmblemHeight = 144f;
+        private const float StudioPortraitHeight = 112f;
+        private const float StudioEmblemHeight = 96f;
 
         /// <summary>How a studio message reads: a success, a caution, or a refusal.</summary>
         private enum StudioTone : byte { Info, Ok, Warn, Bad }
@@ -135,23 +134,24 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             studioPager = p.Buttons(
                 new AvControl.Spec("PREVIOUS", () => ChangeStudioPage(-1), AvButtonStyle.Quiet, AvIcon.ChevronLeft),
-                new AvControl.Spec("NEXT", () => ChangeStudioPage(1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
+                new AvControl.Spec("NEXT", () => ChangeStudioPage(1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
             studioPagerPrev = studioPager.Controls[0];
             studioPagerNext = studioPager.Controls[1];
 
-            p.Section(AvIcon.Pencil, "PILOT EDITOR", "LOCAL FILE");
             studioPortrait = new AvPortrait(p.Content, "StudioPilot", "NO PORTRAIT", StudioPortraitHeight);
             AvCard who = new AvCard(p.Content, console.Ticker, half);
             studioCallsignField = who.Flow.Add(new AvField(who.Flow.Content, "CALLSIGN", PilotDraft.MaxCallsign,
                 value => { studioDraft.Callsign = value; studioDraft.Normalize(); }));
-            FieldHelp(studioCallsignField, "Pilot callsign, up to 14 characters.");
-            who.Flow.Buttons(new AvControl.Spec("RANDOM CALLSIGN", RandomizeCallsign, AvButtonStyle.Quiet, AvIcon.Refresh))
-                .Controls[0].Help = "Generate a new random callsign.";
+            FieldHelp(studioCallsignField, "Pilot callsign, up to 14 characters. Press Enter to keep an edit.");
             studioNameField = who.Flow.Add(new AvField(who.Flow.Content, "NAME", PilotDraft.MaxName,
                 value => { studioDraft.Name = value; studioDraft.Normalize(); }));
-            FieldHelp(studioNameField, "Pilot name, up to 24 characters.");
-            who.Flow.Buttons(new AvControl.Spec("RANDOM NAME", RandomizeName, AvButtonStyle.Quiet, AvIcon.Refresh))
-                .Controls[0].Help = "Generate a new random name.";
+            FieldHelp(studioNameField, "Pilot name, up to 24 characters. Press Enter to keep an edit.");
+            AvButtons rolls = who.Flow.Buttons(
+                new AvControl.Spec("CALL", RandomizeCallsign, AvButtonStyle.Quiet, AvIcon.Refresh),
+                new AvControl.Spec("NAME", RandomizeName, AvButtonStyle.Quiet, AvIcon.Refresh));
+            rolls.Controls[0].Help = "Roll a new random callsign.";
+            rolls.Controls[1].Help = "Roll a new random name.";
+            studioPortrait.Help = "The portrait Wing Command will draw for this pilot. Change it with the six steppers below.";
             p.Row(studioPortrait, who);
 
             studioBody = new AvStepper(p.Content, "BODY", () => WingLink.PortraitBodyLabel(studioDraft.Body),
@@ -169,22 +169,23 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 () => CycleDraft(d => d.CycleBackdrop(-1, BackdropCount())), () => CycleDraft(d => d.CycleBackdrop(1, BackdropCount())));
             studioStyle = new AvStepper(p.Content, "STYLE", () => WingLink.PersonaLabel(studioDraft.Persona).ToUpperInvariant(),
                 () => CycleDraft(d => d.CyclePersona(-1)), () => CycleDraft(d => d.CyclePersona(1)));
+            StepperHelp(studioBody, "body type"); StepperHelp(studioFace, "face"); StepperHelp(studioHair, "hair");
+            StepperHelp(studioSuit, "flight suit"); StepperHelp(studioBack, "portrait backdrop"); StepperHelp(studioStyle, "radio style");
             p.Row(studioBody, studioFace);
             p.Row(studioHair, studioSuit);
             p.Row(studioBack, studioStyle);
 
-            p.Section(AvIcon.Message2, "BACKGROUND / LORE", null);
             studioBioField = p.Add(new AvField(p.Content, "Service background…", PilotDraft.MaxBackground,
                 value => { studioDraft.Background = value; studioDraft.Normalize(); }));
             FieldHelp(studioBioField, "Free-form service record shown on the pilot status page.");
-            p.Buttons(new AvControl.Spec("GENERATE", GenerateBio, AvButtonStyle.Quiet, AvIcon.Refresh))
-                .Controls[0].Help = "Generate a service background from the radio style.";
 
             AvButtons saveRow = p.Buttons(
-                new AvControl.Spec("SAVE PILOT", SaveStudioDraft, AvButtonStyle.Primary, AvIcon.CircleCheck),
-                new AvControl.Spec("SET AS PROFILE", SetAsLocalProfile),
-                new AvControl.Spec("RECRUIT", ToggleRecruit));
+                new AvControl.Spec("SAVE", SaveStudioDraft, AvButtonStyle.Primary, AvIcon.CircleCheck),
+                new AvControl.Spec("PROFILE", SetAsLocalProfile),
+                new AvControl.Spec("RECRUIT", ToggleRecruit),
+                new AvControl.Spec("BIO", GenerateBio, AvButtonStyle.Quiet, AvIcon.Refresh));
             saveRow.Controls[0].Help = "Write this pilot to the Wing Command custom pilots folder.";
+            saveRow.Controls[3].Help = "Write a service background for this pilot from the chosen radio style.";
             studioProfileButton = saveRow.Controls[1];
             studioProfileButton.Help = "Use this pilot's name, callsign, background and portrait as your local pilot profile.";
             studioRecruitButton = saveRow.Controls[2];
@@ -197,27 +198,39 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 value => settings.SquadronName.Value = value ?? string.Empty));
             studioSquadronField.Text = squadronName;
             FieldHelp(studioSquadronField, "Local squadron name shown on the pilot status page.");
-            squadronCard.Flow.Buttons(new AvControl.Spec("RANDOMIZE EMBLEM", RandomizeEmblem, AvButtonStyle.Quiet, AvIcon.Refresh))
-                .Controls[0].Help = "Roll a new local emblem.";
-            squadronCard.Flow.Buttons(new AvControl.Spec("NO ART", ClearArtFile, AvButtonStyle.Quiet))
-                .Controls[0].Help = "Use the procedural emblem instead of a PNG.";
+            AvButtons emblemButtons = squadronCard.Flow.Buttons(
+                new AvControl.Spec("ROLL", RandomizeEmblem, AvButtonStyle.Quiet, AvIcon.Refresh),
+                new AvControl.Spec("NO ART", ClearArtFile, AvButtonStyle.Quiet));
+            emblemButtons.Controls[0].Help = "Roll a new local emblem: shape, mark and palette together.";
+            emblemButtons.Controls[1].Help = "Use the procedural emblem instead of a PNG.";
+            studioEmblem.Help = "Your squadron emblem, shown on the pilot card. Local cosmetic only; nothing is uploaded.";
             p.Row(studioEmblem, squadronCard);
 
-            studioShape = p.Add(new AvStepper(p.Content, "SHAPE", () => EmblemDesign.ShapeNames[emblem.Shape],
-                () => CycleEmblem(-1, 0, 0), () => CycleEmblem(1, 0, 0)));
-            studioCharge = p.Add(new AvStepper(p.Content, "CHARGE", () => EmblemDesign.ChargeNames[emblem.Charge],
-                () => CycleEmblem(0, -1, 0), () => CycleEmblem(0, 1, 0)));
-            studioPalette = p.Add(new AvStepper(p.Content, "PALETTE",
+            studioShape = new AvStepper(p.Content, "SHAPE", () => EmblemDesign.ShapeNames[emblem.Shape],
+                () => CycleEmblem(-1, 0, 0), () => CycleEmblem(1, 0, 0));
+            studioCharge = new AvStepper(p.Content, "MARK", () => EmblemDesign.ChargeNames[emblem.Charge],
+                () => CycleEmblem(0, -1, 0), () => CycleEmblem(0, 1, 0));
+            studioPalette = new AvStepper(p.Content, "COLOR",
                 () => "PALETTE " + AvNum.Thousands(emblem.Palette + 1) + "/" + AvNum.Thousands(EmblemDesign.PaletteCount),
-                () => CycleEmblem(0, 0, -1), () => CycleEmblem(0, 0, 1)));
-            studioArt = p.Add(new AvStepper(p.Content, "ART",
+                () => CycleEmblem(0, 0, -1), () => CycleEmblem(0, 0, 1));
+            studioArt = new AvStepper(p.Content, "ART",
                 () => emblemFileIndex >= 0 && emblemFileIndex < emblemFiles.Length
                     ? System.IO.Path.GetFileNameWithoutExtension(emblemFiles[emblemFileIndex])
                     : "NONE · PROCEDURAL",
-                () => CycleArtFile(-1), () => CycleArtFile(1)));
+                () => CycleArtFile(-1), () => CycleArtFile(1));
+            StepperHelp(studioShape, "emblem shape"); StepperHelp(studioCharge, "emblem mark"); StepperHelp(studioPalette, "palette");
+            StepperHelp(studioArt, "PNG in the emblem folder (NONE keeps the procedural emblem)");
+            p.Row(studioShape, studioCharge);
+            p.Row(studioPalette, studioArt);
 
-            studioMessageText = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall));
+            studioMessageText = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall), 1f);
             studioMessageText.Set("Custom pilots are local files read by Wing Command; nothing is uploaded.");
+        }
+
+        private static void StepperHelp(AvStepper stepper, string what)
+        {
+            stepper.Minus.Help = "Previous " + what + ".";
+            stepper.Plus.Help = "Next " + what + ".";
         }
 
         /// <summary>Kit v2's <see cref="AvField"/> has no help setter; the field root receives hover from its frame.</summary>
@@ -231,7 +244,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (studioSection == null)
             {
                 // Wing Command companion API absent: the card built above explains why.
-                studioUnavailable?.Set("WING COMMAND NOT CONNECTED", WingLink.PilotStudioUnavailableReason);
+                studioUnavailable?.Set("WING NOT CONNECTED", WingLink.PilotStudioUnavailableReason);
                 return;
             }
 

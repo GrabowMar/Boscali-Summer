@@ -1,10 +1,9 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static partial class VanillaMfdRebuild
     {
@@ -42,6 +41,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private Func<int, Sprite> iconFn;
             private Func<int, string> subFn;
             private Func<int, string> detailFn;
+            private Func<int, AvIcon> glyphFn;
+            private readonly bool tile;
             private int lastSizeKey = -1;
 
             /// <summary>Raised when the grid's measured height changes (rows shown, pager shown), so the
@@ -49,8 +50,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             public Action SizeChanged;
 
             public MfdPagingGrid(RectTransform parent, int columns, int rows, bool pager = true,
-                bool readOnly = false, float rowHeight = 0f)
+                bool readOnly = false, float rowHeight = 0f, bool tile = false)
             {
+                this.tile = tile;
                 this.columns = Mathf.Max(1, columns);
                 this.rows = Mathf.Max(1, rows);
                 this.readOnly = readOnly;
@@ -64,14 +66,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 for (int i = 0; i < perPage; i++)
                 {
                     int slot = i;
-                    cells[i] = MfdIconCell.Toggle(Rect, () => IsSelected(slot), v => Click(slot), onWord, offWord);
+                    cells[i] = MfdIconCell.Toggle(Rect, () => IsSelected(slot), v => Click(slot), onWord, offWord, tile);
                     cells[i].Rect.gameObject.SetActive(false);
                 }
                 empty = AvText.Make(Rect, "Empty", AvTextRole.ProseSmall, "NO ENTRIES", TextAlignmentOptions.Center, true);
                 if (pagerEnabled)
                 {
                     prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-                    next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
+                    next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
                     pageLabel = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
                 }
             }
@@ -95,7 +97,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 return Mathf.Max(1, Mathf.CeilToInt(Mathf.Min(perPage, count) / (float)columns));
             }
 
-            private float GridHeight(int shown) => rowHeight * shown + AvGridTokens.Gap * (shown - 1);
 
             /// <summary>
             /// <paramref name="details"/> is the hover help for a cell (shown in the console footer);
@@ -117,6 +118,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (page > maxPage) page = maxPage;
                 Refresh();
             }
+
+            /// <summary>Tile grids: the chrome glyph for item <c>i</c> (used when the item has no sprite). Set before SetData.</summary>
+            public void SetGlyphs(Func<int, AvIcon> glyphs) { glyphFn = glyphs; }
 
             public void ResetPage() { page = 0; Refresh(); }
 
@@ -162,6 +166,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     string text = label != null ? label(index) : "";
                     cell.SetTitle(text, subFn != null ? subFn(index) : "");
                     cell.SetIcon(iconFn != null ? iconFn(index) : null);
+                    if (tile) cell.SetGlyph(glyphFn != null ? glyphFn(index) : AvIcon.None);
                     cell.Interactable = canUse && !readOnly;
                     // A fenced cell still publishes its "why" to the footer; Click() gates the action.
                     cell.Help = detailFn != null ? detailFn(index) : text;
@@ -170,13 +175,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 empty.gameObject.SetActive(count == 0);
                 if (pageLabel != null)
-                    pageLabel.text = count == 0 ? "NO ENTRIES"
-                        : "PAGE " + AvNum.Fixed(page + 1, 0) + " / " + AvNum.Fixed(PageCount, 0) +
-                          "  ·  " + AvNum.Fixed(count, 0) + " ITEMS";
+                    pageLabel.text = count == 0 ? "—"
+                        : AvNum.Fixed(page + 1, 0) + " / " + AvNum.Fixed(PageCount, 0);
                 bool pager = PagerShown;
                 if (prev != null) { prev.gameObject.SetActive(pager); prev.Interactable = page > 0; }
                 if (next != null) { next.gameObject.SetActive(pager); next.Interactable = page < PageCount - 1; }
                 if (pageLabel != null) pageLabel.gameObject.SetActive(pager);
+
+                // Wrapping changes with content even when the number of rows stays the same.
+                Changed();
 
                 int sizeKey = ShownRows() * 2 + (pager ? 1 : 0);
                 if (sizeKey != lastSizeKey)
@@ -188,21 +195,31 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             public override float Measure(float width)
             {
-                float h = GridHeight(ShownRows());
+                float h = MeasuredRowHeight(width) * ShownRows() + AvGridTokens.Gap * (ShownRows() - 1);
                 if (PagerShown) h += AvGridTokens.Gap + AvGridTokens.Row;
                 return h;
+            }
+
+            private float MeasuredRowHeight(float width)
+            {
+                float height = rowHeight;
+                float column = AvFlowMath.ColumnWidth(width, columns, AvGridTokens.Gap);
+                foreach (MfdIconCell cell in cells)
+                    if (cell.Rect.gameObject.activeSelf) height = Mathf.Max(height, cell.Measure(column));
+                return height;
             }
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
                 float colW = AvFlowMath.ColumnWidth(s.W, columns, AvGridTokens.Gap);
+                float height = MeasuredRowHeight(s.W);
                 for (int i = 0; i < cells.Length; i++)
                 {
                     int row = i / columns, col = i % columns;
-                    cells[i].Place(new AvSlot(col * (colW + AvGridTokens.Gap), row * (rowHeight + AvGridTokens.Gap), colW, rowHeight));
+                    cells[i].Place(new AvSlot(col * (colW + AvGridTokens.Gap), row * (height + AvGridTokens.Gap), colW, height));
                 }
-                float gridH = GridHeight(ShownRows());
+                float gridH = height * ShownRows() + AvGridTokens.Gap * (ShownRows() - 1);
                 AvLay.Place(empty.rectTransform, 0f, 0f, s.W, gridH);
                 if (PagerShown)
                 {

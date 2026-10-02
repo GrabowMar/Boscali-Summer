@@ -2,7 +2,7 @@ using System;
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Squad.Configuration
+namespace BoscaliSummer.Modules.Squad.Configuration
 {
     internal enum PilotLifeMode { Respawning, OneLife }
 

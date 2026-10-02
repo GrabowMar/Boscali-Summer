@@ -1,12 +1,14 @@
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using Rewired;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Grab-the-ground navigation for the relief map. Left drag holds the pressed terrain
@@ -47,14 +49,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static bool focusEasing;
         private static float targetFocusX, targetFocusZ;
         private static bool follow;
+        private static bool fly;
         private static float lastClickTime = -1f;
+        private static int doubleClickFrame = -1;
+        private static bool doubleClickPending;
         private static Vector2 lastClickScreen;
         private static Player player;
 
         internal static bool Following => follow;
+        internal static bool Flying => fly;
 
         /// <summary>A grab drag, or its release frame, must not also click the icon beneath it.</summary>
         internal static bool BlockIconClick() => drag == Drag.Grab || releaseFrame == Time.frameCount;
+        internal static bool BlockContextClick() => drag == Drag.Grab || releaseFrame == Time.frameCount ||
+            doubleClickFrame == Time.frameCount;
 
         internal static void Tick(ReliefRig rig)
         {
@@ -97,6 +105,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 (mouse - lastClickScreen).sqrMagnitude < Slop * Slop)
             {
                 lastClickTime = -1f;
+                doubleClickFrame = Time.frameCount;
+                doubleClickPending = true;
                 follow = false;
                 FocusOn(anchor.x, anchor.z);
                 ZoomTo(rig, (zoomEasing ? targetZoom : rig.Zoom) * 2f, .5f, .5f, 0f);
@@ -110,6 +120,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (!Input.GetMouseButton(dragButton) || (drag == Drag.PendingGrab && ControlHeld()))
             {
+                if (dragButton == 0 && doubleClickPending)
+                {
+                    doubleClickFrame = Time.frameCount;
+                    doubleClickPending = false;
+                }
                 if (drag == Drag.Grab)
                 {
                     releaseFrame = Time.frameCount;
@@ -146,9 +161,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (Typing()) return;
             if (player == null && ReInput.isReady) player = ReInput.players.GetPlayer(0);
-            if (player == null) return;
 
-            float zoom = player.GetAxis("Zoom View");
+            float zoom = player != null ? player.GetAxis("Zoom View") : 0f;
             // Wheel over a panel scrolls the panel; a stick or key zoom off the map uses the centre.
             if (zoom != 0f && !MapUiPointer.OverControls())
             {
@@ -158,8 +172,20 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     free ? vx : .5f, free ? vy : .5f, at.y);
             }
 
-            float right = player.GetAxis("Move Map Horizontal");
-            float up = player.GetAxis("Move Map Vertical");
+            float right = player != null ? player.GetAxis("Move Map Horizontal") : 0f;
+            float up = player != null ? player.GetAxis("Move Map Vertical") : 0f;
+            if (fly)
+            {
+                float keysRight = (Input.GetKey(KeyCode.D) ? 1f : 0f) -
+                    (Input.GetKey(KeyCode.A) ? 1f : 0f);
+                float keysUp = (Input.GetKey(KeyCode.W) ? 1f : 0f) -
+                    (Input.GetKey(KeyCode.S) ? 1f : 0f);
+                if (keysRight != 0f || keysUp != 0f)
+                {
+                    right = keysRight;
+                    up = keysUp;
+                }
+            }
             if (right == 0f && up == 0f) return;
             follow = focusEasing = false;
             float yaw = rig.Yaw * Mathf.Deg2Rad;
@@ -252,10 +278,27 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             ZoomTo(MfdTerrainRelief.Rig, ReliefRig.MinZoom, .5f, .5f, 0f);
         }
 
+        internal static void Focus(GlobalPosition point, bool zoom)
+        {
+            if (!MfdTerrainRelief.WorldToModel(point, out float x, out float z)) return;
+            follow = false;
+            FocusOn(x, z);
+            if (zoom) ZoomTo(MfdTerrainRelief.Rig,
+                Mathf.Max(3f, MfdTerrainRelief.Rig.Zoom), .5f, .5f, 0f);
+        }
+
         internal static void ToggleFollow()
         {
             follow = !follow && GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
+            if (follow) fly = false;
             focusEasing = follow;
+        }
+
+        internal static void ToggleFly()
+        {
+            fly = !fly;
+            if (fly) follow = focusEasing = false;
+            coast = Vector2.zero;
         }
 
         /// <summary>The terrain under a viewport point, or the sea-level plane off the terrain.</summary>
@@ -273,7 +316,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 
         private static bool LeftDragClaimed() =>
-            ModServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
+            ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
 
         private static bool Typing()
         {
@@ -284,8 +327,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// <summary>Map closed: drop gestures and easing, keep the view.</summary>
         internal static void Release()
         {
+            fly = false;
             drag = Drag.None;
             releaseFrame = -1;
+            doubleClickFrame = -1;
+            doubleClickPending = false;
             velocity = coast = Vector2.zero;
             zoomEasing = angleEasing = focusEasing = false;
             lastClickTime = -1f;

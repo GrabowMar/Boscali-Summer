@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// Which contracts the vicinity card lists, and in what order: the area you are already

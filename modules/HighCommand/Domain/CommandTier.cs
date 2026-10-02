@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>The three staff tiers every faction fields. Weight is the share of the tree one post is worth.</summary>
     internal static class CommandTier

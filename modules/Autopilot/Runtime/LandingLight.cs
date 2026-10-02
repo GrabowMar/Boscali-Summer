@@ -1,7 +1,8 @@
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// A switchable nose landing light on the local player's own aircraft: one forward-down

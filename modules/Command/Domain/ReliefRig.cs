@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// The relief map's orthographic orbit camera, in relief model units, with exact solvers

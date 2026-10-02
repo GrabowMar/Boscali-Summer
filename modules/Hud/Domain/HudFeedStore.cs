@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Hud.Domain
+namespace BoscaliSummer.Modules.Hud.Domain
 {
     internal struct HudMessage
     {

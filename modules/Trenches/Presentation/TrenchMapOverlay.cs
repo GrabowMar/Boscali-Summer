@@ -1,17 +1,19 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Trenches.Configuration;
-using BoscaliSummer.Features.Trenches.Domain;
-using BoscaliSummer.Features.Trenches.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Trenches.Configuration;
+using BoscaliSummer.Modules.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Trenches.Presentation
+namespace BoscaliSummer.Modules.Trenches.Presentation
 {
     /// <summary>
     /// Hosts the trench belt's tactical map layer. The layer is a mesh pass over the drawn
@@ -122,7 +124,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
                 lastHq = dynamicMap.HQ;
                 if (layer != null) layer.SetVerticesDirty();
             }
-            bool projected = ModServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            bool projected = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
             int projectionRevision = projected ? projection.Revision : 0;
             if (projected != lastProjectionActive || projectionRevision != lastProjectionRevision)
             {
@@ -192,10 +194,10 @@ namespace BoscaliSummer.Features.Trenches.Presentation
         private const int MaximumSegmentsPerStroke = 200;
         private const int MaximumVertices = 12000;
 
-        private static readonly Color32 Under = new Color32(10, 12, 16, 150);
-        private static readonly Color32 FriendlyInk = new Color32(65, 210, 255, 235);
-        private static readonly Color32 HostileInk = new Color32(255, 100, 80, 235);
-        private static readonly Color32 SuppressedInk = new Color32(255, 195, 65, 235);
+        private static readonly Color32 Under = new Color32(5, 8, 12, 160);
+        private static readonly Color32 FriendlyInk = new Color32(88, 200, 255, 235);
+        private static readonly Color32 HostileInk = new Color32(255, 74, 61, 235);
+        private static readonly Color32 SuppressedInk = new Color32(255, 176, 46, 235);
         private static readonly Color32 NeutralizedInk = new Color32(150, 150, 150, 190);
 
         private static IMapProjection populateProjection;
@@ -217,7 +219,7 @@ namespace BoscaliSummer.Features.Trenches.Presentation
 
             float factor = map.mapDisplayFactor;
             if (!(factor > 0.0001f)) return;
-            ModServices.TryGet(out populateProjection);
+            ModuleServices.TryGet(out populateProjection);
 
             float scale = Mathf.Abs(transform.lossyScale.x);
             if (!(scale > 1e-4f)) scale = 1f;

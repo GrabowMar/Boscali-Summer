@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// Boscali integrations, each through its owner's narrow contract: the camera mark and

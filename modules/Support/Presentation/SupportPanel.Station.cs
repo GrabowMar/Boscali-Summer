@@ -1,26 +1,28 @@
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
 using NOAvionics;
-using NOAvionics.Ui;
+using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// SPACE status: the orbit schematic as the hero (or, with no station, its one empty-state card
-    /// with LAUNCH CORE), health as labelled meters, the module roster and the voice loop. PAW S1
-    /// deleted the rooms: orders belong to the ACTIONS page and return as Tier-2 tabs in S2; this
-    /// page is the glance.
+    /// with LAUNCH CORE), the door into the task map and engineering, health as labelled meters,
+    /// the fitted-module roster, the voice loop and the battery history. No section headers:
+    /// every block names itself. Orders belong to the rooms and the ACTIONS page.
     /// </summary>
     internal sealed partial class SupportPanel
     {
         private static readonly string[] TileKeys = { "THERMAL", "LINK", "CREW", "DEBRIS", "SUN", "DARK" };
 
         private OrbitHero stationHero;
-        private AvSection healthSection, moduleSection;
-        private MeterRow meterEnergy, meterFuel, meterRods, meterMass;
+        private AvSection healthSection;
+        private AvButtons stationButtons;
+        private AvGauge meterEnergy, meterFuel, meterRods, meterMass;
         private AvChip[] stationTiles;
         private RosterGrid roster;
+        private AvLineChart energyChart;
         private LogTape stationLog;
         private BriefCard windowCard;
         private readonly byte[] heroCells = new byte[OrbitHero.Cells];
@@ -28,10 +30,12 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void ResetStationPage()
         {
             stationHero = null;
-            healthSection = moduleSection = null;
+            healthSection = null;
+            stationButtons = null;
             meterEnergy = meterFuel = meterRods = meterMass = null;
             stationTiles = null;
             roster = null;
+            energyChart = null;
             stationLog = null;
             windowCard = null;
         }
@@ -48,32 +52,36 @@ namespace BoscaliSummer.Features.Support.Presentation
             }, AvButtonStyle.Primary, AvIcon.Satellite))
                 .Help = "Launch " + OrbitalPlatform.Callsign + "'s core directly; every other module docks to it.";
 
+            stationButtons = status.Buttons(
+                new AvControl.Spec("OPEN TASKING", OpenStationConsole, AvButtonStyle.Primary, AvIcon.Map2),
+                new AvControl.Spec("ENGINEERING", OpenEngineering, AvButtonStyle.Default, AvIcon.Settings));
+            stationConsoleButton = stationButtons.Controls[0];
+            stationConsoleButton.Help = "BASTION fire control: Reconnaissance, Kinetic and Electromagnetic branches. Track, charge, vent and commit optional weapon improvements.";
+            stationButtons.Controls[1].Help = "The engineering wall: loadouts, the blueprint, the module rack and every launch.";
             status.Section(AvIcon.Clock, "TASKING WINDOW", "");
             windowCard = status.Add(new BriefCard(status.Content));
 
-            healthSection = status.Section(AvIcon.Activity, "STATION HEALTH", "");
-            meterEnergy = status.Add(new MeterRow(status.Content, "ENERGY"));
-            meterFuel = status.Add(new MeterRow(status.Content, "FUEL"));
-            meterRods = status.Add(new MeterRow(status.Content, "RODS"));
-            meterMass = status.Add(new MeterRow(status.Content, "MASS"));
+            meterEnergy = new AvGauge(status.Content, "ENERGY", AvGaugeShape.Segments, 60f);
+            meterFuel = new AvGauge(status.Content, "FUEL", AvGaugeShape.Segments, 60f);
+            meterRods = new AvGauge(status.Content, "RODS", AvGaugeShape.Segments, 60f);
+            meterMass = new AvGauge(status.Content, "MASS", AvGaugeShape.Segments, 60f);
+            status.Row(meterEnergy, meterFuel, meterRods, meterMass);
             stationTiles = BuildChipRow(status, TileKeys, 3);
 
-            moduleSection = status.Section(AvIcon.Stack2, "MODULES", "");
             roster = status.Add(new RosterGrid(status.Content));
-
-            status.Section(AvIcon.ListDetails, "VOICE LOOP · FLIGHT");
             stationLog = status.Add(new LogTape(status.Content, LoopLines));
+            energyChart = AddTrend(status);
         }
 
         private void SetStationParts(bool station)
         {
             healthSection.SetShown(station);
+            stationButtons.SetShown(station);
             meterEnergy.SetShown(station);
             meterFuel.SetShown(station);
             meterRods.SetShown(station);
             meterMass.SetShown(station);
             foreach (AvChip chip in stationTiles) chip.SetShown(station);
-            moduleSection.SetShown(station);
             roster.SetShown(station);
         }
 
@@ -99,7 +107,8 @@ namespace BoscaliSummer.Features.Support.Presentation
             RefreshStationHero(platform, stats, now);
             RefreshStationHealth(platform, stats, state, now);
             RefreshStationResources(platform, stats);
-            RefreshRoster(platform, stats, now);
+            RefreshRoster(platform, now);
+            PaintTrend(energyChart, energyTrend, "%");
         }
 
         private void PaintWindowCard()
@@ -163,59 +172,80 @@ namespace BoscaliSummer.Features.Support.Presentation
                 down >= 0 ? AvState.Danger : deflected ? AvState.Info : AvState.Ready);
 
             SetChip(stationTiles[4], "SUN", PlatformWords.Kilowatts(stats.NetSunKw), stats.NetSunKw >= 0f ? AvState.Ready : AvState.Caution);
-            SetChip(stationTiles[5], "DARK", PlatformWords.Kilowatts(stats.NetEclipseKw), stats.NetEclipseKw >= 0f ? AvState.Info : AvState.Info);
+            SetChip(stationTiles[5], "DARK", PlatformWords.Kilowatts(stats.NetEclipseKw), stats.NetEclipseKw >= 0f ? AvState.Ready : AvState.Info);
 
             string caption = platform.Brownout ? "✕ BROWNOUT" : down >= 0 ? "✕ MODULE DOWN" : hot != null ? "▲ RUNNING HOT" : "NOMINAL";
             healthSection.SetCaption(caption);
         }
 
+        private static string Pct(float v01, AvState st) => AvStates.Glyph(st) + Mathf.RoundToInt(Mathf.Clamp01(v01) * 100f) + "%";
+
         private void RefreshStationResources(OrbitalPlatform platform, in PlatformStats stats)
         {
             float charge = stats.StorageKj > 0f ? platform.Energy / stats.StorageKj : 0f;
-            meterEnergy.Set(charge, AvNum.Thousands(platform.Energy) + "/" + AvNum.Thousands(stats.StorageKj) + " kJ",
-                platform.Brownout ? "BROWNOUT" : charge < 0.25f ? "LOW" : "NOMINAL",
-                platform.Brownout ? AvState.Danger : charge < 0.25f ? AvState.Caution : AvState.Ready);
+            AvState energy = platform.Brownout ? AvState.Danger : charge < 0.25f ? AvState.Caution : AvState.Ready;
+            meterEnergy.Set(charge, Pct(charge, energy), energy);
+            SetMeterHelp(meterEnergy, "ENERGY: battery charge " + Mathf.RoundToInt(platform.Energy) + " / " +
+                Mathf.RoundToInt(stats.StorageKj) + " kJ." + (platform.Brownout ? " BROWNOUT: demand exceeds supply." : ""));
 
-            if (stats.FuelCapacity <= 0f) meterFuel.Set(0f, "—", "NO TANKS", AvState.Inert);
+            if (stats.FuelCapacity <= 0f)
+            {
+                meterFuel.Set(0f, "—", AvState.Inert);
+                SetMeterHelp(meterFuel, "FUEL: no tank fitted.");
+            }
             else
             {
                 float fuel = platform.Fuel / stats.FuelCapacity;
-                string drag = platform.Orbit.DragFuelPerSecond > 0f ? "DRAG" : platform.Fuel <= 0.5f ? "DRY" : fuel < 0.25f ? "LOW" : "NOMINAL";
-                meterFuel.Set(fuel, AvNum.Thousands(platform.Fuel) + "/" + AvNum.Thousands(stats.FuelCapacity),
-                    platform.Fuel <= 0.5f ? "DRY" : drag,
-                    platform.Fuel <= 0.5f ? AvState.Danger : fuel < 0.25f || platform.Orbit.DragFuelPerSecond > 0f ? AvState.Caution : AvState.Ready);
+                AvState st = platform.Fuel <= 0.5f ? AvState.Danger
+                    : fuel < 0.25f || platform.Orbit.DragFuelPerSecond > 0f ? AvState.Caution : AvState.Ready;
+                meterFuel.Set(fuel, Pct(fuel, st), st);
+                SetMeterHelp(meterFuel, "FUEL: " + platform.Fuel.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) +
+                    " / " + stats.FuelCapacity.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) +
+                    " units." + (platform.Orbit.DragFuelPerSecond > 0f ? " Drag is burning fuel to hold orbit." : ""));
             }
 
-            if (stats.RodCapacity <= 0) meterRods.Set(0f, "—", "NO RODS", AvState.Inert);
-            else
-                meterRods.Set(platform.Rods / (float)stats.RodCapacity, platform.Rods + "/" + stats.RodCapacity,
-                    platform.Rods == 0 ? "EMPTY" : "LOADED", platform.Rods == 0 ? AvState.Caution : AvState.Ready);
+            if (stats.RodCapacity <= 0)
+            {
+                meterRods.Set(0f, "—", AvState.Inert);
+                SetMeterHelp(meterRods, "RODS: no launch rack fitted.");
+            }
+            else meterRods.Set(platform.Rods / (float)stats.RodCapacity, platform.Rods + "/" + stats.RodCapacity,
+                platform.Rods == 0 ? AvState.Caution : AvState.Ready);
+
+            if (stats.RodCapacity > 0)
+                SetMeterHelp(meterRods, "RODS: " + platform.Rods + " of " + stats.RodCapacity + " kinetic rods loaded.");
 
             float mass = stats.Mass / OrbitalPlatform.MassLimit;
-            meterMass.Set(mass, PlatformWords.Tonnes(stats.Mass) + "/" + PlatformWords.Tonnes(OrbitalPlatform.MassLimit),
-                mass >= 0.9f ? "NEAR LIMIT" : "IN LIMIT", mass >= 0.9f ? AvState.Caution : AvState.Info);
+            AvState ms = mass >= 0.9f ? AvState.Caution : AvState.Info;
+            meterMass.Set(mass, Pct(mass, ms), ms);
+            SetMeterHelp(meterMass, "MASS: " + PlatformWords.Tonnes(stats.Mass) + " of " + PlatformWords.Tonnes(OrbitalPlatform.MassLimit) + " limit.");
         }
 
-        private void RefreshRoster(OrbitalPlatform platform, in PlatformStats stats, double now)
+        private static void SetMeterHelp(AvGauge gauge, string text)
         {
-            int n = 0;
-            for (int i = 0; i < OrbitalPlatform.CellCount && n < RosterGrid.MaxCells; i++)
+            if (gauge != null && gauge.Help != text) gauge.Help = text;
+        }
+
+        /// <summary>The fitted modules by name and state, one hover tip each: what the module does.</summary>
+        private void RefreshRoster(OrbitalPlatform platform, double now)
+        {
+            int listed = 0;
+            for (int i = 0; i < OrbitalPlatform.CellCount && listed < RosterGrid.MaxCells; i++)
             {
                 ModuleKind kind = platform.Cell(i);
-                if (kind == ModuleKind.None) continue;
-                ModuleInfo info = PlatformModules.Info(kind);
-                bool online = platform.IsOnline(i, now);
-                bool hot = online && platform.RunsHot(kind, now);
-                string word = !online ? "DOWN " + AvNum.Fixed(platform.OfflineRemaining(i, now), 0) + "S" : hot ? "HOT" : "ONLINE";
-                roster.Set(n++, info.Code, info.Name, word, !online ? AvState.Danger : hot ? AvState.Caution : AvState.Ready);
+                bool docking = kind == ModuleKind.None && platform.Pending != ModuleKind.None && platform.PendingCell == i;
+                if (kind == ModuleKind.None && !docking) continue;
+                ModuleInfo info = PlatformModules.Info(docking ? platform.Pending : kind);
+                bool online = docking || platform.IsOnline(i, now);
+                bool hot = online && !docking && platform.RunsHot(kind, now);
+                AvState tone = docking ? AvState.Info : !online ? AvState.Danger : hot ? AvState.Caution : AvState.Ready;
+                roster.Set(listed, info.Code, info.Name, docking ? "DOCKING" : !online ? "DOWN" : hot ? "HOT" : "ONLINE", tone);
+                roster.SetHelp(listed, info.Name + " — " + info.Summary +
+                    (docking ? " Docking in " + PlatformWords.Clock(platform.DockAt - now) + "."
+                    : !online ? " Offline: check power and cooling." : hot ? " Running hot: add a radiator beside it." : ""));
+                listed++;
             }
-            if (platform.Pending != ModuleKind.None && n < RosterGrid.MaxCells)
-            {
-                ModuleInfo info = PlatformModules.Info(platform.Pending);
-                roster.Set(n++, info.Code, info.Name, "DOCK " + PlatformWords.Clock(platform.DockAt - now), AvState.Info);
-            }
-            roster.SetCount(n);
-            moduleSection.SetCaption(stats.Modules + "/" + OrbitalPlatform.CellCount + " FITTED · " + stats.Online + " ONLINE");
+            roster.SetCount(listed);
         }
     }
 }

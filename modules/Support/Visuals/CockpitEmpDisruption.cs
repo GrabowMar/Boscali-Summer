@@ -4,7 +4,7 @@ using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// Delivers the full cinematic cockpit electronic meltdown for aircraft inside or near

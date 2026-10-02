@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// One procedurally drawn icon for Boscali's own entries in the native radial wheel, in

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
     /// Simulated ILS: localizer / glideslope beam ±1, plus the words the HUD prints so

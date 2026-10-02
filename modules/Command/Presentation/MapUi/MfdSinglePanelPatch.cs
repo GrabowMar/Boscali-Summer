@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Keeps exactly one MFD panel on screen at a time.
@@ -16,7 +16,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     ///
     /// <para>Postfixing the press handlers rather than prefixing them means vanilla has
     /// already decided what to open; this only closes what should no longer show. Registered
-    /// in <c>CommandFeature.PatchTypes</c> — an unlisted patch class is skipped in
+    /// in <c>CommandModule.PatchTypes</c> — an unlisted patch class is skipped in
     /// total silence.</para>
     /// </summary>
     [HarmonyPatch]

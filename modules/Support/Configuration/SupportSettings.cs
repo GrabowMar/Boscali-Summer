@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Support.Configuration
+namespace BoscaliSummer.Modules.Support.Configuration
 {
     internal sealed class SupportSettings
     {

@@ -1,11 +1,11 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Configuration;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Runtime.Actions;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Support.Configuration;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Runtime.Actions;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// The one place an action is declared. Adding a support action is a row here plus one
@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Recon, "RADAR SCAN",
-                "Station radar images a scene; stationary ground contacts are revealed.",
+                "Core survey radar reveals stationary ground contacts. An imager doubles the scene; fresh recon assists fire-control tracking.",
                 SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
 
             actions.Add(new SupportActionDefinition(
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.MtiSweep, "MTI SWEEP",
-                "Station radar tracks moving ground contacts in the imaged scene; stationary targets blend into the ground return.",
+                "Core radar tracks moving ground contacts; an imager doubles the scene. Stationary targets blend into the ground return.",
                 SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction()));
 
             if (fortifications != null)
@@ -45,7 +45,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Artillery, "ROD FROM GOD",
-                "One kinetic rod per online magazine, up to loaded ammunition.",
+                "One rod per online magazine, bounded by ammunition. Gyros halve scatter; a banked STRIKE package tightens it up to 40% further.",
                 SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction()));
 
             actions.Add(new SupportActionDefinition(
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
-                "High-altitude airburst and 30 s radar blackout. Extra station batteries widen the pulse; hostile units only.",
+                "30 s hostile radar blackout. Batteries widen the pulse; a banked SCREEN package adds up to 25% radius and duration.",
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(

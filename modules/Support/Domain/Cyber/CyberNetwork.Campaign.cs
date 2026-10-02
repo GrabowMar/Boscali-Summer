@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Cyber
+namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>Wire-stable threat kind on the incident board.</summary>
     internal enum IncidentKind : byte

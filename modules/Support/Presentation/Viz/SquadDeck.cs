@@ -1,10 +1,9 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>What one squad card shows; every string is decided by the panel from the detachment model.</summary>
     internal struct SquadCardData

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Pure response curves driving the canopy droplet/flow shader uniforms.

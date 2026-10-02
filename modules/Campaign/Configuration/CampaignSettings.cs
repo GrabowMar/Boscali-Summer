@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Campaign.Configuration
+namespace BoscaliSummer.Modules.Campaign.Configuration
 {
     /// <summary>
     /// The campaign mission ships with the mod; this gate decides whether it is written into

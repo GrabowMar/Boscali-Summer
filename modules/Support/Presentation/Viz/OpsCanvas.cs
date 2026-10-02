@@ -1,12 +1,11 @@
-using System;
 using NOAvionics;
-using BoscaliSummer.Features.Support.Presentation.Window;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Support.Presentation.Window;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// Colours for the OPS hero parts, always read from the live style sheet roles (never a literal),

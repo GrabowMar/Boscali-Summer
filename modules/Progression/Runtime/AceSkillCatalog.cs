@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Progression.Runtime
+namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>One shared combat skill. Wing Command owns the effects and gates them per
     /// tier; SQD presents the same names and badges for player, AI and enemy aces.</summary>

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Window
+namespace BoscaliSummer.Modules.Support.Presentation.Window
 {
     /// <summary>
     /// Procedural sprites for the OPS window and its rooms. Created once, cached, never written to

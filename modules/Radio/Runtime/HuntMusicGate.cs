@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     // A manual transport action wins until the current hunt has ended. Polling an
     // active hunt must never restart music that the listener deliberately stopped.

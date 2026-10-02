@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.FireAndDestruction.Domain
+namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {
     /// <summary>
     /// Pure escalation maths for visible building hits: breach-decal sizing, wisp stages

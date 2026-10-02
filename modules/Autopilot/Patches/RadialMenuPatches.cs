@@ -1,8 +1,8 @@
 using System;
-using BoscaliSummer.Features.Autopilot.Runtime;
+using BoscaliSummer.Modules.Autopilot.Runtime;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Autopilot.Patches
+namespace BoscaliSummer.Modules.Autopilot.Patches
 {
     /// <summary>Keeps the Boscali Summer root slice present across native wheel rebuilds and
     /// injects it on open only when the wheel is the stock root, never a foreign submenu.</summary>

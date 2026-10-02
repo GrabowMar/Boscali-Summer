@@ -1,6 +1,6 @@
-﻿using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Hud.Domain
+namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// The transient half of the common HUD element: a fixed ring of short-lived lines, newest

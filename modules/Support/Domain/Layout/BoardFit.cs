@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     /// <summary>A north-up map frame. World +Z is screen −Y. One metres-per-pixel keeps the aspect.</summary>
     internal struct BoardFrame

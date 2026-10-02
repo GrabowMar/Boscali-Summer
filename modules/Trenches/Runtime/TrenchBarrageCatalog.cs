@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// The shell a harassing mission fires: the smallest-yield conventional vanilla

@@ -1,6 +1,6 @@
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.FireAndDestruction.Domain
+namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {
     /// <summary>
     /// Delayed magazine pulses after a ground-vehicle wreck. Generation 0 is the death

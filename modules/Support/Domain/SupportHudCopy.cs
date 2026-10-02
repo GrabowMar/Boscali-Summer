@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Support.Domain
+namespace BoscaliSummer.Modules.Support.Domain
 {
     /// <summary>
     /// The support-readiness widget's copy and tone, pure so the test project links it directly.

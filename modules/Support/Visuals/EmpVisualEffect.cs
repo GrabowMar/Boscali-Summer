@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Runtime;
+using BoscaliSummer.Modules.Support.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     // Nuclear-pulse phases: a prompt coherent E1 spike, an intermediate lightning-like E2,
     // and a slow geomagnetic E3 heave that holds for the jam window. Gameplay jamming

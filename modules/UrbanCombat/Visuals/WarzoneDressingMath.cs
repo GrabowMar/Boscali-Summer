@@ -1,5 +1,5 @@
 using System;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Garrisons
 {

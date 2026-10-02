@@ -1,22 +1,22 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// "OPS" — the multi-domain operations MFD: SPACE, CYBER and SPEC OPS, on kit v2's
@@ -36,9 +36,7 @@ namespace BoscaliSummer.Features.Support.Presentation
         private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.15f;
 
-        private const int ChipCount = 3;
         private const int DomainCount = 3;
-        private const float SectionGap = 16f;
 
         private const int TabSpace = (int)OpsDomain.Space;
         private const int TabCyber = (int)OpsDomain.Cyber;
@@ -52,7 +50,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         private GameObject screenRoot;
         private AvConsole shell;
 
-        private AvChip chipNet, chipLink, chipMap;
         private AvMetric allocationMetric, orbitMetric, stationMetric, reserveMetric;
 
         /// <summary>Support-action rows on every page, refreshed by the page that owns them.</summary>
@@ -82,10 +79,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             screenRoot = null;
             screen = null;
             shell = null;
-            chipNet = chipLink = chipMap = null;
+            ResetTrends();
             allocationMetric = orbitMetric = stationMetric = reserveMetric = null;
             actionRows.Clear();
-
+            ResetReadyStrips();
+            ResetOpsWindow();
             ResetSpacePage();
             ResetCyberPage();
             ResetSpecOpsPage();
@@ -218,11 +216,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             shell = AvConsole.Build(rootRect, "OPS", "OPERATIONS", DomainCount, Width, height);
             shell.PageChanged += _ => nextRefresh = 0f;
 
-            AvChip[] chips = shell.Chips(ChipCount);
-            chipNet = chips[0];
-            chipLink = chips[1];
-            chipMap = chips[2];
-
             AvMetric[] metrics = shell.Metrics("ALLOCATION", "ORBIT", "CYBER", "SPEC OPS");
             allocationMetric = metrics[0];
             orbitMetric = metrics[1];
@@ -296,7 +289,6 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             if (action.IsCyber) return TabCyber;
             if (SupportManager.OrbitalAbility(action.Id).HasValue) return TabSpace;
-            if (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) return TabSpace;
             if (action.Id == SupportActionId.FlareMissile) return TabCyber;
             return TabSpecOps;
         }
@@ -319,8 +311,6 @@ namespace BoscaliSummer.Features.Support.Presentation
                 case SupportActionId.ElintSweep: return AvIcon.Antenna;
                 case SupportActionId.Artillery: return AvIcon.ArrowDown;
                 case SupportActionId.Emp: return AvIcon.Bolt;
-                case SupportActionId.Prsm: return AvIcon.CurrentLocation;
-                case SupportActionId.Cruise: return AvIcon.Wind;
                 case SupportActionId.FlareMissile: return AvIcon.Flame;
                 case SupportActionId.Fortify: return AvIcon.Shield;
                 case SupportActionId.HackPing: return AvIcon.WaveSine;
@@ -381,6 +371,9 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void RefreshActionRows(int tab, bool bypass)
         {
+            bool strip = tab == TabSpecOps;   // SPACE and CYBER fill their strips in their own refresh
+            if (strip) ReadyBegin(tab);
+            int readyIndex = 0;
             for (int i = 0; i < actionRows.Count; i++)
             {
                 ActionRow row = actionRows[i];
@@ -406,7 +399,9 @@ namespace BoscaliSummer.Features.Support.Presentation
                 SetTileHelp(row.View, row.Trailing, action.Name + " — " +
                     (cyber ? AvNum.Thousands(Mathf.Round(intel)) + " INTEL. " : cost > 0f ? AvNum.Thousands(Mathf.Round(cost)) + " ALLOC. " : "") +
                     action.Description + " " + facts.Readiness + ".");
+                if (strip) ReadyCell(tab, readyIndex++, facts);
             }
+            if (strip) ReadyEnd(tab);
         }
 
         // ---- Refresh ---------------------------------------------------------------------
@@ -418,8 +413,9 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (shell == null || allocationMetric == null) return;
             bool bypass = support.BypassRequirements;
 
-            RefreshChips(bypass);
+            opsSnapshotSeen |= support.OpsStateFresh;
             RefreshMetrics(bypass);
+            SampleTrends();
 
             int page = shell.CurrentPage;
             switch (page)
@@ -437,22 +433,6 @@ namespace BoscaliSummer.Features.Support.Presentation
             string status = alert ?? (armed ? support.Status : null) ?? support.Status ??
                              OpsDomains.Mission((OpsDomain)Mathf.Max(0, page));
             shell.Footer.Set(status, alert != null ? AvState.Danger : armed ? AvState.Caution : AvState.Inert);
-        }
-
-        private void RefreshChips(bool bypass)
-        {
-            bool pending = support.RequestPending || support.CommandPending;
-            bool armed = support.ArmedAction.HasValue || support.LocalPickArmed;
-            float cooldown = support.LocalCooldownRemaining;
-            bool fresh = support.OpsStateFresh;
-            opsSnapshotSeen |= fresh;
-
-            chipNet.Set(pending ? "PENDING" : cooldown > 0.5f ? "NET COOL" : bypass ? "BYPASS" : "NET READY",
-                        pending || cooldown > 0.5f ? AvState.Caution : bypass ? AvState.Caution : AvState.Ready);
-            chipLink.Set(fresh ? "LINKED" : opsSnapshotSeen ? "LINK STALE" : "SYNCING",
-                        fresh ? AvState.Ready : opsSnapshotSeen ? AvState.Danger : AvState.Info);
-            chipMap.Set(armed ? "MAP ARMED" : WingLink.WingMapGestureArmed ? "WING MAP" : "MAP IDLE",
-                        armed ? AvState.Caution : WingLink.WingMapGestureArmed ? AvState.Info : AvState.Inert);
         }
 
         private void RefreshMetrics(bool bypass)

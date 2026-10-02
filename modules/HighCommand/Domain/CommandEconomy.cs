@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>
     /// Pure pay-out rules: what a living staff earns its faction and what killing one of its

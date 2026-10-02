@@ -1,18 +1,17 @@
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Presentation.Board;
-using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Presentation.Window;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Presentation.Board;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Presentation.Window;
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Views
+namespace BoscaliSummer.Modules.Support.Presentation.Views
 {
     /// <summary>
     /// The compact SPEC OPS theatre on OPS › SPEC OPS › STATUS: objectives by relation, owned airbases,
-    /// deployed teams as lettered plates on their objectives and held posts' reach, fitted with the
+    /// deployed teams as lettered plates on their objectives and charged posts' sectors, fitted with the
     /// same percentile rule as the desk so a far home base cannot shrink the cluster.
     /// </summary>
     internal sealed class MiniTheatre
@@ -22,11 +21,11 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private const int Homes = 8;
 
         private BoardSurface board;
+        private BoardSectorOverlay sectors;
         private readonly Image[] marks = new Image[Objectives];
         private readonly Image[] homes = new Image[Homes];
         private readonly Image[] plates = new Image[Teams];
         private readonly TMP_Text[] letters = new TMP_Text[Teams];
-        private readonly Image[] reach = new Image[Teams];
         private readonly float[] fitX = new float[Objectives + Homes];
         private readonly float[] fitZ = new float[Objectives + Homes];
         private readonly float[] homeX = new float[Homes];
@@ -42,13 +41,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             contours.type = Image.Type.Tiled;
             contours.raycastTarget = false;
             Chrome.Outline(parent, view, AvTheme.Hairline);
+            RoomPaint.Brackets(parent, view, 8f, AvTheme.RailInfo);
             board = new BoardSurface(parent, view, view, false);
-            for (int i = 0; i < Teams; i++)
-            {
-                reach[i] = Chrome.Panel(parent, new Rect(0f, 0f, 10f, 10f), AvTheme.RailReady, OpsSprites.Ring);
-                reach[i].type = Image.Type.Simple;
-                reach[i].enabled = false;
-            }
+            sectors = new BoardSectorOverlay(parent, board, AvTheme.Hairline, AvTheme.RailReady, AvTheme.RailInfo);
             for (int i = 0; i < Homes; i++)
             {
                 homes[i] = Chrome.Panel(parent, new Rect(0f, 0f, 7f, 7f), AvTheme.RailInfo);
@@ -62,8 +57,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             }
             for (int i = 0; i < Teams; i++)
             {
-                plates[i] = Chrome.Panel(parent, new Rect(0f, 0f, 13f, 12f), AvTheme.RailInfo, AvSprites.Control);
-                letters[i] = OpsText.Plot(plates[i].rectTransform, FieldWords.Callsign(i).Substring(0, 1), new Rect(0f, 0f, 13f, 12f),
+                plates[i] = Chrome.Panel(parent, new Rect(0f, 0f, 16f, 16f), AvTheme.RailInfo, AvSprites.Control);
+                letters[i] = OpsText.Plot(plates[i].rectTransform, FieldWords.Callsign(i).Substring(0, 1), new Rect(0f, 0f, 16f, 16f),
                     AvTheme.TextInk, AvTextRole.Micro, TextAlignmentOptions.Center);
                 Chrome.Stretch(letters[i].rectTransform);
                 plates[i].gameObject.SetActive(false);
@@ -76,9 +71,9 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             Image bottomOsd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - view.height + 17f,
                 view.width - 2f, 16f), AvTheme.SurfaceInert.WithAlpha(0.88f));
             bottomOsd.raycastTarget = false;
-            OpsText.Plot(parent, "FIELD PLOT / LIVE CONTACTS", new Rect(view.x + 8f, view.y - 1f,
+            OpsText.Plot(parent, "// FIELD PLOT", new Rect(view.x + 8f, view.y - 1f,
                 view.width - 16f, 16f), AvTheme.RailInfo, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-            OpsText.Plot(parent, "TEAM   /   OBJECTIVE   /   POST REACH", new Rect(view.x + 8f,
+            OpsText.Plot(parent, "TEAM · REAL SITE · SECTOR", new Rect(view.x + 8f,
                 view.y - view.height + 17f, view.width - 16f, 16f), AvTheme.Dim, AvTextRole.Micro,
                 TextAlignmentOptions.MidlineLeft);
         }
@@ -108,6 +103,21 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 fitZ[points++] = homeZ[i];
             }
             board.Fit(fitX, fitZ, points, 16000f, points >= 8 ? 10f : 0f, 12f);
+            sectors.Begin();
+            for (int i = 0; i < count; i++)
+            {
+                FieldObjective o = detachment.Objective(i);
+                sectors.Add(o.X, o.Z, detachment.ControlsSector(o.X, o.Z, now));
+            }
+            for (int i = 0; i < homeCount; i++)
+                sectors.Add(homeX[i], homeZ[i], detachment != null && detachment.ControlsSector(homeX[i], homeZ[i], now));
+            if (detachment != null && detachment.Enabled)
+                for (int t = 0; t < Teams; t++)
+                {
+                    FieldTeam team = detachment.Team(t);
+                    if (team.Deployed) sectors.Add(team.X, team.Z, detachment.ControlsSector(team.X, team.Z, now));
+                }
+            sectors.Paint();
             string text = count > 0 ? "" : emptyText ?? "";
             if (empty.text != text) empty.text = text;
             for (int i = 0; i < Homes; i++)
@@ -134,17 +144,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 FieldTeam team = detachment != null && detachment.Enabled ? detachment.Team(t) : default;
                 bool deployed = count > 0 && team.Deployed;
                 if (plates[t].gameObject.activeSelf != deployed) plates[t].gameObject.SetActive(deployed);
-                bool holding = deployed && team.State == TeamState.Holding;
-                reach[t].enabled = holding;
                 if (!deployed) continue;
                 Vector2 p = board.Project(team.X, team.Z);
-                Lines.Centre(plates[t].rectTransform, p.x + 9f + t * 2f, p.y + 9f, 13f, 12f);
+                Lines.Centre(plates[t].rectTransform, p.x + 9f + t * 2f, p.y + 9f, 16f, 16f);
                 plates[t].color = FieldTones.State(team.State);
-                if (holding)
-                {
-                    Lines.Centre(reach[t].rectTransform, p.x, p.y, board.Pixels(FieldCatalog.PostReach(team.Mission)) * 2f);
-                    reach[t].color = FieldTones.Post(team.Mission).WithAlpha(0.6f);
-                }
             }
         }
     }

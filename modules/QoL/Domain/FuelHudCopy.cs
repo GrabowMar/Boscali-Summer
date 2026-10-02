@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.QoL.Domain
+namespace BoscaliSummer.Modules.QoL.Domain
 {
     /// <summary>
     /// The fuel/divert widget's copy and tone, pure so the test project links it directly. It

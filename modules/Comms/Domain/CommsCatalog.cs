@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Comms.Domain
+namespace BoscaliSummer.Modules.Comms.Domain
 {
     /// <summary>How loud a comms item is. Decides its ink and its HUD tone; the words say the same.</summary>
     internal enum CommsTone : byte

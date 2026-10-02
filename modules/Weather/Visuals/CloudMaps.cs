@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Domain;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>The cloud renderer's weather maps for one settled state: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
@@ -50,17 +50,22 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static void Fill(WeatherField snapshot, float half, int size, byte[] pixels, byte[] profiles,
             ref float bottom, ref float top)
         {
+            CloudGenus genus = CloudShape.Resolve(snapshot.Params);
+            float deckDepth = Math.Max(genus.PuffDepth, snapshot.Params.LayerDepth) + genus.BaseWobble * 0.5f;
             for (int z = 0; z < size; z++)
             for (int x = 0; x < size; x++)
             {
                 float worldX = ((x + 0.5f) / size * 2f - 1f) * half;
                 float worldZ = ((z + 0.5f) / size * 2f - 1f) * half;
                 WeatherPoint p = snapshot.Sample(worldX, worldZ);
+                // The deck's geometry has its own thickness, independent of cell coverage.
+                // Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
+                float visualTop = Math.Max(p.CloudTop, p.CloudBase + deckDepth);
                 int i = (z * size + x) * 4;
                 pixels[i] = Byte(p.BackgroundCover);
                 pixels[i + 1] = Byte(p.FrontCover);
                 pixels[i + 2] = Byte(p.CellShape);
-                pixels[i + 3] = Byte(p.CloudTop / VolumeTop);
+                pixels[i + 3] = Byte(visualTop / VolumeTop);
                 profiles[i] = Byte(p.FrontBase / VolumeTop);
                 profiles[i + 1] = Byte(p.FrontTop / VolumeTop);
                 profiles[i + 2] = Byte(p.CloudBase / VolumeTop);
@@ -68,7 +73,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 if (p.Cover > 0.02f)
                 {
                     bottom = Math.Min(bottom, p.FrontCover > 0.02f ? Math.Min(p.CloudBase, p.FrontBase) : p.CloudBase);
-                    top = Math.Max(top, Math.Max(p.CloudTop, p.FrontTop));
+                    top = Math.Max(top, Math.Max(visualTop, p.FrontTop));
                 }
             }
         }
@@ -91,9 +96,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
                     int i = (zz * NearSize + xx) * 4;
                     byte c = Math.Max(near[i], Math.Max(near[i + 1], near[i + 2]));
                     if (c > cover) cover = c;
-                    // The shader's top is at least base + 1600 m, a front's crown base + 600 m.
-                    int crown = Math.Max(Math.Max(near[i + 3], profiles[i + 1]),
-                        Math.Max(profiles[i + 2] + 26, profiles[i] + 10));
+                    // Stored tops already include the genus. A few hundred metres of slack covers
+                    // a puff dome above that top; the old base+1600 floor made every deck a slab.
+                    int crown = Math.Max(near[i + 3], profiles[i + 1]) + 6;
                     top = (byte)Math.Max(top, Math.Min(255, crown));
                     bottom = Math.Min(bottom, Math.Min(profiles[i], profiles[i + 2]));
                 }

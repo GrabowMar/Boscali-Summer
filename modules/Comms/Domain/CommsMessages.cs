@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Comms.Domain
+namespace BoscaliSummer.Modules.Comms.Domain
 {
     /// <summary>What a peer asks the host to do. Values are wire bytes; append only.</summary>
     internal enum CommsOp : byte

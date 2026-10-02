@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     /// <summary>WCAG relative luminance and contrast, on straight sRGB channels.</summary>
     internal static class Contrast

@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Reads the theatre out of a game message line so the event stream is not a wall of
@@ -6,9 +6,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     /// game owns the wording, this only paints what is already there, and an unrecognised
     /// line stays neutral rather than being forced into a meaning it may not have.
     ///
-    /// Pure: no Unity, no theme, no per-frame allocation beyond the painted string the
-    /// panel already built. Colours are the literal status rails, not the live accent, so
-    /// a mission theme cannot make "destroyed" and "captured" the same hue.
+    /// Pure: no Unity or theme dependency. Body text stays warm white; colours apply only
+    /// to the report category, so native rich-text spans cannot defeat contrast.
     /// </summary>
     internal static class MfdLogTone
     {
@@ -20,10 +19,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Danger,
         }
 
-        public const string NeutralHex = "8FA8B8";
-        public const string ReadyHex = "00FFA3";
-        public const string CautionHex = "FFB300";
-        public const string DangerHex = "FF2A55";
+        public const string NeutralHex = "F3F0E8";
+        public const string ReadyHex = "8ED9BE";
+        public const string CautionHex = "F5BA56";
+        public const string DangerHex = "F39A96";
 
         private static readonly string[] DangerWords =
         {
@@ -64,11 +63,54 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
         }
 
-        /// <summary>Wrap one line in its tone colour. TMP rich text, so nesting is safe.</summary>
+        public static string Label(Kind kind)
+        {
+            switch (kind)
+            {
+                case Kind.Ready: return "UPDATE";
+                case Kind.Caution: return "CONTACT";
+                case Kind.Danger: return "LOSS";
+                default: return "REPORT";
+            }
+        }
+
+        /// <summary>Native faction colours are authored for a different background. Strip presentation
+        /// tags so they cannot override the readable mirrored body or fade old reports to near-black.</summary>
+        public static string Plain(string line)
+        {
+            if (string.IsNullOrEmpty(line)) return "";
+            var clean = new System.Text.StringBuilder(line.Length);
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (line[i] == '<')
+                {
+                    int end = line.IndexOf('>', i + 1);
+                    if (end >= 0)
+                    {
+                        string tag = line.Substring(i + 1, end - i - 1).Trim();
+                        string name = tag.TrimStart('/').Split('=', ' ')[0];
+                        bool presentation = name.StartsWith("#", System.StringComparison.Ordinal) ||
+                            name.Equals("color", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("alpha", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("mark", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("size", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("font", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("material", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("b", System.StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("i", System.StringComparison.OrdinalIgnoreCase);
+                        if (presentation) { i = end; continue; }
+                    }
+                }
+                clean.Append(line[i]);
+            }
+            return clean.ToString();
+        }
+
+        /// <summary>Keep the report itself warm white; only its separate category marker carries tone.</summary>
         public static string Paint(string line)
         {
             if (string.IsNullOrEmpty(line)) return "";
-            return "<color=#" + Hex(Classify(line)) + ">" + line + "</color>";
+            return "<color=#" + NeutralHex + ">" + Plain(line) + "</color>";
         }
 
         private static bool Contains(string line, string[] words)

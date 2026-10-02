@@ -1,8 +1,8 @@
-using BoscaliSummer.Features.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Domain;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     /// <summary>
     /// Line-art primitives for the comms graphics: quads for segments, polylines with a dark
@@ -17,9 +17,9 @@ namespace BoscaliSummer.Features.Comms.Presentation
         {
             switch (tone)
             {
-                case CommsTone.Danger: return new Color32(255, 86, 72, alpha);
-                case CommsTone.Caution: return new Color32(255, 190, 64, alpha);
-                case CommsTone.Friendly: return new Color32(84, 196, 255, alpha);
+                case CommsTone.Danger: return new Color32(255, 74, 61, alpha);
+                case CommsTone.Caution: return new Color32(255, 176, 46, alpha);
+                case CommsTone.Friendly: return new Color32(88, 200, 255, alpha);
                 case CommsTone.Fun: return new Color32(255, 128, 214, alpha);
                 default: return new Color32(214, 236, 246, alpha);
             }

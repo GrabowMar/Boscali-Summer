@@ -1,9 +1,9 @@
 using System;
-using BoscaliSummer.Features.Autopilot.Runtime;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Modules.Autopilot.Runtime;
+using BoscaliSummer.Core.Diagnostics;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Autopilot.Patches
+namespace BoscaliSummer.Modules.Autopilot.Patches
 {
     /// <summary>The native tiltwing autopilot calls Aircraft.SetFlightAssist every fixed step, and
     /// the game reports every call as a status message. While the landing autopilot drives the

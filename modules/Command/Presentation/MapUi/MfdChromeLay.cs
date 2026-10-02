@@ -1,9 +1,8 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Placement helper for the Theater Wire (<see cref="MfdNewsTicker"/>, <see cref="MfdLogPanel"/>)

@@ -1,9 +1,8 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// SPACE's hero: a planet limb and an orbit track with the station drawn as its 5 x 3 truss

@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Progression.Configuration
+namespace BoscaliSummer.Modules.Progression.Configuration
 {
     internal sealed class ProgressionSettings
     {

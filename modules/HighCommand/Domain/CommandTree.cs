@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>
     /// One faction's fixed staff structure. Generation is deterministic from the faction

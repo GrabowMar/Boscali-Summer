@@ -1,11 +1,11 @@
-using BoscaliSummer.Features.Support.Domain.Layout;
-using BoscaliSummer.Features.Support.Presentation.Window;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Domain.Layout;
+using BoscaliSummer.Modules.Support.Presentation.Window;
+using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>A row of pips (the room's glyph): filled, ghosted (projected) and empty, with a caption.</summary>
     internal sealed class PipTrack

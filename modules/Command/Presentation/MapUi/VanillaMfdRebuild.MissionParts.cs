@@ -1,11 +1,10 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static partial class VanillaMfdRebuild
     {
@@ -222,7 +221,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
                 frame.Bracket = 8f;
                 value = AvText.Make(Rect, "Value", AvTextRole.Display, "0/0", TextAlignmentOptions.MidlineLeft);
-                caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "OBJECTIVES COMPLETE", TextAlignmentOptions.MidlineLeft);
+                caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "DONE", TextAlignmentOptions.MidlineLeft);
                 sideKey = AvText.Make(Rect, "SideKey", AvTextRole.Micro, "NEAREST FIX", TextAlignmentOptions.MidlineRight);
                 sideValue = AvText.Make(Rect, "SideValue", AvTextRole.DataStrong, "—", TextAlignmentOptions.MidlineRight);
                 segments = MakeBar(Rect, "Segments", AvGaugeShape.Segments);
@@ -543,7 +542,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// </summary>
         private sealed class ChecklistRow : AvPart
         {
-            private const float PadX = 12f, PadY = 7f, IconW = 26f, ValueW = 92f, BarH = 3f;
+            private const float PadX = 12f, PadY = 6f, IconW = 26f, ValueW = 92f, BarH = 5f;
             private readonly AvFrame frame;
             private readonly Image rail;
             private readonly TMP_Text icon, title, sub, value;
@@ -589,8 +588,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 float tw = TextWidth(width);
                 float h = PadY + AvText.Height(title, tw) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, tw) : 0f) + PadY;
-                if (hasBar) h += BarH + 4f;
-                return Mathf.Max(AvGridTokens.Row + 8f, h);
+                if (hasBar) h += BarH + 2f;
+                return Mathf.Max(AvGridTokens.Row + 4f, h);
             }
 
             public override void Place(AvSlot s)
@@ -649,7 +648,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     ticker?.Register(items[i]);
                 }
                 prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-                next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
+                next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
                 range = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
             }
 

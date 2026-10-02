@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>
     /// Two-body circular-orbit and spherical-Earth viewing geometry. Pure double-precision

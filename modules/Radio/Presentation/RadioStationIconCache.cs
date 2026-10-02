@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Presentation
+namespace BoscaliSummer.Modules.Radio.Presentation
 {
     internal static class RadioStationIconCache
     {

@@ -1,0 +1,127 @@
+using System;
+using System.Collections.Generic;
+using BepInEx.Logging;
+using BoscaliSummer.Core.Config;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using UnityEngine;
+
+namespace BoscaliSummer.Core.Modules
+{
+    internal sealed class ModuleContext
+    {
+        private readonly string moduleId;
+        private readonly GameObject runtimeRoot;
+        private readonly SceneLifecycle sceneLifecycle;
+        private readonly List<Component> installedComponents = new List<Component>();
+        private readonly List<Type> registeredServices = new List<Type>();
+        private readonly List<IHostSettingsView> registeredHostSettings = new List<IHostSettingsView>();
+        private readonly List<ClientSettingToggle> registeredClientSettings = new List<ClientSettingToggle>();
+        private readonly List<IClientEffect> registeredEffects = new List<IClientEffect>();
+
+        public ManualLogSource Logger { get; }
+        public ModConfiguration Settings { get; }
+        public ServiceRegistry Services { get; }
+
+        /// <summary>Where this module publishes host-authoritative settings for SET SERVER.</summary>
+        public HostSettingsBoard HostSettings { get; }
+        public ClientSettingsBoard ClientSettings { get; }
+
+        internal ModuleContext(
+            string moduleId,
+            GameObject runtimeRoot,
+            SceneLifecycle sceneLifecycle,
+            ManualLogSource logger,
+            ModConfiguration settings,
+            ServiceRegistry services,
+            HostSettingsBoard hostSettings, ClientSettingsBoard clientSettings)
+        {
+            this.moduleId = moduleId;
+            this.runtimeRoot = runtimeRoot;
+            this.sceneLifecycle = sceneLifecycle;
+            Logger = logger;
+            Settings = settings;
+            Services = services;
+            HostSettings = hostSettings;
+            ClientSettings = clientSettings;
+        }
+
+        public T AddComponent<T>() where T : MonoBehaviour
+        {
+            T component = runtimeRoot.AddComponent<T>();
+            installedComponents.Add(component);
+            return component;
+        }
+
+        public T AddSceneService<T>(int resetOrder) where T : MonoBehaviour, ISceneService
+        {
+            T component = AddComponent<T>();
+            sceneLifecycle.Register(moduleId, component, resetOrder);
+            return component;
+        }
+
+        public void AddService<T>(T service) where T : class
+        {
+            Services.Add(service);
+            registeredServices.Add(typeof(T));
+        }
+
+        /// <summary>Publish this module's host-authoritative settings to the SET SERVER page.</summary>
+        public void AddHostSettings(IHostSettingsView view)
+        {
+            if (view == null) return;
+            HostSettings.Add(view);
+            registeredHostSettings.Add(view);
+        }
+
+        /// <summary>Publish an immediately applied client-local toggle to SET.</summary>
+        public void AddClientSetting(string section, string label, string help,
+            BepInEx.Configuration.ConfigEntry<bool> entry)
+        {
+            if (entry == null) return;
+            registeredClientSettings.Add(ClientSettings.Add(section, label, help, entry));
+        }
+
+        /// <summary>
+        /// Opt a client-local effect into the shared resource/diagnostic bus. A rejected
+        /// registration fails only this module's installation, so the host rolls it back.
+        /// The owning module still creates, ticks and configures the effect.
+        /// </summary>
+        public void AddClientEffect(IClientEffect effect)
+        {
+            if (!FxBus.Register(effect))
+                throw new InvalidOperationException("Client effect registration refused: " +
+                    (effect?.EffectId ?? "<null>"));
+            registeredEffects.Add(effect);
+        }
+
+        internal void Rollback()
+        {
+            sceneLifecycle.Unregister(moduleId);
+            for (int i = registeredEffects.Count - 1; i >= 0; i--)
+            {
+                IClientEffect effect = registeredEffects[i];
+                FxBus.Unregister(effect);
+                try { effect.ReleaseFx(); }
+                catch (Exception error) { Logger.LogWarning("Client effect teardown failed: " + error); }
+            }
+            registeredEffects.Clear();
+            for (int i = registeredHostSettings.Count - 1; i >= 0; i--)
+                HostSettings.Remove(registeredHostSettings[i]);
+            registeredHostSettings.Clear();
+            for (int i = registeredClientSettings.Count - 1; i >= 0; i--)
+                ClientSettings.Remove(registeredClientSettings[i]);
+            registeredClientSettings.Clear();
+            for (int i = registeredServices.Count - 1; i >= 0; i--)
+                Services.Remove(registeredServices[i]);
+            registeredServices.Clear();
+            for (int i = installedComponents.Count - 1; i >= 0; i--)
+                if (installedComponents[i] != null)
+                    UnityEngine.Object.Destroy(installedComponents[i]);
+            installedComponents.Clear();
+        }
+    }
+}

@@ -1,0 +1,152 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+
+using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Modules.Wing.Presentation;
+using BoscaliSummer.Modules.Wing.Patches;
+using BoscaliSummer.Modules.Wing.Networking;
+using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Util;
+using BoscaliSummer.Core.Storage;
+namespace BoscaliSummer.Modules.Wing.Runtime
+{
+    internal static class PilotPortrait
+    {
+        private static readonly Dictionary<string, Sprite> portraits = new Dictionary<string, Sprite>();
+        private static byte[] layers;
+        private static bool loadAttempted;
+
+        public static Sprite Sprite => For(null);
+
+        /// <summary>Renders a semantic selection. Atlas tile IDs never escape the compositor.</summary>
+        public static Sprite ForSelection(PortraitSelection selection)
+        {
+            selection = PilotPortraitGenerator.Normalize(selection);
+            string key = $"Custom_{(int)selection.Body}_{selection.Face}_{selection.Hair}_{selection.Uniform}_{selection.Backdrop}";
+            if (portraits.TryGetValue(key, out Sprite portrait)) return portrait;
+            if (!LoadLayers()) return null;
+
+            portrait = Create(key, PilotPortraitGenerator.Compose(selection, layers));
+            portraits.Add(key, portrait);
+            return portrait;
+        }
+
+        private static Texture2D previewTexture;
+        private static Sprite previewSprite;
+
+        /// <summary>The studio's preview (R7): one texture drawn over in place, so stepping through looks never grows the cache.</summary>
+        public static Sprite Preview(PortraitSelection selection)
+        {
+            if (!LoadLayers()) return null;
+            byte[] pixels = PilotPortraitGenerator.Compose(PilotPortraitGenerator.Normalize(selection), layers);
+            if (previewTexture == null)
+            {
+                previewTexture = new Texture2D(PilotPortraitGenerator.Width, PilotPortraitGenerator.Height, TextureFormat.RGBA32, mipChain: false)
+                {
+                    name = "WingCommand_Pilot_Preview", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave,
+                };
+                previewSprite = UnityEngine.Sprite.Create(previewTexture, new Rect(0, 0, previewTexture.width, previewTexture.height),
+                    new Vector2(0.5f, 0.5f), 100f);
+                previewSprite.hideFlags = HideFlags.HideAndDontSave;
+            }
+            previewTexture.LoadRawTextureData(pixels);
+            previewTexture.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+            return previewSprite;
+        }
+
+        public static Sprite ForCustom(PortraitBody body, int face, int hair, int uniform, int accessory, int backdrop) =>
+            ForSelection(new PortraitSelection(body, face, hair, uniform, accessory, backdrop));
+
+        public static Sprite For(WingPilot pilot)
+        {
+            if (pilot != null && pilot.HasCustomPortrait)
+                return ForSelection(pilot.PortraitSelection.Value);
+
+            string identity = pilot == null ? "WingCommand" : pilot.Name + "|" + pilot.Callsign;
+            if (portraits.TryGetValue(identity, out Sprite portrait)) return portrait;
+            if (!LoadLayers()) return null;
+
+            portrait = Create(identity, PilotPortraitGenerator.Compose(identity, layers));
+            portraits.Add(identity, portrait);
+            return portrait;
+        }
+
+        private static Sprite Create(string key, byte[] pixels)
+        {
+            var texture = new Texture2D(PilotPortraitGenerator.Width, PilotPortraitGenerator.Height,
+                                        TextureFormat.RGBA32, mipChain: false)
+            {
+                name = "WingCommand_Pilot_" + key,
+                filterMode = FilterMode.Bilinear,
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.HideAndDontSave,
+            };
+            texture.LoadRawTextureData(pixels);
+            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
+            Sprite portrait = UnityEngine.Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
+                                                        new Vector2(0.5f, 0.5f), 100f);
+            portrait.name = texture.name;
+            portrait.hideFlags = HideFlags.HideAndDontSave;
+            return portrait;
+        }
+
+        private static bool LoadLayers()
+        {
+            if (loadAttempted) return layers != null;
+            loadAttempted = true;
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false);
+            try
+            {
+                using (Stream stream = typeof(PilotPortrait).Assembly.GetManifestResourceStream("WingCommand.PilotLayers.png"))
+                using (var bytes = new MemoryStream())
+                {
+                    if (stream == null) throw new InvalidDataException("Embedded portrait layers missing.");
+                    stream.CopyTo(bytes);
+                    if (!ImageConversion.LoadImage(texture, bytes.ToArray(), false) ||
+                        texture.width != PilotPortraitGenerator.AtlasWidth || texture.height != PilotPortraitGenerator.AtlasHeight)
+                        throw new InvalidDataException("Invalid portrait atlas dimensions.");
+                    // LoadImage can change PNG storage to ARGB32; the compositor needs RGBA.
+                    Color32[] pixels = texture.GetPixels32();
+                    layers = new byte[pixels.Length * 4];
+                    for (int i = 0; i < pixels.Length; i++)
+                    {
+                        layers[i * 4] = pixels[i].r;
+                        layers[i * 4 + 1] = pixels[i].g;
+                        layers[i * 4 + 2] = pixels[i].b;
+                        layers[i * 4 + 3] = pixels[i].a;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                WingLog.Logger.LogWarning("[Pilot] Could not load portrait layers: " + e.Message);
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
+            return layers != null;
+        }
+
+        public static void Reset()
+        {
+            foreach (Sprite portrait in portraits.Values)
+            {
+                UnityEngine.Object.Destroy(portrait.texture);
+                UnityEngine.Object.Destroy(portrait);
+            }
+            portraits.Clear();
+            if (previewTexture != null) UnityEngine.Object.Destroy(previewTexture);
+            if (previewSprite != null) UnityEngine.Object.Destroy(previewSprite);
+            previewTexture = null;
+            previewSprite = null;
+            layers = null;
+            loadAttempted = false;
+        }
+    }
+}

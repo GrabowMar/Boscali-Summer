@@ -1,17 +1,17 @@
+using NOAvionics;
 using System;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Events.Configuration;
-using BoscaliSummer.Features.Events.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Events.Configuration;
+using BoscaliSummer.Modules.Events.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// Client-local MFD battlefield dispatch. It sits below the news wire over the map;
@@ -64,6 +64,7 @@ namespace BoscaliSummer.Features.Events.Presentation
         private TMP_Text compactTitle;
         private TMP_Text compactImpact;
         private TMP_Text compactClock;
+        private AvHazardGraphic onAir;
 
         private int shownSerial;
         private int lastOrderSecond = -1;
@@ -97,6 +98,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             plate = compactPlate = null;
             stamp = target = eyebrow = title = scope = impact = flavor = nextOrder = clock = null;
             compactTitle = compactImpact = compactClock = null;
+            onAir = null;
             shownSerial = 0;
             planeNotifiedSerial = 0;
             lastOrderSecond = -1;
@@ -161,9 +163,9 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             stamp.text = "SUPEREVENT / " + view.Category;
             target.text = view.Target;
-            eyebrow.text = "THEATER DISPATCH / LIVE";
+            eyebrow.text = AvStates.Glyph(AvState.Danger) + "SUPER // LIVE";
             title.text = view.Title.ToUpperInvariant();
-            scope.text = "DIRECTED TO / " + view.Target.ToUpperInvariant();
+            scope.text = "TARGET // " + view.Target.ToUpperInvariant();
             impact.text = view.EffectSummary;
             impact.color = ink;
             flavor.text = view.FlavorText;
@@ -207,6 +209,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             float remaining = Mathf.Max(0f, closeAt - now);
             clock.text = "ON AIR " + AvNum.Clock(remaining);
+            if (onAir != null) onAir.Value = duration > 0f ? Mathf.Clamp01(remaining / duration) : 0f;
             compactClock.text = AvNum.Clock(remaining);
             UpdateNextOrder(MissionTime());
 
@@ -233,7 +236,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 nextOrder.text = "T-" + AvNum.Clock(step.AtSeconds - elapsed) + "   " + step.Label;
                 return;
             }
-            nextOrder.text = "NO FURTHER FIELD ORDERS";
+            nextOrder.text = "NO MORE ORDERS";
         }
 
         private bool TryBuild()
@@ -320,9 +323,12 @@ namespace BoscaliSummer.Features.Events.Presentation
             target.color = ink;
             AvLay.Place(target.rectTransform, 14f, 153f, artWidth - 28f, 17f);
 
-            eyebrow = AvText.Make(expandedPanel, "Eyebrow", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
-            eyebrow.color = danger;
-            AvLay.Place(eyebrow.rectTransform, textX, 13f, centreWidth, 19f);
+            // The red slab: a solid alert tag, dark ink on the danger fill (never colour alone: glyph plus word).
+            Image slab = AvLay.Solid(expandedPanel, "EyebrowSlab", EventsMfdPanel.SlabBack(AvState.Danger));
+            AvLay.Place(slab.rectTransform, textX, 13f, Mathf.Min(centreWidth, 190f), 22f);
+            eyebrow = AvText.Make(expandedPanel, "Eyebrow", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+            eyebrow.color = EventsMfdPanel.SlabInk();
+            AvLay.Place(eyebrow.rectTransform, textX + 8f, 13f, Mathf.Min(centreWidth, 190f) - 12f, 22f);
             title = AvText.Make(expandedPanel, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
             AvText.Fit(title, true);
             title.color = ink;
@@ -355,8 +361,16 @@ namespace BoscaliSummer.Features.Events.Presentation
             clock = AvText.Make(expandedPanel, "Clock", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
             clock.color = dim;
             AvLay.Place(clock.rectTransform, width - 291f, 181f, 130f, 24f);
+            // The dispatch's on-air window as a hazard-stripe bar under the order line: it drains, then the strip folds.
+            var barGo = new GameObject("OnAir", typeof(RectTransform), typeof(CanvasRenderer));
+            barGo.transform.SetParent(expandedPanel, false);
+            onAir = barGo.AddComponent<AvHazardGraphic>();
+            onAir.raycastTarget = false;
+            onAir.FillColor = danger;
+            onAir.FrameColor = dim.WithAlpha(.4f);
+            AvLay.Place(onAir.rectTransform, 14f, 206f, width - 175f, 8f);
             AvControl dismiss = AvControl.Make(expandedPanel, new AvControl.Spec("DISMISS", Dismiss, AvButtonStyle.Default, AvIcon.X));
-            dismiss.Help = "Hide this dispatch. The event continues on the battlefield.";
+            dismiss.Help = "DISMISS: hide this dispatch. The event carries on; its countdown, price effect and full script stay on the EVN screen. The stripe bar is how long the dispatch stays on air.";
             AvLay.Place(dismiss.Rect, width - 145f, 178f, 131f, 31f);
         }
 

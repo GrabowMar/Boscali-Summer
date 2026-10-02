@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using HarmonyLib;
 using NuclearOption.Networking;
 using UnityEngine;

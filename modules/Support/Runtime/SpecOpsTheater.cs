@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Layout;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Runtime.Actions;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Layout;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Runtime.Actions;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Host side of SPEC OPS: the only code that reads the scene for the detachment and the only
@@ -67,6 +67,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private readonly List<Town> towns = new List<Town>(MaximumTowns);
         private readonly List<Airbase> owned = new List<Airbase>(16);
         private readonly Vector3[] unitPositions = new Vector3[MaximumUnits];
+        private readonly Unit[] unitRefs = new Unit[MaximumUnits];
         private readonly FactionHQ[] unitOwners = new FactionHQ[MaximumUnits];
         private readonly bool[] unitRadars = new bool[MaximumUnits];
         private readonly bool[] unitRadarEmitting = new bool[MaximumUnits];
@@ -84,7 +85,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         private double currentNow;
         private IZoneFortificationService fortifications;
         private ManualLogSource logger;
-        private readonly Func<double> roll = () => UnityEngine.Random.value;
+
         private readonly Func<FieldResult, bool> apply;
 
         public SpecOpsTheater() => apply = Apply;
@@ -131,12 +132,12 @@ namespace BoscaliSummer.Features.Support.Runtime
                 {
                     for (int t = 0; t < SpecOpsDetachment.TeamCount; t++)
                         if (detachment.Team(t).Deployed) detachment.TryDirective(t, SpecOpsDirective.Extract, now);
-                    detachment.Tick(now, roll, apply);
+                    detachment.Tick(now, null, apply);
                     currentOwner = null;
                     currentSpace = null;
                     continue;
                 }
-                detachment.Tick(now, roll, apply);
+                detachment.Tick(now, null, apply);
                 RefreshPosts(f, hq, detachment, now);
                 Announce(hq, detachment);
             }
@@ -157,6 +158,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             towns.Clear();
             owned.Clear();
             Array.Clear(unitOwners, 0, unitOwners.Length);
+            Array.Clear(unitRefs, 0, unitRefs.Length);
             Array.Clear(unitRadars, 0, unitRadars.Length);
             Array.Clear(unitRadarEmitting, 0, unitRadarEmitting.Length);
             Array.Clear(jams, 0, jams.Length);
@@ -172,6 +174,21 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>Metres from the faction's nearest held airbase to a point; negative when it holds none.</summary>
         public static float TravelMetres(FactionHQ hq, float x, float z) =>
             TravelOrigin(hq, x, z, out _, out _, out _);
+
+        /// <summary>Read-only names/positions from the existing real-town scan; never triggers a scan.</summary>
+        public int CopyTownNames(float[] xs, float[] zs, string[] names)
+        {
+            if (xs == null || zs == null || names == null) return 0;
+            int count = Math.Min(towns.Count, Math.Min(xs.Length, Math.Min(zs.Length, names.Length)));
+            for (int i = 0; i < count; i++)
+            {
+                Town town = towns[i];
+                xs[i] = town.X;
+                zs[i] = town.Z;
+                names[i] = town.Name;
+            }
+            return count;
+        }
 
         /// <summary>Host-only nearest friendly staging base. Coordinates and name are outputs only;</summary>
         public static float TravelOrigin(FactionHQ hq, float x, float z, out float originX, out float originZ,
@@ -231,6 +248,9 @@ namespace BoscaliSummer.Features.Support.Runtime
                         return AddJam(owner, result.X, result.Z, FieldCatalog.SabotageRadius(result.Rank),
                             FieldCatalog.SabotageSeconds(result.Rank), Time.timeSinceLevelLoadAsDouble);
                     case FieldMission.Steal:
+                        SpecOpsDetachment field = currentSpace?.DetachmentFor(owner);
+                        int slot = field != null ? field.SlotOf(result.Anchor) : -1;
+                        if (slot < 0 || field.Objective(slot).Friendly || !field.Objective(slot).Hostile) return false;
                         var cyber = currentSpace?.CyberFor(owner);
                         if (cyber == null) return false;
                         cyber.GrantIntel(FieldCatalog.StealIntel(result.Rank));
@@ -267,7 +287,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 opRefresh[slot] = now + FieldCatalog.OpRefreshSeconds;
                 try
                 {
-                    ReconAction.Reveal(hq, new GlobalPosition(team.X, 0f, team.Z), FieldCatalog.ReconRadius(team.Rank),
+                    ReconAction.Reveal(hq, new GlobalPosition(team.X, 0f, team.Z), FieldCatalog.ReconRadius(team.Quality),
                         logger, RevealFilter.Ground, quiet: true);
                 }
                 catch (Exception e)
@@ -359,7 +379,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                 Add(ObjectiveKind.Town, town.Anchor, town.X, town.Z, hostile && !friendly, town.Name, cx, cz, friendly);
             }
 
-            ClusterAirDefence(hq, cx, cz);
+            ClusterAirDefence(hq, detachment, cx, cz);
             CountThreats(hq);
 
             candidates.Sort((a, b) => a.Order.CompareTo(b.Order));
@@ -393,13 +413,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>Hostile ground radars more than 2.5 km from any listed place, grouped within 3 km.</summary>
-        private void ClusterAirDefence(FactionHQ hq, float cx, float cz)
+        private void ClusterAirDefence(FactionHQ hq, SpecOpsDetachment detachment, float cx, float cz)
         {
             int start = candidates.Count;
             int clusters = 0;
             for (int u = 0; u < unitCount && candidates.Count < MaximumCandidates && clusters < MaximumAirDefence; u++)
             {
                 if (!unitRadars[u] || unitOwners[u] == null || unitOwners[u] == hq) continue;
+                if (!hq.IsTargetBeingTracked(unitRefs[u]) && detachment.TeamOn(unitIds[u]) < 0) continue;
                 GlobalPosition at = unitPositions[u].ToGlobalPosition();
                 bool placed = false;
                 for (int c = 0; c < candidates.Count; c++)
@@ -451,9 +472,10 @@ namespace BoscaliSummer.Features.Support.Runtime
                 Unit unit = units[i];
                 if (unit == null || unit.disabled || unit is Aircraft || unit.NetworkHQ == null) continue;
                 unitPositions[unitCount] = unit.transform.position;
+                unitRefs[unitCount] = unit;
                 unitOwners[unitCount] = unit.NetworkHQ;
                 // Keep physical radar presence for site identity, but only live, unjammed ground
-                // emitters add radar pressure to the forecast and sabotage eligibility.
+                // emitters add radar pressure to the field operation and sabotage eligibility.
                 Radar radar = unit.radar as Radar;
                 unitRadars[unitCount] = radar != null;
                 unitRadarEmitting[unitCount] = radar != null && unit.HasRadarEmission() && !radar.IsJammed();
@@ -463,6 +485,7 @@ namespace BoscaliSummer.Features.Support.Runtime
             for (int i = unitCount; i < MaximumUnits; i++)
             {
                 unitOwners[i] = null;
+                unitRefs[i] = null;
                 unitRadars[i] = unitRadarEmitting[i] = false;
             }
         }

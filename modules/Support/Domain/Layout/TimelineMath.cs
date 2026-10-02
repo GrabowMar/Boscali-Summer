@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
 
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     internal enum LaneKind : byte
     {

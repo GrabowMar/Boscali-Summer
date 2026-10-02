@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Core.Fx;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     internal enum SarPhase : byte
     {

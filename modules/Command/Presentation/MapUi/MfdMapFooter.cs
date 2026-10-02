@@ -1,10 +1,9 @@
-using System.Collections.Generic;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The ordered instrument strip below the maximised map.
@@ -345,7 +344,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             var area = new Rect(0f, 0f, size.x, size.y);
             Color select = AvStyleHost.FuiColor("select", AvTheme.Accent);
             Color frame = AvStyleHost.FuiColor("frame", AvTheme.Frame);
-            MfdChromeLay.Outline(chrome, "FooterOutline", area, AvStyleHost.FuiColor("hairline", AvTheme.Hairline), AvChamfer.All(0f));
+            AvFrame outline = MfdChromeLay.Outline(chrome, "FooterOutline", area, AvStyleHost.FuiColor("hairline", AvTheme.Hairline), AvChamfer.All(0f));
+            outline.Bracket = 8f;
+            outline.BracketColor = select.WithAlpha(0.8f);
             MfdChromeLay.Rule(chrome, "FooterRule", new Rect(1f, 0f, size.x - 2f, 2f), select.WithAlpha(0.30f));
             // A small segmented uplink trace ties the footer to the wire and index rail.
             if (size.x >= 300f)

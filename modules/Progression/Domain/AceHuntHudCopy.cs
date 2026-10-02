@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BoscaliSummer.Features.Progression.Domain
+namespace BoscaliSummer.Modules.Progression.Domain
 {
     /// <summary>
     /// The ace-hunt widget's copy, pure so the test project links it directly. It names the

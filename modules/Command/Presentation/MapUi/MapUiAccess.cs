@@ -4,9 +4,9 @@ using HarmonyLib;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static class MapUiAccess
     {

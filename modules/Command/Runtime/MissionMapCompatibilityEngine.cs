@@ -1,8 +1,9 @@
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Read-only adapter for theater dimensions, actual base ownership and objective

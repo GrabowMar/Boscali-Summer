@@ -104,7 +104,7 @@ Shader "Boscali/FlightCloudComposite"
             sampler2D _CloudHistoryTex;
             float4 _CloudLowResSize, _CloudQuarterSize;
             float4x4 _CloudFrustum, _CloudPrevMatrix;
-            float3 _CloudCamDelta;
+            float4 _CloudCamDelta;
             float4 _CloudChecker;
             float _CloudHistoryValid;
 
@@ -145,7 +145,7 @@ Shader "Boscali/FlightCloudComposite"
                 float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
                 float3 ray = normalize(lerp(bottom, top, uv.y));
                 float distance = tex2Dlod(_CloudQuarterData, float4(quv, 0, 0)).g;
-                float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta, 1.0));
+                float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta.xyz, 1.0));
                 float2 previous = clip.xy / clip.w * 0.5 + 0.5;
                 if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) { o.colour = fresh ? freshVal : upsampled; return o; }
                 float4 history = tex2Dlod(_CloudHistoryTex, float4(previous, 0, 0));
@@ -164,11 +164,15 @@ Shader "Boscali/FlightCloudComposite"
                     }
                 }
                 float4 carried = clamp(history, low, high);
-                if (!fresh) { o.colour = carried; return o; }
+                // A single representative depth cannot reproject all the material in a
+                // nearby volume. Reduce history when translation is large relative to it.
+                // Distant skies keep the same temporal savings and accumulation.
+                float motion = max(saturate(length(_CloudCamDelta.xyz) / max(4.0, distance * 0.08)), _CloudCamDelta.w);
+                if (!fresh) { o.colour = lerp(carried, upsampled, motion); return o; }
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames; dense texels track the
                 // fresh march faster to keep their detail crisp.
-                o.colour = lerp(carried, freshVal, 0.10 + 0.40 * freshVal.a);
+                o.colour = lerp(carried, freshVal, max(0.10 + 0.40 * freshVal.a, motion));
                 return o;
             }
             ENDHLSL

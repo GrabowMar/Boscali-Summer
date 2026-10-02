@@ -1,12 +1,11 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Events.Domain;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Events.Domain;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// A local reading room, floating over the map on kit v2's <see cref="AvWindow"/> chrome. The window is
@@ -20,8 +19,15 @@ namespace BoscaliSummer.Features.Events.Presentation
         private const float MaxWidth = 1040f;
         private const float MaxHeight = 960f;
         private const float ScreenMargin = 40f;
-        private const int IndexRows = 14;
         private const int SortingOrder = 30003;
+        private static readonly string[] SectionNames = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
+        private static readonly string[] SectionHelp =
+        {
+            "AIRCRAFT: every native aircraft, with a rotating model viewer and its performance figures. Click a row, or step with the arrow keys.",
+            "EVENTS: a dossier for every authored theater event: price effect, reset clock, window, tier, target and timed orders.",
+            "WORLD: short files on life behind the front line. Flavour only; nothing here changes the game.",
+            "MANUAL: how to read a dispatch and issue orders. Start here if the desk is new to you.",
+        };
 
         // AvWindow chrome the pane height is carved out of.
         private const float TitleHeight = 30f;
@@ -30,8 +36,8 @@ namespace BoscaliSummer.Features.Events.Presentation
         private readonly List<AircraftDefinition> aircraft = new List<AircraftDefinition>(128);
         private AvControl[] tabs;
         private ArchivePanesPart panes;
-        private AvSection indexSection;
         private AvList index;
+        private int indexRows = 14;
         private EventDetailPart detail;
         private EventAircraftPreview preview;
         private int section, selected;
@@ -151,21 +157,24 @@ namespace BoscaliSummer.Features.Events.Presentation
                 specs[i] = new AvControl.Spec(names[i], () => SelectSection(target), AvButtonStyle.Default, icons[i]);
             }
             tabs = p.Buttons(specs).Controls;
-            for (int i = 0; i < tabs.Length; i++) tabs[i].SingleLine();
+            for (int i = 0; i < tabs.Length; i++) { tabs[i].SingleLine(); tabs[i].Help = SectionHelp[i]; }
 
             // Pane height: the body minus the tab row, the flow's top/bottom pad and the gaps.
             float bodyHeight = height - TitleHeight - AvGridTokens.Footer;
             float paneHeight = Mathf.Max(200f, bodyHeight - 2f * AvGridTokens.Pad - AvGridTokens.Tab - AvGridTokens.Gap);
             panes = p.Add(new ArchivePanesPart(p.Content, window.Ticker, p.Inner, paneHeight));
 
-            indexSection = panes.Left.Flow.Section(AvIcon.ListDetails, "INDEX", "0 RECORDS");
-            index = panes.Left.Flow.Add(new AvList(panes.Left.Content, window.Ticker, IndexRows, BindIndexRow));
+            // The index has no header of its own (the tab names the section, the footer counts the records), so the
+            // list takes the whole pane. Each named event already carries its explicit tier.
+            indexRows = Mathf.Clamp(Mathf.FloorToInt((paneHeight - 2f * AvGridTokens.Pad - AvGridTokens.Gap - (AvGridTokens.Row + 6f)) / 30f), 6, 40);
+            index = panes.Left.Flow.Add(new AvList(panes.Left.Content, window.Ticker, indexRows, BindIndexRow));
             index.RowClicked = Select;
 
-            detail = panes.Right.Flow.Add(new EventDetailPart(panes.Right.Content));
+            // The dossier's poster or model view takes spare pane height.
+            detail = panes.Right.Flow.Add(new EventDetailPart(panes.Right.Content), 1f);
             detail.Rotate = degrees => preview?.Rotate(degrees);
 
-            window.Footer.Set("Local reading room · no signal leaves this cockpit · Esc closes, Up and Down step the index.");
+            window.Footer.Set("LOCAL // ESC CLOSES // UP DOWN STEP");
         }
 
         private void Step(int delta)
@@ -195,6 +204,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 : AvState.Info;
             row.Set(RowTitle(item).ToUpperInvariant(), "", value, state);
             row.Armed = chosen;
+            row.Help = "Read the " + RowTitle(item).ToLowerInvariant() + " record. The up and down arrow keys step through the list.";
         }
 
         private int Count => section == 0 ? aircraft.Count : section == 1 ? EventCatalog.All.Length :
@@ -212,12 +222,12 @@ namespace BoscaliSummer.Features.Events.Presentation
         {
             preview?.Dispose();
             preview = null;
-            indexSection.SetCaption(AvNum.Fixed(Count, 0) + " RECORDS");
+            window.Footer.Set(SectionNames[section] + " // " + AvNum.Fixed(Count, 0) + " RECORDS // ESC CLOSES // UP DOWN STEP");
             index.SetCount(Count);
             if (Count == 0)
             {
                 detail.ShowEmpty(section == 0 ? "AIRCRAFT INDEX UNAVAILABLE" : "NO RECORDS",
-                    "The native encyclopedia has not loaded in this scene.");
+                    "ENCYCLOPEDIA NOT LOADED");
                 panes.Right.ScrollToTop();
                 return;
             }

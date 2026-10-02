@@ -1,10 +1,11 @@
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using NuclearOption.Networking;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// The support net as one cockpit line: ready, cooling with the retask clock, or a request

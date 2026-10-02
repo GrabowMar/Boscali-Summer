@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>One laid-out option for the current frame.</summary>
     internal readonly struct AceRadialNodeLayout

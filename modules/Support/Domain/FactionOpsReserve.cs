@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain
+namespace BoscaliSummer.Modules.Support.Domain
 {
     /// <summary>Host-owned, faction-wide infrastructure budget. Player count never changes income.</summary>
     internal sealed class FactionOpsReserve

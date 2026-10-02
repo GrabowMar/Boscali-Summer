@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     internal enum CommanderStatus : byte
     {

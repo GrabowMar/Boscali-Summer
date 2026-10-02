@@ -1,16 +1,18 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Features.Command.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Modules.Command.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     internal sealed class CommandManager : MonoBehaviour, ISceneService, IFactionMoraleView
     {
@@ -23,14 +25,14 @@ namespace BoscaliSummer.Features.Command.Runtime
 
         private void Update()
         {
-            ModServices.TryGet(out IOperationOutcomeSource source);
+            ModuleServices.TryGet(out IOperationOutcomeSource source);
             if (!ReferenceEquals(source, operationOutcomes))
             {
                 if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
                 operationOutcomes = source;
                 if (operationOutcomes != null) operationOutcomes.MoraleAwarded += OnOperationMorale;
             }
-            ModServices.TryGet(out IActiveEventsView events);
+            ModuleServices.TryGet(out IActiveEventsView events);
             if (ReferenceEquals(events, activeEvents)) return;
             if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
             activeEvents = events;

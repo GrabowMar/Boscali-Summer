@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Squad.Domain
+namespace BoscaliSummer.Modules.Squad.Domain
 {
     /// <summary>
     /// Content revision of one squad snapshot. The host stamps every full reply with it and the

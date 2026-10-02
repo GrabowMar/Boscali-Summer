@@ -1,11 +1,11 @@
 using System;
-using BoscaliSummer.Features.Support.Presentation.Window;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Presentation.Window;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// Pointer behaviour for a control whose look belongs to the room that owns it: hover, press,
@@ -20,12 +20,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         private string tooltip;
 
         public bool Hovered { get; private set; }
+        public bool Focused { get; private set; }
         public bool Pressed { get; private set; }
         public bool Enabled { get; private set; } = true;
         public bool Latched { get; private set; }
 
         /// <summary>Raised on every state change so the owner can repaint its own skin.</summary>
         public Action<RoomControl> Changed;
+        public Action<RoomControl> FocusRequested;
 
         public static RoomControl Create(RectTransform parent, Rect area, Action onClick, string name = "Control")
         {
@@ -51,7 +53,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             if (tooltip == text) return this;
             tooltip = text;
             AvHelpTip.Attach(gameObject, text);
-            if (Hovered) GetComponentInParent<AvHelpScope>()?.Show(text);
+            if (Hovered || Focused) GetComponentInParent<AvHelpScope>()?.Show(text);
             return this;
         }
 
@@ -81,7 +83,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                     ExecuteEvents.ExecuteHierarchy(transform.parent.gameObject, eventData, ExecuteEvents.pointerClickHandler);
                 return;
             }
-            if (eventData.button != PointerEventData.InputButton.Left || !Enabled) return;
+            if (eventData.button != PointerEventData.InputButton.Left) return;
+            Activate();
+        }
+
+        public void SetFocus(bool focused)
+        {
+            if (Focused == focused) return;
+            Focused = focused;
+            if (focused) GetComponentInParent<AvHelpScope>()?.Show(tooltip);
+            Changed?.Invoke(this);
+        }
+
+        public void Activate()
+        {
+            if (!gameObject.activeInHierarchy) return;
+            FocusRequested?.Invoke(this);
+            if (!Enabled) return;
             AvInput.Deselect(gameObject);
             AvUiSound.Tick(0.3f);
             click?.Invoke();
@@ -116,9 +134,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
 
         private void OnDisable()
         {
-            if (!Hovered && !Pressed) return;
+            if (!Hovered && !Pressed && !Focused) return;
             Hovered = false;
             Pressed = false;
+            Focused = false;
         }
     }
 }

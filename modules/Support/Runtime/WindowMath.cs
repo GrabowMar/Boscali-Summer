@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Satellite tasking windows (§6.4, D1/D12). The schedule is derived, never stored: every

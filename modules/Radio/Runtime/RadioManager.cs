@@ -3,17 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using BepInEx;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Radio.Configuration;
-using BoscaliSummer.Features.Radio.Domain;
-using BoscaliSummer.Features.Radio.Presentation;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Radio.Configuration;
+using BoscaliSummer.Modules.Radio.Domain;
+using BoscaliSummer.Modules.Radio.Presentation;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>
     /// The receiver and the deck behind the two map screens. One manager owns both audio

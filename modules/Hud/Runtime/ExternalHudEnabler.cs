@@ -2,7 +2,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Hud.Runtime
+namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// Forces the vanilla flight HUD -- and, outside a maximized map, the minimap -- visible

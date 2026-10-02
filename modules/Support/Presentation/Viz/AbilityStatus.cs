@@ -1,12 +1,12 @@
 using System.Globalization;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Runtime;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Runtime;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     internal enum AbilityTone : byte
     {
@@ -65,7 +65,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             action.Hack.HasValue ? CyberCatalog.Intel(action.Hack.Value) : action.Cap.HasValue ? Capstones.Intel : 0f;
 
         /// <summary>
-        /// Domain gates the host would refuse (a location covering the target, a breached Cyber
+        /// Domain gates the host would refuse (a controlled target sector, a breached Cyber
         /// Command, the station's pass and power, a held post). An open gate still reports the
         /// coverage note the player needs.
         /// </summary>
@@ -83,19 +83,38 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                     return false;
                 }
                 FieldMission post = FieldCatalog.PostFor(action.Field.Value);
-                // The host re-checks that a post's reach covers the clicked point.
-                // Zero posts is only reachable under the debug bypass; say so instead of "0 POSTS".
-                int posts = detachment.Posts(post);
-                reason = posts == 0
-                    ? "NO " + FieldWords.Post(post) + " · DEBUG BYPASS"
-                    : "WITHIN " + FieldWords.Km(FieldCatalog.PostReach(post)).ToUpperInvariant() + " OF " +
-                      (posts == 1 ? "YOUR " + FieldWords.Post(post) : posts + " " + FieldWords.Post(post) + "S");
+                // The host re-checks the matching post's sector at the clicked point.
+                int quality = FieldCatalog.RequiredQuality(action.Field.Value);
+                bool eligible = false;
+                for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
+                {
+                    FieldTeam team = detachment.Team(i);
+                    if (team.State == TeamState.Holding && team.Mission == post && team.Charges > 0 &&
+                        team.Quality >= quality && team.PhaseEnd > support.OrbitNow &&
+                        OpsSectors.TryLocate(team.X, team.Z, out _)) eligible = true;
+                }
+                if (!eligible)
+                {
+                    reason = "NEEDS " + FieldWords.Post(post) + " · QUALITY " + quality + " · 1 CHARGE";
+                    return false;
+                }
+                reason = "IN CONTROLLED " + FieldWords.Post(post) + " SECTOR";
                 return true;
             }
             if (action.IsCyber)
             {
                 CyberNetwork cyber = support.LocalCyber;
                 if (cyber == null || !cyber.HasCommand) return false;
+                if (!support.CyberEnabled)
+                {
+                    reason = "CYBER DISABLED IN HOST CONFIG";
+                    return false;
+                }
+                if (!support.LocalMayCyberControl)
+                {
+                    reason = "RESERVED · OPERATOR MUST RELEASE TO TEAM";
+                    return false;
+                }
                 if (cyber.CommandCompromised)
                 {
                     reason = "C2 BREACHED · PATCH IT";
@@ -108,17 +127,23 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
                     return false;
                 }
                 bool any = action.Hack.HasValue
-                    ? cyber.AnyTier(CyberCatalog.RequiredStage(action.Hack.Value) - 1, support.OrbitNow)
+                    ? cyber.Supports(action.Hack.Value, support.OrbitNow)
                     : cyber.AnyCapstone(action.Cap.Value, support.OrbitNow);
                 if (!any)
                 {
                     reason = action.IsHack
-                        ? "PREPARE A FRESH ACCESS WINDOW"
-                        : "CHOOSE A PAYLOAD IN AN OPEN WINDOW";
+                        ? "NEEDS FRESH ACCESS · QUALITY " + CyberCatalog.RequiredQuality(action.Hack.Value)
+                        : "NEEDS QUALITY 6 ACCESS · CHOOSE PAYLOAD";
                     return false;
                 }
-                // The host still re-checks that a location's radius covers the point.
-                reason = "ONE USE · " + CyberWords.Seconds(cyber.AccessRemaining(support.OrbitNow)) + " · INSIDE ACCESS RADIUS";
+                CyberNode access = cyber.Node(cyber.AccessSlot);
+                if (!cyber.ControlsSector(access.X, access.Z, support.OrbitNow))
+                {
+                    reason = "NO LIVE SECTOR CONTROL";
+                    return false;
+                }
+                reason = "SECTOR " + OpsSectors.Code(access.X, access.Z) + " · ONE USE · " +
+                    CyberWords.Seconds(cyber.AccessRemaining(support.OrbitNow));
                 return true;
             }
             TeamGate? gate = action.Id == SupportActionId.FlareMissile ? TeamGate.FlareBarrage :
@@ -135,8 +160,15 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             if (action.Id == SupportActionId.Fortify)
             {
                 SpecOpsDetachment detachment = support.LocalDetachment;
-                int posts = detachment != null && detachment.Enabled ? detachment.Posts(FieldMission.Seize) : 0;
-                reason = posts > 0 ? "OWNED GROUND OR SAFEHOUSE REACH" : "OWNED GROUND ONLY";
+                bool safehouse = false;
+                if (detachment != null && detachment.Enabled)
+                    for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
+                    {
+                        FieldTeam team = detachment.Team(i);
+                        if (team.State == TeamState.Holding && team.Mission == FieldMission.Seize && team.Charges > 0 &&
+                            team.PhaseEnd > support.OrbitNow && OpsSectors.TryLocate(team.X, team.Z, out _)) safehouse = true;
+                    }
+                reason = safehouse ? "OWNED GROUND OR HELD SAFEHOUSE SECTOR" : "OWNED GROUND ONLY";
             }
             if (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise ||
                 action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Emp)
@@ -163,6 +195,10 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             // An open orbital gate has nothing to add; "READY · READY" helped nobody.
             reason = denial == PlatformDenial.None ? null
                 : PlatformWords.Denial(denial, support.LocalPlatform, ability.Value, support.OrbitNow);
+            if (denial == PlatformDenial.None && support.LocalPlatform != null && support.LocalPlatform.ObserverPackage &&
+                support.LocalPlatform.BoostRemaining(support.OrbitNow) > 0 &&
+                support.LocalPlatform.PackageAppliesTo(ability.Value, support.OrbitNow))
+                reason = "OBSERVER PACKAGE / INSIDE RECON AREA / " + Mathf.CeilToInt((float)support.LocalPlatform.BoostRemaining(support.OrbitNow)) + " S";
             return denial == PlatformDenial.None;
         }
 
@@ -180,7 +216,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             if (pending)
                 return Make(AbilityTone.Pending, "REQUEST PENDING · AWAITING HOST", costText, false, false);
             if (!authorised)
-                return Make(AbilityTone.Locked, Locked(action), costText, false, false);
+                return Make(AbilityTone.Locked, (action.IsCyber || action.IsField) && !string.IsNullOrEmpty(gate)
+                    ? gate : Locked(action), costText, false, false);
             if (!gateOpen)
                 return Make(AbilityTone.Locked, gate, costText, false, false);
             if (cooldown > 0.5f)
@@ -196,8 +233,8 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         private static string Locked(SupportActionDefinition action)
         {
             if (action.IsField) return "LOCKED · " + FieldWords.AbilityLocked(action.Field.Value);
-            if (action.IsHack) return "LOCKED · PREPARE ACCESS IN CYBER";
-            if (action.IsCapstone) return "LOCKED · MASTER A LOCATION (STAGE 4)";
+            if (action.IsHack) return "LOCKED · PREPARE ACCESS";
+            if (action.IsCapstone) return "LOCKED · QUALITY 6 ACCESS + CHOSEN PAYLOAD";
             if (action.Id == SupportActionId.FlareMissile) return "LOCKED · SHARES RADAR SCAN PERK";
             if (action.Id == SupportActionId.Fortify) return "LOCKED · UNLOCK FORTIFY IN SQD ABILITIES";
             return "LOCKED · UNLOCK IN SQD ABILITIES";

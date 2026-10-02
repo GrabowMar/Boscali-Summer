@@ -1,22 +1,23 @@
-using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Runtime;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Runtime;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
-    /// SPACE actions: host-authorized abilities under persistent coverage, as one column of tiles.
-    /// PAW S1 deleted the rooms: core launch is a direct host request, the sensor feed and the
-    /// task map return as Tier-2 tabs in S2. Ability readiness uses the shared presenter
-    /// (<see cref="AbilityStatus"/>) on every surface. With no station the page is one card and
-    /// a LAUNCH CORE button plus the offboard FIRES rows, not a list of locked tiles. The strike strip names live friendly
-    /// fires near the player (S1 walking skeleton of the strike-vector band).
+    /// SPACE actions: the armed banner, the readiness strip, the power-focus strip with the
+    /// targeting solution and retask clocks, then one column of ability tiles (uplink, the station
+    /// abilities, relocation), the offboard FIRES rows with the strike strip and cruise tasking,
+    /// and the allocation history. Position control opens the station room for explicit sector
+    /// selection and fitting. Ability readiness uses the shared presenter
+    /// (<see cref="AbilityStatus"/>) on every surface. With no station the page is the banner,
+    /// a LAUNCH CORE button, the offboard fires and the history, not a list of locked tiles.
     /// </summary>
     internal sealed partial class SupportPanel
     {
@@ -32,6 +33,18 @@ namespace BoscaliSummer.Features.Support.Presentation
         private AvSection spaceAbilitiesSection;
         private AvSection spaceFiresSection;
         private BriefCard strikeStrip;
+        private AvSegmented spaceFocus;
+        private AvHazardBar spaceSolutionBar, spaceRetaskBar;
+        private AvLineChart spaceAllocChart;
+        private static readonly string[] FocusWords = { "SURVEY", "STRIKE", "SCREEN" };
+        private static readonly string[] FocusTips =
+        {
+            "SURVEY: wide radar, ELINT and MTI scans, 1.2x reach, 0.75x recharge. Route power here to find targets.",
+            "STRIKE: work the fire-control desk to bank tighter rod accuracy. Baseline rods work with a magazine.",
+            "SCREEN: balance tracking, charge and heat to bank a stronger EMP. Baseline EMP works with its hardware.",
+        };
+        private ActionTile spaceUplinkRow, spaceRephaseRow;
+        private AvControl spaceUplinkOpen, spaceUplinkAim, spaceRephaseOpen;
         private readonly List<SpaceStrikeRow> spaceStrikeRows = new List<SpaceStrikeRow>(4);
         private const string TaskingSectionTitle = "STRIKE TASKING";
         private readonly ActionTile[] taskingSlots = new ActionTile[3];
@@ -49,6 +62,11 @@ namespace BoscaliSummer.Features.Support.Presentation
             spaceAbilitiesSection = null;
             spaceFiresSection = null;
             strikeStrip = null;
+            spaceFocus = null;
+            spaceSolutionBar = spaceRetaskBar = null;
+            spaceAllocChart = null;
+            spaceUplinkRow = spaceRephaseRow = null;
+            spaceUplinkOpen = spaceUplinkAim = spaceRephaseOpen = null;
             spaceStrikeRows.Clear();
             taskingButtons = null;
             taskingHint = null;
@@ -69,7 +87,15 @@ namespace BoscaliSummer.Features.Support.Presentation
             }, AvButtonStyle.Primary, AvIcon.Satellite));
             spaceLaunch.Controls[0].Help = "Launch " + OrbitalPlatform.Callsign + "'s core directly; every other module docks to it.";
 
-            spaceAbilitiesSection = actions.Section(AvIcon.Bolt, "STATION ABILITIES", "");
+            AddReadyStrip(actions, TabSpace, CountSpaceStrikes());
+
+            spaceFocus = actions.Add(AvSegmented.Strip(actions.Content, FocusWords, FocusIndex, SelectFocus));
+            for (int i = 0; i < spaceFocus.Options.Length; i++) spaceFocus.Options[i].Help = FocusTips[i];
+            spaceSolutionBar = new AvHazardBar(actions.Content, "SOLUTION") { Help =
+                "Fresh radar, ELINT, MTI or field recon improves each TRACK correction in the fire-control desk. Optional preparation; expires after 75 s." };
+            spaceRetaskBar = new AvHazardBar(actions.Content, "RETASK") { Help =
+                "Mission profile changes settle in 2 seconds. A banked package holds its profile until used or expired." };
+            actions.Row(spaceSolutionBar, spaceRetaskBar);
 
             var strikes = new List<SupportActionDefinition>(4);
             foreach (SupportActionDefinition action in support.Actions)
@@ -132,16 +158,48 @@ namespace BoscaliSummer.Features.Support.Presentation
                     nextRefresh = 0f;
                 }));
             taskingHint = actions.Add(new BriefCard(actions.Content));
+            spaceRephaseRow = actions.Add(new ActionTile(actions.Content, AvIcon.CurrentLocation));
+            spaceRephaseOpen = spaceRephaseRow.AddTrailing(new AvControl.Spec("OPEN", OpenStationConsole));
+            spaceAllocChart = AddTrend(actions);
+        }
+
+        private int FocusIndex()
+        {
+            OrbitalPlatform platform = support != null ? support.LocalPlatform : null;
+            return platform != null && platform.Exists ? (int)platform.Focus : -1;
+        }
+
+        private void SelectFocus(int index)
+        {
+            OrbitalPlatform platform = support != null ? support.LocalPlatform : null;
+            PlatformFocus focus = (PlatformFocus)Mathf.Clamp(index, 0, 2);
+            if (platform == null || !platform.Exists || support.CommandPending || support.RequestPending ||
+                !support.LocalMayStationControl || platform.Focus == focus || support.OrbitNow < platform.RetaskUntil) return;
+            support.RequestPlatformFocus(focus);
+            nextRefresh = 0f;
+        }
+
+        private int CountSpaceStrikes()
+        {
+            int n = 0;
+            foreach (SupportActionDefinition action in support.Actions)
+                if (SupportManager.OrbitalAbility(action.Id).HasValue) n++;
+            return n;
         }
 
         private void SetSpaceActionParts(bool station)
         {
+            if (readySummaries[TabSpace] != null) { readySummaries[TabSpace].SetShown(station); readyBars[TabSpace].SetShown(station); }
             spaceLaunch.SetShown(!station);
             spaceAbilitiesSection.SetShown(station);
             spaceFiresSection.SetShown(true);
+            spaceFocus.SetShown(station);
+            spaceSolutionBar.SetShown(station);
+            spaceRetaskBar.SetShown(station);
+            spaceUplinkRow.SetShown(station);
             foreach (SpaceStrikeRow row in spaceStrikeRows)
                 row.Row.SetShown(station || !SupportManager.OrbitalAbility(row.Action.Id).HasValue);
-            strikeStrip.SetShown(true);
+            spaceRephaseRow.SetShown(station);
         }
 
         // ---- Refresh ---------------------------------------------------------------------------
@@ -164,7 +222,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             else if (platform.Brownout)
             {
                 headline = "✕ BROWNOUT";
-                text = "Abilities are refused until the cells recharge.";
+                text = "RECHARGING";
                 tone = AvState.Danger;
             }
             else if (hold != PlatformHold.None)
@@ -176,26 +234,70 @@ namespace BoscaliSummer.Features.Support.Presentation
             else
             {
                 headline = "ON STATION";
-                text = "Arm an ability, then right-click the map.";
+                text = "ARM · RIGHT-CLICK MAP";
                 tone = AvState.Ready;
             }
             PaintBanner(spaceBanner, TabSpace, headline, text, tone);
-            // Offboard rows paint without a station; station rows are gated per row.
-
-            foreach (SpaceStrikeRow row in spaceStrikeRows)
-                if (station || !SupportManager.OrbitalAbility(row.Action.Id).HasValue)
-                    PaintSpaceStrikeRow(row, bypass);
+            PaintTrend(spaceAllocChart, allocationTrend, "");
+            ReadyBegin(TabSpace);
+            for (int i = 0; i < spaceStrikeRows.Count; i++)
+                if (station || !SupportManager.OrbitalAbility(spaceStrikeRows[i].Action.Id).HasValue)
+                    ReadyCell(TabSpace, i, PaintSpaceStrikeRow(spaceStrikeRows[i], bypass));
+            ReadyEnd(TabSpace);
             RefreshStrikeStrip();
             RefreshTasking((float)now);
+            if (!station) return;
+
+            PaintFocus(platform, now);
+
+            PlatformDenial denial = support.PlatformCheck(PlatformAbility.Uplink);
+            bool fitted = platform.Fitted(ModuleKind.Imager);
+            string uplinkWord = denial == PlatformDenial.None ? "READY · FEED LIVE"
+                : PlatformWords.Denial(denial, platform, PlatformAbility.Uplink, now);
+            AvState uplinkState = denial == PlatformDenial.None ? AvState.Ready : fitted ? AvState.Info : AvState.Inert;
+            spaceUplinkRow.Set("SENSOR UPLINK", uplinkWord, "2.0 KW", "", uplinkState, AvIcon.Camera);
+            spaceUplinkRow.Dim = !fitted;
+            spaceUplinkOpen.Interactable = fitted;
+            spaceUplinkAim.Interactable = fitted;
+            SetTileHelp(spaceUplinkRow, spaceUplinkOpen,
+                "Open the sensor feed: drag or WASD to slew, wheel to zoom, 1-5 to task at the crosshair. " + uplinkWord + ".");
+
+
+            bool propulsion = platform.FittedOnline(ModuleKind.Propulsion, now);
+            string rword = propulsion ? "PICK A SECTOR" : "FIT PROPULSION";
+            string fuel = PlatformWords.Whole(PlatformAbilities.Info(PlatformAbility.Rephase).Fuel);
+            spaceRephaseRow.Set("RELOCATE", rword, fuel + " FUEL", "", propulsion ? AvState.Ready : AvState.Inert, AvIcon.CurrentLocation);
+            spaceRephaseRow.Dim = !propulsion;
+            SetTileHelp(spaceRephaseRow, spaceRephaseOpen,
+                "Open station control to choose a destination sector or fit propulsion. Relocation uses " + fuel + " fuel. " + rword + ".");
         }
 
-        private void PaintSpaceStrikeRow(SpaceStrikeRow row, bool bypass)
+        /// <summary>The power-focus strip and its two clocks: how long the targeting solution holds, and the retask lock.</summary>
+        private void PaintFocus(OrbitalPlatform platform, double now)
+        {
+            spaceFocus.Refresh();
+            double retask = Math.Max(0.0, platform.RetaskUntil - now);
+            foreach (AvControl option in spaceFocus.Options) option.Interactable = retask <= 0.0 && !support.CommandPending &&
+                support.LocalMayStationControl && platform.BoostRemaining(now) <= 0;
+
+            double solution = platform.SolutionRemaining(now);
+            if (solution > 0.0)
+                spaceSolutionBar.Set((float)(solution / OrbitalPlatform.SolutionSeconds),
+                    PlatformWords.Clock(solution) + " · " + Mathf.RoundToInt(platform.SolutionRadius / 1000f) + " KM", AvState.Ready);
+            else spaceSolutionBar.Set(0f, "NONE", AvState.Inert);
+
+            if (retask > 0.0) spaceRetaskBar.Set((float)(1.0 - retask / OrbitalPlatform.RetaskSeconds), "T-" + Mathf.CeilToInt((float)retask) + "s", AvState.Caution);
+            else spaceRetaskBar.Set(1f, "READY", AvState.Ready);
+        }
+
+        private AbilityFacts PaintSpaceStrikeRow(SpaceStrikeRow row, bool bypass)
         {
             AbilityFacts facts = AbilityStatus.For(support, row.Action, bypass);
-            string name = row.Action.Id == SupportActionId.Emp ? row.Action.Name + " · FRIENDLY FIRE" : row.Action.Name;
+            string name = row.Action.Id == SupportActionId.Emp ? row.Action.Name + " · HOSTILES ONLY" : row.Action.Name;
             PaintAbilityTile(row.Row, row.Button, row.Action, facts, facts.Readiness, "ARM", name);
             SetTileHelp(row.Row, row.Button, row.Action.Name + " — " + row.Action.Description +
-                " Arm, then right-click the map. " + facts.Readiness + ".");
+                " Arm, then right-click the map or fire from the feed's crosshair. " + facts.Readiness + ".");
+            return facts;
         }
 
         /// <summary>Live friendly fires near the player, from the host's own strike picture.</summary>

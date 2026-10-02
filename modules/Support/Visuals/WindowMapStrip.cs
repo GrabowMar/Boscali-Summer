@@ -1,15 +1,17 @@
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Presentation;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Presentation;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// The station's coverage ring on the maximized tactical map: the sub-point and radius of
@@ -87,7 +89,7 @@ namespace BoscaliSummer.Features.Support.Visuals
             }
             float x;
             float y;
-            if (!(ModServices.TryGet(out IMapProjection projection) &&
+            if (!(ModuleServices.TryGet(out IMapProjection projection) &&
                 projection.TryProject((float)state.SubX, (float)state.SubZ, out x, out y)))
             {
                 x = (float)state.SubX * factor;

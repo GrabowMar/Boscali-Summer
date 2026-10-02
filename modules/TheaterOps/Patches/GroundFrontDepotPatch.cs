@@ -1,7 +1,7 @@
-using BoscaliSummer.Features.TheaterOps.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Runtime;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.TheaterOps.Patches
+namespace BoscaliSummer.Modules.TheaterOps.Patches
 {
     [HarmonyPatch(typeof(GroundVehicle), nameof(GroundVehicle.MoveFromDepot))]
     internal static class GroundFrontDepotPatch

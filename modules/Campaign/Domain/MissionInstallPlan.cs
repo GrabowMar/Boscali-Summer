@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Campaign.Domain
+namespace BoscaliSummer.Modules.Campaign.Domain
 {
     /// <summary>What the installer should do with the campaign mission file.</summary>
     internal enum MissionInstallAction

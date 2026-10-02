@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.HighCommand.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.HighCommand.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.HighCommand.Runtime
+namespace BoscaliSummer.Modules.HighCommand.Runtime
 {
     /// <summary>
     /// The world half of the chain of command: posts, convoys, intel and kill credit.

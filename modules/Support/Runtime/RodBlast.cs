@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     internal static class RodBlast
     {

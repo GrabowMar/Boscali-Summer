@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace BoscaliSummer.Features.Support.Domain
+namespace BoscaliSummer.Modules.Support.Domain
 {
     /// <summary>Operator-facing formatting for theatre coordinates, ranges and clocks.</summary>
     internal static class TheaterGrid

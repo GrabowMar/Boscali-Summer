@@ -1,11 +1,11 @@
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// Reinforces the garrison of a controlled zone, or — inside a SPEC OPS safehouse's reach —
+    /// Reinforces the garrison of a controlled zone, or — inside a SPEC OPS safehouse's controlled sector —
     /// occupies buildings around the mark in any ground. Crosses into Urban Combat only through
     /// <see cref="IZoneFortificationService"/>, which reports false or zero unless it placed
     /// defenders, so the player is never charged for a fortification that silently did nothing.
@@ -39,13 +39,15 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             // Outside owned ground only a held safehouse lets the order through.
             GlobalPosition mark = context.Target;
             if (detachment == null || !detachment.Enabled ||
-                detachment.Covering(FieldMission.Seize, mark.x, mark.z) < 0)
+                detachment.Covering(FieldMission.Seize, mark.x, mark.z, context.Host.OrbitNow) < 0)
                 return SupportResult.NoFieldPost;
-            int covering = detachment.Covering(FieldMission.Seize, mark.x, mark.z);
-            int postShells = covering >= 0 ? 1 + detachment.Team(covering).Rank : shells;
-            return fortifications.TrySeize(mark.x, mark.z, FieldCatalog.SeizeRadius, context.Owner, postShells) > 0
-                ? SupportResult.Accepted
-                : SupportResult.SpawnFailed;
+            int covering = detachment.Covering(FieldMission.Seize, mark.x, mark.z, context.Host.OrbitNow);
+            if (covering < 0 || context.Host.OrbitNow >= detachment.Team(covering).PhaseEnd) return SupportResult.NoFieldPost;
+            int postShells = 1 + detachment.Team(covering).Quality;
+            if (fortifications.TrySeize(mark.x, mark.z, FieldCatalog.SeizeRadius, context.Owner, postShells) <= 0)
+                return SupportResult.SpawnFailed;
+            detachment.ConsumeTeamCharge(covering, context.Host.OrbitNow);
+            return SupportResult.Accepted;
         }
     }
 }

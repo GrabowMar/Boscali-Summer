@@ -1,7 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.FireAndDestruction.Configuration;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
+using BoscaliSummer.Modules.FireAndDestruction.Domain;
+using BoscaliSummer.Modules.FireAndDestruction.Networking;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -28,6 +31,7 @@ namespace BoscaliSummer.Fire
         private readonly List<RuinSite> ruins = new List<RuinSite>(128);
         private readonly FuelDepotSmokePool smokePool = new FuelDepotSmokePool(24);
         private readonly CollapseBurstPool collapsePool = new CollapseBurstPool();
+        private readonly RuinDebrisPool debrisPool = new RuinDebrisPool();
         private float nextSelection;
         private float nextVisualTick;
 
@@ -60,9 +64,30 @@ namespace BoscaliSummer.Fire
                 Born = Time.timeSinceLevelLoad - Mathf.Max(0f, ageSeconds)
             };
             ruins.Add(site);
+            debrisPool.Place(position, halfExtents);
             if (collapseBurst && ageSeconds < 2f) collapsePool.Emit(position, halfExtents);
             if (broadcast) ModNet.BroadcastRuin(position, halfExtents);
             nextSelection = 0f;
+        }
+
+        internal GameObject AttachFacade(
+            GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, int buildingId) =>
+            debrisPool.AttachShell(position, pieces, buildingId);
+
+        /// <summary>
+        /// A shot near a wreck. The slab eases over a third of a second. A blast that
+        /// lands on the wreck also kicks the collapse dust and a new hole in the facade.
+        /// </summary>
+        internal void Poke(Vector3 point, float power)
+        {
+            if (GameManager.IsHeadless) return;
+            if (!debrisPool.Nudge(point, power, out bool struck, out Transform shell,
+                    out Vector3 holePoint, out Vector3 holeNormal, out float holeSize))
+                return;
+            if (shell != null)
+                BuildingHitLedger.Instance?.StampRuinHole(shell, holePoint, holeNormal, holeSize);
+            if (struck && power >= HitEscalation.MinBlastPower)
+                collapsePool.Emit(point.ToGlobalPosition(), new Vector2(6f, 6f));
         }
 
         internal void SendSnapshot(Mirage.INetworkPlayer player)
@@ -78,6 +103,7 @@ namespace BoscaliSummer.Fire
         {
             float now = Time.timeSinceLevelLoad;
             collapsePool.Update(now);
+            debrisPool.Tick(now);
             if (now < nextSelection && now < nextVisualTick) return;
             if (ruins.Count == 0) return;
 
@@ -88,6 +114,7 @@ namespace BoscaliSummer.Fire
             {
                 nextSelection = now + 0.5f;
                 SelectVisuals(camPos);
+                debrisPool.ApplyAttention(camPos);
             }
             if (now < nextVisualTick) return;
             nextVisualTick = now + 0.25f;
@@ -164,6 +191,7 @@ namespace BoscaliSummer.Fire
             ruins.Clear();
             smokePool.Clear();
             collapsePool.Clear();
+            debrisPool.Clear();
             nextSelection = nextVisualTick = 0f;
         }
     }

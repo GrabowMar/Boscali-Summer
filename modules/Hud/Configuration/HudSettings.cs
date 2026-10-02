@@ -1,8 +1,8 @@
-﻿using BepInEx.Configuration;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Features.Hud.Domain;
+using BepInEx.Configuration;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Hud.Domain;
 
-namespace BoscaliSummer.Features.Hud.Configuration
+namespace BoscaliSummer.Modules.Hud.Configuration
 {
     /// <summary>
     /// The common HUD element's pilot-facing knobs. Client-local presentation only: nothing

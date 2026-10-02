@@ -1,13 +1,15 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
     /// The map half of the contract HUD: accepted contracts drawn as vanilla-style objective
@@ -136,7 +138,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                     continue;
                 }
                 shown[i] = true;
-                if (ModServices.TryGet(out IMapProjection projection) &&
+                if (ModuleServices.TryGet(out IMapProjection projection) &&
                     projection.TryProject(cards[i].X, cards[i].Z, out float x, out float y))
                     positions[i] = new Vector2(x, y);
                 else

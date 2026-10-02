@@ -1,9 +1,10 @@
-using BoscaliSummer.Features.Support.Presentation.Window;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Presentation.Window;
+using BoscaliSummer.Modules.Support.Presentation.Views;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Board
+namespace BoscaliSummer.Modules.Support.Presentation.Board
 {
     /// <summary>Borrow the loaded map's terrain sprite; never duplicate or own its texture.
     /// World corners use the same projection as markers, so zoom and pan cannot drift.</summary>
@@ -14,8 +15,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
         private Vector2 size;
         private float nextResolve;
         public bool Available => image != null && image.sprite != null;
+        internal Sprite Source => image.sprite;
+        internal Vector2 Metres => size;
 
-        public BoardTerrain(RectTransform parent, BoardSurface board)
+        public BoardTerrain(RectTransform parent, BoardSurface board) : this(parent, board, false) { }
+
+        public BoardTerrain(RectTransform parent, BoardSurface board, bool warm)
         {
             this.board = board;
             image = Chrome.Panel(parent, new Rect(0f, 0f, 1f, 1f), Color.white);
@@ -23,6 +28,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
             image.type = Image.Type.Simple;
             image.raycastTarget = false;
             image.enabled = false;
+            image.material = OpsArtwork.TerrainMaterial(warm);
         }
 
         public void Refresh()

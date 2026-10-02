@@ -1,18 +1,18 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Networking
+namespace BoscaliSummer.Modules.Support.Networking
 {
     [NetworkMessage]
     internal struct SupportRequestMessage
@@ -94,9 +94,11 @@ namespace BoscaliSummer.Features.Support.Networking
         /// Protocol 25 adds the JTAC mark/unlase actions and the NoMarkTarget result, the PRSM/cruise
         /// actions with live-TTI replies, the FIRES intel gate (StaleIntel result, IntelStale mirror) and
         /// cruise waypoint intents with leg broadcasts.
+        /// Protocol 27 adds per-recipient operator permissions and station platform alignment,
+        /// capacitor, heat, work, boost and crew-bus telemetry (26 never left a worktree probe).
         /// Older peers must not interpret fleet, hack, team or node ids.
         /// </summary>
-        internal const byte ProtocolVersion = 25;
+        internal const byte ProtocolVersion = 27;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;

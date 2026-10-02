@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     /// <summary>
     /// Vector art for every ping, sticker and tool, as polylines in a unit box (−1…1, y up).

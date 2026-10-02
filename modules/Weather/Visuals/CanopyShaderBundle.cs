@@ -3,7 +3,7 @@ using System.IO;
 using System.Reflection;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Loads the embedded canopy-rain shader bundle (weatherrain.bundle, built by

@@ -1,9 +1,9 @@
 using System.Collections.Generic;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>One station's transmitting site: where it is and how high.</summary>
     internal readonly struct RadioTower

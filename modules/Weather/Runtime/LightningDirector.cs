@@ -1,9 +1,9 @@
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Runtime
+namespace BoscaliSummer.Modules.Weather.Runtime
 {
     // Storm lightning: schedules bolts in heavy rain, pulses the vanilla sun with a
     // base-tracked boost (restored when the flash ends, like RainAtmosphere), and fires

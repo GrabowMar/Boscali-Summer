@@ -1,19 +1,20 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Comms.Configuration;
-using BoscaliSummer.Features.Comms.Domain;
-using BoscaliSummer.Features.Comms.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Comms.Configuration;
+using BoscaliSummer.Modules.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Comms.Runtime
+namespace BoscaliSummer.Modules.Comms.Runtime
 {
     /// <summary>What a left click on the open map does while COM owns it.</summary>
     internal enum CommsTool : byte
@@ -389,7 +390,7 @@ namespace BoscaliSummer.Features.Comms.Runtime
 
             bool sound = false;
             IHudBoard board = null;
-            if (settings.HudNotices.Value && ModServices.TryGet(out board) && !hudDeclared)
+            if (settings.HudNotices.Value && ModuleServices.TryGet(out board) && !hudDeclared)
             {
                 board.DeclareChannel(HudChannel, "COMMS");
                 hudDeclared = true;

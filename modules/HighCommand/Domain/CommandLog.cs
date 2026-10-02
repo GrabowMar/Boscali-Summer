@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>
     /// One faction's bounded staff log: the last few things that happened to its staff, newest

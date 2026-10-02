@@ -1,25 +1,24 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// One stage-4 capstone, carried by a mastered location whose radius covers the target.
+    /// One stage-4 capstone, carried by a mastered location controlling the target sector.
     /// REVEAL opens the whole radius; VIRTUAL JAMMER suppresses hostile sensors inside it for
-    /// 45 s; SABOTAGE destroys hostile ground vehicles in a small radius. Intel and the long
+    /// 45 s; NETWORK SHUTDOWN disrupts a bounded ground cluster without direct damage. Intel and the long
     /// recharge are the manager's; this class only re-checks coverage and touches the game.
     /// </summary>
     internal sealed class CapstoneAction : ISupportAction
     {
         private const float JammerSeconds = 45f;
         private const float JammerStrength = 1000f;
-        private const float SabotageRadius = 500f;
-        private const float SabotageDamage = 5000f;
+        private const float SabotageRadius = 3000f;
         private const int SabotageMaximum = 8;
 
         private readonly Capstone capstone;
@@ -38,7 +37,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (cyber.CommandCompromised) return SupportResult.CommandCompromised;
             double now = context.Host.OrbitNow;
             if (!cyber.TryCovering(capstone, target.x, target.z, now, out int slot)) return SupportResult.NoEwAsset;
-            float radius = cyber.RadiusOf(slot, now);
+            float radius = cyber.RadiusOf(slot, now) * cyber.EffectScale;
 
             switch (capstone)
             {
@@ -58,33 +57,35 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
                 case Capstone.Jammer:
                     if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
-                    context.Host.Run(JammerRoutine(context.Host, context.Player, context.Owner, target, radius));
+                    context.Host.Run(JammerRoutine(context.Host, context.Player, context.Owner, target, radius, JammerSeconds * cyber.EffectScale));
                     return SupportResult.Accepted;
 
                 default:
-                    if (!GameAccess.IsServer()) return SupportResult.CapabilityUnavailable;
-                    int destroyed = Sabotage(context.Owner, ground, context.Logger, SabotageRadius, SabotageMaximum);
-                    context.Host.ReportContacts(context.RequestId, destroyed);
+                    if (!context.Host.TryReserve(context.Owner, SupportPool.Cyber)) return SupportResult.Busy;
+                    context.Host.Run(HackAction.GroundDisruption(context.Host, context.Player, context.Owner, target,
+                        SabotageRadius * cyber.EffectScale * cyber.PayloadRadiusAt(now), 35f * cyber.EffectScale, SabotageMaximum, 1400f));
                     return SupportResult.Accepted;
             }
         }
 
         private static IEnumerator JammerRoutine(
-            ISupportHost host, Player player, FactionHQ owner, GlobalPosition target, float radius)
+            ISupportHost host, Player player, FactionHQ owner, GlobalPosition target, float radius, float duration)
         {
             try
             {
                 float radiusSquared = radius * radius;
                 float elapsed = 0f;
-                while (elapsed < JammerSeconds)
+                int scanCursor = 0;
+                while (elapsed < duration)
                 {
                     Vector3 centre = target.ToLocalPosition();
                     List<Unit> units = UnitRegistry.allUnits;
                     if (units != null)
                     {
-                        for (int i = 0; i < units.Count; i++)
+                        for (int examined = 0; examined < Mathf.Min(128, units.Count); examined++)
                         {
-                            Unit unit = units[i];
+                            if (scanCursor >= units.Count) scanCursor = 0;
+                            Unit unit = units[scanCursor++];
                             if (unit == null || unit.disabled) continue;
                             FactionHQ ownerHq = unit.NetworkHQ;
                             if (ownerHq == null || ownerHq == owner) continue;
@@ -109,42 +110,5 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             }
         }
 
-        /// <summary>Host: kill hostile ground vehicles inside <paramref name="radius"/>, at most
-        /// <paramref name="maximum"/>. Shared by the SABOTAGE capstone and the OVERLOAD ability.</summary>
-        internal static int Sabotage(FactionHQ owner, Vector3 point, BepInEx.Logging.ManualLogSource logger,
-            float radius, int maximum)
-        {
-            var hits = new Collider[128];
-            var damaged = new HashSet<IDamageable>();
-            int destroyed = 0;
-            int count = Physics.OverlapSphereNonAlloc(point, Mathf.Max(1f, radius), hits);
-            try
-            {
-                for (int i = 0; i < count && destroyed < maximum; i++)
-                {
-                    Collider hit = hits[i];
-                    if (hit == null) continue;
-                    IDamageable damageable = hit.GetComponentInParent<IDamageable>();
-                    Unit unit = damageable?.GetUnit();
-                    if (damageable == null || unit == null || unit.disabled || unit is Aircraft) continue;
-                    FactionHQ ownerHq = unit.NetworkHQ;
-                    if (ownerHq == null || ownerHq == owner) continue;
-                    if (!damaged.Add(damageable)) continue;
-                    damageable.TakeDamage(SabotageDamage, SabotageDamage * 0.5f, 1f, 0f, SabotageDamage,
-                        PersistentID.None);
-                    destroyed++;
-                }
-            }
-            catch (Exception e)
-            {
-                logger?.LogWarning("[Support] Capstone sabotage failed: " + e.Message);
-            }
-            finally
-            {
-                Array.Clear(hits, 0, count);
-                damaged.Clear();
-            }
-            return destroyed;
-        }
     }
 }

@@ -84,11 +84,14 @@ Shader "Boscali/CanopyRain"
 
                 float4 drop = tex2D(_DropTex, i.simUv);
                 float hC = drop.r;
+                float bead = smoothstep(0.025, 0.28, hC);
+                float cover = saturate(bead + drop.g * 0.25);
+                // Dry glass needs no gradient taps, lighting or scene refraction.
+                clip(cover - 0.004);
                 float hx = tex2D(_DropTex, i.simUv + float2(TEXEL, 0.0)).r
                     - tex2D(_DropTex, i.simUv - float2(TEXEL, 0.0)).r;
                 float hy = tex2D(_DropTex, i.simUv + float2(0.0, TEXEL)).r
                     - tex2D(_DropTex, i.simUv - float2(0.0, TEXEL)).r;
-                float trail = drop.g;
 
                 // Pane basis in object space, flipped to the authored normal side.
                 float3 exO = _MapAxis < 0.5 ? float3(1, 0, 0) : (_MapAxis < 1.5 ? float3(0, 0, 1) : float3(1, 0, 0));
@@ -99,11 +102,8 @@ Shader "Boscali/CanopyRain"
                 float3 nW = normalize(mul(objToWorld, nO) * side
                     + (mul(objToWorld, exO) * -hx + mul(objToWorld, eyO) * -hy) * 3.5 * side);
 
-                float bead = smoothstep(0.025, 0.28, hC);
                 float2 slope = float2(hx, hy);
                 float rim = saturate(length(slope) * 3.0);
-                float cover = saturate(bead + trail * 0.25);
-                clip(cover - 0.004);
 
                 float2 suv = i.screen.xy / max(i.screen.w, 0.0001);
                 float2 screenDistortion = float2(hx, hy) * _Distortion
@@ -113,7 +113,7 @@ Shader "Boscali/CanopyRain"
                 if (_Refract > 0.5)
                     body = tex2D(_CameraOpaqueTexture, saturate(suv + screenDistortion)).rgb;
                 // Keep the refracted scene but avoid bright solid discs in dark storms.
-                body = lerp(body, _FogColor.rgb * _LightLevel, 0.55) * _Tint.rgb;
+                body = lerp(body, _FogColor.rgb * _LightLevel, 0.25) * _Tint.rgb;
 
                 float sunLen = length(_SunDir.xyz);
                 float glint = 0.0;
@@ -133,8 +133,10 @@ Shader "Boscali/CanopyRain"
                     + _SunColor.rgb * glint * 0.55
                     + _FogColor.rgb * (sky + rim * bead * 0.12 * _LightLevel);
 
+                // The simulation already controls how much water rain deposits. Multiplying
+                // opacity by rain again made individual light-shower beads disappear.
                 float alpha = saturate(cover * lerp(0.15 + bead * 0.32,
-                    0.22 + bead * 0.50, _Refract)) * _Intensity;
+                    0.22 + bead * 0.50, _Refract)) * smoothstep(0.0, 0.12, _Intensity);
                 return float4(finalColor, alpha);
             }
             ENDHLSL

@@ -1,11 +1,12 @@
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using NuclearOption.MissionEditorScripts;
 using NuclearOption.UI;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Applies the three quick-slot target presets from the keyboard while flying. Input

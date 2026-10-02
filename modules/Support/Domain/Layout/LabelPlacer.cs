@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     internal readonly struct LabelRequest
     {

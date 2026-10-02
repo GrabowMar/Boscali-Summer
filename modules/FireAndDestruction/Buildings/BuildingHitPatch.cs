@@ -1,6 +1,6 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Core.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 

@@ -1,0 +1,183 @@
+using System;
+
+using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Modules.Wing.Presentation;
+using BoscaliSummer.Modules.Wing.Patches;
+using BoscaliSummer.Modules.Wing.Networking;
+using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Util;
+using BoscaliSummer.Core.Storage;
+namespace BoscaliSummer.Modules.Wing.Domain
+{
+    /// <summary>Engine-free continuous formation target motion.</summary>
+    internal static class FormationTracking
+    {
+        public const float SlotResponseSeconds = 0.5f;
+
+        public static float QuietTurnRate(float rate, float deadband, float horizontalSpeed = 100f)
+        {
+            if (deadband <= 0f) return rate;
+            // Above the reference speed, reject the same lateral acceleration noise rather than
+            // suppressing deliberate shallow jet turns whose heading rate decreases with speed.
+            deadband *= Math.Min(1f, 100f / Math.Max(1f, horizontalSpeed));
+            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(rate) - deadband) / deadband));
+            return rate * blend * blend * (3f - 2f * blend);
+        }
+
+        // Integrate constant-rate turn velocity instead of rotating velocity times duration, which
+        // doubles shallow-turn lateral lead. Bound sweep to avoid predicted loops.
+        public static float Sweep(float turnRate, float seconds) =>
+            Math.Max(-(float)Math.PI / 2f, Math.Min((float)Math.PI / 2f,
+                turnRate * Math.Max(0f, seconds)));
+
+        public static (float x, float y, float z) Arc(
+            float vx, float vy, float vz, float turnRate, float seconds)
+        {
+            double time = Math.Max(0f, seconds);
+            double angle = Sweep(turnRate, seconds);
+            double squared = angle * angle;
+            double sinc = Math.Abs(angle) < 0.001d
+                ? 1d - squared / 6d + squared * squared / 120d : Math.Sin(angle) / angle;
+            double cosc = Math.Abs(angle) < 0.001d
+                ? angle * (0.5d - squared / 24d + squared * squared / 720d)
+                : (1d - Math.Cos(angle)) / angle;
+            return ((float)(time * (vx * sinc + vz * cosc)),
+                    (float)(time * vy),
+                    (float)(time * (vz * sinc - vx * cosc)));
+        }
+
+        public static float WrapDegrees(float degrees)
+        {
+            float result = (degrees + 180f) % 360f;
+            return (result < 0f ? result + 360f : result) - 180f;
+        }
+
+        public static float SmoothBank(float bank, float observed, float responseSeconds, float dt) =>
+            WrapDegrees(bank + WrapDegrees(observed - bank) *
+                (1f - (float)Math.Exp(-Math.Max(0f, dt) / Math.Max(0.001f, responseSeconds))));
+
+        public static float ManeuverIntensity(float pitchRate, float rollRate, float turnRate)
+        {
+            float totalRate = (float)Math.Sqrt(pitchRate * pitchRate + rollRate * rollRate + turnRate * turnRate);
+            if (totalRate <= 0.05f) return 0f;
+            float blend = Math.Max(0f, Math.Min(1f, (totalRate - 0.05f) / 0.35f));
+            return blend * blend * (3f - 2f * blend);
+        }
+
+        // Accelerate tracking only for large manoeuvre error; retain quiet-flight filtering against
+        // stick noise.
+        public static float TrackResponse(float errorDegrees, float quietSeconds) =>
+            ManeuverResponse(errorDegrees, quietSeconds, 0.10f, 2f, 12f);
+
+        public static float ResponsiveTrackTime(float errorDegrees, float quietSeconds,
+            float maneuverIntensity = 0f, float holdBlend = 0f)
+        {
+            float baseTime = TrackResponse(errorDegrees, quietSeconds);
+            float minTime = Math.Min(quietSeconds, 0.06f);
+            float factor = Math.Max(maneuverIntensity, holdBlend * 0.75f);
+            return baseTime + (minTime - baseTime) * factor;
+        }
+
+        public static float BankResponse(float errorDegrees, float quietSeconds) =>
+            ManeuverResponse(WrapDegrees(errorDegrees), quietSeconds, 0.12f, 8f, 45f);
+
+        public static float ResponsiveBankTime(float errorDegrees, float quietSeconds,
+            float maneuverIntensity = 0f, float holdBlend = 0f)
+        {
+            float baseTime = BankResponse(errorDegrees, quietSeconds);
+            float minTime = Math.Min(quietSeconds, 0.05f);
+            float factor = Math.Max(maneuverIntensity, holdBlend * 0.85f);
+            return baseTime + (minTime - baseTime) * factor;
+        }
+
+        public static float ResponsiveSlotTime(float defaultSeconds, float holdBlend, float maneuverIntensity)
+        {
+            const float FastSlotSeconds = 0.12f;
+            float urgency = Math.Max(0f, Math.Min(1f, Math.Max(holdBlend, maneuverIntensity)));
+            return defaultSeconds + (FastSlotSeconds - defaultSeconds) * urgency;
+        }
+
+        private static float ManeuverResponse(float error, float quiet, float fast,
+            float begin, float full)
+        {
+            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(error) - begin) / (full - begin)));
+            blend = blend * blend * (3f - 2f * blend);
+            return quiet + (Math.Min(quiet, fast) - quiet) * blend;
+        }
+
+        // Weight horizontal information from normalized 3D velocity; near-vertical tracks cannot
+        // reliably indicate yaw.
+        public static float HorizontalTrackWeight(float x, float z)
+        {
+            float horizontal = (float)Math.Sqrt(x * x + z * z);
+            float blend = Math.Max(0f, Math.Min(1f, (horizontal - 0.05f) / 0.15f));
+            return blend * blend * (3f - 2f * blend);
+        }
+
+        public static float TrackTurnRate(float previousX, float previousZ,
+            float currentX, float currentZ, float dt, float maximumRate)
+        {
+            if (dt <= 0f) return 0f;
+            float confidence = Math.Min(HorizontalTrackWeight(previousX, previousZ),
+                HorizontalTrackWeight(currentX, currentZ));
+            double angle = Math.Atan2(previousZ * currentX - previousX * currentZ,
+                previousX * currentX + previousZ * currentZ);
+            float rate = (float)(angle / dt);
+            return Math.Max(-maximumRate, Math.Min(maximumRate, rate)) * confidence;
+        }
+
+        // Cubic Hermite capture follows current velocity at departure and future slot velocity at
+        // arrival. Bound tangents by gap to prevent loops.
+        public static (float x, float z) Capture(
+            float targetX, float targetZ, float ownVx, float ownVz,
+            float slotVx, float slotVz, float seconds, float previewSeconds)
+        {
+            double time = Math.Max(0.001f, seconds);
+            double t = Math.Max(0d, Math.Min(1d, previewSeconds / time));
+            double distance = Math.Sqrt((double)targetX * targetX + (double)targetZ * targetZ);
+            double ownScale = Math.Min(time, distance / Math.Max(1d,
+                Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz)));
+            double slotScale = Math.Min(time, distance / Math.Max(1d,
+                Math.Sqrt((double)slotVx * slotVx + (double)slotVz * slotVz)));
+            // Fade tangents outside the forward cone so rearward rendezvous can enter the heading
+            // limiter instead of keeping preview ahead indefinitely.
+            double alignment = ((double)targetX * ownVx + (double)targetZ * ownVz) /
+                Math.Max(1d, distance * Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz));
+            double tangentBlend = Math.Max(0d, Math.Min(1d, alignment * 4d));
+            tangentBlend *= tangentBlend * (3d - 2d * tangentBlend);
+            ownScale *= tangentBlend;
+            slotScale *= tangentBlend;
+            double h10 = t * (1d - t) * (1d - t);
+            double h01 = t * t * (3d - 2d * t);
+            double h11 = t * t * (t - 1d);
+            return ((float)(h10 * ownVx * ownScale + h01 * targetX + h11 * slotVx * slotScale),
+                    (float)(h10 * ownVz * ownScale + h01 * targetZ + h11 * slotVz * slotScale));
+        }
+
+        // Exact critically damped held-target response preserving continuous position and velocity
+        // across attitude changes and geometry strides.
+        public static void DampedAxis(float position, float velocity, float target,
+            float responseSeconds, float maxSpeed, float dt, out float nextPosition, out float nextVelocity)
+        {
+            if (dt <= 0f) { nextPosition = position; nextVelocity = velocity; return; }
+            double response = Math.Max(0.001f, responseSeconds);
+            double omega = 2d / response;
+            double maxChange = Math.Max(0f, maxSpeed) * response;
+            double change = Math.Max(-maxChange, Math.Min(maxChange, position - target));
+            double effectiveTarget = position - change;
+            double c = velocity + omega * change;
+            double decay = Math.Exp(-omega * dt);
+            nextPosition = (float)(effectiveTarget + (change + c * dt) * decay);
+            nextVelocity = (float)((velocity - omega * c * dt) * decay);
+            // Returning from the fast response retains momentum from a stiffer spring. Stop at the
+            // target instead of letting that stored velocity carry the slot past the leader's move.
+            if ((target - position) * (nextPosition - target) > 0f)
+            {
+                nextPosition = target;
+                nextVelocity = 0f;
+            }
+        }
+    }
+}

@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// The handful of numeric helpers the weather field is built from. Pure and allocation-free,

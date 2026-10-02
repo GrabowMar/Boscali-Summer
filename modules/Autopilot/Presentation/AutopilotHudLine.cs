@@ -1,9 +1,10 @@
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Features.Autopilot.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Modules.Autopilot.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Autopilot.Presentation
+namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
     /// The landing autopilot as one cockpit line while it is flying the aircraft: the phase it

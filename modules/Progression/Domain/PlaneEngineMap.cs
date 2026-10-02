@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Progression.Domain
+namespace BoscaliSummer.Modules.Progression.Domain
 {
     /// <summary>Small, per-aircraft preflight engine tune. Stock is always the fallback.</summary>
     internal static class PlaneEngineMap

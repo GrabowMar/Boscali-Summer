@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.UrbanCombat.Configuration;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Infrastructure.Diagnostics;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.UrbanCombat.Configuration;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 

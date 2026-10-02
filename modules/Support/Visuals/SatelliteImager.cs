@@ -1,9 +1,9 @@
 using UnityEngine;
 using UnityEngine.Rendering;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// The orbital platform's live optical sensor. A dedicated camera renders

@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     // Additional glass-only draws preserve all native materials, frames and animations.
     // Owns the droplet sim tick plus the heightfield render: UpdateSim steps every live
@@ -23,7 +23,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private static readonly int FogColorId = Shader.PropertyToID("_FogColor");
         private static readonly int RefractId = Shader.PropertyToID("_Refract");
 
-        private const float PatternDensity = 1.5f; // tiles/m, mirrors the shader
+        private const float PatternDensity = 3f; // tiles/m, mirrors the shader
         private const float GravityTiles = 0.08f; // parked beads creep; airflow drives fast runoff
 
         private readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();

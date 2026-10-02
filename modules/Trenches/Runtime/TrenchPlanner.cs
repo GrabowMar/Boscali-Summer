@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Trenches.Domain;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Trenches.Domain;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// Turns a Command front trace into natural trench positions: a Bezier chain through the

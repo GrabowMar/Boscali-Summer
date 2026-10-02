@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Resolves vanilla definitions for support actions. Strikes need a non-nuclear missile

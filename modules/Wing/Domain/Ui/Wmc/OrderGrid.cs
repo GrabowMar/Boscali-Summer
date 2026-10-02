@@ -1,0 +1,164 @@
+using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Modules.Wing.Presentation;
+using BoscaliSummer.Modules.Wing.Patches;
+using BoscaliSummer.Modules.Wing.Networking;
+using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Util;
+using BoscaliSummer.Core.Storage;
+namespace BoscaliSummer.Modules.Wing.Domain
+{
+    internal enum GridOrder : byte
+    {
+        Attack, Splash, Engage, Sweep, Scout, Move, Orbit, Cap, Hold, Break, FormUp, Ecm, Detach, Rtb, Refit, Land, Cargo, TakeOff, Rescue, Maneuver,
+        // Spec FUI §TACTICAL: orders the wing always had, now on the grid.
+        MyTarget, ClearSix, Patrol, Escort, Call, Bogey, Dismiss,
+    }
+
+    /// <summary>What an order needs before it can go: nothing, a map point, an enemy, or an area.</summary>
+    internal enum GridInput : byte { Now, Point, Target, Area }
+
+    internal readonly struct GridCell
+    {
+        public readonly GridOrder Order;
+        public readonly string Id, Label, Tip, Pending;
+        public readonly GridInput Input;
+        public readonly MapMode Map;
+        public readonly Glyph Glyph;
+        /// <summary>A maneuver's number (the <c>OrderKind.Maneuver</c> order's Number); 0 for the rest.</summary>
+        public readonly int Number;
+
+        public GridCell(GridOrder order, string key, string label, GridInput input, MapMode map, string tip, string pending = null,
+            string prefix = "tac.orders.", int number = 0, Glyph glyph = Glyph.None)
+        {
+            Order = order;
+            Glyph = glyph;
+            Number = number;
+            Id = prefix + key;
+            Label = label;
+            Input = input;
+            Map = map;
+            Tip = tip;
+            Pending = pending;
+        }
+
+        public bool Built => Pending == null;
+    }
+
+    /// <summary>TACTICAL's order grid (spec FUI §TACTICAL): six labelled rows with a category rail and a glyph per cell; an order
+    /// that needs a point or an enemy latches and arms the map, the rest act at once (the scope's, or the wing's for CLEAR 6, ESCORT,
+    /// CALL, BOGEY and DISMISS). With helicopters in scope SUPPORT becomes TAKE OFF · RESCUE · LAND · CARGO (RTB stays on every
+    /// member row). Under it the REACT row flies the five maneuvers; BREAK therefore reads DISENGAGE.</summary>
+    internal static class OrderGrid
+    {
+        public const int Rows = 6, Columns = 4;
+        public static readonly string[] RowLabels = { "OFFENSE", "DEFENSE", "MOVE", "AREA", "SUPPORT", "WING" };
+        private static readonly string[] rowRails = { "danger", "warn", "info", "info", "live", "inert" };
+        public const string ReactLabel = "REACT", ReactRail = "armed";
+
+        /// <summary>The rail class of grid row <paramref name="row"/>; the row's word key says the same.</summary>
+        public static string RowRail(int row) => row >= 0 && row < rowRails.Length ? rowRails[row] : "info";
+
+        /// <summary>BRK L · BRK R · PULL UP · SPLIT · BEAM: flown through the pipeline, then back to the slot.</summary>
+        public static readonly GridCell[] React =
+        {
+            new GridCell(GridOrder.Maneuver, "brkl", "BRK L", GridInput.Now, MapMode.Off, "Hard turn 90° left, then back to the slot.", null, "tac.react.", 0),
+            new GridCell(GridOrder.Maneuver, "brkr", "BRK R", GridInput.Now, MapMode.Off, "Hard turn 90° right, then back to the slot.", null, "tac.react.", 1),
+            new GridCell(GridOrder.Maneuver, "pullup", "PULL UP", GridInput.Now, MapMode.Off, "Climb 500 m straight on, then back to the slot.", null, "tac.react.", 2),
+            new GridCell(GridOrder.Maneuver, "split", "SPLIT", GridInput.Now, MapMode.Off,
+                "Turn 60° apart: a pair splits, one aircraft turns away from the lead.", null, "tac.react.", 3),
+            new GridCell(GridOrder.Maneuver, "beam", "BEAM", GridInput.Now, MapMode.Off,
+                "Turn across the nearest air threat's line of sight (from the wing's tracks), then back to the slot.", null, "tac.react.", 4),
+        };
+
+        private static readonly GridCell Attack = new GridCell(GridOrder.Attack, "attack", "ATTACK", GridInput.Target, MapMode.Attack,
+            "Right-click an enemy on the map to attack it; shift-click adds targets.", glyph: Glyph.Attack);
+        private static readonly GridCell Splash = new GridCell(GridOrder.Splash, "splash", "SPLASH", GridInput.Now, MapMode.Off,
+            "One missile at the nearest enemy aircraft.", glyph: Glyph.Splash);
+        private static readonly GridCell Engage = new GridCell(GridOrder.Engage, "engage", "ENGAGE", GridInput.Now, MapMode.Off,
+            "Fight the enemies in reach, then come back.", glyph: Glyph.Engage);
+        private static readonly GridCell Sweep = new GridCell(GridOrder.Sweep, "sweep", "SWEEP", GridInput.Area, MapMode.Sweep,
+            "Right-click the map: loop round a 12 km area there and fight hostile aircraft found in it; right-drag sets the radius.", glyph: Glyph.Sweep);
+        private static readonly GridCell Move = new GridCell(GridOrder.Move, "move", "MOVE", GridInput.Point, MapMode.Move,
+            "Right-click the map: fly there, then orbit.", glyph: Glyph.Move);
+        private static readonly GridCell Orbit = new GridCell(GridOrder.Orbit, "orbit", "ORBIT", GridInput.Point, MapMode.Orbit,
+            "Right-click the map: orbit there. HERE orbits where they are now.", glyph: Glyph.Orbit);
+        private static readonly GridCell Cap = new GridCell(GridOrder.Cap, "cap", "CAP", GridInput.Area, MapMode.Cap,
+            "Right-click the map: orbit there and fight hostile aircraft entering 8 km of it; right-drag sets the radius.", glyph: Glyph.Cap);
+        private static readonly GridCell Hold = new GridCell(GridOrder.Hold, "hold", "HOLD", GridInput.Point, MapMode.Hold,
+            "Right-click the map: hold there. HERE holds where they are now.", glyph: Glyph.Hold);
+        private static readonly GridCell Break = new GridCell(GridOrder.Break, "break", "DISENGAGE", GridInput.Now, MapMode.Off,
+            "Stop fighting and rejoin.", glyph: Glyph.Disengage);
+        private static readonly GridCell FormUp = new GridCell(GridOrder.FormUp, "formup", "FORM UP", GridInput.Now, MapMode.Off,
+            "Back to formation on you.", glyph: Glyph.FormUp);
+        private static readonly GridCell Ecm = new GridCell(GridOrder.Ecm, "ecm", "ECM", GridInput.Now, MapMode.Off,
+            "The scope's jammers on for a minute (only aircraft carrying one); press again to stop.", glyph: Glyph.Ecm);
+        private static readonly GridCell Detach = new GridCell(GridOrder.Detach, "detach", "DETACH", GridInput.Now, MapMode.Off,
+            "The selected wingmen orbit where they are, as their own element.", glyph: Glyph.Detach);
+        private static readonly GridCell Rtb = new GridCell(GridOrder.Rtb, "rtb", "RTB", GridInput.Now, MapMode.Off,
+            "Home to the reserve.", glyph: Glyph.Rtb);
+        private static readonly GridCell Refit = new GridCell(GridOrder.Refit, "refit", "REFIT", GridInput.Now, MapMode.Off,
+            "Home to refuel and rearm, then back out.", glyph: Glyph.Refit);
+        private static readonly GridCell Land = new GridCell(GridOrder.Land, "land", "LAND", GridInput.Point, MapMode.Land,
+            "Right-click a landing point: helicopters land there.", glyph: Glyph.Land);
+        private static readonly GridCell Cargo = new GridCell(GridOrder.Cargo, "cargo", "CARGO", GridInput.Point, MapMode.Cargo,
+            "Right-click a drop point: helicopters carrying cargo fly there, land and deliver.", glyph: Glyph.Cargo);
+        private static readonly GridCell TakeOff = new GridCell(GridOrder.TakeOff, "takeoff", "TAKE OFF", GridInput.Now, MapMode.Off,
+            "Landed helicopters lift off.", glyph: Glyph.TakeOff);
+        private static readonly GridCell Rescue = new GridCell(GridOrder.Rescue, "rescue", "RESCUE", GridInput.Now, MapMode.Off,
+            "A helicopter picks up a downed pilot.", glyph: Glyph.Rescue);
+
+        private static readonly GridCell MyTarget = new GridCell(GridOrder.MyTarget, "mytgt", "MY TGT", GridInput.Now, MapMode.Off,
+            "Attack the targets you have locked (your own target list), split across the scope.", glyph: Glyph.MyTarget);
+        private static readonly GridCell ClearSix = new GridCell(GridOrder.ClearSix, "clearsix", "CLEAR 6", GridInput.Now, MapMode.Off,
+            "A wingman engages the air threat on your six.", glyph: Glyph.ClearSix);
+        private static readonly GridCell Patrol = new GridCell(GridOrder.Patrol, "patrol", "PATROL", GridInput.Now, MapMode.Off,
+            "Patrol back and forth through where the scope is now.", glyph: Glyph.Patrol);
+        private static readonly GridCell Escort = new GridCell(GridOrder.Escort, "escort", "ESCORT", GridInput.Now, MapMode.Off,
+            "The wing escorts you: close cover, engaging what threatens you.", glyph: Glyph.Escort);
+        private static readonly GridCell Call = new GridCell(GridOrder.Call, "call", "CALL", GridInput.Now, MapMode.Off,
+            "Call one more wingman (your type, or Wing/CallAirframe); SUPPLY picks pilot, airframe and base.", glyph: Glyph.Call);
+        private static readonly GridCell Bogey = new GridCell(GridOrder.Bogey, "bogey", "BOGEY", GridInput.Now, MapMode.Off,
+            "Bogey dope: the wing calls the nearest air threat's bearing, range and altitude.", glyph: Glyph.Bogey);
+        private static readonly GridCell Dismiss = new GridCell(GridOrder.Dismiss, "dismiss", "DISMISS", GridInput.Now, MapMode.Off,
+            "Release every wingman to the game's AI (press twice).", glyph: Glyph.Dismiss);
+        private static readonly GridCell Scout = new GridCell(GridOrder.Scout, "scout", "SCOUT", GridInput.Now, MapMode.Off,
+            "A low route 20 km ahead, reporting contacts.", glyph: Glyph.Scout);
+
+        // Spec FUI §TACTICAL: OFFENSE · DEFENSE · MOVE · AREA · SUPPORT · WING, most urgent first.
+        private static readonly GridCell[] Jets =
+        {
+            Attack, MyTarget, Splash, Engage,
+            Break, ClearSix, Ecm, FormUp,
+            Move, Orbit, Hold, Patrol,
+            Cap, Sweep, Scout, Escort,
+            Rtb, Refit, Land, Cargo,
+            Detach, Call, Bogey, Dismiss,
+        };
+
+        private static readonly GridCell[] Helos =
+        {
+            Attack, MyTarget, Splash, Engage,
+            Break, ClearSix, Ecm, FormUp,
+            Move, Orbit, Hold, Patrol,
+            Cap, Sweep, Scout, Escort,
+            TakeOff, Rescue, Land, Cargo,
+            Detach, Call, Bogey, Dismiss,
+        };
+
+        public static GridCell At(int row, int column, bool helos) => (helos ? Helos : Jets)[row * Columns + column];
+
+        /// <summary>Why the cell cannot be pressed now, or null.</summary>
+        public static string Why(in GridCell cell, bool canOrder, int members, bool scoped)
+        {
+            if (!cell.Built) return cell.Pending;
+            if (!canOrder) return "Orders are host only for now";
+            if (members == 0 && cell.Order != GridOrder.Call) return "No wingmen: call or recruit some first";
+            if (cell.Order == GridOrder.Detach && !scoped) return "Select the wingmen to detach";
+            return null;
+        }
+
+        public static bool HasHere(GridOrder order) => order == GridOrder.Orbit || order == GridOrder.Hold;
+    }
+}

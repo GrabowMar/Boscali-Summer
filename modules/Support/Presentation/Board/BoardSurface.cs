@@ -1,14 +1,16 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Layout;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Features.Support.Presentation.Window;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Domain.Layout;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Modules.Support.Presentation.Window;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Board
+namespace BoscaliSummer.Modules.Support.Presentation.Board
 {
     /// <summary>
     /// The shared geographic engine under the CYBER netmap and the SPEC OPS briefing table:
@@ -251,7 +253,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Board
         {
             if (time < nextFrontline) return false;
             nextFrontline = time + FrontlineInterval;
-            if (!ModServices.TryGet(out ITerritoryIngress territory) || territory == null)
+            if (!ModuleServices.TryGet(out ITerritoryIngress territory) || territory == null)
             {
                 bool had = TraceCount > 0;
                 TraceCount = 0;

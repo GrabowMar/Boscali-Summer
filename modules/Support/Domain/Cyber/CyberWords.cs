@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace BoscaliSummer.Features.Support.Domain.Cyber
+namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>
     /// Every word the CYBER page, the console and the map use for nodes, leases, breaches,
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                            " s. An intrusion still sitting there re-compromises it: isolate first.";
                 case CyberVerb.Honeypot:
                     return "Bait a node for " + (int)CyberLocations.HoneypotSeconds +
-                           " s: an intrusion walks into it, stalls, and traces twice as fast.";
+                           " s: an intrusion stalls and traces twice as fast. Setting bait also interrupts a live enemy breach of this home node; Cyber Command stays online.";
                 case CyberVerb.Trace:
                     return "Follow an intrusion or detected enemy operation home. A home ear or active forward lease must cover it; " +
                            "bait doubles the speed. A finished trace tracks the source for a short intelligence window.";
@@ -82,7 +82,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberDenial.AlreadyPatching: return "PATCH RUNNING";
                 case CyberDenial.AlreadyBaited: return "ALREADY BAITED";
                 case CyberDenial.NeedsEar: return "NO HOME OR FORWARD EAR OVER IT";
-                case CyberDenial.NeedsCoverage: return "NO HACKED LOCATION COVERS IT";
+                case CyberDenial.NeedsCoverage: return "NO LIVE ACCESS IN THIS SECTOR";
                 case CyberDenial.NotTraceable: return "NOT TRACEABLE";
                 case CyberDenial.AlreadyTracing: return "TRACE RUNNING";
                 case CyberDenial.LowComputing: return "LOW COMPUTING";
@@ -105,8 +105,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case BreachDenial.NotRunning: return "NO BREACH RUNNING";
                 case BreachDenial.NoSession: return "NO BREACH RUNNING";
                 case BreachDenial.LowComputing: return "NOT ENOUGH COMPUTING";
-                case BreachDenial.Recharging: return "ACCESS RECOVERY OR SPOOF RECHARGING";
+                case BreachDenial.Recharging: return "HANDSHAKE / RECOVERY / COUNTERMEASURE";
                 case BreachDenial.AccessActive: return "TEMPORARY ACCESS STILL OPEN";
+                case BreachDenial.StaleWork: return "WORKBENCH CHANGED / REFRESH";
+                case BreachDenial.Incomplete: return "COMPLETE ROUTE / THEN COMMIT";
+                case BreachDenial.AlreadyAnalyzed: return "GATE SECURED OR SERVICES PROFILED";
                 default: return "CHOOSE A CAPSTONE FIRST";
             }
         }
@@ -200,7 +203,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberNotice.IntrusionWithdrew: return "INTRUDER WITHDREW · PATCH WHAT THEY LEFT";
                 case CyberNotice.TraceStarted: return "TRACE RUNNING ON " + origin;
                 case CyberNotice.TraceComplete: return "ORIGIN TRACKED · " + origin;
-                case CyberNotice.RaidStarted: return "JAMMING RAID NEAR " + node + " · COVERAGE HALVED";
+                case CyberNotice.RaidStarted: return "JAMMING RAID NEAR " + node + " · SCAN / DISRUPTION FOOTPRINT HALVED";
                 case CyberNotice.RaidBroken: return "BURN-THROUGH · RAID BROKEN";
                 case CyberNotice.RaidFaded: return "JAMMING RAID ENDED";
                 case CyberNotice.HostileOperation: return "NETWORK HEARD " + origin + " OPERATION NEAR " + node;
@@ -226,7 +229,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case CyberNotice.CapstoneReady: return node + " IS MASTERED · CHOOSE A CAPSTONE";
                 case CyberNotice.CapstoneChosen: return node + " FIELDS " + Capstones.Name((Capstone)Math.Max(0, Math.Min(3, (int)code)));
                 case CyberNotice.LocationLost: return node + " LOST · THE AIRBASE CHANGED HANDS";
-                case CyberNotice.AccessOpened: return "TEMPORARY ACCESS OPEN ON " + node;
+                case CyberNotice.AccessOpened: return "SECTOR ACCESS OPEN ON " + node;
                 case CyberNotice.AccessConsumed: return "ACCESS USED · " + node + " WINDOW CLOSED";
                 case CyberNotice.AccessExpired: return "ACCESS EXPIRED · " + node + " WINDOW CLOSED";
                 default: return null;
@@ -347,10 +350,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (network.BreachActive)
             {
                 int percent = (int)Math.Round(Math.Max(0f, Math.Min(1f, network.BreachTrace)) * 100f);
-                return "BREACH " + PhaseOf(network.BreachPhase) + " · TRACE " + percent + "% · SPOOF IF IT CLIMBS";
+                return "WORK " + PhaseOf(network.BreachPhase) + " " + network.WorkProgress + "/3 · Q" + network.WorkQuality + " · TRACE " + percent + "%";
             }
             if (network.AccessRemaining(now) > 0f)
-                return "ACCESS AT " + Callsign(network, network.AccessSlot) + " · " + Seconds(network.AccessRemaining(now)) +
+                return "SECTOR " + OpsSectors.Code(network.Node(network.AccessSlot).X, network.Node(network.AccessSlot).Z) +
+                       " · " + Seconds(network.AccessRemaining(now)) +
                        " LEFT · ONE ACCEPTED EFFECT CONSUMES IT";
             int inReach = 0;
             for (int slot = CyberNetwork.TargetBase; slot < CyberNetwork.SlotCount; slot++)

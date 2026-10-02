@@ -1,7 +1,7 @@
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Comms.Configuration
+namespace BoscaliSummer.Modules.Comms.Configuration
 {
     /// <summary>
     /// COMMS: the multiplayer map-talk screen. Lifetimes, channels and games are

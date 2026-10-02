@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Squad.Domain
+namespace BoscaliSummer.Modules.Squad.Domain
 {
     internal enum HuntOutcome { Hunting, Defeated, TargetLost, Expired }
 

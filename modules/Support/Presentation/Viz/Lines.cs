@@ -1,8 +1,8 @@
-using NOAvionics.Ui;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// A straight stroke as one rotated image, so traces, links and routes can be pooled and moved

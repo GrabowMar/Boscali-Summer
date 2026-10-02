@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>Where the weather timeline is at one instant.</summary>
     internal struct TimelineState

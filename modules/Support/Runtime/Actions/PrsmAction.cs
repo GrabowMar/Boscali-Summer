@@ -2,7 +2,7 @@ using System.Collections;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// PRSM strike: one offboard ballistic missile onto the mark. Gated by allocation,

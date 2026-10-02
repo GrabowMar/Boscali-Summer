@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>
     /// Distances against a faction's rings at one height above ground. Terrain masking is not

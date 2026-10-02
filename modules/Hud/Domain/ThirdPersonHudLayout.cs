@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Hud.Domain
+namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// A screen-space rectangle, centre-origin (0,0 is screen centre) with Y up, in reference

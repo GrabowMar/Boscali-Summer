@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>Persistent theatre sectors. Protocol 18 uses the existing seed word for
     /// origin * 9 + destination; no random orbit clock can move a station anymore.</summary>

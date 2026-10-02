@@ -1,12 +1,14 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
     /// Accepted contracts on the common HUD element: one line each, the contracted title above
@@ -98,7 +100,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 return;
             }
 
-            if (!ModServices.TryGet(out board)) return;
+            if (!ModuleServices.TryGet(out board)) return;
             board.DeclareChannel(Channel, "CONTRACTS");
 
             var self = aircraft.transform.position.ToGlobalPosition().AsVector3();

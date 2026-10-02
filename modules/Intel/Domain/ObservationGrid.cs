@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>
     /// Where a faction has looked: 2 km cells (at most 4096) stamped with the time own units

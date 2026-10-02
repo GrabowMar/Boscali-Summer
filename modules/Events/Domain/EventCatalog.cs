@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Events.Domain
+namespace BoscaliSummer.Modules.Events.Domain
 {
     /// <summary>
     /// The curated event list. Hand-authored, like the rail catalog: the selector only

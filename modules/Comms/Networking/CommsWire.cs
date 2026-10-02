@@ -1,8 +1,8 @@
 using System;
-using BoscaliSummer.Features.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Domain;
 using Mirage.Serialization;
 
-namespace BoscaliSummer.Features.Comms.Networking
+namespace BoscaliSummer.Modules.Comms.Networking
 {
     /// <summary>
     /// The COMMS wire format, hand-written like every other Boscali message and kept apart

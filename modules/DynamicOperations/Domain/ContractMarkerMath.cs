@@ -1,6 +1,6 @@
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// One accepted contract as the HUDs draw it: the board's own words plus the geometry the

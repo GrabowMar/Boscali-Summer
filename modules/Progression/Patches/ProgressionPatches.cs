@@ -1,13 +1,13 @@
 using System;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Features.Progression.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Infrastructure.Diagnostics;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.Networking;
 
-namespace BoscaliSummer.Features.Progression.Patches
+namespace BoscaliSummer.Modules.Progression.Patches
 {
     /// <summary>
     /// Scales fuel draw for the owning player. Harmony binds <c>fuelDrawn</c> by name; the patch

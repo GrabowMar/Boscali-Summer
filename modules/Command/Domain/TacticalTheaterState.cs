@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// The theater picture, as one mutable bag the strategic panel reads.

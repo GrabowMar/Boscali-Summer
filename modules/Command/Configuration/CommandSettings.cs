@@ -2,7 +2,7 @@ using BepInEx.Configuration;
 using NOAvionics;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Configuration
+namespace BoscaliSummer.Modules.Command.Configuration
 {
     internal sealed class CommandSettings
     {
@@ -65,7 +65,7 @@ namespace BoscaliSummer.Features.Command.Configuration
                 "Enable client-local MFD glass and display overlays. OFF gives a clean display.");
             DisplayAutoLight = config.Bind("Command", "DisplayAutoLight", true,
                 "Adjust glass reflection strength to ambient lighting.");
-            DisplayGlass = config.Bind("Command", "DisplayGlass", 0.6f,
+            DisplayGlass = config.Bind("Command", "DisplayGlass", 0.35f,
                 new ConfigDescription("MFD glass reflection strength.", new AcceptableValueRange<float>(0f, 1f)));
             DisplayScanlines = config.Bind("Command", "DisplayScanlines", 0f,
                 new ConfigDescription("Static CRT scanline strength over the maximized MFD; no flicker.", new AcceptableValueRange<float>(0f, 1f)));
@@ -75,8 +75,8 @@ namespace BoscaliSummer.Features.Command.Configuration
                 new ConfigDescription("MFD color wash: 0 Neutral, 1 Green, 2 Amber, 3 Ice, 4 Rose.", new AcceptableValueRange<int>(0, 4)));
             DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
                 new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
-            AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Steel,
-                "Panel colour theme: Steel (follows the game theme), Ace (blue + amber), Phosphor (green + magenta).");
+            AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
+                "Panel look. Portal is the only theme; older saved names fall back to it.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
                 "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
             AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,
@@ -119,22 +119,22 @@ namespace BoscaliSummer.Features.Command.Configuration
                     new AcceptableValueRange<float>(0.10f, 1.0f)));
 
             DeckGrid = config.Bind("Command", "DeckGrid", false,
-                "Legacy decoration: backdrop grid. The SET background selector chooses one decoration at a time.");
+                "Retired backdrop grid flag, retained for config compatibility. Renders as matte.");
 
             CheckerboardOverlay = config.Bind("Command", "CheckerboardOverlay", false,
-                "Render subtle tactical checkerboard overlay grid on the backdrop surface.");
+                "Retired checkerboard flag, retained for config compatibility. Renders as matte.");
 
             CheckerboardOpacity = config.Bind("Command", "CheckerboardOpacity", 0.08f,
                 new ConfigDescription(
-                    "Alpha opacity of the tactical checkerboard overlay pattern.",
+                    "Retired checkerboard opacity, retained for config compatibility.",
                     new AcceptableValueRange<float>(0.02f, 0.40f)));
 
             BackgroundImage = config.Bind("Command", "BackgroundImage", false,
-                "Display custom or procedural tactical wallpaper on the backdrop deck.");
+                "Display a local custom wallpaper when BackgroundImagePreset is 3.");
 
             BackgroundImagePreset = config.Bind("Command", "BackgroundImagePreset", 0,
                 new ConfigDescription(
-                    "Wallpaper pattern preset (0: Hexagon, 1: Carbon, 2: Radar, 3: Custom file).",
+                    "Wallpaper source (3: Custom file; retired presets 0-2 render the matte instrument surface).",
                     new AcceptableValueRange<int>(0, 3)));
 
             CustomWallpaperFile = config.Bind("Command", "CustomWallpaperFile", "images.jpg",

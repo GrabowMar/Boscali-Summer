@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>Scene geometry for one SAR collect, in theatre metres relative to the scene centre.</summary>
     internal readonly struct SarGeometry
@@ -120,9 +120,9 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             int perRow = Math.Max(1, rangeSamples);
             int row = index / perRow;
             int column = index % perRow;
-            uint hash = BoscaliSummer.Core.Deterministic.Hash(seed, index, 0x5a2, 7);
-            double jitterU = BoscaliSummer.Core.Deterministic.UnitFloat(hash) - 0.5;
-            double jitterV = BoscaliSummer.Core.Deterministic.UnitFloat(hash * 2654435761u) - 0.5;
+            uint hash = BoscaliSummer.Core.Math.Deterministic.Hash(seed, index, 0x5a2, 7);
+            double jitterU = BoscaliSummer.Core.Math.Deterministic.UnitFloat(hash) - 0.5;
+            double jitterV = BoscaliSummer.Core.Math.Deterministic.UnitFloat(hash * 2654435761u) - 0.5;
             double ground = HalfSize - (column + 0.5 + jitterU) / perRow * 2.0 * HalfSize;
             double azimuth = HalfSize - (row + 0.5 + jitterV) / Height * 2.0 * HalfSize;
             x = ground * geometry.RangeX + azimuth * geometry.AzimuthX;

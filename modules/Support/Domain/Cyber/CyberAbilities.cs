@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Cyber
+namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>Wire-stable cyber operation bytes. The eight map abilities.</summary>
     internal enum HackKind : byte
@@ -11,17 +11,17 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         Ghost = 3,
         Spoof = 4,
 
-        /// <summary>Sweep for hostile ground vehicles; revealed armor is worth a hijack.</summary>
+        /// <summary>Wide ground search; a deeper profile opens selective disruption.</summary>
         Scan = 5,
 
-        /// <summary>Seize hostile ground vehicles: they halt, hold and go blind for the window.</summary>
+        /// <summary>Reveal and disrupt up to eight hostile ground vehicles for a short window.</summary>
         Hijack = 6,
 
-        /// <summary>Detonate hostile ground vehicles in a tight radius.</summary>
+        /// <summary>High-strength sensor disruption on four ground vehicles in a tight radius.</summary>
         Overload = 7
     }
 
-    /// <summary>Stage-4 capstones a hacked location can take. One per location, wire-stable.</summary>
+    /// <summary>Quality-six payloads for the single expiring access package. Wire-stable.</summary>
     internal enum Capstone : byte
     {
         None = 0,
@@ -32,7 +32,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         /// <summary>A virtual jammer suppresses hostile sensors inside the radius.</summary>
         Jammer = 2,
 
-        /// <summary>Hostile ground vehicles inside a small radius are destroyed.</summary>
+        /// <summary>Disrupt a bounded hostile ground cluster without dealing direct damage.</summary>
         Sabotage = 3
     }
 
@@ -68,22 +68,22 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     {
         public static readonly CyberAbilityInfo[] Table =
         {
-            new CyberAbilityInfo(HackKind.Ping, "PNG", "PING SWEEP",
-                "Ground contacts in the target area.", 2, 20f),
+            new CyberAbilityInfo(HackKind.Ping, "PNG", "EMITTER PING",
+                "Locate up to 48 hostile ground and ship radars that are on and working; radar silence defeats this sweep.", 2, 20f),
             new CyberAbilityInfo(HackKind.Track, "TRK", "TRACK UPLINK",
                 "Streams air tracks for the window.", 3, 30f),
             new CyberAbilityInfo(HackKind.Blackout, "C2B", "RADAR BLACKOUT",
                 "Jams hostile sensors; friends unaffected.", 3, 45f),
             new CyberAbilityInfo(HackKind.Ghost, "GST", "GHOST SHIELD",
-                "Hostile tracking of your aircraft goes stale.", 3, 40f),
+                "Hostile tracks of friendly aircraft in 3 km go stale.", 3, 40f),
             new CyberAbilityInfo(HackKind.Spoof, "SPF", "SPOOF CONTACTS",
-                "Feeds the enemy a false contact.", 3, 45f),
+                "False tracks in 3 km. Q6 also breaks four non-nuclear active-radar missile locks; native seekers may recover.", 3, 45f),
             new CyberAbilityInfo(HackKind.Scan, "SCN", "NODE SCAN",
-                "Sweep for hostile vehicles; revealed armor can be hijacked.", 2, 25f),
+                "Reveal up to 48 hostile surface contacts in a wide area, including silent radars; aircraft excluded.", 2, 25f),
             new CyberAbilityInfo(HackKind.Hijack, "HJK", "HIJACK",
-                "Seize hostile vehicles: they halt and hold blind.", 3, 50f),
-            new CyberAbilityInfo(HackKind.Overload, "OVL", "OVERLOAD",
-                "Detonate hostile vehicles in a tight radius.", 3, 60f)
+                "Reveal and blind up to eight hostile ground vehicles.", 3, 50f),
+            new CyberAbilityInfo(HackKind.Overload, "OVL", "SENSOR OVERLOAD",
+                "Strong sensor disruption on four vehicles in a tight area.", 3, 60f)
         };
 
         public static CyberAbilityInfo Info(HackKind kind) => Table[(int)kind];
@@ -92,6 +92,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public static string Description(HackKind kind) => Info(kind).Summary;
         public static float Intel(HackKind kind) => Info(kind).Intel;
         public static byte RequiredStage(HackKind kind) => Info(kind).Stage;
+        public static int RequiredQuality(HackKind kind) => kind == HackKind.Ping || kind == HackKind.Scan ? 0
+            : kind == HackKind.Track || kind == HackKind.Blackout || kind == HackKind.Hijack ? 2 : 4;
+        public static string Branch(HackKind kind) => kind == HackKind.Ping || kind == HackKind.Scan ||
+            kind == HackKind.Hijack || kind == HackKind.Overload ? "INTRUSION" : "ELECTRONIC WARFARE";
 
         /// <summary>Effect radius of the ability at the target, metres; 0 when it has no ring.</summary>
         public static float Radius(HackKind kind)
@@ -103,7 +107,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case HackKind.Blackout: return 6000f;
                 case HackKind.Scan: return 6000f;
                 case HackKind.Hijack: return 2500f;
-                case HackKind.Overload: return 400f;
+                case HackKind.Overload: return 1500f;
+                case HackKind.Ghost:
+                case HackKind.Spoof: return 3000f;
                 default: return 0f;
             }
         }
@@ -117,6 +123,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case HackKind.Ghost: return 16f;
                 case HackKind.Spoof: return 16f;
                 case HackKind.Hijack: return 20f;
+                case HackKind.Blackout: return 20f;
+                case HackKind.Overload: return 30f;
                 default: return 0f;
             }
         }
@@ -129,6 +137,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     internal static class Capstones
     {
         public const float Intel = 120f;
+        public const int RequiredQuality = 6;
         public const float RechargeSeconds = 360f;
 
         public static readonly Capstone[] All = { Capstone.Reveal, Capstone.Jammer, Capstone.Sabotage };
@@ -150,7 +159,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             {
                 case Capstone.Reveal: return "REVEAL";
                 case Capstone.Jammer: return "VIRTUAL JAMMER";
-                case Capstone.Sabotage: return "SABOTAGE";
+                case Capstone.Sabotage: return "NETWORK SHUTDOWN";
                 default: return "CAPSTONE";
             }
         }
@@ -164,7 +173,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                 case Capstone.Jammer:
                     return "A virtual jammer suppresses hostile sensors inside the radius for 45 s.";
                 case Capstone.Sabotage:
-                    return "Hostile ground vehicles in a small radius are destroyed.";
+                    return "Reveal and disrupt eight ground vehicles in 3 km for 35 s; no direct damage.";
                 default:
                     return string.Empty;
             }

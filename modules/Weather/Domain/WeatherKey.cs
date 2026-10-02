@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Everything the host decides about the weather, and the only weather data that ever

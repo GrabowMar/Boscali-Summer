@@ -1,9 +1,9 @@
 using System.Collections;
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// "Rod from God": one high-velocity projectile per online magazine, up to loaded rods.
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             var targets = new Vector3[shots];
             for (int i = 0; i < shots; i++)
             {
-                Vector2 miss = Random.insideUnitCircle * platform.RodScatter(now);
+                Vector2 miss = Random.insideUnitCircle * platform.PreparedRodScatter(now);
                 Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
                 targets[i] = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
                     ? scattered : ground;

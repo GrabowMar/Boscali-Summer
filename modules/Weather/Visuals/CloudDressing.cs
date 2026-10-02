@@ -1,7 +1,7 @@
 using System.Reflection;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Client-local tuning of the game's cloud layer. Also keeps it as a visual fallback

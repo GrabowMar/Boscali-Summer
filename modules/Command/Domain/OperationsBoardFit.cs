@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// How the OPERATIONS page divides the bay it is given between its two lists.

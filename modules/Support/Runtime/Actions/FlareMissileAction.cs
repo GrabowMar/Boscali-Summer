@@ -1,9 +1,9 @@
 using System.Collections;
-using BoscaliSummer.Features.Support.Visuals;
+using BoscaliSummer.Modules.Support.Visuals;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// Tactical Flare Barrage: launches a high-velocity countermeasure delivery missile that

@@ -1,8 +1,9 @@
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
+using NOAvionics;
+using BoscaliSummer.Modules.Support.Presentation.Views;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// The semantic hue of a team state and of a held post, the same on every SPEC OPS surface
@@ -13,17 +14,17 @@ namespace BoscaliSummer.Features.Support.Presentation
     {
         /// <summary>Observation post green, saboteur cell amber, listening post teal, safehouse blue.</summary>
         public static Color Post(FieldMission post) =>
-            post == FieldMission.Recon ? AvTheme.RailReady : post == FieldMission.Sabotage ? AvTheme.RailCaution : AvTheme.RailInfo;
+            post == FieldMission.Recon ? RoomPaint.Ready : post == FieldMission.Sabotage ? AvTheme.RailCaution : RoomPaint.Instrument;
 
         public static Color State(TeamState state)
         {
             switch (state)
             {
-                case TeamState.Ready: return AvTheme.RailReady;
-                case TeamState.EnRoute: return AvTheme.RailInfo;
+                case TeamState.Ready: return RoomPaint.Ready;
+                case TeamState.EnRoute: return RoomPaint.Instrument;
                 case TeamState.Deciding: return AvTheme.RailCaution;
                 case TeamState.OnTask: return AvTheme.RailCaution;
-                case TeamState.Holding: return AvTheme.RailReady;
+                case TeamState.Holding: return RoomPaint.Ready;
                 case TeamState.Recovering: return AvTheme.Dim;
                 default: return AvTheme.RailInert;
             }

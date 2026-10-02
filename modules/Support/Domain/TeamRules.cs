@@ -1,6 +1,6 @@
-using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
 
-namespace BoscaliSummer.Features.Support.Domain
+namespace BoscaliSummer.Modules.Support.Domain
 {
     /// <summary>The abilities and commands one faction shares a clock for, in a fixed order.</summary>
     internal enum TeamGate : byte
@@ -119,6 +119,20 @@ namespace BoscaliSummer.Features.Support.Domain
         /// <summary>The pilot who launched the shared station core; 0 when unknown.</summary>
         public ulong StationOwner;
 
+        public const double StationControlSeconds = 20.0;
+        public ulong StationOperator;
+        public double StationControlUntil;
+
+        public bool MayOperateStation(ulong requester, bool ownerPresent, int pilots, bool guard, double now) =>
+            now >= StationControlUntil ||
+            TeamRules.MayTouch(requester, StationOperator, ownerPresent, pilots, guard);
+
+        public void OperateStation(ulong requester, double now)
+        {
+            StationOperator = requester;
+            StationControlUntil = now + StationControlSeconds;
+        }
+
         /// <summary>Seconds until <paramref name="gate"/> reopens under a cooldown of
         /// <paramref name="cooldown"/>; the setting is read each time, so a change applies at once.</summary>
         public float Remaining(TeamGate gate, float now, float cooldown)
@@ -157,6 +171,8 @@ namespace BoscaliSummer.Features.Support.Domain
             System.Array.Clear(Launcher, 0, Launcher.Length);
             BreachOwner = 0;
             StationOwner = 0;
+            StationOperator = 0;
+            StationControlUntil = 0;
         }
     }
 }

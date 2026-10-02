@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>
     /// Operator words for station state, shared by the console, the uplink and the map so a

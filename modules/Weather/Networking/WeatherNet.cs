@@ -1,14 +1,14 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Features.Weather.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Runtime;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Networking
+namespace BoscaliSummer.Modules.Weather.Networking
 {
     /// <summary>
     /// Mirage network bridge for weather synchronization between host and remote clients.

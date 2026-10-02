@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// A restrained two-note dispatch chime, flat and client-local. Generated once and

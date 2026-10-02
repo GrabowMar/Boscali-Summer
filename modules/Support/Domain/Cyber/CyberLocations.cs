@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Cyber
+namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>Wire-stable kind of a hackable map location. One byte.</summary>
     internal enum LocationKind : byte
@@ -35,7 +35,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
     /// <summary>What money can improve. Never an ability.</summary>
     internal enum CyberUpgrade : byte
     {
-        /// <summary>Every hacked location's ability radius grows.</summary>
+        /// <summary>Cyber payload effect footprints grow; sector authority does not.</summary>
         Radius = 0,
 
         /// <summary>Network reach grows, so farther locations can be breached.</summary>
@@ -95,8 +95,14 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         LowComputing,
         Recharging,
         AwaitingChoice,
-        AccessActive
+        AccessActive,
+        StaleWork,
+        Incomplete,
+        AlreadyAnalyzed
     }
+
+    /// <summary>Host-validated intrusion work. Bytes are stable on the OPS command wire.</summary>
+    internal enum CyberWork : byte { Analyze = 0, Exploit = 1, Scrub = 2, Commit = 3 }
 
     internal readonly struct StageInfo
     {
@@ -149,7 +155,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float ExtractSeconds = 7f;
         public const float AccessSeconds = 75f;
         /// <summary>One bounded basic-effect budget per completed operation.</summary>
-        public const float AccessIntel = 35f;
+        public const float AccessIntel = 60f;
+        public const float WorkSeconds = 2f;
+        public const float SessionSeconds = 120f;
+        public const int WorkRequired = 3;
+        public const int MaximumQuality = 6;
         public const float AccessRecoverySeconds = 30f;
         public const float ForceDurationScale = 0.55f;
         public const float ForceCostScale = 1.6f;
@@ -169,7 +179,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public const float SpoofCost = 15f;
         public const float SpoofRecharge = 30f;
         public const float LockoutSeconds = 60f;
-        public const float PendingChoiceSeconds = 12f;
+        public const float PendingChoiceSeconds = 75f;
 
         public const float PatchSeconds = 8f;
         public const float HoneypotSeconds = 60f;
@@ -192,7 +202,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             switch (upgrade)
             {
-                case CyberUpgrade.Radius: return "ABILITY RADIUS";
+                case CyberUpgrade.Radius: return "PAYLOAD FOOTPRINT";
                 case CyberUpgrade.Reach: return "NETWORK REACH";
                 case CyberUpgrade.Income: return "RESOURCE YIELD";
                 default: return "TRACE RESISTANCE";
@@ -203,10 +213,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             switch (upgrade)
             {
-                case CyberUpgrade.Radius: return "+" + (int)RadiusPerLevel + " m on every location";
+                case CyberUpgrade.Radius: return "+10 % recon/disruption radius; deception stays 3 km";
                 case CyberUpgrade.Reach: return "+" + (int)(ReachPerLevel * 100f) + " % breach reach";
                 case CyberUpgrade.Income: return "+" + (int)(IncomePerLevel * 100f) + " % resource income";
-                default: return "−" + (int)(TracePerLevel * 100f) + " % trace per phase";
+                default: return "−" + (int)(TracePerLevel * 100f) + " % intrusion exposure";
             }
         }
 

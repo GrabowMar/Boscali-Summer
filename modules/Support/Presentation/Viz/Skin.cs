@@ -1,7 +1,7 @@
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// What a primitive is allowed to know about the room that hosts it: its inks, its stroke sprite

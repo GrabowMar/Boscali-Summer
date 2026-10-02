@@ -1,6 +1,6 @@
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.QoL.Patches
+namespace BoscaliSummer.Modules.QoL.Patches
 {
     // A camera change must not undo the player's explicit N-key choice.
     [HarmonyPatch(typeof(NightVision), "NightVis_OnSwitchCam")]

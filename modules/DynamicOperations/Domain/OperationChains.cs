@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// The deterministic chain map for follow-on contracts. A completed contract may seed one

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>The unit families Intel tells apart. Scenery, containers and pilots are <see cref="Other"/>.</summary>
     internal enum UnitClass : byte

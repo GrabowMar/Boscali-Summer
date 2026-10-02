@@ -1,32 +1,31 @@
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
 using NOAvionics;
-using NOAvionics.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// CYBER — the faction's cyber network. STATUS is the watch floor: the INFOCON rail and advice,
-    /// the node mesh, the resource meters with the live breach or lease, six status chips and the
-    /// event tape. ACTIONS holds the map abilities the network has earned. PAW S1 deleted the
-    /// full-screen console: breach and incident answers return as the Tier-2 spectrum tab in S3.
-    /// This file is the shell plus STATUS and the work that keeps running with the page closed:
-    /// the event log and the alarm. Every figure comes from the network model; every control is
-    /// a host request. With no network the page is its one card and the log.
+    /// the console door, the node mesh, the resource meters with the live breach or lease,
+    /// six status chips and the event tape. ACTIONS holds the map abilities the network has
+    /// earned. Breach and incident answers live in the full-screen console. This file is the
+    /// shell plus STATUS and the work that keeps running with the page closed: the event log
+    /// and the alarm. Every figure comes from the network model; every control is a host
+    /// request. With no network the page is its one card and the log.
     /// </summary>
     internal sealed partial class SupportPanel
     {
-        private const string CyberStatusHelp = "Watch floor: INFOCON, the node mesh, resources and the event log.";
-        private const string CyberActionsHelp = "The map abilities the network has earned.";
+        private const string CyberStatusHelp = "STATUS: the watch floor. INFOCON and the adversary phase, the node mesh (click a node to open the console on it), resources, incidents and the event log.";
+        private const string CyberActionsHelp = "ACTIONS: the map effects your network has earned. Analyze, inject and commit three services. Quality opens deeper INTRUSION / EW tiers; arm one earned effect and right-click the map.";
 
-        private static readonly string[] CyberTileKeys = { "NODES", "INTRUSION", "JAMMING", "TRACE", "ADVERSARY", "C2" };
+        private static readonly string[] CyberTileKeys = { "INTRUSION", "JAMMING", "TRACE" };
 
         /// <summary>Hosts the <see cref="Views.MiniNetmap"/> board inside a kit v2 part.</summary>
         private sealed class NetmapPart : AvPart
         {
-            private const float H = 176f;
+            private const float H = 156f;
             private readonly Views.MiniNetmap map = new Views.MiniNetmap();
             private readonly System.Action<int> onClick;
             private bool built;
@@ -55,9 +54,13 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private OpsSubPage cyberPage;
         private InfoconHero cyberHero;
-        private AvSection cyberMeshSection, cyberResourceSection;
+        private AvSection cyberMeshSection;
+        private AvButtons cyberButtons;
+        private AvControl openConsoleButton;
         private NetmapPart cyberMap;
-        private MeterRow cyberComputing, cyberIntel, cyberLease;
+        private AvGauge cyberComputing, cyberIntel, cyberNodes;
+        private AvHazardBar cyberLease;
+        private AvLineChart cyberChart;
         private AvChip[] cyberTiles;
         private LogTape cyberLog;
         private readonly string[] cyberLoop = new string[LoopLines];
@@ -69,9 +72,15 @@ namespace BoscaliSummer.Features.Support.Presentation
         {
             cyberPage = null;
             cyberHero = null;
-            cyberMeshSection = cyberResourceSection = null;
+            cyberMeshSection = null;
+            cyberButtons = null;
+            openConsoleButton = null;
             cyberMap = null;
-            cyberComputing = cyberIntel = cyberLease = null;
+            cyberComputing = null;
+            cyberIntel = null;
+            cyberNodes = null;
+            cyberChart = null;
+            cyberLease = null;
             cyberTiles = null;
             cyberLog = null;
             for (int i = 0; i < cyberLoop.Length; i++) cyberLoop[i] = null;
@@ -104,30 +113,48 @@ namespace BoscaliSummer.Features.Support.Presentation
         private void BuildCyberStatusPage(AvFlow status)
         {
             cyberHero = status.Add(new InfoconHero(status.Content));
+            cyberButtons = status.Buttons(new AvControl.Spec("OPEN CONSOLE", OpenConsole, AvButtonStyle.Primary, AvIcon.Maximize));
+            openConsoleButton = cyberButtons.Controls[0];
+            openConsoleButton.Help = "The network-ops terminal: breach locations, answer incidents, buy network upgrades.";
 
             cyberMeshSection = status.Section(AvIcon.Map2, "NODE MESH", "");
-            cyberMap = status.Add(new NetmapPart(status.Content, SelectSite));
+            cyberMap = status.Add(new NetmapPart(status.Content, slot =>
+            {
+                SelectSite(slot);
+                OpenConsole();
+            }));
 
-            cyberResourceSection = status.Section(AvIcon.Gauge, "RESOURCES", "");
-            cyberComputing = status.Add(new MeterRow(status.Content, "COMPUTING"));
-            cyberIntel = status.Add(new MeterRow(status.Content, "INTEL"));
-            cyberLease = status.Add(new MeterRow(status.Content, "ACCESS"));
+            cyberComputing = new AvGauge(status.Content, "COMPUTING", AvGaugeShape.Segments, 64f);
+            cyberIntel = new AvGauge(status.Content, "INTEL", AvGaugeShape.Segments, 64f);
+            cyberNodes = new AvGauge(status.Content, "NODES", AvGaugeShape.Segments, 64f);
+            status.Row(cyberComputing, cyberIntel, cyberNodes);
+            cyberLease = status.Add(new AvHazardBar(status.Content, "OP"));
+            cyberLease.Help = "The live operation: an open breach (trace risk), the one-use access lease that follows it, or a payload waiting for your choice.";
             cyberTiles = BuildChipRow(status, CyberTileKeys, 3);
 
-            status.Section(AvIcon.ListDetails, "EVENT LOG · NEWEST FIRST");
-            cyberLog = status.Add(new LogTape(status.Content, LoopLines, true));
+            cyberLog = status.Add(new LogTape(status.Content, 5, true));
+            cyberChart = AddTrend(status);
         }
 
         private void SetCyberStatusParts(bool live)
         {
             cyberMeshSection.SetShown(live);
+            cyberButtons.SetShown(live);
             cyberMap.SetShown(live);
-            cyberResourceSection.SetShown(live);
             cyberComputing.SetShown(live);
             cyberIntel.SetShown(live);
             cyberLease.SetShown(live);
-            foreach (AvChip chip in cyberTiles) chip.SetShown(live);
+            cyberNodes.SetShown(live);
             if (!live) cyberLease.SetShown(false);
+        }
+
+        // ---- Console and loop --------------------------------------------------------------------
+
+        private void OpenConsole()
+        {
+            if (FullscreenInput.AnyOpen && !Window.OpsWindow.IsOpen) return;
+            OpenRoom(CyberRoom(), selectedSite, openConsoleButton != null ? openConsoleButton.Rect : null);
+            CyberLog("CONSOLE - " + CyberWords.NetworkName + " ON THE BIG BOARD");
         }
 
         /// <summary>Work that must not wait for the CYBER page: the loop and the alarm.</summary>
@@ -197,6 +224,7 @@ namespace BoscaliSummer.Features.Support.Presentation
             SetCyberStatusParts(live);
             cyberLog.Write(cyberLoop);
 
+            PaintCyberHeadline(network, enabled, built, now);
             if (!enabled)
             {
                 cyberHero.Set(0, "CYBER OFFLINE", "HOST OFF", "DISABLED IN HOST CONFIG", "The host has switched cyber operations off.", AvState.Inert);
@@ -223,16 +251,25 @@ namespace BoscaliSummer.Features.Support.Presentation
                 CyberNode node = network.Node(i);
                 if (!(node.Static || node.Hacked) && network.CheckBreach(i, now) == BreachDenial.None) reach++;
             }
-            cyberMeshSection.SetCaption(nodes + " NODES · " + reach + " IN REACH");
             cyberMap.Paint(network, now, selectedSite);
+            cyberNodes.Set(nodes > 0 ? stats.Hacked / (float)nodes : 0f, stats.Hacked + "/" + nodes,
+                stats.Hacked > 0 ? AvState.Ready : AvState.Inert);
+            string nodeHelp = "NODES: " + stats.Hacked + " of " + nodes + " nodes are yours; " + reach +
+                " more are inside breach reach. Click one on the mesh to open the console on it.";
+            if (cyberNodes.Help != nodeHelp) cyberNodes.Help = nodeHelp;
 
             float computing = network.Computing, computingCap = Mathf.Max(1f, network.ComputingCapacity());
             float intel = network.Intel, intelCap = Mathf.Max(1f, network.IntelCapacity());
-            cyberComputing.Set(computing / computingCap, Mathf.FloorToInt(computing) + "/" + Mathf.RoundToInt(computingCap),
-                "+" + AvNum.Fixed(network.ComputingIncome(), 1) + "/S", computing < computingCap * 0.25f ? AvState.Caution : AvState.Info);
-            cyberIntel.Set(intel / intelCap, Mathf.FloorToInt(intel) + "/" + Mathf.RoundToInt(intelCap),
-                "+" + AvNum.Fixed(network.IntelIncome(), 1) + "/S", AvState.Info);
-            cyberResourceSection.SetCaption(computing < computingCap * 0.25f ? "▲ COMPUTING LOW" : "NOMINAL");
+            AvState computeState = computing < computingCap * 0.25f ? AvState.Caution : AvState.Info;
+            cyberComputing.Set(computing / computingCap, AvStates.Glyph(computeState) + Mathf.FloorToInt(computing) + "/" + Mathf.RoundToInt(computingCap), computeState);
+            cyberIntel.Set(intel / intelCap, Mathf.FloorToInt(intel) + "/" + Mathf.RoundToInt(intelCap), AvState.Info);
+            string computeHelp = "COMPUTING: " + Mathf.FloorToInt(computing) + " of " + Mathf.RoundToInt(computingCap) +
+                " spendable on active intrusion work and defence. Online home infrastructure refills it.";
+            if (cyberComputing.Help != computeHelp) cyberComputing.Help = computeHelp;
+            string intelHelp = "INTEL: " + Mathf.FloorToInt(intel) + " of " + Mathf.RoundToInt(intelCap) +
+                " earned from completed intrusion packages. Map effects are paid in intel.";
+            if (cyberIntel.Help != intelHelp) cyberIntel.Help = intelHelp;
+            PaintTrend(cyberChart, computingTrend, "");
 
             RefreshCyberLease(network, now);
             RefreshCyberTiles(network, stats, now);
@@ -244,22 +281,19 @@ namespace BoscaliSummer.Features.Support.Presentation
             if (network.BreachActive)
             {
                 float trace = network.BreachTrace;
-                cyberLease.SetLabel("BREACH");
-                cyberLease.Set(trace, AvNum.Percent(trace) + " TRACE", CyberWords.PhaseOf(network.BreachPhase),
+                cyberLease.Set(trace, "WORK " + network.WorkProgress + "/3 · Q" + network.WorkQuality + " · " + AvNum.Percent(trace) + " TRACE",
                     trace >= 0.8f ? AvState.Danger : trace >= 0.5f ? AvState.Caution : AvState.Info);
                 cyberLease.SetShown(true);
             }
             else if (network.AccessRemaining(now) > 0f)
             {
                 float left = network.AccessRemaining(now);
-                cyberLease.SetLabel("ACCESS");
-                cyberLease.Set(left / CyberLocations.AccessSeconds, CyberWords.Seconds(left), "ONE USE", AvState.Ready);
+                cyberLease.Set(left / CyberLocations.AccessSeconds, "ACCESS " + CyberWords.Seconds(left) + " · ONE USE", AvState.Ready);
                 cyberLease.SetShown(true);
             }
             else if (network.BreachAwaitingChoice)
             {
-                cyberLease.SetLabel("PAYLOAD");
-                cyberLease.Set(1f, "—", "SELECT", AvState.Caution);
+                cyberLease.Set(1f, "PAYLOAD · SELECT", AvState.Caution);
                 cyberLease.SetShown(true);
             }
             else cyberLease.SetShown(false);
@@ -267,19 +301,25 @@ namespace BoscaliSummer.Features.Support.Presentation
 
         private void RefreshCyberTiles(CyberNetwork network, in CyberStats stats, double now)
         {
-            SetChip(cyberTiles[0], CyberTileKeys[0], stats.Hacked + "/" + stats.Nodes + " LIVE", stats.Hacked > 0 ? AvState.Ready : AvState.Inert);
             int intrusions = network.ActiveIncidents(IncidentKind.Intrusion);
-            SetChip(cyberTiles[1], CyberTileKeys[1], network.CommandCompromised ? "C2 BREACH" : intrusions > 0 ? intrusions + " ACTIVE" : "CLEAR",
+            SetChip(cyberTiles[0], CyberTileKeys[0], network.CommandCompromised ? "C2 BREACH" : intrusions > 0 ? intrusions + " ACTIVE" : "CLEAR",
                 network.CommandCompromised || intrusions > 0 ? AvState.Danger : AvState.Ready);
             int raids = network.ActiveIncidents(IncidentKind.Raid);
-            SetChip(cyberTiles[2], CyberTileKeys[2], raids > 0 ? "RAID" : "CLEAR", raids > 0 ? AvState.Caution : AvState.Ready);
-            SetChip(cyberTiles[3], CyberTileKeys[3], network.AnyFoothold(now) ? "TRACEABLE" : "NONE",
+            SetChip(cyberTiles[1], CyberTileKeys[1], raids > 0 ? "RAID" : "CLEAR", raids > 0 ? AvState.Caution : AvState.Ready);
+            SetChip(cyberTiles[2], CyberTileKeys[2], network.AnyFoothold(now) ? "TRACEABLE" : "NONE",
                 network.AnyFoothold(now) ? AvState.Caution : AvState.Inert);
-            SetChip(cyberTiles[4], CyberTileKeys[4], CyberWords.Phase(network.Phase),
-                network.Phase == CampaignPhase.Offensive ? AvState.Danger
-                : network.Phase == CampaignPhase.Active ? AvState.Caution : AvState.Info);
-            SetChip(cyberTiles[5], CyberTileKeys[5], network.CommandCompromised ? "BREACHED" : "SECURE",
-                network.CommandCompromised ? AvState.Danger : AvState.Ready);
+        }
+
+        /// <summary>The mode word in the title slot: only what the hero card below does not already say.</summary>
+        private void PaintCyberHeadline(CyberNetwork network, bool enabled, bool built, double now)
+        {
+            if (!enabled) { cyberPage.SetHeadline("OFFLINE", AvState.Inert); return; }
+            if (!built) { cyberPage.SetHeadline("NO NETWORK", AvState.Inert); return; }
+            float access = network.AccessRemaining(now);
+            if (network.CommandCompromised) cyberPage.SetHeadline("C2 BREACHED", AvState.Danger);
+            else if (network.BreachActive) cyberPage.SetHeadline("BREACH RUNNING", AvState.Caution);
+            else if (access > 0f) cyberPage.SetHeadline("ACCESS " + CyberWords.Seconds(access), AvState.Ready);
+            else cyberPage.SetHeadline("NETWORK UP", AvState.Ready);
         }
     }
 }

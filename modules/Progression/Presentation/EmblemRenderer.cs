@@ -1,12 +1,11 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using BoscaliSummer.Features.Progression.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Progression.Runtime;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// Local squadron-emblem art: a procedural silhouette/charge/palette renderer plus a

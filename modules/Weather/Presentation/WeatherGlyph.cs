@@ -1,9 +1,9 @@
-using BoscaliSummer.Features.Weather.Domain;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Weather.Domain;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Weather.Presentation
+namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>Small forecast symbology, drawn once per regime change with no texture or update loop.</summary>
     internal sealed class WeatherGlyph : MaskableGraphic

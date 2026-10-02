@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// One candidate for a JTAC mark: a hostile unit's position. Pure data so the

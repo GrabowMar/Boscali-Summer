@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Runtime;
+using BoscaliSummer.Modules.Command.Runtime;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Observation buffer shared by the faction panels, sampled from mission start rather

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>One orbit band a station can fly. Wire-stable by <see cref="Index"/>.</summary>
     internal readonly struct OrbitRegime

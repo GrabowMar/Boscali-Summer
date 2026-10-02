@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Orbital
 {
     /// <summary>Why the station is not on its pass cycle. Wire-stable.</summary>
     internal enum PlatformHold : byte
@@ -53,6 +53,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
     }
 
     internal enum PlatformFocus : byte { Survey = 0, Strike = 1, Screen = 2 }
+    internal enum PlatformWork : byte { Track = 0, Charge = 1, Vent = 2, Commit = 3 }
+    internal enum PlatformWorkDenial : byte
+    {
+        None, Invalid, NoPlatform, Holding, SurveyFocus, Cooldown, LowEnergy, TooHot, Incomplete, AlreadyBanked, NothingToVent,
+        NotFitted, Offline
+    }
 
     /// <summary>The last station event worth a voice-loop line. Wire-stable.</summary>
     internal enum PlatformNotice : byte
@@ -130,6 +136,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public byte NoticeSerial;
         public byte Focus;
         public float RetaskIn, SolutionX, SolutionZ, SolutionRadius, SolutionIn;
+        public float Alignment, Capacitor, Heat, WorkIn, Boost, BoostIn;
+        public byte BoostFocus;
+        public int WorkRevision;
+        public byte CrewBus;
 
         public void Clear()
         {
@@ -142,6 +152,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             CycleClock = Energy = Fuel = DockIn = Elapsed = 0f;
             Focus = 0;
             RetaskIn = SolutionX = SolutionZ = SolutionRadius = SolutionIn = 0f;
+            Alignment = Capacitor = Heat = WorkIn = Boost = BoostIn = 0f;
+            BoostFocus = 0;
+            WorkRevision = 0;
+            CrewBus = 0;
         }
     }
 
@@ -151,7 +165,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
     /// the game. The host launches, jettisons, burns and ticks; a client only mirrors. All
     /// clocks are the caller's scene clock in seconds.
     /// </summary>
-    internal sealed class OrbitalPlatform
+    internal sealed partial class OrbitalPlatform
     {
         public const int Columns = 5;
         public const int Rows = 3;
@@ -170,8 +184,110 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         public const float StepLimitSeconds = 5f;
         public const string Callsign = "BASTION";
         public const float SolutionSeconds = 75f;
-        public const float RetaskSeconds = 12f;
+        public const float RetaskSeconds = 2f;
         public const float MaximumSolutionRadius = 6000f;
+        public const float WorkSeconds = 1.25f;
+        public const float BoostSeconds = 90f;
+
+        public float Alignment { get; private set; }
+        public float Capacitor { get; private set; }
+        public float Heat { get; private set; }
+        public float Boost { get; private set; }
+        public PlatformFocus BoostFocus { get; private set; }
+        public int WorkRevision { get; private set; }
+        private double workUntil, boostUntil;
+        public double WorkRemaining(double now) => ClockValid(now) ? Math.Max(0.0, workUntil - now) : 0.0;
+        public double BoostRemaining(double now) => ClockValid(now) ? Math.Max(0.0, boostUntil - now) : 0.0;
+        public float PreparedQuality => CircuitQuality(Alignment, Capacitor, Heat);
+        public float TrackingMatch(double now) => ClockValid(now) ?
+            (float)(0.5 + 0.5 * Math.Cos((now - LaunchTime) * Math.PI / 3.0)) : 0f;
+        public float TrackingGain(double now) => 22f + 12f * TrackingMatch(now) +
+            (Stats(now).Stabilised ? 8f : 0f) + (SolutionRemaining(now) > 0 ? 10f : 0f);
+        private float BoostFor(PlatformFocus focus, double now) => BoostFocus == focus && BoostRemaining(now) > 0 ? Boost : 0f;
+        public float EmpRadiusScale(double now) => EmpScaleAt(now) * (1f + BoostFor(PlatformFocus.Screen, now) * 0.25f);
+        public float EmpDurationScale(double now) => 1f + BoostFor(PlatformFocus.Screen, now) * 0.25f;
+        public float PreparedRodScatter(double now) => RodScatter(now) * (1f - BoostFor(PlatformFocus.Strike, now) * 0.4f);
+
+        public static float WorkCost(PlatformWork order) => order == PlatformWork.Track ? 20f :
+            order == PlatformWork.Charge ? 90f : order == PlatformWork.Commit ? 40f : 0f;
+        public static string WorkOrderName(PlatformWork order) => order == PlatformWork.Track ? "TRACK" :
+            order == PlatformWork.Charge ? "CHARGE" : order == PlatformWork.Vent ? "VENT" : "COMMIT";
+        public static string WorkWords(PlatformWorkDenial denial)
+        {
+            switch (denial)
+            {
+                case PlatformWorkDenial.None: return "GO";
+                case PlatformWorkDenial.NoPlatform: return "COMMISSION BASTION FIRST";
+                case PlatformWorkDenial.Holding: return "BUS TRANSITION IN PROGRESS";
+                case PlatformWorkDenial.SurveyFocus: return "SELECT STRIKE OR SCREEN";
+                case PlatformWorkDenial.Cooldown: return "ORDER ACKNOWLEDGEMENT PENDING";
+                case PlatformWorkDenial.LowEnergy: return "INSUFFICIENT STATION ENERGY";
+                case PlatformWorkDenial.TooHot: return "THERMAL LIMIT / CHANGE COOLING OR PULSE";
+                case PlatformWorkDenial.Incomplete: return "ROUTE ALL THREE / CHARGE 40 MIN / OBSERVER NEEDS FRESH RECON";
+                case PlatformWorkDenial.AlreadyBanked: return "PACKAGE READY / EXPEND BEFORE REWORK";
+                case PlatformWorkDenial.NothingToVent: return "THERMAL NOMINAL / NOTHING TO VENT";
+                case PlatformWorkDenial.NotFitted: return "FIT THE SELECTED EMP OR ROD PAYLOAD IN ENGINEERING";
+                case PlatformWorkDenial.Offline: return "SELECTED PAYLOAD OFFLINE / RESTORE MODULE FIRST";
+                default: return "INVALID FIRE CONTROL ORDER";
+            }
+        }
+
+        public PlatformWorkDenial CheckWork(PlatformWork order, double now, int expectedRevision = -1)
+        {
+            if ((byte)order > (byte)PlatformWork.Commit || !ClockValid(now) || expectedRevision < -1 ||
+                (expectedRevision >= 0 && expectedRevision != WorkRevision)) return PlatformWorkDenial.Invalid;
+            if (!Exists) return PlatformWorkDenial.NoPlatform;
+            if (Brownout || !IsOnline(CoreCell, now)) return PlatformWorkDenial.LowEnergy;
+            if (now < CycleStart || now < RetaskUntil) return PlatformWorkDenial.Holding;
+            if (Focus == PlatformFocus.Survey) return PlatformWorkDenial.SurveyFocus;
+            if (now < workUntil) return PlatformWorkDenial.Cooldown;
+            if (BoostRemaining(now) > 0) return PlatformWorkDenial.AlreadyBanked;
+            if (order == PlatformWork.Vent && Heat <= 0f) return PlatformWorkDenial.NothingToVent;
+            if (Energy + 0.001f < WorkCost(order)) return PlatformWorkDenial.LowEnergy;
+            if ((order == PlatformWork.Track && Heat > 88f) || (order == PlatformWork.Charge && Heat > 78f))
+                return PlatformWorkDenial.TooHot;
+            if (order == PlatformWork.Commit && (Alignment < 45f || Capacitor < 40f)) return PlatformWorkDenial.Incomplete;
+            return PlatformWorkDenial.None;
+        }
+
+        /// <summary>Bounded host fire-control work. Waiting never creates alignment or charge;
+        /// active orders spend real station energy, and heat makes repeating CHARGE a poor solution.</summary>
+        public PlatformWorkDenial TryWork(PlatformWork order, double now, int expectedRevision = -1)
+        {
+            PlatformWorkDenial denial = CheckWork(order, now, expectedRevision);
+            if (denial != PlatformWorkDenial.None) return denial;
+            AdvanceWorkRevision();
+            Energy = Math.Max(0f, Energy - WorkCost(order));
+            workUntil = now + WorkSeconds;
+            if (order == PlatformWork.Track)
+            {
+                Alignment = Math.Min(100f, Alignment + TrackingGain(now));
+                Heat = Math.Min(100f, Heat + 12f);
+            }
+            else if (order == PlatformWork.Charge)
+            {
+                Capacitor = Math.Min(100f, Capacitor + (Focus == PlatformFocus.Screen ? 30f : 25f));
+                Alignment = Math.Max(0f, Alignment - 5f);
+                Heat = Math.Min(100f, Heat + 22f);
+            }
+            else if (order == PlatformWork.Vent)
+            {
+                Heat = Math.Max(0f, Heat - (FittedOnline(ModuleKind.Radiator, now) ? 50f : 35f));
+                Capacitor = Math.Max(0f, Capacitor - 8f);
+                Alignment = Math.Max(0f, Alignment - 4f);
+            }
+            else
+            {
+                Boost = Math.Max(0f, Math.Min(1f, PreparedQuality));
+                BoostFocus = Focus;
+                boostUntil = now + BoostSeconds;
+                Alignment = Capacitor = 0f;
+            }
+            return PlatformWorkDenial.None;
+        }
+
+        private static bool ClockValid(double now) => !double.IsNaN(now) && !double.IsInfinity(now) && now >= 0.0;
+        private void AdvanceWorkRevision() => WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
 
         public PlatformFocus Focus { get; private set; }
         public double RetaskUntil { get; private set; }
@@ -183,9 +299,13 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public bool TryFocus(PlatformFocus focus, double now)
         {
-            if (!Exists || (byte)focus > (byte)PlatformFocus.Screen || focus == Focus || now < RetaskUntil) return false;
+            if (!Exists || !ClockValid(now) || (byte)focus > (byte)PlatformFocus.Screen || focus == Focus ||
+                now < RetaskUntil || BoostRemaining(now) > 0) return false;
             Focus = focus;
+            CrewBus = 0;
             RetaskUntil = now + RetaskSeconds;
+            Alignment = Capacitor = 0f;
+            AdvanceWorkRevision();
             return true;
         }
 
@@ -193,7 +313,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// A heavy effect consumes it; repeated callers cannot turn one sighting into a salvo.</summary>
         public void RecordSolution(float x, float z, float radius, double now)
         {
-            if (!Exists || !Finite(x) || !Finite(z) || !Finite(radius) || radius <= 0f) return;
+            if (!Exists || !ClockValid(now) || !Finite(x) || !Finite(z) || !Finite(radius) || radius <= 0f) return;
+            if (ObserverPackage && BoostRemaining(now) > 0) return; // Keep the committed observer area stable for every teammate.
             SolutionX = x;
             SolutionZ = z;
             SolutionRadius = Math.Min(MaximumSolutionRadius, radius);
@@ -205,6 +326,8 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             PlatformDenial denial = Check(ability, now);
             if (denial != PlatformDenial.None) return denial;
             if (!Finite(x) || !Finite(z)) return PlatformDenial.OutsideSector;
+            if (PackageAppliesTo(ability, now) && !PackageCoversTarget(x, z, now))
+                return PlatformDenial.NoSolution;
             if (ability != PlatformAbility.Uplink && ability != PlatformAbility.Rephase && ability != PlatformAbility.OrbitShift)
             {
                 OrbitState state = State(now);
@@ -212,10 +335,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
                 float reach = CoverageRadius(now);
                 if (reachX * reachX + reachZ * reachZ > reach * reach) return PlatformDenial.OutsideSector;
             }
-            if (ability != PlatformAbility.RodStrike && ability != PlatformAbility.EmpBurst) return denial;
-            double dx = x - SolutionX, dz = z - SolutionZ;
-            return !Finite(x) || !Finite(z) || dx * dx + dz * dz > SolutionRadius * SolutionRadius
-                ? PlatformDenial.NoSolution : PlatformDenial.None;
+            return PlatformDenial.None;
         }
 
         private readonly ModuleKind[] cells = new ModuleKind[CellCount];
@@ -600,6 +720,14 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         {
             if (!Exists || float.IsNaN(deltaTime) || deltaTime <= 0f) return;
             float dt = Math.Min(deltaTime, StepLimitSeconds);
+            if (ObserverPackage && BoostRemaining(now) <= 0) CrewBus = 0;
+            if ((CrewBus & 63) != 0) ReadCircuits();
+            else
+            {
+                Alignment = Math.Max(0f, Alignment - dt * 0.8f);
+                Capacitor = Math.Max(0f, Capacitor - dt * 0.4f);
+                Heat = Math.Max(0f, Heat - dt * 1.5f);
+            }
             if (Pending != ModuleKind.None && now >= DockAt) Dock(now);
             if (Hold != PlatformHold.None && now >= CycleStart) Hold = PlatformHold.None;
 
@@ -669,8 +797,10 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         {
             if (!Exists) return PlatformDenial.NoPlatform;
             AbilityInfo info = PlatformAbilities.Info(ability);
-            if (!Fitted(info.Module)) return PlatformDenial.NotFitted;
-            if (!FittedOnline(info.Module, now)) return PlatformDenial.Offline;
+            // The commissioning core carries a small survey radar. An imager widens its scene and adds EO.
+            bool coreRadar = ability == PlatformAbility.RadarScan && !Fitted(ModuleKind.Imager);
+            if (!coreRadar && !Fitted(info.Module)) return PlatformDenial.NotFitted;
+            if (coreRadar ? !IsOnline(CoreCell, now) : !FittedOnline(info.Module, now)) return PlatformDenial.Offline;
             if (Brownout) return PlatformDenial.Brownout;
             if (now < CycleStart) return PlatformDenial.Holding;
             if (ability != PlatformAbility.Uplink && ability != PlatformAbility.Rephase &&
@@ -685,10 +815,6 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             if (now < readyAt[(int)ability]) return PlatformDenial.Recharging;
             if (ability == PlatformAbility.RodStrike && Rods <= 0) return PlatformDenial.Expended;
             if (ability != PlatformAbility.OrbitShift && Fuel + 0.001f < info.Fuel) return PlatformDenial.NoFuel;
-            if (ability == PlatformAbility.RodStrike && Focus != PlatformFocus.Strike ||
-                ability == PlatformAbility.EmpBurst && Focus != PlatformFocus.Screen) return PlatformDenial.WrongFocus;
-            if ((ability == PlatformAbility.RodStrike || ability == PlatformAbility.EmpBurst) &&
-                SolutionRemaining(now) <= 0.0) return PlatformDenial.NoSolution;
             return PlatformDenial.None;
         }
 
@@ -724,7 +850,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Energy = Math.Max(0f, Energy - info.EnergyKj);
             if (ability != PlatformAbility.OrbitShift) Fuel = Math.Max(0f, Fuel - info.Fuel);
             if (ability == PlatformAbility.RodStrike) Rods = Math.Max(0, Rods - Math.Max(1, rodShots));
-            if (ability == PlatformAbility.RodStrike || ability == PlatformAbility.EmpBurst) solutionUntil = 0.0;
+            bool matchingPackage = PackageAppliesTo(ability, now);
+            if ((ability == PlatformAbility.RodStrike || ability == PlatformAbility.EmpBurst) &&
+                (!ObserverPackage || BoostRemaining(now) <= 0 || matchingPackage)) solutionUntil = 0.0;
+            if (matchingPackage)
+            { Boost = 0f; boostUntil = 0.0; CrewBus = 0; }
             if (info.RechargeSeconds > 0f) readyAt[(int)ability] = now + RechargeSeconds(ability, now);
         }
 
@@ -757,7 +887,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         public float ScanScale(double now) =>
             Orbit.ScanScale * (SensorBoosted(ModuleKind.Imager, now) ? RelayBoost : 1f) *
-            (Focus == PlatformFocus.Survey ? 1.2f : 0.8f);
+            (Focus == PlatformFocus.Survey ? 1.2f : 0.8f) * (FittedOnline(ModuleKind.Imager, now) ? 1f : 0.5f);
 
         public float ElintScale(double now) =>
             Orbit.ScanScale * (SensorBoosted(ModuleKind.Sigint, now) ? RelayBoost : 1f) *
@@ -820,6 +950,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             into.SolutionZ = SolutionZ;
             into.SolutionRadius = SolutionRadius;
             into.SolutionIn = (float)SolutionRemaining(now);
+            into.Alignment = Alignment; into.Capacitor = Capacitor; into.Heat = Heat;
+            into.WorkIn = (float)WorkRemaining(now);
+            into.Boost = BoostRemaining(now) > 0 ? Boost : 0f;
+            into.BoostFocus = (byte)BoostFocus; into.BoostIn = (float)BoostRemaining(now);
+            into.WorkRevision = WorkRevision;
+            into.CrewBus = CrewBus;
         }
 
         /// <summary>
@@ -829,7 +965,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         /// </summary>
         public void Mirror(PlatformSnapshot from, double now)
         {
-            if (from == null) return;
+            if (from == null || !ClockValid(now)) return;
             if (!from.Active)
             {
                 Clear();
@@ -871,6 +1007,12 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             SolutionZ = from.SolutionZ;
             SolutionRadius = from.SolutionRadius;
             solutionUntil = from.SolutionIn > 0f ? Rebase(solutionUntil, now + from.SolutionIn, true) : 0.0;
+            Alignment = from.Alignment; Capacitor = from.Capacitor; Heat = from.Heat;
+            workUntil = from.WorkIn > 0f ? Rebase(workUntil, now + from.WorkIn, true) : 0.0;
+            Boost = from.Boost; BoostFocus = (PlatformFocus)from.BoostFocus;
+            boostUntil = from.BoostIn > 0f ? Rebase(boostUntil, now + from.BoostIn, true) : 0.0;
+            WorkRevision = from.WorkRevision;
+            CrewBus = from.CrewBus;
         }
 
         private static double Rebase(double known, double reported, bool keep) =>
@@ -878,7 +1020,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
 
         private static bool Valid(PlatformSnapshot from)
         {
+            if ((from.CrewBus & 64) != 0 || ((from.CrewBus & 128) != 0 && (from.CrewBus & 63) != 0)) return false;
             if (!StationKeeping.ValidRoute(from.Seed)) return false;
+            if (from.WorkRevision < 0 || !Bounded(from.Alignment, 100f) || !Bounded(from.Capacitor, 100f) || !Bounded(from.Heat, 100f) ||
+                !Bounded(from.WorkIn, WorkSeconds) || !Bounded(from.Boost, 1f) || !Bounded(from.BoostIn, BoostSeconds) ||
+                from.BoostFocus > (byte)PlatformFocus.Screen || (from.Boost > 0f && from.BoostFocus == (byte)PlatformFocus.Survey)) return false;
             if (from.Modules[CoreCell] != (byte)ModuleKind.Core) return false;
             for (int i = 0; i < CellCount; i++)
             {
@@ -903,6 +1049,7 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+        private static bool Bounded(float value, float max) => Finite(value) && value >= 0f && value <= max;
 
         public void Clear()
         {
@@ -930,6 +1077,11 @@ namespace BoscaliSummer.Features.Support.Domain.Orbital
             Focus = PlatformFocus.Survey;
             RetaskUntil = solutionUntil = 0.0;
             SolutionX = SolutionZ = SolutionRadius = 0f;
+            Alignment = Capacitor = Heat = Boost = 0f;
+            workUntil = boostUntil = 0.0;
+            BoostFocus = PlatformFocus.Survey;
+            WorkRevision = 0;
+            CrewBus = 0;
         }
 
         public void Reset() => Clear();

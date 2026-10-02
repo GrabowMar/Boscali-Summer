@@ -1,7 +1,7 @@
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.QoL.Configuration
+namespace BoscaliSummer.Modules.QoL.Configuration
 {
     internal sealed class QoLSettings
     {

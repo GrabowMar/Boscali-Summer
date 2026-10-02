@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Intel.Configuration;
-using BoscaliSummer.Features.Intel.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Intel.Configuration;
+using BoscaliSummer.Modules.Intel.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Intel.Runtime
+namespace BoscaliSummer.Modules.Intel.Runtime
 {
     /// <summary>
     /// Publishes IThreatPicture. The host keeps one picture for every non-neutral faction that

@@ -1,17 +1,19 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Features.TheaterOps.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Modules.TheaterOps.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>One host-run staff per faction. It reads real units and front geometry.</summary>
     internal sealed class LivingFrontService : MonoBehaviour, ISceneService, ITheaterWarView,
@@ -162,7 +164,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         private void Review(FactionWar war, float now)
         {
-            if (territory == null) ModServices.TryGet(out territory);
+            if (territory == null) ModuleServices.TryGet(out territory);
             bool contactChanged = Sense(war);
             bool finished = AdvanceOperation(war, now);
             float largestChange = 0f;
@@ -325,7 +327,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         {
             List<Unit> all = UnitRegistry.allUnits;
             if (all == null) return;
-            ModServices.TryGet(out IAircraftTaskExclusion excludedAircraft);
+            ModuleServices.TryGet(out IAircraftTaskExclusion excludedAircraft);
             int cap = Math.Min(all.Count, MaximumUnitScan);
             for (int i = 0; i < cap; i++)
             {
@@ -672,7 +674,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
                 (war.Proposals.Count > 0 ? Mathf.Max(0f, war.Proposals[0].SecondsRemaining) : 0f);
             war.NextClock = 0f;
             for (int i = log != null ? Math.Min(log.Count,
-                BoscaliSummer.Features.TheaterOps.Domain.StaffLog.MaximumEntries) - 1 : -1; i >= 0; i--)
+                BoscaliSummer.Modules.TheaterOps.Domain.StaffLog.MaximumEntries) - 1 : -1; i >= 0; i--)
                 war.Log.Add(log[i]);
             war.Posture = posture;
             war.Active = operation == null ? null : new Operation

@@ -1,5 +1,6 @@
+using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
 
@@ -16,7 +17,7 @@ namespace BoscaliSummer.Fire
     [HarmonyPatch]
     internal static class BuildingDestructPatch
     {
-        private struct DestructGeometry
+        private sealed class DestructGeometry
         {
             public bool Valid;
             public int BuildingId;
@@ -24,6 +25,8 @@ namespace BoscaliSummer.Fire
             public Vector3 ScarPosition;
             public GlobalPosition RuinPosition;
             public Vector2 HalfExtents;
+            public List<RuinDebrisPool.FacadePiece> Facade;
+            public MapBuilding Building;
         }
 
         private static MethodBase TargetMethod() => AccessTools.Method(typeof(MapBuilding), "Destruct");
@@ -31,15 +34,16 @@ namespace BoscaliSummer.Fire
 
         private static void Prefix(MapBuilding __instance, out DestructGeometry __state)
         {
-            __state = default;
+            __state = null;
             if (__instance == null) return;
             __state = Capture(__instance);
         }
 
         private static void Postfix(DestructGeometry __state)
         {
-            if (!__state.Valid) return;
-            BuildingHitLedger.Instance?.Forget(__state.BuildingId);
+            if (__state == null || !__state.Valid) return;
+            bool keepCards = !__state.TreeRow;
+            BuildingHitLedger.Instance?.Forget(__state.BuildingId, keepCards);
             if (__state.TreeRow)
             {
                 BuildingHitLedger.Instance?.StampTreeRowAsh(
@@ -54,21 +58,37 @@ namespace BoscaliSummer.Fire
             // already registered, and the message echo of this same death on remotes.
             // Late-join replay runs Destruct with a fresh level clock, so ancient ruins
             // get their scar and smoulder but no new collapse burst.
-            RuinAftermathManager.Instance?.RegisterRuin(
+            RuinAftermathManager manager = RuinAftermathManager.Instance;
+            manager?.RegisterRuin(
                 __state.RuinPosition, __state.HalfExtents, 0f,
                 GameAccess.IsServer(), Time.timeSinceLevelLoad >= 10f);
+            if (!keepCards) return;
+            GameObject shell = manager?.AttachFacade(__state.RuinPosition, __state.Facade, __state.BuildingId);
+            if (shell == null)
+            {
+                BuildingHitLedger.Instance?.HideBreaches(__state.BuildingId);
+                return;
+            }
+            // Vanilla may leave the mesh up for the rest of the frame. The shell is the one that stays.
+            if (__state.Building == null) return;
+            Renderer[] live = __state.Building.GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < live.Length; i++)
+                if (live[i] != null) live[i].enabled = false;
         }
 
         private static DestructGeometry Capture(MapBuilding building)
         {
+            bool treeRow = building.name.IndexOf(
+                "TreeRow", System.StringComparison.OrdinalIgnoreCase) >= 0;
             var geometry = new DestructGeometry
             {
                 Valid = true,
                 BuildingId = building.GetInstanceID(),
-                TreeRow = building.name.IndexOf(
-                    "TreeRow", System.StringComparison.OrdinalIgnoreCase) >= 0,
+                TreeRow = treeRow,
                 RuinPosition = building.transform.GlobalPosition(),
-                HalfExtents = new Vector2(8f, 8f)
+                HalfExtents = new Vector2(8f, 8f),
+                Facade = treeRow ? null : RuinDebrisPool.CaptureFacade(building),
+                Building = building
             };
             Renderer[] renderers = building.GetComponentsInChildren<Renderer>(false);
             Bounds bounds = default;

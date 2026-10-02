@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// A single entry in the weather forecast timeline.
@@ -13,13 +13,14 @@ namespace BoscaliSummer.Features.Weather.Domain
         public float RainProbability { get; }
         public RegimeSnapshot Regime { get; }
 
-        public ForecastStep(int offsetMinutes, float conditions, float cloudDeckMetres, float rainProbability)
+        public ForecastStep(int offsetMinutes, float conditions, float cloudDeckMetres, float rainProbability,
+            WeatherRegimeType? state = null)
         {
             OffsetMinutes = offsetMinutes;
             Conditions = Math.Max(0f, Math.Min(1f, conditions));
             CloudDeckMetres = cloudDeckMetres;
             RainProbability = Math.Max(0f, Math.Min(1f, rainProbability));
-            Regime = RegimeSnapshot.FromConditions(Conditions);
+            Regime = state.HasValue ? RegimeSnapshot.FromType(state.Value) : RegimeSnapshot.FromConditions(Conditions);
         }
     }
 

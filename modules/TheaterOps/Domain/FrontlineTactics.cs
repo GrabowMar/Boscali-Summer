@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>Small, deterministic formation rules over Command's existing front trace.</summary>
     internal static class FrontlineTactics

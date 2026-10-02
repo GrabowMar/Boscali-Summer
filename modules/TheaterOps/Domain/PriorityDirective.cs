@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
     /// One faction's main effort: the objective identity it was named after and the world

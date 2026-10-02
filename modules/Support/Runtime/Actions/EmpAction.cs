@@ -1,9 +1,9 @@
 using System.Collections;
-using BoscaliSummer.Features.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// EMP shock: a burst from high altitude that blinds radars across a wide area. The
@@ -53,6 +53,10 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
             if (platform == null) return SupportContext.Refusal(denial);
 
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
+            // Capture the banked package before the accepted effect consumes it.
+            float radius = Mathf.Min(context.Settings.EmpRadius.Value * platform.EmpRadiusScale(context.Host.OrbitNow),
+                SupportEffectPolicy.MaxEmpRadius);
+            float duration = SupportEffectPolicy.EmpDuration * platform.EmpDurationScale(context.Host.OrbitNow);
             platform.Consume(PlatformAbility.EmpBurst, context.Host.OrbitNow);
             context.Logger.LogInfo("[Support] EMP burst package released by " + OrbitalPlatform.Callsign + " from " +
                                    platform.Orbit.Code + " orbit.");
@@ -62,16 +66,14 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
             // The station's online battery banks widen both the jam and its replicated effect.
             // Bound to the ceiling the replicated name can carry, or peers fall back to the default visual.
-            float radius = Mathf.Min(context.Settings.EmpRadius.Value * platform.EmpScaleAt(context.Host.OrbitNow),
-                SupportEffectPolicy.MaxEmpRadius);
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
-                radius, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
+                radius, duration, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
             return SupportResult.Accepted;
         }
 
         private static IEnumerator Discharge(
             ISupportHost host, Player player, FactionHQ owner, MissileDefinition definition,
-            Vector3 target, float radius, string unique)
+            Vector3 target, float radius, float duration, string unique)
         {
             Missile missile = null;
             GlobalPosition targetGlobal = target.ToGlobalPosition();
@@ -114,8 +116,8 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
 
 
                 float radiusSquared = radius * radius;
-                float duration = SupportEffectPolicy.EmpDuration;
                 float elapsed = 0f;
+                int cursor = 0;
 
                 while (elapsed < duration)
                 {
@@ -123,11 +125,15 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
                     var units = UnitRegistry.allUnits;
                     if (units != null)
                     {
-                        for (int i = 0; i < units.Count; i++)
+                        // Fair rolling work bound: crowded missions cannot turn a support pulse into a frame spike.
+                        int count = units.Count;
+                        int examined = Mathf.Min(128, count);
+                        for (int i = 0; i < examined; i++)
                         {
-                            Unit unit = units[i];
+                            if (cursor >= count) cursor = 0;
+                            Unit unit = units[cursor++];
                             if (unit == null || unit.disabled) continue;
-                            if (owner != null && unit.NetworkHQ == owner) continue;
+                            if (unit.NetworkHQ == null || unit.NetworkHQ == owner) continue;
 
                             float dx = unit.transform.position.x - target.x;
                             float dz = unit.transform.position.z - target.z;

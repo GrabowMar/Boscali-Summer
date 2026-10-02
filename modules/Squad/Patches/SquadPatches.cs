@@ -1,9 +1,9 @@
-using BoscaliSummer.Features.Squad.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Squad.Runtime;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.Networking;
 
-namespace BoscaliSummer.Features.Squad.Patches
+namespace BoscaliSummer.Modules.Squad.Patches
 {
     [HarmonyPatch(typeof(Unit), nameof(Unit.RecordDamage))]
     internal static class SquadDamagePatch

@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>Pure 2D vector for deterministic radial layout math without UnityEngine.</summary>
     internal readonly struct AceVec2

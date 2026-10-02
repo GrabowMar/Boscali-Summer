@@ -1,17 +1,18 @@
 using System;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// Cached read-only reflection for the few vanilla toggles that keep their state private
     /// (nav lights, night vision, linked guns), so the interaction menu can print ON / OFF. A
-    /// missing member only blanks that state line; the toggle itself still works.
+    /// missing member only blanks that state line; the toggle itself still works. Night vision
+    /// resolves once in Infrastructure GameAccess; the rest are Autopilot-only.
     /// </summary>
     internal static class CockpitStateProbe
     {
         private static AccessTools.FieldRef<NavLights, bool> navLightsOn;
-        private static AccessTools.FieldRef<NightVision, bool> nightVisionSelected;
         private static AccessTools.FieldRef<WeaponManager, bool> gunsLinked;
         private static bool initialised;
 
@@ -23,7 +24,6 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             if (initialised) return;
             initialised = true;
             navLightsOn = Ref<NavLights>("isOn");
-            nightVisionSelected = Ref<NightVision>("nightVisSelected");
             gunsLinked = Ref<WeaponManager>("gunsLinked");
         }
 
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         }
 
         public static bool? NightVisionOn() =>
-            nightVisionSelected != null && NightVision.i != null ? nightVisionSelected(NightVision.i) : (bool?)null;
+            GameAccess.TryGetNightVisionState(out bool selected, out _) ? selected : (bool?)null;
 
         public static bool? GunsLinked(WeaponManager manager) =>
             gunsLinked != null && manager != null ? gunsLinked(manager) : (bool?)null;

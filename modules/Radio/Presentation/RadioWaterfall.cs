@@ -1,11 +1,10 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Radio.Presentation
+namespace BoscaliSummer.Modules.Radio.Presentation
 {
     /// <summary>
     /// The receiver's spectrum display: a small scrolled texture, one row per refresh, warm
@@ -23,32 +22,51 @@ namespace BoscaliSummer.Features.Radio.Presentation
         private readonly Color32[] palette = new Color32[PaletteSteps];
         private Texture2D texture;
         private AvFrame ground;
+        private RectTransform viewRect;
+        private RectTransform legendRoot;
+        private Image[] rules;
+        private Rect area;
+        private readonly AvLineGraphic spectrum;
+        private readonly float[] spectrumX, spectrumY;
 
         private const int PaletteSteps = 32;
 
         public RadioWaterfall(RectTransform parent, Rect area, int bins, int rows)
         {
+            this.area = area;
             this.bins = Mathf.Clamp(bins, 8, 256);
             this.rows = Mathf.Clamp(rows, 8, 256);
             pixels = new Color32[this.bins * this.rows];
+            spectrumX = new float[this.bins]; spectrumY = new float[this.bins];
+            for (int i = 0; i < this.bins; i++) spectrumX[i] = i / (float)(this.bins - 1);
             BuildPalette();
 
             Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
             ground = AvFrame.Add(parent, "Waterfall Ground", AvChamfer.All(0f));
             PlaceAt(ground.rectTransform, area);
             ground.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground), hairline);
+            var trace = new GameObject("Live spectrum", typeof(RectTransform), typeof(CanvasRenderer));
+            trace.transform.SetParent(ground.rectTransform, false);
+            spectrum = trace.AddComponent<AvLineGraphic>();
+            spectrum.raycastTarget = false;
+            Color signal = AvStyleHost.FuiColor("ready", AvTheme.RailReady);
+            spectrum.LineColor = Color.Lerp(signal, Color.white, 0.2f);
+            spectrum.FillTop = signal.WithAlpha(0.38f);
+            spectrum.FillBottom = signal.WithAlpha(0.015f);
 
             var viewObject = new GameObject("Waterfall", typeof(RectTransform), typeof(RawImage));
-            var viewRect = (RectTransform)viewObject.transform;
+            viewRect = (RectTransform)viewObject.transform;
             viewRect.SetParent(ground.rectTransform, false);
-            AvLay.Place(viewRect, 1f, 1f, area.width - 2f, area.height - 2f);
+            PlacePlots();
 
             // Reticle dB reference markers for 6th/7th-gen SIGINT scope
+            rules = new Image[3];
             for (int r = 1; r <= 3; r++)
             {
                 float yFrac = r * 0.25f;
                 Image rule = AvLay.Solid(ground.rectTransform, "Reference " + r, hairline.WithAlpha(0.28f));
                 AvLay.Place(rule.rectTransform, 1f, area.height * yFrac, area.width - 2f, 1f);
+                rules[r - 1] = rule;
             }
 
             texture = new Texture2D(this.bins, this.rows, TextureFormat.RGBA32, false)
@@ -62,7 +80,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
             RawImage image = viewObject.GetComponent<RawImage>();
             image.texture = texture;
             image.raycastTarget = false;
-            image.color = Color.white;
+            image.color = new Color(1f, 1f, 1f, 0.6f);
             Clear();
 
             BuildLegend(parent, area);
@@ -77,20 +95,44 @@ namespace BoscaliSummer.Features.Radio.Presentation
         {
             const float swatch = 7f;
             const float step = 10f;
-            float x = area.x + AvTokens.Space2;
-            float y = area.y - area.height + 16f;
-            Image plate = AvLay.Solid(parent, "Legend Plate", AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.82f));
-            PlaceAt(plate.rectTransform, new Rect(x - 4f, y + 2f, 148f, 16f));
+            // Everything is positioned inside one root, so a resize only moves the root.
+            legendRoot = AvLay.Child(parent, "Legend");
+            PlaceLegend();
+            float x = AvTokens.Space2;
+            Image plate = AvLay.Solid(legendRoot, "Legend Plate", AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.82f));
+            PlaceAt(plate.rectTransform, new Rect(x - 4f, 2f, 148f, 16f));
 
-            LegendLabel(parent, "Noise", "NOISE", new Rect(x, y, 50f, 12f));
+            LegendLabel(legendRoot, "Noise", "NOISE", new Rect(x, 0f, 50f, 16f));
             x += 50f;
             for (int i = 0; i < 3; i++)
             {
-                Image chip = AvLay.Solid(parent, "Swatch " + i, Ramp(0.10f + i * 0.40f));
-                PlaceAt(chip.rectTransform, new Rect(x, y + 1f, swatch, swatch));
+                Image chip = AvLay.Solid(legendRoot, "Swatch " + i, Ramp(0.10f + i * 0.40f));
+                PlaceAt(chip.rectTransform, new Rect(x, 1f, swatch, swatch));
                 x += step;
             }
-            LegendLabel(parent, "Carrier", "CARRIER", new Rect(x + 2f, y, 64f, 12f));
+            LegendLabel(legendRoot, "Carrier", "CARRIER", new Rect(x + 2f, 0f, 64f, 16f));
+        }
+
+        private void PlaceLegend() =>
+            AvLay.Place(legendRoot, area.x, -(area.y - area.height + 16f), 148f, 16f);
+
+        /// <summary>Follow a taller or wider slot: the scope grows with its page, the texture stretches with it.</summary>
+        public void Resize(Rect newArea)
+        {
+            if (ground == null) return;
+            area = newArea;
+            PlaceAt(ground.rectTransform, area);
+            PlacePlots();
+            for (int r = 0; r < rules.Length; r++)
+                AvLay.Place(rules[r].rectTransform, 1f, area.height * (r + 1) * 0.25f, area.width - 2f, 1f);
+            PlaceLegend();
+        }
+
+        private void PlacePlots()
+        {
+            float split = area.height * 0.66f;
+            AvLay.Place(spectrum.rectTransform, 3f, 3f, area.width - 6f, Mathf.Max(8f, split - 6f));
+            AvLay.Place(viewRect, 1f, split, area.width - 2f, Mathf.Max(8f, area.height - split - 1f));
         }
 
         private static void LegendLabel(RectTransform parent, string name, string text, Rect area)
@@ -117,17 +159,20 @@ namespace BoscaliSummer.Features.Radio.Presentation
             for (int bin = 0; bin < bins; bin++)
             {
                 float value = magnitudes[Mathf.Min(magnitudes.Length - 1, bin * stride)];
+                spectrumY[bin] = Mathf.Clamp01(value);
                 int step = Mathf.Clamp((int)(value * (PaletteSteps - 1)), 0, PaletteSteps - 1);
                 pixels[top + bin] = palette[step];
             }
 
             texture.SetPixels32(pixels);
             texture.Apply(false, false);
+            spectrum.SetPoints(spectrumX, spectrumY, bins);
         }
 
         public void Clear()
         {
             if (texture == null) return;
+            spectrum.SetPoints(null, null, 0);
             for (int i = 0; i < pixels.Length; i++) pixels[i] = palette[0];
             texture.SetPixels32(pixels);
             texture.Apply(false, false);
@@ -142,8 +187,7 @@ namespace BoscaliSummer.Features.Radio.Presentation
 
         /// <summary>
         /// The one place the ramp is written down, so the legend swatches and the pixels they
-        /// explain can never drift apart. 6th/7th-generation quantum SIGINT spectrum:
-        /// deep-space obsidian ground -> datalink cyan -> quantum hyper-emerald -> white-hot.
+        /// explain can never drift apart: dark noise floor through cyan to a white carrier peak.
         /// </summary>
         internal static Color Ramp(float t)
         {

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>Wire ids. Stable: they are the only action identity that crosses the network.</summary>
     internal enum SupportActionId : byte
@@ -94,6 +94,10 @@ namespace BoscaliSummer.Features.Support.Runtime
         PlatformRetasking = 42,
         NeedsTargetSolution = 43,
         PlatformOutOfReach = 44,
+        CapacityFull = 45,
+
+        /// <summary>Fire-control refusal plus PlatformWorkDenial.</summary>
+        PlatformWorkRefused = 48,
 
         /// <summary>No hostile unit (or no lased one, for UNLASE) inside the mark radius.</summary>
         NoMarkTarget = 45,
@@ -106,6 +110,9 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
         CyberRefused = 64,
+
+        /// <summary>Intrusion refusal plus BreachDenial, separate from defense-console verbs.</summary>
+        BreachRefused = 96,
 
         /// <summary>Field-operation refusal: <c>SpecOpsRefused + SpecOpsDenial</c>.</summary>
         SpecOpsRefused = 128

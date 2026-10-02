@@ -1,23 +1,22 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
         private const int WingmanRows = 4;
         private const int EnemyScanLimit = 64;
 
-        private SqdRosterRow huntRow;
+        private AvStatTile huntTile;
         private SqdRosterRow wingLeadRow;
         private SqdEmptyCard wingTeamNote;
         private SqdEmptyCard hostileEmpty;
@@ -25,6 +24,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private AvSection hostileSection;
         private AvStatTile wingsTotalTile, wingsActiveTile, wingsAliveTile;
         private readonly SqdRosterRow[] wingmanSlots = new SqdRosterRow[WingmanRows];
+        private AvEqualizer wingsThreat;
+        private const int ThreatBars = 24;
+        private readonly float[] threatValues = new float[ThreatBars];
         private readonly List<Aircraft> friendlyWing = new List<Aircraft>(WingmanRows);
 
         private AvButtons wingsPager;
@@ -36,7 +38,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void ResetWingsPage()
         {
-            huntRow = wingLeadRow = null;
+            huntTile = null;
+            wingLeadRow = null;
+            wingsThreat = null;
+            Array.Clear(threatValues, 0, threatValues.Length);
             wingTeamNote = hostileEmpty = null;
             friendlySection = hostileSection = null;
             wingsTotalTile = wingsActiveTile = wingsAliveTile = null;
@@ -53,27 +58,25 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
         private void BuildWingsPage(AvFlow p)
         {
-            p.Section(AvIcon.Skull, "ACE INTELLIGENCE", "LIVE + ENCOUNTER DATA");
+            // One strip of four: the hunt state first, then the hostile wing counts.
+            huntTile = new AvStatTile(p.Content, "HUNT");
+            huntTile.Set("STANDBY", AvState.Info);
+            wingsTotalTile = new AvStatTile(p.Content, "WINGS");
+            wingsActiveTile = new AvStatTile(p.Content, "ACTIVE");
+            wingsAliveTile = new AvStatTile(p.Content, "ALIVE");
+            p.Row(huntTile, wingsTotalTile, wingsActiveTile, wingsAliveTile);
 
-            huntRow = p.Add(new SqdRosterRow(p.Content));
-            huntRow.Set("ACE HUNT STANDBY", "Awaiting enemy wing reports.", null, null, AvState.Info);
-
-            wingsTotalTile = new AvStatTile(p.Content, "HOSTILE WINGS");
-            wingsActiveTile = new AvStatTile(p.Content, "STILL ACTIVE");
-            wingsAliveTile = new AvStatTile(p.Content, "ACES + ESCORTS");
-            p.Row(wingsTotalTile, wingsActiveTile, wingsAliveTile);
-
-            friendlySection = p.Section(AvIcon.UsersGroup, "FRIENDLY FLIGHT", "MANAGED IN WMC");
+            friendlySection = p.Section(AvIcon.UsersGroup, "FLIGHT", null);
             wingLeadRow = p.Add(new SqdRosterRow(p.Content, true));
             wingLeadRow.Set("RECORD PENDING", null, null, null, AvState.Info);
             for (int i = 0; i < wingmanSlots.Length; i++)
                 wingmanSlots[i] = p.Add(new SqdRosterRow(p.Content));
-            wingTeamNote = p.Add(new SqdEmptyCard(p.Content, AvIcon.UsersGroup, "NO RECRUITED WINGMEN",
-                "Recruit and task wingmen in Wing Command (WMC); they fly beside you and appear here."));
+            wingTeamNote = p.Add(new SqdEmptyCard(p.Content, AvIcon.UsersGroup, "NO WINGMEN",
+                "Recruit in Wing Command."));
 
-            hostileSection = p.Section(AvIcon.Skull, "HOSTILE ACES", "MOST RECENT CONTACTS");
-            hostileEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Radar2, "NO HOSTILE ACES ON RECORD",
-                "Damage hostile forces to attract an enemy ace wing. Each ace kill is worth +1 skill point, and downed aces may return stronger."));
+            hostileSection = p.Section(AvIcon.Skull, "HOSTILE", null);
+            hostileEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Radar2, "NO ACES YET",
+                "Ace kill: +1 skill point."));
             for (int i = 0; i < WingRowsPerPage; i++)
                 wingRows.Add(p.Add(new HostileWingCard(p.Content)));
 
@@ -85,20 +88,22 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     int count = squad != null ? squad.EnemyWingCount : 0;
                     if ((wingPage + 1) * WingRowsPerPage < count) wingPage++;
                     nextRefresh = 0f;
-                }, AvButtonStyle.Quiet, AvIcon.ChevronRight));
+                }, AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
             previousWings = wingsPager.Controls[0];
             nextWings = wingsPager.Controls[1];
+
+            // Every known hostile wing as one bar (height = its tier, dim = destroyed): the whole roster at a glance, and it takes the leftover height.
+            wingsThreat = p.Add(new AvEqualizer(p.Content, "THREAT", 36f), 1f);
+            wingsThreat.Help = "THREAT: one bar per known hostile ace wing, taller is a higher tier, a stub is a wing that is gone. Open the cards above for who they are and what they hunt.";
         }
 
         // ---- ACES refresh -------------------------------------------------------------------
 
         private void RefreshWingsPage()
         {
-            if (huntRow == null) return;
+            if (huntTile == null) return;
             bool hunted = squad != null && squad.HuntActive;
-            huntRow.Set(hunted ? "ACE HUNT ACTIVE — YOU ARE THE TARGET" : "ACE HUNT STANDBY",
-                squad != null ? squad.Status : "Enemy wing reports are unavailable.", null, null,
-                hunted ? AvState.Danger : AvState.Info);
+            huntTile.Set(hunted ? "ACTIVE" : "STANDBY", hunted ? AvState.Danger : AvState.Info);
 
             RefreshFriendlyWing();
 
@@ -108,13 +113,17 @@ namespace BoscaliSummer.Features.Progression.Presentation
             int last = Math.Min(first + WingRowsPerPage, count);
 
             int active = 0, alive = 0;
+            Array.Clear(threatValues, 0, threatValues.Length);
             for (int i = 0, scan = Math.Min(count, EnemyScanLimit); i < scan; i++)
             {
-                int members = squad.GetEnemyWing(i).MembersAlive;
+                EnemyWingView known = squad.GetEnemyWing(i);
+                int members = known.MembersAlive;
+                if (i < ThreatBars) threatValues[i] = members > 0 ? Mathf.Clamp(known.Tier / 5f, 0.12f, 1f) : 0.06f;
                 if (members <= 0) continue;
                 active++;
                 alive += members;
             }
+            wingsThreat.Set(threatValues, count == 0 ? "NO WINGS" : active + "/" + count + " ACTIVE", active > 0 ? AvState.Caution : AvState.Inert);
             bool any = count > 0;
             wingsTotalTile.SetShown(any);
             wingsActiveTile.SetShown(any);
@@ -180,11 +189,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
             Aircraft lead = null;
             if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null) lead = local.Aircraft;
             wingLeadRow.Set(string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
-                (string.IsNullOrEmpty(name) ? "—" : name) + "   ·   FLIGHT LEAD",
+                (string.IsNullOrEmpty(name) ? "—" : name) + "   ·   FLIGHT LEAD" + FuelWord(lead),
                 lead == null ? null : AirframeOf(lead),
                 lead == null ? "NO AIRCRAFT" : AircraftStatus(lead),
                 lead == null ? AvState.Inert : AvState.Ready);
             wingLeadRow.SetThumb(PlayerPortrait(name, callsign));
+            PaintWingMeter(wingLeadRow, lead, "FLIGHT LEAD");
 
             friendlyWing.Clear();
             int total = WingLink.WingCount;
@@ -211,8 +221,40 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 AvState state = aircraft == null ? AvState.Inert
                     : aircraft.disabled || aircraft.HasEjected() ? AvState.Danger
                     : aircraft.IsLanded() ? AvState.Caution : AvState.Ready;
-                slot.Set("WINGMAN " + AvNum.Thousands(i + 1), AirframeOf(aircraft), AircraftStatus(aircraft), null, state);
+                slot.Set("WINGMAN " + AvNum.Thousands(i + 1), AirframeOf(aircraft) + FuelWord(aircraft), AircraftStatus(aircraft), null, state);
+                PaintWingMeter(slot, aircraft, "WINGMAN " + AvNum.Thousands(i + 1));
             }
+        }
+
+        private const int HullPartScan = 64;
+
+        /// <summary>" · FUEL 82%": the fuel figure rides the sub line; the hull is the bar under the row.</summary>
+        private static string FuelWord(Aircraft aircraft) =>
+            aircraft == null ? "" : " · FUEL " + AvNum.Percent(Mathf.Clamp01(aircraft.fuelLevel));
+
+        /// <summary>The mean part condition of one aircraft as the row's thin meter, with fuel and hull in its tip.</summary>
+        private static void PaintWingMeter(SqdRosterRow row, Aircraft aircraft, string who)
+        {
+            if (row == null) return;
+            if (aircraft == null) { row.SetMeter(null, AvTheme.RailInert); row.Help = who + ": no aircraft."; return; }
+            float fuel = Mathf.Clamp01(aircraft.fuelLevel);
+            float sum = 0f;
+            int n = 0;
+            System.Collections.Generic.List<UnitPart> parts = aircraft.partLookup;
+            if (parts != null)
+                for (int i = 0, limit = Math.Min(parts.Count, HullPartScan); i < limit; i++)
+                {
+                    float condition = PartCondition(parts[i]);
+                    if (float.IsNaN(condition)) continue;
+                    sum += condition;
+                    n++;
+                }
+            if (n == 0) { row.SetMeter(null, AvTheme.RailInert); row.Help = who + ": fuel " + AvNum.Percent(fuel) + "."; return; }
+            float hull = sum / n;
+            AvState state = hull < .25f ? AvState.Danger : hull < .7f || fuel <= .15f ? AvState.Caution : AvState.Ready;
+            row.SetMeter(hull, SqdTone.Rail(state));
+            row.Help = who + ": fuel " + AvNum.Percent(fuel) + ", hull " + AvNum.Percent(hull) +
+                ". The thin bar under the row is the hull, the mean condition of its parts.";
         }
 
         private static string AirframeOf(Aircraft aircraft)
@@ -235,12 +277,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
         /// </summary>
         private sealed class HostileWingCard : AvPart
         {
-            private const float CardH = 156f, LeftW = 54f, TextX = 72f, Pad = 10f;
+            private const float CardH = 122f, LeftW = 54f, TextX = 72f, Pad = 10f;
             private const int ThreatPips = 5;
             private readonly AvFrame frame;
             private readonly Image rail;
             private readonly AvPortrait crest, portrait;
-            private readonly TMP_Text symbol, wing, ace, skill, status, threatCaption, threatWord, members, target, noSkills;
+            private readonly TMP_Text symbol, wing, ace, skill, status, threatWord, members, target, noSkills;
             private readonly Image[] pips = new Image[ThreatPips];
             private readonly SqdBar aliveBar;
             private readonly AvFrame[] badgeFrames = new AvFrame[AceSkillCatalog.MaximumSkills];
@@ -267,7 +309,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 AvText.Fit(skill, false);
                 status = AvText.Make(Rect, "Status", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
                 AvText.Fit(status, false);
-                threatCaption = AvText.Make(Rect, "ThreatCaption", AvTextRole.Micro, "THREAT");
                 threatWord = AvText.Make(Rect, "ThreatWord", AvTextRole.DataSmall);
                 AvText.Fit(threatWord, false);
                 for (int i = 0; i < pips.Length; i++) pips[i] = AvLay.Solid(Rect, "Pip" + i, Color.clear);
@@ -339,22 +380,23 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 base.Place(s);
                 float tw = s.W - TextX - Pad;
                 AvLay.Place(rail.rectTransform, 0f, 0f, 3f, s.H);
-                crest.Place(new AvSlot(Pad + 2f, Pad, LeftW - 2f, 44f));
-                portrait.Place(new AvSlot(Pad + 2f, Pad + 50f, LeftW - 2f, 62f));
+                crest.Place(new AvSlot(Pad + 2f, 8f, LeftW - 2f, 40f));
+                portrait.Place(new AvSlot(Pad + 2f, 52f, LeftW - 2f, 62f));
 
-                AvLay.Place(symbol.rectTransform, TextX, 8f, 18f, 20f);
-                AvLay.Place(wing.rectTransform, TextX + 22f, 8f, tw - 22f - 120f, 20f);
-                AvLay.Place(status.rectTransform, s.W - Pad - 116f, 8f, 116f, 20f);
-                AvLay.Place(ace.rectTransform, TextX, 30f, tw, 16f);
-                AvLay.Place(skill.rectTransform, TextX, 48f, tw, 14f);
+                AvLay.Place(symbol.rectTransform, TextX, 6f, 18f, 20f);
+                AvLay.Place(wing.rectTransform, TextX + 22f, 6f, tw - 22f - 120f, 20f);
+                AvLay.Place(status.rectTransform, s.W - Pad - 116f, 6f, 116f, 20f);
+                AvLay.Place(ace.rectTransform, TextX, 27f, tw, 16f);
+                AvLay.Place(skill.rectTransform, TextX, 44f, tw, 14f);
 
-                AvLay.Place(threatCaption.rectTransform, TextX, 68f, 50f, 14f);
+                // Threat pips and the wing's strength share one line: pips + word at the left, count + bar at the right.
+                const float rowY = 61f;
                 for (int i = 0; i < pips.Length; i++)
-                    AvLay.Place(pips[i].rectTransform, TextX + 54f + i * 17f, 72f, 14f, 6f);
-                AvLay.Place(threatWord.rectTransform, TextX + 54f + pips.Length * 17f + 6f, 66f, 90f, 16f);
-
-                AvLay.Place(members.rectTransform, TextX, 88f, 100f, 16f);
-                aliveBar.Place(TextX + 108f, 94f, tw - 108f, 4f);
+                    AvLay.Place(pips[i].rectTransform, TextX + i * 17f, rowY + 5f, 14f, 6f);
+                AvLay.Place(threatWord.rectTransform, TextX + pips.Length * 17f + 6f, rowY, 84f, 16f);
+                float memberX = TextX + pips.Length * 17f + 96f;
+                AvLay.Place(members.rectTransform, memberX, rowY, 92f, 16f);
+                aliveBar.Place(memberX + 98f, rowY + 6f, Mathf.Max(20f, s.W - Pad - memberX - 98f), 4f);
                 aliveBar.Set(aliveFraction, SqdTone.Rail(state));
 
                 float badgeW = 54f; // 4 codes (TOUGH/NOTCH/GHOST/...) at Micro caps need ~42 px
@@ -362,12 +404,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 for (int i = 0; i < badgeText.Length; i++)
                 {
                     float x = TextX + shown * (badgeW + 4f);
-                    AvLay.Place(badgeFrames[i].rectTransform, x, 110f, badgeW, 20f);
-                    AvLay.Place(badgeText[i].rectTransform, x, 110f, badgeW, 20f);
+                    AvLay.Place(badgeFrames[i].rectTransform, x, 80f, badgeW, 20f);
+                    AvLay.Place(badgeText[i].rectTransform, x, 80f, badgeW, 20f);
                     if (AceSkillCatalog.Has(mask, i)) shown++;
                 }
-                AvLay.Place(noSkills.rectTransform, TextX, 110f, tw, 20f);
-                AvLay.Place(target.rectTransform, TextX, 134f, tw, 14f);
+                AvLay.Place(noSkills.rectTransform, TextX, 80f, tw, 20f);
+                AvLay.Place(target.rectTransform, TextX, 104f, tw, 14f);
             }
 
             public override void Restyle()
@@ -381,7 +423,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 ace.color = SqdTone.Ink;
                 skill.color = SqdTone.Dim;
                 status.color = SqdTone.Text(state);
-                threatCaption.color = SqdTone.Caption;
                 threatWord.color = SqdTone.Text(state);
                 for (int i = 0; i < pips.Length; i++)
                     pips[i].color = i < threat && state != AvState.Inert ? tone : AvTheme.Hairline;

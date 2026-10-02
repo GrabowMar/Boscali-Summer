@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using RoadPathfinding;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>Finite vanilla reinforcement batches. The director owns award eligibility.</summary>
     internal sealed class OperationRewards

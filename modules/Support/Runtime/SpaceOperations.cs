@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     internal enum OpsCommand : byte
     {
@@ -60,7 +60,11 @@ namespace BoscaliSummer.Features.Support.Runtime
         SpecOpsRecall = 22,
         /// <summary>Route station power; Arg is PlatformFocus. The host owns the retask timer.</summary>
         PlatformFocus = 23,
-        SpecOpsDirective = 24
+        SpecOpsDirective = 24,
+        PlatformWork = 25,
+        CyberWork = 26,
+        BlackMarket = 27,
+        CyberShare = 28
     }
 
     /// <summary>

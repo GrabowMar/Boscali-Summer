@@ -8,7 +8,7 @@ using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// Delivers the cinematic visual, lighting, atmospheric, and acoustic effects for the

@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Events.Domain
+namespace BoscaliSummer.Modules.Events.Domain
 {
     /// <summary>What kind of story the event tells; drives the card icon and tint.</summary>
     internal enum EventCategory : byte

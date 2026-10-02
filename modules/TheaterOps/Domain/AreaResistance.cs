@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
     /// The director's per-objective resistance when the faction's own threat picture is ready.

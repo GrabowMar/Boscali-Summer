@@ -1,14 +1,15 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Features.Command.Presentation;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Modules.Command.Presentation;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static partial class VanillaMfdRebuild
     {
@@ -23,7 +24,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         /// </summary>
         private sealed class MissionPresenter : Presenter
         {
-            private const int ObjectivePageSize = 6;
+            private const int ObjectivePageSize = 10;
             private const int MaxObjectiveLines = 24;
             private const int SecondaryPageSize = MfdSecondaryObjectives.MaxCards;
 
@@ -64,13 +65,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private int objectiveSummarySignature;
             private bool hasObjectiveSummary;
 
-            private AvChip[] chips;
             private AvFlow briefFlow, objectivesFlow, contractsFlow;
+            private AvSection trendSection;
+            private AvLineChart trendChart;
+            private readonly float[] trendBuffer = new float[MfdResourceHistory.Capacity];
             private int selectedPage;
 
             // MISSION page.
             private MissionHeroPart hero;
-            private AvMetric[] briefTiles;
+            private AvGauge[] briefTiles;
             private AvSection ladderSection;
             private EscalationLadderPart ladder;
             private AvSection leadSection;
@@ -87,7 +90,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private AvRow objectivesEmpty;
 
             // CONTRACTS page.
-            private AvMetric[] moneyTiles;
+            private AvGauge[] moneyTiles;
             private AvControl[] secondaryFilterControls;
             private AvSection boardSection;
             private PagedPartStack<ContractCard> cardStack;
@@ -110,9 +113,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 (AvIcon.Star, "CONTRACTS"),
             };
 
+            protected override string[] TabTips { get; } = new[]
+            {
+                "Mission: the briefing, lead objective, escalation ladder, lead contract, live log and a funds trend.",
+                "Objectives: the checklist with progress and distance to each objective, and a map of how far each one has come.",
+                "Contracts: browse, accept or abort optional contracts, or open the shared contract desk.",
+            };
+
             protected override void BuildContent()
             {
-                chips = Console.Chips(3);
+                // The objective / contract / clock chips repeated the rings and the hero clock, so the header now
+                // carries only the tab bar.
                 briefFlow = CreatePage();
                 objectivesFlow = CreatePage();
                 contractsFlow = CreatePage();
@@ -129,8 +140,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             protected override string AmbientStatus() =>
                 selectedPage == 2 ? secondaryStatus :
-                model.ObjectivesActive == 0 ? "MISSION STATUS — NO ACTIVE OBJECTIVES" :
-                "MISSION STATUS — " + model.ObjectivesActive + " ACTIVE OBJECTIVES";
+                model.ObjectivesActive == 0 ? "NO ACTIVE OBJECTIVES" :
+                model.ObjectivesActive + " ACTIVE OBJECTIVES";
 
             protected override void OnPageChanged(int index)
             {
@@ -146,10 +157,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
                 briefTiles = new[]
                 {
-                    new AvMetric(page.Content, "SCORE"),
-                    new AvMetric(page.Content, "OBJECTIVES"),
-                    new AvMetric(page.Content, "AT STAKE"),
+                    new AvGauge(page.Content, "SCORE", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "OBJECTIVES", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "AT STAKE", AvGaugeShape.Ring, 64f),
                 };
+                briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
+                briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";
+                briefTiles[2].Help = "At stake: the reward of contracts currently in the field. The ring shows how full the active-contract limit is.";
                 page.Row(briefTiles);
 
                 ladderSection = page.Section(MfdChromeIcon.For("CHART"), "ESCALATION");
@@ -161,10 +175,41 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     AvButtonStyle.Primary));
                 if (leadContractOpen != null) leadContractOpen.Help = BrowseHelp;
 
-                logSection = page.Section(AvIcon.Activity, "MISSION LOG", "LIVE FEED");
+                logSection = page.Section(AvIcon.Activity, "LOG");
                 logList = page.Add(new AvList(page.Content, page.Ticker, MfdMissionBoard.LogShown, BindLogRow));
                 logSection.SetShown(false);
                 logList.SetShown(false);
+
+                trendSection = page.Section(AvIcon.ChartLine, "FUNDS", "NO SAMPLES");
+                trendChart = new AvLineChart(page.Content, 120f);
+                trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
+                page.Add(trendChart, 1f);
+            }
+
+            /// <summary>The faction's funds over the observed window, fed by the same recorder the FAC history uses.</summary>
+            private void RenderTrend()
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                FactionHQ hq = map != null ? map.HQ : null;
+                MfdResourceHistory history = hq == null ? null : FactionResourceHistoryStore.For(hq);
+                int count = history != null ? history.Count : 0;
+                int run = 0, runStart = 0;
+                for (int i = 0; i < count; i++)
+                {
+                    float v = history.Value(0, i);
+                    if (!MfdResourceHistory.Finite(v)) { run = 0; runStart = i + 1; continue; }
+                    trendBuffer[run++] = v;
+                }
+                if (run < 2)
+                {
+                    trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
+                    trendSection.SetCaption(count == 0 ? "NO SAMPLES" : "NEEDS 2 SAMPLES");
+                    return;
+                }
+                float lo = trendBuffer[0], hi = trendBuffer[0];
+                for (int i = 1; i < run; i++) { lo = Mathf.Min(lo, trendBuffer[i]); hi = Mathf.Max(hi, trendBuffer[i]); }
+                trendChart.SetSeries(trendBuffer, run, AvNum.Money(lo), AvNum.Money(hi), AvNum.Money(trendBuffer[run - 1]));
+                trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))));
             }
 
             private void BindLogRow(int index, AvRow row)
@@ -195,19 +240,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
                     progress = MfdMissionOverview.NextGateProgress(model.Current, model.Tactical, model.Strategic);
                 }
-                if (!model.HasHq) briefTiles[0].Set("—", "NO HQ", 0f, AvState.Inert);
-                else briefTiles[0].Set(AvNum.Fixed(model.Score, 1), model.HasEscalation ? "NEXT GATE " + AvNum.Percent(progress) : "FACTION",
-                    progress, model.HasEscalation ? holding : AvState.Ready);
+                if (!model.HasHq) briefTiles[0].Set(0f, "—", AvState.Inert);
+                else briefTiles[0].Set(progress, AvNum.Fixed(model.Score, 1), model.HasEscalation ? holding : AvState.Ready);
 
                 int total = model.ObjectivesDone + model.ObjectivesActive;
-                if (total == 0) briefTiles[1].Set("—", "NONE ISSUED", 0f, AvState.Inert);
-                else briefTiles[1].Set(AvNum.Fixed(model.ObjectivesDone, 0) + "/" + AvNum.Fixed(total, 0), "COMPLETE",
-                    model.ObjectivesDone / (float)total, model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
+                if (total == 0) briefTiles[1].Set(0f, "—", AvState.Inert);
+                else briefTiles[1].Set(model.ObjectivesDone / (float)total,
+                    AvNum.Fixed(model.ObjectivesDone, 0) + "/" + AvNum.Fixed(total, 0),
+                    model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
 
-                if (!model.Installed) briefTiles[2].Set("—", "NO DIRECTOR", 0f, AvState.Inert);
-                else briefTiles[2].Set(Cash(model.AtStake), model.ActiveContracts > 0 ? "IN FIELD" : "NONE ACTIVE",
-                    model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : 0f,
-                    model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
+                if (!model.Installed) briefTiles[2].Set(0f, "—", AvState.Inert);
+                else briefTiles[2].Set(model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : 0f,
+                    Cash(model.AtStake), model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
 
                 RenderLadder();
 
@@ -226,8 +270,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 }
                 else
                 {
-                    leadContractRow.Set(model.Offers + model.ActiveContracts > 0 ? "REVIEW CONTRACTS" : "NO ACTIVE CONTRACTS",
-                        "Open the contract board to review optional faction missions.", "", AvState.Inert);
+                    leadContractRow.Set(model.Offers + model.ActiveContracts > 0 ? "REVIEW CONTRACTS" : "NO CONTRACTS",
+                        "", "", AvState.Inert);
                     leadContractRow.Help = BrowseHelp;
                     if (leadContractOpen != null) leadContractOpen.Help = BrowseHelp;
                 }
@@ -238,6 +282,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 logSection.SetShown(shown > 0);
                 logList.SetShown(shown > 0);
                 logList.SetCount(shown);
+                RenderTrend();
             }
 
             private int LeadObjective()
@@ -290,6 +335,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
                 objectivesEmpty = page.Add(new AvRow(page.Content));
                 objectivesEmpty.SetShown(false);
+
             }
 
             private void RenderObjectives()
@@ -302,8 +348,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (!any)
                 {
                     objectivesEmpty.Set(model.HasHq ? "NO ACTIVE OBJECTIVES" : "OBJECTIVE FEED OFFLINE",
-                        model.HasHq ? "The mission has not issued an objective to this faction yet."
-                            : "No faction headquarters is attached to this display.", "", AvState.Inert);
+                        "", "", AvState.Inert);
                     checklist.SetCount(0);
                     return;
                 }
@@ -336,8 +381,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 string detail = line.Kind;
                 if (!string.IsNullOrEmpty(line.Source) && line.Source != line.Title) detail += "  ·  " + line.Source;
                 detail += "  ·  " + (done ? "100%" : AvNum.Percent(line.Fraction));
-                string value = done ? "DONE" : line.DistanceM >= 0f ? MfdMissionBoard.Distance(line.DistanceM) : "ACTIVE";
+                string value = done ? "DONE" : line.DistanceM >= 0f ? MfdMissionBoard.Distance(line.DistanceM) : AvNum.Percent(line.Fraction);
 
+                // Surface the objective kind and source beside its progress instead of hiding them behind a heat cell.
                 row.Set(line.Title, detail, value, line.Fraction, !done, done ? AvState.Ready : AvState.Info);
                 row.Help = line.Title + "  —  " + detail;
             }
@@ -348,18 +394,23 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             {
                 moneyTiles = new[]
                 {
-                    new AvMetric(page.Content, "IN FIELD"),
-                    new AvMetric(page.Content, "OFFERED"),
-                    new AvMetric(page.Content, "PAID"),
+                    new AvGauge(page.Content, "IN FIELD", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "OFFERED", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "PAID", AvGaugeShape.Ring, 64f),
                 };
+                moneyTiles[0].Help = "In field: the money at stake in accepted contracts. The ring fills as active contracts approach the limit.";
+                moneyTiles[1].Help = "Offered: the total reward of offers nobody has accepted yet, against everything on the board.";
+                moneyTiles[2].Help = "Paid: rewards already earned from completed contracts, against everything on the board.";
                 page.Row(moneyTiles);
 
-                boardSection = page.Section(AvIcon.Star, "CONTRACT BOARD");
+                boardSection = page.Section(AvIcon.Star, "CONTRACTS");
+                // The desk button rides the filter row: one row of four instead of a row and a stray full-width button.
                 AvButtons filters = page.Buttons(
                     new AvControl.Spec("AVAILABLE", () => { secondaryFilter = MfdSecondaryObjectives.FilterAvailable; cardStack.SetPage(0); RequestRefresh(); }),
                     new AvControl.Spec("ACTIVE", () => { secondaryFilter = MfdSecondaryObjectives.FilterActive; cardStack.SetPage(0); RequestRefresh(); }),
-                    new AvControl.Spec("CLOSED", () => { secondaryFilter = MfdSecondaryObjectives.FilterResults; cardStack.SetPage(0); RequestRefresh(); }));
-                secondaryFilterControls = filters.Controls;
+                    new AvControl.Spec("CLOSED", () => { secondaryFilter = MfdSecondaryObjectives.FilterResults; cardStack.SetPage(0); RequestRefresh(); }),
+                    new AvControl.Spec("DESK", OpenContractDesk, AvButtonStyle.Default, MfdChromeIcon.For("LEDGER")));
+                secondaryFilterControls = new[] { filters.Controls[0], filters.Controls[1], filters.Controls[2] };
                 string[] filterNames = { "available", "active", "closed" };
                 string[] filterHelp =
                 {
@@ -369,6 +420,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 };
                 for (int i = 0; i < secondaryFilterControls.Length; i++)
                     secondaryFilterControls[i].Help = "Show " + filterNames[i] + " contracts — " + filterHelp[i] + ".";
+                openDesk = filters.Controls[3];
+                openDesk.Help = "Desk: open the shared faction contract record in its own window.";
 
                 cardStack = page.Add(new PagedPartStack<ContractCard>(page.Content, page.Ticker, SecondaryPageSize, 6f,
                     (parent, slot) => new ContractCard(parent,
@@ -378,10 +431,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 contractsEmpty = page.Add(new AvRow(page.Content));
                 contractsEmpty.SetShown(false);
 
-                AvButtons desk = page.Buttons(new AvControl.Spec("OPEN CONTRACT DESK", OpenContractDesk,
-                    AvButtonStyle.Default, MfdChromeIcon.For("LEDGER")));
-                openDesk = desk.Controls[0];
-                openDesk.Help = "Open the shared faction contract record.";
             }
 
             private void OpenContractDesk()
@@ -393,15 +442,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             private void RenderContracts()
             {
                 if (!model.Installed)
-                    foreach (AvMetric tile in moneyTiles) tile.Set("—", "NO DIRECTOR", 0f, AvState.Inert);
+                    foreach (AvGauge ring in moneyTiles) ring.Set(0f, "—", AvState.Inert);
                 else
                 {
-                    moneyTiles[0].Set(Cash(model.AtStake), model.ActiveContracts + " ACTIVE",
-                        model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : 0f,
-                        model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
-                    moneyTiles[1].Set(Cash(model.Offered), model.Offers + (model.Offers == 1 ? " OFFER" : " OFFERS"),
-                        0f, model.Offers > 0 ? AvState.Info : AvState.Inert);
-                    moneyTiles[2].Set(Cash(model.Paid), "COLLECTED", 0f, model.Paid > 0 ? AvState.Ready : AvState.Inert);
+                    float pool = Mathf.Max(1f, model.AtStake + model.Offered + model.Paid);
+                    moneyTiles[0].Set(model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : model.AtStake / pool,
+                        Cash(model.AtStake), model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
+                    moneyTiles[1].Set(model.Offered / pool, Cash(model.Offered), model.Offers > 0 ? AvState.Info : AvState.Inert);
+                    moneyTiles[2].Set(model.Paid / pool, Cash(model.Paid), model.Paid > 0 ? AvState.Ready : AvState.Inert);
                 }
 
                 secondaryFilterControls[0].Label = "AVAILABLE " + model.Offers;
@@ -414,7 +462,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 bool empty = count == 0;
                 boardSection.SetCaption(!model.Installed ? "UNAVAILABLE"
                     : !model.Streamed ? "WAITING FOR HOST"
-                    : model.Limit > 0 ? "CAPACITY " + model.Limit + " MAX" : "DIRECTOR ONLINE");
+                    : model.Limit > 0 ? "MAX " + model.Limit : "ONLINE");
 
                 cardStack.SetShown(!empty);
                 contractsEmpty.SetShown(empty);
@@ -423,7 +471,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     string message = MfdSecondaryObjectives.EmptyMessage(secondaryFilter,
                         EmptyReason(model.Installed, model.Streamed, model.Offers, model.Closed));
                     int cut = message.IndexOf('\n');
-                    contractsEmpty.Set(cut < 0 ? message : message.Substring(0, cut), cut < 0 ? "" : message.Substring(cut + 1),
+                    contractsEmpty.Set(cut < 0 ? message : message.Substring(0, cut), "",
                         "", model.Installed && model.Streamed ? AvState.Inert : AvState.Caution);
                 }
                 cardStack.SetCount(count);
@@ -469,9 +517,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     Sub = sub,
                     Reward = Cash(objective.Money),
                     Xp = "+" + AvNum.Thousands(Math.Max(0, objective.Xp)) + " XP",
-                    Progress = objective.IsOffered ? "NOT STARTED" : "PROGRESS " + (complete ? "100%" : AvNum.Percent(fraction)),
+                    Progress = objective.IsOffered ? "OFFER" : complete ? "100%" : AvNum.Percent(fraction),
                     Chip = MfdSecondaryObjectives.ChipLabel(objective),
-                    Description = objective.Description,
                     Fraction = fraction,
                     State = state,
                     ShowActions = dismissable,
@@ -492,7 +539,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (index < 0 || index >= model.Contracts.Count) return;
                 SecondaryObjectiveView objective = model.Contracts[index];
                 if (objective != null && MfdSecondaryObjectives.CanAccept(objective, secondaryHasCapacity) &&
-                    ModServices.TryGet(out ISecondaryObjectivesView view))
+                    ModuleServices.TryGet(out ISecondaryObjectivesView view))
                     view.RequestAccept(objective.Id);
                 RequestRefresh();
             }
@@ -508,7 +555,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     RequestRefresh();
                     return;
                 }
-                if (ModServices.TryGet(out ISecondaryObjectivesView view)) view.RequestCancel(objective.Id);
+                if (ModuleServices.TryGet(out ISecondaryObjectivesView view)) view.RequestCancel(objective.Id);
                 secondaryConfirmId = 0;
                 RequestRefresh();
             }
@@ -520,10 +567,6 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 RenderBrief();
                 RenderObjectives();
                 RenderContracts();
-                chips[0].Set(model.ObjectivesActive + " OBJECTIVES", model.ObjectivesActive > 0 ? AvState.Ready : AvState.Inert);
-                chips[1].Set(MfdSecondaryObjectives.ShortCount(model.ActiveContracts, model.Limit) + " CONTRACTS",
-                    model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
-                chips[2].Set(model.Clock, model.Clock != "—" ? AvState.Ready : AvState.Inert);
             }
 
             // ---------------------------------------------------------------- gather
@@ -650,7 +693,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
             private void GatherContracts()
             {
-                bool installed = ModServices.TryGet(out ISecondaryObjectivesView view);
+                bool installed = ModuleServices.TryGet(out ISecondaryObjectivesView view);
                 IReadOnlyList<SecondaryObjectiveView> entries = null;
                 bool streamed = false;
                 model.Installed = installed;

@@ -1,15 +1,14 @@
-using System;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Presentation.Board;
-using BoscaliSummer.Features.Support.Presentation.Viz;
-using BoscaliSummer.Features.Support.Presentation.Window;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Presentation.Board;
+using BoscaliSummer.Modules.Support.Presentation.Viz;
+using BoscaliSummer.Modules.Support.Presentation.Window;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Views
+namespace BoscaliSummer.Modules.Support.Presentation.Views
 {
     /// <summary>
     /// The compact CYBER wire netmap on OPS › CYBER › STATUS: nodes as small hexes by state, links
@@ -23,6 +22,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
         private const float Hex = 13f;
 
         private BoardSurface board;
+        private BoardSectorOverlay sectors;
         private RectTransform layer;
         private readonly Image[] hexes = new Image[Slots];
         private readonly Image[] rings = new Image[Slots];
@@ -43,6 +43,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             lattice.type = Image.Type.Tiled;
             lattice.raycastTarget = false;
             Chrome.Outline(parent, view, AvTheme.Hairline);
+            CyberStyle.Corners(parent, view, AvTheme.RailInfo.WithAlpha(0.8f));
             var map = new Rect(view.x, view.y, view.width, view.height - 18f);
             board = new BoardSurface(parent, map, map, true, true);
             board.Clicked = (local, button) =>
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
             layer = (RectTransform)go.transform;
             layer.SetParent(board.InputLayer, false);
             Chrome.Place(layer, new Rect(-map.x, -map.y, map.x + map.width, map.height - map.y));
+            sectors = new BoardSectorOverlay(layer, board, AvTheme.Hairline, AvTheme.RailReady, AvTheme.RailInfo);
             for (int i = 0; i < Slots; i++)
             {
                 links[i] = Lines.Make(layer, AvTheme.Hairline);
@@ -77,12 +79,12 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 threats[i].sprite = OpsSprites.Glyph(OpsSprites.G.Alert);
                 threats[i].enabled = false;
             }
-            OpsText.Plot(parent, "CLICK A NODE TO OPEN IT IN THE CONSOLE", new Rect(view.x + 8f, view.y - view.height + 17f,
+            OpsText.Plot(parent, "CLICK NODE > CONSOLE", new Rect(view.x + 8f, view.y - view.height + 17f,
                 view.width - 16f, 16f), AvTheme.Dim, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             Image osd = Chrome.Panel(parent, new Rect(view.x + 1f, view.y - 1f, view.width - 2f, 16f),
                 AvTheme.SurfaceInert.WithAlpha(0.88f));
             osd.raycastTarget = false;
-            OpsText.Plot(parent, "AEGIS NET / NODE MESH", new Rect(view.x + 8f, view.y - 1f,
+            OpsText.Plot(parent, "// NODES / SECTOR ACCESS", new Rect(view.x + 8f, view.y - 1f,
                 view.width - 16f, 16f), AvTheme.RailInfo, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             empty = OpsText.Plot(parent, "", new Rect(view.x + 8f, view.y - (view.height - 18f) * 0.5f + 8f, view.width - 16f, 16f),
                 AvTheme.Dim, AvTextRole.Label, TextAlignmentOptions.Center);
@@ -98,6 +100,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 zs[count++] = network.Node(i).Z;
             }
             board.Fit(xs, zs, count, 20000f, count >= 8 ? 10f : 0f, 12f);
+            sectors.Begin();
+            for (int i = 0; i < Slots && network != null; i++)
+            {
+                if (!network.Exists(i)) continue;
+                CyberNode node = network.Node(i);
+                sectors.Add(node.X, node.Z, network.ControlsSector(node.X, node.Z, now), i == selected);
+            }
+            sectors.Paint();
             string emptyText = network == null ? "AWAITING THEATER DATA" : !network.HasCommand ? "NO AIRBASE HELD · NO NETWORK" : "";
             if (empty.text != emptyText) empty.text = emptyText;
             int command = network != null ? network.CommandSlot : -1;
@@ -120,7 +130,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Views
                 bool mine = n.Static || n.Hacked;
                 bool bad = n.Compromised || (n.Static && n.Down);
                 hexes[i].color = bad ? AvTheme.RailDanger : n.Isolated ? AvTheme.Disabled
-                    : n.Static ? AvTheme.TextPrimary : n.Hacked ? AvTheme.RailInfo : AvTheme.Dim;
+                    : n.Static ? AvTheme.TextPrimary : n.Hacked ? AvTheme.RailReady : AvTheme.RailInfo;
                 bool reach = !mine && network.CheckBreach(i, now) == BreachDenial.None;
                 rings[i].enabled = reach;
                 if (reach) Lines.Centre(rings[i].rectTransform, p.x, p.y, 22f);

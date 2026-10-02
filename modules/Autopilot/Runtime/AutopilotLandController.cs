@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Autopilot.Configuration;
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Autopilot.Configuration;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     internal sealed class AutopilotLandController : MonoBehaviour, ISceneService
     {

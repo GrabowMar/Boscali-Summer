@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Support.Domain.Cyber
+namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>What an operator can do to a node or an incident from the console. Wire-stable.</summary>
     internal enum CyberVerb : byte
@@ -215,7 +215,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public bool AnyCapstone(Capstone capstone) => AnyCapstone(capstone, lastTick);
 
         public bool AnyCapstone(Capstone capstone, double now) =>
-            capstone != Capstone.None && AccessRemaining(now) > 0f && Working(accessSlot) && nodes[accessSlot].Capstone == capstone;
+            capstone != Capstone.None && AccessQuality >= Capstones.RequiredQuality && AccessRemaining(now) > 0f &&
+            Working(accessSlot) && nodes[accessSlot].Capstone == capstone;
 
         public CyberStats Stats()
         {
@@ -279,7 +280,10 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         /// <summary>Host: an ability's loot and the trace reward land here.</summary>
         public void GrantIntel(float amount) =>
-            Intel = Math.Min(IntelCapacity(), Intel + Math.Max(0f, amount));
+            Intel = Math.Min(IntelCapacity(), Intel + (Finite(amount) ? Math.Max(0f, amount) : 0f));
+
+        public void GrantComputing(float amount) =>
+            Computing = Math.Min(ComputingCapacity(), Computing + (Finite(amount) ? Math.Max(0f, amount) : 0f));
 
         // ---- Upgrades (money; never an ability) ---------------------------------------------
 
@@ -304,28 +308,31 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public float Reach =>
             Math.Max(1000f, BaseReach) * (1f + CyberLocations.ReachPerLevel * upgradeLevels[(int)CyberUpgrade.Reach]);
 
-        /// <summary>Ability radius of a hacked location, upgraded, halved inside a jamming raid.</summary>
+        /// <summary>Payload footprint grows independently of the sector that authorises its target.</summary>
+        public float PayloadRadiusScale => 1f + 0.1f * upgradeLevels[(int)CyberUpgrade.Radius];
+
+        /// <summary>A live raid halves recon/disruption footprints, without redrawing sector ownership.</summary>
+        public float PayloadRadiusAt(double now) => PayloadRadiusScale *
+            (AccessRemaining(now) > 0f && Jammed(accessSlot, now) ? 0.5f : 1f);
+
+        /// <summary>Capstone effect radius, upgraded, halved inside a jamming raid; never target authority.</summary>
         public float RadiusOf(int slot, double now)
         {
             if (!IsHacked(slot)) return 0f;
-            float radius = CyberLocations.Stage(CyberLocations.LocationOf(nodes[slot].Kind), nodes[slot].Stage).Radius +
-                           CyberLocations.RadiusPerLevel * upgradeLevels[(int)CyberUpgrade.Radius];
+            float radius = CyberLocations.Stage(CyberLocations.LocationOf(nodes[slot].Kind), nodes[slot].Stage).Radius * PayloadRadiusScale;
             return Jammed(slot, now) ? radius * 0.5f : radius;
         }
 
-        /// <summary>A working hacked location of at least <paramref name="tier"/> whose radius covers the point.</summary>
+        /// <summary>The live, working access package controls the sector containing its real node.</summary>
+        public bool ControlsSector(float x, float z, double now) =>
+            !double.IsNaN(now) && !double.IsInfinity(now) && now >= 0.0 &&
+            AccessRemaining(now) > 0f && Working(accessSlot) &&
+            OpsSectors.Same(nodes[accessSlot].X, nodes[accessSlot].Z, x, z);
+
+        /// <summary>A live package of at least <paramref name="tier"/> controlling the target sector.</summary>
         public bool AbilityCovers(int tier, float x, float z, double now)
         {
-            if (tier <= 0) return false;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Working(i) || Tier(i) < tier) continue;
-                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
-                float radius = RadiusOf(i, now);
-                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
-                if (dx * dx + dz * dz <= radius * radius) return true;
-            }
-            return false;
+            return tier > 0 && ControlsSector(x, z, now) && Tier(accessSlot) >= tier;
         }
 
         /// <summary>Any working location of at least this tier, wherever it is; the panel's readiness hint.</summary>
@@ -337,41 +344,23 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public bool AnyTier(int tier, double now) =>
             tier > 0 && AccessRemaining(now) > 0f && Working(accessSlot) && Tier(accessSlot) >= tier;
 
-        /// <summary>The working location of at least this tier whose radius covers the point, best first.</summary>
+        /// <summary>The live location of at least this tier controlling the target sector.</summary>
         public bool TryCovering(int tier, float x, float z, double now, out int slot)
         {
             slot = -1;
-            if (tier <= 0) return false;
-            int bestTier = -1;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Working(i) || Tier(i) < tier || Tier(i) <= bestTier) continue;
-                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
-                float radius = RadiusOf(i, now);
-                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
-                if (dx * dx + dz * dz > radius * radius) continue;
-                slot = i;
-                bestTier = Tier(i);
-            }
-            return slot >= 0;
+            if (!AbilityCovers(tier, x, z, now)) return false;
+            slot = accessSlot;
+            return true;
         }
 
-        /// <summary>The working capstone location covering the point, best first.</summary>
+        /// <summary>The live capstone location controlling the target sector.</summary>
         public bool TryCovering(Capstone capstone, float x, float z, double now, out int slot)
         {
             slot = -1;
-            if (capstone == Capstone.None) return false;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Working(i) || nodes[i].Capstone != capstone) continue;
-                if (i == accessSlot && AccessRemaining(now) <= 0f) continue;
-                float radius = RadiusOf(i, now);
-                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
-                if (dx * dx + dz * dz > radius * radius) continue;
-                slot = i;
-                return true;
-            }
-            return false;
+            if (capstone == Capstone.None || AccessQuality < Capstones.RequiredQuality ||
+                !ControlsSector(x, z, now) || nodes[accessSlot].Capstone != capstone) return false;
+            slot = accessSlot;
+            return true;
         }
 
         /// <summary>Capstone recharge left, seconds.</summary>
@@ -402,18 +391,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return AbilityCovers(1, x, z, now);
         }
 
-        /// <summary>Any working hacked location covering the point, whatever its stage.</summary>
-        public bool HackedCovers(float x, float z, double now)
-        {
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Working(i) || !IsHacked(i) || (i == accessSlot && AccessRemaining(now) <= 0f)) continue;
-                float radius = RadiusOf(i, now);
-                float dx = nodes[i].X - x, dz = nodes[i].Z - z;
-                if (dx * dx + dz * dz <= radius * radius) return true;
-            }
-            return false;
-        }
+        /// <summary>The live access package controlling the point's sector, whatever its tier.</summary>
+        public bool HackedCovers(float x, float z, double now) => ControlsSector(x, z, now);
 
         public bool ReachCovers(float x, float z)
         {
@@ -436,6 +415,87 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         private double breachPhaseEnds;
         private int choiceTarget = -1;
         private double choiceDeadline;
+        private double workReady;
+        public int WorkRevision { get; private set; }
+        public int WorkProgress { get; private set; }
+        public int WorkAnalysis { get; private set; }
+        public int WorkQuality { get; private set; }
+        public int AccessQuality { get; private set; }
+        public float EffectScale => 1f + 0.05f * AccessQuality;
+        public bool Supports(HackKind kind, double now) => (byte)kind < CyberCatalog.Table.Length &&
+            AccessQuality >= CyberCatalog.RequiredQuality(kind) && AnyTier(CyberCatalog.RequiredStage(kind) - 1, now);
+        public float WorkRemaining(double now) => (float)Math.Max(0.0, workReady - now);
+
+        /// <summary>The service answers differently in each phase. The operator sees the forecast;
+        /// no hidden random roll and no reaction-time test decides a prepared payload.</summary>
+        public string WorkService => breachPhase == BreachPhase.Probe ? "EDGE FILTER / LOW-EXPOSURE ENTRY"
+            : breachPhase == BreachPhase.Exploit ? "SERVICE AUTH / BLIND INJECTION TRAP"
+            : "AUDIT LOG / PURGE COSTS 1 QUALITY";
+
+        public float WorkCost(CyberWork operation) => operation == CyberWork.Analyze ? 6f
+            : operation == CyberWork.Exploit ? (breachQuiet ? 12f : 18f)
+            : operation == CyberWork.Scrub ? 12f : 0f;
+
+        public float WorkTrace(CyberWork operation)
+        {
+            if (operation == CyberWork.Scrub) return breachPhase == BreachPhase.Extract ? -0.36f : -0.24f;
+            if (operation == CyberWork.Commit) return 0f;
+            float trace = operation == CyberWork.Analyze ? 0.025f
+                : WorkAnalysis > 0 ? breachPhase == BreachPhase.Extract ? 0.16f : 0.08f
+                : breachPhase == BreachPhase.Exploit ? 0.34f : breachPhase == BreachPhase.Probe ? 0.20f : 0.25f;
+            return TraceResistance(trace * (breachQuiet ? 1f : 1.3f));
+        }
+
+        public BreachDenial CheckWork(CyberWork operation, int expectedRevision, double now)
+        {
+            if (!BreachActive || now >= breachPhaseEnds) return BreachDenial.NoSession;
+            if (!CommandOnline || CommandCompromised) return BreachDenial.NoCommand;
+            if ((byte)operation > (byte)CyberWork.Commit) return BreachDenial.NoTarget;
+            if (expectedRevision != WorkRevision) return BreachDenial.StaleWork;
+            if (WorkRemaining(now) > 0f) return BreachDenial.Recharging;
+            if (operation == CyberWork.Analyze && WorkAnalysis >= 2) return BreachDenial.AlreadyAnalyzed;
+            if (operation == CyberWork.Exploit && WorkProgress >= CyberLocations.WorkRequired) return BreachDenial.Incomplete;
+            if (operation == CyberWork.Commit && WorkProgress < CyberLocations.WorkRequired) return BreachDenial.Incomplete;
+            return Computing + 0.001f < WorkCost(operation) ? BreachDenial.LowComputing : BreachDenial.None;
+        }
+
+        /// <summary>Every accepted input has one revision. Tick never earns work or quality.</summary>
+        public BreachDenial Work(CyberWork operation, int expectedRevision, double now)
+        {
+            BreachDenial denial = CheckWork(operation, expectedRevision, now);
+            if (denial != BreachDenial.None) return denial;
+            SpendComputing(WorkCost(operation));
+            breachTrace = Math.Max(0f, Math.Min(1f, breachTrace + WorkTrace(operation)));
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
+            workReady = now + CyberLocations.WorkSeconds;
+            breachPhaseEnds = now + CyberLocations.SessionSeconds;
+            if (breachTrace >= 1f) { Backtrace(now); return BreachDenial.None; }
+            switch (operation)
+            {
+                case CyberWork.Analyze:
+                    WorkAnalysis++;
+                    WorkQuality = Math.Min(CyberLocations.MaximumQuality, WorkQuality + 1);
+                    if (WorkAnalysis == 1) WorkProgress = Math.Min(CyberLocations.WorkRequired, WorkProgress + 1);
+                    break;
+                case CyberWork.Exploit:
+                    WorkProgress = Math.Min(CyberLocations.WorkRequired,
+                        WorkProgress + (WorkAnalysis > 0 || !breachQuiet ? 3 : 1));
+                    break;
+                case CyberWork.Scrub:
+                    if (breachPhase == BreachPhase.Extract) WorkQuality = Math.Max(0, WorkQuality - 1);
+                    break;
+                case CyberWork.Commit:
+                    if (breachPhase == BreachPhase.Extract) Complete(now);
+                    else
+                    {
+                        breachPhase++;
+                        WorkProgress = WorkAnalysis = 0;
+                        Notify(CyberNotice.BreachPhaseDone, breachTarget, (byte)breachPhase, now);
+                    }
+                    break;
+            }
+            return BreachDenial.None;
+        }
 
         public bool BreachActive => breachTarget >= 0 && breachPhase != BreachPhase.None;
         public int BreachTarget => breachTarget;
@@ -454,20 +514,16 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public float AccessRecoveryRemaining(double now) =>
             accessRecoveryUntil > now ? (float)(accessRecoveryUntil - now) : 0f;
 
-        /// <summary>Consume the lease only when a validated Cyber effect lands inside its site coverage.</summary>
+        /// <summary>Consume the lease only when a validated Cyber effect lands in its controlled sector.</summary>
         public bool ConsumeAccess(float x, float z, double now)
         {
-            int slot = accessSlot;
-            if (AccessRemaining(now) <= 0f || !Working(slot) || !Finite(x) || !Finite(z)) return false;
-            float radius = RadiusOf(slot, now);
-            float dx = nodes[slot].X - x, dz = nodes[slot].Z - z;
-            if (dx * dx + dz * dz > radius * radius) return false;
+            if (!ControlsSector(x, z, now)) return false;
             EndAccess(now, CyberNotice.AccessConsumed);
             accessRecoveryUntil = now + CyberLocations.AccessRecoverySeconds;
             return true;
         }
 
-        /// <summary>Seconds left to pick the capstone before the model picks REVEAL itself.</summary>
+        /// <summary>Seconds left to select an optional high-quality payload before access expires.</summary>
         public float ChoiceRemaining(double now) =>
             choiceTarget >= 0 && choiceDeadline > now ? (float)(choiceDeadline - now) : 0f;
 
@@ -509,7 +565,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
 
         public BreachDenial CheckBreach(int slot, double now)
         {
-            if (!HasCommand || !CommandOnline) return BreachDenial.NoCommand;
+            if (!HasCommand || !CommandOnline || CommandCompromised) return BreachDenial.NoCommand;
             if (!Exists(slot) || slot < TargetBase) return BreachDenial.NoTarget;
             if (!CyberLocations.Hackable(CyberLocations.LocationOf(nodes[slot].Kind))) return BreachDenial.NotHackable;
             if (AccessRemaining(now) > 0f) return BreachDenial.AccessActive;
@@ -522,7 +578,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             return BreachDenial.None;
         }
 
-        /// <summary>Host: start a breach. Charges the probe phase and runs it to completion on Tick.</summary>
+        /// <summary>Host: open a workbench. Charges entry; only accepted operator work can complete it.</summary>
         public BreachDenial TryStartBreach(int slot, bool quiet, double now)
         {
             BreachDenial denial = CheckBreach(slot, now);
@@ -531,17 +587,28 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             breachTarget = slot;
             breachPhase = BreachPhase.Probe;
             breachQuiet = quiet;
-            breachTrace = 0f;
-            breachPhaseEnds = now + PhaseSeconds(BreachPhase.Probe, quiet);
+            breachTrace = TraceResistance(CyberLocations.ProbeTrace * (quiet ? 1f : CyberLocations.ForceTraceScale));
+            WorkProgress = WorkAnalysis = WorkQuality = 0;
+            CrewLinks = 0;
+            crewReleaseAt = now + CrewIngressSeconds(quiet);
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
+            workReady = now;
+            breachPhaseEnds = now + CyberLocations.SessionSeconds;
             Notify(CyberNotice.BreachStarted, slot, 0, now);
             return BreachDenial.None;
         }
 
         /// <summary>Host: quiet or force for the next phase.</summary>
-        public bool TryBreachMode(bool quiet)
+        public bool TryBreachMode(bool quiet) => TryBreachMode(quiet, lastTick);
+
+        public bool TryBreachMode(bool quiet, double now)
         {
-            if (!BreachActive) return false;
+            if (!BreachActive || breachQuiet == quiet || double.IsNaN(now) || double.IsInfinity(now)) return false;
+            // A late loud retune cannot buy away the response window. Returning to quiet ingress
+            // takes the full quiet handshake, so loud entry cannot be combined with quiet prices.
+            if (quiet) crewReleaseAt = Math.Max(crewReleaseAt, now + CrewHandshakeSeconds);
             breachQuiet = quiet;
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
             return true;
         }
 
@@ -554,6 +621,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             SpendComputing(CyberLocations.SpoofCost);
             capstoneReady[0] = now + CyberLocations.SpoofRecharge;
             breachTrace = Math.Max(0f, breachTrace - CyberLocations.SpoofTrace);
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
             return BreachDenial.None;
         }
 
@@ -572,8 +640,17 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public bool ResistBreach(double now)
         {
             if (!BreachActive || breachPhaseEnds <= now) return false;
-            breachPhaseEnds += 10.0;
-            breachTrace = Math.Min(0.85f, breachTrace + 0.06f);
+            workReady = Math.Max(workReady, now + 10.0);
+            if (CrewLinks != 0)
+            {
+                // Defensive isolation reopens one real link, not just a cosmetic progress counter.
+                for (int link = 2; link >= 0; link--)
+                    if (LinkSolved(link)) { CrewLinks &= (byte)~(1 << link); break; }
+                WorkQuality = Math.Max(0, WorkQuality - 2);
+            }
+            WorkProgress = Math.Max(0, WorkProgress - 1);
+            breachTrace = Math.Min(0.95f, breachTrace + 0.12f);
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
             return true;
         }
 
@@ -582,7 +659,8 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         {
             if (!BreachAwaitingChoice || choiceTarget != accessSlot || AccessRemaining(now) <= 0f ||
                 !IsHacked(choiceTarget) || nodes[choiceTarget].Capstone != Capstone.None ||
-                capstone == Capstone.None || !Capstones.Known((byte)capstone)) return false;
+                capstone == Capstone.None || !Capstones.Known((byte)capstone) ||
+                AccessQuality < Capstones.RequiredQuality) return false;
             int slot = choiceTarget;
             nodes[slot].Capstone = capstone;
             choiceTarget = -1;
@@ -597,81 +675,31 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             breachPhase = BreachPhase.None;
             breachTrace = 0f;
             breachPhaseEnds = 0.0;
+            WorkProgress = WorkAnalysis = WorkQuality = 0;
+            CrewLinks = 0;
+            crewReleaseAt = 0;
+            workReady = 0.0;
+            WorkRevision = WorkRevision == int.MaxValue ? 1 : WorkRevision + 1;
         }
 
-        private float TraceScale(int slot, bool quiet)
-        {
-            LocationKind kind = CyberLocations.LocationOf(nodes[slot].Kind);
-            int stage = Math.Max(1, (int)nodes[slot].Stage + 1);
-            float scale = 1f + CyberLocations.StageTraceScale * (stage - 1);
-            scale *= 1f - CyberLocations.TracePerLevel * upgradeLevels[(int)CyberUpgrade.Trace];
-            // A far target is a weak connection: the defender traces it faster.
-            float distance = DistanceToNearest(slot);
-            float reach = Math.Max(1f, Reach);
-            scale *= 1f - CyberLocations.DistanceTraceScale * Math.Min(1f, distance / reach);
-            if (!quiet) scale *= CyberLocations.ForceTraceScale;
-            return Math.Max(0.1f, scale);
-        }
-
-        private float DistanceToNearest(int slot)
-        {
-            float best = float.MaxValue;
-            for (int i = 0; i < SlotCount; i++)
-            {
-                if (!Online(i) || i == slot) continue;
-                float dx = nodes[i].X - nodes[slot].X, dz = nodes[i].Z - nodes[slot].Z;
-                float distance = (float)Math.Sqrt(dx * dx + dz * dz);
-                if (distance < best) best = distance;
-            }
-            return best == float.MaxValue ? 0f : best;
-        }
+        private float TraceResistance(float trace) =>
+            trace * (1f - CyberLocations.TracePerLevel * upgradeLevels[(int)CyberUpgrade.Trace]);
 
         private void StepBreach(double now, float dt)
         {
             if (!BreachActive) return;
-            float seconds = PhaseSeconds(breachPhase, breachQuiet);
-            if (seconds <= 0f)
+            if (now >= breachPhaseEnds || !CommandOnline || CommandCompromised)
             {
-                EndBreach();
-                return;
-            }
-            float contribution = TraceContribution(breachPhase) * TraceScale(breachTarget, breachQuiet);
-            breachTrace = Math.Min(1f, breachTrace + contribution / seconds * dt);
-            if (breachTrace >= 1f)
-            {
-                Backtrace(now);
-                return;
-            }
-            if (now < breachPhaseEnds) return;
-            switch (breachPhase)
-            {
-                case BreachPhase.Probe:
-                    Advance(BreachPhase.Exploit, now);
-                    return;
-                case BreachPhase.Exploit:
-                    Advance(BreachPhase.Extract, now);
-                    return;
-                default:
-                    Complete(now);
-                    return;
-            }
-        }
-
-        private void Advance(BreachPhase phase, double now)
-        {
-            int slot = breachTarget;
-            float cost = PhaseCost(phase, Math.Max(1, (int)nodes[slot].Stage + 1), breachQuiet);
-            if (Computing + 0.001f < cost)
-            {
-                // No computing to continue: the session ends without loot, not with a backtrace.
+                int slot = breachTarget;
                 EndBreach();
                 Notify(CyberNotice.BreachStalled, slot, 0, now);
                 return;
             }
-            SpendComputing(cost);
-            breachPhase = phase;
-            breachPhaseEnds = now + PhaseSeconds(phase, breachQuiet);
-            Notify(CyberNotice.BreachPhaseDone, slot, (byte)phase, now);
+            // A patient operator has time to read. Idling only increases exposure; it cannot win.
+            breachTrace = Math.Min(1f, breachTrace + TraceResistance(Math.Max(0f, dt) * 0.0015f *
+                (breachQuiet ? 1f : CyberLocations.ForceTraceScale)));
+            if (breachTrace >= 1f)
+                Backtrace(now);
         }
 
         private void Complete(double now)
@@ -683,10 +711,11 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             nodes[slot].Capstone = Capstone.None;
             accessSlot = slot;
             accessUntil = now + CyberLocations.AccessSeconds;
-            GrantIntel(CyberLocations.AccessIntel);
+            AccessQuality = WorkQuality;
+            GrantIntel(CyberLocations.AccessIntel + WorkQuality * 10f);
             EndBreach();
-            choiceTarget = slot;
-            choiceDeadline = now + CyberLocations.PendingChoiceSeconds;
+            choiceTarget = AccessQuality >= Capstones.RequiredQuality ? slot : -1;
+            choiceDeadline = choiceTarget >= 0 ? accessUntil : 0.0;
             Notify(CyberNotice.AccessOpened, slot, 0, now);
         }
 
@@ -703,6 +732,7 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             }
             accessSlot = -1;
             accessUntil = 0.0;
+            AccessQuality = 0;
             if (choiceTarget == slot)
             {
                 choiceTarget = -1;
@@ -717,16 +747,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             Heat = Math.Min(HeatMaximum, Heat + OffensiveHeatSpike);
             EndBreach();
             Notify(CyberNotice.BreachBacktrace, slot, 0, now);
-        }
-
-        private static float TraceContribution(BreachPhase phase)
-        {
-            switch (phase)
-            {
-                case BreachPhase.Probe: return CyberLocations.ProbeTrace;
-                case BreachPhase.Exploit: return CyberLocations.ExploitTrace;
-                default: return CyberLocations.ExtractTrace;
-            }
         }
 
         // ---- Verbs --------------------------------------------------------------------------
@@ -798,7 +818,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
                         if (node.PatchDone > 0.0) return CyberDenial.AlreadyPatching;
                         break;
                     case CyberVerb.Honeypot:
-                        if (node.Kind == NodeKind.Command) return CyberDenial.CommandProtected;
                         if (node.HoneypotUntil > now) return CyberDenial.AlreadyBaited;
                         break;
                 }
@@ -873,11 +892,6 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             Computing = Math.Min(ComputingCapacity(), Computing + ComputingIncome() * dt);
             Intel = Math.Min(IntelCapacity(), Intel + IntelIncome() * dt);
 
-            if (BreachAwaitingChoice && now >= choiceDeadline)
-            {
-                // The operator never chose; the location keeps REVEAL as the watch floor's pick.
-                TryChooseCapstone(Capstone.Reveal, now);
-            }
             StepBreach(now, dt);
             TickCampaign(now, dt, campaignIntensity);
         }
@@ -1081,6 +1095,14 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             into.BreachTrace = breachTrace;
             into.BreachIn = BreachAwaitingChoice ? ChoiceRemaining(now) : BreachPhaseRemaining(now);
             into.SpoofIn = SpoofRechargeRemaining(now);
+            into.WorkRevision = WorkRevision;
+            into.CrewLinks = CrewLinks;
+            into.CrewReleaseIn = SecondsByte(CrewReleaseRemaining(now));
+            into.WorkProgress = (byte)WorkProgress;
+            into.WorkAnalysis = (byte)WorkAnalysis;
+            into.WorkQuality = (byte)WorkQuality;
+            into.AccessQuality = (byte)AccessQuality;
+            into.WorkIn = WorkRemaining(now);
             for (int i = 0; i < Capstones.All.Length; i++)
                 into.CapstoneIn[i] = CapstoneRechargeRemaining(Capstones.All[i], now);
             for (int v = 0; v < VerbCount; v++) into.Recharge[v] = RechargeRemaining((CyberVerb)v, now);
@@ -1153,6 +1175,14 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             if (breachTarget < 0 || breachPhase == BreachPhase.None) breachTarget = -1;
             breachQuiet = (from.BreachFlags & 1) != 0;
             breachTrace = Math.Max(0f, Math.Min(1f, from.BreachTrace));
+            WorkRevision = Math.Max(0, from.WorkRevision);
+            CrewLinks = BreachActive ? (byte)(from.CrewLinks & 7) : (byte)0;
+            crewReleaseAt = BreachActive ? Rebase(crewReleaseAt, from.CrewReleaseIn, now, CrewHandshakeSeconds) : 0;
+            WorkProgress = BreachActive ? Math.Min(CyberLocations.WorkRequired, (int)from.WorkProgress) : 0;
+            WorkAnalysis = BreachActive ? Math.Min(2, (int)from.WorkAnalysis) : 0;
+            WorkQuality = BreachActive ? Math.Min(CyberLocations.MaximumQuality, (int)from.WorkQuality) : 0;
+            AccessQuality = accessSlot >= 0 ? Math.Min(CyberLocations.MaximumQuality, (int)from.AccessQuality) : 0;
+            workReady = BreachActive ? Rebase(workReady, from.WorkIn, now, 10f) : 0.0;
             breachPhaseEnds = Rebase(breachPhaseEnds, from.BreachIn, now, 120f);
             choiceTarget = choosing ? sessionTarget : -1;
             choiceDeadline = choosing ? Rebase(choiceDeadline, from.BreachIn, now, CyberLocations.PendingChoiceSeconds) : 0.0;
@@ -1210,6 +1240,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
         public float BreachTrace;
         public float BreachIn;
         public float SpoofIn;
+        public int WorkRevision;
+        public byte WorkProgress, WorkAnalysis, WorkQuality, AccessQuality, CrewLinks, CrewReleaseIn;
+        public float WorkIn;
         /// <summary>Capstone recharge left, seconds, in <see cref="Capstones.All"/> order.</summary>
         public readonly float[] CapstoneIn = new float[Capstones.All.Length];
         public readonly float[] Recharge = new float[CyberNetwork.VerbCount];
@@ -1263,6 +1296,9 @@ namespace BoscaliSummer.Features.Support.Domain.Cyber
             BreachTrace = 0f;
             BreachIn = 0f;
             SpoofIn = 0f;
+            WorkRevision = 0;
+            WorkProgress = WorkAnalysis = WorkQuality = AccessQuality = CrewLinks = CrewReleaseIn = 0;
+            WorkIn = 0f;
             Array.Clear(CapstoneIn, 0, CapstoneIn.Length);
             Array.Clear(Recharge, 0, Recharge.Length);
             Heat = 0;

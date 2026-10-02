@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.Events.Domain;
-using BoscaliSummer.Features.Events.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Events.Domain;
+using BoscaliSummer.Modules.Events.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Events.Networking
+namespace BoscaliSummer.Modules.Events.Networking
 {
     /// <summary>
     /// Host-to-client event state, plus the one client intent: a response. State carries

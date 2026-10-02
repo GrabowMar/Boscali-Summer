@@ -1,3 +1,30 @@
+EXPEDITIONARY COMMAND / SUPPORT PRESENTATION ASSETS
+Created 2026-09-30 with the built-in image generation tool.
+
+expedition-hardware.png: original generated cosmetic artwork, 1254 x 1254.
+Four equal tiles: orbital station, EMP equipment, Earth limb, supply crates.
+expedition-crew.png: original generated cosmetic artwork, 1254 x 1254.
+Four fictional operator portraits. No identity or intelligence claims.
+
+The user-selected Expeditionary Command concept was the visual direction.
+No third-party game artwork was copied into these atlases.
+Runtime terrain and target crops borrow the installed game's live map sprite;
+no terrain image is bundled or replaced by generated geography.
+PROMPTS.txt records the generation prompts. Runtime sprites sample quadrants.
+
+support-ui.bundle: built from Source/ExpeditionTerrain.shader using
+ tools/Compile-SupportAssets.ps1 and tools/SupportAssets/BuildSupportAssets.cs.
+Unity 2022.3.62f3, StandaloneWindows64, chunk compression.
+The shader grades native terrain, preserves alpha and UI clipping, and falls
+back to the ordinary terrain image when unsupported.
+
+expedition-panel-surface-v1.png: original built-in generated image, 1254 x 1254.
+Charcoal brushed instrument-panel material only, no game geography or intelligence.
+Used as one shared, bounded, non-readable repeating texture behind instrument text.
+Original generation remains in the Codex generated_images folder; project copy is embedded.
+
+---
+
 A1 tasking satellite — provenance (Boscali Summer, PAW S2, 2026-10-01)
 
 Built headless in Blender 5.2, no generative tooling, no sourced geometry:

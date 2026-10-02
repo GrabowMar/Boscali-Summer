@@ -1,19 +1,21 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Features.TheaterOps.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Modules.TheaterOps.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
     /// Host-authoritative offensives for the STR console's OPERATIONS page.
@@ -827,7 +829,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         /// </summary>
         private void RefreshPlanScales()
         {
-            if (highCommand == null) ModServices.TryGet(out highCommand);
+            if (highCommand == null) ModuleServices.TryGet(out highCommand);
             planScales.Clear();
             if (highCommand == null || table.Count == 0) return;
             int inspected = 0;

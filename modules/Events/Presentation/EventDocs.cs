@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>Local-only field archive copy. These notes never enter event state or the wire.</summary>
     internal sealed class EventDocEntry

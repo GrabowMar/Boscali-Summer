@@ -1,24 +1,26 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.Weather.Audio;
-using BoscaliSummer.Features.Weather.Configuration;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Features.Weather.Networking;
-using BoscaliSummer.Features.Weather.Presentation;
-using BoscaliSummer.Features.Weather.Visuals;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Fx;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Weather.Audio;
+using BoscaliSummer.Modules.Weather.Configuration;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Networking;
+using BoscaliSummer.Modules.Weather.Presentation;
+using BoscaliSummer.Modules.Weather.Visuals;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.MissionEditorScripts;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Weather.Runtime
+namespace BoscaliSummer.Modules.Weather.Runtime
 {
     /// <summary>
     /// Coordinates dynamic weather progression, native environment modulation,
@@ -89,6 +91,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
         private readonly CloudDressing clouds = new CloudDressing();
         private WeatherVolumeDressing flightClouds;
+        private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
         private readonly LightningDirector lightning = new LightningDirector();
         private bool prewarmAttempted;
         private bool canopyShaderActive;
@@ -98,11 +101,13 @@ namespace BoscaliSummer.Features.Weather.Runtime
         private readonly RaycastHit[] shelterHits = new RaycastHit[8];
         private float nextShelterCheck;
         private float rainExposure = 1f;
+        private float lastVisualIntensity;
         private bool sheltered;
 
         // Held weather (console or automation). Explicit targets are the automation's fixed
         // conditions; a console hold still derives fog, light and wind from the cloud field.
         private bool isManualOverride;
+        private bool consoleAuto;
         private bool explicitTargets;
         private WeatherConsoleWindow console;
         private float? forcedRainIntensity;
@@ -136,7 +141,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
             Live = this;
         }
 
-        internal void RegisterClientEffects(FeatureContext context)
+        internal void RegisterClientEffects(ModuleContext context)
         {
             context.AddClientEffect(terrainRain);
             context.AddClientEffect(atmosphere);
@@ -154,9 +159,11 @@ namespace BoscaliSummer.Features.Weather.Runtime
             atmosphere.Restore();
             clouds.Restore();
             flightClouds?.Restore();
+            heatHaze.Restore();
 
             baselineCaptured = false;
             isManualOverride = false;
+            consoleAuto = false;
             explicitTargets = false;
             forcedRainIntensity = null;
             CanopyGlassResolver.ResetForScene();
@@ -195,6 +202,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
             atmosphere.Restore();
             clouds.Restore();
             flightClouds?.Restore();
+            heatHaze.Restore();
             flightClouds = null;
         }
 
@@ -359,6 +367,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) UpdateRainSystems();
             else atmosphere.Restore();
+            if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
+            else heatHaze.Restore();
             bool wantClouds = !Application.isBatchMode && settings != null && settings.Enabled.Value &&
                 settings.CinematicCloudsEnabled.Value;
             if (wantClouds)
@@ -445,13 +455,14 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 airMass.CloudMoisture, Time.deltaTime * 0.65f);
             float visualIntensity = settings != null && settings.RainVisualsEnabled.Value
                 ? Mathf.Max(rainIntensity, cloudMoisture * 0.3f) : 0f;
+            lastVisualIntensity = visualIntensity;
             bool wantSystems = visualIntensity > 0.02f || canopyWetness > 0.001f ||
                 (settings != null && settings.RainAudioEnabled.Value && rainIntensity > 0.02f);
             if (rainRoot == null)
             {
                 if (!wantSystems)
                 {
-                    if (hazeEnabled) atmosphere.Apply(0f, underwaterView, cloudShade, flightClouds?.CameraInCloud ?? 0f);
+                    if (hazeEnabled) atmosphere.Apply(0f, underwaterView, cloudShade);
                     else atmosphere.Restore();
                     UpdateLighting(currentCam);
                     return;
@@ -496,13 +507,12 @@ namespace BoscaliSummer.Features.Weather.Runtime
             rainExposure = Mathf.MoveTowards(rainExposure, sheltered ? 0f : 1f, Time.deltaTime * 2f);
             rainIntensity *= rainExposure;
             visualIntensity *= rainExposure;
-            float glassMoisture = Mathf.Max(rainIntensity, isCockpit ? cloudMoisture : 0f) * rainExposure;
+            float glassMoisture = Mathf.Max(rainIntensity, isCockpit ? cloudMoisture * rainExposure : 0f);
 
             // Haze first: everything below reads the fog colour it produces.
             if (hazeEnabled)
                 atmosphere.Apply(settings != null && settings.RainVisualsEnabled.Value
-                    ? Mathf.Max(rainIntensity, cloudMoisture * 0.7f) : 0f, underwaterView, cloudShade,
-                    flightClouds?.CameraInCloud ?? 0f);
+                    ? Mathf.Max(rainIntensity, cloudMoisture * 0.7f) : 0f, underwaterView, cloudShade);
             else atmosphere.Restore();
             UpdateLighting(currentCam);
 
@@ -533,7 +543,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
             }
             if (settings.LightningEnabled.Value)
                 lightning.Tick(Time.deltaTime, rainIntensity, LevelInfo.i);
-            rainSound?.UpdateAudio(rainIntensity, cloudMoisture, canopyWetness, isCockpit,
+            // Impact sound follows incoming water, independently of optional glass rendering.
+            rainSound?.UpdateAudio(rainIntensity, cloudMoisture * rainExposure, glassMoisture, isCockpit,
                 settings.RainAudioEnabled.Value);
             // The sim remains current outside cockpit view, but submits at most 30 blits/s per pane.
             float speedNorm = Mathf.Clamp01(ias / 250f);
@@ -576,6 +587,17 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 { "forcedRain", forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1f },
                 { "rainExposure", rainExposure },
                 { "rainSystems", rainRoot != null ? 1 : 0 },
+                { "streakAlive", rainEmitter != null ? rainEmitter.AliveParticles : -1 },
+                { "streakPlaying", rainEmitter != null && rainEmitter.Playing ? 1 : 0 },
+                { "streakRate", rainEmitter != null ? rainEmitter.EmissionNow : -1f },
+                { "streakApparent", rainEmitter != null ? rainEmitter.ApparentSpeedNow : -1f },
+                { "streakShader", rainEmitter != null ? rainEmitter.ShaderNow : "none" },
+                { "streakIntensity", lastVisualIntensity },
+                { "lightNow", lightLevel },
+                { "ambientNow", LevelInfo.i != null ? LevelInfo.i.GetAmbientLight() : -1f },
+                { "sunNow", LevelInfo.i != null && LevelInfo.i.sun != null ? LevelInfo.i.sun.intensity : -1f },
+                { "missionNow", TryMissionTime(out float mtForReadout) ? mtForReadout : -1f },
+                { "todNow", LevelInfo.i != null ? LevelInfo.i.timeOfDay : -1f },
                 { "canopySurfaces", canopySurfaces != null ? canopySurfaces.Count : 0 },
                 { "canopyWetness", canopyWetness },
                 { "canopyShader", canopyShaderActive ? 1 : 0 },
@@ -606,6 +628,8 @@ namespace BoscaliSummer.Features.Weather.Runtime
                 { "rainAudioReady", rainSound != null && rainSound.ClipsReady ? 1 : 0 },
                 { "rainAudioRouted", rainSound != null && rainSound.IsRouted ? 1 : 0 },
                 { "rainAudioPlaying", rainSound != null && rainSound.IsPlaying ? 1 : 0 },
+                { "rainRushVolume", rainSound != null ? rainSound.RushVolume : 0f },
+                { "rainPatterVolume", rainSound != null ? rainSound.PatterVolume : 0f },
                 { "terrainSurfaces", terrainRain.SurfaceCount },
                 { "terrainWetness", terrainRain.Wetness },
             };
@@ -705,12 +729,12 @@ namespace BoscaliSummer.Features.Weather.Runtime
             nextFieldUpdate = Time.unscaledTime + 1f;
 
             if (GameAccess.IsServer() && !isManualOverride &&
-                (fieldKey.Dynamic != settings.DynamicWeatherEnabled.Value ||
+                (fieldKey.Dynamic != (consoleAuto || settings.DynamicWeatherEnabled.Value) ||
                  !Mathf.Approximately(fieldKey.IntervalMinutes, settings.StateIntervalMinutes.Value) ||
                  !Mathf.Approximately(fieldKey.FadeSeconds, settings.StateFadeSeconds.Value)))
             {
                 // Continue from the state on screen; the renderer crossfades the new layout.
-                fieldKey = NewFieldKey(missionTime, settings.DynamicWeatherEnabled.Value,
+                fieldKey = NewFieldKey(missionTime, consoleAuto || settings.DynamicWeatherEnabled.Value,
                     field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
                 lastForecastSampleTime = -999f;
                 BroadcastSync(missionTime);
@@ -970,7 +994,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
                     fieldSpan.y * 0.5f, LevelInfo.i != null ? LevelInfo.i.timeOfDay : 12f);
                 WeatherPoint point = forecastField.Sample(fieldPosition.x, fieldPosition.y);
                 cachedForecast[i] = new ForecastStep(offsets[i], point.Cover, point.CloudBase,
-                    Mathf.Clamp01(point.RainRate / 20f));
+                    forcedRainIntensity ?? Mathf.Clamp01(point.RainRate / 20f), forecastField.Timeline.Dominant);
             }
 
             return cachedForecast;
@@ -1045,7 +1069,9 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
         public void SetForcedRain(float? rainIntensity)
         {
-            forcedRainIntensity = rainIntensity;
+            if (!CanCommand) return;
+            forcedRainIntensity = rainIntensity.HasValue ? Mathf.Clamp01(rainIntensity.Value) : (float?)null;
+            lastForecastSampleTime = -999f;
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             BroadcastSync(missionTime);
 
@@ -1064,7 +1090,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
             transitionProgress = 0f;
 
             float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
-            fieldKey = NewFieldKey(missionTime, settings.DynamicWeatherEnabled.Value,
+            fieldKey = NewFieldKey(missionTime, consoleAuto || settings.DynamicWeatherEnabled.Value,
                 field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
@@ -1104,6 +1130,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         internal void ResumeChanging()
         {
             if (!CanCommand) return;
+            consoleAuto = true;
             ClearManualOverride();
         }
 
@@ -1148,44 +1175,25 @@ namespace BoscaliSummer.Features.Weather.Runtime
             RekeyAndSync(now);
         }
 
-        internal enum Scenario { HurricaneEye, SquallAssault, MountainWave, SeaFog, FrontalPassage, ResetAll }
-
         /// <summary>One click: a held state with its set-pieces and placement, sent as one key.</summary>
-        internal void ApplyScenario(Scenario scenario)
+        internal void ApplyScenario(WeatherScenario scenario)
         {
             if (!CanCommand || !TryMissionTime(out float now)) return;
-            if (scenario == Scenario.ResetAll)
-            {
-                if (fieldKey != null) fieldKey = fieldKey.WithSets(0).WithoutAnchor().WithFrontTurn(0);
-                forcedRainIntensity = null;
-                ClearManualOverride();
-                return;
-            }
-            WeatherRegimeType state; byte sets; float ahead = -1f;
-            switch (scenario)
-            {
-                case Scenario.HurricaneEye: state = WeatherRegimeType.Storm; sets = Superstructures.StormEyeSet; ahead = 0f; break;
-                case Scenario.SquallAssault:
-                    state = WeatherRegimeType.RainSquall; sets = Superstructures.SquallLineSet | Superstructures.SupercellSet; break;
-                case Scenario.MountainWave: state = WeatherRegimeType.Fair; sets = Superstructures.LenticularSet; ahead = 25000f; break;
-                case Scenario.SeaFog: state = WeatherRegimeType.Clear; sets = Superstructures.FogBankSet; break;
-                default: state = WeatherRegimeType.Overcast; sets = 0; break;
-            }
-            isManualOverride = true;
+            consoleAuto = scenario == WeatherScenario.ResetAll;
+            isManualOverride = !consoleAuto;
             explicitTargets = false;
-            fieldKey = NewFieldKey(now, false, state).WithSets(sets);
-            if (ahead >= 0f)
+            forcedRainIntensity = null;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
+            float x = 0f, z = 0f;
+            Vector3 forward = Vector3.forward;
+            if (camera != null)
             {
-                Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
-                if (camera != null)
-                {
-                    GlobalPosition here = camera.transform.GlobalPosition();
-                    Vector3 forward = camera.transform.forward;
-                    forward.y = 0f;
-                    forward = forward.sqrMagnitude < 0.001f ? Vector3.forward : forward.normalized;
-                    fieldKey = fieldKey.WithAnchor((float)here.x + forward.x * ahead, (float)here.z + forward.z * ahead);
-                }
+                GlobalPosition here = camera.transform.GlobalPosition();
+                x = (float)here.x; z = (float)here.z;
+                forward = camera.transform.forward;
             }
+            fieldKey = WeatherScenarios.Apply(scenario, NewFieldKey(now, false, ShownState),
+                camera != null, x, z, forward.x, forward.z);
             RekeyAndSync(now);
             NotifyPlayer("SCENARIO " + scenario.ToString().ToUpperInvariant(), forcedRainIntensity);
         }
@@ -1239,7 +1247,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
 
             logger?.LogInfo($"[WeatherConsole] {title} ({detail})");
 
-            if (ModServices.TryGet(out IHudBoard hud) && hud != null)
+            if (ModuleServices.TryGet(out IHudBoard hud) && hud != null)
             {
                 hud.DeclareChannel("weather", "Weather");
                 hud.Notice("weather", HudTone.Info, $"ENV: {title.ToUpper()}", detail);

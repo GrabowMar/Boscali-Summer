@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Features.Command.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Modules.Command.Runtime;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Networking
+namespace BoscaliSummer.Modules.Command.Networking
 {
     [NetworkMessage]
     internal struct FactionMoraleChanged

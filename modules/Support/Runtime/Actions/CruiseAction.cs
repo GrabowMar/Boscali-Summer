@@ -1,10 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// Cruise salvo: bounded offboard cruise missiles onto the mark. The seeker's native

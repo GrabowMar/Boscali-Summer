@@ -1,11 +1,10 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Radio.Presentation
+namespace BoscaliSummer.Modules.Radio.Presentation
 {
     /// <summary>One built Boscali radio screen: root, the vanilla show/hide anchor, and the kit v2 console.</summary>
     internal sealed class RadioScreen

@@ -1,12 +1,11 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// One labelled instrument bar: NAME · bar · mono value · state word. Replaces the double-printed
@@ -95,7 +94,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
     /// </summary>
     internal sealed class BriefCard : AvPart
     {
-        private const float PadX = 12f, PadY = 8f, ControlW = 92f;
+        private const float PadX = 12f, PadY = 5f, ControlW = 92f;
         private readonly AvFrame frame;
         private readonly Image rail;
         private readonly TMP_Text head, body;
@@ -144,7 +143,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         {
             float w = TextW(width);
             float h = PadY + AvText.Height(head, w) + (body.text.Length > 0 ? 2f + AvText.Height(body, w) : 0f) + PadY;
-            return Mathf.Max(ControlOn ? 40f : 32f, h);
+            return Mathf.Max(ControlOn ? 34f : 28f, h);
         }
 
         public override void Place(AvSlot s)
@@ -264,7 +263,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
     internal sealed class RosterGrid : AvPart
     {
         public const int MaxCells = 16;
-        private const float CellH = 26f, Gap = 6f, CodeW = 34f, StateW = 74f;
+        private const float CellH = 26f, Gap = 4f, CodeW = 34f, StateW = 58f;
         private readonly Image[] backs = new Image[MaxCells], rails = new Image[MaxCells];
         private readonly TMP_Text[] codes = new TMP_Text[MaxCells], names = new TMP_Text[MaxCells], states = new TMP_Text[MaxCells];
         private readonly AvState[] tones = new AvState[MaxCells];
@@ -292,6 +291,14 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             names[index].text = name ?? "";
             states[index].text = AvStates.Glyph(tone) + (state ?? "");
             if (tones[index] != tone) { tones[index] = tone; RestyleCell(index); }
+        }
+
+        /// <summary>Hover help for one cell (shown in the console footer while the pointer is over it).</summary>
+        public void SetHelp(int index, string text)
+        {
+            if (index < 0 || index >= MaxCells) return;
+            backs[index].raycastTarget = !string.IsNullOrEmpty(text);
+            AvHelpTip.Attach(backs[index].gameObject, text);
         }
 
         public void SetCount(int n)
@@ -348,7 +355,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
     /// </summary>
     internal sealed class ActionTile : AvPart
     {
-        private const float PadX = 10f, PadY = 8f, Plate = 34f, ValueW = 62f, TrailW = 60f, TrailH = 26f, Min = 52f;
+        private const float PadX = 8f, PadY = 4f, Plate = 30f, ValueW = 62f, TrailW = 58f, TrailH = 24f, Min = 38f;
         private readonly AvFrame frame, plate;
         private readonly Image rail;
         private readonly TMP_Text icon, name, sub, value, unit;

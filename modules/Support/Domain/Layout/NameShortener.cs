@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BoscaliSummer.Features.Support.Domain.Layout
+namespace BoscaliSummer.Modules.Support.Domain.Layout
 {
     /// <summary>
     /// Place-name cleaning. A city-set token (CITY, BUILDING, BUILDINGS, SET) or a pure

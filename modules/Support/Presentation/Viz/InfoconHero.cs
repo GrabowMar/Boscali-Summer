@@ -1,9 +1,8 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Presentation.Viz
+namespace BoscaliSummer.Modules.Support.Presentation.Viz
 {
     /// <summary>
     /// CYBER's headline card: INFOCON as a five-step rail (5 on the left is quiet, 1 on the right is
@@ -13,7 +12,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
     /// </summary>
     internal sealed class InfoconHero : AvPart
     {
-        private const float PadX = 14f, TopY = 10f, RailY = 44f, RailH = 26f, PhaseY = 78f, Gap = 4f;
+        private const float PadX = 12f, TopY = 6f, RailY = 36f, RailH = 22f, PhaseY = 64f, Gap = 4f;
         private readonly AvFrame frame;
         private readonly OpsCanvas art;
         private readonly TMP_Text head, word, phase, advice;
@@ -68,7 +67,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
         public override float Measure(float w)
         {
             float a = AdviceH(w);
-            return PhaseTop + 18f + (a > 0f ? 6f + a : 0f) + 12f;
+            return PhaseTop + 18f + (a > 0f ? 4f + a : 0f) + 8f;
         }
 
         public override void Place(AvSlot s)
@@ -87,7 +86,7 @@ namespace BoscaliSummer.Features.Support.Presentation.Viz
             OpsText.Place(head, PadX, TopY, w - 2f * PadX - 150f, 28f);
             OpsText.Place(word, w - PadX - 146f, TopY + 4f, 146f, 20f);
             OpsText.Place(phase, PadX, PhaseTop, w - 2f * PadX, 18f);
-            OpsText.Place(advice, PadX, PhaseTop + 18f + 6f, w - 2f * PadX, AdviceH(w));
+            OpsText.Place(advice, PadX, PhaseTop + 18f + 4f, w - 2f * PadX, AdviceH(w));
             float cw = (w - 2f * PadX - 4f * Gap) / 5f;
             for (int i = 0; i < 5; i++) OpsText.Place(numbers[i], PadX + i * (cw + Gap), RailY, cw, RailH - 2f);
         }

@@ -1,14 +1,14 @@
 using System.Collections;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Configuration;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Configuration;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Orbital;
+using BoscaliSummer.Modules.Support.Domain.SpecOps;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>Bounded concurrency pools the host hands out to actions.</summary>
     internal enum SupportPool : byte
@@ -148,7 +148,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public const string Prefix = "BoscaliSummer:Support:";
 
         public static string Unique(string kind, in SupportContext context) =>
-            Prefix + kind + ":" + Framework.Contracts.PlayerIdentity.Of(context.Player) + ":" +
+            Prefix + kind + ":" + Core.Contracts.PlayerIdentity.Of(context.Player) + ":" +
             context.RequestId;
     }
 

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Discrete, recognizable weather regimes that translate into native Nuclear Option
@@ -194,6 +194,24 @@ namespace BoscaliSummer.Features.Weather.Domain
         /// <summary>0 uniform sky .. 1 a frontal boundary with an open sky ahead of it (<see cref="SkySplit"/>).</summary>
         public float Split;
 
+        // Low-cloud genus. Zero means "derive" (see CloudShape.Resolve) except Anvil, where zero means none.
+        // Lerped, so a fade grows one kind of cloud into the next instead of swapping shapes.
+
+        /// <summary>Metres across one puff. Zero with a smooth deck is a sheet, not a field of cumulus.</summary>
+        public float PuffScale;
+        /// <summary>Typical thickness of one puff, metres.</summary>
+        public float PuffDepth;
+        /// <summary>Metres of the base transition. Small is a flat cumulus base.</summary>
+        public float BaseSharp;
+        /// <summary>How far each puff's base rises and falls, metres.</summary>
+        public float BaseWobble;
+        /// <summary>0 flat top, 1 round cumulus, above 1 a pinched tower.</summary>
+        public float Dome;
+        /// <summary>Detail-noise erosion at the boundary.</summary>
+        public float Billow;
+        /// <summary>0 none .. 1 a spreading anvil on convective tops.</summary>
+        public float Anvil;
+
         public static StateParams Lerp(StateParams a, StateParams b, float t)
         {
             return new StateParams
@@ -217,6 +235,13 @@ namespace BoscaliSummer.Features.Weather.Domain
                 HighCover = WeatherMath.Lerp(a.HighCover, b.HighCover, t),
                 HighVeil = WeatherMath.Lerp(a.HighVeil, b.HighVeil, t),
                 Split = WeatherMath.Lerp(a.Split, b.Split, t),
+                PuffScale = WeatherMath.Lerp(a.PuffScale, b.PuffScale, t),
+                PuffDepth = WeatherMath.Lerp(a.PuffDepth, b.PuffDepth, t),
+                BaseSharp = WeatherMath.Lerp(a.BaseSharp, b.BaseSharp, t),
+                BaseWobble = WeatherMath.Lerp(a.BaseWobble, b.BaseWobble, t),
+                Dome = WeatherMath.Lerp(a.Dome, b.Dome, t),
+                Billow = WeatherMath.Lerp(a.Billow, b.Billow, t),
+                Anvil = WeatherMath.Lerp(a.Anvil, b.Anvil, t),
             };
         }
     }
@@ -231,22 +256,30 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         private static readonly StateParams[] Table =
         {
-            //   sheet  base   wind  turb  rain  cu    conv  sev   front haze qnh    temp
-            //   deck depth / smooth, middle cover / sheet, high cover / veil
-            Make(0.00f, 2400f, 0.85f, 0.05f, 0f,  0.00f, 0.00f, 0f,  0.00f, 45f, 1022f, 24f,
-                 900f, 0.0f, 0.00f, 0.0f, 0.18f, 0.0f, 0.00f),  // CLEAR: a few cirrus streaks
-            Make(0.03f, 1800f, 0.90f, 0.08f, 0f,  0.45f, 0.00f, 0f,  0.00f, 38f, 1018f, 23f,
-                 900f, 0.0f, 0.08f, 0.0f, 0.28f, 0.1f, 0.00f),  // FAIR: cumulus humilis, cirrus
-            Make(0.10f, 1500f, 1.00f, 0.14f, 0f,  0.85f, 0.18f, 0f,  0.00f, 28f, 1014f, 22f,
-                 1000f, 0.0f, 0.28f, 0.0f, 0.25f, 0.45f, 0.00f), // SCATTERED: cumulus, altocumulus, cirrocumulus
-            Make(0.40f, 1200f, 1.05f, 0.20f, 0.2f, 1.00f, 0.30f, 0f,  0.00f, 20f, 1010f, 20f,
-                 1200f, 0.1f, 0.40f, 0.25f, 0.30f, 0.6f, 0.55f), // BROKEN: stratocumulus, altocumulus
-            Make(0.85f,  900f, 1.10f, 0.15f, 1.0f, 0.55f, 0.12f, 0f,  0.80f, 12f, 1006f, 17f,
-                 1500f, 0.5f, 0.70f, 0.85f, 0.55f, 1.0f, 0.60f), // OVERCAST: stratus deck, altostratus, cirrostratus
-            Make(0.80f,  800f, 1.25f, 0.30f, 3.0f, 0.40f, 0.60f, 0.1f, 1.00f,  9f, 1000f, 17f,
-                 2600f, 0.7f, 0.85f, 1.0f, 0.40f, 1.0f, 0.50f),  // RAIN SQUALL: nimbostratus under altostratus
-            Make(0.70f,  900f, 1.45f, 0.45f, 2.0f, 0.30f, 1.00f, 0.6f, 1.00f,  8f,  995f, 19f,
-                 1800f, 0.2f, 0.35f, 0.4f, 0.50f, 0.3f, 0.35f),  // STORM: cumulonimbus, anvil cirrus
+            // sheet, base, wind, turb, rain, cu, conv, sev, front, haze, qnh, temp,
+            // deck depth / smooth, middle cover / sheet, high cover / veil, split,
+            // puff scale, depth, base sharp, base wobble, dome, billow, anvil
+            Make(0.00f, 2400f, 0.85f, 0.05f, 0f, 0.00f, 0.00f, 0f, 0.00f, 45f, 1022f, 24f,
+                 400f, 0.00f, 0.00f, 0.00f, 0.22f, 0.05f, 0.00f,
+                 1400f, 500f, 40f, 60f, 0.80f, 0.70f, 0.00f),
+            Make(0.02f, 1900f, 0.90f, 0.08f, 0f, 0.42f, 0.00f, 0f, 0.00f, 38f, 1018f, 23f,
+                 650f, 0.00f, 0.03f, 0.00f, 0.10f, 0.08f, 0.00f,
+                 1100f, 650f, 45f, 35f, 0.95f, 0.65f, 0.00f),
+            Make(0.06f, 1600f, 1.00f, 0.14f, 0f, 0.72f, 0.18f, 0f, 0.00f, 28f, 1014f, 22f,
+                 1800f, 0.05f, 0.10f, 0.05f, 0.12f, 0.20f, 0.00f,
+                 1800f, 2200f, 55f, 60f, 1.00f, 0.80f, 0.00f),
+            Make(0.48f, 1300f, 1.05f, 0.20f, 0.15f, 0.55f, 0.22f, 0f, 0.00f, 20f, 1010f, 20f,
+                 850f, 0.25f, 0.16f, 0.35f, 0.14f, 0.45f, 0.45f,
+                 2400f, 850f, 110f, 70f, 0.50f, 0.45f, 0.00f),
+            Make(0.90f, 900f, 1.10f, 0.15f, 0.8f, 0.15f, 0.06f, 0f, 0.78f, 12f, 1006f, 17f,
+                 1000f, 0.95f, 0.45f, 0.90f, 0.28f, 0.95f, 0.65f,
+                 0f, 1000f, 170f, 35f, 0.15f, 0.12f, 0.00f),
+            Make(0.88f, 750f, 1.25f, 0.30f, 3.0f, 0.12f, 0.62f, 0.15f, 1.00f, 9f, 1000f, 17f,
+                 2400f, 0.90f, 0.45f, 0.95f, 0.28f, 0.90f, 0.55f,
+                 0f, 2400f, 210f, 80f, 0.20f, 0.20f, 0.15f),
+            Make(0.55f, 1000f, 1.45f, 0.45f, 2.2f, 0.20f, 1.00f, 0.65f, 1.00f, 8f, 995f, 19f,
+                 1200f, 0.15f, 0.20f, 0.25f, 0.42f, 0.25f, 0.30f,
+                 4600f, 2000f, 65f, 80f, 1.35f, 0.75f, 0.90f),
         };
 
         public static StateParams Get(WeatherRegimeType state) => Table[Index((int)state)];
@@ -289,7 +322,8 @@ namespace BoscaliSummer.Features.Weather.Domain
 
         private static StateParams Make(float overcast, float cloudBase, float wind, float turbulence, float rain,
             float cumulus, float convective, float severity, float frontal, float haze, float qnh, float temperature,
-            float layerDepth, float layerSmooth, float midCover, float midSheet, float highCover, float highVeil, float split)
+            float layerDepth, float layerSmooth, float midCover, float midSheet, float highCover, float highVeil, float split,
+            float puffScale, float puffDepth, float baseSharp, float baseWobble, float dome, float billow, float anvil)
         {
             return new StateParams
             {
@@ -298,6 +332,8 @@ namespace BoscaliSummer.Features.Weather.Domain
                 Frontal = frontal, HazeKm = haze, Qnh = qnh, Temperature = temperature,
                 LayerDepth = layerDepth, LayerSmooth = layerSmooth, MidCover = midCover, MidSheet = midSheet,
                 HighCover = highCover, HighVeil = highVeil, Split = split,
+                PuffScale = puffScale, PuffDepth = puffDepth, BaseSharp = baseSharp, BaseWobble = baseWobble,
+                Dome = dome, Billow = billow, Anvil = anvil,
             };
         }
     }

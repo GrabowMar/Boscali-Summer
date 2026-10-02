@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Radio.Domain
+namespace BoscaliSummer.Modules.Radio.Domain
 {
     /// <summary>
     /// The radio widget's copy, pure so the test project links it directly. It names what the

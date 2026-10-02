@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
-using static BoscaliSummer.Infrastructure.Diagnostics.AutomationArgs;
+using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
-namespace BoscaliSummer.Features.Weather.Runtime
+namespace BoscaliSummer.Modules.Weather.Runtime
 {
     /// <summary>Hooks for unattended in-game weather checks: nomodkit's <c>nomod sim run</c> calls them by name
-    /// (<c>{"op": "call", "method": "BoscaliSummer.Features.Weather.Runtime.WeatherAutomation.ForceWeather", "args": {...}}</c>).
+    /// (<c>{"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather", "args": {...}}</c>).
     /// <list type="bullet">
     /// <item>Each takes and returns a <c>Dictionary&lt;string, object&gt;</c>. Numbers may arrive as doubles; a string
     /// arg naming a scenario unit also arrives as the unit itself under <c>&lt;key&gt;Unit</c>.</item>
@@ -24,7 +24,7 @@ namespace BoscaliSummer.Features.Weather.Runtime
         {
             WeatherManager manager = Find();
             if (manager == null) return Fail("ForceWeather", "no weather manager in this scene");
-            if (!BoscaliSummer.Runtime.GameAccess.IsServer()) return Fail("ForceWeather", "weather overrides are host-only");
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer()) return Fail("ForceWeather", "weather overrides are host-only");
             WeatherRegimeType? fixtureRegime = null;
             if (Has(args, "regime"))
             {

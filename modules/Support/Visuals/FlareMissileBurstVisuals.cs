@@ -6,7 +6,7 @@ using HarmonyLib;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Visuals
+namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// Executes the 15-second tactical flare barrage directly at the rocket impact point:

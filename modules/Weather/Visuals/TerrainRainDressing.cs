@@ -1,10 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     // Map-owned discovery is incremental and finite. Native materials and meshes stay untouched.
     internal sealed class TerrainRainDressing : IClientEffect

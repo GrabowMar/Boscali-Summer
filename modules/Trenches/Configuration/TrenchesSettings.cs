@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Trenches.Configuration
+namespace BoscaliSummer.Modules.Trenches.Configuration
 {
     internal sealed class TrenchesSettings
     {

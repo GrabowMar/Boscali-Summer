@@ -1,8 +1,8 @@
 using System;
-using BoscaliSummer.Features.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// One front position: a natural Bezier curve fitted to a stretch of Command's front

@@ -10,6 +10,8 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <LangVersion>12</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The project lives at the repo root, so the SDK's implicit **/*.cs glob would also
          sweep tests/ and any local tooling scratch. Enumerate the source roots explicitly
          instead. -->
@@ -17,19 +19,16 @@
   </PropertyGroup>
 
   <ItemGroup Label="Source roots">
-    <Compile Include="Bootstrap\**\*.cs" />
-    <Compile Include="Configuration\**\*.cs" />
     <Compile Include="Core\**\*.cs" />
-    <Compile Include="Framework\**\*.cs" />
-    <Compile Include="Infrastructure\**\*.cs" />
     <Compile Include="modules\**\*.cs" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
-         NOAvionics / NOAvionics.Ui). Wing Command carries a parallel source copy; the
-         BCL-only AppDomain protocol coordinates bezel and map-input ownership without a
-         shared DLL or hard dependency (see "Shared avionics" in README.md). Unit tests
+         NOAvionics, engine-free sources under Pure/). Wing Command was merged in as modules/Wing/, so this
+         is the only copy: the bezel registry and map-input picker coordinate panels
+         in-process (see "Shared avionics" in README.md). Unit tests
          (*Tests.cs) build only into BoscaliSummer.Tests. -->
-    <Compile Include="Avionics\**\*.cs" Exclude="Avionics\**\*Tests.cs" />
-    <Compile Include="AvionicsUi\**\*.cs" />
+    <Compile Include="AvionicsUi\**\*.cs" Exclude="AvionicsUi\Pure\**\*Tests.cs" />
+
+    <EmbeddedResource Include="AvionicsUi\ThirdParty\**\*.txt" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -48,11 +47,11 @@
   <!-- Keep the BepInPlugin compile-time version constant aligned with assembly metadata. -->
   <Target Name="CheckPluginVersionMatchesCsproj" BeforeTargets="CoreCompile">
     <PropertyGroup>
-      <_PluginSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Bootstrap/Plugin.cs'))</_PluginSource>
+      <_PluginSource>$([System.IO.File]::ReadAllText('$(MSBuildProjectDirectory)/Core/Plugin.cs'))</_PluginSource>
       <_DeclaredVersion>$([System.Text.RegularExpressions.Regex]::Match($(_PluginSource), 'PluginVersion\s*=\s*"([^"]*)"').Groups[1].Value)</_DeclaredVersion>
     </PropertyGroup>
     <Error Condition="'$(_DeclaredVersion)' == ''"
-           Text="Could not find Plugin.PluginVersion in Bootstrap/Plugin.cs. If it moved, update this check." />
+           Text="Could not find Plugin.PluginVersion in Core/Plugin.cs. If it moved, update this check." />
     <Error Condition="'$(_DeclaredVersion)' != '$(Version)'"
            Text="Version mismatch: csproj &lt;Version&gt; is '$(Version)' but Plugin.PluginVersion is '$(_DeclaredVersion)'. Bump both." />
   </Target>
@@ -66,6 +65,7 @@
     <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Mirage.SocketLayer"><HintPath>$(ManagedDir)\Mirage.SocketLayer.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
@@ -77,6 +77,7 @@
     <Reference Include="UnityEngine.ParticleSystemModule"><HintPath>$(ManagedDir)\UnityEngine.ParticleSystemModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(ManagedDir)\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(ManagedDir)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UIModule"><HintPath>$(ManagedDir)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.InputLegacyModule"><HintPath>$(ManagedDir)\UnityEngine.InputLegacyModule.dll</HintPath><Private>false</Private></Reference>
@@ -92,14 +93,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The kit's look, as data: a base sheet of colour roles plus three palette sheets
+    <!-- The kit's look, as data: a base sheet of colour roles plus the Portal palette sheet
          (AvStyleHost.SetTheme), each overridable under BepInEx/config/NOAvionics/. -->
     <EmbeddedResource Include="AvionicsUi\avionics.fui.avss"><LogicalName>NOAvionics.avionics.fui.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.portal.avss"><LogicalName>NOAvionics.avionics.portal.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.steel.avss"><LogicalName>NOAvionics.avionics.steel.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.ace.avss"><LogicalName>NOAvionics.avionics.ace.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.phosphor.avss"><LogicalName>NOAvionics.avionics.phosphor.avss</LogicalName></EmbeddedResource>
-
-
+    <!-- The OPS rooms' own literal palettes (SPACE, CYBER, SPEC OPS, imager), read by Support's RoomPaint. -->
+    <EmbeddedResource Include="modules\Support\Presentation\Views\rooms.avss"><LogicalName>BoscaliSummer.Support.rooms.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="modules\Support\Assets\expedition-*.png"><LogicalName>BoscaliSummer.Support.%(Filename)%(Extension)</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="modules\Support\Assets\support-ui.bundle"><LogicalName>BoscaliSummer.Support.support-ui.bundle</LogicalName></EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Avionics UI bundle">
@@ -135,14 +139,6 @@
     </EmbeddedResource>
   </ItemGroup>
 
-  <ItemGroup Label="Campaign mission">
-    <!-- The authored mission, embedded so the Campaign module can install it into the
-         game's user mission list. Source of truth is missions/Boscali Summer/; rebuild it
-         with tools/build-boscali-summer-mission.ps1 and bump MissionInstallPlan.Revision. -->
-    <EmbeddedResource Include="missions\Boscali Summer\Boscali Summer.json">
-      <LogicalName>BoscaliSummer.Campaign.BoscaliSummerMission.json</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
 
   <ItemGroup Label="Weather shader bundle">
     <!-- Canopy rain shader, embedded so the dressing works with zero loose files.
@@ -159,6 +155,14 @@
     <EmbeddedResource Include="modules\Events\Assets\event_atlas.png">
       <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup Label="Wing assets (merged from Wing Command; logical names kept)">
+    <EmbeddedResource Include="modules\Wing\Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="modules\Wing\Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
+    <EmbeddedResource Include="modules\Wing\Assets\Data\formations.json" LogicalName="WingCommand.formations.json" />
+    <EmbeddedResource Include="modules\Wing\Assets\Data\airframes.json" LogicalName="WingCommand.airframes.json" />
+    <EmbeddedResource Include="modules\Wing\Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
   </ItemGroup>
 
 </Project>

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 #if !NET8_0_OR_GREATER
 using UnityEngine;
 #endif
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
 #if NET8_0_OR_GREATER
     internal struct Color32
@@ -1069,11 +1069,8 @@ namespace BoscaliSummer.Features.Command.Runtime
             EnsureDisplay();
 
             byte fillAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.45f), 18, 56);
-            byte gridLineAlpha = 12;
-
             Color32 friendlyBase = new Color32(FriendlyTint.r, FriendlyTint.g, FriendlyTint.b, fillAlpha);
             Color32 hostileBase = new Color32(HostileTint.r, HostileTint.g, HostileTint.b, fillAlpha);
-            Color32 gridLineColor = new Color32(80, 110, 130, gridLineAlpha);
 
             float pxPerCellX = CellSize / WorldSizeX * texWidth;
             float pxPerCellY = CellSize / WorldSizeY * texHeight;
@@ -1097,10 +1094,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                 Color32 friendly = WeightedAlpha(friendlyBase, weight);
                 Color32 hostile = WeightedAlpha(hostileBase, weight);
                 bool striped = state == SectorControl.Contested;
-                // A lone 1 km square is about three texture pixels: its own grid line would be
-                // most of the square, so only clusters big enough to read as a block get one.
-                bool drawLines = band != 0 && pxMax - pxMin >= 3 && pyMax - pyMin >= 3;
-
                 // A contested square is hatched red/blue, never a third colour: the stripe
                 // runs follow the cell's control value, so the wider run is the side that
                 // holds more of the square. Every square keeps at least one pixel of each
@@ -1122,10 +1115,6 @@ namespace BoscaliSummer.Features.Command.Runtime
                         pixelBuffer[rowOffset + x] = state == SectorControl.Friendly ? friendly : hostile;
                     }
                 }
-
-                if (!drawLines) continue;
-                for (int y = pyMin; y <= pyMax; y++) pixelBuffer[y * texWidth + pxMin] = gridLineColor;
-                for (int x = pxMin; x <= pxMax; x++) pixelBuffer[pyMin * texWidth + x] = gridLineColor;
             }
 
             // 2. The front line itself is no longer rasterised here: the map draws it as one

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Visuals
+namespace BoscaliSummer.Modules.Trenches.Visuals
 {
     /// <summary>
     /// Builds the native URP material for the carved ditch. The earthwork material carries a
@@ -109,11 +109,15 @@ namespace BoscaliSummer.Features.Trenches.Visuals
 
         private static Color BandColor(float u, float v)
         {
-            Color earth = new Color(0.37f, 0.29f, 0.19f);
-            Color darkSoil = new Color(0.26f, 0.19f, 0.12f);
-            Color grass = new Color(0.29f, 0.35f, 0.16f);
-            Color spoil = new Color(0.43f, 0.34f, 0.22f);
-            Color duckboard = new Color(0.32f, 0.24f, 0.15f);
+            // Sun-baked turned earth, not garden soil: freshly dug fieldworks match the dry
+            // ground around them (BALTOPS 2025: "lines of freshly turned earth"), and the old
+            // dark-temperate bands read as a black scar on arid ground from the air. The fringe
+            // is dry summer growth rather than green turf, so the skirts meet either biome.
+            Color earth = new Color(0.52f, 0.42f, 0.28f);
+            Color darkSoil = new Color(0.38f, 0.30f, 0.19f);
+            Color grass = new Color(0.55f, 0.50f, 0.30f);
+            Color spoil = new Color(0.58f, 0.47f, 0.31f);
+            Color duckboard = new Color(0.40f, 0.31f, 0.20f);
 
             if (u < 0.07f) return Color.Lerp(grass, earth, u / 0.07f);
             if (u < 0.21f) return spoil;                       // outer spoil berm

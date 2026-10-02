@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>One known launcher, radar carrier or launch origin, as the ring builder reads it.</summary>
     internal struct RingInput

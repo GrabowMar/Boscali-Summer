@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// Which vanilla objective icon a contract borrows. The game draws four: a waypoint flag,

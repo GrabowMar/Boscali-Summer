@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Screen-space hit test for the mod's map controls: the instrument column the panels
@@ -19,6 +19,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             if (StrPlanningWindow.BlocksMap || MissionContractWindow.BlocksMap) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
+            if (MfdLogPanel.ContainsScreenPoint(screenPoint)) return true;
             if (MfdMapOrbitControls.Contains(screenPoint)) return true;
             if (MfdMapInteractions.ContainsMenu(screenPoint)) return true;
             return MfdRail.TryGetRail(out RectTransform rail) && Contains(rail, screenPoint);

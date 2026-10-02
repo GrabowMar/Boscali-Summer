@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.AirSurvival.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.AirSurvival.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.AirSurvival.Patches
+namespace BoscaliSummer.Modules.AirSurvival.Patches
 {
     [HarmonyPatch(typeof(AIPilotCombatModes), nameof(AIPilotCombatModes.FixedUpdateState))]
     internal static class AirMissileFlarePatch
@@ -57,7 +59,7 @@ namespace BoscaliSummer.Features.AirSurvival.Patches
             state.NextCheck = now + AirFlarePolicy.CheckSeconds;
 
             if (!WingLink.TryIsWingMember(id, out bool isWingMember) || isWingMember ||
-                (ModServices.TryGet(out IAircraftTaskExclusion exclusion) && exclusion.IsExcluded(id)) ||
+                (ModuleServices.TryGet(out IAircraftTaskExclusion exclusion) && exclusion.IsExcluded(id)) ||
                 aircraft.countermeasureTrigger || aircraft.countermeasureManager == null)
                 return;
             MissileWarning warning = aircraft.GetMissileWarningSystem();
