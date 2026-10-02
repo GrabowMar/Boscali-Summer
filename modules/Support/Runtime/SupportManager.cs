@@ -373,8 +373,31 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 ? NetworkSceneSingleton<MissionManager>.i.MissionTime
                 : Time.timeSinceLevelLoad;
 
+        private static bool ActivityScene =>
+            GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer;
+
+        internal void RecordAircraftInput(Aircraft aircraft, ActivityControls controls)
+        {
+            if (!ActivityScene || credits == null || GameplayUI.GameIsPaused || !Application.isFocused || aircraft == null ||
+                !GameManager.GetLocalPlayer<Player>(out Player player) || !ReferenceEquals(player, aircraft.Player)) return;
+            if (credits.RecordAircraftInput(aircraft, controls, MissionNow()) && !GameAccess.IsServer()) network?.SendActivityPulse();
+        }
+
+        private void RecordLocalInput()
+        {
+            if (credits == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
+            if (GameAccess.IsServer()) credits.RecordInput(player, MissionNow());
+            else network?.SendActivityPulse();
+        }
+
+        internal void ReceiveActivityPulse(Player player)
+        {
+            if (ActivityScene && GameAccess.IsServer()) credits?.RecordPulse(player, MissionNow(), Time.unscaledTime);
+        }
+
         private void Update()
         {
+            if (ActivityScene && !GameplayUI.GameIsPaused && Application.isFocused && Input.anyKeyDown) RecordLocalInput();
             if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
             {
                 float missionNow = MissionNow();
@@ -870,6 +893,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
+            credits?.RecordInput(player, missionNow);
             try
             {
                 credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,

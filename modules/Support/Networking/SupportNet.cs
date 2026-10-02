@@ -48,6 +48,12 @@ namespace BoscaliSummer.Modules.Support.Networking
     }
 
     [NetworkMessage]
+    internal struct ActivityPulseMessage
+    {
+        public byte Protocol;
+    }
+
+    [NetworkMessage]
     internal struct CruiseWaypointMessage
     {
         public byte Protocol;
@@ -76,11 +82,11 @@ namespace BoscaliSummer.Modules.Support.Networking
     {
 
         /// <summary>
-        /// Protocol 28 removes the old OPS (station, CYBER, SPEC OPS) messages and adds the CR credit
-        /// message; the surviving support request, result and cruise messages are unchanged.
+        /// Protocol 29 adds a coalesced player input intent so parked remote operators can earn the active trickle.
+        /// The host derives receipt time and limits pulses; the intent carries no credit or client timestamp.
         /// Older peers must not interpret the retired action and result ids.
         /// </summary>
-        internal const byte ProtocolVersion = 28;
+        internal const byte ProtocolVersion = 29;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -90,6 +96,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
         private float nextRegistration;
+        private float nextActivityPulse;
 
         public void Configure(SupportManager support)
         {
@@ -108,10 +115,12 @@ namespace BoscaliSummer.Modules.Support.Networking
             {
                 serverHandler?.UnregisterHandler<SupportRequestMessage>();
                 serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
+                serverHandler?.UnregisterHandler<ActivityPulseMessage>();
                 queries.Clear();
                 serverHandler = network.Server.MessageHandler;
                 serverHandler.RegisterHandler<SupportRequestMessage>(ReceiveRequest, false);
                 serverHandler.RegisterHandler<CruiseWaypointMessage>(ReceiveWaypoint, false);
+                serverHandler.RegisterHandler<ActivityPulseMessage>(ReceiveActivityPulse, false);
             }
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
@@ -129,6 +138,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         {
             serverHandler?.UnregisterHandler<SupportRequestMessage>();
             serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
+            serverHandler?.UnregisterHandler<ActivityPulseMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
             clientHandler?.UnregisterHandler<CreditStateMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
@@ -219,6 +229,23 @@ namespace BoscaliSummer.Modules.Support.Networking
         private void ReceiveCredit(INetworkPlayer _, CreditStateMessage message)
         {
             if (message.Protocol == ProtocolVersion) manager.ReceiveCredit(message);
+        }
+
+        /// <summary>One input intent per real second at most; the host alone stamps mission time and pays CR.</summary>
+        internal void SendActivityPulse()
+        {
+            if (Time.unscaledTime < nextActivityPulse) return;
+            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            if (client == null || !client.Active) return;
+            nextActivityPulse = Time.unscaledTime + 1f;
+            client.Send(new ActivityPulseMessage { Protocol = ProtocolVersion });
+        }
+
+        private void ReceiveActivityPulse(INetworkPlayer sender, ActivityPulseMessage message)
+        {
+            if (message.Protocol != ProtocolVersion || !GameAccess.IsServer() || sender == null || !sender.IsAuthenticated ||
+                !sender.TryGetPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
+            manager?.ReceiveActivityPulse(player);
         }
 
         /// <summary>Server to owner: the player's CR balance and wallet freeze.</summary>
@@ -361,6 +388,8 @@ namespace BoscaliSummer.Modules.Support.Networking
                 if (protocol != ProtocolVersion) return new CreditStateMessage { Protocol = protocol };
                 return new CreditStateMessage { Protocol = protocol, Balance = r.ReadInt32(), FrozenSeconds = r.ReadInt32(), EventFactor = r.ReadSingle(), SilentFactor = r.ReadSingle() };
             });
+            SetWriter<ActivityPulseMessage>((w, v) => w.WriteByte(v.Protocol));
+            SetReader<ActivityPulseMessage>(r => new ActivityPulseMessage { Protocol = r.ReadByte() });
             SetWriter<CruiseWaypointMessage>((w, v) =>
             {
                 w.WriteByte(v.Protocol);
@@ -429,6 +458,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
             MessagePacker.RegisterMessage<CreditStateMessage>();
+            MessagePacker.RegisterMessage<ActivityPulseMessage>();
             MessagePacker.RegisterMessage<CruiseWaypointMessage>();
             MessagePacker.RegisterMessage<CruiseLegsMessage>();
         }

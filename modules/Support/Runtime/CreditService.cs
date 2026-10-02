@@ -47,6 +47,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public TrickleMeter Trickle { get; } = new TrickleMeter();
         public RepeatTracker Repeats { get; } = new RepeatTracker();
         public AssistRegistry Assists { get; } = new AssistRegistry();
+        public CreditActivity Activity { get; } = new CreditActivity();
 
         public CreditService(SupportNet network) => this.network = network;
 
@@ -71,7 +72,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     }
                     else Ledger.SetFaction(id, faction, now);
 
-                    bool active = player.Aircraft != null && !player.Aircraft.disabled;
+                    Aircraft aircraft = player.Aircraft;
+                    // radarAlt already subtracts spawnOffset; 0.2 m is vanilla's airborne threshold.
+                    bool airborne = aircraft != null && !aircraft.disabled && aircraft.radarAlt > 0.2f &&
+                        !float.IsNaN(aircraft.radarAlt) && !float.IsInfinity(aircraft.radarAlt);
+                    bool active = Activity.IsActive(id, airborne, now);
                     float trickle = Trickle.Tick(id, active, dt, now);
                     if (trickle > 0f) Fund.Add(faction, Ledger.Credit(id, trickle));
                     SendIfChanged(player, id, now);
@@ -82,6 +87,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             gone.Clear();
             foreach (ulong id in sent.Keys) if (!seen.Contains(id)) gone.Add(id);
             for (int i = 0; i < gone.Count; i++) sent.Remove(gone[i]);
+            Activity.Prune(seen);
+        }
+
+        /// <summary>Observe a raw pilot snapshot; applied aircraft controls may include autopilot commands.</summary>
+        public bool RecordAircraftInput(Aircraft aircraft, ActivityControls controls, float now)
+        {
+            Player player = aircraft?.Player;
+            if (player == null || player.HQ == null || aircraft.disabled || !ReferenceEquals(player.Aircraft, aircraft)) return false;
+            return Activity.Observe(PlayerIdentity.Of(player), aircraft.GetInstanceID(), controls, now);
+        }
+
+        public void RecordInput(Player player, float now)
+        {
+            if (player != null && player.HQ != null) Activity.Record(PlayerIdentity.Of(player), now);
+        }
+
+        public void RecordPulse(Player player, float now, float wallTime)
+        {
+            if (player != null && player.HQ != null) Activity.Pulse(PlayerIdentity.Of(player), now, wallTime);
         }
 
         public bool TrySpend(Player player, float cost, float now)
@@ -142,6 +166,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Trickle.Clear();
             Repeats.Clear();
             Assists.Clear();
+            Activity.Clear();
             sent.Clear();
             census.Clear();
         }

@@ -21,7 +21,8 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.SupportMissileDetonatePatch),
             typeof(Patches.SupportMissileAuthorityPatch),
             typeof(Patches.SupportMissileDescentPatch),
-            typeof(Patches.CreditRewardPatch)
+            typeof(Patches.CreditRewardPatch),
+            typeof(Patches.ActivityInputPatch)
         };
 
         public void Install(ModuleContext context)
