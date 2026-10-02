@@ -52,6 +52,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private int pendingWaypoint = -1;
         private float pendingWaypointUntil;
 
+        /// <summary>The live manager, or null; set in Configure, cleared only on destroy (survives scene resets).</summary>
+        internal static SupportManager Active { get; private set; }
+
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
@@ -280,7 +283,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void ResetForScene()
         {
-            if (Active == this) Active = null;
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
@@ -317,12 +319,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void OnDestroy()
         {
+            if (Active == this) Active = null;
             ResetForScene();
             SupportMapMode.GestureArmed = false;
         }
-
-        /// <summary>The live manager, or null; set in Configure, cleared on teardown.</summary>
-        internal static SupportManager Active { get; private set; }
 
         internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
         {
