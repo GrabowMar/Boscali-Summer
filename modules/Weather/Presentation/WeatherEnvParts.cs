@@ -1,13 +1,12 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Domain;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Weather.Domain;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Weather.Presentation
+namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>Colour tokens from the live kit sheet. Never literals.</summary>
     internal static class EnvInk
@@ -149,7 +148,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private readonly bool brackets;
         private readonly List<KeyValuePair<TMP_Text, string>> tints = new List<KeyValuePair<TMP_Text, string>>(16);
         protected EnvGraphic Art;
-        protected float PlacedW;
+        protected float PlacedW, PlacedH;
 
         protected EnvPart(RectTransform parent, string name, string cardVariant = "inert", bool hasBrackets = false)
         {
@@ -188,10 +187,18 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         protected void Redraw() { if (Art != null) Art.SetVerticesDirty(); }
 
+        /// <summary>Hover help on the whole part (shown in the console footer).</summary>
+        public void SetHelp(string text)
+        {
+            if (Art == null) return;
+            Art.raycastTarget = !string.IsNullOrEmpty(text);
+            AvHelpTip.Attach(Art.gameObject, text);
+        }
+
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            PlacedW = s.W;
+            PlacedW = s.W; PlacedH = s.H;
             Layout(s.W, s.H);
         }
 
@@ -212,172 +219,24 @@ namespace BoscaliSummer.Features.Weather.Presentation
         }
     }
 
-    /// <summary>N equal cells (label / mono value / status note) inside a parent part; hairlines between them.</summary>
-    internal sealed class EnvCells
-    {
-        private readonly TMP_Text[] label, value, note;
-        private readonly Image[] rule;
-        private readonly AvState[] state;
-        private readonly bool notes;
-
-        public EnvCells(RectTransform parent, string[] labels, bool withNotes,
-            Func<string, AvTextRole, TextAlignmentOptions, string, bool, TMP_Text> make)
-        {
-            int n = labels.Length;
-            notes = withNotes;
-            label = new TMP_Text[n]; value = new TMP_Text[n]; note = new TMP_Text[n];
-            rule = new Image[Mathf.Max(0, n - 1)];
-            state = new AvState[n];
-            for (int i = 0; i < n; i++)
-            {
-                label[i] = make("Key" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "key", true);
-                label[i].text = labels[i];
-                value[i] = make("Val" + i, AvTextRole.DataStrong, TextAlignmentOptions.MidlineLeft, "", true);
-                note[i] = make("Note" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "", true);
-                state[i] = AvState.Info;
-            }
-            for (int i = 0; i < rule.Length; i++) rule[i] = AvLay.Solid(parent, "Rule" + i, Color.clear);
-        }
-
-        public float Height => notes ? 58f : 44f;
-
-        public void Set(int i, string v, string n, AvState s)
-        {
-            if (value[i].text != (v ?? "")) value[i].text = v ?? "";
-            string full = n == null ? "" : AvStates.Glyph(s) + n;
-            if (note[i].text != full) note[i].text = full;
-            state[i] = s;
-            Tint(i);
-        }
-
-        private void Tint(int i)
-        {
-            bool alarm = state[i] == AvState.Caution || state[i] == AvState.Danger;
-            value[i].color = alarm ? EnvInk.State(state[i]) : EnvInk.Role("ink");
-            note[i].color = alarm ? EnvInk.State(state[i]) : EnvInk.Role("ink-dim");
-        }
-
-        public void Restyle()
-        {
-            for (int i = 0; i < label.Length; i++) Tint(i);
-            for (int i = 0; i < rule.Length; i++) rule[i].color = EnvInk.Alpha(EnvInk.Role("hairline"), 0.9f);
-        }
-
-        public void Place(float x, float y, float w)
-        {
-            int n = label.Length;
-            float cw = w / n;
-            for (int i = 0; i < n; i++)
-            {
-                float cx = x + i * cw + 8f, iw = cw - 12f;
-                AvLay.Place(label[i].rectTransform, cx, y + 5f, iw, 15f);
-                AvLay.Place(value[i].rectTransform, cx, y + 20f, iw, 18f);
-                if (notes) AvLay.Place(note[i].rectTransform, cx, y + 39f, iw, 15f);
-                note[i].gameObject.SetActive(notes);
-            }
-            for (int i = 0; i < rule.Length; i++)
-                AvLay.Place(rule[i].rectTransform, x + (i + 1) * cw - 1f, y + 6f, 1f, Height - 12f);
-        }
-    }
-
-    /// <summary>A framed strip of mono readouts, each with an optional status word.</summary>
-    internal sealed class EnvStrip : EnvPart
-    {
-        private readonly EnvCells cells;
-
-        public EnvStrip(RectTransform parent, string name, bool withNotes, params string[] labels)
-            : base(parent, name)
-        {
-            cells = new EnvCells(Rect, labels, withNotes, (n, r, a, ink, fit) => Txt(n, r, a, ink, false, fit));
-            Restyle();
-        }
-
-        public void Set(int i, string value, string note = null, AvState state = AvState.Info) => cells.Set(i, value, note, state);
-
-        public override float Measure(float width) => cells.Height;
-        protected override void Layout(float w, float h) => cells.Place(0f, 0f, w);
-        protected override void OnRestyle() => cells?.Restyle();
-    }
-
-    /// <summary>One labelled bar: name and word/number on a line, a track beneath, optional reference tick.</summary>
-    internal sealed class EnvMeter : EnvPart
-    {
-        private readonly TMP_Text name, value, tickLabel;
-        private float fill, mark = -1f;
-        private AvState state = AvState.Ready;
-
-        public EnvMeter(RectTransform parent, string title) : base(parent, "Meter " + title)
-        {
-            MakeArt(Paint);
-            name = Txt("Name", AvTextRole.Label, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            name.text = title;
-            value = Txt("Value", AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight, "ink", false, true);
-            tickLabel = Txt("Tick", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            Restyle();
-        }
-
-        private bool HasTick => mark >= 0f;
-
-        public void Set(string text, float fill01, AvState s, float mark01 = -1f, string markText = null)
-        {
-            bool tickChanged = HasTick != (mark01 >= 0f);
-            SetText(value, (s == AvState.Caution || s == AvState.Danger ? AvStates.Glyph(s) : "") + text);
-            fill = Mathf.Clamp01(fill01);
-            mark = mark01;
-            SetText(tickLabel, markText);
-            state = s;
-            value.color = s == AvState.Caution || s == AvState.Danger ? EnvInk.State(s) : EnvInk.Role("ink");
-            Redraw();
-            if (tickChanged) Changed();
-            if (PlacedW > 0f) Layout(PlacedW, Measure(PlacedW));
-        }
-
-        public override float Measure(float width) => HasTick ? 62f : 46f;
-
-        protected override void Layout(float w, float h)
-        {
-            Box(name, Pad, 6f, w * 0.5f - Pad, 18f);
-            Box(value, w * 0.5f, 6f, w * 0.5f - Pad, 18f);
-            Box(tickLabel, Pad, 42f, w - 2f * Pad, 15f);
-            tickLabel.gameObject.SetActive(HasTick);
-        }
-
-        private void Paint(EnvCanvas c)
-        {
-            float w = PlacedW - 2f * Pad;
-            if (w <= 0f) return;
-            Color fillColor = EnvInk.State(state == AvState.Info ? AvState.Ready : state);
-            c.Bar(Pad, 28f, w, 8f, fill, EnvInk.Track(), fillColor, mark, EnvInk.Role("ink"));
-        }
-
-        protected override void OnRestyle()
-        {
-            if (value != null) value.color = state == AvState.Caution || state == AvState.Danger ? EnvInk.State(state) : EnvInk.Role("ink");
-        }
-    }
-
     /// <summary>Everything the hero condition card shows.</summary>
     internal sealed class EnvSky
     {
-        public string Code = "", Word = "", Briefing = "", Category = "";
+        public string Code = "", Word = "", Category = "";
         public WeatherRegimeType Regime;
         public float Cover;
         public AvState State = AvState.Info, CategoryState = AvState.Info;
-        public string Base = "", Top = "", Wind = "", Visibility = "", Precip = "";
-        public AvState PrecipState = AvState.Info;
     }
 
     /// <summary>
-    /// METAR-style hero: the sky-cover code at display size with its pictogram and word, a cover bar,
-    /// the flight category, the tactical line and a mono strip (base, top, wind, visibility, precipitation).
+    /// METAR-style hero: the sky-cover code at display size with its pictogram and word, a cover bar
+    /// and the flight category. Base, wind, visibility and rain live in the header metrics and the rings.
     /// </summary>
     internal sealed class EnvConditionCard : EnvPart
     {
-        private const float TopRow = 62f, StripH = 44f;
-        private readonly TMP_Text code, word, cover, catKey, catValue, brief;
+        private readonly TMP_Text code, word, cover, catKey, catValue;
         private readonly WeatherGlyph glyph;
         private readonly Image rail, divider;
-        private readonly EnvCells cells;
         private float coverFrac;
         private AvState state = AvState.Info, catState = AvState.Info;
 
@@ -393,9 +252,6 @@ namespace BoscaliSummer.Features.Weather.Presentation
             catKey = Txt("CatKey", AvTextRole.Micro, TextAlignmentOptions.MidlineRight, "key");
             catKey.text = "FLT CAT";
             catValue = Txt("CatValue", AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight, "ink", false, true);
-            brief = Txt("Brief", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, "ink-dim", true);
-            cells = new EnvCells(Rect, new[] { "BASE", "TOP", "WIND", "VIS", "PRECIP" }, false,
-                (n, r, a, ink, fit) => Txt(n, r, a, ink, false, fit));
             Restyle();
         }
 
@@ -407,27 +263,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
             SetText(catValue, (d.CategoryState == AvState.Caution || d.CategoryState == AvState.Danger ? AvStates.Glyph(d.CategoryState) : "") + d.Category);
             glyph.SetKind(d.Regime);
             coverFrac = Mathf.Clamp01(d.Cover);
-            bool briefChanged = brief.text != (d.Briefing ?? "");
-            SetText(brief, d.Briefing);
             state = d.State; catState = d.CategoryState;
-            cells.Set(0, d.Base, null, AvState.Info);
-            cells.Set(1, d.Top, null, AvState.Info);
-            cells.Set(2, d.Wind, null, AvState.Info);
-            cells.Set(3, d.Visibility, null, AvState.Info);
-            cells.Set(4, d.Precip, null, d.PrecipState);
             Tint();
             Redraw();
-            if (briefChanged) Changed();
-            if (PlacedW > 0f) Layout(PlacedW, Measure(PlacedW));
         }
 
-        private float BriefH(float width) => brief.text.Length == 0 ? 0f : AvText.Height(brief, width - 2f * Pad);
-
-        public override float Measure(float width)
-        {
-            float b = BriefH(width);
-            return 76f + (b > 0f ? b + 6f : 0f) + StripH + 2f;
-        }
+        public override float Measure(float width) => 68f;
 
         protected override void Layout(float w, float h)
         {
@@ -439,12 +280,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             Box(cover, wx, 40f, ww, 16f);
             Box(catKey, w - Pad - catW, 14f, catW, 15f);
             Box(catValue, w - Pad - catW, 30f, catW, 20f);
-            AvLay.Place(divider.rectTransform, Pad, 71f, w - 2f * Pad, 1f);
-            float y = 76f;
-            float b = BriefH(w);
-            if (b > 0f) { Box(brief, Pad, y, w - 2f * Pad, b); y += b + 6f; }
-            brief.gameObject.SetActive(b > 0f);
-            cells.Place(Pad, y, w - 2f * Pad);
+            AvLay.Place(divider.rectTransform, Pad, 66f, w - 2f * Pad, 1f);
         }
 
         private void Paint(EnvCanvas c)
@@ -467,12 +303,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             divider.color = EnvInk.Alpha(EnvInk.Role("hairline"), 0.9f);
         }
 
-        protected override void OnRestyle()
-        {
-            if (cells == null) return;
-            cells.Restyle();
-            Tint();
-        }
+        protected override void OnRestyle() => Tint();
     }
 
     /// <summary>Everything the vertical profile draws.</summary>
@@ -490,10 +321,11 @@ namespace BoscaliSummer.Features.Weather.Presentation
     /// </summary>
     internal sealed class EnvProfile : EnvPart
     {
-        private const float PlotX = 50f, LabelW = 122f, PlotTop = 14f, PlotBottom = 150f, Height = 164f;
+        private const float PlotX = 50f, LabelW = 122f, PlotTop = 14f, Height = 132f, BottomMargin = 14f;
         private const int MaxTicks = 7;
         private readonly TMP_Text[] ticks = new TMP_Text[MaxTicks];
-        private readonly TMP_Text topLabel, baseLabel, camLabel, empty;
+        private readonly TMP_Text topLabel, baseLabel, camLabel, empty, status;
+        private float plotBottom = Height - BottomMargin;
         private EnvProfileData d = new EnvProfileData();
         private float minAlt, maxAlt;
         private int tickCount;
@@ -508,6 +340,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             baseLabel = Txt("Base", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, "ink", false, true);
             camLabel = Txt("Cam", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, "ink", false, true);
             empty = Txt("NoCam", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
+            status = Txt("Status", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim", false, true);
             Restyle();
         }
 
@@ -527,6 +360,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
             SetText(baseLabel, "BASE " + AvNum.Fixed(data.Base, 0) + " M");
             SetText(camLabel, data.HasCamera ? "CAM " + AvNum.Signed(data.CameraAlt, 0) + " M" : "");
             SetText(empty, data.HasCamera ? "" : "CAMERA UNAVAILABLE");
+            bool alarm = data.State == AvState.Caution || data.State == AvState.Danger;
+            SetText(status, data.HasCamera ? (alarm ? AvStates.Glyph(data.State) : "") + data.Status : "");
             for (int i = 0; i < MaxTicks; i++)
             {
                 SetText(ticks[i], i < tickCount ? AvNum.Fixed(tickAlt[i], 0) : "");
@@ -534,15 +369,17 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
             Tint();
             Redraw();
-            if (PlacedW > 0f) Layout(PlacedW, Height);
+            if (PlacedW > 0f) Layout(PlacedW, PlacedH > 0f ? PlacedH : Height);
         }
 
         public override float Measure(float width) => Height;
 
-        private float Y(float alt) => Mathf.Lerp(PlotBottom, PlotTop, Mathf.InverseLerp(minAlt, maxAlt, alt));
+        private float Y(float alt) => Mathf.Lerp(plotBottom, PlotTop, Mathf.InverseLerp(minAlt, maxAlt, alt));
 
         protected override void Layout(float w, float h)
         {
+            plotBottom = Mathf.Max(PlotTop + 60f, h - BottomMargin);   // a growing profile stretches its metre scale
+            Box(status, PlotX + 6f, 0f, w - PlotX - LabelW - 12f, 14f);
             for (int i = 0; i < tickCount; i++) Box(ticks[i], 2f, Y(tickAlt[i]) - 8f, PlotX - 8f, 16f);
             // Three labels at the right, nudged apart so they never overlap; each keeps its own level.
             float x = w - LabelW + 10f, lw = LabelW - Pad - 6f;
@@ -557,12 +394,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 int i = order[k];
                 if (i == 2 && !d.HasCamera) continue;
                 float y = Mathf.Max(want[i] - 8f, last + 17f);
-                y = Mathf.Min(y, PlotBottom - 8f - (2 - k) * 17f);
+                y = Mathf.Min(y, plotBottom - 8f - (2 - k) * 17f);
                 Box(who[i], x, y, lw, 16f);
                 last = y;
             }
             camLabel.gameObject.SetActive(d.HasCamera);
-            Box(empty, PlotX + 8f, PlotBottom - 22f, w - PlotX - LabelW - 16f, 15f);
+            Box(empty, PlotX + 8f, plotBottom - 22f, w - PlotX - LabelW - 16f, 15f);
             empty.gameObject.SetActive(!d.HasCamera);
         }
 
@@ -573,7 +410,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             float x0 = PlotX, x1 = w - LabelW;
             Color grid = EnvInk.Alpha(EnvInk.Role("hairline"), 0.8f);
             for (int i = 0; i < tickCount; i++) c.Line(x0, Y(tickAlt[i]), x1, Y(tickAlt[i]), 1f, grid);
-            c.Line(x0, PlotTop - 4f, x0, PlotBottom + 4f, 1f, EnvInk.Role("frame"));
+            c.Line(x0, PlotTop - 4f, x0, plotBottom + 4f, 1f, EnvInk.Role("frame"));
 
             float yTop = Y(d.Top), yBase = Y(d.Base);
             Color cloud = EnvInk.Role("ink-dim");
@@ -599,6 +436,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             Color s = EnvInk.State(d.State == AvState.Info ? AvState.Ready : d.State);
             camLabel.color = s;
+            status.color = d.State == AvState.Caution || d.State == AvState.Danger ? s : EnvInk.Role("ink-dim");
         }
 
         protected override void OnRestyle() => Tint();
@@ -687,36 +525,20 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void Paint(EnvCanvas c)
         {
-            float cx = Pad + ArcW * 0.5f, hy = 62f, rx = ArcW * 0.5f - 6f, ry = 46f;
             Color dim = EnvInk.Alpha(EnvInk.Role("ink-muted"), 0.9f);
-            Color frameC = EnvInk.Role("frame");
-            c.Line(Pad, hy, Pad + ArcW, hy, 1.5f, frameC);
-            c.Arc(cx, hy, rx, ry, 0f, 180f, 1.5f, dim, 1);
-            c.Arc(cx, hy, rx, 16f, 180f, 360f, 1.2f, EnvInk.Alpha(dim, 0.5f), 1);
-            c.Line(cx, hy - ry - 4f, cx, hy - ry + 2f, 1f, dim); // zenith tick
             float t = ((d.TimeOfDay % 24f) + 24f) % 24f;
-            float day = d.Sunset - d.Sunrise;
-            bool above = d.Elevation > 0f;
-            float f;
-            if (d.PolarDay || d.PolarNight || day <= 0.1f) f = t / 24f;
-            else if (t >= d.Sunrise && t <= d.Sunset) f = (t - d.Sunrise) / day;
-            else f = ((t < d.Sunrise ? t + 24f : t) - d.Sunset) / Mathf.Max(0.1f, 24f - day);
-            f = Mathf.Clamp01(f);
-            // Day: sunrise at the left end, sunset at the right. Night: sunset at the right, back to sunrise at the left.
-            float a = above ? Mathf.PI * (1f - f) : Mathf.PI * f;
-            float px = cx + Mathf.Cos(a) * rx;
-            float py = above ? hy - Mathf.Sin(a) * ry : hy + Mathf.Sin(Mathf.PI * f) * 16f;
-            Color sun = EnvInk.Role("ink");
-            if (above)
+            // One rectangular 24-hour strip: day/night blocks and the current time cursor.
+            float cell = ArcW / 24f;
+            for (int hour = 0; hour < 24; hour++)
             {
-                c.Disc(px, py, 7f, sun);
-                c.Ring(px, py, 11f, 1.2f, EnvInk.Alpha(sun, 0.5f));
+                bool daylight = d.PolarDay || (!d.PolarNight && hour + .5f >= d.Sunrise && hour + .5f < d.Sunset);
+                c.Quad(Pad + hour * cell, 26f, cell - 2f, 32f,
+                    daylight ? EnvInk.Alpha(EnvInk.Role("key"), .65f) : EnvInk.Track());
+                c.Line(Pad + hour * cell, 62f, Pad + hour * cell, hour % 6 == 0 ? 72f : 67f, 1f, dim);
             }
-            else
-            {
-                c.Ring(px, py, 6f, 1.5f, dim);
-                c.Disc(px, py, 2f, dim);
-            }
+            float cursor = Pad + t / 24f * ArcW;
+            c.Line(cursor, 20f, cursor, 75f, 2f, EnvInk.Role("ink"));
+            c.Quad(cursor - 3f, 17f, 6f, 4f, EnvInk.Role("ink"));
         }
     }
 
@@ -728,10 +550,10 @@ namespace BoscaliSummer.Features.Weather.Presentation
         public bool Waxing = true, Moonless;
     }
 
-    /// <summary>Moon: a phase disc drawn from the lit fraction, the phase name, a lit bar and the guidance line.</summary>
+    /// <summary>Moon phase and light levels with a labeled illumination meter.</summary>
     internal sealed class EnvMoonCard : EnvPart
     {
-        private const float DiscR = 27f, DiagramH = 78f;
+        private const float DiagramH = 78f;
         private readonly TMP_Text key, phase, lit, glow, guidance;
         private EnvMoon d = new EnvMoon();
 
@@ -770,7 +592,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         protected override void Layout(float w, float h)
         {
-            float x = Pad + 2f * DiscR + 18f, rw = w - x - Pad;
+            float x = Pad, rw = w - 2f * Pad;
             Box(key, x, 8f, rw, 15f);
             Box(phase, x, 22f, rw, 26f);
             Box(lit, w - Pad - 92f, 48f, 92f, 18f);
@@ -782,25 +604,8 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void Paint(EnvCanvas c)
         {
-            float cx = Pad + DiscR + 2f, cy = 8f + DiscR + 2f;
-            Color ink = EnvInk.Role("ink");
-            Color dark = EnvInk.Alpha(EnvInk.Role("ink-muted"), 0.30f);
-            c.Disc(cx, cy, DiscR, dark, 32);
-            float t = 1f - 2f * Mathf.Clamp01(d.Lit);
-            const int slices = 36;
-            float sh = DiscR * 2f / slices;
-            for (int i = 0; i < slices; i++)
-            {
-                float dy = -DiscR + (i + 0.5f) * sh;
-                float half = Mathf.Sqrt(Mathf.Max(0f, DiscR * DiscR - dy * dy));
-                float from = d.Waxing ? t * half : -half;
-                float to = d.Waxing ? half : -t * half;
-                if (to - from > 0.3f) c.Quad(cx + from, cy + dy - sh * 0.5f, to - from, sh + 0.4f, EnvInk.Alpha(ink, 0.92f));
-            }
-            c.Ring(cx, cy, DiscR, 1.2f, EnvInk.Alpha(ink, 0.55f));
-            // Track under the lit bar.
-            float bx = Pad + 2f * DiscR + 18f, bw = PlacedW - bx - Pad;
-            if (bw > 0f) c.Bar(bx, 71f, bw, 3f, d.Lit, EnvInk.Track(), EnvInk.Role("ink-dim"), -1f, Color.clear);
+            float bw = PlacedW - 2f * Pad;
+            if (bw > 0f) c.Bar(Pad, 71f, bw, 3f, d.Lit, EnvInk.Track(), EnvInk.Role("ink-dim"), -1f, Color.clear);
         }
     }
 
@@ -827,7 +632,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             MakeArt(Paint);
             north = Txt("North", AvTextRole.Micro, TextAlignmentOptions.Center, "key");
-            north.text = "N";
+            north.text = "N  E  S  W  N";
             speedKey = Txt("SpeedKey", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "key");
             speedKey.text = "WIND";
             speed = Txt("Speed", AvTextRole.Display, TextAlignmentOptions.MidlineLeft, "ink", false, true);
@@ -853,7 +658,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
             if (PlacedW > 0f) Layout(PlacedW, Measure(PlacedW));
         }
 
-        private string AdvisoryText() => d.Advisory == null || d.Advisory.Length == 0 ? "" : AvStates.Glyph(d.State) + d.Advisory;
+        private string AdvisoryText() => "";
 
         private float AdvH(float width) => advisory.text.Length == 0 ? 0f : AvText.Height(advisory, width - 2f * Pad);
 
@@ -865,8 +670,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         protected override void Layout(float w, float h)
         {
-            float cx = Pad + DialR + 4f;
-            Box(north, cx - 12f, 0f, 24f, 15f);
+            Box(north, Pad, 8f, 2f * DialR + 8f, 15f);
             float x = Pad + 2f * DialR + 24f, rw = w - x - Pad;
             Box(speedKey, x, 8f, rw, 15f);
             Box(speed, x, 22f, rw, 32f);
@@ -880,29 +684,21 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private void Paint(EnvCanvas c)
         {
-            float cx = Pad + DialR + 4f, cy = DialTop + DialR;
             Color ink = EnvInk.Role("ink"), dim = EnvInk.Alpha(EnvInk.Role("ink-muted"), 0.9f);
-            c.Ring(cx, cy, DialR, 1.5f, EnvInk.Role("frame"));
-            for (int i = 0; i < 16; i++)
+            float tapeW = 2f * DialR + 8f;
+            c.Quad(Pad, 30f, tapeW, 34f, EnvInk.Track());
+            for (int i = 0; i <= 16; i++)
             {
-                float a = i * Mathf.PI / 8f, r0 = DialR - (i % 4 == 0 ? 7f : 3f);
-                c.Line(cx + Mathf.Sin(a) * r0, cy - Mathf.Cos(a) * r0, cx + Mathf.Sin(a) * DialR, cy - Mathf.Cos(a) * DialR, 1f, dim);
+                float at = Pad + i * tapeW / 16f;
+                c.Line(at, 30f, at, i % 4 == 0 ? 41f : 36f, 1f, dim);
             }
             if (d.Kts >= 0.5f)
             {
-                float to = d.To * Mathf.Deg2Rad;
-                float dx = Mathf.Sin(to), dy = -Mathf.Cos(to);
                 Color s = d.State == AvState.Caution || d.State == AvState.Danger ? EnvInk.State(d.State) : ink;
-                float tail = DialR * 0.62f, head = DialR * 0.72f;
-                c.Line(cx - dx * tail, cy - dy * tail, cx + dx * (head - 8f), cy + dy * (head - 8f), 2.4f, s);
-                float nx = -dy, ny = dx;
-                c.Tri(cx + dx * head, cy + dy * head,
-                    cx + dx * (head - 12f) + nx * 6f, cy + dy * (head - 12f) + ny * 6f,
-                    cx + dx * (head - 12f) - nx * 6f, cy + dy * (head - 12f) - ny * 6f, s);
-                // Fletching at the upwind end marks where the air comes from.
-                c.Disc(cx - dx * tail, cy - dy * tail, 2.5f, s);
+                float at = Pad + Mathf.Repeat(d.From, 360f) / 360f * tapeW;
+                c.Line(at, 27f, at, 70f, 2f, s);
+                c.Quad(at - 3f, 68f, 6f, 4f, s);
             }
-            else c.Ring(cx, cy, 3f, 1.5f, dim);
             float x = Pad + 2f * DialR + 24f, rw = PlacedW - x - Pad;
             if (rw > 0f)
                 c.Bar(x, 98f, rw, 6f, Mathf.Clamp01(d.Turbulence / 0.8f), EnvInk.Track(),
@@ -921,137 +717,224 @@ namespace BoscaliSummer.Features.Weather.Presentation
         protected override void OnRestyle() => Tint();
     }
 
-    /// <summary>Column geometry shared by the outlook header and its rows so every column lines up.</summary>
-    internal static class EnvOutlookCols
+    /// <summary>Icon-first sky state: SUN / CLOUD / RAIN / STORM / MIST cells, the ones that apply lit in the state colour.</summary>
+    internal sealed class EnvStateRow : EnvPart
     {
-        public const float Time = 10f, TimeW = 34f;
-        public const float Sky = 48f, SkyW = 70f;
-        public const float CoverX = 120f, CoverW = 46f;
-        public const float DeckX = 170f, DeckW = 62f;
-        public const float RainX = 246f;
-        public const float RightPad = 12f;
-    }
-
-    /// <summary>Column captions above the 60-minute outlook.</summary>
-    internal sealed class EnvOutlookHeader : AvPart
-    {
-        private readonly TMP_Text time, sky, cover, deck, rain;
-
-        public EnvOutlookHeader(RectTransform parent)
-        {
-            Rect = AvLay.Child(parent, "Outlook header");
-            time = Head("Time", "TIME", TextAlignmentOptions.MidlineLeft);
-            sky = Head("Sky", "SKY", TextAlignmentOptions.MidlineLeft);
-            cover = Head("Cover", "COVER", TextAlignmentOptions.MidlineRight);
-            deck = Head("Base", "BASE", TextAlignmentOptions.MidlineRight);
-            rain = Head("Rain", "RAIN", TextAlignmentOptions.MidlineLeft);
-            Restyle();
-        }
-
-        private TMP_Text Head(string name, string text, TextAlignmentOptions a) => AvText.Make(Rect, name, AvTextRole.Micro, text, a);
-
-        public override float Measure(float width) => 18f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            AvLay.Place(time.rectTransform, EnvOutlookCols.Time, 0f, EnvOutlookCols.TimeW + 8f, s.H);
-            AvLay.Place(sky.rectTransform, EnvOutlookCols.Sky, 0f, EnvOutlookCols.SkyW, s.H);
-            AvLay.Place(cover.rectTransform, EnvOutlookCols.CoverX - 8f, 0f, EnvOutlookCols.CoverW + 8f, s.H);
-            AvLay.Place(deck.rectTransform, EnvOutlookCols.DeckX, 0f, EnvOutlookCols.DeckW, s.H);
-            AvLay.Place(rain.rectTransform, EnvOutlookCols.RainX, 0f, s.W - EnvOutlookCols.RainX, s.H);
-        }
-
-        public override void Restyle()
-        {
-            Color c = EnvInk.Role("key");
-            time.color = sky.color = cover.color = deck.color = rain.color = c;
-        }
-    }
-
-    /// <summary>
-    /// One 60-minute outlook row: state rail, time, the regime pictogram, code badge, cover, cloud
-    /// base and a rain bar. Columns come from <see cref="EnvOutlookCols"/>.
-    /// </summary>
-    internal sealed class ForecastRowPart : AvPart
-    {
-        private readonly Image rail, back, sep, rainTrack, rainFill;
-        private readonly TMP_Text time, badge, cover, deckLabel, rainText;
-        private readonly WeatherGlyph glyph;
+        public const int Sun = 1, Cloud = 2, Rain = 4, Storm = 8, Mist = 16;
+        private static readonly string[] Names = { "SUN", "CLOUD", "RAIN", "STORM", "MIST" };
+        private const float H = 58f;
+        private readonly TMP_Text[] labels = new TMP_Text[5];
+        private int mask;
         private AvState state = AvState.Info;
-        private float rainFrac;
-        private bool now;
-        private AvSlot lastSlot;
 
-        public ForecastRowPart(RectTransform parent, string name)
+        public EnvStateRow(RectTransform parent) : base(parent, "State row")
         {
-            Rect = AvLay.Child(parent, name);
-            back = AvLay.Solid(Rect, "Back", Color.clear);
-            rail = AvLay.Solid(Rect, "Rail", Color.clear);
-            sep = AvLay.Solid(Rect, "Sep", Color.clear);
-            time = AvText.Make(Rect, "Time", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft);
-            glyph = WeatherGlyph.Create(Rect, new Rect(EnvOutlookCols.Sky, 3f, 24f, 24f));
-            badge = AvText.Make(Rect, "Badge", AvTextRole.Micro, "", TextAlignmentOptions.Center);
-            cover = AvText.Make(Rect, "Cover", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            deckLabel = AvText.Make(Rect, "Deck", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            rainTrack = AvLay.Solid(Rect, "RainTrack", Color.clear);
-            rainFill = AvLay.Solid(Rect, "RainFill", Color.clear);
-            rainText = AvText.Make(Rect, "RainText", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+            MakeArt(Paint);
+            for (int i = 0; i < labels.Length; i++)
+            {
+                labels[i] = Txt("Label" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink-dim", false, true);
+                labels[i].text = Names[i];
+            }
             Restyle();
         }
 
-        public void Set(string timeText, bool isNow, WeatherRegimeType regime, string code,
-            float coverFrac, float deckMetres, float rainProbability, AvState rowState)
+        /// <summary>Which cells a regime lights.</summary>
+        public static int LitFor(WeatherRegimeType regime)
         {
-            time.text = timeText;
-            time.fontStyle = isNow ? FontStyles.Bold : FontStyles.Normal;
-            now = isNow;
-            glyph.SetKind(regime);
-            badge.text = code ?? "";
-            cover.text = AvNum.Percent(coverFrac);
-            deckLabel.text = AvNum.Fixed(deckMetres, 0) + " M";
-            rainFrac = Mathf.Clamp01(rainProbability);
-            rainText.text = rainProbability <= 0.05f ? "DRY" : "RAIN " + AvNum.Percent(rainProbability);
-            state = rowState;
+            switch (regime)
+            {
+                case WeatherRegimeType.Clear: return Sun;
+                case WeatherRegimeType.Fair:
+                case WeatherRegimeType.Scattered: return Sun | Cloud;
+                case WeatherRegimeType.RainSquall: return Cloud | Rain;
+                case WeatherRegimeType.Storm: return Rain | Storm;
+                default: return Cloud;
+            }
+        }
+
+        public void Set(int litMask, AvState s)
+        {
+            if (litMask == mask && s == state) return;
+            mask = litMask; state = s;
+            Apply();
+        }
+
+        private void Apply()
+        {
+            bool alarm = state == AvState.Caution || state == AvState.Danger;
+            for (int i = 0; i < labels.Length; i++)
+            {
+                bool on = (mask & (1 << i)) != 0;
+                SetText(labels[i], (on && alarm && i == 3 ? AvStates.Glyph(state) : "") + Names[i]);
+                labels[i].color = on ? (alarm ? EnvInk.State(state) : EnvInk.Role("ink")) : EnvInk.Role("ink-dim");
+            }
+            Redraw();
+        }
+
+        public override float Measure(float width) => H;
+
+        protected override void Layout(float w, float h)
+        {
+            float cw = w / labels.Length;
+            for (int i = 0; i < labels.Length; i++) Box(labels[i], i * cw + 2f, 38f, cw - 4f, 16f);
+        }
+
+        protected override void OnRestyle()
+        {
+            if (labels[labels.Length - 1] == null) return;
+            Apply();
+        }
+
+        private void Paint(EnvCanvas c)
+        {
+            float w = PlacedW;
+            if (w <= 0f) return;
+            float cw = w / labels.Length;
+            bool alarm = state == AvState.Caution || state == AvState.Danger;
+            Color lit = EnvInk.State(state == AvState.Info ? AvState.Ready : state);
+            Color ink = EnvInk.Role("ink");
+            for (int i = 0; i < labels.Length; i++)
+            {
+                bool on = (mask & (1 << i)) != 0;
+                float x = i * cw, cx = x + cw * 0.5f;
+                Color col = on ? (alarm ? lit : ink) : EnvInk.Alpha(EnvInk.Role("ink-dim"), 0.6f);
+                if (on)
+                {
+                    c.Quad(x + 3f, 3f, cw - 6f, H - 6f, EnvInk.Alpha(lit, 0.14f));
+                    c.Quad(x + 3f, 3f, cw - 6f, 2f, lit);
+                }
+                switch (i)
+                {
+                    case 0: DrawSun(c, cx, 22f, col); break;
+                    case 1: DrawCloud(c, cx, 22f, col); break;
+                    case 2: DrawCloud(c, cx, 17f, col); DrawDrops(c, cx, 22f, col); break;
+                    case 3: DrawCloud(c, cx, 17f, col); DrawBolt(c, cx, 22f, col); break;
+                    default: DrawMist(c, cx, 22f, col); break;
+                }
+            }
+        }
+
+        private static void DrawSun(EnvCanvas c, float cx, float cy, Color col)
+        {
+            c.Ring(cx, cy, 6f, 1.6f, col);
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * Mathf.PI / 4f;
+                c.Line(cx + Mathf.Cos(a) * 9f, cy + Mathf.Sin(a) * 9f, cx + Mathf.Cos(a) * 13f, cy + Mathf.Sin(a) * 13f, 1.6f, col);
+            }
+        }
+
+        private static void DrawCloud(EnvCanvas c, float cx, float cy, Color col)
+        {
+            c.Disc(cx - 7f, cy + 1f, 5f, col, 16);
+            c.Disc(cx, cy - 3f, 7f, col, 16);
+            c.Disc(cx + 8f, cy + 1f, 5f, col, 16);
+            c.Quad(cx - 7f, cy + 1f, 15f, 5f, col);
+        }
+
+        private static void DrawDrops(EnvCanvas c, float cx, float cy, Color col)
+        {
+            for (int k = -1; k <= 1; k++)
+                c.Line(cx + k * 6f + 1.5f, cy + 3f, cx + k * 6f - 1.5f, cy + 10f, 1.6f, col);
+        }
+
+        private static void DrawBolt(EnvCanvas c, float cx, float cy, Color col)
+        {
+            c.Line(cx + 2f, cy + 2f, cx - 2f, cy + 7f, 1.8f, col);
+            c.Line(cx - 2f, cy + 7f, cx + 3f, cy + 7f, 1.8f, col);
+            c.Line(cx + 3f, cy + 7f, cx - 1f, cy + 13f, 1.8f, col);
+        }
+
+        private static void DrawMist(EnvCanvas c, float cx, float cy, Color col)
+        {
+            c.Line(cx - 11f, cy - 6f, cx + 9f, cy - 6f, 1.8f, col);
+            c.Line(cx - 8f, cy, cx + 12f, cy, 1.8f, col);
+            c.Line(cx - 11f, cy + 6f, cx + 9f, cy + 6f, 1.8f, col);
+        }
+    }
+
+    /// <summary>The 60-minute outlook as one row of icon cells: time, regime pictogram, code and a rain tick.</summary>
+    internal sealed class EnvOutlookStrip : EnvPart
+    {
+        private const float H = 76f;
+        private readonly int count;
+        private readonly TMP_Text[] time, code;
+        private readonly WeatherGlyph[] glyph;
+        private readonly float[] rain;
+        private readonly AvState[] state;
+        private int nowIndex;
+
+        public EnvOutlookStrip(RectTransform parent, int cells) : base(parent, "Outlook strip")
+        {
+            count = cells;
+            time = new TMP_Text[cells]; code = new TMP_Text[cells];
+            glyph = new WeatherGlyph[cells]; rain = new float[cells]; state = new AvState[cells];
+            MakeArt(Paint);
+            for (int i = 0; i < cells; i++)
+            {
+                time[i] = Txt("Time" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink-dim", false, true);
+                code[i] = Txt("Code" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink", false, true);
+                glyph[i] = WeatherGlyph.Create(Rect, new Rect(0f, 0f, 26f, 26f));
+                state[i] = AvState.Info;
+            }
             Restyle();
-            if (lastSlot.W > 0f) Place(lastSlot);
         }
 
-        public override float Measure(float width) => 30f;
-
-        public override void Place(AvSlot s)
+        public void Set(int i, string timeText, bool isNow, WeatherRegimeType regime, string codeText, float rainProbability, AvState s)
         {
-            base.Place(s);
-            lastSlot = s;
-            AvLay.Place(back.rectTransform, 0f, 0f, s.W, s.H);
-            AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-            AvLay.Place(sep.rectTransform, 0f, s.H - 1f, s.W, 1f);
-            AvLay.Place(time.rectTransform, EnvOutlookCols.Time, 0f, EnvOutlookCols.TimeW, s.H);
-            AvLay.Place(glyph.rectTransform, EnvOutlookCols.Sky, 3f, 24f, 24f);
-            AvLay.Place(badge.rectTransform, EnvOutlookCols.Sky + 28f, (s.H - 15f) * 0.5f, 42f, 15f);
-            AvLay.Place(cover.rectTransform, EnvOutlookCols.CoverX, 0f, EnvOutlookCols.CoverW, s.H);
-            AvLay.Place(deckLabel.rectTransform, EnvOutlookCols.DeckX, 0f, EnvOutlookCols.DeckW, s.H);
-            float barX = EnvOutlookCols.RainX, textW = 62f;
-            float barW = Mathf.Max(24f, s.W - barX - textW - EnvOutlookCols.RightPad);
-            AvLay.Place(rainTrack.rectTransform, barX, (s.H - 6f) * 0.5f, barW, 6f);
-            AvLay.Place(rainFill.rectTransform, barX, (s.H - 6f) * 0.5f, barW * rainFrac, 6f);
-            AvLay.Place(rainText.rectTransform, barX + barW + 8f, 0f, textW - 8f + EnvOutlookCols.RightPad, s.H);
+            if (i < 0 || i >= count) return;
+            SetText(time[i], timeText);
+            bool alarm = s == AvState.Caution || s == AvState.Danger;
+            SetText(code[i], (alarm ? AvStates.Glyph(s) : "") + (codeText ?? ""));
+            glyph[i].SetKind(regime);
+            rain[i] = Mathf.Clamp01(rainProbability);
+            state[i] = s;
+            if (isNow) nowIndex = i;
+            Tint(i);
+            Redraw();
         }
 
-        public override void Restyle()
+        private void Tint(int i)
         {
-            AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state));
-            rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-            back.color = now ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row").Background, AvTheme.SurfaceInert) : Color.clear;
-            sep.color = EnvInk.Alpha(EnvInk.Role("hairline"), 0.7f);
-            time.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            Color badgeColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Dim);
-            badge.color = badgeColor;
-            glyph.color = badgeColor;
-            cover.color = deckLabel.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value").Color, AvTheme.TextPrimary);
-            rainTrack.color = EnvInk.Track();
-            rainFill.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
-            rainText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            bool alarm = state[i] == AvState.Caution || state[i] == AvState.Danger;
+            Color c = alarm ? EnvInk.State(state[i]) : EnvInk.Role("ink");
+            glyph[i].color = c; code[i].color = c;
+            glyph[i].SetVerticesDirty();
+        }
+
+        public override float Measure(float width) => H;
+
+        protected override void Layout(float w, float h)
+        {
+            float cw = (w - 8f) / count;
+            for (int i = 0; i < count; i++)
+            {
+                float x = 4f + i * cw;
+                Box(time[i], x, 5f, cw, 16f);
+                AvLay.Place(glyph[i].rectTransform, x + (cw - 26f) * 0.5f, 23f, 26f, 26f);
+                Box(code[i], x, 51f, cw, 16f);
+            }
+        }
+
+        protected override void OnRestyle()
+        {
+            if (state == null || glyph == null || glyph[count - 1] == null) return;
+            for (int i = 0; i < count; i++) Tint(i);
+        }
+
+        private void Paint(EnvCanvas c)
+        {
+            float w = PlacedW;
+            if (w <= 0f) return;
+            float cw = (w - 8f) / count;
+            for (int i = 0; i < count; i++)
+            {
+                float x = 4f + i * cw;
+                bool alarm = state[i] == AvState.Caution || state[i] == AvState.Danger;
+                Color s = EnvInk.State(state[i] == AvState.Info ? AvState.Ready : state[i]);
+                if (i == nowIndex) c.Quad(x + 1f, 2f, cw - 2f, H - 4f, EnvInk.Alpha(EnvInk.Role("ink"), 0.08f));
+                c.Bar(x + 6f, H - 8f, cw - 12f, 3f, rain[i], EnvInk.Track(), alarm ? s : EnvInk.Role("ink-dim"), -1f, Color.clear);
+            }
         }
     }
 }

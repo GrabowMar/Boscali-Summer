@@ -1,20 +1,27 @@
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal sealed class MapUiManager : MonoBehaviour, ISceneService
     {
         private float nextRefresh;
         private int screenCount = -1;
+        private bool mapWasMaximized;
         private void LateUpdate()
         {
             if (!DynamicMap.mapMaximized)
             {
-                MfdMapInteractions.Restore();
-                MfdTerrainRelief.Restore();
+                if (mapWasMaximized)
+                {
+                    MfdMapInteractions.Restore();
+                    MfdTerrainRelief.Restore();
+                    mapWasMaximized = false;
+                }
                 return;
             }
+            mapWasMaximized = true;
             MfdTerrainRelief.Tick();
             MfdMapInteractions.Tick(SceneSingleton<DynamicMap>.i);
             MfdNewsTicker.Tick();
@@ -51,6 +58,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             MfdNewsTicker.Reset();
             nextRefresh = 0f;
             screenCount = -1;
+            mapWasMaximized = false;
         }
         private void OnDestroy() => ResetForScene();
     }

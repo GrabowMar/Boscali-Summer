@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     internal static class IlsHudCopy
     {

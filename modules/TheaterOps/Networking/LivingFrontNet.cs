@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Features.TheaterOps.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Modules.TheaterOps.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Networking
+namespace BoscaliSummer.Modules.TheaterOps.Networking
 {
     [NetworkMessage]
     internal struct LivingFrontQuery { public byte Protocol; }

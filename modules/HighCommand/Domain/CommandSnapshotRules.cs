@@ -1,6 +1,6 @@
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
-    using BoscaliSummer.Framework.Contracts;
+    using BoscaliSummer.Core.Contracts;
 
     /// <summary>
     /// Bounds shared by the runtime snapshot builder and the wire reader. A malformed row

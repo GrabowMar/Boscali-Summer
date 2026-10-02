@@ -1,10 +1,9 @@
-using System.Collections.Generic;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The left column every MFD screen is shown in.

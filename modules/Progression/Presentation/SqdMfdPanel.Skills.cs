@@ -1,15 +1,14 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
@@ -18,11 +17,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
         // scrolling a list. Geometry lives in SkillBoardLayout (which a test pins); SkillBoard
         // draws it and SkillNode is one grade.
         private const string SkillIdleTitle = "SELECT A GRADE";
-        private const string SkillHint =
-            "Compare lanes at the same tier, tap an open grade, then unlock it. One pick, no undo.";
+        private const string SkillHint = "Tap an open grade. One pick, no undo.";
 
-        private AvChip skillBudgetPicks;
-        private AvChip skillBudgetNext;
         private SkillBoard skillBoard;
         private AvTextBlock skillStripTitle;
         private AvTextBlock skillStripEffect;
@@ -38,8 +34,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             skillRows.Clear();
             skillBranches.Clear();
-            skillBudgetPicks = null;
-            skillBudgetNext = null;
             skillBoard = null;
             skillStripTitle = null;
             skillStripEffect = null;
@@ -64,7 +58,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
         private void BuildSkillsPage(AvFlow p)
         {
             PerkView[] perks = Progress != null ? Progress.GetPerks() : Array.Empty<PerkView>();
-            p.Section(AvIcon.Star, "QUALIFICATION BOARD", "HOST PROGRESSION");
             if (perks.Length == 0)
             {
                 p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO QUALIFICATION CATALOG",
@@ -76,14 +69,11 @@ namespace BoscaliSummer.Features.Progression.Presentation
             for (int i = 0; i < perks.Length; i++)
                 LaneOf(lanes, perks[i].Branch).Nodes.Add(perks[i]);
 
-            skillBudgetPicks = new AvChip(p.Content);
-            skillBudgetNext = new AvChip(p.Content);
-            p.Row(skillBudgetPicks, skillBudgetNext);
-            skillBoard = p.Add(new SkillBoard(p.Content, console.Ticker, lanes, SelectSkill));
+            // The budget rings that used to sit here repeated the header's SCORE and PICKS tiles; the board takes the height.
+            skillBoard = p.Add(new SkillBoard(p.Content, console.Ticker, lanes, SelectSkill), 1f);
             skillRows.AddRange(skillBoard.Rows);
             skillBranches.AddRange(skillBoard.Branches);
 
-            p.Section(AvIcon.CircleCheck, "SELECTED GRADE", null);
             AvCard detail = new AvCard(p.Content, console.Ticker, p.Inner, null, true, "raised");
             skillStripTitle = detail.Flow.Add(new AvTextBlock(detail.Flow.Content, AvTextRole.Head));
             skillStripEffect = detail.Flow.Add(new AvTextBlock(detail.Flow.Content, AvTextRole.DataStrong));
@@ -94,31 +84,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             skillConfirmButton.Interactable = false;
             skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
             p.Add(detail);
-        }
-
-        /// <summary>The budget as two chips: how many picks are unspent, and the wait for the next.</summary>
-        private void PaintBudget()
-        {
-            IProgressionView view = Progress;
-            if (progression.BypassRequirements)
-            {
-                skillBudgetPicks.Set("DEBUG BYPASS", AvState.Caution);
-                skillBudgetNext.Set("EVERY GRADE OPEN", AvState.Info);
-                return;
-            }
-
-            int available = view.AvailablePoints;
-            skillBudgetPicks.Set(AvNum.Thousands(available) + (available == 1 ? " PICK UNSPENT" : " PICKS UNSPENT"),
-                available > 0 ? AvState.Ready : AvState.Inert);
-            if (view.EarnedPoints >= view.MaximumPoints)
-            {
-                skillBudgetNext.Set("GRADE LADDER COMPLETE", AvState.Info);
-                return;
-            }
-
-            int remaining = PerkPoints.RemainingToNext(MissionScore(), view.ScorePerPoint);
-            skillBudgetNext.Set(remaining < 0 ? "GRADE LADDER COMPLETE" : AvNum.Thousands(remaining) + " TO NEXT GRADE",
-                AvState.Info);
         }
 
         private int MissionScore()
@@ -217,7 +182,6 @@ namespace BoscaliSummer.Features.Progression.Presentation
             if (skillStripTitle == null || progression == null) return;
 
             IProgressionView view = Progress;
-            PaintBudget();
             bool requestPending = view.UnlockPending;
             if (requestPending) skillAwaitingConfirmation = null;
 
@@ -241,7 +205,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 skillStripTitle.Set("WAITING FOR THE HOST");
                 skillStripTitle.Color = AvTheme.RailCaution;
                 skillStripEffect.SetShown(false);
-                skillStripDetail.Set("The pick is sent. The host answers on the next tick.");
+                skillStripDetail.Set("Pick sent.");
             }
             else if (hasSelection)
             {
@@ -283,6 +247,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 : perk.Affordable || armed ? perk.Name + " (" + effect + ") — " + perk.Description
                 : perk.Name + " — " + BlockReason(perk);
             row.Node.Paint(CellName(perk, definition), state, help);
+            row.Node.SetEffect(definition.IsTool ? "SUPPORT TOOL" : effect.ToUpperInvariant());
         }
 
         private static void PaintLane(SkillBranchRow lane, PerkView[] perks)
@@ -311,7 +276,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             private readonly AvFrame frame;
             private readonly Image rail;
-            private readonly TMP_Text glyph, label;
+            private readonly TMP_Text glyph, label, effect;
             private readonly Action<byte> onSelect;
             private readonly byte id;
             private SkillNodeState state = SkillNodeState.Locked;
@@ -332,6 +297,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 label = AvText.Make(Rect, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
                 label.characterSpacing = 1f; // a long word (SURVEILLANCE) must fit the node without breaking mid-word
                 AvText.Fit(label, true);
+                effect = AvText.Make(Rect, "Effect", AvTextRole.Micro, "", TextAlignmentOptions.BottomLeft);
+                AvText.Fit(effect, false);
                 AvHit hit = AvHit.On(frame);
                 hit.Hover = h => { hover = h; Restyle(); };
                 hit.Click = e => { if (state == SkillNodeState.Open || state == SkillNodeState.Selected) onSelect?.Invoke(id); };
@@ -339,6 +306,16 @@ namespace BoscaliSummer.Features.Progression.Presentation
             }
 
             public SkillNodeState State => state;
+
+            /// <summary>What the grade buys, shown on the node's last line once the board has the height for it.</summary>
+            public void SetEffect(string text)
+            {
+                string t = text ?? "";
+                if (effect.text != t) effect.text = t;
+            }
+
+            /// <summary>A node needs this much height for two name lines plus the effect line.</summary>
+            public const float EffectHeight = 70f;
 
             public void Paint(string name, SkillNodeState next, string help)
             {
@@ -370,7 +347,10 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 base.Place(s);
                 AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
                 AvLay.Place(glyph.rectTransform, 9f, 5f, 14f, 14f);
-                AvLay.Place(label.rectTransform, 8f, 21f, s.W - 11f, s.H - 24f);
+                bool tall = s.H >= EffectHeight && effect.text.Length > 0 && AvText.Width(effect) <= s.W - 11f;   // a long effect waits for the detail card
+                AvLay.Place(label.rectTransform, 8f, 21f, s.W - 11f, tall ? 32f : s.H - 24f);
+                effect.gameObject.SetActive(tall);
+                AvLay.Place(effect.rectTransform, 8f, s.H - 17f, s.W - 11f, 14f);
             }
 
             public override void Restyle()
@@ -406,6 +386,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 rail.color = accent;
                 glyph.color = state == SkillNodeState.Locked ? AvTheme.Disabled : accent;
                 label.color = ink;
+                effect.color = state == SkillNodeState.Locked ? AvTheme.Disabled : SqdTone.Text(AvState.Ready);
                 if (Connector != null)
                     Connector.color = state == SkillNodeState.Held ? AvTheme.RailReady.WithAlpha(.8f) : AvTheme.Hairline;
             }
@@ -469,9 +450,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
             public override float Measure(float width) => SkillBoardLayout.ContentHeight(grades);
 
+            /// <summary>Leftover page height becomes taller nodes (up to this much each), which is what lets a node print what it buys.</summary>
+            private const float MaxNodeGrowth = 24f;
+
             public override void Place(AvSlot s)
             {
                 base.Place(s);
+                float growth = grades > 0 ? Mathf.Clamp((s.H - SkillBoardLayout.ContentHeight(grades)) / grades, 0f, MaxNodeGrowth) : 0f;
+                float nodeHeight = SkillBoardLayout.NodeHeight + growth;
                 float cellWidth = SkillBoardLayout.CellWidth(s.W, lanes.Count);
 
                 float pitch = s.W / legendWords.Length;
@@ -486,8 +472,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
 
                 for (int g = 0; g < grades; g++)
                 {
-                    float y = SkillBoardLayout.NodeTop(g);
-                    AvLay.Place(tierLabels[g].rectTransform, 0f, y, SkillBoardLayout.Gutter, SkillBoardLayout.NodeHeight);
+                    float y = SkillBoardLayout.NodeTop(g) + g * growth;
+                    AvLay.Place(tierLabels[g].rectTransform, 0f, y, SkillBoardLayout.Gutter, nodeHeight);
                 }
 
                 int index = 0;
@@ -496,12 +482,12 @@ namespace BoscaliSummer.Features.Progression.Presentation
                     float laneX = SkillBoardLayout.CellX(0f, cellWidth, l);
                     for (int g = 0; g < lanes[l].Nodes.Count; g++)
                     {
-                        float y = SkillBoardLayout.NodeTop(g);
+                        float y = SkillBoardLayout.NodeTop(g) + g * growth;
                         SkillNode node = Rows[index].Node;
-                        node.Place(new AvSlot(laneX, y, cellWidth, SkillBoardLayout.NodeHeight));
+                        node.Place(new AvSlot(laneX, y, cellWidth, nodeHeight));
                         if (node.Connector != null)
                             AvLay.Place(node.Connector.rectTransform, laneX + cellWidth * .5f - 1f,
-                                y + SkillBoardLayout.NodeHeight, 2f, SkillBoardLayout.NodeGap);
+                                y + nodeHeight, 2f, SkillBoardLayout.NodeGap);
                         index++;
                     }
                 }

@@ -1,9 +1,9 @@
 using System;
 using System.Threading;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Audio
+namespace BoscaliSummer.Modules.Weather.Audio
 {
     /// <summary>Two bounded, baked loops: rain rush outside and drops on cockpit glass.</summary>
     internal sealed class RainSoundscape : MonoBehaviour
@@ -25,7 +25,9 @@ namespace BoscaliSummer.Features.Weather.Audio
 
         internal bool ClipsReady => rushClip != null && patterClip != null;
         internal bool IsRouted => rush != null && rush.outputAudioMixerGroup != null;
-        internal bool IsPlaying => playing;
+        internal bool IsPlaying => playing && rush != null && rush.isPlaying;
+        internal float RushVolume => rush != null ? rush.volume : 0f;
+        internal float PatterVolume => patter != null ? patter.volume : 0f;
 
         internal void Initialize()
         {
@@ -55,7 +57,7 @@ namespace BoscaliSummer.Features.Weather.Audio
             });
         }
 
-        internal void UpdateAudio(float rain, float cloud, float glassWetness, bool cockpit, bool enabled)
+        internal void UpdateAudio(float rain, float cloud, float glassMoisture, bool cockpit, bool enabled)
         {
             if (rush == null || patter == null || bakeState == 2) return;
             if (!ClipsReady && !CreateClips()) return;
@@ -70,7 +72,7 @@ namespace BoscaliSummer.Features.Weather.Audio
             float targetRush = enabled && mixer != null
                 ? Mathf.Clamp01(rain * 0.28f + cloud * 0.12f) * (cockpit ? 0.65f : 1f) : 0f;
             float targetPatter = enabled && mixer != null && cockpit
-                ? Mathf.Clamp01(glassWetness * 0.38f + rain * 0.07f) : 0f;
+                ? Mathf.Clamp01(glassMoisture * 0.38f + rain * 0.07f) : 0f;
 
             if (!playing && (targetRush > 0.01f || targetPatter > 0.01f) && FxVoiceBus.TryStartLoop(VoiceId))
             {
@@ -126,6 +128,7 @@ namespace BoscaliSummer.Features.Weather.Audio
                 samples[i * 2 + 1] = (right - low) * 0.65f + white * 0.015f;
             }
             playableFrames = CrossfadeLoop(samples, frames);
+            Normalize(samples, playableFrames, 0.16f);
             return samples;
         }
 
@@ -157,7 +160,25 @@ namespace BoscaliSummer.Features.Weather.Audio
                 }
             }
             playableFrames = CrossfadeLoop(samples, frames);
+            Normalize(samples, playableFrames, 0.12f);
             return samples;
+        }
+
+        // Bake-time gain only: filtered noise had ample peak headroom but was almost
+        // inaudible beneath engines. Preserve dynamics and cap peaks before playback.
+        private static void Normalize(float[] samples, int frames, float targetRms)
+        {
+            double energy = 0;
+            float peak = 0f;
+            int count = frames * 2;
+            for (int i = 0; i < count; i++)
+            {
+                energy += samples[i] * samples[i];
+                peak = Math.Max(peak, Math.Abs(samples[i]));
+            }
+            if (peak <= 0f || count == 0) return;
+            float gain = Math.Min(targetRms / (float)Math.Sqrt(energy / count), 0.78f / peak);
+            for (int i = 0; i < count; i++) samples[i] *= gain;
         }
 
         private static int CrossfadeLoop(float[] samples, int frames)

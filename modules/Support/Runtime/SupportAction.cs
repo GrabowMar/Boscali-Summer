@@ -1,14 +1,11 @@
 using System.Collections;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Configuration;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
+using BoscaliSummer.Modules.Support.Configuration;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>Bounded concurrency pools the host hands out to actions.</summary>
     internal enum SupportPool : byte
@@ -25,11 +22,6 @@ namespace BoscaliSummer.Features.Support.Runtime
     internal interface ISupportHost
     {
         SupportSettings Settings { get; }
-        SpaceOperations Space { get; }
-
-        /// <summary>The clock station passes are computed against on this peer.</summary>
-        double OrbitNow { get; }
-
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
 
@@ -48,18 +40,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         /// <summary>Appends a later salvo missile to its strike record.</summary>
         void AddCruiseMissile(int requestId, Missile missile);
-
-        /// <summary>Tasking window for a faction: the derived schedule, identical on every peer.</summary>
-        bool WindowOpen(FactionHQ owner);
-
-        /// <summary>Host-side entry for the two track-deception operations.</summary>
-        bool BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration);
-
-        /// <summary>An operation landed: the attacker's adversaries grow warier and enemy SIGINT may hear it.</summary>
-        void ReportOperation(Player caster, GlobalPosition target);
-
-        /// <summary>SPEC OPS host runtime: the timed jam zones SUPPRESS adds to.</summary>
-        SpecOpsTheater SpecOps { get; }
     }
 
     internal readonly struct SupportContext
@@ -81,46 +61,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public SupportSettings Settings => Host.Settings;
         public ManualLogSource Logger => Host.Logger;
-
-        /// <summary>The requester's CYBER network (null until the theater is loaded).</summary>
-        public CyberNetwork Cyber => Host.Space.CyberFor(Owner);
-
-        /// <summary>
-        /// The requester's station when it can run <paramref name="ability"/> right now (fitted,
-        /// online, powered, overhead, charged, recharged, armed); null with the reason otherwise.
-        /// Nothing is spent here — call <see cref="OrbitalPlatform.Consume"/> once the action is accepted.
-        /// </summary>
-        public OrbitalPlatform PlatformAccess(PlatformAbility ability, out PlatformDenial denial)
-        {
-            OrbitalPlatform platform = Host.Space.PlatformFor(Owner);
-            if (platform == null)
-            {
-                denial = PlatformDenial.NoPlatform;
-                return null;
-            }
-            denial = platform.CheckTarget(ability, Target.x, Target.z, Host.OrbitNow);
-            return denial == PlatformDenial.None ? platform : null;
-        }
-
-        public static SupportResult Refusal(PlatformDenial denial)
-        {
-            switch (denial)
-            {
-                case PlatformDenial.NoPlatform: return SupportResult.NoPlatform;
-                case PlatformDenial.NotFitted: return SupportResult.ModuleNotFitted;
-                case PlatformDenial.Offline: return SupportResult.ModuleOffline;
-                case PlatformDenial.Brownout: return SupportResult.PlatformBrownout;
-                case PlatformDenial.LowEnergy: return SupportResult.PlatformLowPower;
-                case PlatformDenial.Recharging: return SupportResult.PlatformRecharging;
-                case PlatformDenial.Expended: return SupportResult.PlatformExpended;
-                case PlatformDenial.NoFuel: return SupportResult.NoFuel;
-                case PlatformDenial.WrongFocus: return SupportResult.PlatformWrongFocus;
-                case PlatformDenial.Retasking: return SupportResult.PlatformRetasking;
-                case PlatformDenial.NoSolution: return SupportResult.NeedsTargetSolution;
-                case PlatformDenial.OutsideSector: return SupportResult.PlatformOutOfReach;
-                default: return SupportResult.OutOfCoverage;
-            }
-        }
     }
 
     /// <summary>
@@ -130,9 +70,8 @@ namespace BoscaliSummer.Features.Support.Runtime
     internal interface ISupportAction
     {
         /// <summary>
-        /// Allocation price before perk discounts, derived from vanilla unit value where the
-        /// action spawns something. Returns 0 when the action cannot currently price itself,
-        /// which the manager treats as unavailable rather than free.
+        /// Availability flag: 1 when this action is usable on this map, 0 when it is not (the manager reports
+        /// CapabilityUnavailable). The price is CallSheet x CallPricing, never this value.
         /// </summary>
         float BaseCost(in SupportContext context);
 
@@ -148,7 +87,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public const string Prefix = "BoscaliSummer:Support:";
 
         public static string Unique(string kind, in SupportContext context) =>
-            Prefix + kind + ":" + Framework.Contracts.PlayerIdentity.Of(context.Player) + ":" +
+            Prefix + kind + ":" + Core.Contracts.PlayerIdentity.Of(context.Player) + ":" +
             context.RequestId;
     }
 
@@ -159,15 +98,6 @@ namespace BoscaliSummer.Features.Support.Runtime
         public readonly string Description;
         public readonly string Capability;
         public readonly ISupportAction Action;
-
-        /// <summary>CYBER ability gate for the eight map operations; null for other actions.</summary>
-        public readonly HackKind? Hack;
-
-        /// <summary>CYBER capstone gate; null for other actions.</summary>
-        public readonly Capstone? Cap;
-
-        /// <summary>SPEC OPS post gate for SPOT and SUPPRESS; null for other actions.</summary>
-        public readonly FieldAbility? Field;
 
         private readonly ConfigEntry<bool> enabled;
 
@@ -181,57 +111,8 @@ namespace BoscaliSummer.Features.Support.Runtime
             Capability = capability;
             this.enabled = enabled;
             Action = action;
-            Hack = null;
-            Cap = null;
         }
 
-        public SupportActionDefinition(
-            SupportActionId id, HackKind hack,
-            ConfigEntry<bool> enabled, ISupportAction action)
-        {
-            Id = id;
-            Name = CyberCatalog.Name(hack);
-            Description = CyberCatalog.Description(hack);
-            Capability = null;
-            this.enabled = enabled;
-            Action = action;
-            Hack = hack;
-            Cap = null;
-        }
-
-        public SupportActionDefinition(
-            SupportActionId id, Capstone capstone,
-            ConfigEntry<bool> enabled, ISupportAction action)
-        {
-            Id = id;
-            Name = Capstones.Name(capstone);
-            Description = Capstones.Summary(capstone);
-            Capability = null;
-            this.enabled = enabled;
-            Action = action;
-            Hack = null;
-            Cap = capstone;
-        }
-
-        public SupportActionDefinition(
-            SupportActionId id, FieldAbility ability,
-            ConfigEntry<bool> enabled, ISupportAction action)
-        {
-            Id = id;
-            Name = FieldWords.Ability(ability);
-            Description = FieldWords.AbilityDescription(ability);
-            Capability = null;
-            this.enabled = enabled;
-            Action = action;
-            Hack = null;
-            Cap = null;
-            Field = ability;
-        }
-
-        public bool IsHack => Hack.HasValue;
-        public bool IsCapstone => Cap.HasValue;
-        public bool IsCyber => Hack.HasValue || Cap.HasValue;
-        public bool IsField => Field.HasValue;
         public bool Enabled => enabled == null || enabled.Value;
     }
 }

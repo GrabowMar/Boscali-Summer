@@ -2,27 +2,39 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     public sealed class AvGauge : AvPart
     {
-        private readonly float size;
+        private readonly AvFrame frame;
         private readonly TMP_Text key, value;
         private readonly AvGaugeGraphic dial;
         private AvState state = AvState.Ready;
 
         public AvGauge(RectTransform parent, string keyText, AvGaugeShape shape, float diameter = 88f)
         {
-            size = diameter;
             Rect = AvLay.Child(parent, "Gauge " + keyText);
-            key = AvText.Make(Rect, "Key", AvTextRole.Micro, keyText, TextAlignmentOptions.Center);
+            frame = AvFrame.Add(Rect, "Instrument", AvChamfer.Diagonal(2f));
+            AvLay.Fill(frame.rectTransform); frame.Bracket = 3f;
+            key = AvText.Make(Rect, "Key", AvTextRole.Micro, keyText);
+            AvText.Fit(key, false);
             var go = new GameObject("Dial", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             dial = go.AddComponent<AvGaugeGraphic>();
-            dial.Shape = shape; dial.Thickness = 6f; dial.Segments = 12; dial.raycastTarget = false;
-            value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.Center);
+            // All cockpit meters share a rectangular ladder, including legacy Ring/Arc callers.
+            dial.Shape = AvGaugeShape.Segments; dial.Ticks = 0; dial.Segments = 10; dial.SegmentGap = 1.5f; dial.raycastTarget = false;
+            value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "");
+            AvText.Fit(value, false);
             Restyle();
         }
+
+        /// <summary>Hover help shown while the pointer is anywhere over the instrument.</summary>
+        public string Help
+        {
+            get => tip != null ? tip.Text : null;
+            set { frame.raycastTarget = !string.IsNullOrEmpty(value); tip = AvHelpTip.Attach(frame.gameObject, value); }
+        }
+        private AvHelpTip tip;
 
         public void Set(float v01, string text, AvState st = AvState.Ready)
         {
@@ -31,22 +43,25 @@ namespace NOAvionics.Ui
             if (st != state) { state = st; Restyle(); }
         }
 
-        public override float Measure(float width) => size + 18f;
+        public override float Measure(float width) => 48f;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float x = (s.W - size) * 0.5f;
-            AvLay.Place(key.rectTransform, 0f, 0f, s.W, 16f);
-            AvLay.Place((RectTransform)dial.transform, x, 18f, size, size);
-            AvLay.Place(value.rectTransform, x, 18f + size * 0.5f - 10f, size, 20f);
+            AvLay.Place(key.rectTransform, 6f, 3f, s.W - 12f, 15f);
+            AvLay.Place(value.rectTransform, 6f, 18f, s.W - 12f, 19f);
+            AvLay.Place((RectTransform)dial.transform, 6f, s.H - 8f, s.W - 12f, 4f);
         }
 
         public override void Restyle()
         {
             key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
+            frame.Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
+            frame.BracketColor = AvStyleHost.FuiColor("ink-muted", AvTheme.Dim).WithAlpha(0.5f);
+            frame.SetVerticesDirty();
             value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-value").Color, AvTheme.TextPrimary);
             dial.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+            dial.TickColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-axis").Color, AvTheme.Hairline);
             Color fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
             dial.FillColor = fill; dial.FillEnd = Color.Lerp(fill, Color.white, 0.25f);
             dial.SetVerticesDirty();

@@ -1,10 +1,10 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Generates the tiling 3D noise volume the raymarch shader shapes clouds with.
-    /// R = Perlin-Worley base shape, G = Worley detail used to erode the edges.
+    /// R = weather variation, G = fine erosion, B = single-scale rounded lobes.
     /// </summary>
     /// <remarks>
     /// Pure System.Math on plain arrays -- no UnityEngine calls -- so it can run on a
@@ -25,6 +25,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             int count = size * size * size;
             float[] baseShape = new float[count];
             float[] detail = new float[count];
+            byte[] bytes = new byte[count * 4];
 
             float inv = 1f / size;
             int index = 0;
@@ -40,11 +41,12 @@ namespace BoscaliSummer.Features.Weather.Visuals
                         float fz = z * inv;
 
                         float value = ValueFbm(fx, fy, fz, seed);
-                        float billow = WorleyFbm(fx, fy, fz, BasePeriod, BaseWorleyOctaves, seed + 101);
+                        float billow = WorleyFbm(fx, fy, fz, BasePeriod, BaseWorleyOctaves, seed + 101, out float lobe);
+                        bytes[index * 4 + 2] = (byte)(lobe * 255f);
 
                         // Same bounded remap as the 2D field: divisor is 2 - billow, in [1,2].
                         baseShape[index] = (value - (billow - 1f)) / (2f - billow);
-                        detail[index] = WorleyFbm(fx, fy, fz, DetailPeriod, DetailWorleyOctaves, seed + 313);
+                        detail[index] = WorleyFbm(fx, fy, fz, DetailPeriod, DetailWorleyOctaves, seed + 313, out _);
                     }
                 }
             }
@@ -52,7 +54,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             Normalise(baseShape);
             Normalise(detail);
 
-            byte[] bytes = new byte[count * 4];
             for (int i = 0; i < count; i++)
             {
                 byte r = (byte)(baseShape[i] * 255f);
@@ -60,7 +61,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 int o = i * 4;
                 bytes[o + 0] = r;
                 bytes[o + 1] = g;
-                bytes[o + 2] = 0;
                 bytes[o + 3] = 255;
             }
 
@@ -86,8 +86,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
         }
 
         /// <summary>Inverted Worley fBm: near a feature point means dense.</summary>
-        private static float WorleyFbm(float x, float y, float z, int basePeriod, int octaves, int seed)
+        private static float WorleyFbm(float x, float y, float z, int basePeriod, int octaves, int seed, out float lobe)
         {
+            lobe = 0f;
             float sum = 0f;
             float amplitude = 1f;
             float total = 0f;
@@ -95,7 +96,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
             for (int octave = 0; octave < octaves; octave++)
             {
-                sum += (1f - Worley(x * period, y * period, z * period, period, seed + octave)) * amplitude;
+                float value = 1f - Worley(x * period, y * period, z * period, period, seed + octave);
+                if (octave == 0) lobe = value;
+                sum += value * amplitude;
                 total += amplitude;
                 amplitude *= 0.5f;
                 period *= 2;

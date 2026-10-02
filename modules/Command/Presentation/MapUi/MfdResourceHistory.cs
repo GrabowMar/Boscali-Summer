@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     // Local observations only: no backfill and no simulated resource production.
     internal sealed class MfdResourceHistory

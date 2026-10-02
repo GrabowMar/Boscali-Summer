@@ -1,8 +1,9 @@
-using BoscaliSummer.Features.Progression.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// The active ace hunt as one cockpit line: the ace, its tier, how much of the wing is

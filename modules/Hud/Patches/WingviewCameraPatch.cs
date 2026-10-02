@@ -1,9 +1,9 @@
 using System;
-using BoscaliSummer.Features.Hud.Presentation;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Modules.Hud.Presentation;
+using BoscaliSummer.Core.Diagnostics;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Hud.Patches
+namespace BoscaliSummer.Modules.Hud.Patches
 {
     /// <summary>
     /// One postfix on vanilla's own orbit-camera update

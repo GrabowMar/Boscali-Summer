@@ -1,13 +1,13 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Features.TheaterOps.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Modules.TheaterOps.Runtime;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NOAvionics;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Patches
+namespace BoscaliSummer.Modules.TheaterOps.Patches
 {
     /// <summary>
     /// Applies the host's main effort at the two places the game asks "where should this

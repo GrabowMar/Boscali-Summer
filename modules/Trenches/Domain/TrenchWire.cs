@@ -1,6 +1,6 @@
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.Trenches.Domain
+namespace BoscaliSummer.Modules.Trenches.Domain
 {
     /// <summary>
     /// Pure wire contract for trench replication: protocol version, trace caps and the

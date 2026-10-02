@@ -1,12 +1,18 @@
 using NOAvionics;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>A kit v2 building block: measurable at a width, placeable in a slot, restylable on theme change.</summary>
     public abstract class AvPart
     {
         public RectTransform Rect { get; protected set; }
+
+        /// <summary>
+        /// Share of a page's leftover height this part absorbs (0 = natural height). A page whose content is shorter than
+        /// its viewport hands the difference to its growing parts, so no page ends in dead space.
+        /// </summary>
+        public float Grow;
         public virtual float Measure(float width) => Rect != null ? Rect.rect.height : 0f;
         public virtual void Place(AvSlot slot) { if (Rect != null) AvLay.Place(Rect, slot); }
         public virtual void Restyle() { }

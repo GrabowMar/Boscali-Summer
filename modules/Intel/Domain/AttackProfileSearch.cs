@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>
     /// The release-point search behind IThreatPicture.TryFindAttackProfile: 9 release points on

@@ -3,7 +3,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>Displays the aircraft's own HUD damage art without starting its audio or subscriptions.</summary>
     internal sealed class PlaneNativeDamageView

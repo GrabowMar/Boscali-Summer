@@ -3,16 +3,19 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Session.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Config;
+using BoscaliSummer.Modules.Session.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Session.Networking
+namespace BoscaliSummer.Modules.Session.Networking
 {
     /// <summary>A client with the mod says hello once it is in the mission, naming its version.</summary>
     [NetworkMessage]
@@ -409,7 +412,7 @@ namespace BoscaliSummer.Features.Session.Networking
 
         private static void Notice(HudTone tone, string text, string detail)
         {
-            if (!ModServices.TryGet(out IHudBoard board)) return;
+            if (!ModuleServices.TryGet(out IHudBoard board)) return;
             board.DeclareChannel(HudChannel, "SESSION");
             board.Notice(HudChannel, tone, text, detail);
         }

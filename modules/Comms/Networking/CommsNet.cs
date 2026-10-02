@@ -1,15 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.Comms.Domain;
-using BoscaliSummer.Features.Comms.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Comms.Networking
+namespace BoscaliSummer.Modules.Comms.Networking
 {
     /// <summary>A peer's request to the host. Mirrors <see cref="CommsIntent"/>.</summary>
     [NetworkMessage]

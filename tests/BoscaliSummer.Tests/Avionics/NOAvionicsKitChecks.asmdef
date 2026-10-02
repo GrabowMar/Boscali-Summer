@@ -1,5 +1,0 @@
-{
-  "name": "NOAvionicsKitChecks",
-  "references": ["Unity.TextMeshPro", "Unity.ugui"],
-  "includePlatforms": ["Editor"]
-}

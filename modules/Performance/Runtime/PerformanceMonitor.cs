@@ -1,11 +1,12 @@
 using BepInEx.Logging;
-using BoscaliSummer.Features.Performance.Domain;
-using BoscaliSummer.Features.Performance.Configuration;
-using BoscaliSummer.Framework.Fx;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Performance.Domain;
+using BoscaliSummer.Modules.Performance.Configuration;
+using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Performance.Runtime
+namespace BoscaliSummer.Modules.Performance.Runtime
 {
     internal sealed class PerformanceMonitor : MonoBehaviour, ISceneService
     {

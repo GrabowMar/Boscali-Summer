@@ -1,11 +1,10 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// The DESK tile and the EVENT LOG timeline. Both are module-local kit parts: they measure from their
@@ -14,26 +13,28 @@ namespace BoscaliSummer.Features.Events.Presentation
     /// </summary>
     internal sealed partial class EventsMfdPanel
     {
-        /// <summary>A clickable archive entry point: glyph, name, record count and one line about what is inside.</summary>
+        /// <summary>
+        /// A clickable archive door, four to a row: the section glyph, its name and its record count stacked in a
+        /// narrow tile. What is inside rides on the hover help.
+        /// </summary>
         private sealed class ArchiveTilePart : AvPart
         {
             private readonly AvFrame frame;
             private readonly Image rail;
-            private readonly TMP_Text glyph, arrow, title, count, blurb;
+            private readonly TMP_Text glyph, title, count;
             private bool hover;
 
-            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, string blurbText, Action onClick)
+            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, Action onClick)
             {
                 Rect = AvLay.Child(parent, "Tile " + titleText);
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
                 AvLay.Fill(frame.rectTransform);
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 glyph = AvIcons.Make(Rect, icon, AvGridTokens.IconTool, Color.white);
-                arrow = AvIcons.Make(Rect, AvIcon.ChevronRight, AvGridTokens.IconInline, Color.white);
                 title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText, TextAlignmentOptions.MidlineLeft);
                 AvText.Fit(title, false);
-                count = AvText.Make(Rect, "Count", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
-                blurb = AvText.Make(Rect, "Blurb", AvTextRole.ProseSmall, blurbText, TextAlignmentOptions.TopLeft, true);
+                count = AvText.Make(Rect, "Count", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                AvText.Fit(count, false);
                 AvHit hit = AvHit.On(frame);
                 hit.Hover = h => { hover = h; Restyle(); };
                 hit.Click = e => onClick?.Invoke();
@@ -46,35 +47,17 @@ namespace BoscaliSummer.Features.Events.Presentation
             {
                 if (count.text == text) return;
                 count.text = text ?? "";
-                Changed();
             }
 
-            public override float Measure(float width) => Arrange(width, false);
+            public override float Measure(float width) => 78f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                Arrange(s.W, true);
-            }
-
-            private float Arrange(float width, bool place)
-            {
-                float w = width - 24f;
-                float ch = count.text.Length > 0 ? AvText.Height(count, w) : 0f;
-                float bh = AvText.Height(blurb, w);
-                float total = 12f + 22f + 4f + (ch > 0f ? ch + 2f : 0f) + bh + 12f;
-                if (place)
-                {
-                    AvLay.Place(rail.rectTransform, 0f, 0f, 2f, total);
-                    AvLay.Place(glyph.rectTransform, 12f, 12f, 22f, 22f);
-                    AvLay.Place(title.rectTransform, 40f, 12f, width - 40f - 34f, 22f);
-                    AvLay.Place(arrow.rectTransform, width - 28f, 16f, 16f, 16f);
-                    float y = 12f + 22f + 4f;
-                    AvLay.Place(count.rectTransform, 12f, y, w, ch);
-                    if (ch > 0f) y += ch + 2f;
-                    AvLay.Place(blurb.rectTransform, 12f, y, w, bh);
-                }
-                return total;
+                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
+                AvLay.Place(glyph.rectTransform, 10f, 8f, 22f, 22f);
+                AvLay.Place(title.rectTransform, 10f, 32f, s.W - 16f, 20f);
+                AvLay.Place(count.rectTransform, 10f, 52f, s.W - 16f, 16f);
             }
 
             public override void Restyle()
@@ -83,11 +66,19 @@ namespace BoscaliSummer.Features.Events.Presentation
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                 rail.color = AvStyleHost.FuiColor(hover ? "select" : "info", AvTheme.RailInfo);
                 glyph.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-                arrow.color = AvStyleHost.FuiColor(hover ? "ink" : "ink-dim", AvTheme.Dim);
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 count.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-                blurb.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
             }
+        }
+
+        /// <summary>A clear hit layer over a part that shows its help in the console footer; the returned tip's Text can change live.</summary>
+        private static AvHelpTip HelpOn(AvPart part, string text)
+        {
+            if (part == null || part.Rect == null) return null;
+            Image hit = AvLay.Solid(part.Rect, "Help", Color.clear);
+            AvLay.Fill(hit.rectTransform);
+            hit.raycastTarget = true;
+            return AvHelpTip.Attach(hit.gameObject, text);
         }
 
         /// <summary>
@@ -121,6 +112,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                     names[i] = AvText.Make(Rect, "Name " + i, AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
                     effects[i] = AvText.Make(Rect, "Effect " + i, AvTextRole.DataSmall, "", TextAlignmentOptions.TopRight);
                     metas[i] = AvText.Make(Rect, "Meta " + i, AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
+                    names[i].raycastTarget = true;
                     nodes[i].gameObject.SetActive(false);
                     names[i].gameObject.SetActive(false);
                     effects[i].gameObject.SetActive(false);
@@ -160,10 +152,11 @@ namespace BoscaliSummer.Features.Events.Presentation
             public void Set(int i, string nameText, string metaText, string effectText, AvState tier, AvState effectState)
             {
                 if (i < 0 || i >= Capacity) return;
-                bool grew = names[i].text != nameText || metas[i].text != metaText || effects[i].text != effectText;
+                // The tier / target / age line rides on the name's hover help; the row itself stays one line.
+                AvHelpTip.Attach(names[i].gameObject, metaText);
+                bool grew = names[i].text != nameText || effects[i].text != effectText;
                 if (!grew && tiers[i] == tier && effectStates[i] == effectState) return;
                 names[i].text = nameText;
-                metas[i].text = metaText;
                 effects[i].text = effectText;
                 tiers[i] = tier;
                 effectStates[i] = effectState;

@@ -1,6 +1,6 @@
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// Kit v2 icon lookup for SQD chrome (spec §5.4: per-module glyph classes that are chrome

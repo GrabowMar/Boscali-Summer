@@ -1,16 +1,17 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Squad.Configuration;
-using BoscaliSummer.Features.Squad.Domain;
-using BoscaliSummer.Features.Squad.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Squad.Configuration;
+using BoscaliSummer.Modules.Squad.Domain;
+using BoscaliSummer.Modules.Squad.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Squad.Runtime
+namespace BoscaliSummer.Modules.Squad.Runtime
 {
     internal sealed class SquadManager : MonoBehaviour, ISceneService, ISquadView, IAircraftTaskExclusion
     {
@@ -111,9 +112,9 @@ namespace BoscaliSummer.Features.Squad.Runtime
         public int GetScoreOrigin(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.ScoreOrigin : 0 : id == localIdentity ? localOrigin : 0;
 
-        private BoscaliSummer.Framework.Features.ServiceRegistry services;
+        private BoscaliSummer.Core.Services.ServiceRegistry services;
         internal void Configure(SquadSettings config, SquadNet transport, ManualLogSource log,
-            BoscaliSummer.Framework.Features.ServiceRegistry registry)
+            BoscaliSummer.Core.Services.ServiceRegistry registry)
         {
             services = registry;
             settings = config; network = transport; logger = log; SquadRuntime.Active = this;

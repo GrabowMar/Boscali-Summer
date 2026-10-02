@@ -1,11 +1,11 @@
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Runtime;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Game;
+using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
     /// One contract's cockpit marker, drawn by the mod to look like the game's own cockpit

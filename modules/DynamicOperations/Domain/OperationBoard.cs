@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     internal enum OperationKind : byte
     {

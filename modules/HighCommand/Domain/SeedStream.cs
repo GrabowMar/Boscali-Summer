@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>
     /// Deterministic xorshift stream for generated identities. Every draw comes from the

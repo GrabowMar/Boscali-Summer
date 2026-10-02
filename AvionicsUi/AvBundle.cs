@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// The shared avionics UI bundle: FUI fonts, the icon font, the UI shaders and a noise texture.
@@ -25,6 +26,20 @@ namespace NOAvionics.Ui
 
         public static bool Available { get; private set; }
         public static Texture2D Noise => noise;
+        public static Texture2D Illustration(string name) => bundle != null ? bundle.LoadAsset<Texture2D>(name) : null;
+
+        public static void Engraving(RectTransform parent, float opacity)
+        {
+            Texture2D texture = Illustration("contour-engraving");
+            if (texture == null) return;
+            var go = new GameObject("Decorative engraving", typeof(RectTransform), typeof(CanvasRenderer));
+            go.transform.SetParent(parent, false);
+            AvLay.Fill((RectTransform)go.transform, 1f);
+            var image = go.AddComponent<RawImage>();
+            image.texture = texture;
+            image.color = new Color(1f, 1f, 1f, Mathf.Clamp01(opacity));
+            image.raycastTarget = false;
+        }
 
         public static void Load(Action<string> log = null)
         {
@@ -54,9 +69,9 @@ namespace NOAvionics.Ui
             attempted = true;
             try
             {
-                // Another plugin (Wing Command) may already hold the same bundle; reuse it.
+                // Reuse only this asset revision; other mods can carry the older shared bundle.
                 foreach (AssetBundle loaded in AssetBundle.GetAllLoadedAssetBundles())
-                    if (loaded != null && loaded.name == "avionics-ui.bundle") { bundle = loaded; break; }
+                    if (loaded != null && loaded.name == "boscali-mfd-ui.bundle") { bundle = loaded; break; }
                 if (bundle == null) bundle = AssetBundle.LoadFromMemory(bytes);
                 if (bundle == null) { log?.Invoke("avionics-ui.bundle failed to load; using vanilla fonts, no UI effects"); return; }
 

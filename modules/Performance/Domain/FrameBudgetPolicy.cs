@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Performance.Domain
+namespace BoscaliSummer.Modules.Performance.Domain
 {
     /// <summary>Pure, bounded frame-pacing hysteresis. Inputs are local rendered-frame intervals.</summary>
     internal sealed class FrameBudgetPolicy

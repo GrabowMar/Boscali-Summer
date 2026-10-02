@@ -1,20 +1,20 @@
-using System;
-using BoscaliSummer.Features.Events.Domain;
-using BoscaliSummer.Features.Events.Runtime;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Events.Domain;
+using BoscaliSummer.Modules.Events.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     internal sealed partial class EventsMfdPanel
     {
         /// <summary>
         /// The response desk: four bounded routes (allocation / treasury / contract / pilot channel) as a 2x2
-        /// grid of choice cards. Each card carries the route name, its scope, the support price it would set,
-        /// its cost and one CHOOSE action; the chosen route latches in the game's accent and reads IN FORCE.
+        /// grid of compact choice cards. Each card carries the route name and scope beside the support price it
+        /// would set, its cost and one CHOOSE action; the chosen route latches in the game's accent and reads
+        /// IN FORCE. What the price means rides on the CHOOSE button's hover help.
         /// Quotes are read-only; the host validates every order. When the dispatch does not price this side
         /// the desk is one compact note instead of four locked cards.
         /// </summary>
@@ -145,17 +145,15 @@ namespace BoscaliSummer.Features.Events.Presentation
                 bool priced = aimedAtLocal && allocation != EventResponseKind.None;
 
                 string caption = selected == EventResponseKind.None
-                    ? priced ? "CHOOSE ONE RESPONSE" : "NO PRICE DIRECTIVE"
+                    ? priced ? "CHOOSE ONE" : "NO PRICE"
                     : faction != EventResponseKind.None && faction != selected
-                        ? "PILOT + FACTION DIRECTIVES"
+                        ? "PILOT + FACTION"
                         : EventsManager.ResponseLabel(selected) + " · COMMITTED";
 
                 if (!priced)
                 {
                     for (int i = 0; i < Count; i++) routes[i] = EventResponseKind.None;
-                    SetNote("NO RESPONSE NEEDED", aimedAtLocal
-                        ? "This dispatch is flavour only. It does not change your support prices."
-                        : "This dispatch is aimed at the other side. Your support prices are unchanged.");
+                    SetNote("NO RESPONSE NEEDED", aimedAtLocal ? "FLAVOUR ONLY" : "OTHER SIDE");
                     return caption;
                 }
 
@@ -173,9 +171,7 @@ namespace BoscaliSummer.Features.Events.Presentation
 
                     string payment = quote.Cost > 0 ? AvNum.Fixed(quote.Cost, 0) + " " + quote.Unit : quote.Unit;
                     string scope = quote.Shared ? "FACTION-WIDE" : "PERSONAL";
-                    string note = chosen
-                        ? faction == kind ? "In force for your whole side until the event ends." : "In force for you until the event ends."
-                        : quote.Reason ?? "";
+                    string note = chosen ? "IN FORCE" : quote.Reason ?? "";
                     string help = chosen ? "This response is in force for the rest of the event." :
                         quote.Available ? quote.Label + " costs " + payment +
                             " and changes this side's support price to x" +
@@ -195,7 +191,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 private const float PadX = 10f, ButtonHeight = 28f;
                 private readonly AvFrame frame;
                 private readonly Image rail;
-                private readonly TMP_Text name, scope, effect, effectKey, cost, note;
+                private readonly TMP_Text name, scope, effect, cost, note;
                 private readonly AvControl button;
                 private bool chosen, enabled;
 
@@ -209,9 +205,8 @@ namespace BoscaliSummer.Features.Events.Presentation
                     rail = AvLay.Solid(Root, "Rail", Color.clear);
                     name = AvText.Make(Root, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
                     scope = AvText.Make(Root, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
-                    effect = AvText.Make(Root, "Effect", AvTextRole.Display, "", TextAlignmentOptions.MidlineLeft);
-                    effectKey = AvText.Make(Root, "EffectKey", AvTextRole.Micro, "SUPPORT PRICE", TextAlignmentOptions.MidlineRight);
-                    AvText.Fit(effectKey, false);
+                    effect = AvText.Make(Root, "Effect", AvTextRole.Display, "", TextAlignmentOptions.MidlineRight);
+                    AvText.Fit(effect, false);
                     cost = AvText.Make(Root, "Cost", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft, true);
                     note = AvText.Make(Root, "Note", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                     button = AvControl.Make(Root, new AvControl.Spec("CHOOSE", onChoose, AvButtonStyle.Primary));
@@ -238,34 +233,36 @@ namespace BoscaliSummer.Features.Events.Presentation
                     return grew;
                 }
 
+                // Name and scope stack on the left; the price it would set is the big number on the right.
+                private float PriceWidth => Mathf.Ceil(AvText.Width(effect)) + 4f;
+
                 public float Measure(float width)
                 {
                     float w = width - 2f * PadX;
-                    float h = 10f + AvText.Height(name, w) + 1f + AvText.Height(scope, w) + 6f + 32f + 2f + 16f + 4f;
-                    if (note.text.Length > 0) h += AvText.Height(note, w) + 4f;
-                    return h + 2f + ButtonHeight + 10f;
+                    float nameW = Mathf.Max(30f, w - PriceWidth - 6f);
+                    float head = Mathf.Max(32f, AvText.Height(name, nameW) + 1f + AvText.Height(scope, nameW));
+                    float h = 8f + head + 2f + 16f;
+                    if (note.text.Length > 0) h += 2f + AvText.Height(note, w);
+                    return h + 6f + ButtonHeight + 8f;
                 }
 
                 public void Place(float x, float y, float width, float height)
                 {
                     AvLay.Place(Root, x, y, width, height);
-                    float w = width - 2f * PadX, cy = 10f;
+                    float w = width - 2f * PadX, cy = 8f;
                     AvLay.Place(rail.rectTransform, 0f, 0f, 2f, height);
-                    float nh = AvText.Height(name, w);
-                    AvLay.Place(name.rectTransform, PadX, cy, w, nh);
-                    cy += nh + 1f;
-                    float sh = AvText.Height(scope, w);
-                    AvLay.Place(scope.rectTransform, PadX, cy, w, sh);
-                    cy += sh + 6f;
-                    float ew = Mathf.Ceil(AvText.Width(effect)) + 4f;
-                    AvLay.Place(effect.rectTransform, PadX, cy, ew, 32f);
-                    AvLay.Place(effectKey.rectTransform, PadX + ew + 6f, cy + 12f, Mathf.Max(30f, w - ew - 6f), 15f);
-                    cy += 32f;
+                    float pw = PriceWidth, nameW = Mathf.Max(30f, w - pw - 6f);
+                    float nh = AvText.Height(name, nameW), sh = AvText.Height(scope, nameW);
+                    float head = Mathf.Max(32f, nh + 1f + sh);
+                    AvLay.Place(name.rectTransform, PadX, cy, nameW, nh);
+                    AvLay.Place(scope.rectTransform, PadX, cy + nh + 1f, nameW, sh);
+                    AvLay.Place(effect.rectTransform, PadX + w - pw, cy, pw, 32f);
+                    cy += head + 2f;
                     AvLay.Place(cost.rectTransform, PadX, cy, w, 16f);
-                    cy += 20f;
+                    cy += 16f;
                     float noteH = note.text.Length > 0 ? AvText.Height(note, w) : 0f;
-                    AvLay.Place(note.rectTransform, PadX, cy, w, noteH);
-                    AvLay.Place(button.Rect, PadX, height - 10f - ButtonHeight, w, ButtonHeight);
+                    AvLay.Place(note.rectTransform, PadX, cy + (noteH > 0f ? 2f : 0f), w, noteH);
+                    AvLay.Place(button.Rect, PadX, height - 8f - ButtonHeight, w, ButtonHeight);
                 }
 
                 public void Restyle()
@@ -279,7 +276,6 @@ namespace BoscaliSummer.Features.Events.Presentation
                     scope.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     effect.color = chosen ? AvStyleHost.FuiColor("select", AvTheme.Accent)
                         : enabled ? AvStyleHost.FuiColor("ready", AvTheme.RailInfo) : AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                    effectKey.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     cost.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                     note.color = chosen ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     button.Restyle();

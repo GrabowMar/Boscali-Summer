@@ -1,7 +1,7 @@
 using BepInEx.Configuration;
-using BoscaliSummer.Features.Autopilot.Domain;
+using BoscaliSummer.Modules.Autopilot.Domain;
 
-namespace BoscaliSummer.Features.Autopilot.Configuration
+namespace BoscaliSummer.Modules.Autopilot.Configuration
 {
     internal sealed class AutopilotSettings
     {

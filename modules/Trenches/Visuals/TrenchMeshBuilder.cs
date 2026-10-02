@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Visuals
+namespace BoscaliSummer.Modules.Trenches.Visuals
 {
     /// <summary>
     /// Generates the carved trench ditch: a raised earthwork with a dry floor, a firing
@@ -283,6 +283,74 @@ namespace BoscaliSummer.Features.Trenches.Visuals
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        /// <summary>
+        /// Overhead cover over the fire ditch: timber-and-earth roof panels between the open
+        /// firing bays, the drone-age answer to observation and plunging fire from above.
+        /// Panels keep clear of bay nodes (nests stand in the open bays), ride the ditch
+        /// centreline low over the floor, and span wall to wall so each reads as a roofed
+        /// length of trench. LOD0 only, like the wire belts.
+        /// </summary>
+        public static Mesh BuildOverheadCoverMesh(Vector3[] path, float width, Vector3[] nodes)
+        {
+            if (path == null || path.Length < 2) return null;
+
+            const float CoverHeight = 0.55f;
+            const float CoverU = 0.375f;   // the palette's duckboard band: timber roof under earth
+            float span = width + TrenchTraceMath.CoverSpanExtra;
+
+            var mesh = new Mesh { name = "Trench_Cover_Mesh" };
+            var vertices = new List<Vector3>(TrenchTraceMath.MaximumCoverSpans * 8);
+            var uvs = new List<Vector2>(TrenchTraceMath.MaximumCoverSpans * 8);
+            var triangles = new List<int>(TrenchTraceMath.MaximumCoverSpans * 12);
+
+            float sincePanel = TrenchTraceMath.CoverSpacing;
+            float arc = 0f;
+            int spans = 0;
+            for (int i = 1; i < path.Length && spans < TrenchTraceMath.MaximumCoverSpans; i++)
+            {
+                Vector3 delta = path[i] - path[i - 1];
+                float segment = delta.magnitude;
+                if (segment < 0.01f) continue;
+                arc += segment;
+                sincePanel += segment;
+                if (sincePanel < TrenchTraceMath.CoverSpacing) continue;
+                sincePanel = 0f;
+
+                Vector3 center = path[i] + Vector3.up * CoverHeight;
+                if (NearBayNode(center, nodes)) continue;
+
+                Vector3 tangent = delta / segment;
+                Vector3 lateral = Lateral(delta, Vector3.right);
+                Vector3 along = tangent * (TrenchTraceMath.CoverLength * 0.5f);
+                Vector3 across = lateral * (span * 0.5f);
+                float v = arc * 0.34f;
+                // Wound both ways: the roof reads from the air above and the ditch below,
+                // whichever way the path runs.
+                AddBlade(vertices, uvs, triangles, center - along, center + along, across,
+                    CoverU, v, v + TrenchTraceMath.CoverLength * 0.34f);
+                AddBlade(vertices, uvs, triangles, center + along, center - along, across,
+                    CoverU, v, v + TrenchTraceMath.CoverLength * 0.34f);
+                spans++;
+            }
+
+            if (triangles.Count == 0) return null;
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        private static bool NearBayNode(Vector3 point, Vector3[] nodes)
+        {
+            if (nodes == null) return false;
+            for (int i = 0; i < nodes.Length; i++)
+                if (TrenchTraceMath.WithinCoverClearance(point.x, point.z, nodes[i].x, nodes[i].z))
+                    return true;
+            return false;
         }
 
         /// <summary>One flat blade: a quad of width <paramref name="across"/> between two points.</summary>

@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.HighCommand.Domain;
-using BoscaliSummer.Features.HighCommand.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.HighCommand.Domain;
+using BoscaliSummer.Modules.HighCommand.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.HighCommand.Networking
+namespace BoscaliSummer.Modules.HighCommand.Networking
 {
     [NetworkMessage]
     internal struct HighCommandQuery

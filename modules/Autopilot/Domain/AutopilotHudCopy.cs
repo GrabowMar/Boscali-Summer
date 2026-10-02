@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
     /// The landing-autopilot widget's copy, pure so the test project links it directly. The

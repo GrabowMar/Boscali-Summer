@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace BoscaliSummer.Features.Hud.Domain
+namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// The parsed form of the `DisabledChannels` setting: a CSV of channel keys the pilot muted.

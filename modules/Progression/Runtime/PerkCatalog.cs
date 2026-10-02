@@ -1,7 +1,7 @@
 using System;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Progression.Runtime
+namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>
     /// One grade of a qualification: a lane, the grade it occupies, and either a multiplier

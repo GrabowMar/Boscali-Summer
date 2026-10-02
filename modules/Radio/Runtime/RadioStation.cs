@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     internal sealed class RadioStationTrack
     {

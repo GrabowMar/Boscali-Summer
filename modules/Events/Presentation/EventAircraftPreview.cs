@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// A selected aircraft's render meshes, with no Unit, colliders, audio or network objects.
@@ -43,7 +43,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             camera = cameraObject.GetComponent<Camera>();
             camera.enabled = false;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = new Color(.035f, .065f, .075f, 1f);
+            camera.backgroundColor = new Color(.02f, .031f, .047f, 1f);
             camera.cullingMask = 1 << PreviewLayer;
             camera.fieldOfView = 32f;
             camera.targetTexture = texture;

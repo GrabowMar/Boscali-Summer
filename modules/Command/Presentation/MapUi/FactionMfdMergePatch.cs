@@ -1,10 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using TMPro;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>Keeps both native HQ controllers while offering one faction bezel.</summary>
     [HarmonyPatch]

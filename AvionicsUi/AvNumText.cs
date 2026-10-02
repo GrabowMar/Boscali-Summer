@@ -1,7 +1,7 @@
 using System;
 using TMPro;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// A numeric TMP label formatted with <see cref="AvNumFormat"/> instead of string

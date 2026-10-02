@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Radio.Domain
+namespace BoscaliSummer.Modules.Radio.Domain
 {
     internal enum InterceptKind : byte
     {

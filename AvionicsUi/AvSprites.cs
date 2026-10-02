@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Cached panel and control masks. Widget masks are white so the

@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// JTAC mark. The SOF team lases the nearest hostile unit (buildings included)
@@ -16,8 +16,7 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// </summary>
     internal sealed class MarkAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) =>
-            context.Settings.JtacMarkCost.Value * context.Settings.CostMultiplier.Value;
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {

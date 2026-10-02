@@ -1,13 +1,14 @@
 using System.Collections.Generic;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
     /// The cockpit half of the contract HUD, drawn entirely by the mod in vanilla's own

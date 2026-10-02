@@ -1,7 +1,7 @@
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     [HarmonyPatch(typeof(PilotDismounted), nameof(PilotDismounted.Capture))]
     internal static class OperationRescuePatch

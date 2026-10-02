@@ -1,12 +1,12 @@
 using System;
-using BoscaliSummer.Infrastructure.Diagnostics;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.PlayerSpawnPriority
+namespace BoscaliSummer.Modules.PlayerSpawnPriority
 {
     [HarmonyPatch(typeof(Hangar), nameof(Hangar.TrySpawnAircraft))]
     internal static class PlayerSpawnPriorityPatch

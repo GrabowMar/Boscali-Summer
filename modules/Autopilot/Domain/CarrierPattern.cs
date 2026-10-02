@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     internal enum CarrierLeg
     {

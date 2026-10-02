@@ -1,10 +1,9 @@
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
     /// Kit v2 building blocks shared by the STR console and its floating operations room.
@@ -22,6 +21,23 @@ namespace BoscaliSummer.Features.Command.Presentation
             AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabs.Length && i < hints.Length; i++)
                 if (hints[i] != null) tabs[i].Help = hints[i];
+        }
+    }
+
+    /// <summary>Hover help for the console's header tiles (the kit gives metrics no help seam; the tile's frame takes one).</summary>
+    internal static class StrTips
+    {
+        public static void Metric(AvMetric metric, string tip)
+        {
+            if (metric == null || metric.Rect == null) return;
+            Transform frame = metric.Rect.Find("Frame");
+            var graphic = frame != null ? frame.GetComponent<AvFrame>() : null;
+            if (graphic == null) return;
+            graphic.raycastTarget = true;
+            // The header tiles live on the console's non-interactive "live" canvas; hover needs a raycaster there.
+            Canvas host = metric.Rect.GetComponentInParent<Canvas>();
+            if (host != null && host.GetComponent<GraphicRaycaster>() == null) host.gameObject.AddComponent<GraphicRaycaster>();
+            AvHelpTip.Attach(graphic.gameObject, tip);
         }
     }
 
@@ -145,11 +161,18 @@ namespace BoscaliSummer.Features.Command.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float w = TextW(s.W), th = AvText.Height(title, w);
-            AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-            AvLay.Place(icon.rectTransform, PadX, PadY - 1f, IconW, 22f);
-            AvLay.Place(title.rectTransform, PadX + IconW + 4f, PadY, w, th);
-            AvLay.Place(body.rectTransform, PadX + IconW + 4f, PadY + th + 3f, w, AvText.Height(body, w));
+            float w = TextW(s.W), th = AvText.Height(title, w), bh = AvText.Height(body, w);
+            float content = th + (body.text.Length > 0 ? 3f + bh : 0f);
+            // A note that soaks up leftover height draws a compact card centred in the slot: a frame
+            // stretched across the whole well reads as an empty container, not an empty state.
+            float h0 = Mathf.Min(s.H, Mathf.Max(AvGridTokens.Row + 8f, PadY + content + PadY));
+            float y0 = (s.H - h0) * 0.5f;
+            float top = y0 + Mathf.Max(PadY, (h0 - content) * 0.5f);
+            AvLay.Place(frame.rectTransform, 0f, y0, s.W, h0);
+            AvLay.Place(rail.rectTransform, 0f, y0, 2f, h0);
+            AvLay.Place(icon.rectTransform, PadX, top - 1f, IconW, 22f);
+            AvLay.Place(title.rectTransform, PadX + IconW + 4f, top, w, th);
+            AvLay.Place(body.rectTransform, PadX + IconW + 4f, top + th + 3f, w, bh);
         }
 
         public override void Restyle()
@@ -227,12 +250,12 @@ namespace BoscaliSummer.Features.Command.Presentation
                 Seg seg = segs[i];
                 if (i == current)
                 {
-                    seg.Frame.Paint(c.WithAlpha(0.5f), c);
+                    seg.Frame.Paint(c.WithAlpha(0.20f), c);
                     seg.Text.color = StrPaint.Ink;
                 }
                 else if (i < current)
                 {
-                    seg.Frame.Paint(c.WithAlpha(0.2f), c.WithAlpha(0.55f));
+                    seg.Frame.Paint(c.WithAlpha(0.06f), c.WithAlpha(0.4f));
                     seg.Text.color = StrPaint.Dim;
                 }
                 else
@@ -245,30 +268,34 @@ namespace BoscaliSummer.Features.Command.Presentation
     }
 
     /// <summary>
-    /// A readout tile: key, one big mono figure, a wrapped caption and an optional share bar. Tiles in
-    /// one flow row grow to the tallest neighbour, so a 2x2 grid never has ragged frames.
+    /// A compact readout tile: icon + key on the first line, one big mono figure under it and a share bar on
+    /// the floor. Four of them share one row. What used to be a wrapped caption rides on the hover help.
     /// </summary>
     internal sealed class StrTile : AvPart
     {
-        private const float PadX = 10f;
+        public const float TileHeight = 58f;
+        private const float PadX = 8f;
         private readonly AvFrame frame;
         private readonly Image rail;
-        private readonly TMP_Text key, value, sub;
+        private readonly TMP_Text icon, key, value;
         private readonly AvGaugeGraphic bar;
+        private readonly string keyText;
         private AvState state = AvState.Info;
         private bool hasBar;
+        private string help = "", caption = "";
 
         public StrTile(RectTransform parent, AvIcon glyph, string keyText)
         {
+            this.keyText = keyText;
             Rect = AvLay.Child(parent, "Tile " + keyText);
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
             AvLay.Fill(frame.rectTransform);
+            frame.raycastTarget = true;
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconInline, Color.white);
             key = StrPaint.Fit(Rect, "Key", AvTextRole.Micro);
             key.text = keyText;
             value = StrPaint.Fit(Rect, "Value", AvTextRole.Display);
-            sub = AvText.Make(Rect, "Sub", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             var go = new GameObject("Bar", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             bar = go.AddComponent<AvGaugeGraphic>();
@@ -278,42 +305,37 @@ namespace BoscaliSummer.Features.Command.Presentation
             Restyle();
         }
 
-        private readonly TMP_Text icon;
-
-        public void Set(string figure, string caption, AvState s, float share = -1f)
+        public void Set(string figure, string captionText, AvState s, float share = -1f)
         {
             bool changed = StrPaint.Put(value, figure);
-            changed |= StrPaint.Put(sub, string.IsNullOrEmpty(caption) ? "" : AvStates.Glyph(s) + caption);
+            caption = captionText ?? "";
+            // Status is never colour alone: a tile in caution or danger prints the glyph before its key.
+            StrPaint.Put(key, AvStates.Glyph(s) + keyText);
             bool wantBar = share >= 0f;
             if (wantBar != hasBar) { hasBar = wantBar; bar.gameObject.SetActive(wantBar); changed = true; }
             if (wantBar) bar.Value = share;
             if (s != state) { state = s; Restyle(); }
+            PushHelp();
             if (changed) Changed();
         }
 
-        public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
+        /// <summary>What the tile counts (the live caption is appended on hover).</summary>
+        public string Help { set { help = value ?? ""; PushHelp(); } }
 
-        private float SubW(float width) => Mathf.Max(20f, width - 2f * PadX);
+        private void PushHelp() =>
+            AvHelpTip.Attach(frame.gameObject, caption.Length == 0 ? help : help + " Now: " + caption + ".");
 
-        public override float Measure(float width) =>
-            8f + 15f + 30f + (sub.text.Length > 0 ? 1f + AvText.Height(sub, SubW(width)) : 0f) + (hasBar ? 10f : 0f) + 8f;
+        public override float Measure(float width) => TileHeight;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float w = SubW(s.W);
+            float w = Mathf.Max(20f, s.W - 2f * PadX);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-            AvLay.Place(icon.rectTransform, PadX, 8f, 16f, 15f);
-            AvLay.Place(key.rectTransform, PadX + 20f, 8f, w - 20f, 15f);
-            AvLay.Place(value.rectTransform, PadX, 23f, w, 30f);
-            float y = 53f;
-            if (sub.text.Length > 0)
-            {
-                float h = AvText.Height(sub, w);
-                AvLay.Place(sub.rectTransform, PadX, y, w, h);
-                y += h + 1f;
-            }
-            AvLay.Place((RectTransform)bar.transform, PadX, s.H - 11f, w, 3f);
+            AvLay.Place(icon.rectTransform, PadX, 7f, 14f, 15f);
+            AvLay.Place(key.rectTransform, PadX + 18f, 6f, w - 18f, 15f);
+            AvLay.Place(value.rectTransform, PadX, 20f, w, 30f);
+            AvLay.Place((RectTransform)bar.transform, PadX, s.H - 7f, w, 3f);
         }
 
         public override void Restyle()
@@ -325,7 +347,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             key.color = StrPaint.Key;
             value.color = state == AvState.Info || state == AvState.Ready || state == AvState.Inert
                 ? StrPaint.Ink : StrPaint.State(state);
-            sub.color = StrPaint.Dim;
             bar.Track = StrPaint.Hairline;
             bar.FillColor = bar.FillEnd = c;
             bar.SetVerticesDirty();
@@ -335,7 +356,8 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// <summary>
     /// A vertical stack of parts that is itself one part, so a two-column flow row can hold "a card, its
     /// empty-state note and a button" in one column. Hidden children collapse; a child's Changed() reaches
-    /// the flow through the stack.
+    /// the flow through the stack; children with <see cref="AvPart.Grow"/> share the height the row gives
+    /// the stack beyond its natural height.
     /// </summary>
     internal sealed class StrStack : AvPart
     {
@@ -363,12 +385,17 @@ namespace BoscaliSummer.Features.Command.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
+            // A column that is shorter than its row hands the leftover height to its growing children.
+            float weights = 0f;
+            for (int i = 0; i < children.Count; i++)
+                if (children[i].Shown) weights += children[i].Grow;
+            float extra = weights > 0f ? Mathf.Max(0f, s.H - Measure(s.W)) : 0f;
             float y = 0f;
             for (int i = 0; i < children.Count; i++)
             {
                 AvPart c = children[i];
                 if (!c.Shown) continue;
-                float h = c.Measure(s.W);
+                float h = c.Measure(s.W) + (extra > 0f ? extra * c.Grow / weights : 0f);
                 c.Place(new AvSlot(0f, y, s.W, h));
                 y += h + Gap;
             }

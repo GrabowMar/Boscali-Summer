@@ -1,15 +1,15 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Features.Progression.Domain;
-using BoscaliSummer.Features.Progression.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Progression.Networking
+namespace BoscaliSummer.Modules.Progression.Networking
 {
     /// <summary>Client intent: a perk id, or <see cref="ProgressionNet.QueryOnly"/> for a snapshot.</summary>
     [NetworkMessage]

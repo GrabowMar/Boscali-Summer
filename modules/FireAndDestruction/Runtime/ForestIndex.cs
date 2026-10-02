@@ -1,7 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 #if !NET8_0_OR_GREATER
 using NuclearOption.Effects;
 using UnityEngine;

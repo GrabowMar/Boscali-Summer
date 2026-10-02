@@ -1,10 +1,9 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>The THIS PILOT / SERVER switch and the two consoles it flips between.</summary>
     internal sealed partial class SettingsMfdPanel
@@ -22,14 +21,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             AvConsole c = AvConsole.Build(body, "SET", names[0], names.Length, AvTokens.PanelWidth, height);
             c.PageChanged += index => c.SetTitle(names[index]);
 
-            AvChip[] chips = c.Chips(2);
-
-            // The kit has no slot for a control between the chips and the tabs. A hidden metric reserves one
+            // The kit has no slot for a control between the header and the tabs. A hidden metric reserves one
             // metric-height strip there and the mode switch (a module-local part) is drawn over exactly that strip.
+            // The old chip strip (SAVED / HOST) is gone: the switch's status line says the same thing.
             AvMetric[] band = c.Metrics("MODE");
             band[0].SetShown(false);
             var mode = new ModeSwitch(c.Root, SwitchMode);
-            mode.Place(new AvSlot(AvGridTokens.Pad, AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f,
+            mode.Place(new AvSlot(AvGridTokens.Pad, AvGridTokens.Header + 4f,
                 AvTokens.PanelWidth - 2f * AvGridTokens.Pad, AvGridTokens.Metric));
             c.Ticker.Register(mode);
 
@@ -55,20 +53,22 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                         (AvIcon.Typography, "DISPLAY"),
                         (AvIcon.Map2, "MAP"),
                         (AvIcon.Eye, "COCKPIT"),
+                        (AvIcon.WaveSine, "IMMERSION"),
                         (AvIcon.Gauge, "PERF")),
-                    "Glass, CRT, tint, theme, motion and interface audio.",
-                    "Map layout, terrain, backdrop imagery and the news ticker.",
-                    "Target camera, radial presets and the common HUD element.",
-                    "Client-local work budgets. Each switch applies during this mission. " +
-                    "Installing a disabled Weather module requires a game restart.");
+                    "Glass, surface texture, tint, motion and interface audio, with a live preview of the finish.",
+                    "Map layout, terrain, backdrop imagery and the news ticker, with a layout schematic.",
+                    "Target camera, radial presets and the common HUD element, with a sample of it.",
+                    "Cockpit head inertia, camera vibrations, Mach buffeting, sun glare, G-vignette, and aerodynamic audio.",
+                    "Client-local work budgets and panel effects, with a live frame-time trace. Each switch applies " +
+                    "during this mission. Installing a disabled Weather module requires a game restart.");
                 BuildDisplayPage(c.Page(CDisplay), CDisplay);
                 BuildMapPage(c.Page(CMap), CMap);
                 BuildCockpitPage(c.Page(CCockpit), CCockpit);
+                BuildImmersionPage(c.Page(CImmersion), CImmersion);
                 BuildPerformancePage(c.Page(CPerf), CPerf);
             }
 
-            AvChip saved = chips[0], role = chips[1];
-            c.Ticker.Add(-1, AvTickRate.Slow, () => RefreshChrome(c, saved, role, mode, server));
+            c.Ticker.Add(-1, AvTickRate.Slow, () => RefreshChrome(c, mode, server));
             c.Finish();
             return c;
         }
@@ -90,16 +90,17 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// The two big segments under the header: what you are editing and who can change it. Not a kit part
-        /// (the kit has no console-level mode control), built from kit v2 controls.
+        /// The two big segments under the header (what you are editing and who can change it) with a status line
+        /// under them: the scope on the left, the role on the right. Not a kit part (the kit has no console-level
+        /// mode control), built from kit v2 controls.
         /// </summary>
         private sealed class ModeSwitch : AvPart
         {
-            private const float ButtonH = 36f;
+            private const float ButtonH = 30f, LineH = 15f;
             private readonly AvControl pilot, server;
-            private readonly TMP_Text note;
+            private readonly TMP_Text scope, role;
             private readonly TMP_Text serverGlyph;
-            private bool lockedIcon;
+            private bool lockedIcon, hostShown = true;
             private string shown = "";
 
             public ModeSwitch(RectTransform parent, Action<bool> pick)
@@ -113,7 +114,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 server.Help = "Rules of this game. Host-authoritative: the host can change them, " +
                               "everyone else sees them locked.";
                 serverGlyph = server.transform.Find("Icon " + AvIcon.Database)?.GetComponent<TMP_Text>();
-                note = AvText.Make(Rect, "Note", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+                scope = AvText.Make(Rect, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                AvText.Fit(scope, false);
+                role = AvText.Make(Rect, "Role", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+                AvText.Fit(role, false);
                 Restyle();
             }
 
@@ -129,13 +133,16 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     AvIcons.Set(serverGlyph, locked ? AvIcon.Lock : AvIcon.Database, AvGridTokens.IconInline);
                 }
                 string text = !serverMode
-                    ? "Your machine only. Nobody else sees these. Saved automatically."
+                    ? "YOUR MACHINE ONLY · SAVED AUTOMATICALLY"
                     : host
-                        ? "You are the host. Changes apply to everyone on this server."
-                        : "Locked. The host decides these; you can read the values.";
-                if (text == shown) return;
-                shown = text;
-                note.text = text;
+                        ? "YOU ARE THE HOST · CHANGES APPLY TO EVERYONE"
+                        : AvStates.Glyph(AvState.Caution) + "LOCKED · THE HOST DECIDES, YOU CAN READ THEM";
+                string who = host ? "HOST" : "CLIENT";
+                if (text == shown && host == hostShown) return;
+                shown = text; hostShown = host;
+                scope.text = text;
+                role.text = who;
+                Restyle();
             }
 
             public override float Measure(float width) => AvGridTokens.Metric;
@@ -146,14 +153,19 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 float half = (s.W - 4f) * 0.5f;
                 AvLay.Place(pilot.Rect, 0f, 0f, half, ButtonH);
                 AvLay.Place(server.Rect, half + 4f, 0f, half, ButtonH);
-                AvLay.Place(note.rectTransform, 2f, ButtonH + 5f, s.W - 4f, s.H - ButtonH - 5f);
+                float y = ButtonH + 2f;
+                AvLay.Place(scope.rectTransform, 2f, y, s.W * 0.78f, LineH);
+                AvLay.Place(role.rectTransform, s.W * 0.78f + 2f, y, s.W * 0.22f - 4f, LineH);
             }
 
             public override void Restyle()
             {
                 pilot.Restyle();
                 server.Restyle();
-                note.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                scope.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                role.color = hostShown
+                    ? AvStyleHost.FuiColor("ready", AvTheme.RailReady)
+                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
             }
         }
     }

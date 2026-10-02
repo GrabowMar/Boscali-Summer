@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Intel.Domain;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Intel.Domain;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Intel.Runtime
+namespace BoscaliSummer.Modules.Intel.Runtime
 {
     /// <summary>
     /// One faction's own knowledge: the hostiles its tracking database holds, the pre-war sites

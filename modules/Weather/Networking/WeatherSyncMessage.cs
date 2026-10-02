@@ -1,6 +1,6 @@
 using Mirage;
 
-namespace BoscaliSummer.Features.Weather.Networking
+namespace BoscaliSummer.Modules.Weather.Networking
 {
     /// <summary>
     /// Lightweight periodic host-to-client weather state broadcast.

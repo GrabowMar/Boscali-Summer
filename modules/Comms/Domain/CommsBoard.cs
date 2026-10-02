@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Comms.Domain
+namespace BoscaliSummer.Modules.Comms.Domain
 {
     /// <summary>What a map item is. Values are wire bytes; append only.</summary>
     internal enum CommsItemKind : byte

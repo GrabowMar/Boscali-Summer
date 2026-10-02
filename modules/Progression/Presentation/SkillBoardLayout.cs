@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// The SKILLS board's arithmetic, kept out of the panel so a test can hold the one

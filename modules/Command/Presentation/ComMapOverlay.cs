@@ -1,16 +1,18 @@
 using System;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Patches;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
-using BoscaliSummer.Features.Command.Runtime;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Modules.Command.Patches;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using BoscaliSummer.Modules.Command.Runtime;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     internal sealed class ComMapOverlay : MonoBehaviour, ISceneService
     {

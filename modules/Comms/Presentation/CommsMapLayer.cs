@@ -1,19 +1,20 @@
+using NOAvionics;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Comms.Configuration;
-using BoscaliSummer.Features.Comms.Domain;
-using BoscaliSummer.Features.Comms.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Comms.Configuration;
+using BoscaliSummer.Modules.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     /// <summary>
     /// The shared comms on the tactical map. Everything is parented to the map image, so it
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             float factor = map.mapDisplayFactor;
             if (!(zoom > 1e-4f) || !(factor > 1e-6f)) return;
             bool zoomed = Mathf.Abs(zoom - lastZoom) > Mathf.Max(0.0005f, lastZoom * 0.01f);
-            bool projected = ModServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            bool projected = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
             int projectionRevision = projected ? projection.Revision : 0;
             if (projected != lastProjectionActive || projectionRevision != lastProjectionRevision)
             {
@@ -268,9 +269,11 @@ namespace BoscaliSummer.Features.Comms.Presentation
             root.sizeDelta = new Vector2(Width, Height);
 
             plate = AvFrame.Add(root, "Plate", AvChamfer.All(0f));
-            plate.Stroke = 0f;
+            plate.Stroke = 1f;
+            plate.Bracket = 4f;
             plate.raycastTarget = false;
-            plate.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.62f), Color.clear);
+            // Portal: hairline frame plus corner brackets in the caption's own tone.
+            plate.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.7f), AvTheme.Hairline.WithAlpha(0.45f));
             plate.rectTransform.anchorMin = plate.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             plate.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             plate.rectTransform.anchoredPosition = Vector2.zero;
@@ -302,6 +305,11 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 plate.rectTransform.sizeDelta = new Vector2(width, AvTypeScale.Of(role).Size + 5f);
             }
             label.color = colour;
+            if (plate.BracketColor != colour)
+            {
+                plate.BracketColor = colour;
+                plate.SetVerticesDirty();
+            }
         }
 
         public void SetVisible(bool visible)
@@ -572,7 +580,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
     {
         internal static Vector2 At(float worldX, float worldZ, float mapFactor)
         {
-            if (ModServices.TryGet(out IMapProjection projection) &&
+            if (ModuleServices.TryGet(out IMapProjection projection) &&
                 projection.TryProject(worldX, worldZ, out float x, out float y))
                 return new Vector2(x, y);
             return new Vector2(worldX * mapFactor, worldZ * mapFactor);

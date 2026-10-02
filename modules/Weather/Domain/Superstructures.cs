@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     internal enum SuperstructureKind : byte
     {
@@ -82,13 +82,13 @@ namespace BoscaliSummer.Features.Weather.Domain
             float cell = Forced(forced, SupercellSet, WeatherMath.Smoothstep(0.55f, 1f, conv));
             if (cell > 0.001f && count < into.Length)
                 into[count++] = Tower(layout, 2, SupercellSet, half, 30000f, 75000f, 12500f, 15000f, 5000f, 7000f,
-                    25000f, 40000f, prevailingHeading, cell);
+                    14000f, 22000f, prevailingHeading, cell);
 
             // A lone cumulonimbus far on the horizon whenever the air is convective.
             float distant = Forced(forced, DistantCellSet, WeatherMath.Smoothstep(0.12f, 0.3f, conv));
             if (distant > 0.001f && count < into.Length)
                 into[count++] = Tower(layout, 3, DistantCellSet, half, 70000f, 120000f, 9000f, 12000f, 3000f, 5000f,
-                    12000f, 20000f, prevailingHeading, distant);
+                    9000f, 14000f, prevailingHeading, distant);
 
             // Console-only formations. Without an anchor they stand at a default spot of the layout.
             if ((forced & StormEyeSet) != 0 && count < into.Length)
@@ -113,7 +113,7 @@ namespace BoscaliSummer.Features.Weather.Domain
                 float windAngle = (90f - prevailingHeading) * Deg;
                 float x = hasAnchor ? anchorX : WeatherMath.HashRange(layout, 6, 84, 0, -0.4f, 0.4f) * half;
                 float z = hasAnchor ? anchorZ : WeatherMath.HashRange(layout, 6, 85, 0, -0.4f, 0.4f) * half;
-                if (hasAnchor)
+                if (hasAnchor && (forced & StormEyeSet) != 0)
                 {
                     // Beside a storm eye placed at the same anchor, not inside it.
                     x += (float)Math.Cos(windAngle + Math.PI * 0.5) * 30000f;

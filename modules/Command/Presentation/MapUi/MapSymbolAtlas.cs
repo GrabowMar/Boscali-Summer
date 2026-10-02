@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>What a contact is, at the resolution the map can show at 12 px.</summary>
     internal enum MapGlyph
@@ -24,6 +24,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         Helicopter,
         /// <summary>Stand-in fixed-wing silhouette (the map keeps the game's per-type sprite for jets).</summary>
         Aircraft,
+        /// <summary>Observed contact without a reliable platform class.</summary>
+        Contact,
         /// <summary>Surface ship: the game's hulls are hairlines at map size, so this replaces them.</summary>
         Hull
     }
@@ -48,6 +50,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static readonly Sprite[] plates = new Sprite[3];
         private static readonly Sprite[] glyphs = new Sprite[Enum.GetValues(typeof(MapGlyph)).Length];
+        private static Sprite airbase;
+
+        internal static Sprite AirbaseMark => airbase != null ? airbase :
+            (airbase = MakeSprite("AirbaseMark", RenderAirbaseMark()));
 
         internal static Sprite Plate(MapSide side)
         {
@@ -82,10 +88,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                             float v = ((y + (sy + .5f) / Samples) / Size) * 2f - 1f;
                             float d = PlateDistance(side, u, v);
                             float pr, pa;
-                            if (d > .075f) continue;
-                            if (d > 0f) { pr = 0f; pa = .88f; }               // keyline
-                            else if (d > -.115f) { pr = 1f; pa = 1f; }        // tintable outline
-                            else { pr = .06f; pa = .66f; }                    // dark fill
+                            if (d > .055f) continue;
+                            if (d > 0f) { pr = 0f; pa = .55f; }               // keyline
+                            else if (d > -.07f) { pr = 1f; pa = .94f; }       // fine outline
+                            else { pr = .08f; pa = .38f; }                    // translucent fill
                             r += pr * pa; g += pr * pa; b += pr * pa; a += pa;
                         }
                     }
@@ -115,6 +121,36 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     float coverage = inside / (float)(Samples * Samples);
                     pixels[y * Size + x] = new Color32(255, 255, 255, (byte)Mathf.RoundToInt(coverage * 255f));
                 }
+            }
+            return pixels;
+        }
+
+        /// <summary>Runway and threshold inside a dark landing-zone ring, legible at 32 pixels.</summary>
+        internal static Color32[] RenderAirbaseMark()
+        {
+            var pixels = new Color32[Size * Size];
+            for (int y = 0; y < Size; y++)
+            for (int x = 0; x < Size; x++)
+            {
+                float ink = 0f, alpha = 0f;
+                for (int sy = 0; sy < Samples; sy++)
+                for (int sx = 0; sx < Samples; sx++)
+                {
+                    float u = ((x + (sx + .5f) / Samples) / Size) * 2f - 1f;
+                    float v = ((y + (sy + .5f) / Samples) / Size) * 2f - 1f;
+                    float edge = Box(u, v, 0f, 0f, .82f, .82f, .14f);
+                    if (edge > 0f) continue;
+                    float runway = Box(u, v, 0f, 0f, .23f, .64f, .03f);
+                    bool threshold = Mathf.Abs(v) > .43f && Mathf.Abs(v) < .52f && Mathf.Abs(u) < .31f;
+                    bool centerline = Mathf.Abs(u) < .045f && Mathf.Abs(v) < .32f &&
+                        Mathf.Repeat(v + .34f, .22f) < .1f;
+                    float brightness = edge > -.08f || (runway > -.06f && runway < .04f) ||
+                        threshold || centerline ? 1f : .08f;
+                    float opacity = brightness > .5f ? .9f : .42f;
+                    ink += brightness * opacity;
+                    alpha += opacity;
+                }
+                pixels[y * Size + x] = Resolve(ink, ink, ink, alpha);
             }
             return pixels;
         }
@@ -224,6 +260,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     float tail = Triangle(x, y, -.42f, -.9f, .42f, -.9f, 0f, -.5f);
                     return Math.Min(fuselage, Math.Min(wing, tail));
                 }
+                case MapGlyph.Contact:
+                    return Math.Min(Math.Abs(Length(x, y) - .58f) - .075f,
+                        Circle(x, y, 0f, 0f, .13f));
                 default:
                 {
                     // Ship: pointed bow, full beam amidships, square stern, dark superstructure notch.

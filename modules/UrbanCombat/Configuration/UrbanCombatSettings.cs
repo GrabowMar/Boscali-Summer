@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.UrbanCombat.Configuration
+namespace BoscaliSummer.Modules.UrbanCombat.Configuration
 {
     internal sealed class UrbanCombatSettings
     {

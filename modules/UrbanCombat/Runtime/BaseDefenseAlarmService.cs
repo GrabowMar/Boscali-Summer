@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Garrisons;
 
-namespace BoscaliSummer.Features.UrbanCombat.Runtime
+namespace BoscaliSummer.Modules.UrbanCombat.Runtime
 {
     /// <summary>
     /// Monitors friendly airbases and fortified garrisons for incoming hostile strike

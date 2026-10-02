@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.Events.Configuration;
-using BoscaliSummer.Features.Events.Domain;
-using BoscaliSummer.Features.Events.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Events.Configuration;
+using BoscaliSummer.Modules.Events.Domain;
+using BoscaliSummer.Modules.Events.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Events.Runtime
+namespace BoscaliSummer.Modules.Events.Runtime
 {
     /// <summary>Outcome of one response intent, validated on the host.</summary>
     internal enum EventResponseResult : byte
@@ -288,14 +290,14 @@ namespace BoscaliSummer.Features.Events.Runtime
                     reason = "FACTION UNAVAILABLE";
                 else if (usedContractFactions.Contains(HashOf(player.HQ)))
                     reason = "CONTRACT DIRECTIVE SPENT THIS MISSION";
-                else if (!ModServices.TryGet(out IOperationOutcomeSource outcomes) ||
+                else if (!ModuleServices.TryGet(out IOperationOutcomeSource outcomes) ||
                          !outcomes.HasCompletedContract(player.HQ.GetInstanceID()))
                     reason = "COMPLETE A FACTION CONTRACT";
             }
             else if (kind == EventResponseKind.Perk)
             {
                 ulong id = LocalPlayerId();
-                if (id == PlayerIdentity.None || !ModServices.TryGet(out IPlayerPerks perks) ||
+                if (id == PlayerIdentity.None || !ModuleServices.TryGet(out IPlayerPerks perks) ||
                     !perks.Grants(id, SupportCapabilities.Recon)) reason = "RECON QUALIFICATION REQUIRED";
             }
             else if (kind != EventResponseKind.Contain && kind != EventResponseKind.Leverage)
@@ -376,7 +378,7 @@ namespace BoscaliSummer.Features.Events.Runtime
                 else
                 {
                     if (usedContractFactions.Contains(factionHash) ||
-                        !ModServices.TryGet(out IOperationOutcomeSource outcomes) ||
+                        !ModuleServices.TryGet(out IOperationOutcomeSource outcomes) ||
                         !outcomes.HasCompletedContract(hq.GetInstanceID()))
                         return EventResponseResult.Prerequisite;
                     kind = EventResponseKind.Contract;
@@ -389,7 +391,7 @@ namespace BoscaliSummer.Features.Events.Runtime
             else if (action == EventsNet.ActionPerk)
             {
                 if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
-                if (id == PlayerIdentity.None || !ModServices.TryGet(out IPlayerPerks perks) ||
+                if (id == PlayerIdentity.None || !ModuleServices.TryGet(out IPlayerPerks perks) ||
                     !perks.Grants(id, SupportCapabilities.Recon)) return EventResponseResult.Prerequisite;
                 kind = EventResponseKind.Perk;
                 responses[id] = (byte)kind;
@@ -931,7 +933,7 @@ namespace BoscaliSummer.Features.Events.Runtime
         /// </summary>
         private void Announce(EventDefinition definition)
         {
-            if (!ModServices.TryGet(out IHudBoard board) || settings == null) return;
+            if (!ModuleServices.TryGet(out IHudBoard board) || settings == null) return;
             board.DeclareChannel("events", "World events");
             string aim = definition.Target == EventTarget.All
                 ? "ALL THEATER"

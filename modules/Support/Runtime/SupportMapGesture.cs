@@ -1,6 +1,6 @@
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Tracks Boscali's armed map right-click.

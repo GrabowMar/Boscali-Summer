@@ -1,21 +1,22 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
-using BoscaliSummer.Features.Command.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using BoscaliSummer.Modules.Command.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
     /// STR bezel: situation, chain of command, and a short live-war brief. TheaterOps owns
@@ -36,7 +37,9 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         /// <summary>Contested nodes the SITUATION list can rank; a hard ceiling, not a page size.</summary>
         private const int NodeRankCap = 32;
-        private const int NodeListPageSize = 6;
+
+        /// <summary>Row pool of the contested list; how many show at once depends on the height the page gives it.</summary>
+        private const int NodeListRows = 12;
 
         private static readonly SortieRole[] Roles =
         {
@@ -59,7 +62,6 @@ namespace BoscaliSummer.Features.Command.Presentation
         private MFDScreen screen;
         private GameObject screenRoot;
         private AvConsole console;
-        private AvChip[] chips;
         private AvMetric[] metrics;
         private AvFlow cocPage;
         private bool cocBuilt;
@@ -71,9 +73,8 @@ namespace BoscaliSummer.Features.Command.Presentation
         // ---- SITUATION page ----------------------------------------------------------------
 
         private StrThreatBanner threat;
-        private AvSection balanceSection;
-        private StrForceBar forceBar;
-        private AvSection sortieSection;
+        private AvGauge ringAllied, ringContested, ringHostile, ringOpen;
+        private AvRow frontReadout;
         private StrAtoBoard atoBoard;
         private StrNote atoNote;
         private StrTile groundTile, airbaseTile, radarTile, adTile;
@@ -81,7 +82,7 @@ namespace BoscaliSummer.Features.Command.Presentation
         private readonly AirDefenceRing[] knownAdRings = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
 
         private AvSection contestedSection;
-        private AvList nodeList;
+        private StrNodeBoard nodeList;
         private StrNote nodeNote;
         private readonly TacticalSectorGrid.TacticalNode[] ranked =
             new TacticalSectorGrid.TacticalNode[NodeRankCap];
@@ -107,7 +108,6 @@ namespace BoscaliSummer.Features.Command.Presentation
             screenRoot = null;
             screen = null;
             console = null;
-            chips = null;
             metrics = null;
             baseAlarm = null;
             highCommand = null;
@@ -117,9 +117,8 @@ namespace BoscaliSummer.Features.Command.Presentation
             threatPicture = null;
 
             threat = null;
-            balanceSection = null;
-            forceBar = null;
-            sortieSection = null;
+            ringAllied = ringContested = ringHostile = ringOpen = null;
+            frontReadout = null;
             atoBoard = null;
             atoNote = null;
             groundTile = airbaseTile = radarTile = adTile = null;
@@ -238,10 +237,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             rootRect.sizeDelta = new Vector2(Width, height);
             AvLay.ClampIntoCanvas(rootRect);
 
-            ModServices.TryGet(out baseAlarm);
-            ModServices.TryGet(out highCommand);
-            ModServices.TryGet(out theaterWar);
-            ModServices.TryGet(out threatPicture);
+            ModuleServices.TryGet(out baseAlarm);
+            ModuleServices.TryGet(out highCommand);
+            ModuleServices.TryGet(out theaterWar);
+            ModuleServices.TryGet(out threatPicture);
 
             console = AvConsole.Build(rootRect, "STR", "STRATEGY", 3, Width, height);
             AvTabBar tabBar = console.Tabs(
@@ -252,8 +251,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 "Air picture, sortie board and sector control.",
                 "Chain of command: posts, personnel files and the staff log.",
                 "Theater operations: offensives, main effort and reinforcement calls.");
-            chips = console.Chips(3);
-            metrics = console.Metrics("THEATER CONTROL", "AIR DOMINANCE", "COMMAND");
+            // One row of four tiles carries what the old chip strip and tile row said twice.
+            metrics = console.Metrics("SECTORS", "AIR", "STAFF", "FRONT");
             console.PageChanged += _ => nextRefresh = 0f;
 
             BuildSaPage(console.Page(TabSa));
@@ -314,31 +313,37 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildSaPage(AvFlow p)
         {
-            p.Section(AvIcon.AlertTriangle, "THREAT CONDITION", "C4ISR");
             threat = p.Add(new StrThreatBanner(p.Content));
 
-            balanceSection = p.Section(AvIcon.Scale, "THEATER BALANCE", "SECTOR CONTROL");
-            forceBar = p.Add(new StrForceBar(p.Content));
+            // Four ownership strips, followed by named force and contested-node records.
+            ringAllied = new AvGauge(p.Content, "ALLIED", AvGaugeShape.Ring, 64f);
+            ringContested = new AvGauge(p.Content, "CONTESTED", AvGaugeShape.Ring, 64f);
+            ringHostile = new AvGauge(p.Content, "HOSTILE", AvGaugeShape.Ring, 64f);
+            ringOpen = new AvGauge(p.Content, "UNCLAIMED", AvGaugeShape.Ring, 64f);
+            ringAllied.Help = "ALLIED: share of the sector field held by your side.";
+            ringContested.Help = "CONTESTED: share of sectors with both sides present.";
+            ringHostile.Help = "HOSTILE: share of sectors held by the enemy. Red above half.";
+            ringOpen.Help = "UNCLAIMED: share of sectors nobody controls yet.";
+            p.Row(ringAllied, ringContested, ringHostile, ringOpen);
 
-            sortieSection = p.Section(AvIcon.Plane, "AIR TASKING ORDER", "FRIENDLY AI");
             atoBoard = p.Add(new StrAtoBoard(p.Content, Roles.Length));
             atoNote = p.Add(new StrNote(p.Content, AvIcon.Plane));
 
-            p.Section(AvIcon.Shield, "SURFACE & INFRASTRUCTURE", "ALLIED / HOSTILE");
-            groundTile = new StrTile(p.Content, AvIcon.Shield, "GROUND FORCES");
+            groundTile = new StrTile(p.Content, AvIcon.Shield, "GROUND");
             airbaseTile = new StrTile(p.Content, AvIcon.Plane, "AIRBASES");
-            radarTile = new StrTile(p.Content, AvIcon.Antenna, "RADARS ON NET");
-            adTile = new StrTile(p.Content, AvIcon.Target, "KNOWN ENEMY AD");
-            groundTile.Help = "Allied and hostile ground units on the theater.";
-            airbaseTile.Help = "Airbases by owner. Contested bases are being captured.";
+            radarTile = new StrTile(p.Content, AvIcon.Antenna, "RADARS");
+            adTile = new StrTile(p.Content, AvIcon.Target, "KNOWN AD");
+            groundTile.Help = "Ground forces on the theater, allied / hostile.";
+            airbaseTile.Help = "Airbases by owner, allied / hostile / neutral. Contested bases are being captured.";
             radarTile.Help = "Friendly radars and emitters sharing the network.";
             adTile.Help = "Enemy air-defence sites this faction knows about.";
-            p.Row(groundTile, airbaseTile);
-            p.Row(radarTile, adTile);
+            p.Row(groundTile, airbaseTile, radarTile, adTile);
 
             contestedSection = p.Section(AvIcon.MapPin, "CONTESTED GROUND", "BY PRESSURE");
-            nodeList = p.Add(new AvList(p.Content, console.Ticker, NodeListPageSize, BindNodeRow));
-            nodeNote = p.Add(new StrNote(p.Content, AvIcon.MapPin));
+            frontReadout = p.Add(new AvRow(p.Content));
+            frontReadout.Help = "Length and segment count of the observed ground-contact front. Node percentages below are opposing pressure ratios, not vanilla capture completion.";
+            nodeList = p.Add(new StrNodeBoard(p.Content, console.Ticker, NodeListRows, BindNodeRow, 62f), 1f);
+            nodeNote = p.Add(new StrNote(p.Content, AvIcon.MapPin), 1f);
         }
 
         private void BindNodeRow(int index, AvRow row)
@@ -346,19 +351,15 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (index < 0 || index >= rankedCount) { row.Set("—", "", "", AvState.Inert); row.Help = null; return; }
             TacticalSectorGrid.TacticalNode node = ranked[index];
             bool friendly = node.Faction == SectorControl.Friendly;
-            // Pressure on ground we hold is bad news; pressure on ground they hold is progress.
-            AvState state = friendly ? AvState.Caution : AvState.Ready;
-            bool pressing = node.CaptureProgress >= 0.05f;
+            bool hostile = node.Faction == SectorControl.Hostile;
+            AvState state = friendly ? AvState.Info : hostile ? AvState.Caution : AvState.Info;
+            string owner = friendly ? "ALLIED HELD" : hostile ? "HOSTILE HELD" : "UNCLAIMED";
             string name = string.IsNullOrEmpty(node.Name) ? "UNNAMED NODE" : node.Name.ToUpperInvariant();
             string pressureState = TheaterReadout.PressureState(node.CaptureProgress);
-            string figure = pressing ? Glyphed(TheaterReadout.Percent(node.CaptureProgress), state) : "—";
-            row.Set(name,
-                (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " · " +
-                (friendly ? "ALLIED HELD" : "HOSTILE HELD") + " · " + pressureState,
-                figure,
-                RailState(TheaterReadout.NodeRail(friendly, node.IsContested)));
-            row.Help = name + " — " + (friendly ? "allied held" : "hostile held") + ", " +
-                       pressureState.ToLowerInvariant() + ".";
+            string figure = pressureState == "UNKNOWN" ? "\u2014" : TheaterReadout.Percent(node.CaptureProgress);
+            row.Set(name, (node.IsAirbase ? "AIRBASE" : "STRONGPOINT") + " / " + owner +
+                " / " + pressureState, "PRESSURE " + figure, state);
+            row.Help = name + " / " + owner + ". Opposing pressure ratio, not vanilla capture completion. Ranked highest pressure first.";
         }
 
         private static string AtoCode(SortieRole role) =>
@@ -391,9 +392,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             SortieTally tally = state.Sorties;
             bool known = tally.Observed > 0;
-            sortieSection.SetCaption(known
-                ? tally.Observed + " OBSERVED · " + tally.Tasked + " TASKED"
-                : "NO AI DATA");
+            atoBoard.SetCaption(known ? tally.Observed + " OBSERVED · " + tally.Tasked + " TASKED" : "");
             atoBoard.SetShown(known);
             atoNote.SetShown(!known);
             if (known)
@@ -407,23 +406,23 @@ namespace BoscaliSummer.Features.Command.Presentation
                 }
                 atoBoard.SetHot(hot);
             }
-            else atoNote.Set("NO AI SORTIE DATA", "Friendly AI pilots are not observable on this peer yet.");
+            else atoNote.Set("NO AI SORTIES", "");
 
             int friendlyGround = state.FriendlyGroundUnitsCount, hostileGround = state.HostileGroundUnitsCount;
-            groundTile.Set(friendlyGround + " / " + hostileGround, "ALLIED / HOSTILE", AvState.Info,
+            groundTile.Set(friendlyGround + "/" + hostileGround, "ALLIED / HOSTILE", AvState.Info,
                 friendlyGround + hostileGround > 0 ? friendlyGround / (float)(friendlyGround + hostileGround) : -1f);
 
             bool contestedBases = state.ContestedAirbaseCount > 0;
             int bases = state.FriendlyAirbaseCount + state.HostileAirbaseCount + state.NeutralAirbaseCount;
             airbaseTile.Set(
-                state.FriendlyAirbaseCount + " / " + state.HostileAirbaseCount + " / " + state.NeutralAirbaseCount,
-                "ALLIED / HOSTILE / NEUTRAL" + (contestedBases ? " · " + state.ContestedAirbaseCount + " CONTESTED" : ""),
+                state.FriendlyAirbaseCount + "/" + state.HostileAirbaseCount + "/" + state.NeutralAirbaseCount,
+                contestedBases ? state.ContestedAirbaseCount + " CONTESTED" : "ALLIED / HOSTILE / NEUTRAL",
                 contestedBases ? AvState.Caution : AvState.Info,
                 bases > 0 ? state.FriendlyAirbaseCount / (float)bases : -1f);
 
             bool radars = GameAccess.HqSensorsAvailable;
             radarTile.Set(radars ? state.FriendlyRadarCount.ToString(System.Globalization.CultureInfo.InvariantCulture) : "—",
-                radars ? "FRIENDLY EMITTERS ON NET" : "SENSOR NET UNAVAILABLE",
+                radars ? "FRIENDLY" : "NO SENSOR NET",
                 radars ? AvState.Info : AvState.Inert);
         }
 
@@ -433,19 +432,23 @@ namespace BoscaliSummer.Features.Command.Presentation
         {
             if (adTile == null || Time.unscaledTime < nextKnownAdRefresh) return;
             nextKnownAdRefresh = Time.unscaledTime + KnownAdInterval;
-            if (threatPicture == null) ModServices.TryGet(out threatPicture);
+            if (threatPicture == null) ModuleServices.TryGet(out threatPicture);
             int observer = hq != null ? hq.GetInstanceID() : 0;
             bool ready = hq != null && threatPicture != null && threatPicture.IsReady(observer);
             int count = ready ? threatPicture.CopyAirDefence(observer, knownAdRings) : 0;
             string line = TheaterReadout.KnownAirDefence(ready, knownAdRings, count);
-            if (!ready) adTile.Set("—", "NO THREAT PICTURE YET", AvState.Inert);
-            else if (line == "NONE KNOWN") adTile.Set("NONE", "NO ENEMY SITES KNOWN", AvState.Info);
+            if (!ready) adTile.Set("—", "NO PICTURE", AvState.Inert);
+            else if (line == "NONE KNOWN") adTile.Set("NONE", "", AvState.Info);
             else
             {
-                // "57 SITES · 11 RADAR (45 PRE-WAR, 1 STALE)": the figure, then what it is made of.
+                // "57 SITES · 11 RADAR (45 PRE-WAR, 1 STALE)": the count is the figure, the rest is the caption.
                 int split = line.IndexOf(" · ", StringComparison.Ordinal);
-                adTile.Set(split < 0 ? line : line.Substring(0, split),
-                    split < 0 ? "" : line.Substring(split + 3), AvState.Info);
+                string head = split < 0 ? line : line.Substring(0, split);
+                string rest = split < 0 ? "" : line.Substring(split + 3);
+                int space = head.IndexOf(' ');
+                string figure = space > 0 ? head.Substring(0, space) : head;
+                string unit = space > 0 ? head.Substring(space + 1) : "";
+                adTile.Set(figure, unit + (rest.Length > 0 && unit.Length > 0 ? " · " : "") + rest, AvState.Info);
             }
         }
 
@@ -459,13 +462,21 @@ namespace BoscaliSummer.Features.Command.Presentation
             int sectors = state.FriendlySectorCount + state.ContestedSectorCount +
                           state.HostileSectorCount + state.NeutralSectorCount;
 
-            forceBar.Set(sectors > 0, friendly, contested, hostile,
-                state.FriendlySectorCount, state.ContestedSectorCount, state.HostileSectorCount);
-            balanceSection.SetCaption(sectors <= 0 ? "NO SECTOR FIELD"
-                : (state.FrontlineSegmentCount > 0
-                    ? "FRONT " + TheaterReadout.Kilometres(state.FrontlineLengthMetres).ToUpperInvariant()
-                    : "NO CONTACT") +
-                  (unclaimed >= 0.005f ? " · " + TheaterReadout.Percent(unclaimed) + " UNCLAIMED" : ""));
+            bool field = sectors > 0;
+            ringAllied.Set(friendly, field ? TheaterReadout.Percent(friendly) : "—", field ? AvState.Ready : AvState.Inert);
+            ringContested.Set(contested, field ? TheaterReadout.Percent(contested) : "—",
+                field && state.ContestedSectorCount > 0 ? AvState.Caution : AvState.Inert);
+            ringHostile.Set(hostile, field ? TheaterReadout.Percent(hostile) : "—", !field ? AvState.Inert : hostile > 0.5f ? AvState.Danger : AvState.Info);
+            ringOpen.Set(unclaimed, field ? TheaterReadout.Percent(unclaimed) : "—", AvState.Inert);
+            ringAllied.Help = "ALLIED: " + state.FriendlySectorCount + " of " + sectors + " sectors held by your side.";
+            ringContested.Help = "CONTESTED: " + state.ContestedSectorCount + " of " + sectors + " sectors with both sides present.";
+            ringHostile.Help = "HOSTILE: " + state.HostileSectorCount + " of " + sectors + " sectors held by the enemy. Red above half.";
+            ringOpen.Help = "UNCLAIMED: " + state.NeutralSectorCount + " of " + sectors + " sectors nobody controls yet.";
+            bool frontKnown = overlay != null && overlay.HasControlData;
+            frontReadout.Set("FRONT CONTACT", frontKnown ? state.FrontlineSegmentCount + " SEGMENTS / " +
+                state.ContestedSectorCount + " SECTORS IN CONTACT" : "NO CONTROL FIELD",
+                frontKnown ? TheaterReadout.Kilometres(state.FrontlineLengthMetres) : "\u2014",
+                !frontKnown ? AvState.Inert : state.FrontlineSegmentCount > 0 ? AvState.Caution : AvState.Info);
 
             RefreshNodeList();
         }
@@ -479,7 +490,8 @@ namespace BoscaliSummer.Features.Command.Presentation
                 nodeList.SetCount(0);
                 nodeList.SetShown(false);
                 nodeNote.SetShown(true);
-                nodeNote.Set("SECTOR FIELD NOT RUNNING", "Contested ground appears here once the theater map is live.");
+                nodeNote.Set("NO SECTOR FIELD", "");
+                frontReadout.Set("FRONT CONTACT", "NO SECTOR FIELD", "\u2014", AvState.Inert);
                 contestedSection.SetCaption("NO FIELD");
                 return;
             }
@@ -508,7 +520,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             nodeList.SetShown(shown > 0);
             nodeNote.SetShown(shown == 0);
-            if (shown == 0) nodeNote.Set("NO CONTACT", "No node is being contested. Pressure builds here as the front moves.");
+            if (shown == 0) nodeNote.Set("NO CONTACT", "");
             contestedSection.SetCaption(contestedTotal == 0
                 ? "NO CONTACT"
                 : contestedTotal + " IN CONTACT" + (pressingTotal > 0 ? " · " + pressingTotal + " PRESSING" : ""));
@@ -521,7 +533,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             if (command == null || console == null) return;
 
             highCommand?.Refresh();
-            if (theaterWar == null) ModServices.TryGet(out theaterWar);
+            if (theaterWar == null) ModuleServices.TryGet(out theaterWar);
             theaterWar?.Refresh();
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -562,23 +574,22 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void RefreshChrome(TacticalTheaterState state)
         {
-            AvState alertState = state.DefconLevel <= 2 ? AvState.Danger
-                : state.DefconLevel == 3 ? AvState.Caution : AvState.Ready;
-            chips[0].Set("DEFCON " + state.DefconLevel, alertState);
-
-            bool frontline = state.ContestedSectorCount > 0;
-            chips[1].Set(frontline ? "FRONT LIVE" : "FRONT QUIET", frontline ? AvState.Caution : AvState.Ready);
-
-            bool grid = overlay != null && overlay.HasControlData;
-            chips[2].Set(grid ? "GRID LIVE" : "GRID —", grid ? AvState.Info : AvState.Inert);
+            if (metrics == null || metrics.Length < 3) return;
+            int sectors = state.FriendlySectorCount + state.ContestedSectorCount +
+                          state.HostileSectorCount + state.NeutralSectorCount;
 
             bool territoryKnown = !float.IsNaN(state.TerritoryControlRatio);
+            bool ahead = territoryKnown && state.TerritoryControlRatio >= 0.5f;
             metrics[0].Set(
                 territoryKnown ? TheaterReadout.Percent(state.TerritoryControlRatio) : "—",
-                state.FriendlySectorCount + "/" + state.HostileSectorCount,
+                !territoryKnown ? "" : ahead ? "LEAD" : "LAG",
                 territoryKnown ? state.TerritoryControlRatio : 0f,
-                !territoryKnown ? AvState.Inert
-                    : state.TerritoryControlRatio >= 0.5f ? AvState.Ready : AvState.Caution);
+                !territoryKnown ? AvState.Inert : ahead ? AvState.Ready : AvState.Caution);
+            StrTips.Metric(metrics[0], !territoryKnown
+                ? "SECTORS: no sector field yet, so no control figure."
+                : "SECTORS: your share of the sector field. " + state.FriendlySectorCount + " held, " +
+                  state.HostileSectorCount + " hostile, " + state.ContestedSectorCount + " contested of " + sectors +
+                  ". Above 50% you are ahead.");
 
             bool airKnown = !float.IsNaN(state.AirSuperiorityRatio);
             metrics[1].Set(
@@ -587,22 +598,42 @@ namespace BoscaliSummer.Features.Command.Presentation
                 airKnown ? state.AirSuperiorityRatio : 0f,
                 !airKnown ? AvState.Inert
                     : state.AirSuperiorityRatio >= 0.5f ? AvState.Ready : AvState.Caution);
+            StrTips.Metric(metrics[1], !airKnown
+                ? "AIR: no aircraft observed, so no dominance figure."
+                : "AIR: air dominance, " + state.FriendlyAircraftCount + " friendly against " +
+                  state.HostileAircraftCount + " hostile aircraft in the picture. Above 50% favours you.");
 
-            if (metrics.Length > 2)
+            bool staff = highCommand != null && highCommand.Available;
+            float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
+            metrics[2].Set(
+                staff ? TheaterReadout.Percent(cohesion) : "—",
+                staff ? highCommand.FriendlyActive + " ACT" : "NONE",
+                cohesion,
+                !staff ? AvState.Inert
+                : cohesion >= 0.6f ? AvState.Ready
+                : cohesion >= 0.3f ? AvState.Caution
+                : AvState.Danger);
+            StrTips.Metric(metrics[2], !staff
+                ? "STAFF: no chain of command is running on this host."
+                : "STAFF: how effective your chain of command is. " + highCommand.FriendlyActive + " posts active" +
+                  (highCommand.FriendlyKia > 0 ? ", " + highCommand.FriendlyKia + " lost" : "") +
+                  ". Each living commander earns the faction a bonus.");
+
+            if (metrics.Length > 3)
             {
-                bool staff = highCommand != null && highCommand.Available;
-                float cohesion = staff ? Mathf.Clamp01(highCommand.FriendlyCohesion) : 0f;
-                metrics[2].Set(
-                    staff ? TheaterReadout.Percent(cohesion) : "—",
-                    staff
-                        ? highCommand.FriendlyActive + " ACTIVE" +
-                          (highCommand.FriendlyKia > 0 ? " · " + highCommand.FriendlyKia + " KIA" : "")
-                        : "NO STAFF",
-                    cohesion,
-                    !staff ? AvState.Inert
-                    : cohesion >= 0.6f ? AvState.Ready
-                    : cohesion >= 0.3f ? AvState.Caution
-                    : AvState.Danger);
+                bool grid = overlay != null && overlay.HasControlData;
+                bool contact = state.ContestedSectorCount > 0;
+                float share = sectors > 0 ? state.ContestedSectorCount / (float)sectors : 0f;
+                metrics[3].Set(
+                    !grid ? "—" : state.FrontlineSegmentCount > 0
+                        ? AvNum.Fixed(state.FrontlineLengthMetres / 1000f, 0) : "0",
+                    grid ? "KM" : "NO GRID",
+                    Mathf.Clamp01(share * 4f),
+                    !grid ? AvState.Inert : contact ? AvState.Caution : AvState.Ready);
+                StrTips.Metric(metrics[3], !grid
+                    ? "FRONT: the sector grid has no data yet, so no frontline is drawn."
+                    : "FRONT: frontline length in kilometres; the bar shows the share of sectors in contact (" +
+                      state.ContestedSectorCount + " of " + sectors + "). Amber while any sector is contested.");
             }
         }
 

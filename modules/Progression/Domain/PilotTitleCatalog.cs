@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Progression.Domain
+namespace BoscaliSummer.Modules.Progression.Domain
 {
     /// <summary>
     /// A flavor title for the SQD pilot card, derived purely from this pilot's own score

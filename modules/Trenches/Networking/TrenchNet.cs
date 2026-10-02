@@ -2,16 +2,17 @@ using System;
 using System.Collections;
 using System.Reflection;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Trenches.Domain;
-using BoscaliSummer.Features.Trenches.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Networking
+namespace BoscaliSummer.Modules.Trenches.Networking
 {
     [NetworkMessage]
     internal struct TrenchGeometryMessage

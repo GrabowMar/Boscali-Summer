@@ -22,6 +22,6 @@ Verified with `nomod blender inspect Satellite.fbx`: 6 MESH objects,
 Hull + Panel materials, 47 faces. Runtime form: generated mesh only
 (Visuals/SatelliteMeshData.cs + Visuals/SatelliteSky.cs); no bundle, no
 colliders, no LOD. The sky object renders the real window schedule: it is
-only visible while the local faction's tasking window is open. Map icon:
+only visible while the local faction's tasking window is open. Map icon (retired with the old OPS):
 the existing procedural SatIcon (SupportTacticalIcons), used by the
 coverage strip at the station sub-point.

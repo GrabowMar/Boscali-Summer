@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Features.DynamicOperations.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Modules.DynamicOperations.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Networking
+namespace BoscaliSummer.Modules.DynamicOperations.Networking
 {
     [NetworkMessage]
     internal struct OperationsQuery

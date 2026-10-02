@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
     /// One entry of the ACE3-style interaction menu (ace_interact_menu_fnc_createAction,

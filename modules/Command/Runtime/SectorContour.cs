@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// One interpolated stretch of the front between cells of opposing hold, in world

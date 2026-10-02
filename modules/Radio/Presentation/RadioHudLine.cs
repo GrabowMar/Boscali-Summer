@@ -1,9 +1,10 @@
-using BoscaliSummer.Features.Radio.Domain;
-using BoscaliSummer.Features.Radio.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Radio.Domain;
+using BoscaliSummer.Modules.Radio.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Radio.Presentation
+namespace BoscaliSummer.Modules.Radio.Presentation
 {
     /// <summary>
     /// What the radio is playing as one cockpit line: the station or deck, the track, and its

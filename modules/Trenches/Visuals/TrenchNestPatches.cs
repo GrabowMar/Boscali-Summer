@@ -1,7 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Trenches.Visuals
+namespace BoscaliSummer.Modules.Trenches.Visuals
 {
     /// <summary>
     /// Client half of the nest strip: every peer hides the sandbag ring on a Boscali position

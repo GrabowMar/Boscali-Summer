@@ -1,14 +1,14 @@
 using System.Reflection;
-using BoscaliSummer.Features.Hud.Domain;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Hud.Domain;
+using BoscaliSummer.Core.Contracts;
 using HarmonyLib;
-using NOAvionics.Ui;
+using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Hud.Presentation
+namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
     /// The one status item this module draws: a compact card of plain UGUI objects parented

@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>The reduced-resolution cloud march: a URP pass on the main camera that fills the
     /// half-size sky (<see cref="CloudLowRes"/>) before transparents. The camera-following cube

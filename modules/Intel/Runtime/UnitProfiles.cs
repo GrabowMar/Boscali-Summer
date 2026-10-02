@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Intel.Domain;
+using BoscaliSummer.Modules.Intel.Domain;
 
-namespace BoscaliSummer.Features.Intel.Runtime
+namespace BoscaliSummer.Modules.Intel.Runtime
 {
     /// <summary>What Intel needs to know about one unit type, read once from the first live instance it meets.</summary>
     internal readonly struct UnitProfile

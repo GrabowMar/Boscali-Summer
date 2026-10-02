@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     internal static class BoscaliRadialMenu
     {
@@ -159,7 +161,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         {
             try
             {
-                ModServices.TryGet(out IRadialMenuPage page);
+                ModuleServices.TryGet(out IRadialMenuPage page);
                 return page;
             }
             catch (Exception e)

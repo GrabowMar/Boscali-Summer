@@ -1,10 +1,9 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>Restores the native filter's right-click isolation action.</summary>
     internal sealed class MfdRightClickAction : MonoBehaviour, IPointerClickHandler

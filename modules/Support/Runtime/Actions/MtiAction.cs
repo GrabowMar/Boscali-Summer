@@ -1,7 +1,6 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Orbital;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// MTI sweep. The faction's station, overhead with a spy imager, runs its radar in
@@ -13,30 +12,15 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// </summary>
     internal sealed class MtiAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) =>
-            context.Settings.MtiCost.Value * context.Settings.CostMultiplier.Value;
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
-            if (!context.Host.WindowOpen(context.Owner))
-            {
-                context.Logger.LogInfo("[Support] MTI sweep refused: tasking window closed.");
-                return SupportResult.WindowClosed;
-            }
-            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RadarScan, out PlatformDenial denial);
-            if (platform == null) return SupportContext.Refusal(denial);
-
             try
             {
-                double now = context.Host.OrbitNow;
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), context.Logger, RevealFilter.Ground,
+                    context.Settings.SarSceneRadius.Value, context.Logger, RevealFilter.Ground,
                     minimumSpeed: ReconAction.StationaryThreshold);
-                context.Host.Space.DetachmentFor(context.Owner)?.ScoutNear(context.Target.x, context.Target.z,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
-                platform.Consume(PlatformAbility.RadarScan, now);
-                if (contacts > 0) platform.RecordSolution(context.Target.x, context.Target.z,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }

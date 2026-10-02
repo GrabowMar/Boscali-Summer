@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Owns the effect globals (_NOA_Now, _NOA_Glitch, _NOA_FxTier) and the shared materials. One hidden

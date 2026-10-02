@@ -1,11 +1,11 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Core.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Hud.Runtime
+namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// Levels and re-projects <c>FlightHud.HUDCenter</c> and the velocity vector in third person

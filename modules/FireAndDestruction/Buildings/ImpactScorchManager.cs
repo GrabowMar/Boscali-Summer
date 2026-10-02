@@ -1,8 +1,9 @@
 using System.Collections.Generic;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.FireAndDestruction.Configuration;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Diagnostics;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 

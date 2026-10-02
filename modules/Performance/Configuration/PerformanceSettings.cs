@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Performance.Configuration
+namespace BoscaliSummer.Modules.Performance.Configuration
 {
     internal sealed class PerformanceSettings
     {

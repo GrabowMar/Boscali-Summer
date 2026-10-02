@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>Read-only 0..1 damage from vanilla part HP. Never writes wear.</summary>
     internal static class AirframeSeverity

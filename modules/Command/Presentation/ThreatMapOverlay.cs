@@ -1,16 +1,17 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
+using NOAvionics;
 using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
     /// The hostile sensor picture as contours: one raster over the theater map whose intensity at

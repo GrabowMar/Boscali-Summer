@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>One plot rectangle in panel pixels. Empty marks a degenerate layout.</summary>
     internal readonly struct PlotRect

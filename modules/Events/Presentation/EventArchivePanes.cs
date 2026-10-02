@@ -1,12 +1,11 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>One labelled reading in the archive detail grid.</summary>
     internal readonly struct DetailFigure
@@ -66,6 +65,7 @@ namespace BoscaliSummer.Features.Events.Presentation
         {
             AvLay.Place(Root, x, y, w, h);
             AvLay.Place(viewport, 0f, 0f, w, h);
+            Flow.ViewportHeight = h;   // a growing part (the dossier's poster) takes the pane's spare height
             AvLay.Place((RectTransform)bar.transform, w - AvGridTokens.Pad - AvGridTokens.Gutter + 2f, 2f, 4f, h - 4f);
         }
 
@@ -279,10 +279,10 @@ namespace BoscaliSummer.Features.Events.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            Arrange(s.W, true);
+            Arrange(s.W, true, Mathf.Max(0f, s.H - Arrange(s.W, false)));
         }
 
-        private float Arrange(float w, bool place)
+        private float Arrange(float w, bool place, float extra = 0f)
         {
             float y = 0f;
             float kh = kicker.text.Length > 0 ? AvText.Height(kicker, w) : 0f;
@@ -297,6 +297,8 @@ namespace BoscaliSummer.Features.Events.Presentation
             if (media != Media.None)
             {
                 float mh = media == Media.Model ? ModelHeight : PosterHeight;
+                // Spare pane height goes to the media, but never so much that the art is sliced (poster 1.4:1, model 1.6:1).
+                if (place && extra > 0f) mh += Mathf.Clamp((media == Media.Model ? w / 1.6f : w / 1.4f) - mh, 0f, extra);
                 if (place)
                 {
                     if (media == Media.Poster)

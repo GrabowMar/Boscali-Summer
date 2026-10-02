@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Pure coordinate calculations for map grid labels, minor tick labels, and corner readouts.

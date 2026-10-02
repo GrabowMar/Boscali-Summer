@@ -2,7 +2,7 @@ using System;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Live game theme accessor and color/string conversion helpers shared across mods.

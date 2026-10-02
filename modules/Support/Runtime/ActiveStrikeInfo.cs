@@ -1,7 +1,7 @@
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Telemetry snapshot for an in-flight or actively detonating tactical support ability.

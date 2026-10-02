@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     internal sealed class TerritoryControlView : MonoBehaviour, ISceneService, ITerritoryIngress
     {

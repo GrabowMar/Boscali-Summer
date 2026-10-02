@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// Depth-first order for a staff roster: every post is listed directly after the post it

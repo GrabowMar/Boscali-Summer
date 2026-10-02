@@ -3,16 +3,18 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Bootstrap;
 using BepInEx.Logging;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
     /// Host-side destinations for uncommanded mobile AI vehicles. Groups may be assigned to
@@ -227,7 +229,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
             }
             ScanInitialUnits();
             if (groups.Count == 0) return;
-            if (territory == null) ModServices.TryGet(out territory);
+            if (territory == null) ModuleServices.TryGet(out territory);
             float now = Time.timeSinceLevelLoad;
             for (int i = groups.Count - 1; i >= 0; i--)
             {

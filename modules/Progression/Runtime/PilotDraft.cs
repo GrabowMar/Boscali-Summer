@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Progression.Runtime
+namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>
     /// Editable custom-pilot state for the SQD studio. Engine-free: the panel owns Wing Command

@@ -1,16 +1,16 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Autopilot.Configuration;
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Features.Autopilot.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Autopilot.Configuration;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Modules.Autopilot.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace BoscaliSummer.Features.Autopilot.Presentation
+namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
     /// ACE3-style self-interaction menu on the configured key (default C), presented on the
@@ -29,7 +29,7 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
         private const float TapSeconds = 0.25f;
         private const int WidgetCount = AceRadialMenuTree.MaxVisible + 1;
         private const int VectorCapacity = (WidgetCount * 72) + 160;
-        private const int PlateCapacity = (WidgetCount * 3) + 16;
+        private const int PlateCapacity = (WidgetCount * 4) + 24;
         private const int SelectorCapacity = 12;
         private const CursorFlags ForeignCursorOwners =
             CursorFlags.GameMenu | CursorFlags.Dialogue | CursorFlags.Chat;
@@ -514,7 +514,11 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
             Rgba rail = (data.Enabled && !data.Status.IsEmpty ? ToneColor(data.Status.Tone) : AvTheme.RailInfo).ToRgba();
             float railX = right ? x + w - RailWidth : x;
             AvStrokes.Fill(plates, railX, y, RailWidth, h, rail.WithAlpha(alpha * (data.Status.IsEmpty ? 0.6f : 1f)));
-            if (hovered) PlateBorder(plates, x, y, w, h, AvTheme.Selected.ToRgba());
+            // Portal: hairline top/bottom edges carry the tag, and the hovered tag wears corner brackets.
+            Rgba hair = AvTheme.RailInfo.ToRgba().WithAlpha(0.35f * alpha);
+            AvStrokes.Fill(plates, x, y + h - 1f, w, 1f, hair);
+            AvStrokes.Fill(plates, x, y, w, 1f, hair);
+            if (hovered) AvStrokes.Bracket(plates, x, y, w, h, 5f, 1.25f, AvTheme.Selected.ToRgba());
         }
 
         private static void PaintCentrePlate(AvQuadBuffer plates, NodeWidget widget, float cx, float cy)
@@ -526,6 +530,7 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
             float y = cy - CenterLabelDrop - widget.LabelH - (PlatePadding * 0.5f);
             AvStrokes.Fill(plates, x, y, w, h, AvTokens.HudPanel.WithAlpha(PlateBaseAlpha));
             AvStrokes.Fill(plates, x, y + h - 1f, w, 1f, AvTheme.RailInfo.ToRgba());
+            AvStrokes.Fill(plates, x, y, w, 1f, AvTheme.RailInfo.ToRgba().WithAlpha(0.35f));
         }
 
         private static void Disc(AvQuadBuffer buffer, float x, float y, float radius, Rgba color) =>
@@ -539,14 +544,6 @@ namespace BoscaliSummer.Features.Autopilot.Presentation
             if (len <= ar + br + 1f) return;
             float ux = dx / len, uy = dy / len;
             AvStrokes.Line(buffer, ax + (ux * ar), ay + (uy * ar), bx - (ux * br), by - (uy * br), LeaderWidth, color);
-        }
-
-        private static void PlateBorder(AvQuadBuffer buffer, float x, float y, float w, float h, Rgba color)
-        {
-            AvStrokes.Line(buffer, x, y, x + w, y, 1f, color);
-            AvStrokes.Line(buffer, x, y + h, x + w, y + h, 1f, color);
-            AvStrokes.Line(buffer, x, y, x, y + h, 1f, color);
-            AvStrokes.Line(buffer, x + w, y, x + w, y + h, 1f, color);
         }
 
         // ------------------------------------------------------------------ build

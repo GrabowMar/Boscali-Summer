@@ -1,12 +1,12 @@
 using System;
 using System.Threading;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>One world-anchored volume. Small 2D maps from WeatherField control the
     /// front, cell and cumulus density: a 256-square near map over the flight domain and a
@@ -56,13 +56,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
         private WeatherKey mapKey;
         private float volumeBottom, volumeTop = CloudMaps.VolumeTop;
         private float horizonCover, previousHorizonCover;
-        private float cameraInCloud;
         private float densityHere;
         private int densityFrame = -1;
         private bool halfResolution;
 
         /// <summary>0..1 how deep the camera is inside cloud, smoothed; read by the atmosphere.</summary>
-        internal float CameraInCloud => cameraInCloud;
         private float previousBottom, previousTop;
         private int mapUpdates;
         private GameObject root;
@@ -191,10 +189,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
             material.SetTexture(EnvelopeTexId, envelope);
             material.SetFloat(EnvelopeOnId, envelope != null ? 1f : 0f);
 
-            // Inside cloud: near-field density and wisps, eased so crossing an edge never pops.
-            float depthHere = DensityHere((float)global.x, (float)global.y, (float)global.z);
-            cameraInCloud = Mathf.MoveTowards(cameraInCloud, Mathf.Clamp01((depthHere - 0.02f) * 5f), Time.deltaTime * 1.5f);
-
             // Half resolution once the pass has proved it runs on this camera; the full march
             // stays on screen until then, and returns if the pass stops executing.
             bool passAvailable = wantHalfResolution && compositeMaterial != null;
@@ -231,7 +225,6 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 Extinction = RenderSettings.fog ? Mathf.Clamp(RenderSettings.fogDensity, 0.000008f, 0.00055f) : 0.000008f,
                 Flash = flash,
                 LowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f,
-                CameraInCloud = cameraInCloud,
                 DeltaTime = Time.deltaTime,
             };
             uniforms.Apply(material, field, frame, noise);
@@ -478,7 +471,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
                 for (int i = 0; i < pixels.Length; i++)
                 {
                     int n = i * 4;
-                    pixels[i] = new Color32(ready[n], ready[n + 1], 0, 255);
+                    pixels[i] = new Color32(ready[n], ready[n + 1], ready[n + 2], 255);
                 }
                 noise = new Texture3D(NoiseSize, NoiseSize, NoiseSize, TextureFormat.RGBA32, true)
                 {

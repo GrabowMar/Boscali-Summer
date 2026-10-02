@@ -1,12 +1,13 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Hud.Configuration;
-using BoscaliSummer.Features.Hud.Domain;
-using BoscaliSummer.Features.Hud.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Hud.Configuration;
+using BoscaliSummer.Modules.Hud.Domain;
+using BoscaliSummer.Modules.Hud.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
-namespace BoscaliSummer.Features.Hud.Presentation
+namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // Service and lifecycle only. Feed handles contain data; the panel owns a fixed widget pool
     // parented directly under the native weapons panel (see StatusPanel).
@@ -186,8 +187,8 @@ namespace BoscaliSummer.Features.Hud.Presentation
             string cameraCode = null;
             string cameraRange = null;
             if (CameraFeedEnabled && viewingOwnExternally && ownAircraft != null && ownAircraft.targetCam != null &&
-                BoscaliSummer.Runtime.NativeCamera.ReadMode(ownAircraft.targetCam) != TargetCam.CamMode.landingMode &&
-                BoscaliSummer.Runtime.NativeCamera.TryGet(ownAircraft, out Camera camera, out string mode) &&
+                BoscaliSummer.Core.Game.NativeCamera.ReadMode(ownAircraft.targetCam) != TargetCam.CamMode.landingMode &&
+                BoscaliSummer.Core.Game.NativeCamera.TryGet(ownAircraft, out Camera camera, out string mode) &&
                 camera.targetTexture != null && camera.targetTexture.IsCreated())
             {
                 cameraTexture = camera.targetTexture;

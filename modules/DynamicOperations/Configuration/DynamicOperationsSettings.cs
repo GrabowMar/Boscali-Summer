@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.DynamicOperations.Configuration
+namespace BoscaliSummer.Modules.DynamicOperations.Configuration
 {
     internal sealed class DynamicOperationsSettings
     {

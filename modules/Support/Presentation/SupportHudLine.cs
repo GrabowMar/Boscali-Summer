@@ -1,68 +1,54 @@
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using NuclearOption.Networking;
+using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Support.Presentation
+namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
-    /// The support net as one cockpit line: ready, cooling with the retask clock, or a request
-    /// in flight, plus the local allocation. It reads the local peer's own view and states
-    /// nothing the host has not already accepted; the same numbers the OPS panel shows.
+    /// The support net's cockpit line: armed / pending / recent refusal of the CALL flow.
     /// </summary>
     internal sealed class SupportHudLine : HudLineWidget
     {
         private const string WidgetOwner = "support-net";
 
+        private CallsController calls;
         private SupportManager manager;
-
-        private string text;
-        private string detail;
+        private string text, detail;
         private HudTone tone;
-        private float bar;
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "support";
         protected override string ChannelLabel => "Support net";
 
-        internal void Configure(SupportManager source)
+        internal void Configure(SupportManager manager, CallsController calls)
         {
-            manager = source;
+            this.manager = manager;
+            this.calls = calls;
             DeclareFeed();
         }
 
         protected override bool WantsLine()
         {
-            text = null;
-            if (manager == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null)
-                return false;
-
-            bool pending = manager.RequestPending;
-            float remaining = manager.LocalCooldownRemaining;
-            float total = manager.LocalCooldownTotal;
-            float allocation = manager.LocalAllocation;
-
-            tone = SupportHudCopy.Tone(pending, remaining);
-            bar = SupportHudCopy.Bar(remaining, total, allocation);
-            if (pending)
+            if (calls == null || manager == null) return false;
+            if (calls.Armed.HasValue)
             {
-                text = "SUPPORT · REQUEST PENDING";
-                detail = "AWAITING HOST";
+                SupportActionId id = calls.Armed.Value;
+                text = "CALL ARMED · " + (CallSheet.TryGet(id, out CallRow row) ? row.Label : id.ToString());
+                detail = manager.Quote(id).Cost + " CR · " + Aim.Label(calls.AimNow);
+                tone = HudTone.Caution;
+                return true;
             }
-            else if (remaining > SupportHudCopy.CoolingSeconds)
+            if (calls.Pending) { text = "CALL PENDING"; detail = ""; tone = HudTone.Info; return true; }
+            if (!string.IsNullOrEmpty(calls.LastWords) && calls.LastWords.StartsWith("NEGATIVE")
+                && UnityEngine.Time.unscaledTime - calls.LastWordsAt < 4f)
             {
-                text = "SUPPORT · NET COOLING";
-                detail = "RETASK " + SupportHudCopy.Cooldown(remaining);
+                text = calls.LastWords; detail = ""; tone = HudTone.Warning; return true;
             }
-            else
-            {
-                text = "SUPPORT · NET READY";
-                detail = "ALLOCATION " + SupportHudCopy.Percent(allocation);
-            }
-            return true;
+            return false;
         }
 
-        protected override void Write(IHudLine line) => line.Set(tone, text, detail, bar);
+        protected override void Write(IHudLine line) => line.Set(tone, text, detail, 0f);
     }
 }

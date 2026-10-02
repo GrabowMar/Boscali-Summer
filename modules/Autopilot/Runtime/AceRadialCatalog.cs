@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// What the interaction menu offers, rebuilt on every open so services registered by
@@ -57,7 +59,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
             new AceRadialAction(id, label, run, visible, enabled).WithIcon(icon).WithStatus(status);
 
         private static T Service<T>() where T : class =>
-            ModServices.TryGet(out T service) ? service : null;
+            ModuleServices.TryGet(out T service) ? service : null;
 
         private static string AircraftName()
         {
@@ -75,7 +77,7 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
 
         private static IEnumerable<AceRadialAction> ContributedPage()
         {
-            if (!ModServices.TryGet(out IRadialMenuPage page)) yield break;
+            if (!ModuleServices.TryGet(out IRadialMenuPage page)) yield break;
             var branch = Branch("page", Upper(page.Title ?? "PAGE"), AceIcon.Preset);
             int count = Math.Min(page.EntryCount, MaxPageEntries);
             for (int i = 0; i < count; i++)

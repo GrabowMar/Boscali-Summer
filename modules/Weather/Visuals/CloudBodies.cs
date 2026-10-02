@@ -1,24 +1,26 @@
 using System;
-using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Domain;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// CPU mirror of the volume shader's cloud density (FlightCloud.shader: Bodies, CoverMask,
-    /// the low deck, fronts, towers, the middle layer and the set-piece envelopes; without
-    /// detail erosion or the thin high layer). The shadow cookie and the in-cloud test use it,
-    /// so each visible cloud casts its own shadow. Pure System.Math over the shared noise bytes,
-    /// so it runs on a worker and in tests. Keep it in step with the shader.
+    /// CloudShape's profile, the low deck, fronts, towers, the middle layer and the set-piece
+    /// envelopes; without detail erosion or the thin high layer). The shadow cookie and the
+    /// in-cloud test use it, so each visible cloud casts its own shadow. Pure System.Math over
+    /// the shared noise bytes, so it runs on a worker and in tests. Keep it in step with the shader.
     /// </summary>
     internal readonly struct CloudBodies
     {
         private readonly byte[] noise;
         private readonly int size;
         private readonly StateParams sky;
+        private readonly CloudGenus genus;
         private readonly float windX, windZ;
         private readonly SkySplit split;
         private readonly float fog;
         private readonly WeatherField field;
+        private readonly float eyeX, eyeZ, eyeRadius, eyeStrength;
 
         public CloudBodies(byte[] noise, int size, StateParams sky, float prevailingHeading = 0f, SkySplit split = default,
             float fog = 0f, WeatherField field = null)
@@ -27,8 +29,16 @@ namespace BoscaliSummer.Features.Weather.Visuals
             this.noise = noise;
             this.size = size;
             this.sky = sky;
+            genus = CloudShape.Resolve(sky);
             this.split = split;
             this.field = field;
+            eyeX = eyeZ = eyeRadius = eyeStrength = 0f;
+            for (int i = 0; field != null && i < field.SuperstructureCount; i++)
+            {
+                Superstructure s = field.SuperstructureAt(i);
+                if (s.Kind != SuperstructureKind.StormEye) continue;
+                eyeX = s.X; eyeZ = s.Z; eyeRadius = s.Size; eyeStrength = s.Strength;
+            }
             WeatherMath.HeadingToVector(prevailingHeading, out windX, out windZ);
         }
 
@@ -37,57 +47,88 @@ namespace BoscaliSummer.Features.Weather.Visuals
         public float Density(WeatherPoint p, float x, float y, float z, float shift)
         {
             float heroes = Heroes(x, y, z);
-            float mid = Math.Max(MidLayer(x, y, z), FogBank(y));
+            float eyeKeep = CloudShape.EyeCloudKeep(x, y, z, eyeX, eyeZ, eyeRadius, eyeStrength);
+            float mid = Math.Max(MidLayer(x, y, z) * eyeKeep, FogBank(y));
             float layer = p.BackgroundCover, front = p.FrontCover, cell = p.CellShape;
             if (Math.Max(layer, Math.Max(front, cell)) < 0.025f) return Math.Max(mid, heroes);
+            float smooth = WeatherMath.Clamp01(sky.LayerSmooth);
             float baseY = p.CloudBase + shift;
-            float topY = Math.Max(baseY + 1600f, p.CloudTop + shift);
+            // CloudMaps stores a conservative top including the low deck's independent depth.
+            float topY = Math.Max(baseY + Math.Max(280f, Math.Max(genus.PuffDepth, sky.LayerDepth) + genus.BaseWobble * 0.5f), p.CloudTop + shift);
+            float columnTop = WeatherMath.Lerp(Math.Min(topY, CloudShape.TowerCap(baseY, genus, sky.LayerDepth)), topY, genus.TowerBlend);
+            columnTop = Math.Max(columnTop, baseY + 280f);
+            float lowest = front > 0.02f ? Math.Min(baseY, p.FrontBase + shift) : baseY;
+            float highest = Math.Max(columnTop, baseY + Math.Max(genus.PuffDepth, sky.LayerDepth) + genus.BaseWobble * 0.5f);
+            if (front > 0.02f) highest = Math.Max(highest, p.FrontTop + shift);
+            if (y < lowest - 250f || y > highest + 600f) return Math.Max(mid, heroes);
 
             // The shader warps bodies by its broad noise so no grid shows at range.
-            float broadR = Sample(x / 5800f, z / 5800f, y / 3900f, 0);
-            float broadG = Sample(x / 5800f, z / 5800f, y / 3900f, 1);
-            float wx = x + (broadR - 0.5f) * 2200f, wz = z + (broadG - 0.5f) * 2200f;
+            float broadR = Sample(x / 24000f, z / 24000f, 0.37f, 0);
+            float broadG = Sample(x / 24000f, z / 24000f, 0.37f, 1);
+            float wx = x + (broadR - 0.5f) * 1400f, wz = z + (broadG - 0.5f) * 1400f;
+            float puffBody = genus.Sheet ? 0.72f : WeatherMath.Lerp(Bodies(wx, y, wz, genus.PuffScale), 0.72f, genus.SheetBlend);
+            float relief = WeatherMath.Lerp(0.55f, 1f, WeatherMath.Smoothstep(0.2f, 0.85f, puffBody));
+            columnTop = WeatherMath.Lerp(baseY + (columnTop - baseY) * relief, columnTop,
+                Math.Max(genus.SheetBlend, genus.TowerBlend));
 
-            // Low deck: separate domed bodies, or a smooth stratus/nimbostratus sheet.
-            float body = Bodies(wx, y, wz, 4200f);
-            float smooth = WeatherMath.Clamp01(sky.LayerSmooth);
-            float deckBody = WeatherMath.Lerp(body, 0.72f + 0.28f * body, smooth);
-            float mask = CoverMask(deckBody, WeatherMath.Clamp01(layer * 1.1f));
-            float thick = Math.Max(300f, sky.LayerDepth) * (0.55f + 0.45f * WeatherMath.Clamp01(layer));
-            float layerBase = baseY + (body - 0.5f) * WeatherMath.Lerp(160f, 60f, smooth);
-            float layerTop = layerBase + thick *
-                WeatherMath.Lerp(0.35f + 0.65f * mask, 0.88f + 0.12f * mask, smooth);
-            float hl = WeatherMath.Clamp01((y - layerBase) / Math.Max(1f, layerTop - layerBase));
-            float shape = WeatherMath.Clamp01(mask * 1.35f - hl * hl * 1.1f) *
-                WeatherMath.Smoothstep(-60f, 120f, y - layerBase) * (y <= layerTop + 50f ? 1f : 0f);
-            float layerDensity = WeatherMath.Clamp01((shape - 0.15f) / 0.70f) *
-                WeatherMath.Smoothstep(0.02f, 0.10f, layer);
+            // Low deck: puffs at the genus scale, or a smooth stratus/nimbostratus sheet.
+            // Each puff carries its own base and its own domed top.
+            float layerDensity = 0f;
+            if (layer > 0.02f)
+            {
+                float deckBody = WeatherMath.Lerp(puffBody, 0.72f + 0.28f * puffBody, smooth);
+                float mask = CoverMask(deckBody, WeatherMath.Clamp01(layer * 1.2f));
+                float thick = Math.Max(280f, WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, sky.LayerDepth), genus.SheetBlend));
+                thick *= WeatherMath.Lerp(0.75f + 0.10f * genus.SheetBlend, 1f, broadR);
+                thick *= WeatherMath.Lerp(relief, 1f, genus.SheetBlend);
+                float layerBase = baseY + (puffBody - 0.5f) * WeatherMath.Lerp(genus.BaseWobble, genus.BaseWobble * 0.3f, smooth);
+                float hl = (y - layerBase) / Math.Max(1f, thick);
+                float prof = CloudShape.Profile(hl, WeatherMath.Lerp(genus.Dome, genus.Dome * 0.25f, smooth), genus.Anvil * (1f - smooth));
+                float gate = CloudShape.BaseGate(y, layerBase, WeatherMath.Lerp(genus.BaseSharp, genus.BaseSharp * 2.2f, smooth));
+                float shape = CloudShape.Mass(mask, prof) * gate;
+                layerDensity = WeatherMath.Clamp01((shape - 0.12f) / 0.70f) *
+                    WeatherMath.Smoothstep(0.02f, 0.10f, layer);
+            }
 
-            // Fronts: denser bodies at a larger scale.
+            // Fronts: the same profile at a larger scale. A thin shield stays stratiform;
+            // a deep band picks up the genus dome.
             float frontDensity = 0f;
             if (front > 0.02f)
             {
                 float frontBase = p.FrontBase + shift;
-                float frontCrown = Math.Max(frontBase + 600f, p.FrontTop + shift);
+                float frontCrown = Math.Max(frontBase + 300f, p.FrontTop + shift);
                 float depth = frontCrown - frontBase;
-                float fb = Bodies(wx + 5311f, y + 5311f, wz + 5311f, 5200f);
+                float fScale = WeatherMath.Lerp(Math.Max(1800f, genus.PuffScale * 1.35f), 5200f, genus.SheetBlend);
+                float fb = Bodies(wx + 5311f, y + 5311f, wz + 5311f, fScale);
                 float fm = CoverMask(fb, WeatherMath.Clamp01(front * 1.05f));
-                float frontTop = frontCrown - (1f - fm) * Math.Min(1600f, depth * 0.35f);
-                float profile = WeatherMath.Smoothstep(-120f, 220f, y - (frontBase + (fb - 0.5f) * 220f)) *
-                    (1f - WeatherMath.Smoothstep(frontTop - Math.Min(600f, depth * 0.25f), frontTop + 250f, y));
-                profile *= WeatherMath.Lerp(0.3f, 1f, WeatherMath.Smoothstep(900f, 2200f, depth));
-                frontDensity = WeatherMath.Clamp01((fm * profile - 0.13f) / 0.74f) *
+                float frontFloor = frontBase + (fb - 0.5f) * Math.Min(220f, genus.BaseWobble + 40f);
+                float frontTop = frontCrown + (broadR - 0.5f) * Math.Min(1200f, depth * 0.25f) - (1f - fm) * Math.Min(depth * 0.25f, 900f);
+                float fh = (y - frontFloor) / Math.Max(1f, frontTop - frontFloor);
+                float uplift = WeatherMath.Smoothstep(3500f, 6500f, depth);
+                float prof = CloudShape.Profile(fh, WeatherMath.Lerp(0.25f, genus.Dome, uplift), genus.Anvil * uplift);
+                float gate = CloudShape.BaseGate(y, frontFloor, Math.Max(genus.BaseSharp, 80f));
+                float thin = WeatherMath.Lerp(0.35f, 1f, WeatherMath.Smoothstep(900f, 2200f, depth));
+                frontDensity = WeatherMath.Clamp01((CloudShape.Mass(fm, prof) * gate * thin - 0.12f) / 0.72f) *
                     WeatherMath.Smoothstep(0.04f, 0.20f, front);
             }
 
-            // Towers keep the weather field's shape.
-            float h = WeatherMath.Clamp01((y - baseY) / Math.Max(1f, topY - baseY));
-            float threshold = 0.25f + 0.43f * h * h;
-            float tower = WeatherMath.Smoothstep(threshold - 0.16f, threshold + 0.16f, cell) *
-                WeatherMath.Smoothstep(-100f, 170f, y - baseY) * (1f - WeatherMath.Smoothstep(0.84f, 1f, h)) *
-                WeatherMath.Smoothstep(0.04f, 0.20f, cell);
+            // Towers: the cell's footprint, narrowed with height, flared where the genus has an anvil.
+            // Cumulus groups are carved into puffs; a cumulonimbus stays one mass.
+            // The cell is a gaussian with no flat core, and it is already ~0.2 at the stem's
+            // edge. Dividing the threshold by the footprint never clears that edge. Raising
+            // the gaussian to 1/foot² is the radius scale Footprint describes.
+            float h = WeatherMath.Clamp01((y - baseY) / Math.Max(1f, columnTop - baseY));
+            float foot = CloudShape.Footprint(h, genus.Anvil);
+            float wide = (float)Math.Pow(WeatherMath.Clamp01(cell), 1f / Math.Max(1f, foot * foot));
+            float need = 0.18f + 0.42f * h * h;
+            float inside = WeatherMath.Smoothstep(need - 0.12f, need + 0.12f, wide);
+            float carved = WeatherMath.Lerp(CoverMask(puffBody, WeatherMath.Clamp01(0.45f + 0.35f * cell)),
+                1f, Math.Max(genus.SheetBlend, genus.TowerBlend));
+            float tower = inside * CloudShape.Mass(carved, CloudShape.Profile(h, genus.Dome, genus.Anvil)) *
+                CloudShape.BaseGate(y, baseY, genus.BaseSharp) *
+                WeatherMath.Smoothstep(0.04f, 0.20f, wide);
 
-            return Math.Max(heroes, Math.Max(mid, Math.Max(layerDensity * 0.52f, Math.Max(frontDensity * 0.58f, tower * 0.78f))));
+            return Math.Max(heroes, Math.Max(mid, Math.Max(layerDensity * 0.55f, Math.Max(frontDensity * 0.60f, tower * 0.85f)) * eyeKeep));
         }
 
         /// <summary>The set-pieces (shelf line, supercell, storm eye, lenticulars) as smooth
@@ -168,10 +209,10 @@ namespace BoscaliSummer.Features.Weather.Visuals
         {
             float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
             float h = WeatherMath.Clamp01(y / s.Top);
-            float lean = h * 4000f;
+            float lean = h * 1800f;
             float dx = x - s.X - dirX * lean, dz = z - s.Z - dirZ * lean;
-            float dome = (float)Math.Sqrt(WeatherMath.Clamp01(1f - (float)Math.Pow(Math.Max(0f, h - 0.6f) / 0.45f, 2f)));
-            float radius = s.Size * 0.95f * dome;
+            float dome = (float)Math.Sqrt(WeatherMath.Clamp01(1f - (float)Math.Pow(Math.Max(0f, h - 0.72f) / 0.36f, 2f)));
+            float radius = s.Size * (0.82f + 0.65f * WeatherMath.Smoothstep(0.35f, 0.82f, h)) * dome;
             float tower = (1f - WeatherMath.Smoothstep(radius * 0.7f, radius * 1.1f + 1f,
                     (float)Math.Sqrt(dx * dx + dz * dz))) *
                 WeatherMath.Smoothstep(1100f, 1450f, y) * 0.9f;
@@ -179,8 +220,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float along = ax * dirX + az * dirZ - s.Extent * 0.35f;
             float across = -ax * dirZ + az * dirX;
             float e = (float)Math.Sqrt(along * along * 0.3025f + across * across) / s.Extent;
-            float anvilTop = s.Top + 250f - 500f * e * e;
-            float anvilBase = anvilTop - WeatherMath.Lerp(2600f, 450f, WeatherMath.Clamp01(e)) - 150f;
+            float anvilTop = s.Top + 150f - 1200f * e * e;
+            float anvilBase = anvilTop - WeatherMath.Lerp(6000f, 500f, WeatherMath.Smoothstep(0.05f, 0.75f, e)) - 150f;
             float anvil = (1f - WeatherMath.Smoothstep(0.4f, 0.78f, e)) *
                 WeatherMath.Envelope(y, anvilBase - 50f, anvilBase + 260f, anvilTop - 350f, anvilTop + 120f) * 0.34f;
             return Math.Max(tower, anvil) * s.Strength;
@@ -263,12 +304,15 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return CoverMask(body, c) * WeatherMath.Clamp01(4f * h * (1f - h) * 1.3f);
         }
 
-        /// <summary>The shader's Bodies(): two non-integer scales, stretched to a near-uniform [0, 1].</summary>
+        /// <summary>Rounded lobe field. Four cells per texture tile: scale is the lobe width,
+        /// not the tile width. Broad variation breaks equal-sized cellular packing.</summary>
         public float Bodies(float x, float y, float z, float scale)
         {
-            float a = Sample(x / scale, z / scale, y / (scale * 0.9f), 0);
-            float b = Sample(z / (scale * 2.73f) + 0.37f, -x / (scale * 2.73f) + 0.37f, y / (scale * 2.1f), 0);
-            return WeatherMath.Clamp01(0.5f + (a * 0.62f + b * 0.38f - 0.52f) * 3.16f);
+            float period = scale * 4f;
+            float a = Sample(x / period, z / period, y / (period * 0.9f), 2);
+            float b = Sample(z / (period * 2.73f) + 0.37f, -x / (period * 2.73f) + 0.37f, y / (period * 2.1f), 0);
+            float c = Sample(x / (period * 0.29f) + 0.17f, z / (period * 0.29f) + 0.61f, y / (period * 0.24f), 2);
+            return WeatherMath.Clamp01((a * 0.65f + b * 0.15f + c * 0.20f - 0.22f) * 2.5f);
         }
 
         public static float CoverMask(float body, float cover)
@@ -277,7 +321,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             return WeatherMath.Lerp(open, Math.Max(open, 0.55f + body * 0.45f), WeatherMath.Smoothstep(0.82f, 1f, cover));
         }
 
-        /// <summary>Trilinear, repeating read of one channel (0 = R, 1 = G), like the shader's tex3D.</summary>
+        /// <summary>Trilinear, repeating read of one channel (R = body, G = detail, B = lobe), like the shader's tex3D.</summary>
         private float Sample(float u, float v, float w, int channel)
         {
             float fx = u * size - 0.5f, fy = v * size - 0.5f, fz = w * size - 0.5f;

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>Wire ids. Stable: they are the only action identity that crosses the network.</summary>
     internal enum SupportActionId : byte
@@ -10,23 +10,39 @@ namespace BoscaliSummer.Features.Support.Runtime
         Artillery = 6,
         Emp = 7,
         FlareMissile = 9,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackPing = 10,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackTrack = 11,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackBlackout = 12,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackGhost = 13,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackSpoof = 14,
         ElintSweep = 15,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CapReveal = 16,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CapJammer = 17,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CapSabotage = 18,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecSpot = 19,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecSuppress = 20,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackScan = 21,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackHijack = 22,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         HackOverload = 23,
         MtiSweep = 24,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecSkywatch = 25,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecEavesdrop = 26,
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecHunt = 27,
         JtacMark = 28,
         JtacUnlase = 29,
@@ -53,47 +69,99 @@ namespace BoscaliSummer.Features.Support.Runtime
         OutOfRange = 14,
         /// <summary>The station is not overhead (or is holding in a transfer).</summary>
         OutOfCoverage = 15,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NotBuilt = 16,
 
-        /// <summary>No working CYBER jammer reaches the target.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NoEwAsset = 17,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         WrongPosture = 18,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformExpended = 19,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformLowPower = 20,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformRecharging = 21,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         ModuleNotFitted = 22,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         ModuleOffline = 23,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NoPlatform = 24,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformBrownout = 25,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NoFuel = 26,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         LaunchInFlight = 27,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         OverMass = 28,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CellBlocked = 29,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CopyLimit = 30,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         WouldStrand = 31,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformExists = 32,
 
-        /// <summary>Another present pilot owns the asset and the faction guards it.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         TeamDenied = 33,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NeedsCyberCommand = 34,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NetworkFull = 35,
 
-        /// <summary>The faction's Cyber Command is compromised; offensive operations are locked.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CommandCompromised = 36,
 
-        /// <summary>The faction's intel pool is too low for the ability.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         LowIntel = 37,
 
-        /// <summary>No held SPEC OPS post of the ability's kind covers the target.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NoFieldPost = 38,
 
-        /// <summary>The faction's team for this asset is still re-tasking.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         TeamCoolingDown = 39,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         InsufficientOpsReserve = 40,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformWrongFocus = 41,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformRetasking = 42,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         NeedsTargetSolution = 43,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         PlatformOutOfReach = 44,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
+        CapacityFull = 63,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
+        PlatformWorkRefused = 48,
 
         /// <summary>No hostile unit (or no lased one, for UNLASE) inside the mark radius.</summary>
         NoMarkTarget = 45,
@@ -101,13 +169,16 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>The HQ-known position at the target is missing or older than the intel window.</summary>
         StaleIntel = 46,
 
-        /// <summary>The faction's tasking window is closed; the MFD names the next opening.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         WindowClosed = 47,
 
-        /// <summary>A console verb refused by the network model: <c>CyberRefused + (byte)CyberDenial</c>.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         CyberRefused = 64,
 
-        /// <summary>Field-operation refusal: <c>SpecOpsRefused + SpecOpsDenial</c>.</summary>
+        /// <summary>Retired with the old OPS; never reuse.</summary>
+        BreachRefused = 96,
+
+        /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecOpsRefused = 128
     }
 
@@ -159,10 +230,10 @@ namespace BoscaliSummer.Features.Support.Runtime
             return remaining > 0f ? remaining : 0f;
         }
 
-        public void Accept(ulong playerId, int requestId, float now)
+        public void Accept(ulong playerId, int requestId, float now, bool startCooldown = true)
         {
             PlayerState state = Get(playerId);
-            state.LastAccepted = now;
+            if (startCooldown) state.LastAccepted = now;
             if (!state.Accepted.Add(requestId)) return;
             state.AcceptedOrder.Enqueue(requestId);
             while (state.AcceptedOrder.Count > historyLimit)

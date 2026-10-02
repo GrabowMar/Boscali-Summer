@@ -1,7 +1,7 @@
 using NOAvionics;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>A row of equal-width controls (32 high). The only way controls enter a flow.</summary>
     public sealed class AvButtons : AvPart

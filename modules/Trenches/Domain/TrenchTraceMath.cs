@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Trenches.Domain
+namespace BoscaliSummer.Modules.Trenches.Domain
 {
     /// <summary>How far a field position has been built out.</summary>
     internal enum TrenchStage
@@ -46,7 +46,8 @@ namespace BoscaliSummer.Features.Trenches.Domain
         RedoubtLod1,
         FireLod2,
         SupportLod2,
-        RedoubtLod2
+        RedoubtLod2,
+        Cover
     }
 
     internal static class TrenchTraceMath
@@ -613,13 +614,38 @@ namespace BoscaliSummer.Features.Trenches.Domain
             return dx * dx + dz * dz < SapGapRadius * SapGapRadius;
         }
 
-        public const int MaximumBuildSteps = 14;
+        public const int MaximumBuildSteps = 15;
+
+        // Overhead cover against observation and plunging fire from above: timber-and-earth
+        // roof panels over the fire ditch between the open firing bays, the single most cited
+        // field adaptation of the drone age (KJMS 2026; BALTOPS 2025 Seabee/Marine trench
+        // network). Panels appear once the position matures past its open scrape-and-rifle
+        // stage, never over a bay a nest stands in.
+        public const float CoverSpacing = 12f;
+        public const float CoverLength = 5f;
+        public const float CoverSpanExtra = 2f;
+        public const float CoverNodeClearance = 7f;
+        public const int MaximumCoverSpans = 256;
+
+        /// <summary>True once a position is mature enough to roof its fire ditch between bays.</summary>
+        public static bool HasOverheadCover(TrenchStage stage) => stage >= TrenchStage.Support;
+
+        /// <summary>
+        /// True when a roof panel at (x, z) would sit over a bay node: panels keep clear of
+        /// the open firing bays so nests keep their crest and their field of fire.
+        /// </summary>
+        public static bool WithinCoverClearance(float x, float z, float nodeX, float nodeZ)
+        {
+            float dx = x - nodeX, dz = z - nodeZ;
+            return dx * dx + dz * dz < CoverNodeClearance * CoverNodeClearance;
+        }
 
         /// <summary>
         /// Build order for one chunk rebuild, near-visible first: the fire ditch, its
-        /// colliders and wire, the belt at full detail, then the coarser LOD passes. One
-        /// step per trace keeps every frame of a staged rebuild under budget. Writes at
-        /// most <paramref name="steps"/> entries and returns the number written.
+        /// colliders, wire and overhead cover, the belt at full detail, then the coarser
+        /// LOD passes. One step per trace keeps every frame of a staged rebuild under
+        /// budget. Writes at most <paramref name="steps"/> entries and returns the number
+        /// written.
         /// </summary>
         public static int PlanBuildSteps(bool support, bool redoubt, int links, int spurs,
             TrenchBuildStep[] steps)
@@ -630,6 +656,7 @@ namespace BoscaliSummer.Features.Trenches.Domain
             PlanBuildStep(TrenchBuildStep.Colliders, steps, ref count);
             PlanBuildStep(TrenchBuildStep.Wire, steps, ref count);
             PlanBuildStep(TrenchBuildStep.WireOuter, steps, ref count);
+            PlanBuildStep(TrenchBuildStep.Cover, steps, ref count);
             if (support) PlanBuildStep(TrenchBuildStep.Support, steps, ref count);
             if (redoubt) PlanBuildStep(TrenchBuildStep.Redoubt, steps, ref count);
             if (links > 0) PlanBuildStep(TrenchBuildStep.Links, steps, ref count);

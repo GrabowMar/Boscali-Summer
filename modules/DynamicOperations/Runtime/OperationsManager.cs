@@ -1,17 +1,19 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.DynamicOperations.Configuration;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Features.DynamicOperations.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Configuration;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Modules.DynamicOperations.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource
     {
@@ -129,7 +131,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
                 return;
             }
             wasEnabled = true;
-            ModServices.TryGet(out IAirAssaultObservation currentAssault);
+            ModuleServices.TryGet(out IAirAssaultObservation currentAssault);
             if (!ReferenceEquals(currentAssault, assault))
             {
                 if (assault != null) assault.Landed -= OnLanded;
@@ -376,7 +378,7 @@ namespace BoscaliSummer.Features.DynamicOperations.Runtime
             if (!Operation.Finite(multiplier)) multiplier = 1f;
             multiplier = Mathf.Clamp(multiplier, 0.25f, 4f);
             float scale = multiplier * OperationTempo.Scale(tempoScale);
-            if (ModServices.TryGet(out IFactionMoraleView morale) &&
+            if (ModuleServices.TryGet(out IFactionMoraleView morale) &&
                 morale.TryGetContractMultiplier(hq.GetInstanceID(), out float moodScale))
                 scale *= moodScale;
             var op = new Operation(++nextId, targetId, kind, reward, now,

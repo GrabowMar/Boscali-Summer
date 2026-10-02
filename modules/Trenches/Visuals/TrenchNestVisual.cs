@@ -1,8 +1,8 @@
 using System;
-using BoscaliSummer.Features.Trenches.Runtime;
+using BoscaliSummer.Modules.Trenches.Runtime;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Visuals
+namespace BoscaliSummer.Modules.Trenches.Visuals
 {
     /// <summary>
     /// Hides the vanilla sandbag ring under a Boscali nest emplacement. The ring is a direct

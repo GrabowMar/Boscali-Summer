@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     public enum AvUiCue { Hover, Navigate, Press, Engage, Release, Confirm, Caution }
 

@@ -1,8 +1,8 @@
-using BoscaliSummer.Features.Radio.Runtime;
+using BoscaliSummer.Modules.Radio.Runtime;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Patches
+namespace BoscaliSummer.Modules.Radio.Patches
 {
     [HarmonyPatch(typeof(MusicManager), nameof(MusicManager.PlayMusic))]
     internal static class VanillaPlayMusicPatch

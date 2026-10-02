@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace BoscaliSummer.Features.Comms.Runtime
+namespace BoscaliSummer.Modules.Comms.Runtime
 {
     /// <summary>
     /// Pointer and keyboard questions COMMS asks before it acts on the map: is the player

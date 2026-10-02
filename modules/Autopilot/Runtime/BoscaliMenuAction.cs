@@ -1,23 +1,11 @@
 using System;
-using System.Reflection;
-using HarmonyLib;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     internal sealed class BoscaliMenuAction : RadialMenuAction
     {
-        private static readonly FieldInfo ActionTypeField =
-            AccessTools.Field(typeof(RadialMenuAction), "actionType");
-        private static readonly FieldInfo IconSpriteField =
-            AccessTools.Field(typeof(RadialMenuAction), "iconSprite");
-        private static readonly FieldInfo BackgroundSpriteField =
-            AccessTools.Field(typeof(RadialMenuAction), "backgroundSprite");
-        private static readonly FieldInfo BackgroundInactiveField =
-            AccessTools.Field(typeof(RadialMenuAction), "backgroundColorInactive");
-        private static readonly FieldInfo BackgroundActiveField =
-            AccessTools.Field(typeof(RadialMenuAction), "backgroundColorActive");
-
         private Func<Aircraft, bool> allowed;
         private Action<Aircraft> triggered;
 
@@ -49,20 +37,13 @@ namespace BoscaliSummer.Features.Autopilot.Runtime
         }
 
         /// <summary>Overrides just the icon glyph, leaving the wedge background/colour/layout native.</summary>
-        public void SetIcon(Sprite icon)
-        {
-            if (IconSpriteField == null) return;
-            IconSpriteField.SetValue(this, icon);
-        }
+        public void SetIcon(Sprite icon) => GameAccess.SetRadialIconSprite(this, icon);
 
         public void CopyAppearanceFrom(RadialMenuAction template)
         {
             if (template == null || template is BoscaliMenuAction) return;
-            ActionTypeField?.SetValue(this, ActionTypeField.GetValue(template));
-            IconSpriteField?.SetValue(this, IconSpriteField.GetValue(template));
-            BackgroundSpriteField?.SetValue(this, BackgroundSpriteField.GetValue(template));
-            BackgroundInactiveField?.SetValue(this, BackgroundInactiveField.GetValue(template));
-            BackgroundActiveField?.SetValue(this, BackgroundActiveField.GetValue(template));
+            GameAccess.SetRadialActionType(this, GameAccess.GetRadialActionType(template));
+            GameAccess.CopyRadialAppearance(this, template);
             Caution = template.Caution;
         }
     }

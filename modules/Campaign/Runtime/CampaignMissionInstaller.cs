@@ -2,10 +2,10 @@ using System;
 using System.IO;
 using System.Reflection;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Campaign.Domain;
+using BoscaliSummer.Modules.Campaign.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Campaign.Runtime
+namespace BoscaliSummer.Modules.Campaign.Runtime
 {
     /// <summary>
     /// Writes the embedded campaign mission into the game's user mission directory.

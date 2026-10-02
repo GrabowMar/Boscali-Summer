@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Radio.Configuration
+namespace BoscaliSummer.Modules.Radio.Configuration
 {
     internal enum BroadcastFilterMode
     {

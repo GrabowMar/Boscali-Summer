@@ -1,11 +1,12 @@
-using BoscaliSummer.Features.Autopilot.Configuration;
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Features.Autopilot.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Autopilot.Configuration;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Modules.Autopilot.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Presentation
+namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
     /// Gear-down ILS as one HUD line: localizer / glideslope words, inside/out of the

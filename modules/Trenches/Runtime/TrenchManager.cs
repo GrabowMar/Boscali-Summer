@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Trenches.Configuration;
-using BoscaliSummer.Features.Trenches.Domain;
-using BoscaliSummer.Features.Trenches.Networking;
-using BoscaliSummer.Features.Trenches.Visuals;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Trenches.Configuration;
+using BoscaliSummer.Modules.Trenches.Domain;
+using BoscaliSummer.Modules.Trenches.Networking;
+using BoscaliSummer.Modules.Trenches.Visuals;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// Server-authoritative field positions. Command's front traces arrive as ordered
@@ -456,7 +458,7 @@ namespace BoscaliSummer.Features.Trenches.Runtime
             // Strategic siting probes, both optional: a missing forest index or road
             // network plans the same relief-only position as before.
             Func<float, float, bool> foliageAt = null;
-            if (ModServices.TryGet<IFoliageCover>(out IFoliageCover foliage) && foliage.Ready)
+            if (ModuleServices.TryGet<IFoliageCover>(out IFoliageCover foliage) && foliage.Ready)
                 foliageAt = foliage.Contains;
             Func<float, float, float> roadAt = null;
             if (TrenchRoadIndex.EnsureBuilt())

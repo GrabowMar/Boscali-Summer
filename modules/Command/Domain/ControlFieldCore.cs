@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// What one control cell reads as under the corrected rule. Numeric order matches

@@ -1,7 +1,7 @@
-using BoscaliSummer.Features.Autopilot.Domain;
+using BoscaliSummer.Modules.Autopilot.Domain;
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Autopilot.Presentation
+namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
     /// Line-art glyphs for the interaction menu's option discs, stroked into the shared vector

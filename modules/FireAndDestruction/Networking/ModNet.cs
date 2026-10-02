@@ -2,13 +2,15 @@ using System;
 using System.Collections;
 using System.Reflection;
 using BoscaliSummer.Fire;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Runtime
+namespace BoscaliSummer.Modules.FireAndDestruction.Networking
 {
     [NetworkMessage]
     internal struct FireIgnitedMessage

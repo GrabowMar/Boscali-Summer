@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Comms.Domain
+namespace BoscaliSummer.Modules.Comms.Domain
 {
     /// <summary>
     /// Map geometry on the wire: world metres east/north of the map centre, quantised to a

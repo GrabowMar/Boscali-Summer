@@ -1,10 +1,10 @@
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Camera-relative procedural rain emitter for combat flight simulators.
@@ -40,12 +40,20 @@ namespace BoscaliSummer.Features.Weather.Visuals
             state["fx.streaks.alive"] = ps != null ? ps.particleCount : 0;
         }
 
+        /// <summary>Live diagnostics for the automation readout (sim report).</summary>
+        internal int AliveParticles => ps != null ? ps.particleCount : -1;
+        internal bool Playing => ps != null && ps.isPlaying;
+        internal float EmissionNow => ps != null ? ps.emission.rateOverTime.constant : -1f;
+        internal float ApparentSpeedNow { get; private set; }
+        internal string ShaderNow =>
+            rainMaterial != null && rainMaterial.shader != null ? rainMaterial.shader.name : "none";
+
         public void Initialize(Camera cam)
         {
             if (!FxBus.Register(this)) return;
             targetCamera = cam;
             streakTexture = RainStreakMaterial.CreateTexture();
-            rainMaterial = RainStreakMaterial.CreateMaterial(streakTexture, additive: true);
+            rainMaterial = RainStreakMaterial.CreateMaterial(streakTexture);
             if (rainMaterial == null) return;
 
             ps = gameObject.AddComponent<ParticleSystem>();
@@ -55,8 +63,9 @@ namespace BoscaliSummer.Features.Weather.Visuals
             // Stretched billboard aligned to relative velocity: thin, and longer with speed.
             psRenderer.renderMode = ParticleSystemRenderMode.Stretch;
             psRenderer.cameraVelocityScale = 0.0f;
-            psRenderer.velocityScale = 0.001f;
-            psRenderer.lengthScale = 0.5f;
+            // Short photographic exposure: a moving drop reads as a streak, not a spark.
+            psRenderer.velocityScale = 1f / 120f;
+            psRenderer.lengthScale = 2f;
             psRenderer.sharedMaterial = rainMaterial;
             psRenderer.shadowCastingMode = ShadowCastingMode.Off;
             psRenderer.receiveShadows = false;
@@ -76,7 +85,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             main.simulationSpace = ParticleSystemSimulationSpace.Custom;
             main.customSimulationSpace = simulationFrame;
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
-            main.startSize = 0.012f;
+            main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.04f);
             main.startColor = new Color(0.72f, 0.80f, 0.92f, 0.30f);
 
             // Emission box shape: upstream plane
@@ -121,10 +130,14 @@ namespace BoscaliSummer.Features.Weather.Visuals
 
             Vector3 position = targetCamera.transform.position;
             Vector3 travel = position - previousCameraPosition;
-            if (positioned && travel.sqrMagnitude < 10000f && Time.deltaTime > 0f)
+            // Render-space snaps shorter than a rebase would spike the velocity; resync instead.
+            float snapLimit = Mathf.Max(ApparentSpeedNow, 6f) * Mathf.Max(Time.deltaTime, 0.001f) * 4f + 3f;
+            bool snapped = positioned && travel.sqrMagnitude > snapLimit * snapLimit;
+            if (positioned && !snapped && travel.sqrMagnitude < 10000f && Time.deltaTime > 0f)
                 aircraftVelocity = travel / Time.deltaTime;
             else if (positioned) ps.Clear(); // teleport / floating-origin relocation
             simulationFrame.position = position;
+            psRenderer.bounds = new Bounds(position, Vector3.one * 120f);
             simulationFrame.rotation = Quaternion.identity;
             previousCameraPosition = position;
             positioned = true;
@@ -141,6 +154,7 @@ namespace BoscaliSummer.Features.Weather.Visuals
             Vector3 rainWorldVelocity = worldWind - (Vector3.up * RainTerminalVelocity);
             Vector3 apparentVelocity = rainWorldVelocity - aircraftVelocity;
             float apparentSpeed = apparentVelocity.magnitude;
+            ApparentSpeedNow = apparentSpeed;
             // Hovering in matching wind collapses V_rel; fall straight down instead of
             // feeding LookRotation a degenerate vector.
             Vector3 streamDir = apparentSpeed > 0.5f ? apparentVelocity / apparentSpeed : Vector3.down;
@@ -149,8 +163,11 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float boxLength = Mathf.Clamp(16f + apparentSpeed * 0.09f, 16f, 45f);
             float leadDistance = boxLength * 0.45f;
 
-            transform.position = targetCamera.transform.position - (streamDir * leadDistance);
+            // Bias the bounded volume toward the view without changing upstream travel distance.
+            Vector3 viewBias = Vector3.ProjectOnPlane(targetCamera.transform.forward, streamDir) * 4f;
+            transform.position = targetCamera.transform.position - (streamDir * leadDistance) + viewBias;
             transform.rotation = Quaternion.LookRotation(streamDir);
+            psRenderer.velocityScale = Mathf.Min(1f / 120f, 0.85f / Mathf.Max(1f, apparentSpeed));
 
             // Speed and lifetime matching to keep active particle count bounded
             var main = ps.main;
@@ -162,8 +179,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
             float alpha = RainVisualMath.StreakAlpha(rainIntensity);
             RainSkyMath.StreakColor(fogTint.r, fogTint.g, fogTint.b, Mathf.Clamp(lightLevel, 0.04f, 1f),
                 out float r, out float g, out float b);
-            main.startColor = new Color(Mathf.Max(0.55f, r), Mathf.Max(0.60f, g),
-                Mathf.Max(0.66f, b), alpha * 0.28f);
+            main.startColor = new ParticleSystem.MinMaxGradient(
+                new Color(r, g, b, alpha * 0.75f), new Color(r, g, b, alpha));
 
             // Emission rate preserves spatial particle density across speeds, clamped so
             // density and gusts can never overflow the particle budget.

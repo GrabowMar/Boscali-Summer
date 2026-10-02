@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
     /// Approach energy: stall floor, hot bleed, flare cap, rollout brakes, damage scale.

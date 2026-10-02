@@ -1,9 +1,10 @@
 using System.Collections.Generic;
-using BoscaliSummer.Core;
-using BoscaliSummer.Features.FireAndDestruction.Configuration;
-using BoscaliSummer.Features.FireAndDestruction.Domain;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.FireAndDestruction.Configuration;
+using BoscaliSummer.Modules.FireAndDestruction.Domain;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Diagnostics;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
@@ -11,9 +12,10 @@ namespace BoscaliSummer.Fire
 {
     /// <summary>
     /// Client-local visible building damage: every counted explosive or gun hit stamps a
-    /// breach decal on the wall plus a dust burst, the second hit adds a smoke wisp and
-    /// the third makes it a heavier plume. Collapses lay a ground scar. No HP tracking,
-    /// no networking; the server never sees any of this.
+    /// torn breach card on the wall plus a dust burst, the second hit adds a smoke wisp and
+    /// the third makes it a heavier plume. Collapses lay a ground scar and keep the cards
+    /// on the fallen facade. A later shot on the wreck shoves a slab and can punch one
+    /// more hole. No HP tracking, no networking; the server never sees any of this.
     /// </summary>
     internal sealed class BuildingHitLedger : MonoBehaviour, ISceneService
     {
@@ -46,6 +48,7 @@ namespace BoscaliSummer.Fire
         private readonly List<ParticleSystem[]> dustSystems = new List<ParticleSystem[]>(MaxDustBursts);
         private readonly List<float> dustExpiry = new List<float>(MaxDustBursts);
         private readonly FuelDepotSmokePool wispPool = new FuelDepotSmokePool(MaxWisps);
+        private readonly BreachCards cards = new BreachCards();
         private readonly BurnScarPool ashPool = new BurnScarPool();
         private readonly Queue<GlobalPosition> gunHits = new Queue<GlobalPosition>(GunQueueCap);
         private readonly Collider[] overlapBuffer = new Collider[8];
@@ -75,6 +78,8 @@ namespace BoscaliSummer.Fire
         internal void SubmitShockwave(MapBuilding building, Vector3 origin, float blastPower)
         {
             if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value) return;
+            if (blastPower >= HitEscalation.MinBlastPower)
+                RuinAftermathManager.Instance?.Poke(origin, blastPower);
             if (building == null || blastPower < HitEscalation.MinBlastPower) return;
             int id = building.GetInstanceID();
             if (!ShouldCount(id)) return;
@@ -99,11 +104,11 @@ namespace BoscaliSummer.Fire
         }
 
         /// <summary>
-        /// Releases everything a destroyed building owned: its ledger record and wisp,
-        /// its breach decals and its catch-all scorch marks. Called from the Destruct
-        /// path on every peer, including late-join replay.
+        /// Releases the ledger record, wisp, round scorch marks, and — unless the fallen
+        /// facade is keeping them — the torn breach cards. Called from Destruct on every
+        /// peer, including late-join replay, and when the hit table evicts an old building.
         /// </summary>
-        internal void Forget(int buildingId)
+        internal void Forget(int buildingId, bool keepCards = false)
         {
             if (records.TryGetValue(buildingId, out HitRecord record))
             {
@@ -118,8 +123,16 @@ namespace BoscaliSummer.Fire
                     if (breachMarks[i] != null) breachMarks[i].SetActive(false);
                 }
             }
+            if (!keepCards) cards.Hide(buildingId);
             ImpactScorchManager.Instance?.ReleaseForBuilding(buildingId);
         }
+
+        internal void HideBreaches(int buildingId) => cards.Hide(buildingId);
+
+        internal void AdoptBreaches(int buildingId, Transform parent) => cards.Adopt(buildingId, parent);
+
+        internal void StampRuinHole(Transform shell, Vector3 point, Vector3 normal, float size) =>
+            cards.Stamp(shell, point, normal, size);
 
         /// <summary>Lays a ground scar where walls fell. Ring of 32, oldest recycled.</summary>
         internal void StampGroundScar(Vector3 localPosition, float footprintX, float footprintZ)
@@ -180,6 +193,7 @@ namespace BoscaliSummer.Fire
         private void ProcessGunHit(GlobalPosition position)
         {
             Vector3 local = position.ToLocalPosition();
+            RuinAftermathManager.Instance?.Poke(local, 0f);
             int count = Physics.OverlapSphereNonAlloc(
                 local, 4f, overlapBuffer, PhysicsLayers.StaticsMask,
                 QueryTriggerInteraction.Collide);
@@ -271,17 +285,22 @@ namespace BoscaliSummer.Fire
         private void CountHit(int id, Vector3 point, Vector3 normal, float size)
         {
             HitRecord record = records[id];
-            GameObject mark = AcquireRingMark(breachMarks, ref breachHead, MaxBreachDecals);
-            if (mark != null)
+            bool card = cards.Place(id, point, normal, size);
+            GameObject mark = null;
+            if (!card)
             {
-                int slot = breachMarks.IndexOf(mark);
-                if (slot >= 0)
+                mark = AcquireRingMark(breachMarks, ref breachHead, MaxBreachDecals);
+                if (mark != null)
                 {
-                    while (breachOwners.Count <= slot) breachOwners.Add(0);
-                    breachOwners[slot] = id;
+                    int slot = breachMarks.IndexOf(mark);
+                    if (slot >= 0)
+                    {
+                        while (breachOwners.Count <= slot) breachOwners.Add(0);
+                        breachOwners[slot] = id;
+                    }
+                    ConfigureProjector(mark, point, normal, size,
+                        Mathf.Clamp(size * 0.22f, 1.6f, 4f), CraterDecalMaterialResolver.Resolve());
                 }
-                ConfigureProjector(mark, point, normal, size,
-                    Mathf.Clamp(size * 0.22f, 1.6f, 4f), CraterDecalMaterialResolver.Resolve());
             }
             EmitDust(point, normal);
             if (HitEscalation.HasWisp(record.Hits))
@@ -302,7 +321,7 @@ namespace BoscaliSummer.Fire
                     record.Wisp.ExternalIntensity = HitEscalation.WispIntensity(record.Hits);
                 }
             }
-            if (!loggedFirstBreach && Diagnostics.VerboseLogging.Value && mark != null)
+            if (!loggedFirstBreach && Diagnostics.VerboseLogging.Value && (card || mark != null))
             {
                 loggedFirstBreach = true;
                 Plugin.Logger.LogInfo(
@@ -463,6 +482,7 @@ namespace BoscaliSummer.Fire
             gunHits.Clear();
             wispPool.Clear();
             ashPool.Clear();
+            cards.Clear();
             nextWispTick = 0f;
             loggedFirstBreach = loggedFirstScar = false;
             CraterDecalMaterialResolver.ResetForScene();

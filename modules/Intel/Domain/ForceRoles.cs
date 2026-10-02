@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     internal enum ForceRole : byte
     {

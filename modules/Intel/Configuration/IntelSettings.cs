@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.Intel.Configuration
+namespace BoscaliSummer.Modules.Intel.Configuration
 {
     /// <summary>
     /// Intel's two switches. The master switch is read once at startup: a module that was

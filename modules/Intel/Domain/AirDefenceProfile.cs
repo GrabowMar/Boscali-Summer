@@ -1,6 +1,6 @@
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>One weapon station's envelope, copied out of <c>WeaponInfo</c> so the profile stays pure.</summary>
     internal readonly struct StationSample

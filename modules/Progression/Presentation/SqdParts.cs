@@ -1,11 +1,11 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
+using BoscaliSummer.Modules.Progression.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Progression.Presentation
+namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>State colours for the local parts: rail hue, value ink, and the selection accent.</summary>
     internal static class SqdTone
@@ -153,6 +153,9 @@ namespace BoscaliSummer.Features.Progression.Presentation
         }
 
         private Vector2 area;
+
+        /// <summary>Hover help shown in the console footer while the pointer is over the frame.</summary>
+        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
 
         public void Set(Sprite sprite)
         {
@@ -324,12 +327,14 @@ namespace BoscaliSummer.Features.Progression.Presentation
             base.Place(s);
             float w = TextWidth(s.W), x = PadX + IconW + 8f;
             float th = AvText.Height(title, w);
-            float hh = AvText.Height(hint, w);
-            AvLay.Place(icon.rectTransform, PadX, PadY - 1f, IconW, IconW);
-            AvLay.Place(title.rectTransform, x, PadY, w, th);
-            AvLay.Place(hint.rectTransform, x, PadY + th + 3f, w, hh);
+            float hh = hint.text.Length > 0 ? AvText.Height(hint, w) : 0f;
+            float content = th + (hh > 0f ? 3f + hh : 0f) + (action != null ? 8f + ActionH : 0f);
+            float top = Mathf.Max(PadY, (s.H - content) * 0.5f);
+            AvLay.Place(icon.rectTransform, PadX, top - 1f, IconW, IconW);
+            AvLay.Place(title.rectTransform, x, top, w, th);
+            AvLay.Place(hint.rectTransform, x, top + th + 3f, w, hh);
             if (action != null)
-                AvLay.Place(action.Rect, x, PadY + th + (hint.text.Length > 0 ? 3f + hh : 0f) + 8f, Mathf.Min(170f, w), ActionH);
+                AvLay.Place(action.Rect, x, top + th + (hh > 0f ? 3f + hh : 0f) + 8f, Mathf.Min(170f, w), ActionH);
         }
 
         public override void Restyle()
@@ -350,19 +355,23 @@ namespace BoscaliSummer.Features.Progression.Presentation
     internal sealed class SqdStatGrid : AvPart
     {
         private const float CellH = 40f, PadX = 12f;
-        private const int Columns = 2;
+        private readonly int Columns;
         private readonly AvFrame frame;
         private readonly System.Collections.Generic.List<TMP_Text> keys = new System.Collections.Generic.List<TMP_Text>(12);
         private readonly System.Collections.Generic.List<TMP_Text> values = new System.Collections.Generic.List<TMP_Text>(12);
         private readonly System.Collections.Generic.List<AvState> states = new System.Collections.Generic.List<AvState>(12);
         private readonly System.Collections.Generic.List<Image> rules = new System.Collections.Generic.List<Image>(8);
-        private readonly Image divider;
+        private readonly System.Collections.Generic.List<Image> dividers = new System.Collections.Generic.List<Image>(3);
 
-        public SqdStatGrid(RectTransform parent)
+        /// <summary>Hover help for the whole grid (a grid is one frame, so one tip covers every cell).</summary>
+        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
+
+        public SqdStatGrid(RectTransform parent, int columns = 2)
         {
+            Columns = Mathf.Clamp(columns, 1, 4);
             Rect = AvLay.Child(parent, "StatGrid");
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f)); AvLay.Fill(frame.rectTransform);
-            divider = AvLay.Solid(Rect, "Divider", Color.clear);
+            for (int i = 0; i < Columns - 1; i++) dividers.Add(AvLay.Solid(Rect, "Divider", Color.clear));
             Restyle();
         }
 
@@ -402,7 +411,8 @@ namespace BoscaliSummer.Features.Progression.Presentation
                 AvLay.Place(keys[i].rectTransform, x, y + 5f, col - PadX - 6f, 14f);
                 AvLay.Place(values[i].rectTransform, x, y + 19f, col - PadX - 6f, 18f);
             }
-            AvLay.Place(divider.rectTransform, col, 6f, 1f, Mathf.Max(0f, s.H - 12f));
+            for (int d = 0; d < dividers.Count; d++)
+                AvLay.Place(dividers[d].rectTransform, col * (d + 1), 6f, 1f, Mathf.Max(0f, s.H - 12f));
             for (int r = 0; r < rules.Count; r++)
                 AvLay.Place(rules[r].rectTransform, 8f, (r + 1) * CellH, s.W - 16f, 1f);
         }
@@ -411,7 +421,7 @@ namespace BoscaliSummer.Features.Progression.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            divider.color = AvTheme.Hairline;
+            foreach (Image divider in dividers) divider.color = AvTheme.Hairline;
             foreach (Image rule in rules) rule.color = AvTheme.Hairline;
             for (int i = 0; i < keys.Count; i++)
             {
@@ -537,6 +547,131 @@ namespace BoscaliSummer.Features.Progression.Presentation
             valueSub.color = SqdTone.Dim;
             meter.Restyle();
             thumb?.Restyle();
+        }
+    }
+
+    /// <summary>
+    /// The PILOT page's skills summary: one row per qualification lane, its grades as pips (held /
+    /// not yet), the lane name at the left and the count at the right. Rows share the part's height
+    /// (within a cap), so the part can take a page's leftover height without stretching one giant cell.
+    /// </summary>
+    internal sealed class SkillLaneStrip : AvPart
+    {
+        private const float GapY = 4f, MinRow = 30f, NameW = 112f, CountW = 40f, PadX = 10f, PipGap = 4f;
+        private readonly int lanes, grades;
+        private readonly AvFrame[] backs;
+        private readonly TMP_Text[] names, counts;
+        private readonly TMP_Text[][] gradeNames;
+        private readonly Image[][] pips;
+        private readonly bool[][] held;
+        private readonly bool[] closed;
+
+        public SkillLaneStrip(RectTransform parent, string[] laneNames, int gradeCount)
+        {
+            lanes = laneNames.Length; grades = gradeCount;
+            Rect = AvLay.Child(parent, "SkillLanes");
+            backs = new AvFrame[lanes]; names = new TMP_Text[lanes]; counts = new TMP_Text[lanes];
+            gradeNames = new TMP_Text[lanes][];
+            pips = new Image[lanes][]; held = new bool[lanes][]; closed = new bool[lanes];
+            for (int l = 0; l < lanes; l++)
+            {
+                backs[l] = AvFrame.Add(Rect, "Lane " + l, AvChamfer.Diagonal(4f));
+                names[l] = AvText.Make(Rect, "LaneName " + l, AvTextRole.Label, laneNames[l], TextAlignmentOptions.MidlineLeft);
+                AvText.Fit(names[l], false);
+                counts[l] = AvText.Make(Rect, "LaneCount " + l, AvTextRole.DataSmall, "0/" + grades, TextAlignmentOptions.MidlineRight);
+                AvText.Fit(counts[l], false);
+                pips[l] = new Image[grades]; held[l] = new bool[grades];
+                gradeNames[l] = new TMP_Text[grades];
+                for (int g = 0; g < grades; g++)
+                {
+                    pips[l][g] = AvLay.Solid(Rect, "Pip " + l + "." + g, Color.clear);
+                    string title = "GRADE " + (g + 1), help = title;
+                    foreach (PerkDefinition perk in PerkCatalog.All)
+                        if (perk.Lane == laneNames[l] && perk.Grade == g + 1)
+                        { title = perk.Name.Replace(" Qualification", " AUTH"); help = perk.Name + ": " + perk.Description; break; }
+                    gradeNames[l][g] = AvText.Make(Rect, "Grade " + l + "." + g, AvTextRole.Micro,
+                        title.ToUpperInvariant(), TextAlignmentOptions.TopLeft, true);
+                    pips[l][g].raycastTarget = true;
+                    AvHelpTip.Attach(pips[l][g].gameObject, help);
+                    gradeNames[l][g].raycastTarget = true;
+                    AvHelpTip.Attach(gradeNames[l][g].gameObject, help);
+                }
+            }
+            Restyle();
+        }
+
+        /// <summary>Hover help for every lane row.</summary>
+        public string Help
+        {
+            set
+            {
+                for (int l = 0; l < lanes; l++) { backs[l].raycastTarget = true; AvHelpTip.Attach(backs[l].gameObject, value); }
+            }
+        }
+
+        /// <summary>Repaint one lane: which grades are held, and whether the career cap closed the lane.</summary>
+        public void SetLane(int lane, bool[] gradesHeld, bool laneClosed)
+        {
+            if (lane < 0 || lane >= lanes) return;
+            int taken = 0;
+            for (int g = 0; g < grades; g++)
+            {
+                held[lane][g] = g < gradesHeld.Length && gradesHeld[g];
+                if (held[lane][g]) taken++;
+            }
+            closed[lane] = laneClosed;
+            counts[lane].text = taken + "/" + grades;
+            RestyleLane(lane);
+        }
+
+        public override float Measure(float width) => lanes * MinRow + Mathf.Max(0, lanes - 1) * GapY;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float rowH = Mathf.Max(MinRow, (s.H - (lanes - 1) * GapY) / Mathf.Max(1, lanes));
+            float detailH = 0f, detailW = (s.W - 2f * PadX) / grades - PipGap;
+            for (int l = 0; l < lanes; l++)
+                for (int g = 0; g < grades; g++) detailH = Mathf.Max(detailH, AvText.Height(gradeNames[l][g], detailW));
+            bool detailed = rowH >= 38f + detailH;
+            float pipsX = PadX + NameW + 6f, pipsW = s.W - pipsX - CountW - PadX - 4f;
+            float pipW = Mathf.Max(6f, (pipsW - (grades - 1) * PipGap) / Mathf.Max(1, grades)), pipH = Mathf.Min(rowH - 14f, 24f);
+            for (int l = 0; l < lanes; l++)
+            {
+                float y = l * (rowH + GapY);
+                AvLay.Place(backs[l].rectTransform, 0f, y, s.W, rowH);
+                AvLay.Place(names[l].rectTransform, PadX, y, NameW, detailed ? 24f : rowH);
+                AvLay.Place(counts[l].rectTransform, s.W - PadX - CountW, y, CountW, detailed ? 24f : rowH);
+                for (int g = 0; g < grades; g++)
+                {
+                    float x = detailed ? PadX + g * (s.W - 2f * PadX) / grades : pipsX + g * (pipW + PipGap);
+                    float w = detailed ? (s.W - 2f * PadX) / grades - PipGap : pipW;
+                    AvLay.Place(pips[l][g].rectTransform, x, y + (detailed ? 25f : (rowH - pipH) * .5f), w, detailed ? 4f : pipH);
+                    gradeNames[l][g].gameObject.SetActive(detailed);
+                    if (detailed) AvLay.Place(gradeNames[l][g].rectTransform, x, y + 34f, w, rowH - 38f);
+                }
+            }
+        }
+
+        private void RestyleLane(int l)
+        {
+            names[l].color = closed[l] ? AvTheme.Disabled : SqdTone.Ink;
+            counts[l].color = closed[l] ? AvTheme.Disabled : SqdTone.Dim;
+            for (int g = 0; g < grades; g++)
+            {
+                pips[l][g].color = held[l][g] ? SqdTone.Key : closed[l] ? SqdTone.Caption.WithAlpha(.15f) : SqdTone.Caption.WithAlpha(.3f);
+                gradeNames[l][g].color = held[l][g] ? SqdTone.Ink : SqdTone.Dim;
+            }
+        }
+
+        public override void Restyle()
+        {
+            AvStyle c = AvStyleHost.FuiStyle("card inert");
+            for (int l = 0; l < lanes; l++)
+            {
+                backs[l].Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                RestyleLane(l);
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     internal enum NavalRole { Patrol, Screen, CoastalSupport, Withdraw }
 

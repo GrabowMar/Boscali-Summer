@@ -2,19 +2,19 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Contact symbology for the maximised tactical map.
     ///
     /// <para>The game draws every ground vehicle with one blob, every aircraft and ship as a bare
     /// silhouette, and at map scale they all read as tiny tinted specks. This layer keeps the
-    /// game's icon (its selection, tint, tooltip, click and heading behaviour stay authoritative)
-    /// and adds two things on top of the same pipeline: a framed dark plate behind each contact
+    /// game's icon (its observed position, tint and heading stay authoritative)
+    /// and adds two things on top of the same pipeline: a framed translucent plate behind each contact
     /// whose outline shape marks allegiance (see <see cref="MapSymbolAtlas"/>), and a distinct
     /// glyph for ground platforms that the game gives no distinguishing sprite (armour, light
-    /// vehicles, supply trucks, artillery, anti-air guns, SAMs, radars). Aircraft and ships keep the
-    /// game's per-type silhouette, which already differs by class and rotates with heading.</para>
+    /// vehicles, supply trucks, artillery, anti-air guns, SAMs, radars). Aircraft and ships receive
+    /// silhouettes with the same line weight; buildings use an unclassified site mark.</para>
     ///
     /// <para>Bounded and cached: one small state per icon (hard ceiling <see cref="MaximumSymbols"/>),
     /// one shared plate layer, no per-frame allocation, no scene scans. Plates live in that layer
@@ -25,10 +25,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     {
         internal const int MaximumSymbols = 2048;
         /// <summary>Plate width over glyph width; glyphs are drawn to fit inside the hostile diamond.</summary>
-        internal const float PlateRatio = 1.5f;
+        internal const float PlateRatio = 1.4f;
         /// <summary>Plate width in reference pixels at the game's MEDIUM (80%) symbol size.</summary>
         internal const float MediumPlate = 24f;
-        private const float SelectedGrowth = 1.2f;
+        private const float SelectedGrowth = 1.16f;
         private const float SweepInterval = 1f;
 
         private sealed class Symbol
@@ -79,7 +79,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             float pixels = Mathf.Max(rect.rect.width, rect.rect.height);
             float lossy = Mathf.Max(Mathf.Abs(transform.lossyScale.x), Mathf.Abs(transform.lossyScale.y));
             if (pixels < .01f || lossy < .0001f) return true;
-            float glyph = MediumPlate * SizeFactor() * symbol.Relative / PlateRatio *
+            float overview = MfdTerrainRelief.IsDrawing
+                ? Mathf.Lerp(.84f, 1f, Mathf.InverseLerp(1f, 2f, MfdTerrainRelief.Zoom)) : 1f;
+            float glyph = MediumPlate * overview * SizeFactor() * symbol.Relative / PlateRatio *
                 (selected ? SelectedGrowth : 1f) * layerScale;
             transform.localScale *= glyph / (pixels * lossy);
             return true;
@@ -97,10 +99,11 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             Transform transform = image.transform;
             var glyphRect = transform as RectTransform;
             RectTransform plate = symbol.PlateRect;
-            plate.position = transform.position;
-            plate.rotation = Quaternion.identity;
+            if (plate.position != transform.position) plate.position = transform.position;
+            if (plate.rotation != Quaternion.identity) plate.rotation = Quaternion.identity;
             float ratio = Mathf.Abs(transform.lossyScale.x) / Mathf.Max(.0001f, Mathf.Abs(layer.lossyScale.x));
-            plate.localScale = new Vector3(ratio, ratio, 1f);
+            Vector3 scale = new Vector3(ratio, ratio, 1f);
+            if (plate.localScale != scale) plate.localScale = scale;
             if (glyphRect != null)
             {
                 float side = Mathf.Max(glyphRect.rect.width, glyphRect.rect.height) * PlateRatio;
@@ -110,7 +113,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     plate.sizeDelta = symbol.PlateSize;
                 }
             }
-            symbol.Plate.color = image.color;
+            if (symbol.Plate.color != image.color) symbol.Plate.color = image.color;
         }
 
         /// <summary>Puts the game's own icon back and hides the plate.</summary>
@@ -138,7 +141,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             }
             if (symbol == NotApplicable) return symbol;
             Unit contact = icon.unit;
-            if (contact == null || icon.iconImage == null || !EnsurePlate(symbol)) return symbol;
+            if (contact == null || icon.iconImage == null || !EnsurePlate(symbol, icon)) return symbol;
             MapSide side = SideOf(contact);
             if (side != symbol.Side)
             {
@@ -159,9 +162,14 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (unit is Ship) { symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Hull); return symbol; }
             if (unit is Aircraft)
             {
-                // Jets keep the game's per-type silhouette; rotor sprites are all thin lines at this size.
                 if (symbol.Original != null && symbol.Original.name.IndexOf("helo", System.StringComparison.OrdinalIgnoreCase) >= 0)
                     symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Helicopter);
+                else symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Aircraft);
+                return symbol;
+            }
+            if (unit is Building)
+            {
+                symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Contact);
                 return symbol;
             }
             if (!(unit is GroundVehicle)) return NotApplicable;
@@ -212,14 +220,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         // -------------------------------------------------------------- plates
 
-        private static bool EnsurePlate(Symbol symbol)
+        private static bool EnsurePlate(Symbol symbol, UnitMapIcon icon)
         {
             if (symbol.Plate != null) return true;
             if (!EnsureLayer()) return false;
             var go = new GameObject("NOAvionics.MapPlate", typeof(RectTransform), typeof(Image));
             go.transform.SetParent(layer, false);
             symbol.Plate = go.GetComponent<Image>();
-            symbol.Plate.raycastTarget = false;
+            symbol.Plate.raycastTarget = true;
+            go.AddComponent<UnitHitTarget>().Icon = icon;
             symbol.Plate.enabled = false;
             symbol.PlateRect = symbol.Plate.rectTransform;
             symbol.PlateSize = Vector2.zero;

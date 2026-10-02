@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>List row: state rail · name / sub (wraps) · mono value · up to 3 trailing controls.</summary>
     public sealed class AvRow : AvPart
@@ -73,7 +73,10 @@ namespace NOAvionics.Ui
             return c;
         }
 
-        private float BadgeSpace => badge != null && badge.enabled ? BadgeW + 6f : 0f;
+        private float BadgeSpace => BadgeSlot || (badge != null && badge.enabled) ? BadgeW + 6f : 0f;
+
+        /// <summary>Reserve the badge slot even without an image, so mixed rows align their names.</summary>
+        public bool BadgeSlot { get; set; }
 
         /// <summary>Optional small image before the name (station logos, portraits). Null hides it.</summary>
         public void SetBadge(Texture texture)
@@ -104,7 +107,7 @@ namespace NOAvionics.Ui
             float w = TextWidth(s.W), nh = AvText.Height(name, w);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
             float x0 = PadX + 4f + BadgeSpace;
-            if (BadgeSpace > 0f) AvLay.Place(badge.rectTransform, PadX + 4f, (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
+            if (badge != null && badge.enabled) AvLay.Place(badge.rectTransform, PadX + 4f, (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
             AvLay.Place(name.rectTransform, x0, PadY, w, nh);
             AvLay.Place(sub.rectTransform, x0, PadY + nh + 2f, w, AvText.Height(sub, w));
             float x = s.W - PadX;

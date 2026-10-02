@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 using RoadPathfinding;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// Cached distance-to-road query over the game's road network, so the ditch sidesteps

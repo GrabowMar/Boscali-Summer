@@ -1,13 +1,12 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Presentation;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Presentation;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Owned presentation hosts for the game's controller-backed stock map-MFD pages.
@@ -386,6 +385,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             /// </summary>
             protected abstract (AvIcon Icon, string Label)[] TabItems { get; }
 
+            /// <summary>Optional hover tip per tab, in tab order (what the page shows and what it lets you do).</summary>
+            protected virtual string[] TabTips => null;
+
             public void Build(RectTransform root)
             {
                 (AvIcon Icon, string Label)[] tabs = TabItems ?? Array.Empty<(AvIcon, string)>();
@@ -396,8 +398,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 {
                     AvTabBar tabBar = Console.Tabs(tabs);
                     var hints = new string[tabs.Length];
+                    string[] custom = TabTips;
                     for (int i = 0; i < hints.Length; i++)
-                        hints[i] = "Open the " + tabs[i].Label.ToLowerInvariant() + " page.";
+                        hints[i] = custom != null && i < custom.Length && !string.IsNullOrEmpty(custom[i])
+                            ? custom[i] : "Open the " + tabs[i].Label.ToLowerInvariant() + " page.";
                     TabHelp.Apply(tabBar, hints);
                 }
                 Console.PageChanged += OnPageChanged;

@@ -1,6 +1,6 @@
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 
-namespace BoscaliSummer.Features.Command.Runtime
+namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Mission-scoped faction resources. Call on Unity's main thread. Morale starts at

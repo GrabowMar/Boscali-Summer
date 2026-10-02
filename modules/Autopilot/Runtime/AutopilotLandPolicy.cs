@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     internal static class AutopilotLandPolicy
     {

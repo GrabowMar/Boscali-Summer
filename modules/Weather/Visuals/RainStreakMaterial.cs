@@ -1,10 +1,10 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
-    /// Shared procedural rain-streak sprite: one 4x32 gradient texture plus a transparent
+    /// Shared procedural rain-streak sprite: one 8x32 gradient texture plus a transparent
     /// particle material with URP camera fading. Instances are owned by the caller, which
     /// must destroy them. Used by both the falling-rain and canopy-droplet emitters.
     /// </summary>
@@ -12,36 +12,37 @@ namespace BoscaliSummer.Features.Weather.Visuals
     {
         internal static Texture2D CreateTexture()
         {
-            // 4x32 procedural gradient with soft edges and cosine-bell fade
-            var tex = new Texture2D(4, 32, TextureFormat.RGBA32, false)
+            // Transparent borders prevent a bright rectangular edge on stretched billboards.
+            const int width = 8, height = 32;
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, true)
             {
                 name = "ProceduralRainStreak",
                 wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
+                filterMode = FilterMode.Trilinear
             };
 
-            Color32[] pixels = new Color32[4 * 32];
-            for (int y = 0; y < 32; y++)
+            Color32[] pixels = new Color32[width * height];
+            for (int y = 0; y < height; y++)
             {
-                float v = y / 31f;
-                float alpha = Mathf.Sin(v * Mathf.PI);
+                float v = y / (float)(height - 1);
+                float alpha = Mathf.Max(0f, Mathf.Sin(v * Mathf.PI));
                 alpha = Mathf.Pow(alpha, 1.3f);
                 byte a = (byte)(alpha * 255f);
 
-                for (int x = 0; x < 4; x++)
+                for (int x = 0; x < width; x++)
                 {
-                    float uDist = Mathf.Abs(x - 1.5f) / 1.5f;
-                    byte finalA = (byte)(a * (1f - uDist * 0.35f));
-                    pixels[y * 4 + x] = new Color32(240, 248, 255, finalA);
+                    float crossFade = Mathf.Max(0f, Mathf.Sin(x / (float)(width - 1) * Mathf.PI));
+                    byte finalA = (byte)(a * crossFade);
+                    pixels[y * width + x] = new Color32(240, 248, 255, finalA);
                 }
             }
 
             tex.SetPixels32(pixels);
-            tex.Apply(false, true);
+            tex.Apply(true, true);
             return tex;
         }
 
-        internal static Material CreateMaterial(Texture2D tex, bool additive = false)
+        internal static Material CreateMaterial(Texture2D tex, bool additive = false, bool cameraFade = true)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit")
                 ?? Shader.Find("Particles/Standard Unlit")
@@ -63,14 +64,20 @@ namespace BoscaliSummer.Features.Weather.Visuals
             if (mat.HasProperty("_Cull")) mat.SetInt("_Cull", (int)CullMode.Off);
 
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            // Runtime-created materials do not run Unity's particle material inspector.
+            // The built-in fallback needs its alpha variant as well as the blend factors.
+            if (shader.name == "Particles/Standard Unlit") mat.EnableKeyword("_ALPHABLEND_ON");
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
 
             // URP particle camera fading: drops dissolve as they approach the near plane instead of
-            // rendering as giant soft disks on the lens. Requires the URP depth texture; silently
-            // inactive otherwise, with maxParticleSize still bounding them.
-            if (mat.HasProperty("_CameraFadingEnabled")) mat.SetFloat("_CameraFadingEnabled", 1f);
+            // rendering as giant soft disks on the lens. Camera fade uses particle eye depth;
+            // it does not require a scene-depth texture or an extra screen-space pass.
+            if (mat.HasProperty("_CameraFadingEnabled")) mat.SetFloat("_CameraFadingEnabled", cameraFade ? 1f : 0f);
             if (mat.HasProperty("_CameraNearFadeDistance")) mat.SetFloat("_CameraNearFadeDistance", 0.7f);
             if (mat.HasProperty("_CameraFarFadeDistance")) mat.SetFloat("_CameraFarFadeDistance", 2.5f);
-            mat.EnableKeyword("_FADING_ON");
+            if (mat.HasProperty("_CameraFadeParams")) mat.SetVector("_CameraFadeParams", new Vector4(0.7f, 1f / 1.8f, 0f, 0f));
+            if (cameraFade) mat.EnableKeyword("_FADING_ON");
 
             if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
             if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);

@@ -1,11 +1,10 @@
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// The kit v2 parts the DISPATCH and DESK pages share.
@@ -16,9 +15,9 @@ namespace BoscaliSummer.Features.Events.Presentation
     /// it is a small widget the cards below place and resize, the way <c>AvCard</c> hosts a nested
     /// <c>AvFlow</c>. The poster is centre-cropped to the plate, never stretched.</para>
     ///
-    /// <para><see cref="EventHeroPart"/> is the live dispatch: a banner, the tier tag, the event name, effect
-    /// pills, a countdown with its time-remaining bar, the plain-words consequence and the scripted beats.
-    /// It has a compact calm state for a quiet theater. Every state it can show (ENDING, a scripted beat
+    /// <para><see cref="EventHeroPart"/> is the live dispatch: the poster with its tier tag, the event name, one
+    /// effect line, the plain-words consequence and the scripted beats (the countdown is the LEFT metric tile).
+    /// It has a calm standby banner for a quiet theater that grows into spare page height. Every state it can show (ENDING, a scripted beat
     /// firing, a cancelled beat) carries a word as well as a colour (R1). <see cref="EventCaseFilePart"/>
     /// is the same poster-plus-copy shape, sized for the DESK page's current-or-last case file.</para>
     ///
@@ -38,6 +37,13 @@ namespace BoscaliSummer.Features.Events.Presentation
             state == AvState.Inert
                 ? AvStyleHost.FuiColor("ink-dim", AvTheme.Dim)
                 : AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo);
+
+        /// <summary>Solid slab colours (same tokens as <see cref="AvSlab"/>): filled tag, dark ink.</summary>
+        internal static Color SlabBack(AvState state) =>
+            AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + AvStates.Class(state)).Background,
+                AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo));
+
+        internal static Color SlabInk() => AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
 
         /// <summary>The rect of <paramref name="source"/> (in uv space) that fills a w x h plate without stretching.</summary>
         internal static Rect CropUv(Rect source, float w, float h)
@@ -70,6 +76,11 @@ namespace BoscaliSummer.Features.Events.Presentation
             private readonly TMP_Text mark;
             private readonly float markSize;
             private Sprite poster;
+            private AvIcon glyphIcon = AvIcon.Coins;
+            private float shownMark = -1f;
+
+            /// <summary>How much larger than its base size the category mark is drawn (a big standby banner scales it up).</summary>
+            public float MarkScale = 1f;
 
             public RectTransform Root { get; }
 
@@ -96,7 +107,9 @@ namespace BoscaliSummer.Features.Events.Presentation
                 AvLay.Fill(stripes.rectTransform);
                 AvLay.Fill(art.rectTransform);
                 if (poster != null) art.uvRect = CropUv(SpriteUv(poster), w, h);
-                float size = Mathf.Min(markSize, Mathf.Min(w, h) * 0.6f);
+                float want = markSize * Mathf.Max(0.1f, MarkScale);
+                float size = Mathf.Min(want, Mathf.Min(w, h) * 0.6f);
+                if (poster == null && Mathf.Abs(want - shownMark) > 0.5f) { shownMark = want; AvIcons.Set(mark, glyphIcon, want); }
                 AvLay.Place(mark.rectTransform, (w - size) * 0.5f, (h - size) * 0.5f, size, size);
             }
 
@@ -110,89 +123,35 @@ namespace BoscaliSummer.Features.Events.Presentation
                 stripes.color = ink.WithAlpha(0.10f);
                 mark.gameObject.SetActive(!hasArt);
                 if (hasArt) return;
-                AvIcons.Set(mark, categoryGlyph, markSize);
+                glyphIcon = categoryGlyph;
+                shownMark = markSize * Mathf.Max(0.1f, MarkScale);
+                AvIcons.Set(mark, categoryGlyph, shownMark);
                 mark.color = ink.WithAlpha(0.85f);
             }
 
             public void Restyle() => back.color = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
         }
 
-        /// <summary>A small effect pill: state rail plus the effect word, sized to its text and wrapped by its owner.</summary>
-        internal sealed class Pill
-        {
-            private const float Height = 22f;
-            private readonly Image back, rail;
-            private readonly TMP_Text text;
-            private AvState state = AvState.Inert;
-
-            public RectTransform Root { get; }
-            public static float PillHeight => Height;
-            public bool Visible => text.text.Length > 0;
-            public float Width => Visible ? Mathf.Ceil(AvText.Width(text)) + 20f : 0f;
-
-            public Pill(RectTransform parent)
-            {
-                Root = AvLay.Child(parent, "Pill");
-                back = AvLay.Solid(Root, "Back", Color.clear);
-                rail = AvLay.Solid(Root, "Rail", Color.clear);
-                text = AvText.Make(Root, "Text", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft);
-                Root.gameObject.SetActive(false);
-                Restyle();
-            }
-
-            /// <summary>True when the pill's text or visibility changed (its owner must re-measure).</summary>
-            public bool Set(string value, AvState st)
-            {
-                string composed = string.IsNullOrEmpty(value) ? "" : AvStates.Glyph(st) + value;
-                if (composed == text.text && st == state) return false;
-                bool visibilityOrWidth = composed != text.text;
-                text.text = composed;
-                state = st;
-                Root.gameObject.SetActive(composed.Length > 0);
-                Restyle();
-                return visibilityOrWidth;
-            }
-
-            public void Place(float x, float y, float w)
-            {
-                AvLay.Place(Root, x, y, w, Height);
-                AvLay.Fill(back.rectTransform);
-                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, Height);
-                AvLay.Place(text.rectTransform, 10f, 0f, w - 12f, Height);
-            }
-
-            public void Restyle()
-            {
-                AvStyle st = AvStyleHost.FuiStyle("chip " + AvStates.Class(state));
-                back.color = AvStyleHost.Resolve(st.Background, AvTheme.SurfaceInert);
-                rail.color = AvStyleHost.Resolve(st.Rail, AvTheme.RailInert);
-                text.color = state == AvState.Inert
-                    ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary)
-                    : TextColor(state);
-            }
-        }
-
         /// <summary>
-        /// The active dispatch, the page's hero. Calm: one compact card. Active: banner + tier tag, category and
-        /// target, the event name, effect pills, a big countdown over its time-remaining bar, the consequence in
-        /// plain words, flavour copy and (for a scripted superevent) the beat log.
+        /// The active dispatch, the page's hero. Active: the poster on the left with the tier tag on it, and
+        /// beside it the category and target, the event name and one effect line; below, the consequence flag and
+        /// (for a scripted superevent) the beat log. The countdown and its bar live in the LEFT metric tile, and
+        /// the price numbers in COST / RESET, so nothing is said twice. Calm: a designed standby banner (stripe
+        /// plate, large radar mark) that takes the page's spare height, never an empty box.
         /// </summary>
         private sealed class EventHeroPart : AvPart
         {
-            private const float BannerHeight = 100f;
+            private const float PlateW = 132f, PlateMin = 96f;
             private const float CalmPlate = 52f;
 
             private readonly AvFrame frame;
             private readonly Image rail, tagBack;
             private readonly EventPlateArt plate;
-            private readonly TMP_Text tag, kicker, title, clock, clockNote, clockTag, consequence, flavor;
-            private readonly Pill[] pills = new Pill[3];
+            private readonly TMP_Text tag, kicker, title, effectLine, consequence;
             private readonly TMP_Text[] steps;
-            private readonly AvGaugeGraphic progress;
 
             private AvState tierState = AvState.Inert;
-            private AvState clockState = AvState.Inert;
-            private AvState progressState = AvState.Inert;
+            private AvState effectState = AvState.Inert;
             private bool calm = true;
             private bool scripted;
             private int stepCount;
@@ -202,47 +161,34 @@ namespace BoscaliSummer.Features.Events.Presentation
                 Rect = AvLay.Child(parent, "EventHero");
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
                 AvLay.Fill(frame.rectTransform);
+                frame.raycastTarget = true;   // the whole card carries the dispatch's plain-words help
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 plate = new EventPlateArt(Rect, 30f);
                 tagBack = AvLay.Solid(plate.Root, "TagBack", Color.clear);
                 tag = AvText.Make(tagBack.rectTransform, "Tag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
                 kicker = AvText.Make(Rect, "Kicker", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
                 title = AvText.Make(Rect, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
-                for (int i = 0; i < pills.Length; i++) pills[i] = new Pill(Rect);
-                clock = AvText.Make(Rect, "Clock", AvTextRole.Display, "", TextAlignmentOptions.MidlineLeft);
-                clockNote = AvText.Make(Rect, "ClockNote", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                clockTag = AvText.Make(Rect, "ClockTag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+                effectLine = AvText.Make(Rect, "Effect", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
                 consequence = AvText.Make(Rect, "Consequence", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
-                flavor = AvText.Make(Rect, "Flavor", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                 steps = new TMP_Text[MaximumEventSteps];
                 for (int i = 0; i < steps.Length; i++)
                     steps[i] = AvText.Make(Rect, "Step " + i, AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
-                var go = new GameObject("Progress", typeof(RectTransform), typeof(CanvasRenderer));
-                go.transform.SetParent(Rect, false);
-                progress = go.AddComponent<AvGaugeGraphic>();
-                progress.Shape = AvGaugeShape.Bar;
-                progress.raycastTarget = false;
                 ApplyMode(true);
                 Restyle();
             }
 
-            /// <summary>Show the calm compact card or the full active one.</summary>
+            /// <summary>Show the calm standby banner or the full active card. Only the calm banner grows.</summary>
             private void ApplyMode(bool isCalm)
             {
                 calm = isCalm;
+                Grow = isCalm ? 1f : 0f;
                 tagBack.gameObject.SetActive(!isCalm);
                 kicker.gameObject.SetActive(!isCalm);
-                clock.gameObject.SetActive(!isCalm);
-                clockNote.gameObject.SetActive(!isCalm);
-                clockTag.gameObject.SetActive(!isCalm);
-                progress.gameObject.SetActive(!isCalm);
-                flavor.gameObject.SetActive(!isCalm);
-                if (isCalm)
-                    foreach (Pill pill in pills) pill.Set("", AvState.Inert);
+                effectLine.gameObject.SetActive(!isCalm);
             }
 
-            /// <summary>Binds a live dispatch. Clock, bar and script refresh separately, at refresh cadence.</summary>
-            public void BindActive(ActiveEventView view, AvState tier, string consequenceText)
+            /// <summary>Binds a live dispatch. The effect line and the script refresh separately, at refresh cadence.</summary>
+            public void BindActive(ActiveEventView view, AvState tier, string consequenceText, string helpText)
             {
                 ApplyMode(false);
                 tierState = tier;
@@ -252,7 +198,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 kicker.text = view.Category + " · " + view.Target;
                 title.text = view.Title.ToUpperInvariant();
                 consequence.text = consequenceText ?? "";
-                flavor.text = view.FlavorText ?? "";
+                AvHelpTip.Attach(frame.gameObject, (helpText + " " + view.FlavorText).Trim());
                 Restyle();
                 Changed();
             }
@@ -261,48 +207,27 @@ namespace BoscaliSummer.Features.Events.Presentation
             {
                 ApplyMode(true);
                 tierState = AvState.Inert;
-                clockState = AvState.Inert;
+                effectState = AvState.Inert;
                 scripted = false;
                 stepCount = 0;
                 foreach (TMP_Text step in steps) step.text = "";
+                effectLine.text = "";
                 plate.Bind(null, AvIcon.Radar2, TextColor(AvState.Inert));
-                title.text = "THE THEATER IS QUIET";
+                title.text = "THEATER QUIET";
                 consequence.text = note ?? "";
-                SetProgress(0f, AvState.Inert);
+                AvHelpTip.Attach(frame.gameObject,
+                    "THEATER QUIET: no world event is running. The director rolls the next one from the theater's ground balance; the rings below show how close it is to escalating.");
                 Restyle();
                 Changed();
             }
 
-            /// <summary>The three effect pills (cost, tempo, side). Empty text hides a pill.</summary>
-            public void SetPills(string first, AvState firstState, string second, AvState secondState,
-                string third, AvState thirdState)
+            /// <summary>The one effect line (price, tempo, side). It carries a word as well as a colour (R1).</summary>
+            public void SetEffect(string text, AvState state)
             {
-                bool grew = pills[0].Set(first, firstState);
-                grew |= pills[1].Set(second, secondState);
-                grew |= pills[2].Set(third, thirdState);
+                bool grew = effectLine.text != (text ?? "");
+                effectLine.text = text ?? "";
+                if (state != effectState) { effectState = state; effectLine.color = TextColor(effectState); }
                 if (grew) Changed();
-            }
-
-            /// <summary>The clock is one mono number; ENDING / CRITICAL is a word beside it (R1).</summary>
-            public void SetClock(string clockText, bool ending, bool critical)
-            {
-                clock.text = clockText ?? "";
-                clockNote.text = "REMAINING";
-                clockState = critical ? AvState.Danger : ending ? AvState.Caution : AvState.Inert;
-                clockTag.text = critical ? AvStates.Glyph(AvState.Danger) + "CRITICAL"
-                    : ending ? AvStates.Glyph(AvState.Caution) + "ENDING" : "";
-                clock.color = clockState == AvState.Inert ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : TextColor(clockState);
-                clockTag.color = TextColor(clockState);
-            }
-
-            public void SetProgress(float fraction01, AvState state)
-            {
-                progress.Value = Mathf.Clamp01(fraction01);
-                if (state != progressState)
-                {
-                    progressState = state;
-                    Restyle();
-                }
             }
 
             /// <summary>The scripted beat log: "T+m:ss [DONE]/[NEXT] label", or cancelled when the target didn't resolve.</summary>
@@ -338,15 +263,15 @@ namespace BoscaliSummer.Features.Events.Presentation
                 if (textChanged) Changed();
             }
 
-            public override float Measure(float width) => Arrange(width, false);
+            public override float Measure(float width) => Arrange(width, false, 0f);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                Arrange(s.W, true);
+                Arrange(s.W, true, s.H);
             }
 
-            private float Arrange(float width, bool place)
+            private float Arrange(float width, bool place, float slotHeight)
             {
                 float x = 12f, w = width - 24f, y = 12f;
                 if (calm)
@@ -356,10 +281,27 @@ namespace BoscaliSummer.Features.Events.Presentation
                     float ch = consequence.text.Length > 0 ? AvText.Height(consequence, textW) : 0f;
                     float block = th + (ch > 0f ? 4f + ch : 0f);
                     float total = 12f + Mathf.Max(CalmPlate, block) + 12f;
+                    if (place && slotHeight > total + 40f)
+                    {
+                        // Spare height: a full-width standby banner with the words underneath it.
+                        float fth = AvText.Height(title, w);
+                        float fch = consequence.text.Length > 0 ? AvText.Height(consequence, w) : 0f;
+                        float below = fth + (fch > 0f ? 4f + fch : 0f);
+                        float plateH = Mathf.Max(CalmPlate, slotHeight - 24f - below - 10f);
+                        AvLay.Place(rail.rectTransform, 0f, 0f, 3f, slotHeight);
+                        AvLay.Place(plate.Root, x, y, w, plateH);
+                        plate.MarkScale = Mathf.Clamp(plateH / 90f, 1f, 3f);
+                        plate.Layout(w, plateH);
+                        float by = y + plateH + 10f;
+                        AvLay.Place(title.rectTransform, x, by, w, fth);
+                        AvLay.Place(consequence.rectTransform, x, by + fth + 4f, w, fch);
+                        return total;
+                    }
                     if (place)
                     {
                         AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
                         AvLay.Place(plate.Root, x, y, CalmPlate, CalmPlate);
+                        plate.MarkScale = 1f;
                         plate.Layout(CalmPlate, CalmPlate);
                         AvLay.Place(title.rectTransform, textX, y, textW, th);
                         AvLay.Place(consequence.rectTransform, textX, y + th + 4f, textW, ch);
@@ -367,58 +309,31 @@ namespace BoscaliSummer.Features.Events.Presentation
                     return total;
                 }
 
+                float tx = x + PlateW + 12f, tw = width - tx - 12f;
+                float kh = AvText.Height(kicker, tw);
+                float titleH = AvText.Height(title, tw);
+                float eh = effectLine.text.Length > 0 ? AvText.Height(effectLine, tw) : 0f;
+                float text = kh + 2f + titleH + (eh > 0f ? 6f + eh : 0f);
+                float headH = Mathf.Max(PlateMin, text);
                 if (place)
                 {
-                    AvLay.Place(plate.Root, x, y, w, BannerHeight);
-                    plate.Layout(w, BannerHeight);
+                    AvLay.Place(plate.Root, x, y, PlateW, headH);
+                    plate.MarkScale = 1f;
+                    plate.Layout(PlateW, headH);
                     float tagW = Mathf.Ceil(AvText.Width(tag)) + 16f;
-                    AvLay.Place(tagBack.rectTransform, 8f, 8f, tagW, 20f);
-                    AvLay.Place(tag.rectTransform, 8f, 0f, tagW - 10f, 20f);
+                    AvLay.Place(tagBack.rectTransform, 6f, 6f, Mathf.Min(tagW, PlateW - 12f), 20f);
+                    AvLay.Place(tag.rectTransform, 8f, 0f, Mathf.Min(tagW, PlateW - 12f) - 10f, 20f);
+                    AvLay.Place(kicker.rectTransform, tx, y, tw, kh);
+                    AvLay.Place(title.rectTransform, tx, y + kh + 2f, tw, titleH);
+                    AvLay.Place(effectLine.rectTransform, tx, y + kh + 2f + titleH + 6f, tw, eh);
                 }
-                y += BannerHeight + 10f;
-
-                float kh = AvText.Height(kicker, w);
-                if (place) AvLay.Place(kicker.rectTransform, x, y, w, kh);
-                y += kh + 2f;
-                float titleH = AvText.Height(title, w);
-                if (place) AvLay.Place(title.rectTransform, x, y, w, titleH);
-                y += titleH + 8f;
-
-                float cx = 0f, rowY = y;
-                bool anyPill = false;
-                foreach (Pill pill in pills)
-                {
-                    if (!pill.Visible) continue;
-                    float pw = Mathf.Min(w, pill.Width);
-                    if (cx > 0f && cx + pw > w) { cx = 0f; rowY += Pill.PillHeight + 6f; }
-                    if (place) pill.Place(x + cx, rowY, pw);
-                    cx += pw + 6f;
-                    anyPill = true;
-                }
-                if (anyPill) y = rowY + Pill.PillHeight + 10f;
-
-                float clockW = Mathf.Ceil(AvText.Width(clock)) + 4f;
-                if (place)
-                {
-                    AvLay.Place(clock.rectTransform, x, y, clockW, 32f);
-                    AvLay.Place(clockNote.rectTransform, x + clockW + 8f, y + 12f, Mathf.Max(40f, w - clockW - 8f), 15f);
-                    AvLay.Place(clockTag.rectTransform, x, y + 12f, w, 15f);
-                }
-                y += 32f + 4f;
-                if (place) AvLay.Place((RectTransform)progress.transform, x, y, w, 4f);
-                y += 4f + 10f;
+                y += headH;
 
                 if (consequence.text.Length > 0)
                 {
                     float qh = AvText.Height(consequence, w);
-                    if (place) AvLay.Place(consequence.rectTransform, x, y, w, qh);
-                    y += qh + 4f;
-                }
-                if (flavor.text.Length > 0)
-                {
-                    float fh = AvText.Height(flavor, w);
-                    if (place) AvLay.Place(flavor.rectTransform, x, y, w, fh);
-                    y += fh + 6f;
+                    if (place) AvLay.Place(consequence.rectTransform, x, y + 8f, w, qh);
+                    y += 8f + qh;
                 }
                 for (int i = 0; i < steps.Length; i++)
                 {
@@ -426,10 +341,10 @@ namespace BoscaliSummer.Features.Events.Presentation
                     if (place) steps[i].gameObject.SetActive(active);
                     if (!active) continue;
                     float sh = AvText.Height(steps[i], w);
-                    if (place) AvLay.Place(steps[i].rectTransform, x, y, w, sh);
-                    y += sh + 2f;
+                    if (place) AvLay.Place(steps[i].rectTransform, x, y + 6f, w, sh);
+                    y += 6f + sh;
                 }
-                float total2 = y + 8f;
+                float total2 = y + 12f;
                 if (place) AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total2);
                 return total2;
             }
@@ -439,26 +354,22 @@ namespace BoscaliSummer.Features.Events.Presentation
                 AvStyle c = AvStyleHost.FuiStyle("card");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                 rail.color = AvStyleHost.FuiColor(AvStates.Class(tierState), AvTheme.RailInfo);
-                tagBack.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.88f);
-                tag.color = TextColor(tierState);
+                tagBack.color = SlabBack(tierState);
+                tag.color = SlabInk();
                 kicker.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                clock.color = clockState == AvState.Inert ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : TextColor(clockState);
-                clockNote.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                clockTag.color = TextColor(clockState);
+                effectLine.color = TextColor(effectState);
                 consequence.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                flavor.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                 foreach (TMP_Text step in steps) step.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                foreach (Pill pill in pills) pill.Restyle();
-                progress.Track = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-                progress.FillColor = progress.FillEnd = AvStyleHost.FuiColor(
-                    AvStates.Class(progressState == AvState.Inert ? AvState.Info : progressState), AvTheme.RailInfo);
-                progress.SetVerticesDirty();
                 plate.Restyle();
             }
         }
 
-        /// <summary>The DESK page's current-or-last case file: a poster plus title, meta and body copy.</summary>
+        /// <summary>
+        /// The DESK page's current-or-last case file. Natural size: a small poster beside title and meta, the body
+        /// underneath. Given spare height it becomes a poster card: the poster on top grows and the words sit
+        /// under it, centred in whatever is left.
+        /// </summary>
         private sealed class EventCaseFilePart : AvPart
         {
             private const float PlateSize = 64f;
@@ -473,6 +384,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                 Rect = AvLay.Child(parent, "CaseFile");
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
                 AvLay.Fill(frame.rectTransform);
+                frame.raycastTarget = true;
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 plate = new EventPlateArt(Rect, 20f);
                 title = AvText.Make(Rect, "Title", AvTextRole.Head, "", TextAlignmentOptions.TopLeft, true);
@@ -480,6 +392,9 @@ namespace BoscaliSummer.Features.Events.Presentation
                 body = AvText.Make(Rect, "Body", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
                 Restyle();
             }
+
+            /// <summary>Hover help shown in the console footer.</summary>
+            public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
 
             public void Bind(string titleText, string metaText, string bodyText, AvIcon icon, Sprite poster, AvState tier)
             {
@@ -492,15 +407,15 @@ namespace BoscaliSummer.Features.Events.Presentation
                 Changed();
             }
 
-            public override float Measure(float width) => Arrange(width, false);
+            public override float Measure(float width) => Arrange(width, false, 0f);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                Arrange(s.W, true);
+                Arrange(s.W, true, s.H);
             }
 
-            private float Arrange(float width, bool place)
+            private float Arrange(float width, bool place, float slotHeight)
             {
                 float x = 12f, textX = x + PlateSize + 12f, textW = width - textX - 12f;
                 float th = AvText.Height(title, textW);
@@ -509,15 +424,38 @@ namespace BoscaliSummer.Features.Events.Presentation
                 float bodyW = width - 24f;
                 float bh = body.text.Length > 0 ? AvText.Height(body, bodyW) : 0f;
                 float total = 12f + head + (bh > 0f ? 8f + bh : 0f) + 12f;
-                if (place)
+                if (!place) return total;
+
+                if (slotHeight > total + 60f)
                 {
-                    AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
-                    AvLay.Place(plate.Root, x, 12f, PlateSize, PlateSize);
-                    plate.Layout(PlateSize, PlateSize);
-                    AvLay.Place(title.rectTransform, textX, 12f, textW, th);
-                    AvLay.Place(meta.rectTransform, textX, 12f + th + 4f, textW, mh);
-                    AvLay.Place(body.rectTransform, x, 12f + head + 8f, bodyW, bh);
+                    // Poster card: full-width poster (never squarer than about 1.15:1, so the art is not sliced),
+                    // then title, meta and body, the whole stack centred in the card.
+                    float fth = AvText.Height(title, bodyW);
+                    float fmh = meta.text.Length > 0 ? AvText.Height(meta, bodyW) : 0f;
+                    float words = fth + (fmh > 0f ? 4f + fmh : 0f) + (bh > 0f ? 8f + bh : 0f);
+                    float plateH = Mathf.Clamp(slotHeight - 24f - words - 10f, PlateSize, bodyW / 1.15f);
+                    float stack = plateH + 10f + words;
+                    float top = Mathf.Max(12f, (slotHeight - stack) * 0.5f);
+                    AvLay.Place(rail.rectTransform, 0f, 0f, 3f, slotHeight);
+                    AvLay.Place(plate.Root, x, top, bodyW, plateH);
+                    plate.MarkScale = Mathf.Clamp(plateH / 60f, 1f, 3f);
+                    plate.Layout(bodyW, plateH);
+                    float y = top + plateH + 10f;
+                    AvLay.Place(title.rectTransform, x, y, bodyW, fth);
+                    y += fth + 4f;
+                    AvLay.Place(meta.rectTransform, x, y, bodyW, fmh);
+                    y += fmh + (fmh > 0f ? 4f : 0f) + 4f;
+                    AvLay.Place(body.rectTransform, x, y, bodyW, bh);
+                    return total;
                 }
+
+                AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
+                AvLay.Place(plate.Root, x, 12f, PlateSize, PlateSize);
+                plate.MarkScale = 1f;
+                plate.Layout(PlateSize, PlateSize);
+                AvLay.Place(title.rectTransform, textX, 12f, textW, th);
+                AvLay.Place(meta.rectTransform, textX, 12f + th + 4f, textW, mh);
+                AvLay.Place(body.rectTransform, x, 12f + head + 8f, bodyW, bh);
                 return total;
             }
 

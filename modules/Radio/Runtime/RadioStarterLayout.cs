@@ -1,7 +1,7 @@
 using System.IO;
 using BepInEx.Logging;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     internal static class RadioStarterLayout
     {

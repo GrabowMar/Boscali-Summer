@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
     /// The pacing knobs of an offensive, clamped once so a bad config can never divide by

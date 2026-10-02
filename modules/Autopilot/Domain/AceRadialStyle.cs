@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Autopilot.Domain
+namespace BoscaliSummer.Modules.Autopilot.Domain
 {
     /// <summary>
     /// Glyph drawn inside an option's disc (ACE3 draws an icon per action). The presentation

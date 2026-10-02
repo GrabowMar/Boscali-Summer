@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     /// <summary>
     /// Pre-war intel (switch Intel.PreWarIntel, default on): 30 s after the mission starts,

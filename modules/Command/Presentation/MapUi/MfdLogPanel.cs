@@ -1,14 +1,13 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using System.Text;
-using NOAvionics;
-using NOAvionics.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Mirrors the native kill/game-message streams into the left map column. With an MFD
@@ -20,8 +19,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal static class MfdLogPanel
     {
         private const string PanelName = "NOAvionics.TacticalLog";
-        private const float MinimumHeight = 72f;
+        private const float MinimumHeight = 104f;
         private const float HeaderHeight = 30f;
+        private const float ControlsHeight = 28f;
         private const float RetentionSeconds = 30f;
         private const int MaximumEntries = 120;
 
@@ -30,6 +30,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             public string Text;
             public float CapturedAt;
             public float ExpiresAt;
+            public bool KillFeed;
         }
 
         private static RectTransform panel;
@@ -41,6 +42,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static TMP_Text body;
         private static RectTransform scrollContent;
         private static ScrollRect scroll;
+        private static AvControl pauseButton, filterButton, latestButton;
+        private static TMP_Text trafficCount;
+        private static bool paused, killsOnly;
+        private static readonly List<Entry> pausedHistory = new List<Entry>(MaximumEntries);
         private static VirtualMFD mfd;
         private static MfdLayout.Columns columns;
         private static TextMeshProUGUI messageSource;
@@ -60,6 +65,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static string lastKillRaw;
         internal static event Action<string> OnLineAdded;
         internal static bool HasTraffic => history.Count > 0;
+        internal static bool ContainsScreenPoint(Vector2 point) =>
+            panel != null && panel.gameObject.activeInHierarchy && MapUiPointer.Contains(panel, point);
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns layout, VirtualMFD virtualMfd)
         {
@@ -88,8 +95,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (panel == null || mfd == null) return;
 
             ResolveSources();
-            bool added = CaptureChanges(messageSource == null ? null : messageSource.text, ref lastMessageRaw, previousMessages);
-            added |= CaptureChanges(killSource == null ? null : killSource.text, ref lastKillRaw, previousKills);
+            bool added = CaptureChanges(messageSource == null ? null : messageSource.text, ref lastMessageRaw, previousMessages, false);
+            added |= CaptureChanges(killSource == null ? null : killSource.text, ref lastKillRaw, previousKills, true);
             bool pruned = PruneHistory();
 
             if (!DynamicMap.mapMaximized)
@@ -133,6 +140,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             background.Paint(
                 AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(merged ? 0.94f : 1f),
                 merged ? Color.clear : AvStyleHost.FuiColor("frame", AvTheme.Frame));
+            background.Bracket = merged ? 0f : 8f;
+            background.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.8f);
             // The log is always subordinate to the instrument surfaces, including
             // during a resize between layout refreshes.
             Transform dock = panel.parent.Find(MfdPanelDock.DockName);
@@ -145,9 +154,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             HideOriginals();
             if (added || pruned || string.IsNullOrEmpty(body.text))
             {
-                body.text = HistoryText();
-                SetLiveChip(history.Count > 0);
-                ResizeScrollContent(added);
+                RefreshFeed(added);
             }
         }
 
@@ -164,6 +171,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             body = null;
             scrollContent = null;
             scroll = null;
+            pauseButton = filterButton = latestButton = null;
+            trafficCount = null;
+            paused = killsOnly = false;
+            pausedHistory.Clear();
             mfd = null;
             messageSource = null;
             killSource = null;
@@ -270,6 +281,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 BuildHeader(size);
             }
 
+            BuildControls(size.x, contentTop);
+            contentTop += ControlsHeight;
             float feedHeight = Mathf.Max(0f, size.y - contentTop - 6f);
             MfdChromeLay.Rule(panel, "Spine", new Rect(3f, -contentTop - 3f, 3f, feedHeight),
                 AvStyleHost.FuiColor("select", AvTheme.Accent));
@@ -307,8 +320,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             body = AvText.Make(scrollContent, "Body", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, wrap: true);
             MfdChromeLay.Place(body.rectTransform, new Rect(0f, 0f, bodyWidth, viewportHeight));
             body.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-            body.lineSpacing = 5f;
-            body.paragraphSpacing = 4f;
+            body.lineSpacing = 3f;
+            body.paragraphSpacing = 3f;
             body.overflowMode = TextOverflowModes.Overflow;
 
             scroll = scrollGo.GetComponent<ScrollRect>();
@@ -321,6 +334,69 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             scroll.decelerationRate = 0.12f;
             scroll.scrollSensitivity = 28f;
             scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private static void BuildControls(float width, float top)
+        {
+            pauseButton = AvControl.Make(panel, new AvControl.Spec(paused ? "RESUME" : "PAUSE", TogglePause, AvButtonStyle.Default));
+            filterButton = AvControl.Make(panel, new AvControl.Spec(killsOnly ? "COMBAT" : "ALL", ToggleFilter, AvButtonStyle.Default));
+            latestButton = AvControl.Make(panel, new AvControl.Spec("LATEST", Latest, AvButtonStyle.Default));
+            pauseButton.Help = "Freeze this local view while the native feed continues. Resume returns to retained live traffic.";
+            filterButton.Help = "Switch between all native messages and combat reports from the native kill feed, including interceptions. This changes only the local view.";
+            latestButton.Help = "Resume live traffic and jump to the newest retained report.";
+            float x = 10f;
+            foreach (AvControl control in new[] { pauseButton, filterButton, latestButton })
+            {
+                control.SingleLine();
+                MfdChromeLay.Place(control.Rect, new Rect(x, -top - 2f, 66f, 23f));
+                x += 70f;
+            }
+            trafficCount = AvText.Make(panel, "TrafficCount", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+            trafficCount.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            MfdChromeLay.Place(trafficCount.rectTransform, new Rect(x + 2f, -top, Mathf.Max(0f, width - x - 12f), ControlsHeight));
+            UpdateControls();
+        }
+
+        private static void TogglePause()
+        {
+            paused = !paused;
+            pausedHistory.Clear();
+            if (paused) pausedHistory.AddRange(history);
+            RefreshFeed(false);
+        }
+
+        private static void ToggleFilter()
+        {
+            killsOnly = !killsOnly;
+            RefreshFeed(false);
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private static void Latest()
+        {
+            paused = false;
+            pausedHistory.Clear();
+            RefreshFeed(false);
+            if (scroll != null) scroll.verticalNormalizedPosition = 1f;
+        }
+
+        private static void UpdateControls()
+        {
+            if (pauseButton != null) { pauseButton.Label = paused ? "RESUME" : "PAUSE"; pauseButton.Latched = paused; }
+            if (filterButton != null) { filterButton.Label = killsOnly ? "COMBAT" : "ALL"; filterButton.Latched = killsOnly; }
+            List<Entry> shown = paused ? pausedHistory : history;
+            int count = 0;
+            foreach (Entry entry in shown) if (!killsOnly || entry.KillFeed) count++;
+            if (trafficCount != null) trafficCount.text = count + " " + (paused ? "HELD" : "REPORTS");
+            SetLiveChip(count > 0);
+        }
+
+        private static void RefreshFeed(bool added)
+        {
+            if (body == null) return;
+            string text = HistoryText();
+            if (body.text != text) { body.text = text; ResizeScrollContent(added); }
+            UpdateControls();
         }
 
         /// <summary>Icon + title + caption over a hairline, plus the LIVE/STANDBY chip — the standalone panel's own header.</summary>
@@ -338,7 +414,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             headerTitle.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
 
             float chipX = size.x - 74f;
-            headerCaption = AvText.Make(panel, "Caption", AvTextRole.Micro, "TACTICAL EVENT STREAM", TextAlignmentOptions.MidlineLeft);
+            headerCaption = AvText.Make(panel, "Caption", AvTextRole.Micro, "// EVENTS", TextAlignmentOptions.MidlineLeft);
             MfdChromeLay.Place(headerCaption.rectTransform, new Rect(122f, 0f, Mathf.Max(0f, chipX - 8f - 122f), HeaderHeight));
             headerCaption.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
 
@@ -356,9 +432,9 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private static void SetLiveChip(bool live)
         {
             if (chipText == null) return;
-            AvState state = live ? AvState.Ready : AvState.Inert;
+            AvState state = paused ? AvState.Caution : live ? AvState.Ready : AvState.Inert;
             Color paint = AvStyleHost.FuiColor(AvStates.Class(state), live ? AvTheme.Accent : AvTheme.Dim);
-            chipText.text = AvStates.Glyph(state) + (live ? "LIVE" : "STANDBY");
+            chipText.text = AvStates.Glyph(state) + (paused ? "PAUSED" : live ? "LIVE" : "STANDBY");
             chipText.color = paint;
             if (chipRail != null) chipRail.color = paint;
         }
@@ -390,7 +466,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             if (panel != null) panel.gameObject.SetActive(false);
         }
 
-        private static bool CaptureChanges(string text, ref string lastRaw, List<string> previous)
+        private static bool CaptureChanges(string text, ref string lastRaw, List<string> previous, bool killFeed)
         {
             if (ReferenceEquals(text, lastRaw) || (text != null && string.Equals(text, lastRaw, StringComparison.Ordinal)))
                 return false;
@@ -434,7 +510,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             for (int i = current.Count - 1; i >= 0; i--)
             {
                 if (matched[i]) continue;
-                AddEntry(current[i]);
+                AddEntry(current[i], killFeed);
                 added = true;
             }
 
@@ -457,14 +533,18 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             return result;
         }
 
-        private static void AddEntry(string text)
+        private static void AddEntry(string text, bool killFeed)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
 
             float now = Time.unscaledTime;
             for (int i = 0; i < Mathf.Min(4, history.Count); i++)
             {
-                if (history[i].Text == text && now - history[i].CapturedAt < 0.5f) return;
+                if (history[i].Text == text && now - history[i].CapturedAt < 0.5f)
+                {
+                    if (killFeed) history[i].KillFeed = true;
+                    return;
+                }
             }
 
             history.Insert(0, new Entry
@@ -472,6 +552,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 Text = text,
                 CapturedAt = now,
                 ExpiresAt = now + RetentionSeconds,
+                KillFeed = killFeed,
             });
             while (history.Count > MaximumEntries) history.RemoveAt(history.Count - 1);
             OnLineAdded?.Invoke(text);
@@ -494,23 +575,21 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         private static string HistoryText()
         {
-            if (history.Count == 0)
-                return "<color=#" + MfdLogTone.NeutralHex + ">NO ACTIVE TRAFFIC</color>";
-
+            List<Entry> shown = paused ? pausedHistory : history;
             var text = new StringBuilder();
-            for (int i = 0; i < history.Count; i++)
+            int count = 0;
+            for (int i = 0; i < shown.Count; i++)
             {
-                if (i > 0) text.Append('\n');
-                string line = history[i].Text;
-                string tone = MfdLogTone.Hex(MfdLogTone.Classify(line));
-                if (i == 0) text.Append("<mark=#193B475C><b>");
-                else if (i > 2) text.Append("<alpha=#A0>");
-                text.Append("<color=#").Append(i == 0 ? tone : MfdLogTone.NeutralHex)
-                    .Append(">›</color>  ").Append(MfdLogTone.Paint(line));
-                if (i == 0) text.Append("</b></mark>");
-                else if (i > 2) text.Append("<alpha=#FF>");
+                Entry entry = shown[i];
+                if (killsOnly && !entry.KillFeed) continue;
+                if (count++ > 0) text.Append('\n');
+                string line = MfdLogTone.Plain(entry.Text);
+                MfdLogTone.Kind kind = MfdLogTone.Classify(line);
+                text.Append("<color=#").Append(MfdLogTone.Hex(kind)).Append(">")
+                    .Append(MfdLogTone.Label(kind)).Append("  //</color>  ")
+                    .Append(MfdLogTone.Paint(line));
             }
-            return text.ToString();
+            return count == 0 ? MfdLogTone.Paint(killsOnly ? "NO RETAINED COMBAT REPORTS" : "NO ACTIVE TRAFFIC") : text.ToString();
         }
 
         private static void ResizeScrollContent(bool stickToTop)

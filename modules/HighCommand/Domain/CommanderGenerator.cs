@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace BoscaliSummer.Features.HighCommand.Domain
+namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     internal sealed class CommandPerson
     {

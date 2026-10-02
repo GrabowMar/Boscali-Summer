@@ -1,10 +1,10 @@
-using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Domain;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Collections.Generic;
+using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
+using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Weather.Presentation
+namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>One outlook line, already reduced to what the row shows.</summary>
     internal sealed class EnvForecastRow
@@ -24,8 +24,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
     {
         public bool HasMission = true;
         public string Title = "METOC / BATTLEFIELD";
-        public string Chip0 = "", Chip1 = "", Footer = "";
-        public AvState Chip0State = AvState.Ready, FooterState = AvState.Info;
+        public string Footer = "", Next = "";
+        public AvState FooterState = AvState.Info;
+        /// <summary>How far the weather is through its current step (0..1); <see cref="Next"/> is the countdown text.</summary>
+        public float NextFrac;
+        /// <summary>Air density at 0..12 km in 1 km steps (null = unknown); drawn as the density profile on SKY &amp; AIR.</summary>
+        public float[] DensityByAlt;
 
         public WeatherRegimeType Regime;
         public string Code = "", Name = "", Briefing = "";
@@ -48,33 +52,34 @@ namespace BoscaliSummer.Features.Weather.Presentation
     }
 
     /// <summary>
-    /// The ENV console: chips and metrics for the top line, WEATHER (METAR-style condition card, vertical
-    /// profile, 60-minute outlook) and SKY &amp; AIR (watch strip, sun arc, moon phase, wind dial, air
-    /// density). Pure presentation over <see cref="EnvData"/>; the panel owns the game side.
+    /// The ENV console: metrics for the top line, WEATHER (state icon row, condition card, visibility / rain /
+    /// turbulence / next-step rings, storm-risk bar, growing vertical profile, 60-minute icon outlook, cover trend) and SKY &amp; AIR
+    /// (sun arc, moon phase, wind dial, air rings, daylight and density charts). Pure presentation over <see cref="EnvData"/>; the panel owns the game side.
     /// </summary>
     internal sealed class WeatherEnvView
     {
         public const int PageWeather = 0, PageSky = 1;
 
-        private readonly AvChip[] chips;
         private readonly AvMetric[] metrics;
         private readonly List<AvPart>[] pageParts = { new List<AvPart>(16), new List<AvPart>(16) };
         private readonly AvRow[] emptyRows = new AvRow[2];
 
         // WEATHER
+        private EnvStateRow stateRow;
         private EnvConditionCard card;
-        private AvSection profileSection;
+        private AvGauge visGauge, rainGauge, turbGauge, nextGauge;
+        private AvHazardBar stormBar;
         private EnvProfile profile;
-        private EnvStrip localAir;
-        private readonly List<ForecastRowPart> outlook = new List<ForecastRowPart>(6);
+        private EnvOutlookStrip outlook;
+        private AvEqualizer coverEq;
 
         // SKY & AIR
-        private EnvStrip watch;
         private EnvSunCard sun;
         private EnvMoonCard moon;
         private EnvWindCard wind;
-        private EnvMeter density;
-        private EnvStrip airStrip;
+        private AvGauge densityGauge, soundGauge, altGauge;
+        private AvEqualizer densityEq;
+        private readonly float[] densityBuf = new float[13];
 
         private bool empty;
 
@@ -83,8 +88,11 @@ namespace BoscaliSummer.Features.Weather.Presentation
         public WeatherEnvView(RectTransform root, string id, float width, float height)
         {
             Console = AvConsole.Build(root, id, "BATTLEFIELD ENVIRONMENT", 2, width, height);
-            chips = Console.Chips(2);
             metrics = Console.Metrics("COVER", "BASE", "WIND", "DENSITY");
+            HelpOn(metrics[0], "COVER: how much of the sky the cloud hides, with the sky code (CLR clear up to OVC overcast, TS storm). The bar is the cover fraction.");
+            HelpOn(metrics[1], "BASE: height of the cloud bottom above sea level, in metres. Amber under 1600 m: a low ceiling limits how far you can fly under the deck.");
+            HelpOn(metrics[2], "WIND: speed in knots and the bearing it blows from. Amber above 25 kt: expect drift on approach and a rougher ride.");
+            HelpOn(metrics[3], "DENSITY: air density at your altitude as a share of sea level. Thin air cuts lift and engine power; see the SKY & AIR page for the profile.");
             Console.Tabs((AvIcon.Cloud, "WEATHER"), (AvIcon.Wind, "SKY & AIR"));
             BuildWeatherPage(Console.Page(PageWeather));
             BuildSkyPage(Console.Page(PageSky));
@@ -94,44 +102,70 @@ namespace BoscaliSummer.Features.Weather.Presentation
 
         private T Track<T>(int page, T part) where T : AvPart { pageParts[page].Add(part); return part; }
 
+        /// <summary>A clear hit layer over a part that shows <paramref name="text"/> in the console footer on hover.</summary>
+        private static void HelpOn(AvPart part, string text)
+        {
+            if (part == null || part.Rect == null) return;
+            Image hit = AvLay.Solid(part.Rect, "Help", Color.clear);
+            AvLay.Fill(hit.rectTransform);
+            hit.raycastTarget = true;
+            AvHelpTip.Attach(hit.gameObject, text);
+        }
+
         private void BuildWeatherPage(AvFlow p)
         {
             const int pg = PageWeather;
-            Track(pg, p.Section(AvIcon.Cloud, "CURRENT CONDITIONS", "LIVE WEATHER"));
+            stateRow = Track(pg, p.Add(new EnvStateRow(p.Content)));
             card = Track(pg, p.Add(new EnvConditionCard(p.Content)));
-            profileSection = Track(pg, p.Section(AvIcon.LayersSubtract, "VERTICAL PROFILE", ""));
-            profile = Track(pg, p.Add(new EnvProfile(p.Content)));
-            localAir = Track(pg, p.Add(new EnvStrip(p.Content, "Local air", false, "DENSITY", "SOUND", "TURBULENCE")));
-            Track(pg, p.Section(AvIcon.Clock, "NEXT 60 MINUTES", "MODEL OUTLOOK"));
-            Track(pg, p.Add(new EnvOutlookHeader(p.Content)));
-            int rows = WeatherForecast.DefaultOffsetsMinutes.Length;
-            outlook.Clear();
-            for (int i = 0; i < rows; i++)
-                outlook.Add(Track(pg, p.Add(new ForecastRowPart(p.Content, "Forecast " + i))));
+            card.SetHelp("SKY: the sky code and word for the current weather state, how much of the sky the cloud covers, and the flight category from visibility and ceiling (VFR good, MVFR marginal, IFR poor, LIFR very poor).");
+            visGauge = new AvGauge(p.Content, "VIS KM", AvGaugeShape.Segments, 64f);
+            rainGauge = new AvGauge(p.Content, "RAIN", AvGaugeShape.Segments, 64f);
+            turbGauge = new AvGauge(p.Content, "TURB", AvGaugeShape.Segments, 64f);
+            visGauge.Help = "VIS KM: horizontal visibility in kilometres. The ladder is full at 10 km or more.";
+            rainGauge.Help = "RAIN: current rain intensity, as a percentage of the heaviest rain.";
+            turbGauge.Help = "TURB: air turbulence, 0 to 0.8. Higher means a rougher ride.";
+            nextGauge = new AvGauge(p.Content, "NEXT", AvGaugeShape.Segments, 64f);
+            nextGauge.Help = "NEXT: time to the next weather step. The ladder fills as the current state runs out; the sky then holds or moves one state along. HELD means the host or the mission froze it.";
+            p.Row(Track(pg, visGauge), Track(pg, rainGauge), Track(pg, turbGauge), Track(pg, nextGauge));
+            // Storm risk is only drawn while it is real; it is not a page part so the empty state cannot re-show it.
+            stormBar = p.Add(new AvHazardBar(p.Content, "STORM RISK"));
+            stormBar.SetShown(false);
+            profile = Track(pg, p.Add(new EnvProfile(p.Content), 1f));
+            profile.SetHelp("PROFILE: the cloud layer as a slab between its base and top on a metre scale, with your altitude as a dashed level. The line under the top edge says whether you are below, inside or above the cloud.");
+            outlook = Track(pg, p.Add(new EnvOutlookStrip(p.Content, WeatherForecast.DefaultOffsetsMinutes.Length)));
+            outlook.SetHelp("NEXT 60 MIN: the expected sky now and at +5, +10, +15, +30 and +60 minutes. The bar under each icon is the chance of rain; amber or red marks rain or a storm.");
+            coverEq = Track(pg, p.Add(new AvEqualizer(p.Content, "COVER 60 MIN", 36f), 1f));
+            coverEq.Help = "COVER 60 MIN: expected cloud cover from now (left) to +60 minutes (right), one bar per five minutes. Growing bars mean the sky is closing in; the text gives cover now and at +60.";
             AddEmpty(p, pg);
         }
 
         private void BuildSkyPage(AvFlow p)
         {
             const int pg = PageSky;
-            Track(pg, p.Section(AvIcon.InfoCircle, "FLIGHT CONDITIONS", "ENVIRONMENTAL WATCH"));
-            watch = Track(pg, p.Add(new EnvStrip(p.Content, "Watch", true, "LIGHT", "CEILING", "WIND")));
-            Track(pg, p.Section(AvIcon.Circle, "DAYLIGHT", "SOLAR EPHEMERIS"));
             sun = Track(pg, p.Add(new EnvSunCard(p.Content)));
-            Track(pg, p.Section(AvIcon.Star, "MOONLIGHT", "LUNAR EPHEMERIS"));
+            sun.SetHelp("SUN: the strip spans midnight to midnight. Bright hourly blocks indicate daylight; the vertical cursor is the current time. Elevation, bearing and sunrise/sunset are listed beside it. Below about -6 degrees expect poor visual range.");
             moon = Track(pg, p.Add(new EnvMoonCard(p.Content)));
-            Track(pg, p.Section(AvIcon.Wind, "WIND & TURBULENCE", "MISSION WIND"));
+            moon.SetHelp("MOON: phase, illuminated fraction and natural moonlight level. The labeled meter shows illumination; a new moon means dark nights.");
             wind = Track(pg, p.Add(new EnvWindCard(p.Content)));
-            Track(pg, p.Section(AvIcon.Gauge, "AIR AT CAMERA ALTITUDE", "DENSITY"));
-            density = Track(pg, p.Add(new EnvMeter(p.Content, "AIR DENSITY")));
-            airStrip = Track(pg, p.Add(new EnvStrip(p.Content, "Air", false, "SPEED OF SOUND", "SAMPLED ALTITUDE")));
+            wind.SetHelp("WIND: the tape runs N-E-S-W-N and its cursor marks the direction the wind comes FROM. Exact FROM and TO bearings are listed beside it. The bar is turbulence: amber above 0.35, red above 0.6.");
+            altGauge = new AvGauge(p.Content, "ALT M", AvGaugeShape.Segments, 64f);
+            altGauge.Help = "ALT M: your camera altitude in metres; the ladder is full at 12 000 m. Density and the speed of sound are read at this height.";
+            densityGauge = new AvGauge(p.Content, "DENSITY", AvGaugeShape.Segments, 64f);
+            soundGauge = new AvGauge(p.Content, "SOUND M/S", AvGaugeShape.Segments, 64f);
+            densityGauge.Help = "DENSITY: air density at your altitude; the ladder is full at 1.5. Thin air cuts lift and engine power.";
+            soundGauge.Help = "SOUND M/S: speed of sound at your altitude, in metres per second. The ladder is full at 400.";
+            p.Row(Track(pg, altGauge), Track(pg, densityGauge), Track(pg, soundGauge));
+            // Shown only while the density profile is known; not a tracked page part so the empty state cannot re-show it.
+            densityEq = p.Add(new AvEqualizer(p.Content, "AIR DENSITY 0-12 KM", 36f), 1f);
+            densityEq.Help = "AIR DENSITY 0-12 KM: one bar per kilometre of altitude, left is sea level. The bars shrink as the air thins, so climbing costs lift and engine power.";
+            densityEq.SetShown(false);
             AddEmpty(p, pg);
         }
 
         private void AddEmpty(AvFlow p, int page)
         {
             var row = p.Add(new AvRow(p.Content));
-            row.Set("NO MISSION LOADED", "Battlefield weather appears here once a mission is running.", "", AvState.Inert);
+            row.Set("NO MISSION LOADED", "", "", AvState.Inert);
             row.SetShown(false);
             emptyRows[page] = row;
         }
@@ -143,12 +177,12 @@ namespace BoscaliSummer.Features.Weather.Presentation
         {
             SetEmpty(!d.HasMission);
             Console.SetTitle(d.Title);
-            chips[0].Set(d.Chip0, d.Chip0State);
-            chips[1].Set(d.Chip1, AvState.Info);
             Console.Footer.Set(d.Footer, d.FooterState);
             if (!d.HasMission)
             {
                 for (int i = 0; i < metrics.Length; i++) metrics[i].Set("—", "", 0f, AvState.Inert);
+                stormBar.SetShown(false);
+                densityEq.SetShown(false);
                 return;
             }
 
@@ -175,81 +209,111 @@ namespace BoscaliSummer.Features.Weather.Presentation
             }
         }
 
+        private static string Tag(string text, AvState st) =>
+            (st == AvState.Caution || st == AvState.Danger ? AvStates.Glyph(st) : "") + text;
+
         private void ApplyWeather(EnvData d)
         {
             float rain = Mathf.Clamp01(d.Rain);
             FlightCat(d, out string cat, out AvState catState);
-            string windText = d.WindKts < 1f ? "CALM"
-                : AvNum.Fixed(d.WindFrom, 0).PadLeft(3, '0') + "°/" + AvNum.Fixed(d.WindKts, 0) + "KT";
-            string vis = d.VisibilityKm < 0f ? "—" : d.VisibilityKm >= 10f ? "10+ KM" : AvNum.Fixed(d.VisibilityKm, 1) + " KM";
+
+            int lit = EnvStateRow.LitFor(d.Regime);
+            if (d.VisibilityKm >= 0f && d.VisibilityKm < 5f) lit |= EnvStateRow.Mist;
+            stateRow.Set(lit, RegimeState(d.Regime));
+            stateRow.SetHelp(d.Briefing);
+
             card.Set(new EnvSky
             {
                 Code = d.Code,
                 Word = d.Name,
-                Briefing = d.Briefing,
                 Regime = d.Regime,
                 Cover = d.Cover,
                 State = RegimeState(d.Regime),
                 Category = cat,
                 CategoryState = catState,
-                Base = AvNum.Fixed(d.Deck, 0) + " M",
-                Top = AvNum.Fixed(d.Top, 0) + " M",
-                Wind = windText,
-                Visibility = vis,
-                Precip = rain <= 0.02f ? "DRY" : "RAIN " + AvNum.Percent(rain),
-                PrecipState = rain > 0.6f ? AvState.Caution : AvState.Info,
             });
+
+            float vis = d.VisibilityKm;
+            visGauge.Set(vis < 0f ? 0f : Mathf.Clamp01(vis / 10f), vis < 0f ? "—" : vis >= 10f ? "10+" : AvNum.Fixed(vis, 1),
+                vis < 0f ? AvState.Inert : vis < 1.5f ? AvState.Danger : vis < 5f ? AvState.Caution : AvState.Ready);
+            AvState rainState = rain > 0.6f ? AvState.Caution : AvState.Ready;
+            rainGauge.Set(rain, Tag(AvNum.Percent(rain), rainState), rainState);
+            AvState turbState = d.Turbulence >= 0.6f ? AvState.Danger : d.Turbulence >= 0.35f ? AvState.Caution : AvState.Ready;
+            turbGauge.Set(Mathf.Clamp01(d.Turbulence / 0.8f), Tag(AvNum.Fixed(d.Turbulence, 2), turbState), turbState);
+            nextGauge.Set(Mathf.Clamp01(d.NextFrac), d.Next, AvState.Ready);
+
+            // Storm risk: only while a storm is on the field or the outlook really contains one.
+            EnvForecastRow[] rows = d.Forecast;
+            int stormAt = -1;
+            if (rows != null)
+                for (int i = 0; i < rows.Length; i++)
+                    if (rows[i].Regime == WeatherRegimeType.Storm) { stormAt = rows[i].OffsetMinutes; break; }
+            if (d.Regime == WeatherRegimeType.Storm)
+            {
+                stormBar.SetShown(true);
+                stormBar.Set(1f, "ACTIVE", AvState.Danger);
+            }
+            else if (stormAt >= 0)
+            {
+                stormBar.SetShown(true);
+                stormBar.Set(Mathf.Clamp01(1f - stormAt / 90f), "+" + stormAt + " MIN", AvState.Caution);
+            }
+            else stormBar.SetShown(false);
 
             string status; AvState statusState;
             if (!d.HasCamera) { status = "CAMERA UNAVAILABLE"; statusState = AvState.Inert; }
             else if (d.CameraAlt < d.Deck - 50f) { status = "BELOW CLOUD BASE"; statusState = AvState.Info; }
             else if (d.CameraAlt < d.Top - 50f) { status = "IN CLOUD LAYER"; statusState = AvState.Caution; }
             else { status = "ABOVE CLOUD TOP"; statusState = AvState.Ready; }
-            profileSection.SetCaption(status);
             profile.Set(new EnvProfileData
             {
                 Base = d.Deck, Top = d.Top, CameraAlt = d.CameraAlt, HasCamera = d.HasCamera, State = statusState, Status = status,
             });
 
-            localAir.Set(0, d.HasCamera ? AvNum.Percent(d.AirDensity) + " SL" : "—");
-            localAir.Set(1, d.HasCamera ? AvNum.Fixed(d.SoundSpeed, 0) + " M/S" : "—");
-            localAir.Set(2, AvNum.Fixed(d.Turbulence, 2));
-
-            EnvForecastRow[] rows = d.Forecast;
             if (rows == null) return;
-            for (int i = 0; i < rows.Length && i < outlook.Count; i++)
+            for (int i = 0; i < rows.Length; i++)
             {
                 EnvForecastRow r = rows[i];
                 AvState st = r.Regime == WeatherRegimeType.Storm ? AvState.Danger
                     : r.Rain > 0.2f ? AvState.Caution : RegimeState(r.Regime);
-                outlook[i].Set(i == 0 ? "NOW" : "+" + r.OffsetMinutes, i == 0, r.Regime, r.Code, r.Cover, r.Deck, r.Rain, st);
+                outlook.Set(i, i == 0 ? "NOW" : "+" + r.OffsetMinutes, i == 0, r.Regime, r.Code, r.Rain, st);
             }
+            if (rows.Length == 0) return;
+            // 13 bars on a true time axis (0..60 min, 5 min apiece), interpolated between the forecast steps.
+            var bars = new float[13];
+            for (int b = 0; b < bars.Length; b++)
+            {
+                float minute = b * 5f;
+                int k = 0;
+                while (k < rows.Length - 1 && rows[k + 1].OffsetMinutes <= minute) k++;
+                EnvForecastRow a = rows[k], z = rows[Mathf.Min(k + 1, rows.Length - 1)];
+                float span = z.OffsetMinutes - a.OffsetMinutes;
+                float f = span > 0f ? Mathf.Clamp01((minute - a.OffsetMinutes) / span) : 0f;
+                bars[b] = Mathf.Clamp01(Mathf.Lerp(a.Cover, z.Cover, f));
+            }
+            float first = Mathf.Clamp01(rows[0].Cover), last = Mathf.Clamp01(rows[rows.Length - 1].Cover);
+            coverEq.Set(bars, AvNum.Percent(first) + " > " + AvNum.Percent(last), last > 0.75f ? AvState.Caution : AvState.Ready);
         }
 
         private void ApplySky(EnvData d)
         {
-            bool lowLight = d.SunElevation <= -6f, lowDeck = d.Deck < 1600f, strongWind = d.WindKts > 30f;
-            watch.Set(0, d.SunElevation > 0f ? "DAYLIGHT" : lowLight ? "NIGHT" : "TWILIGHT",
-                lowLight ? "LOW LIGHT" : "NORMAL", lowLight ? AvState.Caution : AvState.Info);
-            watch.Set(1, AvNum.Fixed(d.Deck, 0) + " M", lowDeck ? "LOW CEILING" : "NORMAL", lowDeck ? AvState.Caution : AvState.Info);
-            watch.Set(2, AvNum.Fixed(d.WindKts, 0) + " KT", strongWind ? "HIGH WIND" : "NORMAL", strongWind ? AvState.Caution : AvState.Info);
+            bool lowLight = d.SunElevation <= -6f, strongWind = d.WindKts > 30f;
+            AvState lightState = lowLight ? AvState.Caution : AvState.Info;
+            AvState windState = strongWind ? AvState.Caution : AvState.Info;
 
             string solar = d.PolarDay ? "POLAR DAY" : d.PolarNight ? "POLAR NIGHT"
                 : d.SunElevation > 0f ? "DAYLIGHT" : d.SunElevation > -6f ? "CIVIL TWILIGHT" : "NIGHT";
-            string events = d.PolarDay ? "Continuous polar daylight, no sunset."
-                : d.PolarNight ? "Continuous polar night, no sunrise." : d.SunEvent;
+            string events = d.PolarDay || d.PolarNight ? "" : d.SunEvent;
             sun.Set(new EnvSun
             {
                 Elevation = d.SunElevation, Azimuth = d.SunAzimuth, TimeOfDay = d.TimeOfDay, Sunrise = d.Sunrise, Sunset = d.Sunset,
                 PolarDay = d.PolarDay, PolarNight = d.PolarNight, Light = solar, Event = events,
-                LightState = lowLight ? AvState.Caution : AvState.Info,
+                LightState = lightState,
             });
 
             moon.Set(new EnvMoon
             {
                 Phase = d.MoonPhase, Lit = d.MoonLit, Glow = d.MoonGlow, Waxing = d.MoonWaxing, Moonless = d.Moonless,
-                Guidance = d.Moonless ? "Low natural light — visual identification may be harder."
-                    : "Moonlight present — check cloud cover for visibility.",
             });
 
             string turbWord = WeatherWords.Turbulence(d.Turbulence);
@@ -259,24 +323,33 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 Kts = d.WindKts, From = d.WindFrom, To = d.WindTo, Turbulence = d.Turbulence,
                 Cardinal = d.WindKts < 1f ? "" : WeatherWords.Cardinal(d.WindFrom),
                 TurbWord = turbWord, TurbState = turbState,
-                Advisory = strongWind ? "Strong wind — expect drift and turbulence."
-                    : d.WindKts < 3f ? "Calm — no significant drift." : "Normal wind — watch for drift.",
-                State = strongWind ? AvState.Caution : AvState.Info,
+                State = windState,
             });
+
+            float[] dens = d.DensityByAlt;
+            densityEq.SetShown(dens != null && dens.Length > 0);
+            if (dens != null && dens.Length > 0)
+            {
+                int m = Mathf.Min(dens.Length, densityBuf.Length);
+                var shown = new float[m];
+                for (int i = 0; i < m; i++) shown[i] = Mathf.Clamp01(dens[i] / 1.5f);
+                densityEq.Set(shown, d.HasCamera ? AvNum.Percent(d.AirDensity) + " @ " + AvNum.Fixed(d.CameraAlt / 1000f, 1) + " KM" : "",
+                    d.HasCamera && d.AirDensity < 0.6f ? AvState.Caution : AvState.Ready);
+            }
 
             if (d.HasCamera)
             {
+                altGauge.Set(Mathf.Clamp01(d.CameraAlt / 12000f), AvNum.Fixed(d.CameraAlt, 0), AvState.Ready);
                 bool thin = d.AirDensity < 0.6f;
-                density.Set((thin ? "THIN AIR  " : "") + AvNum.Percent(d.AirDensity) + " SL", d.AirDensity / 1.5f,
-                    thin ? AvState.Caution : AvState.Ready, 1f / 1.5f, "SEA LEVEL = 100%");
-                airStrip.Set(0, AvNum.Fixed(d.SoundSpeed, 0) + " M/S");
-                airStrip.Set(1, AvNum.Signed(d.CameraAlt, 0) + " M");
+                AvState densState = thin ? AvState.Caution : AvState.Ready;
+                densityGauge.Set(Mathf.Clamp01(d.AirDensity / 1.5f), Tag(AvNum.Percent(d.AirDensity), densState), densState);
+                soundGauge.Set(Mathf.Clamp01(d.SoundSpeed / 400f), AvNum.Fixed(d.SoundSpeed, 0), AvState.Ready);
             }
             else
             {
-                density.Set("—", 0f, AvState.Inert);
-                airStrip.Set(0, "—");
-                airStrip.Set(1, "—");
+                altGauge.Set(0f, "—", AvState.Inert);
+                densityGauge.Set(0f, "—", AvState.Inert);
+                soundGauge.Set(0f, "—", AvState.Inert);
             }
         }
 

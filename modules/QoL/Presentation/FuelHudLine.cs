@@ -1,9 +1,10 @@
-using BoscaliSummer.Features.QoL.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.QoL.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.QoL.Presentation
+namespace BoscaliSummer.Modules.QoL.Presentation
 {
     /// <summary>
     /// Own fuel state and the nearest friendly field as one cockpit line, with the field's name

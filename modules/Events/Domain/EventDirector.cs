@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.Events.Domain
+namespace BoscaliSummer.Modules.Events.Domain
 {
     /// <summary>
     /// Ground ownership read from live airbase custody: how many bases each side holds, who

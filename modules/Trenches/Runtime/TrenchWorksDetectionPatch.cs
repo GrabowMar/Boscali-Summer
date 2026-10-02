@@ -2,7 +2,7 @@ using System;
 using HarmonyLib;
 using NuclearOption.Jobs;
 
-namespace BoscaliSummer.Features.Trenches.Runtime
+namespace BoscaliSummer.Modules.Trenches.Runtime
 {
     /// <summary>
     /// Skips line-of-sight checks against this module's own infantry works. They spawn as

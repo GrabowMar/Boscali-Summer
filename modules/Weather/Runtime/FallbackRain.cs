@@ -2,7 +2,7 @@ using BepInEx.Logging;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Runtime
+namespace BoscaliSummer.Modules.Weather.Runtime
 {
     /// <summary>
     /// Rain without the shader bundle: one bounded Shuriken box of stretched billboards on the

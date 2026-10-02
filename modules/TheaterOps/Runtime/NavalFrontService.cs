@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>Host-only destinations for uncommanded ships. ShipAI still owns combat,
     /// pathfinding, steering and the response to explicit UnitCommand orders.</summary>

@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Radio.Configuration;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Modules.Radio.Configuration;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Radio.Runtime
+namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>
     /// The receiver's own voice: carrier hiss that follows the modelled signal, a squelch

@@ -1,16 +1,16 @@
-using System.Collections.Generic;
-using BoscaliSummer.Features.Comms.Configuration;
-using BoscaliSummer.Features.Comms.Domain;
-using BoscaliSummer.Features.Comms.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Collections.Generic;
+using BoscaliSummer.Modules.Comms.Configuration;
+using BoscaliSummer.Modules.Comms.Domain;
+using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     /// <summary>
     /// Pings, projected into the cockpit. A teammate's "SAM THREAT" is worth most when it can

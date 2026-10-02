@@ -1,6 +1,6 @@
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.QoL.Runtime
+namespace BoscaliSummer.Modules.QoL.Runtime
 {
     internal sealed class ObservationStore
     {

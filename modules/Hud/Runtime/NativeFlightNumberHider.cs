@@ -4,7 +4,7 @@ using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Hud.Runtime
+namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// Hides vanilla's own flight numbers (airspeed, altitude, climb, bearing, Mach, G, fuel,

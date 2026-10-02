@@ -1,7 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.QoL.Patches
+namespace BoscaliSummer.Modules.QoL.Patches
 {
     // Preserve the game's lead/impact calculation, but stop its stick-input correction.
     [HarmonyPatch(typeof(ControlsFilter), nameof(ControlsFilter.GetAim))]

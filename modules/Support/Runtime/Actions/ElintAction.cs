@@ -1,7 +1,6 @@
 using System;
-using BoscaliSummer.Features.Support.Domain.Orbital;
 
-namespace BoscaliSummer.Features.Support.Runtime.Actions
+namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// ELINT sweep. The faction's station, overhead with a SIGINT array, listens around the
@@ -12,27 +11,14 @@ namespace BoscaliSummer.Features.Support.Runtime.Actions
     /// </summary>
     internal sealed class ElintAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) =>
-            context.Settings.ElintCost.Value * context.Settings.CostMultiplier.Value;
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
-            if (!context.Host.WindowOpen(context.Owner))
-            {
-                context.Logger.LogInfo("[Support] ELINT sweep refused: tasking window closed.");
-                return SupportResult.WindowClosed;
-            }
-            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.Elint, out PlatformDenial denial);
-            if (platform == null) return SupportContext.Refusal(denial);
-
             try
             {
-                double now = context.Host.OrbitNow;
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
-                    context.Settings.ElintRadius.Value * platform.ElintScale(now), context.Logger, RevealFilter.Emitters);
-                platform.Consume(PlatformAbility.Elint, now);
-                if (contacts > 0) platform.RecordSolution(context.Target.x, context.Target.z,
-                    context.Settings.ElintRadius.Value * platform.ElintScale(now), now);
+                    context.Settings.ElintRadius.Value, context.Logger, RevealFilter.Emitters);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }

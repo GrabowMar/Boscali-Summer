@@ -1,8 +1,8 @@
 using System.Collections.Generic;
-using BoscaliSummer.Framework.Fx;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     // Owns one persistent droplet layer per canopy pane (ping-pong 256x256 RGBA32,
     // hard-capped at MaxPanes pairs = 4 MiB). Keyed by renderer+submesh so a lost

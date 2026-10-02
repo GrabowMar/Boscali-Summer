@@ -1,7 +1,7 @@
 using System.Text;
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// One rail button's identity: the short code the game already prints, the words that

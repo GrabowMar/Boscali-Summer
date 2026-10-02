@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Command.Domain
+namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// What a friendly AI pilot is currently pointed at, reduced to the handful of kinds

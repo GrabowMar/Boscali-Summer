@@ -1,6 +1,6 @@
 using Rewired;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// Takes the mouse away from flying while the interaction menu is open, the way ACE3's

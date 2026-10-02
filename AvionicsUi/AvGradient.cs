@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Two-stop vertex gradient multiplied into a Graphic's vertices (UIGradient-class).</summary>
     public sealed class AvGradient : BaseMeshEffect

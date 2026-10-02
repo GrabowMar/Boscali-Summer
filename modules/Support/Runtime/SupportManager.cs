@@ -3,29 +3,28 @@ using System.Collections;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Support.Configuration;
-using BoscaliSummer.Features.Support.Domain;
-using BoscaliSummer.Features.Support.Domain.Cyber;
-using BoscaliSummer.Features.Support.Domain.Orbital;
-using BoscaliSummer.Features.Support.Domain.SpecOps;
-using BoscaliSummer.Features.Support.Networking;
-using BoscaliSummer.Features.Support.Runtime.Actions;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Modules.Support.Configuration;
+using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Networking;
+using BoscaliSummer.Modules.Support.Presentation;
+using BoscaliSummer.Modules.Support.Runtime.Actions;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Interop;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Validates and dispatches support requests. Everything an action does lives in the
     /// action; this class owns only authority, economy, bounded concurrency and the client's
-    /// view of its own request. It also owns the host-authoritative orbital stations, CYBER
-    /// networks and program systems: launch, jettison, burn, resupply, site, console verb,
-    /// upgrade and invest commands are validated and charged here, never in a panel.
+    /// view of its own request.
     /// </summary>
         internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
             IGroundForceReadiness, ITheaterStrikePicture
@@ -40,118 +39,13 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
         private const float ReplyTimeout = 5f;
 
-        internal readonly SpaceOperations Space = new SpaceOperations();
-        internal readonly CyberEffects Cyber = new CyberEffects();
-        internal readonly CyberDefense Spectrum = new CyberDefense();
-        internal readonly SpecOpsTheater Field = new SpecOpsTheater();
-        SpaceOperations ISupportHost.Space => Space;
-        SpecOpsTheater ISupportHost.SpecOps => Field;
-
-        private float opsReceived = -100f;
-        public bool OpsStateFresh => Time.unscaledTime - opsReceived < 3f;
-        private float nextOpsQuery;
-        private int pendingCommand;
-        private string pendingCommandLabel;
-        private OpsCommand? pendingCommandKind;
-        private byte pendingCommandArg;
-        private float commandTimeout;
-
-        public void PollOps()
-        {
-            if (Time.unscaledTime < nextOpsQuery) return;
-            nextOpsQuery = Time.unscaledTime + 2f;
-            network.QueryOps();
-        }
-
-        internal void ReceiveOps(OpsStateMessage state)
-        {
-            if (!OpsStateMessageBuffers.ValidArrays(state)) return;
-            if (!OpsStateMessageBuffers.ValidCyber(state)) return;
-
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            if (player == null || player.HQ == null || state.FactionName != FactionKey(player.HQ)) return;
-            if (player != null && player.HQ != null)
-            {
-                FactionHQ hq = player.HQ;
-                double now = OrbitNow;
-                // The host's own station is the authority: rebasing its clocks from a float
-                // snapshot would only add rounding. Clients rebuild everything from the snapshot.
-                if (!GameAccess.IsServer())
-                {
-                    OpsStateMessageBuffers.Read(state, mirrorSnapshot);
-                    Space.MirrorPlatform(hq, mirrorSnapshot, now);
-                    Space.MirrorCyber(hq, state.Cyber, now);
-                }
-                for (int i = 0; i < cyberOrigins.Length; i++)
-                    cyberOrigins[i] = i < state.CyberOriginCount ? state.CyberOrigins[i] : null;
-                Space.MirrorForeign(state.ForeignRegimes, state.ForeignSeeds, state.ForeignClocks, state.ForeignLayouts,
-                    state.ForeignCount, now);
-            }
-
-            if (state.RequestId != 0 && state.RequestId == pendingCommand)
-            {
-                pendingCommand = 0;
-                SupportResult result = (SupportResult)state.Result;
-                Status = result == SupportResult.Accepted
-                    ? AcceptedStatus()
-                    : pendingCommandLabel + " denied: " + Explain(result) + ".";
-                pendingCommandKind = null;
-                pendingCommandArg = 0;
-            }
-
-            if (state.TeamCooldown != null)
-                for (int i = 0; i < TeamGates.Count && i < state.TeamCooldown.Length; i++)
-                    teamMirror[i] = Mathf.Max(0f, state.TeamCooldown[i]);
-            if (Finite(state.OpsReserve))
-                reserveMirror = Mathf.Clamp(state.OpsReserve, 0f, FactionOpsReserve.Maximum);
-            threatMirror = state.CyberThreatSlot < CyberNetwork.SlotCount ? state.CyberThreatSlot : byte.MaxValue;
-            intelStaleMirror = state.IntelStale;
-
-            opsReceived = Time.unscaledTime;
-        }
-
-        /// <summary>
-        /// A launch reply names the odds the host fixed; the client has already mirrored the
-        /// snapshot that carried them.
-        /// </summary>
-        private string AcceptedStatus()
-        {
-            if (pendingCommandKind != OpsCommand.SpecOpsLaunch || pendingCommandArg >= SpecOpsDetachment.TeamCount)
-                return pendingCommandLabel + " accepted.";
-            FieldTeam team = LocalDetachment?.Team(pendingCommandArg) ?? default;
-            return team.State == TeamState.EnRoute
-                ? FieldWords.Callsign(pendingCommandArg) + " MOVING OUT · " + FieldWords.Mission(team.Mission) + " · " +
-                  team.Target + " · " + team.Chance + "% SUCCESS."
-                : pendingCommandLabel + " accepted.";
-        }
-
-        /// <summary>
-        /// The SPEC OPS half of a poll, arriving just before the ops snapshot. The host's own
-        /// detachment is the authority; mirroring its own snapshot back would only round its clocks.
-        /// </summary>
-        internal void ReceiveSpecOps(SpecOpsStateMessage state)
-        {
-            if (state.State == null || GameAccess.IsServer()) return;
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            if (player != null && player.HQ != null && state.FactionName == FactionKey(player.HQ))
-                Space.MirrorDetachment(player.HQ, state.State, OrbitNow);
-        }
-
-        private readonly PlatformSnapshot mirrorSnapshot = new PlatformSnapshot();
-        private readonly PlatformSnapshot exportSnapshot = new PlatformSnapshot();
-        private readonly string[] cyberOrigins = new string[OpsStateMessageBuffers.MaximumOriginNames];
-        private readonly float[] teamMirror = new float[TeamGates.Count];
-        private float reserveMirror = FactionOpsReserve.Starting;
-        private byte threatMirror = byte.MaxValue;
-        private bool intelStaleMirror;
-        private float nextReserveTick;
+        /// <summary>Concurrent strike jobs per faction, per <see cref="SupportPool"/>.</summary>
+        private readonly Dictionary<FactionHQ, int[]> strikeJobs = new Dictionary<FactionHQ, int[]>();
+        private readonly int[] fallbackJobs = new int[2];
+        private const int MaximumFactionPools = 8;
 
         private readonly SupportRequestLedger ledger = new SupportRequestLedger();
-        private readonly SupportRequestLedger commandLedger = new SupportRequestLedger();
         private readonly SupportMapGesture mapGesture = new SupportMapGesture();
-        private const int MaximumFactionLedgers = 8;
-        private readonly Dictionary<FactionHQ, TeamLedger> teamLedgers = new Dictionary<FactionHQ, TeamLedger>();
-        private readonly TeamLedger fallbackLedger = new TeamLedger();
         private readonly Dictionary<int, int> contactReplies = new Dictionary<int, int>();
         private readonly Dictionary<int, float> ttiReplies = new Dictionary<int, float>();
         private CruiseTasking cruiseTasking;
@@ -159,9 +53,15 @@ namespace BoscaliSummer.Features.Support.Runtime
         private int pendingWaypoint = -1;
         private float pendingWaypointUntil;
 
+        /// <summary>The live manager, or null; set in Configure, cleared only on destroy (survives scene resets).</summary>
+        internal static SupportManager Active { get; private set; }
+
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
+        private CreditService credits;
+        private float nextCreditTick;
+        private float lastCreditTick;
         private ManualLogSource logger;
         private ConfigEntry<bool> bypassRequirements;
         private ConfigEntry<bool> disableCooldowns;
@@ -225,141 +125,23 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
         public SupportSettings Settings => settings;
 
-        bool ISupportHost.WindowOpen(FactionHQ owner) => WindowOpenFor(owner);
-
-        /// <summary>Tasking window for a faction, projected locally from the host's durations.</summary>
-        public bool WindowOpenFor(FactionHQ owner)
-        {
-            if (settings == null) return true;
-            double anchor = WindowMath.Stagger(FactionKey(owner),
-                settings.WindowOpenSeconds.Value + settings.WindowClosedSeconds.Value);
-            return WindowMath.Open(anchor, OrbitNow,
-                settings.WindowOpenSeconds.Value, settings.WindowClosedSeconds.Value, out _);
-        }
-
-        public bool LocalWindowOpen => WindowOpenFor(LocalHQ());
-
-        /// <summary>Seconds until the local window opens or closes, for the MFD clocks.</summary>
-        public float LocalWindowChangeIn
-        {
-            get
-            {
-                if (settings == null) return 0f;
-                double anchor = WindowMath.Stagger(FactionKey(LocalHQ()),
-                    settings.WindowOpenSeconds.Value + settings.WindowClosedSeconds.Value);
-                WindowMath.Open(anchor, OrbitNow,
-                    settings.WindowOpenSeconds.Value, settings.WindowClosedSeconds.Value, out float changeIn);
-                return changeIn;
-            }
-        }
-
-        /// <summary>Faction intel picture for the FIRES pre-check: live on the server, the host mirror on clients.</summary>
-        public bool LocalIntelStale
-        {
-            get
-            {
-                if (GameAccess.IsServer())
-                {
-                    FactionHQ hq = LocalHQ();
-                    return hq == null || SupportTargeting.FactionIntelCold(hq, settings.IntelFreshSeconds.Value);
-                }
-                return intelStaleMirror;
-            }
-        }
-        public bool CommandPending => pendingCommand != 0;
-
-        /// <summary>The local faction's station for the console, the uplink, the sky and the map.</summary>
-        public OrbitalPlatform LocalPlatform
-        {
-            get
-            {
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                return player == null ? null : Space.PlatformFor(player.HQ);
-            }
-        }
-
-        /// <summary>The clock passes are computed against. Scene-local and reset with the stations.</summary>
-        public double OrbitNow => Time.timeSinceLevelLoadAsDouble;
-
-        double ISupportHost.OrbitNow => OrbitNow;
-
-        /// <summary>Client-local uplink aim, remembered between uplink sessions; theatre centre until set.</summary>
-        public GlobalPosition UplinkAim { get; private set; }
-
-        public bool UplinkAimSet { get; private set; }
-
-        public void SetUplinkAim(GlobalPosition point)
-        {
-            UplinkAim = point;
-            UplinkAimSet = true;
-        }
-
-        /// <summary>Latest accepted radar scan of the local player, for the uplink and PLATFORM products.</summary>
+        /// <summary>Latest accepted radar scan of the local player, for the imager.</summary>
         public int RadarScanSerial { get; private set; }
         public GlobalPosition RadarScanTarget { get; private set; }
         public int RadarScanContacts { get; private set; }
 
-        /// <summary>The local faction's CYBER network: the host's own model or a client mirror.</summary>
-        public CyberNetwork LocalCyber
-        {
-            get
-            {
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                return player == null ? null : Space.CyberFor(player.HQ);
-            }
-        }
-
-        /// <summary>The enemy faction an incident origin byte names, as the host last reported it.</summary>
-        public string CyberOriginName(int origin)
-        {
-            if (GameAccess.IsServer())
-            {
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                FactionHQ hq = player != null ? Spectrum.Origin(player.HQ, origin) : null;
-                if (hq != null) return CyberDefense.Name(hq);
-            }
-            string name = origin >= 0 && origin < cyberOrigins.Length ? cyberOrigins[origin] : null;
-            return string.IsNullOrEmpty(name) ? "HOSTILE ACTOR " + (origin + 1) : name;
-        }
-
-        /// <summary>The local faction's SPEC OPS detachment: the host's own model or a client mirror.</summary>
-        public SpecOpsDetachment LocalDetachment
-        {
-            get
-            {
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                return player == null ? null : Space.DetachmentFor(player.HQ);
-            }
-        }
-
-        /// <summary>Which station ability, if any, a support action needs.</summary>
-        public static PlatformAbility? OrbitalAbility(SupportActionId action)
-        {
-            switch (action)
-            {
-                case SupportActionId.MtiSweep: return PlatformAbility.RadarScan;
-                case SupportActionId.Recon: return PlatformAbility.RadarScan;
-                case SupportActionId.ElintSweep: return PlatformAbility.Elint;
-                case SupportActionId.Artillery: return PlatformAbility.RodStrike;
-                case SupportActionId.Emp: return PlatformAbility.EmpBurst;
-                default: return null;
-            }
-        }
-
-        /// <summary>Client prediction of the host's station check for an ability, same model and clock rules.</summary>
-        public PlatformDenial PlatformCheck(PlatformAbility ability)
-        {
-            OrbitalPlatform platform = LocalPlatform;
-            return platform == null ? PlatformDenial.NoPlatform : platform.Check(ability, OrbitNow);
-        }
-
-        /// <summary>Display snapping for zone-targeted actions (Fortify resolves an owned base).</summary>
+        /// <summary>Display the same owned-zone footprint that FORTIFY executes.</summary>
         public void ResolveMapArea(SupportActionId action, ref GlobalPosition target, ref float radius)
         {
+            EffectReceipt(action, LocalHQ(), target.x, target.z, out radius, out _);
             if (action != SupportActionId.Fortify) return;
             if (!GameManager.GetLocalPlayer<Player>(out Player player)) return;
             Airbase zone = SupportTargeting.NearestOwnedAirbase(player, target.ToLocalPosition(), out float distance);
-            if (zone == null || distance > Mathf.Max(650f, zone.GetRadius() * 1.5f)) { radius = 0f; return; }
+            if (zone == null || distance > Mathf.Max(650f, zone.GetRadius() * 1.5f))
+            {
+                radius = 0f;
+                return;
+            }
             target = (zone.center != null ? zone.center.position : zone.transform.position).ToGlobalPosition();
             radius = zone.GetRadius();
         }
@@ -369,73 +151,38 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public float GetEffectRadius(SupportActionId action, FactionHQ owner)
         {
-            OrbitalPlatform platform = Space.PlatformFor(owner);
-            bool station = platform != null && platform.Exists;
             switch (action)
             {
                 case SupportActionId.Artillery:
                     return SupportEffectPolicy.RodBlastRadius;
                 case SupportActionId.Emp:
-                    return (settings != null ? settings.EmpRadius.Value : 12000f) * (station ? platform.EmpScaleAt(OrbitNow) : 1f);
+                    return Mathf.Min(SupportEffectPolicy.MaxEmpRadius,
+                        settings != null ? settings.EmpRadius.Value : 12000f);
                 case SupportActionId.MtiSweep:
                 case SupportActionId.Recon:
-                    return (settings != null ? settings.SarSceneRadius.Value : 1000f) *
-                           (station ? platform.ScanScale(OrbitNow) : 1f);
+                    return settings != null ? settings.SarSceneRadius.Value : 1000f;
                 case SupportActionId.ElintSweep:
-                    return (settings != null ? settings.ElintRadius.Value : 8000f) *
-                           (station ? platform.ElintScale(OrbitNow) : 1f);
+                    return settings != null ? settings.ElintRadius.Value : 8000f;
                 case SupportActionId.FlareMissile:
                     return settings != null ? settings.FlareBarrageRadius.Value : 4000f;
                 case SupportActionId.Fortify:
                     return 650f; // Selection radius; the overlay resolves the actual owned zone.
-                case SupportActionId.HackPing:
-                case SupportActionId.HackTrack:
-                case SupportActionId.HackBlackout:
-                    return CyberCatalog.Radius((HackKind)((byte)action - (byte)SupportActionId.HackPing));
-                case SupportActionId.HackScan:
-                    return CyberCatalog.Radius(HackKind.Scan);
-                case SupportActionId.HackHijack:
-                    return CyberCatalog.Radius(HackKind.Hijack);
-                case SupportActionId.HackOverload:
-                    return CyberCatalog.Radius(HackKind.Overload);
-                case SupportActionId.HackGhost:
-                case SupportActionId.HackSpoof:
-                    return 0f; // Fleet-wide track deception; no area ring to draw.
-                case SupportActionId.SpecSpot:
-                    return FieldCatalog.SpotRadius(BestPostRank(owner, FieldMission.Recon));
-                case SupportActionId.SpecSuppress:
-                    return FieldCatalog.SuppressRadius(BestPostRank(owner, FieldMission.Sabotage));
-                case SupportActionId.SpecSkywatch:
-                    return FieldCatalog.SkywatchRadius(BestPostRank(owner, FieldMission.Recon));
-                case SupportActionId.SpecEavesdrop:
-                    return FieldCatalog.EavesdropRadius(BestPostRank(owner, FieldMission.Steal));
-                case SupportActionId.SpecHunt:
-                    return FieldCatalog.HuntRadius(BestPostRank(owner, FieldMission.Sabotage));
                 default:
                     return 1000f;
             }
         }
 
-        /// <summary>The rank of the best team holding a post of this kind; 0 when none is held.</summary>
-        private int BestPostRank(FactionHQ owner, FieldMission post)
+        // Capture before execution so a receipt describes the effect the host actually applied.
+        internal void EffectReceipt(SupportActionId action, FactionHQ owner, float x, float z,
+            out float radius, out float duration)
         {
-            SpecOpsDetachment detachment = Space.DetachmentFor(owner);
-            if (detachment == null) return 0;
-            int best = 0;
-            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
-            {
-                FieldTeam team = detachment.Team(i);
-                if (team.State == TeamState.Holding && team.Mission == post && team.Rank > best) best = team.Rank;
-            }
-            return best;
+            radius = GetEffectRadius(action, owner);
+            duration = settings != null ? settings.JtacMarkDuration.Value : 10f;
+            if (action == SupportActionId.Emp)
+                duration = SupportEffectPolicy.EmpDuration;
+            else if (action == SupportActionId.FlareMissile)
+                duration = settings.FlareBarrageDuration.Value;
         }
-
-        /// <summary>How long an accepted SUPPRESS lasts, for the map overlay's countdown.</summary>
-        public float FieldEffectDuration(SupportActionId action, FactionHQ owner) =>
-            action == SupportActionId.SpecSuppress
-                ? FieldCatalog.SuppressSeconds(BestPostRank(owner, FieldMission.Sabotage))
-                : action == SupportActionId.SpecHunt
-                    ? FieldCatalog.HuntSeconds(BestPostRank(owner, FieldMission.Sabotage)) : 10f;
 
         private static FactionHQ LocalHQ()
         {
@@ -509,24 +256,23 @@ namespace BoscaliSummer.Features.Support.Runtime
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
-        void ISupportHost.ReportOperation(Player caster, GlobalPosition target)
-        {
-            if (caster != null) Spectrum.ReportOperation(Space, caster.HQ, target, OrbitNow);
-        }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
         public bool RequestPending => pending;
+        internal void AbandonPending() => pending = false;
 
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
             IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
         {
-            Field.Fortifications = fortifications;
             settings = supportSettings;
+            Active = this;
             perks = playerPerks;
             network = net;
+            credits = new CreditService(net);
+            credits.PriceFactors = HostPriceFactors;
             logger = log;
             catalog = new SupportCatalog(supportSettings, fortifications);
         }
@@ -543,36 +289,24 @@ namespace BoscaliSummer.Features.Support.Runtime
             Visuals.KineticRodStrikeVisuals.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
             Visuals.SupportParticles.Reset();
-            Space.Clear();
-            mirrorSnapshot.Clear();
-            UplinkAim = default;
-            UplinkAimSet = false;
-            Cyber.Clear();
-            Spectrum.Clear();
-            Field.Clear();
-            Array.Clear(cyberOrigins, 0, cyberOrigins.Length);
-            Array.Clear(teamMirror, 0, teamMirror.Length);
-            reserveMirror = FactionOpsReserve.Starting;
-            threatMirror = byte.MaxValue;
-            nextReserveTick = 0f;
-            opsReceived = -100f;
-            nextOpsQuery = 0f;
-            pendingCommand = 0;
-            pendingCommandLabel = null;
-            pendingCommandKind = null;
-            pendingCommandArg = 0;
             inboundStrikeName = null;
             inboundStrikeImpactTime = 0f;
             inboundStrikeConfirmedUntil = 0f;
             ledger.Clear();
-            commandLedger.Clear();
+            credits?.Clear();
+            LocalCredit = 0f;
+            LocalFrozenSeconds = 0;
+            LocalEventFactor = 1f;
+            LocalSilentFactor = 1f;
+            nextCreditTick = 0f;
+            lastCreditTick = 0f;
             contactReplies.Clear();
+            ttiReplies.Clear();
             if (cruiseTasking != null) cruiseTasking.Clear();
             cruiseLegs.Clear();
             pendingWaypoint = -1;
-            intelStaleMirror = false;
-            teamLedgers.Clear();
-            fallbackLedger.Clear();
+            strikeJobs.Clear();
+            Array.Clear(fallbackJobs, 0, fallbackJobs.Length);
             StopAllCoroutines();
             pending = false;
             localCooldownUntil = 0f;
@@ -587,47 +321,60 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private void OnDestroy()
         {
+            if (Active == this) Active = null;
             ResetForScene();
             SupportMapMode.GestureArmed = false;
         }
 
+        internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
+        {
+            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
+            EarnKind kind = KindOf(type);
+            if (kind == EarnKind.None) return;
+            float now = MissionNow();
+            ulong id = PlayerIdentity.Of(player);
+            bool repeat = kind == EarnKind.Kill && target != null &&
+                credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
+            bool assisted = false;
+            if (kind == EarnKind.Kill && target != null)
+            {
+                GlobalPosition at = target.GlobalPosition();
+                assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
+            }
+            credits.Earn(player, EarningRules.FromReward(kind, rewardAllocation, repeat, assisted) * settings.EarnKnob.Value, now);
+        }
+
+        private static EarnKind KindOf(FactionHQ.RewardType type)
+        {
+            switch (type)
+            {
+                case FactionHQ.RewardType.Kill: return EarnKind.Kill;
+                case FactionHQ.RewardType.CaptureLocation: return EarnKind.Capture;
+                case FactionHQ.RewardType.Recon: return EarnKind.Recon;
+                case FactionHQ.RewardType.Jamming: return EarnKind.Jamming;
+                case FactionHQ.RewardType.Supply:
+                case FactionHQ.RewardType.Refuel:
+                case FactionHQ.RewardType.Repair:
+                case FactionHQ.RewardType.RescuePilots:
+                case FactionHQ.RewardType.CapturePilots: return EarnKind.Support;
+                default: return EarnKind.None; // RewardType.None: DynamicOperations' own payouts, not OPS earnings
+            }
+        }
+
+        private static float MissionNow() =>
+            NetworkSceneSingleton<MissionManager>.i != null
+                ? NetworkSceneSingleton<MissionManager>.i.MissionTime
+                : Time.timeSinceLevelLoad;
+
         private void Update()
         {
-            bool host = GameAccess.IsServer();
-            // Read every frame so a change from the in-game settings page applies at once.
-            if (settings != null) Space.CyberReach = settings.CyberReach.Value;
-            if (host)
+            if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
             {
-                LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-                double orbitNow = OrbitNow;
-                bool spectrum = settings != null && settings.EwEnabled.Value;
-                Spectrum.Sync(Space, orbitNow, Time.unscaledTime, spectrum);
-                Space.TickHost(orbitNow, Time.deltaTime, level != null && level.isDayLight,
-                    settings != null && settings.PlatformDebrisEvents.Value,
-                    spectrum ? settings.CyberCampaignIntensity.Value : 0f, LogDebris);
-                if (spectrum) Spectrum.Apply(Space, orbitNow, Time.unscaledTime, logger);
-                Field.Tick(Space, orbitNow, Time.unscaledTime, settings == null || settings.SpecOpsEnabled.Value,
-                    Field.Fortifications != null && Field.Fortifications.Available, logger);
-                if (Time.unscaledTime >= nextReserveTick)
-                {
-                    nextReserveTick = Time.unscaledTime + 2f;
-                    for (int i = 0; i < Space.FactionCount; i++)
-                    {
-                        FactionHQ faction = Space.FactionAt(i);
-                        if (faction == null) continue;
-                        int sites = 0;
-                        foreach (Airbase airbase in faction.GetAirbases())
-                            if (airbase != null && airbase.CurrentHQ == faction && !airbase.AttachedAirbase) sites++;
-                        TeamLedgerFor(faction).Reserve.Tick(Time.unscaledTime, sites);
-                    }
-                }
+                float missionNow = MissionNow();
+                credits.Tick(missionNow, Mathf.Max(0f, missionNow - lastCreditTick));
+                lastCreditTick = missionNow;
+                nextCreditTick = Time.unscaledTime + 1f;
             }
-            else
-            {
-                // Keep the mirrored station warm for the sky and the map overlay, not just the panel.
-                PollOps();
-            }
-            Cyber.Tick(Time.timeSinceLevelLoad);
 
             // Prune expired active strikes
             float now = Time.timeSinceLevelLoad;
@@ -666,13 +413,6 @@ namespace BoscaliSummer.Features.Support.Runtime
                 pending = false;
                 Status = "No response from host.";
             }
-            if (pendingCommand != 0 && Time.unscaledTime > commandTimeout)
-            {
-                pendingCommand = 0;
-                pendingCommandKind = null;
-                pendingCommandArg = 0;
-                Status = "No response from host.";
-            }
 
             if (anyArmed)
             {
@@ -709,8 +449,7 @@ namespace BoscaliSummer.Features.Support.Runtime
                             else
                             {
                                 SupportActionId action = ArmedAction.Value;
-                                if (pending || pendingCommand != 0) return;
-                                if (!CheckLocalOrbitalTarget(action, target)) return;
+                                if (pending) return;
                                 ArmedAction = null;
                                 mapGesture.Complete(Time.frameCount);
                                 RequestAt(action, target);
@@ -722,9 +461,60 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         // ---- Client view -----------------------------------------------------------------
+        public float LocalCredit { get; private set; }
+        public int LocalFrozenSeconds { get; private set; }
+        public float LocalEventFactor { get; private set; } = 1f;
+        public float LocalSilentFactor { get; private set; } = 1f;
 
-        public float LocalAllocation =>
-            GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
+        internal void ReceiveCredit(CreditStateMessage message)
+        {
+            LocalCredit = message.Balance;
+            LocalFrozenSeconds = message.FrozenSeconds;
+            LocalEventFactor = SaneFactor(message.EventFactor);
+            LocalSilentFactor = SaneFactor(message.SilentFactor);
+        }
+
+        /// <summary>The host's combined knob x events x perk factor for one player.</summary>
+        private (float eventFactor, float silentFactor) HostPriceFactors(Player player) =>
+            player == null ? (1f, 1f)
+                : (EventsCostMultiplier(player),
+                   settings.PriceKnob.Value * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost));
+
+        private static float SaneFactor(float f) => float.IsNaN(f) || float.IsInfinity(f) || f <= 0f ? 1f : f;
+
+        /// <summary>CR price of one CALL for the local player (host runs the same QuoteFor).</summary>
+        internal CallQuote Quote(SupportActionId id)
+        {
+            SupportActionDefinition def = catalog != null ? catalog.Find(id) : null;
+            if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null)
+                return new CallQuote(0, "");
+            return QuoteFor(def, player);
+        }
+
+        /// <summary>Whether the local player's faction has earned this tier; unlockText names the next goal.</summary>
+        internal bool Unlocked(SupportActionId id, out string unlockText)
+        {
+            unlockText = "";
+            if (!CallSheet.TryGet(id, out CallRow row) ||
+                !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null)
+                return false;
+            ObjectiveCount census = credits.Census(player.HQ);
+            float minutes = MissionNow() / 60f;
+            bool open = CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
+            if (!open) unlockText = CallFloors.NextUnlock(census.held, census.n, minutes, 1f);
+            return open;
+        }
+
+        /// <summary>True when this peer is the host or has a live client link to one.</summary>
+        public bool Online => GameAccess.IsServer() || NetworkManagerNuclearOption.i?.Client?.Active == true;
+
+        /// <summary>The local faction's next tier goal in words, or "" when everything is open.</summary>
+        public string NextUnlockText()
+        {
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null) return "";
+            ObjectiveCount census = credits.Census(player.HQ);
+            return CallFloors.NextUnlock(census.held, census.n, MissionNow() / 60f, 1f);
+        }
 
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
@@ -737,43 +527,11 @@ namespace BoscaliSummer.Features.Support.Runtime
             DisableCooldowns ? 0f : settings != null ? CooldownFor(
                 GameManager.GetLocalPlayer<Player>(out Player local) ? local : null) : 0f;
 
-        /// <summary>
-        /// Seconds until the local faction's team gate reopens. The host answers from its own
-        /// ledger; a client counts down from the last ops snapshot.
-        /// </summary>
-        public float TeamCooldownRemaining(TeamGate gate)
-        {
-            int index = (int)gate;
-            if (index < 0 || index >= TeamGates.Count) return 0f;
-            if (GameAccess.IsServer())
-            {
-                GameManager.GetLocalPlayer<Player>(out Player host);
-                return TeamLedgerFor(host != null ? host.HQ : null).Remaining(gate, Time.unscaledTime, TeamCooldownFor(gate));
-            }
-            return Mathf.Max(0f, teamMirror[index] - (Time.unscaledTime - opsReceived));
-        }
-
         public bool IsAuthorised(SupportActionDefinition action)
         {
             if (BypassRequirements) return true;
             if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return false;
-            if (action.IsCyber)
-            {
-                CyberNetwork cyber = Space.CyberFor(player.HQ);
-                if (cyber == null) return false;
-                if (action.Hack.HasValue)
-                    return cyber.AnyTier(CyberCatalog.RequiredStage(action.Hack.Value) - 1, OrbitNow);
-                return cyber.AnyCapstone(action.Cap.Value, OrbitNow);
-            }
-            if (action.IsField) return HoldsPost(player, action.Field.Value);
             return perks.Grants(PlayerIdentity.Of(player), action.Capability);
-        }
-
-        /// <summary>A SPEC OPS ability is authorised while a team holds its kind of post.</summary>
-        private bool HoldsPost(Player player, FieldAbility ability)
-        {
-            SpecOpsDetachment detachment = player != null ? Space.DetachmentFor(player.HQ) : null;
-            return detachment != null && detachment.Enabled && detachment.Posts(FieldCatalog.PostFor(ability)) > 0;
         }
 
         /// <summary>
@@ -783,98 +541,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         public float Cost(SupportActionDefinition action)
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
-            return Cost(action, player);
-        }
-
-        /// <summary>Launch price of a module, the core or cargo for the local player.</summary>
-        public float LaunchCost(ModuleKind kind)
-        {
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            return LaunchCost(player, kind);
-        }
-
-        /// <summary>The share of what was paid a jettison refunds.</summary>
-        public float JettisonRefund => settings != null ? Mathf.Clamp01(settings.PlatformJettisonRefund.Value) : 0f;
-
-        /// <summary>Price of the next network-wide CYBER upgrade for the local player.</summary>
-        public float CyberUpgradeCost(CyberUpgrade upgrade)
-        {
-            CyberNetwork cyber = LocalCyber;
-            if (cyber == null || settings == null || !cyber.CanUpgrade(upgrade)) return 0f;
-            return cyber.UpgradeCost(upgrade) * settings.CyberUpgradeCostScale.Value * settings.CostMultiplier.Value;
-        }
-
-        /// <summary>Faction infrastructure balance; a client reads only the host's snapshot.</summary>
-        public float LocalOpsReserve
-        {
-            get
-            {
-                if (!GameAccess.IsServer()) return reserveMirror;
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                return player != null && player.HQ != null ? TeamLedgerFor(player.HQ).Reserve.Balance : 0f;
-            }
-        }
-
-        public int LocalCyberThreatSlot
-        {
-            get
-            {
-                if (!GameAccess.IsServer()) return threatMirror == byte.MaxValue ? -1 : threatMirror;
-                GameManager.GetLocalPlayer<Player>(out Player player);
-                return player != null ? ThreatenedHome(player.HQ) : -1;
-            }
-        }
-
-        private int ThreatenedHome(FactionHQ defender)
-        {
-            CyberNetwork home = defender != null ? Space.CyberFor(defender) : null;
-            if (home == null) return -1;
-            for (int i = 0; i < Space.FactionCount; i++)
-            {
-                FactionHQ other = Space.FactionAt(i);
-                if (other == null || other == defender) continue;
-                CyberNetwork attacker = Space.CyberFor(other);
-                if (attacker == null || !attacker.BreachActive) continue;
-                int anchor = attacker.Node(attacker.BreachTarget).Anchor;
-                for (int slot = 0; slot < CyberNetwork.TargetBase; slot++)
-                    if (home.Exists(slot) && home.Node(slot).Static && home.Node(slot).Anchor == anchor)
-                        return slot;
-            }
-            return -1;
-        }
-
-        /// <summary>SPEC OPS prices for the local player, with the same multipliers the host charges.</summary>
-        public float SpecOpsRaiseCost()
-        {
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            return SpecOpsPrice(player, FieldCatalog.RaiseCost);
-        }
-
-        public float SpecOpsMissionCost(FieldMission mission)
-        {
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            return SpecOpsPrice(player, FieldCatalog.MissionCost(mission));
-        }
-
-        public bool SpecOpsEnabled => settings == null || settings.SpecOpsEnabled.Value;
-
-        private float SpecOpsPrice(Player player, float baseCost) =>
-            settings == null ? 0f : baseCost * settings.SpecOpsCostScale.Value * settings.CostMultiplier.Value;
-
-        public bool CyberEnabled => settings == null || settings.EwEnabled.Value;
-
-        private float LaunchCost(Player player, ModuleKind kind)
-        {
-            if (settings == null) return 0f;
-            return PlatformModules.LaunchPrice(kind) * settings.PlatformCostScale.Value *
-                   settings.CostMultiplier.Value;
-        }
-
-        private float Price(Player player, float baseCost)
-        {
-            if (baseCost <= 0f || player == null) return baseCost;
-            return baseCost * EventsCostMultiplier(player) *
-                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+            return QuoteFor(action, player).Cost;
         }
 
         /// <summary>
@@ -895,76 +562,14 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// module has to install first. Exactly 1 when Events is absent or the theater is calm.
         /// </summary>
         internal static float EventsCostMultiplier(Player player) =>
-            player != null && ModServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
+            player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
                 ? events.SupportCostMultiplierFor(PlayerIdentity.Of(player))
                 : 1f;
 
         internal static float EventsCooldownMultiplier(Player player) =>
-            player != null && ModServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
+            player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
                 ? events.SupportCooldownMultiplierFor(PlayerIdentity.Of(player))
                 : 1f;
-
-        /// <summary>The shared team gate a support action waits on, if any.</summary>
-        private static TeamGate? TeamGateFor(SupportActionId action)
-        {
-            switch (action)
-            {
-                case SupportActionId.FlareMissile: return TeamGate.FlareBarrage;
-                case SupportActionId.Fortify: return TeamGate.Fortify;
-                default: return null;
-            }
-        }
-
-        /// <summary>The host's current cooldown for one team gate; 0 turns the gate off.</summary>
-        private float TeamCooldownFor(TeamGate gate)
-        {
-            if (DisableCooldowns || settings == null) return 0f;
-            switch (gate)
-            {
-                case TeamGate.FlareBarrage: return settings.TeamFlareCooldown.Value;
-                case TeamGate.Fortify: return settings.TeamFortifyCooldown.Value;
-                case TeamGate.Relocate: return settings.TeamRelocateCooldown.Value;
-                case TeamGate.Isolate: return settings.TeamIsolateCooldown.Value;
-                default: return 0f;
-            }
-        }
-
-        /// <summary>Faction pilots on station, bounded like every other faction scan.</summary>
-        private static int FactionPilots(FactionHQ hq)
-        {
-            if (hq == null || hq.factionPlayers == null) return 0;
-            int pilots = 0;
-            for (int i = 0; i < hq.factionPlayers.Count && i < 64; i++)
-            {
-                Player player = hq.factionPlayers[i].Player;
-                if (player != null && player.HQ == hq) pilots++;
-            }
-            return pilots;
-        }
-
-        private static bool PilotPresent(FactionHQ hq, ulong identity) => PilotByIdentity(hq, identity) != null;
-
-        private static Player PilotByIdentity(FactionHQ hq, ulong identity)
-        {
-            if (hq == null || hq.factionPlayers == null || identity == 0) return null;
-            for (int i = 0; i < hq.factionPlayers.Count && i < 64; i++)
-            {
-                Player player = hq.factionPlayers[i].Player;
-                if (player != null && player.HQ == hq && PlayerIdentity.Of(player) == identity) return player;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Removing faction infrastructure answers to its founder while that pilot is present.
-        /// A lone pilot or a faction whose founder has left can still recover the station.
-        /// </summary>
-        private bool TeamGuardJettison(Player player)
-        {
-            ulong owner = TeamLedgerFor(player.HQ).StationOwner;
-            return TeamRules.MayTouch(PlayerIdentity.Of(player), owner, PilotPresent(player.HQ, owner),
-                FactionPilots(player.HQ), settings != null && settings.TeamOwnershipGuards.Value);
-        }
 
         public void Arm(SupportActionId action)
         {
@@ -991,11 +596,6 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         private bool TryArmMap(string prompt)
         {
-            if (pendingCommand != 0)
-            {
-                Status = "COMMAND PENDING — wait for host acknowledgement.";
-                return false;
-            }
             if (WingLink.WingMapGestureArmed)
             {
                 Status = "WING ORDER ARMED — cancel it in WMC first.";
@@ -1013,151 +613,17 @@ namespace BoscaliSummer.Features.Support.Runtime
         }
 
         /// <summary>Arms a right-click on the map that only reports the point back; nothing is sent.</summary>
-        public void ArmLocalPick(string label, Action<GlobalPosition> onPick)
+        public bool ArmLocalPick(string label, Action<GlobalPosition> onPick)
         {
-            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return;
+            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return false;
             localPick = onPick;
             ArmedAction = null;
             ArmedFrame = Time.frameCount;
             Status = "PICK: " + label + " — Right-click on map (ESC to cancel).";
+            return true;
         }
 
         public bool LocalPickArmed => localPick != null;
-
-        /// <summary>Launch the core onto <paramref name="band"/>.</summary>
-        public void RequestCoreLaunch(byte band = OrbitRegimes.Standard) => SendCommand(OpsCommand.Launch, (byte)ModuleKind.Core, band, default);
-
-        /// <summary>Launch a module to dock at <paramref name="cell"/>.</summary>
-        public void RequestModuleLaunch(ModuleKind kind, int cell) =>
-            SendCommand(OpsCommand.Launch, (byte)kind, (byte)cell, default);
-
-        public void RequestJettison(int cell) => SendCommand(OpsCommand.Jettison, (byte)cell, 0, default);
-
-        public void RequestRelocate(int sector)
-        {
-            if (StationKeeping.Valid(sector)) SendCommand(OpsCommand.Rephase, (byte)sector, 0, default);
-        }
-
-        public void RequestResupply() => SendCommand(OpsCommand.Resupply, 0, 0, default);
-
-        public void RequestPlatformFocus(PlatformFocus focus) =>
-            SendCommand(OpsCommand.PlatformFocus, (byte)focus, 0, default);
-
-        public void RequestCyberUpgrade(CyberUpgrade upgrade) =>
-            SendCommand(OpsCommand.CyberUpgrade, (byte)upgrade, 0, default);
-
-        /// <summary>Raise an empty SPEC OPS team slot.</summary>
-        public void RequestSpecOpsRaise(int team) =>
-            SendCommand(OpsCommand.SpecOpsRaise, (byte)Mathf.Clamp(team, 0, 255), 0, default);
-
-        /// <summary>Send a team on a mission to the objective carrying <paramref name="anchor"/>.</summary>
-        public void RequestSpecOpsLaunch(int team, FieldMission mission, int anchor) =>
-            SendCommand(OpsCommand.SpecOpsLaunch, (byte)Mathf.Clamp(team, 0, 255), (byte)mission, default,
-                unchecked((uint)anchor));
-
-        public void RequestSpecOpsRecall(int team) =>
-            SendCommand(OpsCommand.SpecOpsRecall, (byte)Mathf.Clamp(team, 0, 255), 0, default);
-
-        public void RequestSpecOpsDirective(int team, SpecOpsDirective directive) =>
-            SendCommand(OpsCommand.SpecOpsDirective, (byte)Mathf.Clamp(team, 0, 255), (byte)directive, default);
-
-        /// <summary>Pick the capstone a mastered location takes.</summary>
-        public void RequestCyberChoice(Capstone capstone) =>
-            SendCommand(OpsCommand.CyberChoice, (byte)capstone, 0, default);
-
-        /// <summary>A breach order: start quiet or loud, retune, spoof or disconnect.</summary>
-        public void RequestCyberBreach(int target, BreachTool tool) =>
-            SendCommand(OpsCommand.CyberBreach, (byte)Mathf.Clamp(target, 0, 255), (byte)tool, default);
-
-        /// <summary>A console verb on a node slot or, for TRACE and BURN THROUGH, a stable incident id.</summary>
-        public void RequestCyberVerb(CyberVerb verb, int target) =>
-            SendCommand(OpsCommand.CyberVerb, (byte)Mathf.Clamp(target, 0, 255), (byte)verb, default);
-
-        private void SendCommand(OpsCommand command, byte arg, byte arg2, GlobalPosition target, uint revision = 0)
-        {
-            if (pending || pendingCommand != 0)
-            {
-                Status = "REQUEST PENDING — wait for host acknowledgement.";
-                return;
-            }
-            TeamGate? gate = command == OpsCommand.Rephase ? TeamGate.Relocate :
-                command == OpsCommand.CyberVerb && arg2 == (byte)CyberVerb.Isolate ? TeamGate.Isolate : (TeamGate?)null;
-            if (gate == TeamGate.Isolate && LocalCyber != null &&
-                LocalCyber.Exists(arg) && LocalCyber.Node(arg).Isolated)
-                gate = null;
-            if (gate.HasValue)
-            {
-                float teamLeft = TeamCooldownRemaining(gate.Value);
-                if (teamLeft > 0.5f)
-                {
-                    Status = "SUPPORT TEAM RE-TASKING: T-" + Mathf.CeilToInt(teamLeft) + "s.";
-                    return;
-                }
-            }
-            int requestId = ++nextRequestId;
-            pendingCommand = requestId;
-            pendingCommandLabel = CommandLabel(command, arg, arg2);
-            pendingCommandKind = command;
-            pendingCommandArg = arg;
-            commandTimeout = Time.unscaledTime + ReplyTimeout;
-            Status = pendingCommandLabel + " sent to host.";
-            network.Command(requestId, command, arg, arg2, target, revision);
-        }
-
-        private string CommandLabel(OpsCommand command, byte arg, byte arg2)
-        {
-            switch (command)
-            {
-                case OpsCommand.Launch:
-                    return arg == (byte)ModuleKind.Core
-                        ? "LAUNCH CORE TO " + OrbitRegimes.Get(arg2).Code
-                        : "LAUNCH " + PlatformModules.Info((ModuleKind)arg).Code + " TO " + OrbitalPlatform.CellName(arg2);
-                case OpsCommand.Jettison:
-                {
-                    ModuleKind module = LocalPlatform?.Cell(arg) ?? ModuleKind.None;
-                    return module == ModuleKind.Core
-                        ? "DEORBIT " + OrbitalPlatform.Callsign
-                        : "JETTISON " + PlatformModules.Info(module).Code + " " + OrbitalPlatform.CellName(arg);
-                }
-                case OpsCommand.Rephase:
-                    return "RELOCATE TO " + StationKeeping.Name(arg);
-                case OpsCommand.OrbitShift:
-                {
-                    OrbitalPlatform platform = LocalPlatform;
-                    string verb = platform != null && arg < platform.Regime ? "LOWER" : "RAISE";
-                    return verb + " TO " + OrbitRegimes.Get(arg).Code;
-                }
-                case OpsCommand.Resupply:
-                    return "CARGO RESUPPLY";
-                case OpsCommand.PlatformFocus:
-                    return "ROUTE POWER TO " + PlatformWords.Focus((PlatformFocus)arg);
-                case OpsCommand.CyberUpgrade:
-                    return "BUY " + CyberLocations.UpgradeName((CyberUpgrade)arg);
-                case OpsCommand.CyberBreach:
-                    return ((BreachTool)arg2 == BreachTool.Spoof ? "SPOOF · " :
-                            (BreachTool)arg2 == BreachTool.Disconnect ? "DISCONNECT · " :
-                            ((BreachTool)arg2 == BreachTool.Force ? "FORCE BREACH · " : "BREACH · ")) +
-                           CyberWords.Callsign(LocalCyber, arg);
-                case OpsCommand.CyberChoice:
-                    return "CAPSTONE " + Capstones.Name((Capstone)arg);
-                case OpsCommand.CyberVerb:
-                {
-                    var verb = (CyberVerb)Math.Min(arg2, (byte)(CyberNetwork.VerbCount - 1));
-                    return CyberWords.Verb(verb) + (CyberNetwork.TargetsIncident(verb)
-                        ? " " + CyberWords.Incident(LocalCyber?.Incident(LocalCyber.IncidentSlot(arg)).Kind ?? IncidentKind.None)
-                        : " " + CyberWords.Callsign(LocalCyber, arg));
-                }
-                case OpsCommand.SpecOpsRaise: return "RAISE " + FieldWords.Callsign(arg);
-                case OpsCommand.SpecOpsLaunch:
-                    return FieldWords.Callsign(arg) + " · " +
-                           (FieldCatalog.KnownMission(arg2) ? FieldWords.Mission((FieldMission)arg2) : "MISSION");
-                case OpsCommand.SpecOpsRecall: return "RECALL " + FieldWords.Callsign(arg);
-                case OpsCommand.SpecOpsDirective:
-                    return (arg2 == (byte)SpecOpsDirective.Execute ? "EXECUTE " : "EXTRACT ") + FieldWords.Callsign(arg);
-                default:
-                    return "CYBER ORDER";
-            }
-        }
 
         public void Disarm()
         {
@@ -1177,9 +643,8 @@ namespace BoscaliSummer.Features.Support.Runtime
         /// crosshair). Consumes the arming exactly as a map click would.</summary>
         public bool CallArmedAt(GlobalPosition target)
         {
-            if (GameplayUI.GameIsPaused || pending || pendingCommand != 0 || !ArmedAction.HasValue) return false;
+            if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue) return false;
             SupportActionId action = ArmedAction.Value;
-            if (!CheckLocalOrbitalTarget(action, target)) return false;
             CancelArmed();
             RequestAt(action, target);
             return true;
@@ -1187,7 +652,7 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         public void RequestAtMark(IObservationSource observations)
         {
-            if (GameplayUI.GameIsPaused || pending || pendingCommand != 0 || !ArmedAction.HasValue) return;
+            if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue) return;
             if (observations == null || !observations.TryGet(out ObservationPoint point))
             {
                 Status = "Camera mark unavailable. Mark again or right-click the map.";
@@ -1195,112 +660,103 @@ namespace BoscaliSummer.Features.Support.Runtime
             }
             SupportActionId action = ArmedAction.Value;
             var target = new GlobalPosition(point.X, point.Y, point.Z);
-            if (!CheckLocalOrbitalTarget(action, target)) return;
             CancelArmed();
             RequestAt(action, target);
         }
 
-        // Keep the map gesture armed after an invalid point so the pilot can pick another
-        // point immediately. This is only prediction; execution repeats the check on the host.
-        private bool CheckLocalOrbitalTarget(SupportActionId action, GlobalPosition target)
-        {
-            PlatformAbility? ability = OrbitalAbility(action);
-            if (!ability.HasValue) return true;
-            OrbitalPlatform platform = LocalPlatform;
-            PlatformDenial denial = platform == null ? PlatformDenial.NoPlatform :
-                platform.CheckTarget(ability.Value, target.x, target.z, OrbitNow);
-            if (denial == PlatformDenial.None) return true;
-            Status = PlatformWords.Denial(denial, platform, ability.Value, OrbitNow) + ". Pick another point or cancel.";
-            return false;
-        }
+        /// <summary>True when the last RequestAt could not leave this machine (no host link).</summary>
+        public bool LastRequestOffline { get; private set; }
 
-        public void RequestAt(SupportActionId action, GlobalPosition target)
+        /// <summary>
+        /// Submits one request. <paramref name="begun"/> receives the request id BEFORE the network send, because a
+        /// server peer evaluates and answers synchronously inside this call.
+        /// </summary>
+        public int RequestAt(SupportActionId action, GlobalPosition target, Action<int> begun = null)
         {
-            if (pending || pendingCommand != 0)
+            LastRequestOffline = false;
+            if (pending)
             {
                 Status = "REQUEST PENDING - wait for host acknowledgement.";
-                return;
+                return 0;
             }
-
-            if (!CheckLocalOrbitalTarget(action, target)) return;
 
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             if (def == null || !def.Enabled)
             {
                 Status = "Action unavailable.";
-                return;
+                return 0;
             }
 
-            bool cyber = def.IsCyber;
-            float cost = cyber ? 0f : Cost(def);
-            if (!cyber && cost <= 0f)
+            float cost = Cost(def);
+            if (cost <= 0f && action != SupportActionId.JtacUnlase) // UNLASE is free by design
             {
                 Status = "Action unavailable on this map.";
-                return;
+                return 0;
             }
 
             if (!IsAuthorised(def))
             {
-                Status = cyber ? "No fresh access window. Prepare a target in CYBER."
-                    : def.IsField ? FieldWords.AbilityLocked(def.Field.Value) + "."
-                    : "Action not authorised.";
-                return;
+                Status = "Action not authorised.";
+                return 0;
             }
 
-            if (cyber)
-            {
-                CyberNetwork model = LocalCyber;
-                float intel = def.Hack.HasValue ? CyberCatalog.Intel(def.Hack.Value) : Capstones.Intel;
-                if (model != null && model.Intel + 0.001f < intel)
-                {
-                    Status = "Insufficient intel (" + intel.ToString("0") + " required).";
-                    return;
-                }
-                if (def.Cap.HasValue && model != null && model.CapstoneRechargeRemaining(def.Cap.Value, OrbitNow) > 0f)
-                {
-                    Status = def.Name + " recharging.";
-                    return;
-                }
-            }
-
-            if (LocalCooldownRemaining > 0.5f)
+            bool free = action == SupportActionId.JtacUnlase; // no cooldown, no freeze, no charge
+            if (!free && LocalCooldownRemaining > 0.5f)
             {
                 Status = "Support network cooling down.";
-                return;
+                return 0;
             }
 
-            TeamGate? gate = TeamGateFor(action);
-            if (gate.HasValue)
+            if (!free && !BypassRequirements && LocalFrozenSeconds > 0)
             {
-                float teamLeft = TeamCooldownRemaining(gate.Value);
-                if (teamLeft > 0.5f)
-                {
-                    Status = "Support team re-tasking: T-" + Mathf.CeilToInt(teamLeft) + "s.";
-                    return;
-                }
+                Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
+                return 0;
             }
 
-            if (!cyber && !BypassRequirements && LocalAllocation + 0.001f < cost)
+            if (!BypassRequirements && LocalCredit + 0.001f < cost)
             {
-                Status = "Insufficient allocation (" + cost.ToString("0") + " required).";
-                return;
+                Status = "Low credit (" + cost.ToString("0") + " CR required).";
+                return 0;
             }
 
             pending = true;
             pendingSince = Time.unscaledTime;
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
-            network.Request(++nextRequestId, action, target);
+            int id = ++nextRequestId;
+            begun?.Invoke(id);
+            network.Request(id, action, target);
+            return id;
         }
 
         /// <summary>Called when the request could not leave this machine at all.</summary>
         internal void ReportOffline()
         {
             pending = false;
-            pendingCommand = 0;
-            pendingCommandKind = null;
-            pendingCommandArg = 0;
+            LastRequestOffline = true;
             Status = "No host connection.";
+        }
+
+        private CallsController calls;
+        internal void AttachCalls(CallsController controller) => calls = controller;
+
+        private string CallWordsFor(in SupportResultMessage r)
+        {
+            switch ((SupportResult)r.Result)
+            {
+                case SupportResult.InsufficientAllocation: return CallWords.Refusal(CallRefusal.LowCredit, need: Quote((SupportActionId)r.Action).Cost);
+                case SupportResult.Cooldown:
+                    return CallWords.Refusal(CallRefusal.Cooldown,
+                        seconds: Mathf.CeilToInt(r.CooldownSeconds > 0.01f ? r.CooldownSeconds : LocalCooldownRemaining));
+                case SupportResult.NotUnlocked:
+                    Unlocked((SupportActionId)r.Action, out string unlock);
+                    return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
+                case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
+                case SupportResult.InvalidTarget: return CallWords.Refusal(CallRefusal.FriendliesClose);
+                case SupportResult.RateLimited:
+                case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
+                default: return "NEGATIVE: " + Explain((SupportResult)r.Result).ToUpperInvariant();
+            }
         }
 
         internal void ReceiveResult(SupportResultMessage message)
@@ -1310,15 +766,13 @@ namespace BoscaliSummer.Features.Support.Runtime
             SupportResult result = (SupportResult)message.Result;
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
             string name = action != null ? action.Name : "Support";
+            calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
             if (result == SupportResult.Accepted)
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
-                     action.Id == SupportActionId.MtiSweep ||
-                     action.Hack == HackKind.Ping || action.Id == SupportActionId.SpecSpot ||
-                     action.Id == SupportActionId.SpecSkywatch || action.Id == SupportActionId.SpecEavesdrop ||
-                     action.Id == SupportActionId.SpecHunt);
+                     action.Id == SupportActionId.MtiSweep);
                 Status = sweep
                     ? name + " complete: " + Mathf.Max(0, message.Contacts) + " contact(s)."
                     : name + " accepted.";
@@ -1354,59 +808,23 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             switch (result)
             {
-                case SupportResult.OutOfCoverage: return "station not overhead — see the pass clock in SPACE";
-                case SupportResult.PlatformExpended: return "rod magazine empty — launch a cargo resupply";
-                case SupportResult.PlatformLowPower: return "station energy too low — let it recharge";
-                case SupportResult.PlatformRecharging: return "station ability recharging";
-                case SupportResult.ModuleNotFitted: return "module not fitted — build it in the station console";
-                case SupportResult.ModuleOffline: return "module offline after a debris strike";
-                case SupportResult.NoPlatform: return "no station on orbit — launch a core in the station console";
-                case SupportResult.PlatformBrownout: return "station browned out — shed load and recharge";
-                case SupportResult.NoFuel: return "not enough fuel";
-                case SupportResult.LaunchInFlight: return "a launch is already in flight";
-                case SupportResult.OverMass: return "station mass limit reached";
-                case SupportResult.CellBlocked: return "that cell cannot take the module";
-                case SupportResult.CopyLimit: return "copy limit for that module reached";
-                case SupportResult.WouldStrand: return "it would strand other modules";
-                case SupportResult.PlatformExists: return "the faction already has a station";
-                case SupportResult.NotBuilt: return "no fresh access window (prepare a target in CYBER)";
-                case SupportResult.NoEwAsset: return "no hacked location covers the target";
-                case SupportResult.WrongPosture: return "the network is not in the right state";
-                case SupportResult.LowIntel: return "not enough intel";
-                case SupportResult.NoFieldPost: return "no SPEC OPS post of that kind covers the target";
-                case SupportResult.NeedsCyberCommand: return "build Cyber Command first";
-                case SupportResult.NetworkFull: return "the network is full";
-                case SupportResult.CommandCompromised: return "Cyber Command is compromised - patch it";
+                case SupportResult.OutOfCoverage: return "outside coverage";
                 case SupportResult.Disabled: return "action disabled";
                 case SupportResult.NotUnlocked: return "not authorised";
                 case SupportResult.InvalidTarget: return "unusable target";
                 case SupportResult.NoMarkTarget: return "no unit at the mark - re-mark on a contact";
                 case SupportResult.StaleIntel: return "stale intel at the grid - task RADAR SCAN first";
-                case SupportResult.WindowClosed: return "outside the tasking window - see the window clock in SPACE";
                 case SupportResult.OutOfRange: return "target out of range";
                 case SupportResult.NotAirborne: return "you must be in an aircraft";
                 case SupportResult.InsufficientAllocation: return "not enough allocation";
-                case SupportResult.InsufficientOpsReserve: return "faction OPS reserve too low";
-                case SupportResult.PlatformWrongFocus: return "select STRIKE or SCREEN power focus in SPACE";
-                case SupportResult.PlatformRetasking: return "station is retasking; wait for the shared timer";
-                case SupportResult.NeedsTargetSolution: return "target needs fresh SAR, ELINT or field recon";
-                case SupportResult.PlatformOutOfReach: return "outside station reach; relocate or fit a relay in SPACE";
                 case SupportResult.NoStock: return "none left";
                 case SupportResult.Cooldown: return "cooling down";
-                case SupportResult.TeamCoolingDown: return "faction team re-tasking";
-                case SupportResult.TeamDenied: return "owned by another pilot who is still here";
                 case SupportResult.Busy: return "too many jobs in flight";
                 case SupportResult.Duplicate: return "already handled";
                 case SupportResult.CapabilityUnavailable: return "unavailable on this map";
                 case SupportResult.SpawnFailed: return "could not be delivered";
                 case SupportResult.RateLimited: return "too many requests";
-                default:
-                    if ((byte)result > (byte)SupportResult.CyberRefused &&
-                        (byte)result <= (byte)SupportResult.CyberRefused + (byte)CyberDenial.Recharging)
-                        return CyberWords.Denial((CyberDenial)((byte)result - (byte)SupportResult.CyberRefused)).ToLowerInvariant();
-                    if ((byte)result > (byte)SupportResult.SpecOpsRefused)
-                        return FieldWords.Denial((SpecOpsDenial)((byte)result - (byte)SupportResult.SpecOpsRefused)).ToLowerInvariant();
-                    return result.ToString();
+                default: return "unavailable";
             }
         }
 
@@ -1429,450 +847,111 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
             if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
-            if (!bypass && !HostAuthorised(player, action))
-                return action.IsCyber ? SupportResult.NotBuilt : action.IsField ? SupportResult.NoFieldPost : SupportResult.NotUnlocked;
-            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
-                return SupportResult.Cooldown;
-            TeamGate? gate = TeamGateFor(action.Id);
-            if (gate.HasValue && !DisableCooldowns &&
-                TeamLedgerFor(player.HQ).Remaining(gate.Value, now, TeamCooldownFor(gate.Value)) > 0f)
-                return SupportResult.TeamCoolingDown;
-
-            // Cyber abilities spend shared intel and one fresh, local access window.
-            CyberNetwork cyber = action.IsCyber ? Space.CyberFor(player.HQ) : null;
-            if (action.IsCyber && cyber == null) return SupportResult.CapabilityUnavailable;
-            float intelCost = action.Hack.HasValue ? CyberCatalog.Intel(action.Hack.Value) :
-                action.Cap.HasValue ? Capstones.Intel : 0f;
-            if (intelCost > 0f && !bypass && cyber.Intel + 0.001f < intelCost) return SupportResult.LowIntel;
-            if (action.Cap.HasValue && cyber.CapstoneRechargeRemaining(action.Cap.Value, OrbitNow) > 0f)
-                return SupportResult.Cooldown;
-            SpecOpsDetachment detachment = action.IsField ? Space.DetachmentFor(player.HQ) : null;
-            if (action.IsField && (detachment == null || !detachment.Enabled)) return SupportResult.Disabled;
-            if (action.IsField && detachment.AbilityRechargeRemaining(action.Field.Value, OrbitNow) > 0f)
+            if (!bypass && !HostAuthorised(player, action)) return SupportResult.NotUnlocked;
+            // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
+            bool free = action.Id == SupportActionId.JtacUnlase;
+            if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
                 return SupportResult.Cooldown;
 
             var context = new SupportContext(
                 player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
-            float cost = action.IsCyber ? 0f : Cost(action, player);
-            if (!action.IsCyber && cost <= 0f) return SupportResult.CapabilityUnavailable;
-            if (!action.IsCyber && !bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+            float cost = free ? 0f : QuoteFor(action, player).Cost;
+            CallRow row = default;
+            if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
+            float missionNow = MissionNow();
+            if (!free)
+            {
+                ObjectiveCount census = credits.Census(player.HQ);
+                if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
+                    return SupportResult.NotUnlocked;
+                if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
+            }
 
-            SupportResult result = action.Action.Execute(context);
+            SupportResult result;
+            try { result = action.Action.Execute(context); }
+            catch (Exception e)
+            {
+                logger.LogError(e);
+                result = SupportResult.SpawnFailed;
+            }
             if (result != SupportResult.Accepted)
             {
+                if (!bypass && !free) credits.Refund(player, cost, missionNow);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
                 return result;
             }
 
-            if (!bypass)
+            ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
+            try
             {
-                if (cost > 0f) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
-                if (intelCost > 0f) cyber.SpendIntel(intelCost);
-                if (action.Cap.HasValue) cyber.TryUseCapstone(action.Cap.Value, OrbitNow);
+                credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,
+                    GetEffectRadius(action.Id, player.HQ), missionNow);
             }
-            // The recharge runs even under the debug bypass: it is the ability's own rhythm.
-            if (action.IsCyber) cyber.ConsumeAccess(context.Target.x, context.Target.z, OrbitNow);
-            if (action.IsField) detachment.TryUseAbility(action.Field.Value, OrbitNow);
-            if (gate.HasValue) TeamLedgerFor(player.HQ).Accept(gate.Value, now);
-            ledger.Accept(playerId, request.RequestId, now);
+            catch (Exception e) { logger.LogError(e); }
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target +
-                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " alloc." : intelCost > 0f
-                    ? " for " + Mathf.RoundToInt(intelCost) + " intel." : "."));
+                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " CR." : "."));
             return SupportResult.Accepted;
         }
 
-        private bool HostAuthorised(Player player, SupportActionDefinition action)
-        {
-            if (action.IsField) return HoldsPost(player, action.Field.Value);
-            if (!action.IsCyber)
-                return perks.Grants(PlayerIdentity.Of(player), action.Capability);
-            CyberNetwork cyber = Space.CyberFor(player.HQ);
-            if (cyber == null) return false;
-            if (action.Hack.HasValue)
-                return cyber.AnyTier(CyberCatalog.RequiredStage(action.Hack.Value) - 1, OrbitNow);
-            return cyber.AnyCapstone(action.Cap.Value, OrbitNow);
-        }
-
-        /// <summary>Host validation for one fleet or infrastructure command.</summary>
-        internal SupportResult EvaluateCommand(Player player, OpsCommandMessage message)
-        {
-            if (player == null || player.HQ == null) return SupportResult.InvalidTarget;
-            if (!Finite(message.X) || !Finite(message.Z) ||
-                Math.Abs(message.X) > 10000000f || Math.Abs(message.Z) > 10000000f)
-                return SupportResult.InvalidTarget;
-
-            ulong playerId = PlayerIdentity.Of(player);
-            float now = Time.unscaledTime;
-            bool bypass = BypassRequirements;
-
-            if (commandLedger.WasAccepted(playerId, message.RequestId)) return SupportResult.Duplicate;
-            if (!DisableCooldowns && commandLedger.IsRateLimited(playerId, now, RequestsPerSecond, 1f))
-                return SupportResult.RateLimited;
-
-            switch ((OpsCommand)message.Command)
-            {
-                case OpsCommand.PlatformFocus:
-                {
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null || !platform.Exists) return SupportResult.NoPlatform;
-                    if (message.Arg > (byte)PlatformFocus.Screen) return SupportResult.InvalidTarget;
-                    if (OrbitNow < platform.RetaskUntil) return SupportResult.PlatformRetasking;
-                    if (!platform.TryFocus((PlatformFocus)message.Arg, OrbitNow)) return SupportResult.InvalidTarget;
-                    break;
-                }
-                case OpsCommand.SpecOpsRaise:
-                {
-                    SpecOpsDetachment detachment = Space.DetachmentFor(player.HQ);
-                    if (detachment == null) return SupportResult.CapabilityUnavailable;
-                    SpecOpsDenial denial = detachment.CheckRaise(message.Arg);
-                    if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    float cost = SpecOpsPrice(player, FieldCatalog.RaiseCost);
-                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
-                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
-                    if (!detachment.TryRaise(message.Arg)) return SupportResult.Busy;
-                    if (!bypass) reserve.Spend(cost);
-                    logger.LogInfo("[Support] SPEC OPS " + FieldWords.Callsign(message.Arg) + " raised for " +
-                        Mathf.RoundToInt(cost) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.SpecOpsLaunch:
-                {
-                    SpecOpsDetachment detachment = Space.DetachmentFor(player.HQ);
-                    if (detachment == null) return SupportResult.CapabilityUnavailable;
-                    // The objective is named by its anchor, never by a slot a relisting could reshuffle.
-                    int anchor = unchecked((int)message.Revision);
-                    var mission = (FieldMission)message.Arg2;
-                    SpecOpsDenial denial = detachment.CheckLaunch(message.Arg, mission, anchor);
-                    if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    float cost = SpecOpsPrice(player, FieldCatalog.MissionCost(mission));
-                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
-                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
-                    FieldObjective objective = detachment.Objective(detachment.SlotOf(anchor));
-                    float travel = SpecOpsTheater.TravelOrigin(player.HQ, objective.X, objective.Z,
-                        out float originX, out float originZ, out string originName);
-                    if (travel < 0f) return SupportResult.InvalidTarget;
-                    denial = detachment.TryLaunch(message.Arg, mission, anchor, travel, OrbitNow,
-                        originX, originZ, originName);
-                    if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    if (message.Arg < SpecOpsDetachment.TeamCount)
-                        TeamLedgerFor(player.HQ).Launcher[message.Arg] = PlayerIdentity.Of(player);
-                    if (!bypass) reserve.Spend(cost);
-                    FieldTeam team = detachment.Team(message.Arg);
-                    logger.LogInfo("[Support] SPEC OPS " + FieldWords.Callsign(message.Arg) + " " +
-                        FieldWords.Mission(mission) + " on " + team.Target + ": " + team.Chance + "% success, " +
-                        team.Loss + "% loss, " + Mathf.RoundToInt(cost) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.SpecOpsRecall:
-                {
-                    SpecOpsDetachment detachment = Space.DetachmentFor(player.HQ);
-                    if (detachment == null) return SupportResult.CapabilityUnavailable;
-                    SpecOpsDenial denial = detachment.CheckRecall(message.Arg);
-                    if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    ulong launcher = TeamLedgerFor(player.HQ).Launcher[message.Arg];
-                    if (!TeamRules.MayTouch(PlayerIdentity.Of(player), launcher,
-                        PilotPresent(player.HQ, launcher), FactionPilots(player.HQ),
-                        settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
-                    if (!detachment.TryRecall(message.Arg, OrbitNow)) return SupportResult.Busy;
-                    if (message.Arg < SpecOpsDetachment.TeamCount)
-                        TeamLedgerFor(player.HQ).Launcher[message.Arg] = 0;
-                    break;
-                }
-                case OpsCommand.SpecOpsDirective:
-                {
-                    SpecOpsDetachment detachment = Space.DetachmentFor(player.HQ);
-                    if (detachment == null) return SupportResult.CapabilityUnavailable;
-                    var directive = (SpecOpsDirective)message.Arg2;
-                    SpecOpsDenial denial = detachment.CheckDirective(message.Arg, directive);
-                    if (denial != SpecOpsDenial.None) return SpecOpsRefusal(denial);
-                    ulong launcher = TeamLedgerFor(player.HQ).Launcher[message.Arg];
-                    if (!TeamRules.MayTouch(playerId, launcher, PilotPresent(player.HQ, launcher),
-                        FactionPilots(player.HQ), settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
-                    if (!detachment.TryDirective(message.Arg, directive, OrbitNow)) return SupportResult.Busy;
-                    break;
-                }
-                case OpsCommand.Launch:
-                {
-                    var kind = (ModuleKind)message.Arg;
-                    if (!PlatformModules.Placeable(message.Arg)) return SupportResult.InvalidTarget;
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null) return SupportResult.CapabilityUnavailable;
-                    bool core = kind == ModuleKind.Core;
-                    int cell = core ? OrbitalPlatform.CoreCell : message.Arg2;
-                    byte band = core ? message.Arg2 : (byte)0;
-                    double orbitNow = OrbitNow;
-                    SupportResult placement = Placement(platform.CheckPlacement(kind, cell, band, orbitNow));
-                    if (placement != SupportResult.Accepted) return placement;
-                    float cost = LaunchCost(player, kind);
-                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
-                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
-                    int seed = UnityEngine.Random.Range(1, int.MaxValue);
-                    placement = Placement(platform.TryLaunch(kind, cell, band, seed, orbitNow, bypass ? 0f : cost,
-                        settings.PlatformInsertionSeconds.Value, settings.PlatformDockingSeconds.Value,
-                        0UL));
-                    if (placement != SupportResult.Accepted) return placement;
-                    if (!bypass) reserve.Spend(cost);
-                    if (core) TeamLedgerFor(player.HQ).StationOwner = PlayerIdentity.Of(player);
-                    ModuleInfo info = PlatformModules.Info(kind);
-                    logger.LogInfo("[Support] Liftoff: " + info.Name + " on a " + PlatformModules.VehicleFor(info.Mass).Code +
-                        " vehicle " + (core ? "to " + OrbitRegimes.Get(band).Name : "for cell " + OrbitalPlatform.CellName(cell)) +
-                        ", " + Mathf.RoundToInt(cost) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.Jettison:
-                {
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null) return SupportResult.CapabilityUnavailable;
-                    if (!TeamGuardJettison(player)) return SupportResult.TeamDenied;
-                    float pendingValue = message.Arg == OrbitalPlatform.CoreCell ? platform.PendingPaid : 0f;
-                    SupportResult removal = Placement(platform.TryJettison(message.Arg, out ModuleKind removed,
-                        out float paid));
-                    if (removal != SupportResult.Accepted) return removal;
-                    float refund = JettisonRefund * (paid + pendingValue);
-                    if (refund > 0f && !bypass)
-                        TeamLedgerFor(player.HQ).Reserve.Refund(refund);
-                    if (removed == ModuleKind.Core) TeamLedgerFor(player.HQ).StationOwner = 0;
-                    logger.LogInfo("[Support] " + (removed == ModuleKind.Core
-                        ? OrbitalPlatform.Callsign + " deorbited"
-                        : PlatformModules.Info(removed).Name + " jettisoned from " + OrbitalPlatform.CellName(message.Arg)) +
-                        "; refunded " + Mathf.RoundToInt(refund) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.Rephase:
-                {
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null) return SupportResult.CapabilityUnavailable;
-                    if (!StationKeeping.Valid(message.Arg)) return SupportResult.InvalidTarget;
-                    PlatformDenial denial = platform.CheckRelocate(message.Arg, OrbitNow);
-                    if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
-                    if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!DisableCooldowns &&
-                        TeamLedgerFor(player.HQ).Remaining(TeamGate.Relocate, now, TeamCooldownFor(TeamGate.Relocate)) > 0f)
-                        return SupportResult.TeamCoolingDown;
-                    if (!platform.TryRelocate(message.Arg, OrbitNow))
-                        return SupportResult.Busy;
-                    TeamLedgerFor(player.HQ).Accept(TeamGate.Relocate, now);
-                    logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " relocating to " + StationKeeping.Name(message.Arg) + "; " +
-                        Mathf.RoundToInt(platform.Fuel) + " fuel left.");
-                    break;
-                }
-                case OpsCommand.OrbitShift:
-                {
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null) return SupportResult.CapabilityUnavailable;
-                    PlatformDenial denial = platform.CheckShift(message.Arg, OrbitNow);
-                    if (denial == PlatformDenial.SameOrbit) return SupportResult.InvalidTarget;
-                    if (denial != PlatformDenial.None) return SupportContext.Refusal(denial);
-                    if (!platform.TryShift(message.Arg, OrbitNow, UnityEngine.Random.Range(1, int.MaxValue)))
-                        return SupportResult.Busy;
-                    logger.LogInfo("[Support] " + OrbitalPlatform.Callsign + " transfer burn to " +
-                        platform.Orbit.Name + "; " + Mathf.RoundToInt(platform.Fuel) + " fuel left.");
-                    break;
-                }
-                case OpsCommand.Resupply:
-                {
-                    OrbitalPlatform platform = Space.PlatformFor(player.HQ);
-                    if (platform == null) return SupportResult.CapabilityUnavailable;
-                    if (!platform.Exists) return SupportResult.NoPlatform;
-                    if (platform.Pending != ModuleKind.None) return SupportResult.LaunchInFlight;
-                    float cost = LaunchCost(player, ModuleKind.Cargo);
-                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
-                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
-                    ulong buyer = 0UL;
-                    SupportResult launch = Placement(platform.TryResupply(OrbitNow, settings.PlatformDockingSeconds.Value,
-                        bypass ? 0f : cost, buyer));
-                    if (launch != SupportResult.Accepted) return launch;
-                    if (!bypass) reserve.Spend(cost);
-                    logger.LogInfo("[Support] Cargo resupply launched to " + OrbitalPlatform.Callsign + " for " +
-                        Mathf.RoundToInt(cost) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.CyberUpgrade:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    if (message.Arg > (byte)CyberUpgrade.Trace) return SupportResult.InvalidTarget;
-                    CyberNetwork cyber = Space.CyberFor(player.HQ);
-                    if (cyber == null) return SupportResult.CapabilityUnavailable;
-                    var upgrade = (CyberUpgrade)message.Arg;
-                    if (!cyber.CanUpgrade(upgrade)) return SupportResult.NotBuilt;
-                    float cost = cyber.UpgradeCost(upgrade) * settings.CyberUpgradeCostScale.Value *
-                                 settings.CostMultiplier.Value;
-                    FactionOpsReserve reserve = TeamLedgerFor(player.HQ).Reserve;
-                    if (!bypass && !reserve.CanSpend(cost)) return SupportResult.InsufficientOpsReserve;
-                    if (!cyber.TryUpgrade(upgrade)) return SupportResult.NotBuilt;
-                    if (!bypass) reserve.Spend(cost);
-                    logger.LogInfo("[Support] CYBER " + CyberLocations.UpgradeName(upgrade) + " to level " +
-                        cyber.UpgradeLevel(upgrade) + " for " + Mathf.RoundToInt(cost) + " ops reserve.");
-                    break;
-                }
-                case OpsCommand.CyberBreach:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    CyberNetwork cyber = Space.CyberFor(player.HQ);
-                    if (cyber == null) return SupportResult.CapabilityUnavailable;
-                    var tool = (BreachTool)message.Arg2;
-                    BreachDenial denial;
-                    TeamLedger teams = TeamLedgerFor(player.HQ);
-                    switch (tool)
-                    {
-                        case BreachTool.Quiet:
-                            denial = cyber.TryStartBreach(message.Arg, true, OrbitNow);
-                            if (denial == BreachDenial.None) teams.BreachOwner = PlayerIdentity.Of(player);
-                            break;
-                        case BreachTool.Force:
-                            denial = cyber.TryStartBreach(message.Arg, false, OrbitNow);
-                            if (denial == BreachDenial.None) teams.BreachOwner = PlayerIdentity.Of(player);
-                            break;
-                        case BreachTool.RetuneQuiet:
-                        case BreachTool.RetuneForce:
-                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
-                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
-                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
-                            if (!cyber.TryBreachMode(tool == BreachTool.RetuneQuiet)) return SupportResult.InvalidTarget;
-                            denial = BreachDenial.None;
-                            break;
-                        case BreachTool.Spoof:
-                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
-                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
-                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
-                            denial = cyber.TrySpoof(OrbitNow);
-                            break;
-                        case BreachTool.Disconnect:
-                            if (!TeamRules.MayTouch(PlayerIdentity.Of(player), teams.BreachOwner,
-                                PilotPresent(player.HQ, teams.BreachOwner), FactionPilots(player.HQ),
-                                settings.TeamOwnershipGuards.Value)) return SupportResult.TeamDenied;
-                            if (!cyber.TryDisconnect(OrbitNow)) return SupportResult.InvalidTarget;
-                            teams.BreachOwner = 0;
-                            denial = BreachDenial.None;
-                            break;
-                        default:
-                            return SupportResult.InvalidTarget;
-                    }
-                    if (denial != BreachDenial.None)
-                        return (SupportResult)((byte)SupportResult.CyberRefused + (byte)denial);
-                    break;
-                }
-                case OpsCommand.CyberChoice:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    if (!Capstones.Known(message.Arg) || message.Arg == (byte)Capstone.None) return SupportResult.InvalidTarget;
-                    CyberNetwork cyber = Space.CyberFor(player.HQ);
-                    if (cyber == null || !cyber.TryChooseCapstone((Capstone)message.Arg, OrbitNow))
-                        return SupportResult.InvalidTarget;
-                    logger.LogInfo("[Support] CYBER capstone " + Capstones.Name((Capstone)message.Arg) + " fielded.");
-                    break;
-                }
-                case OpsCommand.CyberVerb:
-                {
-                    if (!settings.EwEnabled.Value) return SupportResult.Disabled;
-                    if (message.Arg2 >= CyberNetwork.VerbCount) return SupportResult.InvalidTarget;
-                    CyberNetwork cyber = Space.CyberFor(player.HQ);
-                    if (cyber == null) return SupportResult.CapabilityUnavailable;
-                    var verb = (CyberVerb)message.Arg2;
-                    bool isolating = verb == CyberVerb.Isolate &&
-                        !(cyber.Exists(message.Arg) && cyber.Node(message.Arg).Isolated);
-                    if (isolating && !DisableCooldowns &&
-                        TeamLedgerFor(player.HQ).Remaining(TeamGate.Isolate, now, TeamCooldownFor(TeamGate.Isolate)) > 0f)
-                        return SupportResult.TeamCoolingDown;
-                    CyberDenial denial = cyber.TryVerb(verb, message.Arg, OrbitNow);
-                    if (denial != CyberDenial.None)
-                        return (SupportResult)((byte)SupportResult.CyberRefused + (byte)denial);
-                    if (isolating)
-                    {
-                        TeamLedgerFor(player.HQ).Accept(TeamGate.Isolate, now);
-                        CyberNode defended = cyber.Node(message.Arg);
-                        if (defended.Static)
-                            for (int i = 0; i < Space.FactionCount; i++)
-                            {
-                                FactionHQ other = Space.FactionAt(i);
-                                if (other == null || other == player.HQ) continue;
-                                CyberNetwork attacker = Space.CyberFor(other);
-                                if (attacker == null || !attacker.BreachActive) continue;
-                                CyberNode target = attacker.Node(attacker.BreachTarget);
-                                if (target.Anchor == defended.Anchor)
-                                    attacker.ResistBreach(OrbitNow);
-                            }
-                    }
-                    break;
-                }
-                default:
-                    return SupportResult.InvalidTarget;
-            }
-
-            commandLedger.Accept(playerId, message.RequestId, now);
-            return SupportResult.Accepted;
-        }
+        private bool HostAuthorised(Player player, SupportActionDefinition action) =>
+            perks.Grants(PlayerIdentity.Of(player), action.Capability);
 
         internal float ServerCooldownFor(Player player) => CooldownFor(player);
 
-        private static SupportResult SpecOpsRefusal(SpecOpsDenial denial) =>
-            (SupportResult)((byte)SupportResult.SpecOpsRefused + (byte)denial);
-
-        private static SupportResult Placement(PlacementFailure failure)
-        {
-            switch (failure)
-            {
-                case PlacementFailure.None: return SupportResult.Accepted;
-                case PlacementFailure.NoPlatform: return SupportResult.NoPlatform;
-                case PlacementFailure.PlatformExists: return SupportResult.PlatformExists;
-                case PlacementFailure.LaunchInFlight: return SupportResult.LaunchInFlight;
-                case PlacementFailure.OverMass: return SupportResult.OverMass;
-                case PlacementFailure.CopyLimit: return SupportResult.CopyLimit;
-                case PlacementFailure.WouldStrand: return SupportResult.WouldStrand;
-                case PlacementFailure.OutsideGrid:
-                case PlacementFailure.CellOccupied:
-                case PlacementFailure.NotAttached:
-                case PlacementFailure.EmptyCell:
-                    return SupportResult.CellBlocked;
-                default:
-                    return SupportResult.InvalidTarget;
-            }
-        }
-
-        private void LogDebris(FactionHQ owner, OrbitalPlatform platform)
-        {
-            string module = PlatformModules.Info(platform.Cell(platform.NoticeCell)).Name;
-            logger?.LogInfo("[Support] " + (owner != null && owner.faction != null ? owner.faction.factionName : "?") +
-                " station debris strike on " + module + " (" + OrbitalPlatform.CellName(platform.NoticeCell) + "): " +
-                (platform.Notice == PlatformNotice.DebrisDeflected ? "deflected." : "offline for 45 s."));
-        }
+        /// <summary>Seconds left on this player's host cooldown; what a Cooldown refusal tells the client.</summary>
+        internal float ServerCooldownRemaining(Player player) =>
+            player == null || DisableCooldowns ? 0f
+                : ledger.CooldownRemaining(PlayerIdentity.Of(player), Time.unscaledTime, CooldownFor(player));
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
         /// bare context and both the panel and the host reach the same number.
         /// </summary>
-        private float Cost(SupportActionDefinition action, Player player)
+        internal CallQuote QuoteFor(SupportActionDefinition action, Player player)
         {
-            if (player == null) return 0f;
-            float baseCost = action.Action.BaseCost(new SupportContext(player, default, 0, this));
-            if (baseCost <= 0f) return 0f;
-            float price = baseCost * EventsCostMultiplier(player) *
-                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
-            if ((action.Id == SupportActionId.FlareMissile || action.Id == SupportActionId.Fortify) && settings != null)
-                price *= TeamRules.SizeScale(FactionPilots(player.HQ), settings.TeamCostPerExtra.Value, settings.TeamCostCap.Value);
-            return price;
+            // BaseCost <= 0 still means "this action is not available on this map".
+            if (player == null || credits == null || !CallSheet.TryGet(action.Id, out CallRow row) ||
+                action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
+                return new CallQuote(0, "");
+            ObjectiveCount census = credits.Census(player.HQ);
+            var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
+                false, null, false,
+                // Clients quote with the factor the host sent, so the panel matches what the host charges.
+                GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
+                GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,
+                GameAccess.IsServer() ? settings.PriceKnob.Value : 1f);
+            return CallPricing.Quote(row.Tier, inputs);
         }
 
         // ---- Host services ---------------------------------------------------------------
 
-        /// <summary>The faction's team ledger, created on demand; ownerless work shares one fallback.</summary>
-        private TeamLedger TeamLedgerFor(FactionHQ owner)
+        private int[] JobsFor(FactionHQ owner)
         {
-            if (owner == null) return fallbackLedger;
-            if (teamLedgers.TryGetValue(owner, out TeamLedger ledger)) return ledger;
-            if (teamLedgers.Count >= MaximumFactionLedgers) teamLedgers.Clear();
-            ledger = new TeamLedger();
-            teamLedgers.Add(owner, ledger);
-            return ledger;
+            if (owner == null) return fallbackJobs;
+            if (strikeJobs.TryGetValue(owner, out int[] jobs)) return jobs;
+            if (strikeJobs.Count >= MaximumFactionPools) strikeJobs.Clear();
+            jobs = new int[2];
+            strikeJobs.Add(owner, jobs);
+            return jobs;
         }
 
-        bool ISupportHost.TryReserve(FactionHQ owner, SupportPool pool) =>
-            TeamLedgerFor(owner).TryReserve((int)pool, MaximumStrikeJobs);
+        bool ISupportHost.TryReserve(FactionHQ owner, SupportPool pool)
+        {
+            int[] jobs = JobsFor(owner);
+            int index = (int)pool;
+            if (index < 0 || index >= jobs.Length || jobs[index] >= MaximumStrikeJobs) return false;
+            jobs[index]++;
+            return true;
+        }
 
-        void ISupportHost.Release(FactionHQ owner, SupportPool pool) =>
-            TeamLedgerFor(owner).Release((int)pool);
+        void ISupportHost.Release(FactionHQ owner, SupportPool pool)
+        {
+            int[] jobs = JobsFor(owner);
+            int index = (int)pool;
+            if (index >= 0 && index < jobs.Length && jobs[index] > 0) jobs[index]--;
+        }
 
         void ISupportHost.Run(IEnumerator routine) => StartCoroutine(routine);
 
@@ -1906,16 +985,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             if (!contactReplies.TryGetValue(requestId, out int contacts)) return -1;
             contactReplies.Remove(requestId);
             return contacts;
-        }
-
-        bool ISupportHost.BeginDeception(Player caster, HackKind kind, GlobalPosition target, float duration)
-        {
-            if (caster == null || caster.HQ == null) return false;
-            if (!Cyber.Begin(kind, caster.HQ, target.x, target.z, duration, Time.timeSinceLevelLoad))
-                return false;
-            network.BroadcastCyberEffect(kind, caster.HQ.faction != null ? caster.HQ.faction.factionName : string.Empty,
-                target.x, target.z, duration);
-            return true;
         }
 
         // ---- Cruise tasking ----------------------------------------------------------------
@@ -2037,19 +1106,6 @@ namespace BoscaliSummer.Features.Support.Runtime
             }
         }
 
-        internal void ReceiveCyberEffect(CyberEffectMessage message)
-        {
-            float duration = Mathf.Clamp(message.Duration, 1f, 60f);
-            if (!Finite(message.X) || !Finite(message.Z) || Math.Abs(message.X) > 10000000f ||
-                Math.Abs(message.Z) > 10000000f) return;
-            FactionHQ attacker;
-            try { attacker = FactionRegistry.HqFromName(message.FactionName); }
-            catch (Exception) { attacker = null; }
-            if (attacker == null) return;
-            if (message.Kind > (byte)HackKind.Spoof) return;
-            Cyber.Begin((HackKind)message.Kind, attacker, message.X, message.Z, duration, Time.timeSinceLevelLoad);
-        }
-
         // ---- Camera target service ---------------------------------------------------------
         //
         // QoL owns the observation mark and support owns delivery. The target panel consumes
@@ -2061,7 +1117,7 @@ namespace BoscaliSummer.Features.Support.Runtime
         {
             get
             {
-                if (observations == null) ModServices.TryGet(out observations);
+                if (observations == null) ModuleServices.TryGet(out observations);
                 return observations;
             }
         }
@@ -2111,69 +1167,16 @@ namespace BoscaliSummer.Features.Support.Runtime
 
         // ---- Ground readiness read-out -----------------------------------------------------
 
-        /// <summary>
-        /// What Urban Combat may do on the ground for one faction: one position or camp plus the
-        /// best SPEC OPS team's rank. The host answers from its own detachment; a client mirror
-        /// would be its own faction, which is also correct because placement is host-only.
-        /// </summary>
-        int IGroundForceReadiness.InsertionCamps(FactionHQ owner) =>
-            owner != null ? Space.DetachmentFor(owner)?.GroundReadiness ?? 1 : 1;
-
-        internal OpsStateMessage Snapshot(Player player, int requestId, SupportResult result)
-        {
-            OrbitalPlatform platform = player != null ? Space.PlatformFor(player.HQ) : null;
-            double now = OrbitNow;
-            OpsStateMessage message = OpsStateMessageBuffers.Create();
-            // Without the header a client's reader drops the whole snapshot as an old protocol.
-            message.Protocol = SupportNet.ProtocolVersion;
-            message.RequestId = requestId;
-            message.Result = (byte)result;
-            message.FactionName = FactionKey(player != null ? player.HQ : null);
-            message.OpsReserve = player != null && player.HQ != null
-                ? TeamLedgerFor(player.HQ).Reserve.Balance : 0f;
-            int threatened = player != null ? ThreatenedHome(player.HQ) : -1;
-            message.CyberThreatSlot = threatened >= 0 ? (byte)threatened : byte.MaxValue;
-            message.IntelStale = player == null || player.HQ == null ||
-                SupportTargeting.FactionIntelCold(player.HQ, settings.IntelFreshSeconds.Value);
-            if (platform != null)
-            {
-                platform.Export(now, exportSnapshot);
-                OpsStateMessageBuffers.Write(exportSnapshot, ref message);
-            }
-            message.ForeignCount = player != null
-                ? (byte)Space.CollectForeign(player.HQ, now, message.ForeignRegimes, message.ForeignSeeds,
-                    message.ForeignClocks, message.ForeignLayouts)
-                : (byte)0;
-            CyberNetwork cyber = player != null ? Space.CyberFor(player.HQ) : null;
-            if (cyber != null)
-            {
-                cyber.Export(now, message.Cyber);
-                message.CyberOriginCount = (byte)Spectrum.OriginNames(player.HQ, message.CyberOrigins);
-            }
-            TeamLedger teams = TeamLedgerFor(player != null ? player.HQ : null);
-            float stampNow = Time.unscaledTime;
-            for (int i = 0; i < TeamGates.Count; i++)
-            {
-                var teamGate = (TeamGate)i;
-                message.TeamCooldown[i] = teams.Remaining(teamGate, stampNow, TeamCooldownFor(teamGate));
-            }
-            return message;
-        }
-
-        internal SpecOpsStateMessage SpecOpsSnapshot(Player player)
-        {
-            var message = new SpecOpsStateMessage { Protocol = SupportNet.ProtocolVersion,
-                FactionName = FactionKey(player != null ? player.HQ : null), State = new SpecOpsSnapshot() };
-            SpecOpsDetachment detachment = player != null ? Space.DetachmentFor(player.HQ) : null;
-            if (detachment != null) detachment.Export(OrbitNow, message.State);
-            return message;
-        }
+        /// <summary>What Urban Combat may do on the ground for one faction: one position or camp.</summary>
+        int IGroundForceReadiness.InsertionCamps(FactionHQ owner) => 1;
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static string FactionKey(FactionHQ hq)
         {
-            string name = CyberDefense.Name(hq);
+            string name = hq != null && hq.faction != null && !string.IsNullOrEmpty(hq.faction.factionName)
+                ? hq.faction.factionName.ToUpperInvariant()
+                : "UNKNOWN ACTOR";
             return name.Length <= 24 ? name : name.Substring(0, 24);
         }
     }

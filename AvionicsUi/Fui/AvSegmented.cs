@@ -3,7 +3,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     public sealed class AvSegmented : AvPart
     {
@@ -28,7 +28,11 @@ namespace NOAvionics.Ui
 
         public void Refresh() { int sel = get?.Invoke() ?? -1; for (int i = 0; i < options.Length; i++) options[i].Latched = i == sel; }
 
-        private float GroupWidth(float width) => Mathf.Min(width * 0.62f, options.Length * 86f);
+        /// <summary>Label-less, full-width mode selector (A/G · A/A · SEAD): a panel shows only what its mode needs.</summary>
+        public static AvSegmented Strip(RectTransform parent, string[] choices, Func<int> getter, Action<int> set) =>
+            new AvSegmented(parent, "", choices, getter, set);
+
+        private float GroupWidth(float width) => label.text.Length == 0 ? width : Mathf.Min(width * 0.62f, options.Length * 86f);
 
         public override float Measure(float width) => Mathf.Max(AvGridTokens.Row, AvText.Height(label, width - GroupWidth(width) - 8f) + 8f);
 

@@ -1,0 +1,8 @@
+UIEffect by mob-sakai (MIT; see LICENSE.txt).
+https://github.com/mob-sakai/UIEffect
+Source commit: 81c86964832fc99750ba475861a78b40960e2e5c
+Source path: Packages/UIEffect/Scripts/UIGradient.cs
+Adapted in AvionicsUi/AvSurfaceGradient.cs: rect-space vertex colour interpolation and multiplication.
+The adaptation uses Unity's BaseMeshEffect, restricts the gradient to vertical instrument shading,
+and removes text, rotation, editor serialization, and material dependencies.
+This is a source adaptation, not a bundled installation of the complete UIEffect package.

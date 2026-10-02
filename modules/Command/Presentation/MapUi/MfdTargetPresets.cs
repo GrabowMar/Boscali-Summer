@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal enum MfdTargetPreset { All, Hostile, Air, Ground, Sea, Sead, Friendly, Laser }
 

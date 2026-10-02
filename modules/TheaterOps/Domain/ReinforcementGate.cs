@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>Why a reinforcement call was allowed or refused. Order is priority order.</summary>
     internal enum ReinforcementGate

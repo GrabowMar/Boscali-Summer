@@ -1,20 +1,22 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BepInEx.Configuration;
-using BoscaliSummer.Features.Command.Configuration;
-using BoscaliSummer.Features.Command.Presentation;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Core.Config;
+using BoscaliSummer.Modules.Command.Presentation;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The SET console (kit v2). A THIS PILOT / SERVER switch under the header picks one of two
@@ -26,12 +28,12 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         // Page indices are per console (each console has its own ticker and page set).
-        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CPerf = 3;
+        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4;
         private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
         private static readonly string[] ClientPageNames =
         {
-            "PILOT · DISPLAY STYLE", "PILOT · MAP & BACKDROP", "PILOT · COCKPIT", "PILOT · PERFORMANCE"
+            "PILOT · DISPLAY STYLE", "PILOT · MAP & BACKDROP", "PILOT · COCKPIT", "PILOT · IMMERSION", "PILOT · PERFORMANCE"
         };
 
         private static readonly string[] ServerPageNames =
@@ -66,6 +68,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         private bool layoutPending;
         private bool tickerPending;
 
+        // The last few changes made on this screen this session, newest last. The SERVER tabs list them under
+        // their controls so a change is confirmed after the one-line footer echo has faded.
+        private const int ChangeLogSize = 8;
+        private readonly string[] changeText = new string[ChangeLogSize];
+        private readonly float[] changeTime = new float[ChangeLogSize];
+        private int changeCount;
+
         public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null,
             HostSettingsBoard hostSettingsBoard = null, ClientSettingsBoard clientSettingsBoard = null)
         {
@@ -91,7 +100,8 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             // on their own next Slow tick, so no "dirty" flag is needed for those.
             string section = args.ChangedSetting.Definition.Section;
             if (section != "Command" && section != "Hud" && section != "Avionics" &&
-                section != "Weather" && section != "Garrisons" && section != "Performance") return;
+                section != "Weather" && section != "Garrisons" && section != "Performance" &&
+                section != "Immersion") return;
             if (section != "Command") return;
             switch (args.ChangedSetting.Definition.Key)
             {
@@ -147,7 +157,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                     ? "Host controls are saved automatically."
                     : "Locked. These are the host's values for this server.";
             }
-            if (page == CPerf) return "Changes apply now. No mission or game restart.";
+            if (page == CPerf || page == CImmersion) return "Changes apply now. No mission or game restart.";
             return "Saved automatically. Hover a control for help.";
         }
 
@@ -229,14 +239,10 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 if (hints[i] != null) tabs[i].Help = hints[i];
         }
 
-        private void RefreshChrome(AvConsole c, AvChip saved, AvChip role, ModeSwitch mode, bool server)
+        private void RefreshChrome(AvConsole c, ModeSwitch mode, bool server)
         {
             AvUiSound.Volume = settings.UiSoundVolume.Value;
-            bool host = HostAuthority();
-            role.Set(host ? "HOST" : "CLIENT", host ? AvState.Ready : AvState.Inert);
-            if (server && !host) saved.Set("READ-ONLY", AvState.Inert);
-            else saved.Set("SAVED", AvState.Ready);
-            mode.Set(serverMode, host);
+            mode.Set(serverMode, HostAuthority());
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
             c.Footer.Set(echo ?? AmbientStatus(server, c.CurrentPage), echo != null ? AvState.Info : AvState.Inert);
         }
@@ -258,6 +264,15 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
         {
             actionEcho = text;
             actionEchoUntil = Time.unscaledTime + 1.6f;
+            if (changeCount == ChangeLogSize)
+            {
+                Array.Copy(changeText, 1, changeText, 0, ChangeLogSize - 1);
+                Array.Copy(changeTime, 1, changeTime, 0, ChangeLogSize - 1);
+                changeCount--;
+            }
+            changeText[changeCount] = text;
+            changeTime[changeCount] = Time.unscaledTime;
+            changeCount++;
         }
 
         private bool EffectsEnabled() => settings.DisplayEffects.Value;
@@ -290,40 +305,75 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
 
         // ------------------------------------------------------------------ row helpers
         //
-        // Every SET row used to be one of two shapes: a latched ON/OFF, or a "- value +"
-        // stepper, both built from the retired v1 kit's primitives with hand-measured
-        // geometry (Page/Heading/TakeRow/rowPitch). Kit v2's AvFlow measures and places every
-        // part itself, so that geometry is gone; these two helpers now build one AvRow per
-        // setting (state rail, name, always-visible help/reason line, and either the ON/OFF
-        // word or a pair of trailing +/- AvControls), refreshed at the console's 2 Hz "Slow"
-        // tier while their page is open.
+        // Every SET control is one of a few compact shapes, all built from kit v2 primitives and refreshed at
+        // the console's 2 Hz "Slow" tier while their page is open:
+        //   * ToggleCell  - an AvCell (LED + name + ON/OFF), two or three to a line; the sentence lives on hover.
+        //   * Ring        - a SetRingCell dial with - / + for a level (percent, seconds, a named step), packed by
+        //                   a SetRingRow so hidden dials never leave a hole.
+        //   * Stepper     - the classic "name - value +" AvRow, kept for values that are words or file names.
 
-        private AvRow Toggle(AvFlow flow, int page, string title, string help, Func<bool> get, Action<bool> set,
-            Func<bool> enabled = null, Func<string> reason = null)
+        private AvCell ToggleCell(AvFlow flow, AvCellGrid grid, int page, string title, string help, Func<bool> get,
+            Action<bool> set, Func<bool> enabled = null, Func<string> reason = null)
         {
-            AvRow row = null;
-            void RefreshRow()
-            {
-                bool avail = enabled == null || enabled();
-                bool on = get();
-                row.Interactable = avail;
-                row.Set(title, avail ? help : (reason != null ? reason() : help), on ? "ON" : "OFF",
-                    on ? AvState.Ready : AvState.Inert);
-            }
-            row = new AvRow(flow.Content, () =>
+            AvCell cell = null;
+            Action<bool> apply = v =>
             {
                 if (enabled != null && !enabled()) return;
-                set(!get());
+                set(v);
                 Echo(title + " — " + (get() ? "ON" : "OFF"));
-                RefreshRow();
                 Changed();
-            });
-            flow.Add(row);
-            row.Help = help;
-            RefreshRow();
-            flow.Ticker.Add(page, AvTickRate.Slow, RefreshRow);
-            return row;
+            };
+            cell = grid != null
+                ? grid.Toggle(title, "", get, apply)
+                : AvCell.Toggle(flow.Content, title, "", get, apply);
+            void RefreshCell()
+            {
+                bool avail = enabled == null || enabled();
+                cell.Interactable = avail;
+                cell.Help = avail ? help : (reason != null ? reason() : help);
+                cell.Refresh();
+            }
+            RefreshCell();
+            flow.Ticker.Add(page, AvTickRate.Slow, RefreshCell);
+            return cell;
         }
+
+        private SetRingCell Ring(AvFlow flow, SetRingRow row, int page, string title, Func<string> get, Func<float> level01,
+            Action<int> change, Func<bool> decrease, Func<bool> increase, string help, Func<bool> enabled = null,
+            Func<string> reason = null, Func<string> ringText = null)
+        {
+            SetRingCell cell = null;
+            void Refresh()
+            {
+                bool avail = enabled == null || enabled();
+                string text = get();
+                string why = avail ? help : (reason != null ? reason() : help);
+                cell.Bind(ringText != null ? ringText() : text, level01(), avail, decrease(), increase(),
+                    avail ? help + " Now " + text + "." : why,
+                    avail ? help + " Decrease. Now " + text + "." : why,
+                    avail ? help + " Increase. Now " + text + "." : why);
+            }
+            void Nudge(int d)
+            {
+                if ((enabled != null && !enabled()) || !(d < 0 ? decrease() : increase())) return;
+                change(d);
+                Echo(title + " — " + get());
+                Changed();
+                Refresh();
+            }
+            cell = new SetRingCell(flow.Content, title, () => Nudge(-1), () => Nudge(1));
+            row.Add(cell);
+            Refresh();
+            flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
+            return cell;
+        }
+
+        /// <summary>A 0-to-max level stored as a float config entry, as a dial that steps by <paramref name="step"/>.</summary>
+        private SetRingCell PercentRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,
+            float min, float max, float step, string help, Func<bool> enabled = null, Func<string> reason = null) =>
+            Ring(flow, row, page, title, () => AvNum.Percent(entry.Value), () => Mathf.Clamp01(entry.Value / max),
+                d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
+                () => entry.Value > min + .001f, () => entry.Value < max - .001f, help, enabled, reason);
 
         private AvRow Stepper(AvFlow flow, int page, string title, Func<string> get, Action<int> change,
             Func<bool> decrease, Func<bool> increase, string help, Func<bool> enabled = null,
@@ -353,20 +403,13 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
                 string why = avail ? help : (reason != null ? reason() : help);
                 minus.Help = avail ? help + " Previous / decrease. " + text : why;
                 plus.Help = avail ? help + " Next / increase. " + text : why;
-                row.Set(title, why, text, AvState.Info);
+                row.Set(title, avail ? "" : why, text, AvState.Info);
             }
             flow.Add(row);
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
             return row;
         }
-
-        private AvRow Percent(AvFlow flow, int page, string title, ConfigEntry<float> entry,
-            float min, float max, float step, Func<bool> enabled, Func<string> reason) =>
-            Stepper(flow, page, title, () => AvNum.Percent(entry.Value),
-                d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
-                () => entry.Value > min + .001f, () => entry.Value < max - .001f,
-                "Adjust " + title.ToLowerInvariant() + ".", enabled, reason);
 
         /// <summary>A single wrapped line of prose/status copy, built from kit v2 primitives (a kit gap:
         /// there is no bare "label part" in the v2 set — every text-bearing part carries its own chrome).</summary>
@@ -405,6 +448,7 @@ namespace BoscaliSummer.Features.Command.Presentation.MapUi
             nextTick = 0f;
             actionEcho = null;
             actionEchoUntil = 0f;
+            changeCount = 0;
             tasking = null;
             taskCards = null;
             nextTaskingRefresh = 0f;

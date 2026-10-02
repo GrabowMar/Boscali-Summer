@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Intel.Domain
+namespace BoscaliSummer.Modules.Intel.Domain
 {
     internal struct LaunchEntry
     {

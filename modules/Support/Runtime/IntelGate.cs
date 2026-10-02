@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Support.Runtime
+namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// One track near a strike grid: seconds since it was spotted and metres from the

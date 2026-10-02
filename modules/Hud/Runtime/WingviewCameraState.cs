@@ -1,7 +1,7 @@
-using BoscaliSummer.Features.Hud.Domain;
+using BoscaliSummer.Modules.Hud.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Hud.Runtime
+namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// Wingview: the third-person orbit camera's resting pose
@@ -29,6 +29,7 @@ namespace BoscaliSummer.Features.Hud.Runtime
         private float smoothedYawRate;
 
         private const float DistanceScale = 1.7f;
+        private const float VanillaRestTilt = 20f; // CameraOrbitState.EnterState: tiltView = 20
         private float idleTimer;
         private bool hasLastView;
         private float lastPan, lastTilt;
@@ -46,6 +47,7 @@ namespace BoscaliSummer.Features.Hud.Runtime
             smoothedYawRate = 0f;
             idleTimer = 0f;
             hasLastView = false;
+            hasRelative = false;
         }
 
         /// <summary>Local player's own live, undetached, unejected aircraft only.</summary>
@@ -86,47 +88,65 @@ namespace BoscaliSummer.Features.Hud.Runtime
                 state = cam.currentState;
             }
 
-            // Native look-at-target (enemy/selected target) owns its own complete transition;
-            // Wingview yields entirely rather than fighting it.
-            if (lookAtTargetLerp > 0f)
-            {
-                hasEye = false;
-                hasRotation = false;
-                hasPrevYaw = false;
-                idleTimer = 0f;
-                return;
-            }
-
             float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f);
             if (dt <= 0f) return;
 
-            // Free-look = vanilla's own input moved pan/tilt since we last wrote them. Reading the
-            // raw "Pan View"/"Tilt View" axes instead counted mouse flight as free-look forever,
-            // so Wingview never took the pose (seen in game 2026-09-29).
+            // Wingview never hands the camera back to vanilla mid-flight: every handover between two
+            // different poses is a visible jump (user report 2026-09-29, "old camera position
+            // switches with new"). Pan/tilt from the player become offsets ON our pose, look-at-target
+            // is a continuous blend, and smoothing state is never dropped by either.
             bool freeLooking = hasLastView &&
                 (Mathf.Abs(Mathf.DeltaAngle(lastPan, panView)) > 0.05f || Mathf.Abs(tiltView - lastTilt) > 0.05f);
+            if (freeLooking) idleTimer = 0f;
+            else idleTimer += dt;
 
-            if (freeLooking)
+            if (idleTimer >= WingviewMath.RecentreIdleSeconds)
             {
-                idleTimer = 0f;
-                RememberView(panView, tiltView);
-                return; // Hold: vanilla's own pan/tilt placement stands for this frame.
+                float recentreAlpha = WingviewMath.SmoothingAlpha(1f / WingviewMath.RecentreTau, dt);
+                panView = Mathf.LerpAngle(panView, 0f, recentreAlpha);
+                tiltView = Mathf.Lerp(tiltView, VanillaRestTilt, recentreAlpha);
             }
-
-            idleTimer += dt;
-            float recentreAlpha = WingviewMath.SmoothingAlpha(1f / WingviewMath.RecentreTau, dt);
-            panView = Mathf.LerpAngle(panView, 0f, recentreAlpha);
-            tiltView = Mathf.Lerp(tiltView, 0f, recentreAlpha);
             RememberView(panView, tiltView);
 
-            // Grace window applies only after a real free-look; from rest Wingview owns the pose at once.
-            if (idleTimer < WingviewMath.RecentreIdleSeconds && (Mathf.Abs(panView) > 1f || Mathf.Abs(tiltView) > 1f)) return;
+            Vector3 vanillaPosition = cam.transform.position;
+            Quaternion vanillaRotation = cam.transform.rotation;
+            ApplyPose(cam, aircraft, viewDistAdjust, lookAheadEnabled, dt,
+                Mathf.DeltaAngle(0f, panView), tiltView - VanillaRestTilt);
 
-            ApplyPose(cam, aircraft, viewDistAdjust, lookAheadEnabled, dt);
+            // Look-at-target: vanilla has already blended its own pose for this frame; blend from
+            // ours toward it with the same smoothstep vanilla uses, so entering and leaving is smooth.
+            if (lookAtTargetLerp > 0f)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(lookAtTargetLerp));
+                cam.transform.SetPositionAndRotation(
+                    Vector3.Lerp(cam.transform.position, vanillaPosition, t),
+                    Quaternion.Slerp(cam.transform.rotation, vanillaRotation, t));
+            }
+
+            WatchForJump(cam, aircraft);
+        }
+
+        // Diagnostic: the camera must move continuously relative to the aircraft. A one-frame jump
+        // larger than the follow distance means two poses are fighting; log it (at most once a second)
+        // so the sim and the player's log show it.
+        private Vector3 lastRelative;
+        private bool hasRelative;
+        private float nextJumpLog;
+
+        private void WatchForJump(CameraStateManager cam, Aircraft aircraft)
+        {
+            Vector3 relative = cam.transform.position - aircraft.transform.position;
+            if (hasRelative && (relative - lastRelative).magnitude > 6f && Time.unscaledTime >= nextJumpLog)
+            {
+                nextJumpLog = Time.unscaledTime + 1f;
+                Plugin.Logger?.LogWarning("[Wingview] camera jumped " + (relative - lastRelative).magnitude.ToString("0.0") + " m relative to the aircraft in one frame");
+            }
+            lastRelative = relative;
+            hasRelative = true;
         }
 
         private void ApplyPose(CameraStateManager cam, Aircraft aircraft, float viewDistAdjust,
-            bool lookAheadEnabled, float dt)
+            bool lookAheadEnabled, float dt, float panOffsetDeg, float tiltOffsetDeg)
         {
             Transform nose = aircraft.transform;
             Rigidbody rb = cam.followingRB;
@@ -149,6 +169,10 @@ namespace BoscaliSummer.Features.Hud.Runtime
             {
                 hasPrevYaw = false;
             }
+
+            // The player's free-look, as offsets on our own direction (tilt positive = look down, as vanilla).
+            dir = WingviewMath.ApplyYawOffset(dir, panOffsetDeg);
+            dir = WingviewMath.ApplyPitchOffset(dir, -tiltOffsetDeg);
 
             // Vanilla's orbit distance frames the aircraft too tight once Wingview's own lag is gone
             // (sim capture 2026-09-29): pull back so it sits small in the lower third.

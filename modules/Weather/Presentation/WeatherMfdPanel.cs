@@ -1,24 +1,24 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Weather.Configuration;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Features.Weather.Runtime;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Weather.Configuration;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Runtime;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Weather.Presentation
+namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
     /// Read-only battlefield environment briefing on the maximised map. Kit v2 (AvConsole):
-    /// header chips/metrics carry the live top-line numbers, WEATHER holds the current-conditions
-    /// card, vertical profile and the 60-minute outlook table, SKY &amp; AIR holds the environmental
-    /// watch, solar/lunar ephemeris, wind and local-air readouts.
+    /// header metrics carry the live top-line numbers, WEATHER holds the current-conditions
+    /// card, rings, growing vertical profile, 60-minute outlook and cover trend, SKY &amp; AIR holds the
+    /// solar/lunar ephemeris, wind, local-air rings and the daylight and air-density charts.
     /// </summary>
     internal sealed class WeatherMfdPanel : MonoBehaviour, ISceneService
     {
@@ -36,6 +36,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
+        private readonly float[] densityCurve = new float[13];
 
 
         public void Configure(WeatherSettings config, WeatherManager manager, ManualLogSource log)
@@ -208,10 +209,7 @@ namespace BoscaliSummer.Features.Weather.Presentation
                 {
                     HasMission = false,
                     Title = "METOC / NO MISSION",
-                    Chip0 = "WX OFFLINE",
-                    Chip0State = AvState.Info,
-                    Chip1 = "NO MISSION",
-                    Footer = "Battlefield environment unavailable.",
+                    Footer = "NO MISSION",
                     FooterState = AvState.Inert,
                 });
                 return;
@@ -242,28 +240,32 @@ namespace BoscaliSummer.Features.Weather.Presentation
             float nextIn = dynamicField ? Mathf.Max(0f, stateField.Timeline.NextChangeAt - missionNow) : 0f;
             string countdown = AvNum.Clock(nextIn);
 
+            string nextText = "HELD";
+            float nextFrac = 0f;
             string footer;
             if (weather.IsManualOverride)
-                footer = "Held by weather console (Ctrl+O) — " + regime.Name + ".";
+                footer = "HELD // CTRL+O // " + regime.Name;
             else if (dynamicField)
             {
                 TimelineState timeline = stateField.Timeline;
                 string now = RegimeSnapshot.FromType(timeline.To).Name;
                 string next = RegimeSnapshot.FromType(timeline.Next).Name;
+                float interval = Mathf.Max(1f, stateField.Key.IntervalMinutes * 60f);
+                nextText = timeline.Blend < 1f ? AvNum.Percent(timeline.Blend) : countdown;
+                nextFrac = timeline.Blend < 1f ? timeline.Blend : Mathf.Clamp01(1f - nextIn / interval);
                 footer = timeline.Blend < 1f
-                    ? "Changing to " + now + " (" + AvNum.Percent(timeline.Blend) + ")."
+                    ? "SHIFT > " + now + " " + AvNum.Percent(timeline.Blend)
                     : timeline.Next == timeline.To
-                        ? now + " holds — next step in " + countdown + "."
-                        : now + " — " + next + " in " + countdown + ".";
+                        ? now + " // HOLD " + countdown
+                        : now + " > " + next + " " + countdown;
             }
-            else footer = "Held weather — mission conditions.";
+            else footer = "HELD // MISSION";
 
             var data = new EnvData
             {
                 Title = "METOC / BATTLEFIELD",
-                Chip0 = "WX " + regime.Code,
-                Chip0State = regime.Type == WeatherRegimeType.Storm ? AvState.Danger : AvState.Ready,
-                Chip1 = dynamicField ? "NEXT " + countdown : "HELD WEATHER",
+                Next = nextText,
+                NextFrac = nextFrac,
                 Footer = footer,
                 FooterState = AvState.Info,
                 Regime = regime.Type,
@@ -298,6 +300,9 @@ namespace BoscaliSummer.Features.Weather.Presentation
                              lunar.PhaseName.StartsWith("First", StringComparison.Ordinal),
                 Moonless = lunar.IsMoonless,
             };
+
+            for (int i = 0; i < densityCurve.Length; i++) densityCurve[i] = LevelInfo.GetAirDensity(i * 1000f);
+            data.DensityByAlt = densityCurve;
 
             ForecastStep[] steps = weather.GetForecastTimeline();
             if (steps != null)

@@ -5,7 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>One choice in an <see cref="AvPopup"/>.</summary>
     public readonly struct AvPopupEntry

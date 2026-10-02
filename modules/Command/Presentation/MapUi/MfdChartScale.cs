@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static class MfdChartScale
     {

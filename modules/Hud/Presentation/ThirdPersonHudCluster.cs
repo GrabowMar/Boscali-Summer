@@ -1,14 +1,13 @@
-using System.Reflection;
-using BoscaliSummer.Features.Hud.Domain;
-using HarmonyLib;
 using NOAvionics;
-using NOAvionics.Ui;
+using System.Reflection;
+using BoscaliSummer.Modules.Hud.Domain;
+using HarmonyLib;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Hud.Presentation
+namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
     /// The screen-fixed flight cluster and the relocated target-camera card

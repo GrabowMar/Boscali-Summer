@@ -1,7 +1,8 @@
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Scene service that feeds <see cref="FactionResourceHistoryStore"/> every frame,

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Hud.Domain
+namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// Pure 3D vector for deterministic camera math without UnityEngine, matching the project's
@@ -141,6 +141,20 @@ namespace BoscaliSummer.Features.Hud.Domain
             float cos = (float)Math.Cos(rad);
             float sin = (float)Math.Sin(rad);
             return new WVVec3(dir.X * cos + dir.Z * sin, dir.Y, -dir.X * sin + dir.Z * cos);
+        }
+
+        /// <summary>Pitches <paramref name="dir"/> by <paramref name="pitchDeg"/> (positive = up) keeping its
+        /// heading, clamped to +-80 deg so it can never flip over the pole.</summary>
+        public static WVVec3 ApplyPitchOffset(WVVec3 dir, float pitchDeg)
+        {
+            if (float.IsNaN(pitchDeg) || float.IsInfinity(pitchDeg)) return dir;
+            WVVec3 d = dir.Normalized(WVVec3.Forward);
+            double horiz = Math.Sqrt(d.X * d.X + d.Z * d.Z);
+            double pitch = Math.Atan2(d.Y, horiz) + pitchDeg * Math.PI / 180.0;
+            double lim = 80.0 * Math.PI / 180.0;
+            pitch = Math.Max(-lim, Math.Min(lim, pitch));
+            double az = horiz < 1e-6 ? 0.0 : Math.Atan2(d.X, d.Z);
+            return new WVVec3((float)(Math.Sin(az) * Math.Cos(pitch)), (float)Math.Sin(pitch), (float)(Math.Cos(az) * Math.Cos(pitch)));
         }
 
         /// <summary>Vanilla's own orbit distance: (1 + maxRadius*(1+viewDistAdjust)) * 2.</summary>

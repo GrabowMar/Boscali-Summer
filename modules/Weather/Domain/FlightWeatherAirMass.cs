@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>One flight-level evaluation for precipitation and condensation effects.</summary>
     internal readonly struct FlightWeatherAirMass

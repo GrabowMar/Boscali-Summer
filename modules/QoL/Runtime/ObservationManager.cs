@@ -1,11 +1,12 @@
-using BoscaliSummer.Runtime;
-using BoscaliSummer.Features.QoL.Configuration;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Game;
+using BoscaliSummer.Modules.QoL.Configuration;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using NuclearOption.MissionEditorScripts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.QoL.Runtime
+namespace BoscaliSummer.Modules.QoL.Runtime
 {
     internal sealed class ObservationManager : MonoBehaviour, ISceneService, IObservationSource
     {

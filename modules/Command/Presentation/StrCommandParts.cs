@@ -1,11 +1,10 @@
-using System;
 using NOAvionics;
-using NOAvionics.Ui;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>How a staff post reads on the chart: colour is the tone, the status word is the reading.</summary>
     internal enum StrTone : byte { Allied, Hostile, Unconfirmed, Alert, Caution, Info, Kia }
@@ -41,7 +40,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 case StrTone.Alert: return StrPaint.State(AvState.Danger);
                 case StrTone.Caution: return StrPaint.State(AvState.Caution);
-                case StrTone.Hostile: return Color.Lerp(StrPaint.Hostile, StrPaint.Ink, 0.3f);
+                case StrTone.Hostile: return Color.Lerp(StrPaint.Hostile, StrPaint.Ink, 0.5f);
                 case StrTone.Allied: return StrPaint.State(AvState.Ready);
                 case StrTone.Info: return StrPaint.State(AvState.Info);
                 default: return StrPaint.Muted;
@@ -96,7 +95,7 @@ namespace BoscaliSummer.Features.Command.Presentation
     internal sealed class StrOrgChart : AvPart
     {
         public const int MaxNodes = 8;
-        private const float HeadH = 54f, ChildH = 54f, RowGap = 6f, ColGap = 8f, BusGap = 20f, MaxRootW = 250f, Indent = 14f;
+        private const float HeadH = 48f, ChildH = 48f, RowGap = 4f, ColGap = 6f, BusGap = 16f, MaxRootW = 250f, Indent = 12f;
 
         private sealed class Card
         {
@@ -297,9 +296,9 @@ namespace BoscaliSummer.Features.Command.Presentation
                         // Height pass: positions are already in cx/cy; nothing else to record.
                     }
                 }
-                y += bandH + RowGap + 4f;
+                y += bandH + RowGap + 2f;
             }
-            y -= RowGap + 4f;
+            y -= RowGap + 2f;
 
             if (apply)
             {
@@ -331,10 +330,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             float statusW = Mathf.Min(AvText.Width(c.Status) + 2f, w * 0.55f);
             float left = 12f, inner = Mathf.Max(20f, w - left - 8f);
             AvLay.Place(c.Rail.rectTransform, 0f, 0f, 3f, h);
-            AvLay.Place(c.Rank.rectTransform, left, 6f, Mathf.Max(20f, inner - statusW - 6f), 15f);
-            AvLay.Place(c.Status.rectTransform, w - 8f - statusW, 6f, statusW, 15f);
-            AvLay.Place(c.Name.rectTransform, left, 20f, inner, 16f);
-            AvLay.Place(c.Sub.rectTransform, left, 36f, inner, 15f);
+            AvLay.Place(c.Rank.rectTransform, left, 3f, Mathf.Max(20f, inner - statusW - 6f), 15f);
+            AvLay.Place(c.Status.rectTransform, w - 8f - statusW, 3f, statusW, 15f);
+            AvLay.Place(c.Name.rectTransform, left, 17f, inner, 16f);
+            AvLay.Place(c.Sub.rectTransform, left, 32f, inner, 15f);
         }
 
         private void StyleCard(int i)
@@ -377,7 +376,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             public Sprite Portrait;
         }
 
-        private const float Pad = 12f, PortraitSize = 68f, TraitH = 22f, MaxTraits = 3;
+        private const float Pad = 10f, PortraitSize = 56f, TraitH = 20f, MaxTraits = 3;
         private readonly AvFrame frame, portraitFrame;
         private readonly Image rail, portrait;
         private readonly TMP_Text portraitIcon;
@@ -402,11 +401,12 @@ namespace BoscaliSummer.Features.Command.Presentation
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             frame.Bracket = 8f;
+            frame.raycastTarget = true;
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             portraitFrame = AvFrame.Add(Rect, "PortraitFrame", AvChamfer.Diagonal(5f));
             portrait = AvLay.Solid(Rect, "Portrait", Color.white);
             portrait.preserveAspect = true;
-            portraitIcon = AvIcons.Make(Rect, AvIcon.User, 34f, Color.white);
+            portraitIcon = AvIcons.Make(Rect, AvIcon.User, 30f, Color.white);
             name = AvText.Make(Rect, "Name", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
             role = AvText.Make(Rect, "Role", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
             statusBox = AvLay.Child(Rect, "StatusChip");
@@ -437,6 +437,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             bio = AvText.Make(Rect, "Bio", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
         }
+
+        /// <summary>Hover help for the whole file (whose file this is and how sure the reader can be of it).</summary>
+        public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
 
         public void Show(Data d)
         {
@@ -488,18 +491,20 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private float TextW(float width) => Mathf.Max(20f, width - 2f * Pad - PortraitSize - 12f);
 
+        private float ChipW(float width) => Mathf.Min(TextW(width) * 0.45f, AvText.Width(status) + 22f);
+
         private float HeadH(float width)
         {
             float w = TextW(width);
-            float h = AvText.Height(name, w) + 2f + AvText.Height(role, w) + 6f + 20f;
+            float h = AvText.Height(name, Mathf.Max(20f, w - ChipW(width) - 6f)) + 2f + AvText.Height(role, w);
             return Mathf.Max(PortraitSize, h);
         }
 
         public override float Measure(float width)
         {
-            float h = Pad + HeadH(width) + 10f + 1f + 8f + 40f;
-            h += 6f + traits * TraitH;
-            if (bio.text.Length > 0) h += 8f + AvText.Height(bio, width - 2f * Pad);
+            float h = Pad + HeadH(width) + 6f + 1f + 7f + 38f + 4f;
+            h += traits * TraitH;
+            if (bio.text.Length > 0) h += 6f + AvText.Height(bio, width - 2f * Pad);
             return h + Pad;
         }
 
@@ -511,14 +516,14 @@ namespace BoscaliSummer.Features.Command.Presentation
             AvLay.Place(portraitFrame.rectTransform, Pad, y, PortraitSize, PortraitSize);
             AvLay.Place(portrait.rectTransform, Pad + 2f, y + 2f, PortraitSize - 4f, PortraitSize - 4f);
             AvLay.Place(portraitIcon.rectTransform, Pad, y, PortraitSize, PortraitSize);
-            float x = Pad + PortraitSize + 12f, nh = AvText.Height(name, w), rh = AvText.Height(role, w);
-            AvLay.Place(name.rectTransform, x, y, w, nh);
+            float x = Pad + PortraitSize + 12f, chip = ChipW(s.W), nameW = Mathf.Max(20f, w - chip - 6f);
+            float nh = AvText.Height(name, nameW), rh = AvText.Height(role, w);
+            AvLay.Place(name.rectTransform, x, y, nameW, nh);
+            AvLay.Place(statusBox, x + w - chip, y + 2f, chip, 20f);
             AvLay.Place(role.rectTransform, x, y + nh + 2f, w, rh);
-            float sw = Mathf.Min(w, AvText.Width(status) + 22f);
-            AvLay.Place(statusBox, x, y + nh + 2f + rh + 6f, Mathf.Max(60f, sw), 20f);
-            y += HeadH(s.W) + 10f;
+            y += HeadH(s.W) + 6f;
             AvLay.Place(rule.rectTransform, Pad, y, s.W - 2f * Pad, 1f);
-            y += 9f;
+            y += 8f;
             float span = s.W - 2f * Pad - 16f;
             float[] fws = { span * 0.50f, span * 0.18f, span * 0.32f };
             float fx = Pad;
@@ -526,10 +531,10 @@ namespace BoscaliSummer.Features.Command.Presentation
             {
                 AvLay.Place(fieldKeys[i].rectTransform, fx, y, fws[i], 15f);
                 AvLay.Place(fieldValues[i].rectTransform, fx, y + 15f, fws[i], 18f);
-                if (i == 1) AvLay.Place((RectTransform)shareBar.transform, fx, y + 35f, fws[i], 3f);
+                if (i == 1) AvLay.Place((RectTransform)shareBar.transform, fx, y + 34f, fws[i], 3f);
                 fx += fws[i] + 8f;
             }
-            y += 40f + 6f;
+            y += 38f + 4f;
             for (int i = 0; i < traits && i < traitLabel.Length; i++)
             {
                 float ty = y + i * TraitH;
@@ -539,7 +544,7 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
             y += traits * TraitH;
             if (bio.text.Length > 0)
-                AvLay.Place(bio.rectTransform, Pad, y + 8f, s.W - 2f * Pad, AvText.Height(bio, s.W - 2f * Pad));
+                AvLay.Place(bio.rectTransform, Pad, y + 6f, s.W - 2f * Pad, AvText.Height(bio, s.W - 2f * Pad));
         }
 
         public override void Restyle()
@@ -573,115 +578,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         }
     }
 
-    /// <summary>The staff log as a timestamped log: age stamp, tone rail, wrapped line. Rows can open a post.</summary>
-    internal sealed class StrLogBoard : AvPart
-    {
-        private const float PadX = 10f, StampW = 42f, MinH = 28f;
-        private readonly Action<int> onClick;
-        private readonly Line[] lines;
-        private int count;
-
-        private sealed class Line
-        {
-            public RectTransform Root;
-            public AvFrame Frame;
-            public Image Rail;
-            public TMP_Text Stamp, Text;
-            public AvHelpTip Tip;
-            public AvHit Hit;
-            public AvState State;
-            public bool Hover, Live;
-        }
-
-        public StrLogBoard(RectTransform parent, int rows, Action<int> click)
-        {
-            Rect = AvLay.Child(parent, "LogBoard");
-            onClick = click;
-            lines = new Line[rows];
-            for (int i = 0; i < rows; i++)
-            {
-                int slot = i;
-                var l = new Line { Root = AvLay.Child(Rect, "Entry " + i) };
-                l.Frame = AvFrame.Add(l.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(l.Frame.rectTransform);
-                l.Rail = AvLay.Solid(l.Root, "Rail", Color.clear);
-                l.Stamp = StrPaint.Fit(l.Root, "Stamp", AvTextRole.DataSmall);
-                l.Text = AvText.Make(l.Root, "Text", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft, true);
-                l.Hit = AvHit.On(l.Frame);
-                l.Hit.Hover = h => { l.Hover = h; Style(slot); };
-                l.Hit.Click = e => { if (l.Live) onClick?.Invoke(slot); };
-                l.Tip = AvHelpTip.Attach(l.Frame.gameObject, null);
-                l.Root.gameObject.SetActive(false);
-                lines[i] = l;
-            }
-            Restyle();
-        }
-
-        public int Capacity => lines.Length;
-
-        public void Begin() => count = 0;
-
-        /// <summary>Append one entry (ignored past capacity). <paramref name="clickable"/> opens the entry's post.</summary>
-        public void Add(string stamp, string text, AvState state, bool clickable, string help)
-        {
-            if (count >= lines.Length) return;
-            Line l = lines[count];
-            l.Root.gameObject.SetActive(true);
-            StrPaint.Put(l.Stamp, stamp);
-            StrPaint.Put(l.Text, AvStates.Glyph(state) + (text ?? ""));
-            l.State = state;
-            l.Live = clickable;
-            l.Hit.Interactable = clickable;
-            l.Tip.Text = help;
-            count++;
-            Style(count - 1);
-        }
-
-        public void End()
-        {
-            for (int i = count; i < lines.Length; i++) lines[i].Root.gameObject.SetActive(false);
-            Changed();
-        }
-
-        private float TextW(float width) => Mathf.Max(20f, width - PadX - StampW - PadX - 8f);
-
-        private float RowH(int i, float width) => Mathf.Max(MinH, AvText.Height(lines[i].Text, TextW(width)) + 12f);
-
-        public override float Measure(float width)
-        {
-            float h = 0f;
-            for (int i = 0; i < count; i++) h += RowH(i, width) + 2f;
-            return Mathf.Max(0f, h - 2f);
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float y = 0f;
-            for (int i = 0; i < count; i++)
-            {
-                Line l = lines[i];
-                float h = RowH(i, s.W);
-                AvLay.Place(l.Root, 0f, y, s.W, h);
-                AvLay.Place(l.Rail.rectTransform, 0f, 0f, 2f, h);
-                AvLay.Place(l.Stamp.rectTransform, PadX, 0f, StampW, h);
-                AvLay.Place(l.Text.rectTransform, PadX + StampW + 8f, 6f, TextW(s.W), h - 12f);
-                y += h + 2f;
-            }
-        }
-
-        private void Style(int i)
-        {
-            Line l = lines[i];
-            l.Frame.Paint(l.Hover && l.Live ? StrPaint.Raised : StrPaint.Inert, l.Hover && l.Live ? StrPaint.Frame : Color.clear);
-            l.Rail.color = l.State == AvState.Inert ? StrPaint.State(AvState.Inert) : StrPaint.State(l.State);
-            l.Stamp.color = StrPaint.Muted;
-            l.Text.color = l.State == AvState.Inert ? StrPaint.Dim : StrPaint.Ink;
-        }
-
-        public override void Restyle()
-        {
-            for (int i = 0; i < lines.Length; i++) Style(i);
-        }
-    }
-}
+    /// <summary>
+    /// The staff log as a timestamped log: age stamp, tone rail, wrapped line. Rows can open a post. Its
+    /// natural height is the first <c>minRows</c> entries; a slot taller than that shows further entries
+    /// (up to the pool size) instead of leaving a blank band under the log.
+    /// </summary>
+  }

@@ -1,14 +1,15 @@
 using System.Collections.Generic;
 using System.Text;
 using BepInEx.Logging;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
     /// Reinforcement funding and the readiness picture for the CMD board.

@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// What a deliberate dismissal costs. Aborting a contract the faction already accepted is

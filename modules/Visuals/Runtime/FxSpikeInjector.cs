@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Visuals.Runtime
+namespace BoscaliSummer.Modules.Visuals.Runtime
 {
     /// <summary>
     /// Phase-0 spike: injects <see cref="FxSpikeFeature"/> into every live URP renderer.

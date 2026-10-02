@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.TheaterOps.Configuration;
-using BoscaliSummer.Features.TheaterOps.Domain;
-using BoscaliSummer.Features.TheaterOps.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
+using BoscaliSummer.Modules.TheaterOps.Domain;
+using BoscaliSummer.Modules.TheaterOps.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.TheaterOps.Runtime
+namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
     /// The theater staff: a host-only review loop that fights each directed faction's war.
@@ -488,7 +490,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
 
         private void ScanPresence(FactionHQ hq, List<ObjectiveFix> fixes, int unitCap)
         {
-            if (fieldworks == null) ModServices.TryGet(out fieldworks);
+            if (fieldworks == null) ModuleServices.TryGet(out fieldworks);
             for (int i = 0; i < fixes.Count; i++)
             {
                 hostileCounts[i] = 0;
@@ -533,7 +535,7 @@ namespace BoscaliSummer.Features.TheaterOps.Runtime
         /// </summary>
         private void ReadAreaResistance(FactionHQ hq, List<ObjectiveFix> fixes)
         {
-            if (threatPicture == null) ModServices.TryGet(out threatPicture);
+            if (threatPicture == null) ModuleServices.TryGet(out threatPicture);
             if (threatPicture == null && !intelAbsentLogged)
             {
                 intelAbsentLogged = true;

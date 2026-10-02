@@ -1,8 +1,8 @@
 using System;
 using System.Globalization;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 
-namespace BoscaliSummer.Features.TheaterOps.Domain
+namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
     /// <summary>
     /// The theater widget's copy, pure so the test project links it directly. It names the main

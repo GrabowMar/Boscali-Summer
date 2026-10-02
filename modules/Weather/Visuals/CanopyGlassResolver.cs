@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     internal readonly struct CanopySurface
     {

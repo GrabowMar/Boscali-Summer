@@ -1,11 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.DynamicOperations.Domain;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.DynamicOperations.Runtime
+namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     internal sealed partial class OperationsManager
     {

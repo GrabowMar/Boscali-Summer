@@ -1,9 +1,11 @@
-using BoscaliSummer.Features.Autopilot.Domain;
-using BoscaliSummer.Framework.Features;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Modules.Autopilot.Domain;
+using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Autopilot.Runtime
+namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
     /// Vanilla aircraft controls. Every statement is the call the game's own key binding or

@@ -27,6 +27,9 @@ Shader "Boscali/FlightCloud"
         float _CloudFlash;
         // Cloud genera: low-deck depth/smoothness, middle and high layers.
         float _LayerDepth, _LayerSmooth, _MidCover, _MidSheet, _HighCover, _HighVeil;
+        // Low-cloud genus, already resolved (CloudShape.Resolve). Smoothness fades lobes into a sheet.
+        // ShapeProfile / ShapeFootprint / BaseGate match CloudShape.cs. Change both together.
+        float _PuffScale, _PuffDepth, _BaseSharp, _BaseWobble, _Dome, _Billow, _Anvil;
         float2 _CloudWindDir;
         // Radians one screen pixel spans: sets the noise level of detail by footprint.
         float _CloudPixelAngle;
@@ -38,12 +41,12 @@ Shader "Boscali/FlightCloud"
         float4 _HeroB[5];
         // Console fog bank over sea and valleys, 0..1.
         float _FogBank;
+        float4 _CloudEye; // centre x/z, radius, faded strength
         float _HeroCount;
         // Frontal boundary (SkySplit): A = normal x, normal z, offset, width;
         // B = amount, meander amplitude, wavelength, phase.
         float4 _SplitA, _SplitB;
         // 0..1 how deep the camera is inside cloud: near-field density and wisps.
-        float _CameraInCloud;
         // Reduced-resolution march: world view rays through the screen corners (rows:
         // bottom-left, bottom-right, top-left, top-right) and the target size (w, h, 1/w, 1/h).
         float4x4 _CloudFrustum;
@@ -100,17 +103,20 @@ Shader "Boscali/FlightCloud"
             return true;
         }
 
-        // Individual cloud bodies: cellular noise at two non-integer scales (so the 64^3
+        float LodFor(float foot, float period);
+
+        // Individual cloud bodies: cellular noise at non-integer scales (so the 64^3
         // tile never visibly repeats), in [0, 1]. Coverage thresholds it into separate
         // clouds with sky between them, the way broken and scattered decks really look.
         float Bodies(float3 g, float scale, float lod)
         {
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / scale, g.y / (scale * 0.9), lod)).r;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / (scale * 2.73) + 0.37,
-                g.y / (scale * 2.1), lod)).r;
-            // The blend clusters around 0.52 (measured p10 0.39, p90 0.64); stretch it to a
-            // near-uniform [0, 1] so a cover of 0.4 really leaves 60 % of the sky open.
-            return saturate(0.5 + (a * 0.62 + b * 0.38 - 0.52) * 3.16);
+            float period = scale * 4.0;
+            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / period, g.y / (period * 0.9), lod)).b;
+            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / (period * 2.73) + 0.37,
+                g.y / (period * 2.1), lod)).r;
+            float c = tex3Dlod(_CloudNoiseTex, float4(g.xz / (period * 0.29) + float2(0.17, 0.61),
+                g.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
+            return saturate((a * 0.65 + b * 0.15 + c * 0.20 - 0.22) * 2.5);
         }
 
         // Coverage remap: `cover` of the sky becomes cloud, the rest stays clear. Near full
@@ -151,9 +157,9 @@ Shader "Boscali/FlightCloud"
         // never shows the 64^3 tile as a regular grid of lumps (bubble wrap).
         float Billow(float3 g, float lod)
         {
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / 1900.0 + 0.43, g.y / 1500.0 + 0.11, lod)).r;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / 4700.0 + 0.71, g.y / 3900.0 + 0.57, lod)).r;
-            return saturate(0.5 + (a * 0.55 + b * 0.45 - 0.52) * 3.0);
+            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / 12000.0 + 0.43, g.y / 10000.0 + 0.11, lod)).b;
+            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / 4200.0 + 0.71, g.y / 3600.0 + 0.57, lod)).b;
+            return saturate((a * 0.65 + b * 0.35 - 0.22) * 2.5);
         }
 
         // Turns a smooth set-piece envelope into a lumpy cumuliform surface.
@@ -195,8 +201,8 @@ Shader "Boscali/FlightCloud"
             float u = dot(d, along), v = dot(d, ahead);
             const float shelfReach = 7000.0;
             if (abs(u) > b.x + 9000.0 || v < -b.w - 7000.0 || v > shelfReach + 3000.0 || g.y > b.y + 1500.0) return 0.0;
-            float n = HeroNoise(g, 6000.0, lod);
-            float n2 = HeroNoise(g + 911.0, 2200.0, lod);
+            float n = HeroNoise(g, 26000.0, lod);
+            float n2 = HeroNoise(g + 911.0, 6500.0, lod);
             float taper = 1.0 - smoothstep(b.x * 0.55, b.x + 7000.0 * n, abs(u));
             // Lumpy, rounded crowns: the top rolls off over a kilometre instead of a flat cut.
             float stormTop = b.y * (0.72 + 0.28 * n);
@@ -209,7 +215,7 @@ Shader "Boscali/FlightCloud"
             float reach = shelfReach * (0.8 + 0.35 * n);
             float inShelf = smoothstep(-400.0, 0.0, v) * (1.0 - smoothstep(reach - 600.0, reach, v)) *
                 smoothstep(bottom - 40.0, bottom + 90.0, g.y) * (1.0 - smoothstep(top - 350.0, top, g.y));
-            float tiers = 0.62 + 0.38 * sin((g.y + (n - 0.5) * 900.0 + v * 0.08) * 0.0285);
+            float tiers = 0.88 + 0.12 * sin((g.y + (n - 0.5) * 1400.0 + v * 0.08) * 0.008);
             float shelf = inShelf * lerp(1.0, tiers, smoothstep(0.25, 0.9, f)) *
                 smoothstep(0.3, 0.52, n2 * 0.5 + n * 0.5 + 0.08);
             return Erode(max(mass * 0.85, shelf * 0.72), g, lod) * taper * b.z;
@@ -225,15 +231,15 @@ Shader "Boscali/FlightCloud"
             // ends in a flat vertical wall.
             float reach = max(b.w * 2.8, b.x * 1.4 + 4000.0) + 1000.0;
             if (dot(d, d) > reach * reach || g.y > b.y + 1500.0) return 0.0;
-            float n = HeroNoise(g, 5000.0, lod);
-            float n2 = HeroNoise(g + 1733.0, 1800.0, lod);
+            float n = HeroNoise(g, 22000.0, lod);
+            float n2 = HeroNoise(g + 1733.0, 6500.0, lod);
             // Turrets: lobes of their own size bulge out of the column at every height.
-            float bulge = HeroNoise(g + 517.0, 2600.0, lod);
+            float bulge = HeroNoise(g + 517.0, 10000.0, lod);
             float height = saturate(g.y / b.y);
-            float2 lean = dir * height * 4000.0;
+            float2 lean = dir * height * 1800.0;
             // A column that domes over at the top instead of ending in a flat cut.
-            float dome = sqrt(saturate(1.0 - pow(max(0.0, g.y / b.y - 0.6) / 0.45, 2.0)));
-            float radius = b.x * (0.6 + 0.3 * n + 0.4 * bulge) * dome;
+            float dome = sqrt(saturate(1.0 - pow(max(0.0, g.y / b.y - 0.72) / 0.36, 2.0)));
+            float radius = b.x * (0.52 + 0.3 * n + 0.3 * bulge + 0.65 * smoothstep(0.35, 0.82, height)) * dome;
             float tower = (1.0 - smoothstep(radius * 0.7, radius * 1.1, length(d - lean))) *
                 smoothstep(1100.0, 1450.0, g.y);
             float along = dot(d, dir) - b.w * 0.35, across = dot(d, float2(-dir.y, dir.x));
@@ -243,8 +249,8 @@ Shader "Boscali/FlightCloud"
             // its top gently sloping; a clean ellipse seen edge-on reads as a saucer.
             float edge = 0.7 + 0.45 * (n - 0.5) + 0.2 * (bulge - 0.5);
             float outline = 1.0 - smoothstep(edge - 0.3, edge + 0.08, e);
-            float anvilTop = b.y + 250.0 - 500.0 * e * e + (n2 - 0.5) * 350.0;
-            float anvilBase = anvilTop - lerp(2600.0, 450.0, saturate(e)) - 700.0 * pouch;
+            float anvilTop = b.y + 150.0 - 1200.0 * e * e + (n2 - 0.5) * 350.0;
+            float anvilBase = anvilTop - lerp(6000.0, 500.0, smoothstep(0.05, 0.75, e)) - 700.0 * pouch;
             float anvil = outline * smoothstep(anvilBase - 50.0, anvilBase + 260.0, g.y) *
                 (1.0 - smoothstep(anvilTop - 350.0, anvilTop + 120.0, g.y));
             // The anvil is a thin, fibrous ice sheet; the tower a lumpy heap.
@@ -330,7 +336,7 @@ Shader "Boscali/FlightCloud"
             if (_WeatherEnvelopeOn < 0.5 || min(uv.x, uv.y) < 0.05 || max(uv.x, uv.y) > 0.95) return false;
             float4 e = tex2Dlod(_WeatherEnvelopeTex, float4(uv, 0, 0));
             if (e.r <= 0.0) return true;
-            return g.y > e.g * 16000.0 + _CloudHeightShift + 1800.0 || g.y < e.b * 16000.0 + _CloudHeightShift - 1000.0;
+            return g.y > e.g * 16000.0 + _CloudHeightShift + 800.0 || g.y < e.b * 16000.0 + _CloudHeightShift - 500.0;
         }
 
         // True near a set-piece this ray passes (the envelope does not know about them).
@@ -348,15 +354,55 @@ Shader "Boscali/FlightCloud"
             return false;
         }
 
+        // CloudShape.Profile. h is 0 at the base and 1 at the top.
+        float ShapeProfile(float h, float dome, float anvil)
+        {
+            if (h <= 0.0 || h >= 1.0) return 0.0;
+            float round = smoothstep(0.18, 1.0, h);
+            float body = 1.0 - round * saturate(dome);
+            float pinch = max(0.0, dome - 1.0) * smoothstep(0.15, 0.55, h);
+            float cap = smoothstep(0.64, 0.80, h);
+            return saturate(body - pinch + anvil * cap) * (1.0 - smoothstep(0.90, 1.0, h));
+        }
+
+        // CloudShape.Mass: round the boundary without turning the whole cloud into mist.
+        float ShapeMass(float mask, float profile)
+        {
+            return saturate((mask - (1.0 - profile) * 0.8) * 2.6) * smoothstep(0.0, 0.18, profile);
+        }
+
+        // CloudShape.Footprint. The anvil widens the top of a tower.
+        float ShapeFootprint(float h, float anvil)
+        {
+            float cap = smoothstep(0.58, 0.86, saturate(h));
+            return 1.0 + anvil * cap * 1.7;
+        }
+
+        // CloudShape.BaseGate. A small sharp value is a flat cumulus base.
+        float BaseGate(float y, float baseY, float sharp)
+        {
+            float s = max(20.0, sharp);
+            return smoothstep(baseY - s * 0.2, baseY + s, y);
+        }
+
+        float EyeCloudKeep(float3 g)
+        {
+            if (_CloudEye.z <= 0.0 || _CloudEye.w <= 0.0) return 1.0;
+            float r = length(g.xz - _CloudEye.xy);
+            return 1.0 - _CloudEye.w * (1.0 - smoothstep(_CloudEye.z * 0.65, _CloudEye.z * 0.98, r)) *
+                smoothstep(1500.0, 2300.0, g.y);
+        }
+
         float Density(float3 world, float coarse)
         {
             float3 g = world + _CloudWorldOffset;
             // Filter the 1250 m detail to what one pixel and one step can resolve.
             float lod = max(coarse, LodFor(gFoot, 1250.0));
-            float bodyLod = max(coarse, LodFor(gFoot, 4200.0));
+            float bodyLod = max(coarse, LodFor(gFoot, 24000.0));
+            float puffLod = max(coarse, LodFor(gFoot, max(1200.0, _PuffScale * 4.0)));
             float hero = gHeroMask != 0u ? Heroes(g, max(lod, 1.0)) : 0.0;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
-            float3 n1 = float3((g.xz - _CloudWindOffset) / 5800.0, g.y / 3900.0);
+            float3 n1 = float3((g.xz - _CloudWindOffset) / 24000.0, 0.37);
             float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / 1250.0, g.y / 1250.0);
             float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, bodyLod)).rg;
             // Warp the meteorological boundary at cloud scale; otherwise a smooth
@@ -369,101 +415,109 @@ Shader "Boscali/FlightCloud"
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
             float baseY = profile.b * 16000.0 + _CloudHeightShift;
-            float topY = max(baseY + 1600.0, weather.a * 16000.0 + _CloudHeightShift);
+            float topY = max(baseY + 280.0, weather.a * 16000.0 + _CloudHeightShift);
             float frontBase = profile.r * 16000.0 + _CloudHeightShift;
-            float frontCrown = max(frontBase + 600.0, profile.g * 16000.0 + _CloudHeightShift);
-            float height01 = saturate((g.y - baseY) / max(1.0, topY - baseY));
-            if (g.y < min(baseY, frontBase) - 250.0 - gVert || g.y > max(topY, frontCrown) + 1500.0 + gVert) return hero;
-            // Sun samples need the envelope, not the high-frequency erosion.
+            float frontCrown = max(frontBase + 300.0, profile.g * 16000.0 + _CloudHeightShift);
+            float towerBlend = smoothstep(0.18, 0.60, _Anvil);
+            float capTop = baseY + max(280.0, max(_PuffDepth, _LayerDepth)) * 1.15;
+            float columnTop = max(baseY + 280.0, lerp(min(topY, capTop), topY, towerBlend));
+            float deckTop = baseY + max(_PuffDepth, _LayerDepth) + _BaseWobble * 0.5;
+            if (g.y < min(baseY, frontBase) - 250.0 - gVert || g.y > max(deckTop, max(columnTop, frontCrown)) + 600.0 + gVert) return hero;
+
+            float smooth = saturate(_LayerSmooth);
+            float sheetBlend = smoothstep(0.45, 0.85, smooth);
+            bool sheet = sheetBlend >= 0.999;
+            float3 gw = g + float3((broad.r - 0.5) * 1400.0, 0.0, (broad.g - 0.5) * 1400.0);
+            float puffBody = 0.72;
+            if (!sheet) puffBody = lerp(Bodies(gw, _PuffScale, puffLod), 0.72, sheetBlend);
+            float relief = lerp(0.55, 1.0, smoothstep(0.2, 0.85, puffBody));
+            columnTop = lerp(baseY + (columnTop - baseY) * relief, columnTop, max(sheetBlend, towerBlend));
+
+            // Low deck. Each puff has its own base and a domed top; a smooth genus is one sheet.
+            float layerShape = 0.0;
+            if (layer > 0.02)
+            {
+                float deckBody = lerp(puffBody, 0.72 + 0.28 * puffBody, smooth);
+                float mask = CoverMask(deckBody, saturate(layer * 1.2));
+                float thick = max(280.0, lerp(_PuffDepth, max(_PuffDepth, _LayerDepth), sheetBlend));
+                thick *= lerp(0.75 + 0.10 * sheetBlend, 1.0, broad.r);
+                thick *= lerp(relief, 1.0, sheetBlend);
+                float layerBase = baseY + (puffBody - 0.5) * lerp(_BaseWobble, _BaseWobble * 0.3, smooth);
+                float layerTop = layerBase + thick;
+                if (gVert > 40.0)
+                    layerShape = saturate(mask) * LayerOverlap(g.y, layerBase, layerTop) * lerp(0.7, 0.9, sheetBlend);
+                else
+                {
+                    float hl = (g.y - layerBase) / max(1.0, thick);
+                    layerShape = ShapeMass(mask, ShapeProfile(hl, lerp(_Dome, _Dome * 0.25, smooth), _Anvil * (1.0 - smooth))) *
+                        BaseGate(g.y, layerBase, lerp(_BaseSharp, _BaseSharp * 2.2, smooth));
+                }
+            }
+
+            // Fronts use the same profile at a larger scale. A thin shield stays stratiform.
+            float frontShape = 0.0;
+            float frontDepth = frontCrown - frontBase;
+            if (front > 0.02)
+            {
+                float fScale = lerp(max(1800.0, _PuffScale * 1.35), 5200.0, sheetBlend);
+                float frontBody = Bodies(gw + 5311.0, fScale, sheet ? bodyLod : puffLod);
+                float fm = CoverMask(frontBody, saturate(front * 1.05));
+                float frontFloor = frontBase + (frontBody - 0.5) * min(220.0, _BaseWobble + 40.0);
+                float frontTop = frontCrown + (broad.r - 0.5) * min(1200.0, frontDepth * 0.25) -
+                    (1.0 - fm) * min(frontDepth * 0.25, 900.0);
+                float uplift = smoothstep(3500.0, 6500.0, frontDepth);
+                float thin = lerp(0.35, 1.0, smoothstep(900.0, 2200.0, frontDepth));
+                if (gVert > 40.0)
+                    frontShape = saturate(fm) * LayerOverlap(g.y, frontFloor, frontTop) * thin;
+                else
+                {
+                    float fh = (g.y - frontFloor) / max(1.0, frontTop - frontFloor);
+                    frontShape = ShapeMass(fm, ShapeProfile(fh, lerp(0.25, _Dome, uplift), _Anvil * uplift)) *
+                        BaseGate(g.y, frontFloor, max(_BaseSharp, 80.0)) * thin;
+                }
+            }
+
+            // Towers follow the cell footprint: narrow with height, flare where the genus has an anvil.
+            // Cumulus is carved into puffs. A cumulonimbus stays one mass.
+            // Match CloudBodies: the cell gaussian is already ~0.2 at the stem edge, so the
+            // footprint has to scale radius (cell ^ 1/foot²), not the threshold.
+            float height01 = saturate((g.y - baseY) / max(1.0, columnTop - baseY));
+            float foot = ShapeFootprint(height01, _Anvil);
+            float wide = pow(saturate(cell), 1.0 / max(1.0, foot * foot));
+            float need = 0.18 + 0.42 * height01 * height01;
+            float inside = smoothstep(need - 0.12, need + 0.12, wide);
+            float carved = lerp(CoverMask(puffBody, saturate(0.45 + 0.35 * cell)), 1.0, max(sheetBlend, towerBlend));
+            float towerShape = inside * ShapeMass(carved, ShapeProfile(height01, _Dome, _Anvil)) *
+                BaseGate(g.y, baseY, _BaseSharp) * smoothstep(0.04, 0.20, wide);
+
+            // Detail noise only on the boundary. The interior of a deck is one mass, and an
+            // empty sample never pays for the 3D taps.
+            float coarseShape = max(layerShape, max(frontShape, towerShape));
+            float edge = saturate(1.0 - abs(coarseShape - 0.42) * 2.4);
             float detail = 0.5;
-            if (coarse < 1.0)
+            if (coarse < 1.0 && _Billow > 0.01 && edge > 0.08)
             {
                 float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
-                // A finer octave only where it can be seen.
                 float nearDetail = saturate(1.0 - lod);
                 float d2 = nearDetail > 0.0
                     ? tex3Dlod(_CloudNoiseTex, float4(n2 * 3.1 + 0.21, lod)).g : 0.5;
-                float fine = lerp(d1, d1 * 0.72 + d2 * 0.28, nearDetail);
-                // Within a couple of km the cloud is made of wisps that stream past.
+                detail = lerp(d1, d1 * 0.72 + d2 * 0.28, nearDetail);
                 float close = saturate(1.0 - gFoot / 3.0);
-                if (close > 0.0)
+                if (close > 0.0 && edge > 0.35)
                 {
                     float micro = tex3Dlod(_CloudNoiseTex, float4(g.xz / 340.0 + 0.19, g.y / 300.0 + 0.83, 0.0)).g;
-                    fine = lerp(fine, fine * 0.65 + micro * 0.35, close);
+                    detail = lerp(detail, detail * 0.65 + micro * 0.35, close);
                 }
-                // Wispy, torn bases and rounded, billowing tops.
-                float lift = saturate((g.y - baseY) / 350.0);
-                detail = lerp(lerp(1.0 - fine, fine, lift), 0.5, coarse);
             }
-            float baseFlat = smoothstep(-100.0, 170.0, g.y - baseY);
+            // Erosion only removes the boundary; signed noise used to create detached wisps.
+            float nibble = max(0.0, 0.65 - detail) * _Billow * edge * 0.45;
+            layerShape = saturate(layerShape - nibble);
+            frontShape = saturate(frontShape - nibble);
+            towerShape = saturate(towerShape - nibble);
+            float layerDensity = saturate((layerShape - 0.12) / 0.70) * smoothstep(0.02, 0.10, layer);
+            float frontDensity = saturate((frontShape - 0.12) / 0.72) * smoothstep(0.04, 0.20, front);
+            float towerDensity = towerShape;
 
-            // Layer (stratocumulus / broken deck): separate domed bodies. Each body's top
-            // rises with its own strength, its base is gently lumpy, and detail erodes edges.
-            // Warp by the broad noise and use a larger scale than the 64^3 tile's period,
-            // so no regular grid of puffs shows toward the horizon.
-            float3 gw = g + float3((broad.r - 0.5) * 2200.0, 0.0, (broad.g - 0.5) * 2200.0);
-            float body = Bodies(gw, 4200.0, bodyLod);
-            // Smooth decks (stratus, nimbostratus) keep a gentle texture instead of bodies.
-            float deckBody = lerp(body, 0.72 + 0.28 * body, _LayerSmooth);
-            float layerMaskBody = CoverMask(deckBody, saturate(layer * 1.1));
-            float layerThick = max(300.0, _LayerDepth) * (0.55 + 0.45 * saturate(layer));
-            float layerBase = baseY + (body - 0.5) * lerp(160.0, 60.0, _LayerSmooth);
-            float layerTopY = layerBase + layerThick *
-                lerp(0.35 + 0.65 * layerMaskBody, 0.88 + 0.12 * layerMaskBody, _LayerSmooth);
-            float layerShape;
-            if (gVert > 40.0)
-            {
-                // A far step spans more altitude than the deck is thick: use the deck's
-                // vertical average (its dome profile integrates to mask * 1.35 - 0.37).
-                layerShape = saturate(layerMaskBody * 1.35 - 0.37) * LayerOverlap(g.y, layerBase, layerTopY);
-            }
-            else
-            {
-                float hl = saturate((g.y - layerBase) / max(1.0, layerTopY - layerBase));
-                layerShape = saturate(layerMaskBody * 1.35 - hl * hl * 1.1) *
-                    smoothstep(-60.0, 120.0, g.y - layerBase) * (1.0 - smoothstep(layerTopY - 20.0, layerTopY + 60.0, g.y));
-            }
-            float layerDensity = saturate((layerShape - (1.0 - detail) * 0.30) / 0.70) *
-                smoothstep(0.02, 0.10, layer);
-
-            // Fronts: the same bodies at a larger scale and much denser cover, so the band
-            // is a rolled, lumpy mass with ragged edges rather than a plate.
-            float frontDepth = frontCrown - frontBase;
-            float frontBody = Bodies(gw + 5311.0, 5200.0, bodyLod);
-            float frontMaskBody = CoverMask(frontBody, saturate(front * 1.05));
-            float frontTop = frontCrown + (broad.r - 0.5) * min(2200.0, frontDepth * 0.45) -
-                (1.0 - frontMaskBody) * min(1600.0, frontDepth * 0.35);
-            float frontFloor = frontBase + (frontBody - 0.5) * 220.0;
-            float frontProfile = gVert > 40.0 ? LayerOverlap(g.y, frontFloor, frontTop)
-                : smoothstep(-120.0, 220.0, g.y - frontFloor) *
-                  (1.0 - smoothstep(frontTop - min(600.0, frontDepth * 0.25), frontTop + 250.0, g.y));
-            float frontHeight = saturate((g.y - frontBase) / max(600.0, frontDepth));
-            // Deep frontal uplift resolves into connected lobes and cell towers;
-            // a thin warm-front shield keeps its stratiform shape.
-            float uplift = smoothstep(3500.0, 6500.0, frontDepth) * smoothstep(0.15, 0.55, frontHeight);
-            float lobes = smoothstep(0.28 + frontHeight * 0.20, 0.68 + frontHeight * 0.12,
-                max(cell, broad.r * 0.85 + broad.g * 0.30));
-            frontProfile *= lerp(1.0, lobes, uplift);
-            // A thin shield (the high leading veil of a warm front) is translucent.
-            float frontShape = frontMaskBody * frontProfile * lerp(0.3, 1.0, smoothstep(900.0, 2200.0, frontDepth));
-            float frontDensity = saturate((frontShape - (1.0 - detail) * 0.26) / 0.74) *
-                smoothstep(0.04, 0.20, front);
-
-            // Towers keep the weather field's shape; noise only erodes their boundary.
-            // Lobes of the body noise break the column's sides into turrets, and each turret
-            // tops out at its own height, so a distant tower is a cauliflower, not a cake.
-            float erode = (broad.r - 0.5) * 0.25 + (detail - 0.5) * 0.10 + (body - 0.5) * 0.22;
-            float crownH = 0.82 + 0.22 * (broad.g - 0.5) + 0.18 * (body - 0.5);
-            float towerThreshold = 0.25 + 0.43 * height01 * height01 +
-                0.45 * smoothstep(crownH - 0.3, crownH + 0.05, height01);
-            float towerFootprint = smoothstep(towerThreshold - 0.16,
-                towerThreshold + 0.16, cell + erode);
-            float towerProfile = baseFlat * (1.0 - smoothstep(crownH, crownH + 0.14, height01));
-            float cellSupport = smoothstep(0.04, 0.20, cell);
-            float towerDensity = towerFootprint * towerProfile * (0.76 + broad.r * 0.24) * cellSupport;
-            float anvil = smoothstep(0.68, 0.83, height01) *
-                (1.0 - smoothstep(0.91, 1.0, height01)) *
-                smoothstep(0.18, 0.46, cell + erode) * cellSupport;
             // Fractus (scud): ragged fragments hanging under rain-bearing bases.
             float scud = 0.0;
             float rain = profile.a;
@@ -474,8 +528,17 @@ Shader "Boscali/FlightCloud"
                 float band = smoothstep(floorY - 700.0, floorY - 450.0, g.y) * (1.0 - smoothstep(floorY - 180.0, floorY, g.y));
                 scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0);
             }
-            return max(max(hero, scud * 0.4), max(layerDensity * 0.52, max(frontDensity * 0.58,
-                max(towerDensity * 0.78, anvil * 0.35))));
+            float field = max(hero, max(scud * 0.4, max(layerDensity * 0.55, max(frontDensity * 0.60, towerDensity * 0.85))) * EyeCloudKeep(g));
+            // Near-field carving: filaments and thin slots around the camera, so flying inside
+            // is rushing structure instead of flat murk. Inside-out only (never below 0.03 into
+            // clear air, never through the densest cores): the CPU mirror and shadows agree.
+            float carveFade = saturate(1.0 - gFoot / 120.0);
+            if (carveFade > 0.01 && field > 0.03 && field < 0.98)
+            {
+                float cav = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.71, g.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
+                field = saturate(field - (cav - 0.48) * 1.1 * carveFade);
+            }
+            return field;
         }
 
         // Density, or zero at once where the envelope and set-pieces rule cloud out.
@@ -505,6 +568,8 @@ Shader "Boscali/FlightCloud"
         float Slab(float3 g, float cover, float sheet, float scale,
             float stretch, float ripple, float foot, float2 splitMul)
         {
+            cover *= EyeCloudKeep(g);
+            if (cover <= 0.005) return 0;
             // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
             // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
             float2 low = tex3Dlod(_CloudNoiseTex, float4(g.xz / 27000.0 + 0.27, 0.71, 1.5)).rg;
@@ -690,6 +755,9 @@ Shader "Boscali/FlightCloud"
             float transmittance = 1.0;
             float3 colour = 0.0;
             float weightedDistance = 0.0;
+            // Once a sample's sun is extinguished, later samples in the same cloud take one
+            // coarse tap instead of three. Clear air re-opens it.
+            float sunOpen = 1.0;
             float cosine = dot(ray, _CloudSunDirection);
             // Forward scattering, a sharp silver-lining lobe at the rims toward the
             // sun, and some back scatter.
@@ -767,6 +835,7 @@ Shader "Boscali/FlightCloud"
                         stride = false;
                         tHero += fine;
                     }
+                    if (d <= 0.003) sunOpen = 1.0;
                     if (d > 0.003)
                     {
                         // Light taps in one loop, so the (large) density function is compiled
@@ -776,30 +845,35 @@ Shader "Boscali/FlightCloud"
                         // Far away one coarse sun interval is indistinguishable and height
                         // stands in for the cloud above.
                         float optical = 0.0, above = 0.0;
-                        int taps = farSeg ? 1 : 3;
+                        bool coarseSun = farSeg || sunOpen < 0.06;
+                        int taps = coarseSun ? 1 : 3;
                         [loop]
                         for (int k = 0; k < taps; k++)
                         {
                             float3 offset = k == 2 ? float3(0.0, 380.0, 0.0)
-                                : _CloudSunDirection * (farSeg ? 1500.0 : k == 0 ? 170.0 : 1250.0);
-                            float tapCoarse = farSeg ? 1.8 : k == 0 ? 1.0 : k == 1 ? 1.6 : 1.2;
+                                : _CloudSunDirection * (coarseSun ? 1500.0 : k == 0 ? 170.0 : 1250.0);
+                            float tapCoarse = coarseSun ? 1.8 : k == 0 ? 1.0 : k == 1 ? 1.6 : 1.2;
                             float tap = DensityOrEmpty(world + offset, tapCoarse);
                             if (k == 2) above = tap;
-                            else optical += tap * (farSeg ? 3000.0 : k == 0 ? 340.0 : 2300.0);
+                            else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
                         }
                         optical *= 0.0021;
                         float h = saturate((world.y + _CloudWorldOffset.y - _CloudBase) / 6000.0);
                         float direct = exp(-optical);
+                        // The upward tap was only skipped when the sun was already out.
+                        bool sunOut = sunOpen < 0.06;
+                        sunOpen = direct;
                         // Powder: seen away from the sun, dense cores stay darker than
                         // their sunlit rims (the cauliflower look of real cumulus).
                         float powder = 1.0 - exp(-d * 6.0);
                         direct *= lerp(1.0, powder * 1.35, awayFromSun * 0.6);
                         // One broad secondary-scattering lobe retains detail in thick
                         // shade without flattening it to a constant minimum colour.
-                        float scattered = 0.18 * exp(-optical * 0.24);
+                        float scattered = 0.18 * exp(-optical * 0.24) + 0.08 * (1.0 - exp(-optical * 0.4));
                         // Sky light reaches a point only through the cloud above it, so
                         // bases go dark and tops stay bright. Far away the height says enough.
                         if (farSeg) above = d * (1.0 - h);
+                        else if (sunOut) above = d;
                         float skyAccess = lerp(0.32, 1.0, h) * exp(-d * 0.65) * exp(-above * 1.6);
                         float3 light = _CloudAmbientColor * skyAccess * 0.72 +
                             _CloudGroundColor * (1.0 - h) * exp(-d) +
@@ -807,13 +881,25 @@ Shader "Boscali/FlightCloud"
                         // Lightning: the bolt's light scattering off the droplets around it. It
                         // reaches the shadowed cores the sun cannot, so the whole storm flickers.
                         if (_CloudFlash > 0.001) light += float3(0.65, 0.75, 1.1) * (_CloudFlash * d * 2.0);
-                        // Inside cloud, droplets limit visibility to tens or hundreds of
-                        // metres: the cloud right around the camera is far denser.
-                        float nearField = 1.0 + 7.0 * _CameraInCloud * exp(-t / 450.0);
-                        float absorb = exp(-d * stepLength * 0.003 * nearField);
+                        // Near-field wisps: inside cloud the march saturates within metres and every
+                        // pixel would be the same flat grey. Modulate the scattered light itself by
+                        // world-anchored noise (filtered to the sample footprint), so filaments rush
+                        // past the camera. Light only: density, the CPU mirror and shadows agree.
+                        float wispFade = saturate(1.0 - gFoot / 150.0);
+                        if (wispFade > 0.01)
+                        {
+                            float3 wg = world + _CloudWorldOffset;
+                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 1200.0 + 0.47, wg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
+                            float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
+                            light *= 1.0 + (wisp - 0.5) * 2.2 * (0.5 + saturate(d)) * wispFade;
+                        }
+                        // Integrate actual density along this ray. A camera-wide multiplier
+                        // made the same edge eight times more opaque after entering it.
+                        float absorb = exp(-d * stepLength * 0.003);
                         float contribution = transmittance * (1.0 - absorb);
                         colour += contribution * light;
                         weightedDistance += contribution * t;
+                        
                         transmittance *= absorb;
                     }
                 }
@@ -829,8 +915,11 @@ Shader "Boscali/FlightCloud"
             // Horizon deck: past the march the weather continues as one analytic plane at
             // the deck's altitude, with the far map's own outer coverage, so the clouds
             // run on to the horizon instead of ending in a ring.
-            float horizonT = abs(ray.y) > 0.0002 ? (_HorizonDeck - ro.y) / ray.y : -1.0;
-            if (_HorizonCover > 0.01 && horizonT > CLOUD_FAR_LIMIT * 0.75 && horizonT < min(sceneDistance, CLOUD_HORIZON_LIMIT))
+            float horizonT = (_HorizonDeck - ro.y) / ray.y;
+            // Sky pixels carry no occluder: let the deck run past the horizon limit there
+            // (aerial perspective whitens it), so its far edge never draws a line.
+            float deckLimit = sceneDistance >= CLOUD_HORIZON_LIMIT ? 2e7 : sceneDistance;
+            if (_HorizonCover > 0.01 && horizonT > CLOUD_FAR_LIMIT * 0.75 && horizonT < deckLimit)
             {
                 float2 hp = ro.xz + ray.xz * horizonT;
                 float hn = tex3Dlod(_CloudNoiseTex, float4(hp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
@@ -838,9 +927,13 @@ Shader "Boscali/FlightCloud"
                 float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
                 float hCover = CoverMask(hBody, _HorizonCover * (1.0 - _SplitB.x * (1.0 - SplitShare(hp))));
                 float hPath = min(_HorizonDepth / max(0.015, abs(ray.y)), 150000.0);
+                // A distance fade collapses to less than a pixel when the camera flies near
+                // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
+                // Dissolve by view angle instead: always about four texels into the haze.
+                float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
                 float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) *
                     smoothstep(CLOUD_FAR_LIMIT * 0.75, CLOUD_FAR_LIMIT, horizonT) *
-                    (1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, horizonT));
+                    angleFade;
                 bool below = ro.y < _HorizonDeck;
                 float3 hLight = below
                     ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
@@ -861,7 +954,7 @@ Shader "Boscali/FlightCloud"
             float midTop = midBase + lerp(400.0, 1700.0, _MidSheet);
             float highBase = 8600.0;
             float highTop = highBase + lerp(500.0, 900.0, _HighVeil);
-            if (ro.y < 330.0 || transmit > 0.06)
+            if (ro.y < 330.0 || transmit > 0.004)
             {
                 float4 fogLayer = MarchSlab(ro, ray, slabLimit, -30.0, 330.0, _FogBank,
                     0.85, 3200.0, 1.6, 0.0, 0.55, phase, jitter, float2(1.0, 1.0));
@@ -869,7 +962,7 @@ Shader "Boscali/FlightCloud"
                 else { colour += transmit * fogLayer.rgb; }
                 transmit *= fogLayer.a;
             }
-            if (ro.y > midTop || transmit > 0.06)
+            if (ro.y > midTop || transmit > 0.004)
             {
                 float4 midLayer = MarchSlab(ro, ray, slabLimit, midBase, midTop, _MidCover,
                     smoothstep(0.4, 1.0, _MidSheet), 2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.42, phase, jitter,
@@ -878,7 +971,7 @@ Shader "Boscali/FlightCloud"
                 else { colour += transmit * midLayer.rgb; }
                 transmit *= midLayer.a;
             }
-            if (ro.y > highTop || transmit > 0.06)
+            if (ro.y > highTop || transmit > 0.004)
             {
                 float4 highLayer = MarchSlab(ro, ray, slabLimit, highBase, highTop, _HighCover,
                     smoothstep(0.6, 1.0, _HighVeil), 5000.0, lerp(7.0, 1.0, _HighVeil),

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     // VirtualMFD may live beside the map canvas, or exist before the canvas is assigned.
     internal static class MapMfdLookup

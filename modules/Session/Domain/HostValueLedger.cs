@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace BoscaliSummer.Features.Session.Domain
+namespace BoscaliSummer.Modules.Session.Domain
 {
     /// <summary>
     /// The client's record of which of its own settings are standing in for the host's. Values

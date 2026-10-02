@@ -2,14 +2,14 @@ using System;
 using System.IO;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>The kit's sheet: a palette layered over avionics.fui.avss.</summary>
     public static partial class AvStyleHost
     {
         private static AvStyleSheet fui;
 
-        public static AvThemeId Theme { get; private set; } = AvThemeId.Steel;
+        public static AvThemeId Theme { get; private set; } = AvThemeId.Portal;
         public static int FuiGeneration { get; private set; }
 
         public static AvStyleSheet Fui
@@ -51,6 +51,9 @@ namespace NOAvionics.Ui
             AvPaint p = Fui.Paint(role, fallback.ToRgba());
             return Resolve(p, fallback);
         }
+
+        /// <summary>A player-editable override sheet under the config dir (e.g. <c>NOAvionics/rooms.avss</c>), or null when absent.</summary>
+        internal static string ReadOverride(string relative) => ReadFile(relative);
 
         private static string ReadFile(string relative)
         {

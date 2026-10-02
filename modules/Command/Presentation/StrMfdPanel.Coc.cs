@@ -1,12 +1,11 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Command.Domain;
-using BoscaliSummer.Framework.Contracts;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation
+namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
     /// COC — one faction's chain of command at a time, switched by an ALLIED/HOSTILE segment.
@@ -18,15 +17,16 @@ namespace BoscaliSummer.Features.Command.Presentation
     /// can be ordered, marked or spent - the page exists so a pilot knows who runs the enemy
     /// side of the map, where they are, and what killing them costs.</para>
     ///
-    /// <para>The page is an org chart, then the selected post's dossier, then the staff log.
-    /// Selecting a card or a log entry opens that post's file. Enemy posts are listed by identity;
-    /// until local intel confirms one, its file reads unconfirmed and its record stays sealed.</para>
+    /// <para>The page is one line (side switch + staff effect bar), the org chart, the selected post's
+    /// dossier, then the staff log, which grows to fill whatever height is left. Selecting a card or a log
+    /// entry opens that post's file. Enemy posts are listed by identity; until local intel confirms one,
+    /// its file reads unconfirmed and its record stays sealed.</para>
     /// </summary>
     internal sealed partial class StrMfdPanel
     {
         /// <summary>HighCommand's wire ceiling is eight posts per faction; the chart is bounded to match.</summary>
         private const int CocRosterRows = StrOrgChart.MaxNodes;
-        private const int CocLogRows = 4;
+        private const int CocLogRows = 8;
         private const int CocBonusEntries = 3;
 
         private readonly CommanderView[] cocVisible = new CommanderView[CocRosterRows];
@@ -40,11 +40,10 @@ namespace BoscaliSummer.Features.Command.Presentation
         private readonly string[] cocTraitPays = new string[CocBonusEntries];
         private readonly bool[] cocTraitPenalty = new bool[CocBonusEntries];
 
-        private AvSection cocSection;
         private AvSegmented cocSideControl;
+        private AvHazardBar cocEffect;
         private StrOrgChart cocChart;
         private StrNote cocEmpty;
-        private AvSection cocFileSection;
         private StrDossier cocDossier;
         private StrNote cocFileNote;
         private AvSection cocLogSection;
@@ -61,8 +60,9 @@ namespace BoscaliSummer.Features.Command.Presentation
             Array.Clear(cocOrder, 0, cocOrder.Length);
             Array.Clear(cocOrdered, 0, cocOrdered.Length);
             Array.Clear(cocLogTargetIds, 0, cocLogTargetIds.Length);
-            cocSection = cocFileSection = cocLogSection = null;
+            cocLogSection = null;
             cocSideControl = null;
+            cocEffect = null;
             cocChart = null;
             cocEmpty = cocFileNote = cocLogNote = null;
             cocDossier = null;
@@ -73,22 +73,22 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void BuildCocPage(AvFlow p)
         {
-            cocEmpty = p.Add(new StrNote(p.Content, AvIcon.UsersGroup));
-            cocSection = p.Section(AvIcon.UsersGroup, "CHAIN OF COMMAND", "");
-            cocSideControl = p.Add(new AvSegmented(p.Content, "SIDE", new[] { "ALLIED", "HOSTILE" },
-                () => cocShowHostile ? 1 : 0, i => { cocShowHostile = i == 1; nextRefresh = 0f; }));
+            cocEmpty = p.Add(new StrNote(p.Content, AvIcon.UsersGroup), 1f);
+            cocSideControl = AvSegmented.Strip(p.Content, new[] { "ALLIED", "HOSTILE" },
+                () => cocShowHostile ? 1 : 0, i => { cocShowHostile = i == 1; nextRefresh = 0f; });
+            cocEffect = new AvHazardBar(p.Content, "STAFF");
+            p.Row(cocSideControl, cocEffect);
             cocSideControl.Options[0].Help = "Show the allied chain of command.";
             cocSideControl.Options[1].Help =
                 "Show the opposing chain of command. A post stays unconfirmed until local intel has seen it.";
             cocChart = p.Add(new StrOrgChart(p.Content, SelectCoc));
 
-            cocFileSection = p.Section(AvIcon.User, "PERSONNEL FILE", "SELECT A POST");
             cocDossier = p.Add(new StrDossier(p.Content));
-            cocFileNote = p.Add(new StrNote(p.Content, AvIcon.User));
+            cocFileNote = p.Add(new StrNote(p.Content, AvIcon.User), 1f);
 
             cocLogSection = p.Section(AvIcon.ListDetails, "STAFF LOG", "");
-            cocLog = p.Add(new StrLogBoard(p.Content, CocLogRows, LogRowClicked));
-            cocLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
+            cocLog = p.Add(new StrLogBoard(p.Content, CocLogRows, LogRowClicked, 4), 1f);
+            cocLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails), 1f);
         }
 
         private void LogRowClicked(int slot)
@@ -108,10 +108,9 @@ namespace BoscaliSummer.Features.Command.Presentation
         private void CocShowBoard(bool board)
         {
             cocEmpty.SetShown(!board);
-            cocSection.SetShown(board);
             cocSideControl.SetShown(board);
+            cocEffect.SetShown(board);
             cocChart.SetShown(board);
-            cocFileSection.SetShown(board);
             cocLogSection.SetShown(board);
             if (!board)
             {
@@ -124,16 +123,14 @@ namespace BoscaliSummer.Features.Command.Presentation
 
         private void RefreshCoc()
         {
-            if (cocSection == null) return;
+            if (cocEffect == null) return;
 
             bool available = highCommand != null && highCommand.Available;
             if (!available)
             {
                 // No staff, no board: an empty page is not a reading, so the panel says so.
                 CocShowBoard(false);
-                cocEmpty.Set("NO STAFF BOARD",
-                    highCommand == null ? "The chain of command is not running on this host."
-                        : highCommand.Status ?? "The chain of command is forming.");
+                cocEmpty.Set("NO STAFF BOARD", highCommand == null ? "NOT RUNNING" : highCommand.Status ?? "FORMING");
                 for (int i = 0; i < CocLogRows; i++) cocLogTargetIds[i] = -1;
                 if (highCommand != null) highCommand.Highlight(-1);
                 cocSelectedId = -1;
@@ -198,13 +195,23 @@ namespace BoscaliSummer.Features.Command.Presentation
             }
             cocChart.SetNodes(cocNodes, ordered);
 
-            cocSection.SetCaption(!cocShowHostile
-                ? (ownCount == 0 ? "NO POSTS REPORTED"
-                    : ownCount + (ownCount == 1 ? " POST" : " POSTS") + "  ·  " +
-                      TheaterReadout.Percent(Mathf.Clamp01(highCommand.FriendlyCohesion)) + " EFFECTIVE")
-                : (enemyTotal == 0 ? "NO POSTS REPORTED"
-                    : enemyKnown == 0 ? "NO CONFIRMED CONTACTS"
-                    : enemyKnown + " OF " + enemyTotal + " CONFIRMED"));
+            if (!cocShowHostile)
+            {
+                float effect = Mathf.Clamp01(highCommand.FriendlyCohesion);
+                cocEffect.Set(effect,
+                    ownCount == 0 ? "NO POSTS" : TheaterReadout.Percent(effect) + " · " + ownCount + (ownCount == 1 ? " POST" : " POSTS"),
+                    ownCount == 0 ? AvState.Inert : effect >= 0.6f ? AvState.Ready : effect >= 0.3f ? AvState.Caution : AvState.Danger);
+                cocEffect.Help = "STAFF EFFECT: how effective your chain of command is, and how many posts report. " +
+                                 "Living commanders earn the faction a bonus; a loss interrupts it until a successor takes over.";
+            }
+            else
+            {
+                cocEffect.Set(enemyTotal > 0 ? enemyKnown / (float)enemyTotal : 0f,
+                    enemyTotal == 0 ? "NO POSTS" : enemyKnown + " OF " + enemyTotal + " KNOWN",
+                    enemyTotal == 0 ? AvState.Inert : enemyKnown == 0 ? AvState.Caution : AvState.Info);
+                cocEffect.Help = "CONFIRMED: how many enemy posts local intel has identified. " +
+                                 "An unconfirmed post keeps its personnel file sealed.";
+            }
 
             RefreshCocLogList();
 
@@ -237,7 +244,7 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             cocLog.SetShown(shown > 0);
             cocLogNote.SetShown(shown == 0);
-            if (shown == 0) cocLogNote.Set("NO STAFF TRAFFIC", "Orders, contacts and losses on this side appear here as they happen.");
+            if (shown == 0) cocLogNote.Set("NO TRAFFIC", "");
             cocLogSection.SetCaption(count == 0 ? "NO TRAFFIC" : count + (count == 1 ? " ENTRY" : " ENTRIES"));
         }
 
@@ -260,18 +267,20 @@ namespace BoscaliSummer.Features.Command.Presentation
 
             if (view == null)
             {
-                cocFileSection.SetCaption("SELECT A POST");
                 cocDossier.SetShown(false);
                 cocFileNote.SetShown(true);
-                cocFileNote.Set("NO FILE OPEN", "Select a post on the chart or an entry in the staff log to open its personnel file.");
+                cocFileNote.Set("NO FILE OPEN", "Select a post on the chart or a line in the log to open its personnel file.");
                 return;
             }
 
             cocDossier.SetShown(true);
             cocFileNote.SetShown(false);
             bool sealedFile = !view.IsFriendly && !view.IsKnown;
-            cocFileSection.SetCaption(view.IsFriendly ? "ALLIED PERSONNEL"
-                : view.IsKnown ? "IDENTITY CONFIRMED" : "IDENTITY UNCONFIRMED");
+            cocDossier.Help = view.IsFriendly
+                ? "Allied personnel file. The map brackets this post while its file is open."
+                : view.IsKnown
+                    ? "Identity confirmed by local intel. The map brackets this post while its file is open."
+                    : "Identity unconfirmed: the file stays sealed until local intel identifies this post.";
 
             int traits = sealedFile ? 0 : ParseBonus(view.Bonus);
             cocDossier.Show(new StrDossier.Data

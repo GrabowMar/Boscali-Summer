@@ -3,7 +3,7 @@
 :root { pad: 14; gap: 8; gutter: 8; }
 
 .console        { background: ground; border: 1 frame; }
-.header         { background: surface-sunken; border: 1 hairline; }
+.header         { background: surface; border: 1 hairline; }
 .id-plate       { background: surface-raised; color: ink; }
 .title          { color: ink; }
 .page-index     { color: ink-dim; }
@@ -18,14 +18,14 @@
 .metric-key     { color: key; }
 .metric-value   { color: ink; }
 .metric-unit    { color: ink-dim; }
-.metric-track   { background: hairline; }
+.metric-track   { background: frame; }
 .metric-fill    { background: ready; }
 .metric-fill.caution { background: caution; }
 .metric-fill.danger  { background: danger; }
 
 .tab            { background: surface-sunken; border: 1 hairline; color: ink-dim; }
 .tab:hover      { background: surface; border: 1 frame; color: ink; }
-.tab:latched    { background: surface-raised; border: 1 frame; color: ink; rail: 2 select; }
+.tab:latched    { background: caution 1c; border: 1 caution; color: ink; rail: 2 caution; }
 
 .section        { border: 1 hairline; }
 .section-title  { color: key; }
@@ -56,11 +56,11 @@
 .row-value.caution { color: caution; }
 .row-value.danger  { color: danger; }
 
-.control              { background: surface-sunken; border: 1 frame; color: ink; }
+.control              { background: surface; border: 1 frame; color: ink; }
 .control:hover        { background: surface-raised; border: 1 ink; color: ink; }
 .control:pressed      { background: select; border: 1 select; color: ground; }
-.control:latched      { background: surface-raised; border: 1 select; color: ink; rail: 2 select; }
-.control:armed        { background: select 22; border: 1 select; color: ink; }
+.control:latched      { background: select 22; border: 1 select; color: ink; rail: 2 select; }
+.control:armed        { background: caution 22; border: 1 caution; color: ink; }
 .control:disabled     { background: surface-inert; border: 1 hairline; color: ink-muted; }
 /* Primary = strongest call to action without a solid accent slab: tinted fill, accent edge and rail. */
 .control.primary          { background: select 24; border: 1 select; color: ink; rail: 2 select; }
@@ -96,5 +96,16 @@
 .footer.danger  { color: danger; }
 .window         { background: ground; border: 1 frame; }
 .window-title   { background: surface-raised; color: ink; }
-.scrollbar      { background: hairline; }
-.scrollbar-thumb { background: frame; }
+.scrollbar      { background: surface-inert; }
+.scrollbar-thumb { background: ink-muted; }
+
+/* Portal slab tag: solid state colour, dark ink. Red is reserved for alerts. */
+.slab           { background: select; color: ground; }
+.slab.ready     { background: ready; }
+.slab.caution   { background: caution; }
+.slab.danger    { background: danger; }
+.slab.info      { background: info; }
+.slab.inert     { background: ink-dim; }
+
+/* Portal decoration: ruler + registration crosses (background), serial readout (color). */
+.decor          { background: frame 55; color: ink-muted; }

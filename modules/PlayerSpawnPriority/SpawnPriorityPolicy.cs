@@ -1,4 +1,4 @@
-namespace BoscaliSummer.Features.PlayerSpawnPriority
+namespace BoscaliSummer.Modules.PlayerSpawnPriority
 {
     internal static class SpawnPriorityPolicy
     {

@@ -1,8 +1,8 @@
-using BoscaliSummer.Features.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>
     /// Droplets adhered to the canopy glass: a small local-space particle system that
@@ -22,7 +22,8 @@ namespace BoscaliSummer.Features.Weather.Visuals
         public void Initialize()
         {
             streakTexture = RainStreakMaterial.CreateTexture();
-            dropMaterial = RainStreakMaterial.CreateMaterial(streakTexture);
+            // These drops belong on nearby glass; only airborne rain should fade near the eye.
+            dropMaterial = RainStreakMaterial.CreateMaterial(streakTexture, cameraFade: false);
             if (dropMaterial == null) return;
 
             ps = gameObject.AddComponent<ParticleSystem>();

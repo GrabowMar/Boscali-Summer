@@ -1,16 +1,24 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Features.Comms.Domain;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Comms.Domain;
 using TMPro;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Comms.Presentation
+namespace BoscaliSummer.Modules.Comms.Presentation
 {
     internal sealed partial class CommsMfdPanel
     {
-        private const int RecentCalls = 8;
+        private const int RecentCalls = 18;
+        private const int MinRecentCalls = 3;
+        private const int PollHistoryRows = 8;
+
+        // Part heights, gaps and padding of everything on the CALL page except its recent list (biased a few px high).
+        private const float CallFixedHeight = 175f;
+
+        // POLL page: the fixed part plus 33 px per visible option, and 16 px more while a poll is on screen (its row is two lines).
+        private const float PollFixedHeight = 407f;
+        private static readonly string[] PollSeconds = { "30s", "1m", "2m", "5m" };
 
         private static readonly AvIcon[] CallIcons =
         {
@@ -23,59 +31,65 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private AvRow[] recentRows;
 
         // ---- POLL --------------------------------------------------------------------------
-        private AvSection pollSection;
+        private CommsHeaderPart pollHeader;
         private AvRow pollRow;
         private AvControl pollClose;
-        private AvControl pollPrev;
-        private AvControl pollNext;
-        private AvNote pollEmpty;
         private PollOptionRow[] optionRows;
         private int pollIndex;
         private int pollStep;
         private uint shownPoll;
         private readonly List<CommsPoll> orderedPolls = new List<CommsPoll>(8);
 
-        private AvSection askSection;
-        private AvStepper templateStepper;
-        private AvStepper durationStepper;
+        private AvRow[] templateRows;
+        private string templateHelpKey;
+        private AvSegmented durationStrip;
         private AvField questionField;
         private AvField optionsField;
-        private int templateIndex;
+        private AvSection historySection;
+        private AvRow[] historyRows;
+        private readonly uint[] historyIds = new uint[PollHistoryRows];
+        private AvNote pollTips;
 
         private void ResetTalk()
         {
             callSection = null;
             recentRows = null;
-            pollSection = null;
+            pollHeader = null;
             pollRow = null;
-            pollClose = pollPrev = pollNext = null;
-            pollEmpty = null;
+            pollClose = null;
             optionRows = null;
             pollIndex = 0;
             pollStep = 0;
             shownPoll = 0;
             orderedPolls.Clear();
-            askSection = null;
-            templateStepper = null;
-            durationStepper = null;
+            templateRows = null;
+            templateHelpKey = null;
+            durationStrip = null;
             questionField = optionsField = null;
+            historySection = null;
+            historyRows = null;
+            for (int i = 0; i < historyIds.Length; i++) historyIds[i] = 0;
+            pollTips = null;
         }
 
         private void BuildCallPage(AvFlow p)
         {
-            callSection = p.Section(AvIcon.Message2, "BREVITY CALLS", "");
+            // Twelve calls in four rows of three: icon, code, and the meaning in the tip. No header: the tab says CALL.
             var callSpecs = new AvControl.Spec[CommsCatalog.Calls.Length];
             var callHelps = new string[callSpecs.Length];
             for (int i = 0; i < callSpecs.Length; i++)
             {
                 int call = i;
                 BrevityCall brevity = CommsCatalog.Calls[i];
-                callSpecs[i] = new AvControl.Spec(brevity.Code, () => comms.Call(call), ToneStyle(brevity.Tone), CallIcons[i]);
-                callHelps[i] = brevity.Meaning + (brevity.MarksPosition ? " Also drops a ping at your aircraft." : "");
+                callSpecs[i] = new AvControl.Spec(brevity.Code, () => comms.Call(call), ToneStyle(brevity.Tone), CallIcons[i % CallIcons.Length]);
+                callHelps[i] = brevity.Code + ": " + brevity.Meaning +
+                    (brevity.MarksPosition ? " Also drops a ping at your aircraft." : "") +
+                    " Goes to the audience on the chip above (TEAM or ALL).";
             }
-            ButtonGrid(p, callSpecs, 2, callHelps);
+            ButtonGrid(p, callSpecs, 3, callHelps);
 
-            p.Section(AvIcon.ListDetails, "RECENT CALLS", "NEWEST FIRST");
+            // The list is what fills the page: as many calls as fit, newest first.
+            callSection = p.Section(AvIcon.ListDetails, "RECENT CALLS", "");
             recentRows = new AvRow[RecentCalls];
             for (int i = 0; i < RecentCalls; i++) recentRows[i] = p.Add(new AvRow(p.Content));
         }
@@ -83,11 +97,11 @@ namespace BoscaliSummer.Features.Comms.Presentation
         private void RefreshCalls(float now)
         {
             if (recentRows == null) return;
-            callSection?.SetCaption(comms.Channel == CommsChannel.Team ? "ONE CLICK · TO YOUR TEAM" : "ONE CLICK · TO ALL PLAYERS");
 
             IReadOnlyList<CommsFeedLine> feed = comms.State.Feed;
+            int fit = FitRows(console.Page(TabCall), CallFixedHeight, RecentCalls, MinRecentCalls);
             int shown = 0;
-            for (int i = feed.Count - 1; i >= 0 && shown < RecentCalls; i--)
+            for (int i = feed.Count - 1; i >= 0 && shown < fit; i--)
             {
                 CommsFeedLine line = feed[i];
                 if (line.Kind != CommsFeedKind.Call || comms.State.IsMuted(line.Author)) continue;
@@ -95,11 +109,13 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 Show(recentRows[shown], true);
                 shown++;
             }
+            callSection?.SetCaption((comms.Channel == CommsChannel.Team ? "TO TEAM" : "TO ALL") +
+                (shown == 0 ? "" : " · " + AvNum.Fixed(shown, 0) + " SHOWN"));
             for (int i = shown; i < RecentCalls; i++)
             {
                 if (i == 0 && shown == 0)
                 {
-                    recentRows[0].Set("No calls yet. Everything your side calls shows up here.", null, "", AvState.Inert);
+                    recentRows[0].Set("NO CALLS YET · TAP ONE ABOVE, YOUR TEAM HEARS IT AT ONCE", null, "", AvState.Inert);
                     Show(recentRows[0], true);
                 }
                 else Show(recentRows[i], false);
@@ -110,59 +126,78 @@ namespace BoscaliSummer.Features.Comms.Presentation
 
         private void BuildPollPage(AvFlow p)
         {
-            pollSection = p.Section(AvIcon.QuestionMark, "OPEN POLL", "");
-            AvButtons pager = p.Buttons(
-                new AvControl.Spec("PREV", () => pollStep--, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
-                new AvControl.Spec("NEXT", () => pollStep++, AvButtonStyle.Quiet, AvIcon.ChevronRight));
-            pollPrev = pager.Controls[0];
-            pollNext = pager.Controls[1];
-            pollPrev.Help = "Previous poll.";
-            pollNext.Help = "Next poll.";
+            pollHeader = p.Add(new CommsHeaderPart(p.Content, AvIcon.QuestionMark, "POLL",
+                new AvControl.Spec(string.Empty, () => pollStep--, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
+                new AvControl.Spec(string.Empty, () => pollStep++, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
+            pollHeader[0].Help = "Previous poll. Open polls come first, then the ones that closed.";
+            pollHeader[1].Help = "Next poll.";
 
             pollRow = p.Add(new AvRow(p.Content));
             pollClose = pollRow.AddTrailing(new AvControl.Spec("CLOSE", () =>
             {
                 if (shownPoll != 0) comms.ClosePoll(shownPoll);
             }, AvButtonStyle.Danger, AvIcon.X));
-            pollClose.Help = "Close your poll now and announce the result.";
+            pollClose.Help = "Close your poll now and announce the result. The host can close any poll.";
 
-            pollEmpty = p.Add(new AvNote(p.Content,
-                "No poll is open. Ask one below: everyone who can see it gets a HUD notice and one click to vote."));
-
+            // Options sit two to a line: a poll of four is two lines, not four.
             optionRows = new PollOptionRow[CommsPoll.MaxOptions];
             for (int i = 0; i < CommsPoll.MaxOptions; i++)
             {
                 int option = i;
-                optionRows[i] = p.Add(new PollOptionRow(p.Content, () =>
+                optionRows[i] = new PollOptionRow(p.Content, () =>
                 {
                     if (shownPoll != 0) comms.Vote(shownPoll, option);
-                }, "Vote for this option. You can change your mind until the poll closes."));
+                }, "Vote for this option. You can change your mind until the poll closes; the bar and number are the live tally.");
+            }
+            p.Row(optionRows[0], optionRows[1]);
+            p.Row(optionRows[2], optionRows[3]);
+
+            // Ready-made questions: one click asks. The length strip below applies to these and to your own.
+            p.Section(AvIcon.QuestionMark, "QUICK POLLS", "CLICK TO ASK");
+            templateRows = new AvRow[CommsCatalog.PollTemplates.Length];
+            for (int i = 0; i < templateRows.Length; i++)
+            {
+                int template = i;
+                templateRows[i] = p.Add(new AvRow(p.Content, () =>
+                {
+                    PollTemplate t = CommsCatalog.PollTemplates[template];
+                    comms.CreatePoll(t.Question, t.Options);
+                }));
+                PollTemplate shownTemplate = CommsCatalog.PollTemplates[i];
+                templateRows[i].Set(shownTemplate.Question + " · " + string.Join(" / ", shownTemplate.Options), null, "", AvState.Info);
             }
 
-            askSection = p.Section(AvIcon.QuestionMark, "ASK", "");
-            templateStepper = p.Add(new AvStepper(p.Content, "TEMPLATE",
-                () => CommsCatalog.PollTemplates[Wrap(templateIndex, CommsCatalog.PollTemplates.Length)].Question,
-                () => templateIndex = Wrap(templateIndex - 1, CommsCatalog.PollTemplates.Length),
-                () => templateIndex = Wrap(templateIndex + 1, CommsCatalog.PollTemplates.Length)));
-            Tip(templateStepper, "Ready-made questions, so a vote mid-flight costs one click.");
-            p.Buttons(new AvControl.Spec("ASK SELECTED TEMPLATE", () =>
-            {
-                PollTemplate template = CommsCatalog.PollTemplates[Wrap(templateIndex, CommsCatalog.PollTemplates.Length)];
-                comms.CreatePoll(template.Question, template.Options);
-            }, AvButtonStyle.Primary, AvIcon.QuestionMark)).Controls[0].Help = "Ask the selected question.";
-            durationStepper = p.Add(new AvStepper(p.Content, "DURATION",
-                () => "OPEN FOR " + CommsText.Countdown(CommsCatalog.PollDuration(comms.PollDurationIndex)),
-                () => comms.PollDurationIndex = Wrap(comms.PollDurationIndex - 1, CommsCatalog.PollDurations.Length),
-                () => comms.PollDurationIndex = Wrap(comms.PollDurationIndex + 1, CommsCatalog.PollDurations.Length)));
-            Tip(durationStepper, "How long the poll stays open.");
-
-            p.Section(AvIcon.Typography, "CUSTOM POLL", "2-4 OPTIONS, SEPARATED BY COMMAS");
-            questionField = p.Add(new AvField(p.Content, "QUESTION…", CommsText.MaxQuestion, _ => AskCustom()));
-            Tip(questionField, "Up to " + CommsText.MaxQuestion + " characters.");
-            optionsField = p.Add(new AvField(p.Content, "YES, NO, MAYBE", 80, _ => AskCustom()));
+            questionField = new AvField(p.Content, "YOUR QUESTION…", CommsText.MaxQuestion, _ => AskCustom());
+            Tip(questionField, "Your own question, up to " + CommsText.MaxQuestion + " characters. Fill in the options too, then press ASK.");
+            optionsField = new AvField(p.Content, "OPTIONS: YES, NO", 80, _ => AskCustom());
             Tip(optionsField, "Two to four options, separated by commas.");
-            p.Buttons(new AvControl.Spec("ASK", AskCustom, AvButtonStyle.Primary, AvIcon.QuestionMark)).Controls[0].Help =
-                "Ask your own question.";
+            p.Row(questionField, optionsField);
+
+            durationStrip = new AvSegmented(p.Content, "OPEN FOR", PollSeconds,
+                () => comms.PollDurationIndex, index => comms.PollDurationIndex = index);
+            for (int i = 0; i < durationStrip.Options.Length; i++)
+                durationStrip.Options[i].Help = "Keep the poll open for " + CommsText.Countdown(CommsCatalog.PollDuration(i)) + ", for quick polls and your own.";
+            var askRow = new AvButtons(p.Content, new[] { new AvControl.Spec("ASK", AskCustom, AvButtonStyle.Primary, AvIcon.QuestionMark) });
+            askRow.Controls[0].Help = "Ask your own question with the options typed above, to the audience on the chip (TEAM or ALL).";
+            p.Row(durationStrip, askRow);
+
+            // Every poll on record: fills the rest of the page, and a click puts that poll on screen above.
+            historySection = p.Section(AvIcon.ListDetails, "ALL POLLS", "");
+            historyRows = new AvRow[PollHistoryRows];
+            for (int i = 0; i < PollHistoryRows; i++)
+            {
+                int row = i;
+                historyRows[i] = p.Add(new AvRow(p.Content, () =>
+                {
+                    if (historyIds[row] == 0) return;
+                    shownPoll = historyIds[row];
+                    pollStep = 0;
+                    nextRefresh = 0f;
+                }));
+            }
+            pollTips = p.Add(new AvNote(p.Content,
+                "HOW POLLS WORK · anyone on the audience can vote once and change their mind until it closes. " +
+                "The asker or the host can close early; the result is posted to the log. One open poll per player."));
         }
 
         private void AskCustom()
@@ -197,28 +232,28 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 if (ordered[i].Id == shownPoll) pollIndex = i;
             pollIndex = ordered.Count == 0 ? 0 : Wrap(pollIndex + pollStep, ordered.Count);
             pollStep = 0;
-            pollSection?.SetCaption(ordered.Count == 0 ? "NONE" :
+            pollHeader.SetCaption(ordered.Count == 0 ? "NONE" :
                 AvNum.Fixed(pollIndex + 1, 0) + " OF " + AvNum.Fixed(ordered.Count, 0) + (open > 0 ? " · " + AvNum.Fixed(open, 0) + " OPEN" : ""));
-            Show(pollPrev, ordered.Count > 1);
-            Show(pollNext, ordered.Count > 1);
+            Show(pollHeader[0], ordered.Count > 1);
+            Show(pollHeader[1], ordered.Count > 1);
 
             CommsPoll poll = ordered.Count > 0 ? ordered[pollIndex] : null;
             shownPoll = poll != null ? poll.Id : 0;
-            Show(pollEmpty, poll == null);
-            Show(pollRow, poll != null);
             Show(pollClose, poll != null && !poll.Closed && (poll.Author == comms.LocalId || comms.IsHost));
 
             if (poll != null)
             {
                 string when = poll.Closed ? "CLOSED · " + poll.Verdict() : "CLOSES IN " + CommsText.Countdown(poll.Closes - now);
-                string meta = "ASKED BY " + Who(poll.Author, poll.AuthorName) + " · " +
+                string meta = Who(poll.Author, poll.AuthorName) + " · " +
                     (poll.Channel == CommsChannel.All ? "ALL" : "TEAM") + " · " + AvNum.Fixed(poll.Total, 0) + " VOTES · " + when;
                 pollRow.Set(poll.Question, meta, "", poll.Closed ? AvState.Ready : AvState.Info);
             }
+            else pollRow.Set("NO POLL OPEN · PICK A QUICK POLL OR ASK YOUR OWN BELOW", null, "", AvState.Inert);
 
+            int optionCount = poll != null ? Mathf.Min(poll.Options.Length, optionRows.Length) : 0;
             for (int i = 0; i < optionRows.Length; i++)
             {
-                bool shown = poll != null && i < poll.Options.Length;
+                bool shown = i < optionCount;
                 Show(optionRows[i], shown);
                 if (!shown) continue;
                 int total = Mathf.Max(1, poll.Total);
@@ -227,9 +262,41 @@ namespace BoscaliSummer.Features.Comms.Presentation
                 optionRows[i].Set(poll.Options[i], mine, winner, poll.Closed, poll.Tally[i] / (float)total, poll.Tally[i]);
             }
 
-            askSection?.SetCaption(comms.Channel == CommsChannel.Team ? "YOUR TEAM VOTES" : "EVERY PLAYER VOTES");
-            templateStepper?.Refresh();
-            durationStepper?.Refresh();
+            // Template tips carry the audience and length, refreshed only when those change.
+            string helpKey = (comms.Channel == CommsChannel.Team ? "TEAM" : "ALL") + comms.PollDurationIndex;
+            if (helpKey != templateHelpKey)
+            {
+                templateHelpKey = helpKey;
+                string audience = comms.Channel == CommsChannel.Team ? "your team" : "everyone";
+                string length = CommsText.Countdown(CommsCatalog.PollDuration(comms.PollDurationIndex));
+                for (int i = 0; i < templateRows.Length; i++)
+                    templateRows[i].Help = "Ask \"" + CommsCatalog.PollTemplates[i].Question + "\" to " + audience +
+                        ", open for " + length + ". One click sends it.";
+            }
+            durationStrip.Refresh();
+
+            // ---- every poll on record, sized to what is left of the page
+            float fixedHeight = PollFixedHeight + ((optionCount + 1) / 2) * 33f + (poll != null ? 16f : 0f);
+            int fit = FitRows(console.Page(TabPoll), fixedHeight, PollHistoryRows, 0);
+            int rows = Mathf.Min(fit, ordered.Count);
+            for (int i = 0; i < PollHistoryRows; i++)
+            {
+                bool shown = i < rows;
+                Show(historyRows[i], shown);
+                if (!shown) { historyIds[i] = 0; continue; }
+                CommsPoll entry = ordered[i];
+                historyIds[i] = entry.Id;
+                historyRows[i].Set(entry.Question,
+                    null,
+                    entry.Closed ? "CLOSED" : CommsText.Countdown(entry.Closes - now),
+                    entry.Closed ? AvState.Inert : AvState.Ready);
+                historyRows[i].Armed = entry.Id == shownPoll;
+                historyRows[i].Help = "Show this poll above: " + AvNum.Fixed(entry.Total, 0) + " votes" +
+                    (entry.Closed ? ", settled: " + entry.Verdict() + "." : ", still open.");
+            }
+            Show(historySection, rows > 0);
+            historySection.SetCaption(ordered.Count > rows ? AvNum.Fixed(rows, 0) + " OF " + AvNum.Fixed(ordered.Count, 0) : "CLICK TO SHOW");
+            Show(pollTips, ordered.Count == 0);
         }
 
         private static int Wrap(int value, int count) => count <= 0 ? 0 : ((value % count) + count) % count;
@@ -266,7 +333,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
                     ? AvStyleHost.FuiColor("ready", AvTheme.RailReady)
                     : mine ? AvStyleHost.FuiColor("select", AvTheme.Accent) : AvStyleHost.FuiColor("info", AvTheme.RailInfo);
                 track.SetVerticesDirty();
-                count.text = AvNum.Fixed(tally, 0);
+                count.text = AvNum.Fixed(tally, 0) + "\u00b7" + AvNum.Percent(fill01);
             }
 
             public override float Measure(float width) => AvGridTokens.Row;
@@ -274,7 +341,7 @@ namespace BoscaliSummer.Features.Comms.Presentation
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                float countW = 40f, voteW = (s.W - countW) * 0.55f, trackW = Mathf.Max(0f, s.W - voteW - countW - 8f);
+                float countW = 64f, voteW = (s.W - countW) * 0.55f, trackW = Mathf.Max(0f, s.W - voteW - countW - 8f);
                 AvLay.Place(vote.Rect, 0f, 0f, voteW, s.H);
                 AvLay.Place((RectTransform)track.transform, voteW + 4f, (s.H - 6f) * 0.5f, trackW, 6f);
                 AvLay.Place(count.rectTransform, s.W - countW, 0f, countW, s.H);

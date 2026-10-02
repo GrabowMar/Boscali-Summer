@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.HighCommand.Configuration
+namespace BoscaliSummer.Modules.HighCommand.Configuration
 {
     /// <summary>
     /// Chain-of-command tuning. The feature is LARP plus economy: cohesion never mutates

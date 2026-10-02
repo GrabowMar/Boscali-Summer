@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>Lifecycle phase of a mission objective or contract, as the MIS log reads it.</summary>
     internal enum MissionPhase { Offered, Active, Done, Closed }

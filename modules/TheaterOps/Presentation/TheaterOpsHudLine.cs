@@ -1,7 +1,8 @@
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 
-namespace BoscaliSummer.Features.TheaterOps.Presentation
+namespace BoscaliSummer.Modules.TheaterOps.Presentation
 {
     /// <summary>
     /// A compact view of the same host-authored operation and staff choices shown on STR.

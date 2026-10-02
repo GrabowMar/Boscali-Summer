@@ -1,11 +1,11 @@
 using System;
 using System.Threading;
-using BoscaliSummer.Features.Weather.Domain;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>Cloud shadows through the native directional-light cookie: a camera-centred,
     /// 48 km, 256-square transmission map computed from the same cloud bodies the volume

@@ -1,10 +1,10 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Core;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 
-namespace BoscaliSummer.Features.Comms.Runtime
+namespace BoscaliSummer.Modules.Comms.Runtime
 {
     /// <summary>
     /// Who a player is, for COMMS: a stable id, a display name and a side. The host resolves

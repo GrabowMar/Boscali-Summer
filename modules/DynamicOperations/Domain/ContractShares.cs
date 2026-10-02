@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.DynamicOperations.Domain
+namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
     /// <summary>
     /// Contracts are faction work, but one pilot takes each one. That pilot alone may abort it

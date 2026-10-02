@@ -1,7 +1,7 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Infrastructure.Diagnostics;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 
 namespace BoscaliSummer.Garrisons

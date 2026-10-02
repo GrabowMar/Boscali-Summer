@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core;
+using BoscaliSummer.Core.Math;
 
-namespace BoscaliSummer.Features.Events.Domain
+namespace BoscaliSummer.Modules.Events.Domain
 {
     /// <summary>What a player can do about the active event's cost modifier.</summary>
     internal enum EventResponseKind : byte

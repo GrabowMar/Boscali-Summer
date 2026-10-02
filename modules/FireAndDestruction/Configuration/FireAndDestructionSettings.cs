@@ -1,6 +1,6 @@
 using BepInEx.Configuration;
 
-namespace BoscaliSummer.Features.FireAndDestruction.Configuration
+namespace BoscaliSummer.Modules.FireAndDestruction.Configuration
 {
     /// <summary>
     /// High-level fire, impact scorch, and aftermath settings. Detailed effect values

@@ -1,9 +1,9 @@
-﻿using System;
-using BoscaliSummer.Features.Command.Presentation.MapUi;
+using System;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Patches
+namespace BoscaliSummer.Modules.Command.Patches
 {
     [HarmonyPatch(typeof(DynamicMap), "Maximize")]
     internal static class DynamicMapMaximizePatch
@@ -55,8 +55,11 @@ namespace BoscaliSummer.Features.Command.Patches
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
     internal static class MapBoxIconClickGuardPatch
     {
-        private static bool Prefix() =>
-            !MfdMapInteractions.BlockIconClick() && !ReliefNavigator.BlockIconClick();
+        private static bool Prefix(UnitMapIcon __instance)
+        {
+            if (MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return false;
+            return !MfdMapInteractions.HandleUnitClick(__instance);
+        }
     }
 
     /// <summary>

@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace BoscaliSummer.Features.Weather.Visuals
+namespace BoscaliSummer.Modules.Weather.Visuals
 {
     /// <summary>The reduced-resolution cloud targets and the commands that fill them, shared by
     /// the URP pass and the offline bench. The sky is kept at half resolution. With temporal

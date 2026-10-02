@@ -1,9 +1,9 @@
 {
   "unity": "2022.3.62f3",
   "tmp": "3.0.6",
-  "fonts": ["NOA Barlow Condensed Medium SDF", "NOA Barlow Condensed SemiBold SDF", "NOA JetBrains Mono Regular SDF", "NOA JetBrains Mono Bold SDF", "NOA Icons SDF"],
+  "fonts": ["NOA Rajdhani Medium SDF", "NOA Rajdhani SemiBold SDF", "NOA JetBrains Mono Regular SDF", "NOA JetBrains Mono Bold SDF", "NOA Icons SDF"],
   "shaders": ["NOA/UI/Fx", "NOA/UI/Glass", "NOA/UI/Blur"],
-  "textures": ["noise64"],
+  "textures": ["noise64", "pilot-helmet", "contour-engraving"],
   "icons": {
     "activity": "ed23",
     "adjustments-horizontal": "ec38",
@@ -90,8 +90,8 @@
     "x": "eb55"
   },
   "missing": {
-    "NOA Barlow Condensed Medium SDF": "0114 0115 012C 0132 0138 013F 0149 014E 017F 201B",
-    "NOA Barlow Condensed SemiBold SDF": "0114 0115 012C 0132 0138 013F 0149 014E 017F 201B",
+    "NOA Rajdhani Medium SDF": "00A4 00AA 00AC 00B2 00B3 00B5 00B9 00BA 00BC 00BD 00BE 0108 0109 0124 0138 0149 017F 201B",
+    "NOA Rajdhani SemiBold SDF": "00A4 00AA 00AC 00B2 00B3 00B5 00B9 00BA 00BC 00BD 00BE 0108 0109 0124 0138 0149 017F 201B",
     "NOA JetBrains Mono Regular SDF": "0400 040D 0450 045D",
     "NOA JetBrains Mono Bold SDF": "0400 040D 0450 045D",
     "NOA Icons SDF": ""

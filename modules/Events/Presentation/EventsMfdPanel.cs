@@ -1,24 +1,24 @@
+using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Events.Configuration;
-using BoscaliSummer.Features.Events.Domain;
-using BoscaliSummer.Features.Events.Runtime;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
-using NOAvionics;
-using NOAvionics.Ui;
+using BoscaliSummer.Modules.Events.Configuration;
+using BoscaliSummer.Modules.Events.Domain;
+using BoscaliSummer.Modules.Events.Runtime;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Features.Events.Presentation
+namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// "EVN" — active dispatch, response desk, archive and field documentation. Kit v2 console: chrome
-    /// (chips/metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
+    /// (metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
     /// sections, rows and the module's own <see cref="EventActiveCardPart"/> / <see cref="DecisionBoardPart"/>
     /// / <see cref="EventCaseFilePart"/> parts.
     /// </summary>
@@ -47,20 +47,20 @@ namespace BoscaliSummer.Features.Events.Presentation
         private MFDScreen screen;
         private GameObject screenRoot;
         private AvConsole console;
-        private AvChip[] chips;
         private AvMetric[] metrics;
+        private AvHelpTip costTip, resetTip, leftTip, logTip;
 
         private EventHeroPart hero;
         private AvSection responseSection;
         private ResponseDeskPart responseDesk;
-        private AvMetric directorPosture, directorBases, directorSupers;
-        private AvSection directorSection;
-        private AvSection historySection;
+        private AvGauge directorPosture, directorBases, directorSupers;
+        private AvEqualizer historyEq;
+        private float[] logBars;
         private EventTimelinePart timeline;
         private int historyCapacity;
 
         private const int RecentRecords = 3;
-        private AvSection archiveSection;
+        private const int VisibleLogRows = 5;
         private ArchiveTilePart[] tiles;
         private EventCaseFilePart deskCase;
         private AvSection recentSection;
@@ -92,17 +92,16 @@ namespace BoscaliSummer.Features.Events.Presentation
             screenRoot = null;
             screen = null;
             console = null;
-            chips = null;
             metrics = null;
+            costTip = resetTip = leftTip = logTip = null;
             hero = null;
             responseSection = null;
             responseDesk = null;
             directorPosture = directorBases = directorSupers = null;
-            directorSection = null;
-            historySection = null;
+            historyEq = null;
+            logBars = null;
             timeline = null;
             historyCapacity = 0;
-            archiveSection = null;
             tiles = null;
             deskCase = null;
             recentSection = null;
@@ -231,8 +230,12 @@ namespace BoscaliSummer.Features.Events.Presentation
             AvLay.ClampIntoCanvas(rootRect);
 
             console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENT DIRECTORATE", 2, AvTokens.PanelWidth, height);
-            chips = console.Chips(3);
-            metrics = console.Metrics("SUPPORT COST", "SUPPORT RESET");
+            // Four compact tiles carry what the three header chips and two wide tiles used to say twice.
+            metrics = console.Metrics("COST", "RESET", "LEFT", "LOG");
+            costTip = HelpOn(metrics[0], "COST: the support price multiplier the running event sets on requisitions.");
+            resetTip = HelpOn(metrics[1], "RESET: how fast your support requests come back off cooldown.");
+            leftTip = HelpOn(metrics[2], "LEFT: time until the running event ends.");
+            logTip = HelpOn(metrics[3], "LOG: dispatches finished so far, out of the log capacity.");
             console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.Bookmark, "DESK"));
 
             historyCapacity = Mathf.Max(1, settings.HistoryLength.Value);
@@ -270,54 +273,62 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private void BuildDispatchPage(AvFlow p)
         {
-            hero = p.Add(new EventHeroPart(p.Content));
-            hero.BindCalm("Waiting for the director.");
+            // The hero soaks up spare height only while the theater is quiet (a designed standby banner).
+            hero = p.Add(new EventHeroPart(p.Content), 1f);
+            hero.BindCalm("STANDBY");
 
-            responseSection = p.Section(AvIcon.Scale, "RESPONSE DESK", "AWAITING DISPATCH");
+            responseSection = p.Section(AvIcon.Scale, "RESPONSE", "AWAITING");
             responseDesk = p.Add(new ResponseDeskPart(p.Content, events.RequestResponse));
             responseSection.SetShown(false);
             responseDesk.SetShown(false);
 
-            directorSection = p.Section(AvIcon.Radar2, "DIRECTOR", "WAITING FOR GROUND CUSTODY DATA");
-            directorPosture = new AvMetric(p.Content, "POSTURE");
-            directorBases = new AvMetric(p.Content, "GROUND BASES");
-            directorSupers = new AvMetric(p.Content, "SUPERS");
+            // The director's three rings need no section header: each ring names itself and carries its own tip.
+            directorPosture = new AvGauge(p.Content, "POSTURE", AvGaugeShape.Ring, 64f);
+            directorBases = new AvGauge(p.Content, "BASES", AvGaugeShape.Ring, 64f);
+            directorSupers = new AvGauge(p.Content, "SUPERS", AvGaugeShape.Ring, 64f);
+            directorPosture.Help = "POSTURE: how close the losing side is to the base deficit that arms a superevent. ARMED means the director may escalate at its next roll; MON means it is only watching.";
+            directorBases.Help = "BASES: ground airbases held by the leading side against the losing side (leader:loser). The ring fills with the loser's share.";
+            directorSupers.Help = "SUPERS: superevents fired this mission out of the most the director allows. Each superevent fires once.";
             p.Row(directorPosture, directorBases, directorSupers);
-            directorPosture.Set("—", "AWAITING DATA", 0f, AvState.Inert);
-            directorBases.Set("—", "LEAD : TRAIL", 0f, AvState.Inert);
-            directorSupers.Set("—", "SUPERS FIRED", 0f, AvState.Inert);
+            directorPosture.Set(0f, "—", AvState.Inert);
+            directorBases.Set(0f, "—", AvState.Inert);
+            directorSupers.Set(0f, "—", AvState.Inert);
 
-            historySection = p.Section(AvIcon.ListDetails, "EVENT LOG", "0 LOGGED");
+            // Finished events as bars (tall = superevent, short = minor), newest first; it grows into spare height.
+            logBars = new float[Mathf.Max(1, historyCapacity)];
+            historyEq = p.Add(new AvEqualizer(p.Content, "EVENT LOG", 36f), 1f);
+            historyEq.Help = "EVENT LOG: finished events as bars, newest at the left. A tall bar is a superevent, a middle bar a medium, a short bar a minor. Hover a row below for its tier, target and age.";
+            historyEq.SetShown(false);
             timeline = p.Add(new EventTimelinePart(p.Content));
-            timeline.SetNote("Nothing has been filed yet. Finished dispatches are logged here, newest first.");
+            timeline.SetNote("NO DISPATCHES LOGGED");
         }
 
         private void BuildDeskPage(AvFlow p)
         {
-            archiveSection = p.Section(AvIcon.Database, "FIELD ARCHIVE", "LOCAL READING ROOM");
+            // One row of four archive doors (names match the archive's own tabs); the case file below grows.
             tiles = new ArchiveTilePart[4];
-            string[] labels = { "AIRFRAMES", "EVENT DOSSIERS", "WORLD FILES", "FIELD MANUAL" };
+            string[] labels = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
             string[] notes =
             {
-                "Native aircraft with a rotating model viewer.", "Every authored theater scenario.",
-                "Life behind the front line.", "Read the signal and issue orders.",
+                "AIRCRAFT: every native aircraft with a rotating model viewer and its performance figures.",
+                "EVENTS: a dossier for every authored theater event, with its price effect, window and timed orders.",
+                "WORLD: short files on life behind the front line.",
+                "MANUAL: how to read a dispatch and issue orders. Start here if the desk is new to you.",
             };
             AvIcon[] icons = { AvIcon.Plane, AvIcon.AlertTriangle, AvIcon.Map2, AvIcon.Bookmark };
             for (int i = 0; i < tiles.Length; i++)
             {
                 int section = i;
-                tiles[i] = new ArchiveTilePart(p.Content, icons[i], labels[i], notes[i], () => OpenArchive(section));
-                tiles[i].Help = "Open " + labels[i].ToLowerInvariant() + " in the field archive.";
+                tiles[i] = new ArchiveTilePart(p.Content, icons[i], labels[i], () => OpenArchive(section));
+                tiles[i].Help = notes[i] + " Opens the field archive.";
             }
-            p.Row(tiles[0], tiles[1]);
-            p.Row(tiles[2], tiles[3]);
+            p.Row(tiles[0], tiles[1], tiles[2], tiles[3]);
 
-            p.Section(AvIcon.Bookmark, "CASE FILE", "CURRENT OR LAST DISPATCH");
-            deskCase = p.Add(new EventCaseFilePart(p.Content));
-            deskCase.Bind("AWAITING FIRST REPORT", "NO CASE FILED THIS MISSION",
-                "The archive is available while the theater is quiet.", AvIcon.Radar2, null, AvState.Inert);
+            deskCase = p.Add(new EventCaseFilePart(p.Content), 1f);
+            deskCase.Help = "CASE FILE: the running event, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are listed under RECENT.";
+            deskCase.Bind("AWAITING REPORT", "NO CASE FILED", "", AvIcon.Radar2, null, AvState.Inert);
 
-            recentSection = p.Section(AvIcon.ListDetails, "RECENT RECORDS", "OPEN IN THE ARCHIVE");
+            recentSection = p.Section(AvIcon.ListDetails, "RECENT", "OPEN");
             recentRows = new AvRow[RecentRecords];
             for (int i = 0; i < recentRows.Length; i++)
             {
@@ -363,27 +374,22 @@ namespace BoscaliSummer.Features.Events.Presentation
 
             RefreshDirector();
 
-            chips[0].Set(current != null ? TierShort(current.Tier) : "STANDBY", TierChipState(current));
-
-            bool tempoOnly = current != null && aimedAtLocal &&
-                Mathf.Abs(multiplier - 1f) < 0.001f && Mathf.Abs(cooldown - 1f) >= 0.001f;
-            chips[1].Set(
-                tempoOnly ? (cooldown > 1f ? "RESET SLOW" : "RESET FAST") :
-                    current != null ? DirectionLabel(multiplier, aimedAtLocal) : "NO EVENT",
-                tempoOnly ? (cooldown > 1f ? AvState.Caution : AvState.Ready) :
-                    DirectionState(multiplier, aimedAtLocal, current != null));
-
             bool historyOff = settings.HistoryLength.Value <= 0;
-            chips[2].Set(historyOff ? "HISTORY OFF" : AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0) + " LOGGED",
-                !historyOff && history.Count > 0 ? AvState.Ready : AvState.Inert);
+            float secondsLeft = current != null ? current.EndsAtMissionTime - now : 0f;
+            bool ending = current != null && secondsLeft <= EndingSeconds;
+            bool critical = current != null && secondsLeft <= CriticalSeconds;
+            AvState effectState = EffectState(summary, aimedAtLocal);
 
             string sideNote = current == null ? "" : aimedAtLocal ? "YOUR SIDE" : "OTHER SIDE";
             string costCaption = current == null ? "NO ACTIVE EVENT" : EffectText(current, summary, aimedAtLocal);
             metrics[0].Set(
                 current != null ? MultiplierLabel(multiplier) : "—",
-                current == null ? costCaption : sideNote + " · " + costCaption,
+                current == null ? "" : aimedAtLocal ? "YOU" : "THEM",
                 current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
-                EffectState(summary, aimedAtLocal));
+                effectState);
+            costTip.Text = "COST: the support price multiplier the running event sets on requisitions. " +
+                (current == null ? "No event is running, so prices are normal."
+                    : sideNote + ": " + costCaption + ". Dearer shows amber or red, cheaper green; it holds until the event ends.");
 
             string resetCaption = current == null ? "NO ACTIVE EVENT" :
                 !aimedAtLocal ? "NO EFFECT ON YOU" :
@@ -393,9 +399,30 @@ namespace BoscaliSummer.Features.Events.Presentation
                 cooldown > 1.001f ? AvState.Caution : cooldown < 0.999f ? AvState.Ready : AvState.Inert;
             metrics[1].Set(
                 current != null ? MultiplierLabel(cooldown) : "—",
-                current == null ? "NO ACTIVE EVENT" : "REQUEST CLOCK · " + resetCaption,
+                current == null || !aimedAtLocal ? "" : cooldown > 1.001f ? "SLOW" : cooldown < 0.999f ? "FAST" : "",
                 current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(cooldown - 1f)) : 0f,
                 resetState);
+            resetTip.Text = "RESET: how fast your support requests come back off cooldown. x1.00 is normal, above 1 is slower, below 1 is faster. " +
+                (current == null ? "No event is running." : resetCaption + ".");
+
+            float span = current != null ? Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime) : 1f;
+            float remaining = current != null ? Mathf.Clamp01(secondsLeft / span) : 0f;
+            // The bar is time, not severity: neutral until the event is ending or it is costing this side.
+            AvState leftState = current == null ? AvState.Inert
+                : critical ? AvState.Danger
+                : ending || effectState == AvState.Danger ? AvState.Caution
+                : effectState == AvState.Ready ? AvState.Ready : AvState.Info;
+            metrics[2].Set(current != null ? AvNum.Clock(secondsLeft) : "—", critical ? "CRIT" : ending ? "END" : "", remaining, leftState);
+            leftTip.Text = "LEFT: time until the running event ends; the bar is how much of its window remains. Amber under a minute, red under twenty seconds." +
+                (current == null ? " No event is running." : "");
+
+            metrics[3].Set(
+                historyOff ? "OFF" : AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0), "",
+                historyOff || historyCapacity <= 0 ? 0f : Mathf.Clamp01(history.Count / (float)historyCapacity),
+                !historyOff && history.Count > 0 ? AvState.Ready : AvState.Inert);
+            logTip.Text = historyOff
+                ? "LOG: the event log is switched off (Events.HistoryLength is 0)."
+                : "LOG: dispatches finished so far, out of the log capacity (Events.HistoryLength). The bars and rows below show them, newest first.";
 
             string id = current != null ? current.Id : "";
             float started = current != null ? current.StartedAtMissionTime : 0f;
@@ -409,32 +436,19 @@ namespace BoscaliSummer.Features.Events.Presentation
                 boundMultiplier = multiplier;
                 boundCooldown = cooldown;
                 if (current != null)
-                    hero.BindActive(current, TierState(current.Tier), Consequence(current, aimedAtLocal));
+                    hero.BindActive(current, TierState(current.Tier), Consequence(current, aimedAtLocal),
+                        ConsequenceHelp(current, aimedAtLocal));
                 else
-                    hero.BindCalm(events.Available
-                        ? "The director is watching the theater for a story worth telling."
-                        : "No mission is running on this host.");
+                    hero.BindCalm(events.Available ? "SCANNING" : "NO MISSION");
             }
 
             if (current != null)
             {
-                float span = Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime);
-                float remaining = Mathf.Clamp01((current.EndsAtMissionTime - now) / span);
-                float secondsLeft = current.EndsAtMissionTime - now;
-                bool ending = secondsLeft <= EndingSeconds;
-                bool critical = secondsLeft <= CriticalSeconds;
-                AvState effectState = EffectState(summary, aimedAtLocal);
+                // One effect line replaces the three pills; the price and reset numbers live in the COST / RESET tiles.
                 string tempo = aimedAtLocal && !string.IsNullOrEmpty(current.TempoSummary) ? current.TempoSummary : "";
-                hero.SetPills(EffectText(current, summary, aimedAtLocal), effectState,
-                    tempo, tempo.Contains("+") ? AvState.Caution : AvState.Ready,
-                    aimedAtLocal ? "YOUR SIDE" : "NOT YOUR SIDE", aimedAtLocal ? AvState.Info : AvState.Inert);
-                hero.SetClock(AvNum.Clock(secondsLeft), ending, critical);
+                hero.SetEffect(EffectText(current, summary, aimedAtLocal) + (tempo.Length > 0 ? " · " + tempo : "") +
+                    " · " + (aimedAtLocal ? "YOUR SIDE" : "NOT YOUR SIDE"), effectState);
                 hero.SetScript(current, current.StartedAtMissionTime, now);
-                // The bar is time, not severity: neutral until the event is ending or it is costing this side.
-                AvState progressState = critical ? AvState.Danger
-                    : ending || effectState == AvState.Danger ? AvState.Caution
-                    : effectState == AvState.Ready ? AvState.Ready : AvState.Info;
-                hero.SetProgress(remaining, progressState);
 
                 responseSection.SetShown(true);
                 responseDesk.SetShown(true);
@@ -447,12 +461,12 @@ namespace BoscaliSummer.Features.Events.Presentation
                 responseDesk.SetShown(false);
             }
 
-            RefreshTimeline(history, now, historyOff);
+            RefreshTimeline(current, history, now, historyOff);
             RefreshDesk(current, history, now);
 
             string ambient = current != null
-                ? "WORLD EVENT: " + current.Title
-                : events.Available ? "No active world event." : "No running mission.";
+                ? "EVENT // " + current.Title.ToUpperInvariant()
+                : events.Available ? "NO EVENT" : "NO MISSION";
             string status = !string.IsNullOrEmpty(events.Signal) ? events.Signal
                 : !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt
                 : ambient;
@@ -462,15 +476,20 @@ namespace BoscaliSummer.Features.Events.Presentation
             console.Footer.Set(status, footerState);
         }
 
-        private void RefreshTimeline(IReadOnlyList<ActiveEventView> history, float now, bool historyOff)
+        private void RefreshTimeline(ActiveEventView current, IReadOnlyList<ActiveEventView> history, float now, bool historyOff)
         {
             int shown = Mathf.Min(history.Count, Mathf.Min(historyCapacity, EventTimelinePart.Capacity));
-            timeline.SetNote(historyOff
-                ? "History is switched off in the Events settings."
-                : "Nothing has been filed yet. Finished dispatches are logged here, newest first.");
+            // A scripted superevent needs the room for its beats, so the rows step back to three while it runs.
+            int limit = current != null && current.IsSuper && current.Steps.Count > 0 ? 3 : VisibleLogRows;
+            int rows = Mathf.Min(shown, limit);
+            timeline.SetNote(historyOff ? "HISTORY OFF" : "NO DISPATCHES LOGGED");
+            for (int i = 0; i < logBars.Length; i++) logBars[i] = 0f;
             for (int index = 0; index < shown; index++)
             {
                 ActiveEventView view = history[history.Count - 1 - index];
+                if (index < logBars.Length)
+                    logBars[index] = view.Tier == "SUPEREVENT" ? 1f : view.Tier == "MEDIUM" ? 0.6f : 0.3f;
+                if (index >= rows) continue;
                 string effect = IsNeutral(view.EffectSummary) && !string.IsNullOrEmpty(view.TempoSummary)
                     ? view.TempoSummary : view.EffectSummary;
                 timeline.Set(index, view.Title.ToUpperInvariant(),
@@ -479,9 +498,11 @@ namespace BoscaliSummer.Features.Events.Presentation
                     IsNeutral(effect) ? "NO EFFECT" : effect, TierState(view.Tier),
                     IsNeutral(effect) ? AvState.Inert : effect[0] == '+' ? AvState.Danger : AvState.Ready);
             }
-            timeline.SetCount(historyOff ? 0 : shown);
-            historySection.SetCaption(historyOff ? "LOGGING DISABLED" :
-                AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0) + " LOGGED · NEWEST FIRST");
+            timeline.SetCount(historyOff ? 0 : rows);
+            // While a scripted superevent runs the bars step aside as well (the rows already list the log).
+            bool bars = !historyOff && shown > 0 && limit == VisibleLogRows;
+            historyEq.SetShown(bars);
+            if (bars) historyEq.Set(logBars, "NEWEST FIRST", AvState.Info);
         }
 
         private void RefreshDesk(ActiveEventView current, IReadOnlyList<ActiveEventView> history, float now)
@@ -495,8 +516,7 @@ namespace BoscaliSummer.Features.Events.Presentation
             tiles[3].SetCount(AvNum.Fixed(EventDocs.Guide.Length, 0) + " RECORDS");
             if (file == null)
             {
-                deskCase.Bind("AWAITING FIRST REPORT", "NO CASE FILED THIS MISSION",
-                    "The archive is available while the theater is quiet.", AvIcon.Radar2, null, AvState.Inert);
+                deskCase.Bind("AWAITING REPORT", "NO CASE FILED", "", AvIcon.Radar2, null, AvState.Inert);
             }
             else
             {
@@ -506,7 +526,7 @@ namespace BoscaliSummer.Features.Events.Presentation
                     ? file.EffectSummary +
                         (string.IsNullOrEmpty(file.TempoSummary) ? "" : " · " + file.TempoSummary) +
                         " · ENDS " + AvNum.Clock(file.EndsAtMissionTime - now)
-                    : "This dispatch has closed. Its full dossier remains in the archive.";
+                    : "CLOSED";
                 deskCase.Bind(file.Title.ToUpperInvariant(), meta, body, CategoryIcon(file.Category),
                     EventArtCache.Get(file.IconKey, file.IsSuper ? "tier_super" : "tier_medium"), TierState(file.Tier));
             }
@@ -528,32 +548,29 @@ namespace BoscaliSummer.Features.Events.Presentation
             }
         }
 
-        /// <summary>The director posture as three readings: posture, ground custody, supers fired.</summary>
+        /// <summary>The director posture as three rings: posture, ground custody, supers fired.</summary>
         private void RefreshDirector()
         {
             TheaterBalance balance = events.Balance;
             float supers = EventDirector.MaximumSupers > 0
                 ? Mathf.Clamp01(events.SupersFired / (float)EventDirector.MaximumSupers) : 0f;
-            directorSupers.Set(AvNum.Fixed(events.SupersFired, 0) + "/" + AvNum.Fixed(EventDirector.MaximumSupers, 0),
-                "SUPERS FIRED", supers, AvState.Info);
+            directorSupers.Set(supers, AvNum.Fixed(events.SupersFired, 0) + "/" + AvNum.Fixed(EventDirector.MaximumSupers, 0),
+                AvState.Info);
 
             if (!balance.Known)
             {
-                directorSection.SetCaption("WAITING FOR GROUND CUSTODY DATA");
-                directorPosture.Set("—", "AWAITING DATA", 0f, AvState.Inert);
-                directorBases.Set("—", "LEAD : TRAIL", 0f, AvState.Inert);
+                directorPosture.Set(0f, "—", AvState.Inert);
+                directorBases.Set(0f, "—", AvState.Inert);
                 return;
             }
 
             bool armed = balance.Contested && balance.Deficit >= EventDirector.AidDeficitThreshold;
-            directorSection.SetCaption(armed ? "A SUPEREVENT CAN FIRE" : "WATCHING THE THEATER");
             float pressure = EventDirector.AidDeficitThreshold > 0
                 ? Mathf.Clamp01(balance.Deficit / (float)EventDirector.AidDeficitThreshold) : 0f;
-            directorPosture.Set(armed ? "ARMED" : "MONITORING", armed ? "SUPER ELIGIBLE" : "NO TRIGGER",
-                pressure, armed ? AvState.Caution : AvState.Info);
+            directorPosture.Set(pressure, armed ? "ARMED" : "MON", armed ? AvState.Caution : AvState.Info);
             int sum = balance.LeaderBases + balance.LoserBases;
-            directorBases.Set(AvNum.Fixed(balance.LeaderBases, 0) + ":" + AvNum.Fixed(balance.LoserBases, 0),
-                "LEAD : TRAIL", sum > 0 ? balance.LoserBases / (float)sum : 0f, AvState.Info);
+            directorBases.Set(sum > 0 ? balance.LoserBases / (float)sum : 0f,
+                AvNum.Fixed(balance.LeaderBases, 0) + ":" + AvNum.Fixed(balance.LoserBases, 0), AvState.Info);
         }
 
         /// <summary>The card's effect line, from this player's point of view.</summary>
@@ -565,8 +582,15 @@ namespace BoscaliSummer.Features.Events.Presentation
                 : summary;
         }
 
-        /// <summary>Plain words for what the live effect means to the player reading it.</summary>
-        private static string Consequence(ActiveEventView view, bool aimedAtLocal)
+        /// <summary>
+        /// The hero's one-line flag. The pills already carry the effect, so this only speaks when the dispatch is
+        /// broken; the full plain-words consequence lives on the tier slab's hover help.
+        /// </summary>
+        private static string Consequence(ActiveEventView view, bool aimedAtLocal) =>
+            view != null && !view.TargetResolved ? "TARGET LOST // ORDERS CANCELLED" : "";
+
+        /// <summary>Plain words for what the live effect means, for hover help.</summary>
+        private static string ConsequenceHelp(ActiveEventView view, bool aimedAtLocal)
         {
             if (view == null) return "";
             if (!view.TargetResolved)
@@ -605,22 +629,6 @@ namespace BoscaliSummer.Features.Events.Presentation
 
         private static string MultiplierLabel(float multiplier) => "x" + AvNum.Fixed(multiplier, 2);
 
-        private static string DirectionLabel(float multiplier, bool active)
-        {
-            if (!active) return "NOT YOUR SIDE";
-            if (multiplier > 1f) return "COST UP";
-            if (multiplier < 1f) return "COST DOWN";
-            return "FLAT";
-        }
-
-        private static AvState DirectionState(float multiplier, bool active, bool hasEvent)
-        {
-            if (!hasEvent || !active) return AvState.Inert;
-            if (multiplier > 1f) return AvState.Caution;
-            if (multiplier < 1f) return AvState.Ready;
-            return AvState.Inert;
-        }
-
         private static string TierShort(string tier)
         {
             if (tier == "SUPEREVENT") return "SUPER";
@@ -635,12 +643,6 @@ namespace BoscaliSummer.Features.Events.Presentation
             if (target == "ALL THEATER") return "ALL THEATER";
             return target;
         }
-
-        private static AvState TierChipState(ActiveEventView view) =>
-            view == null ? AvState.Inert
-            : view.Tier == "SUPEREVENT" ? AvState.Danger
-            : view.Tier == "MEDIUM" ? AvState.Caution
-            : AvState.Inert;
 
         /// <summary>Colour a tier's rail: weather recedes, a medium warns, a super is an alert.</summary>
         internal static AvState TierState(string tier) =>

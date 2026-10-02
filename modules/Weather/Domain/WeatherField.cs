@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     internal enum PrecipitationKind : byte
     {
@@ -215,8 +215,21 @@ namespace BoscaliSummer.Features.Weather.Domain
                 float depth = cell.CoreAt(x, z);
                 if (depth > core) core = depth;
                 if (cell.Hail && depth > 0.5f) hail = true;
-                float crown = cell.Base + (cell.Top - cell.Base) * (float)Math.Pow(shape, 0.65f);
-                if (crown > top) top = crown;
+                // The updraft is a dome. A real anvil holds that ceiling out to the flared
+                // radius; otherwise the column top falls inside the stem and the flare in
+                // CloudBodies never gets a column to fill.
+                float column = (float)Math.Pow(Math.Max(shape, 0f), 0.65f);
+                if (p.Anvil > 0.05f)
+                {
+                    float dist = (float)Math.Sqrt(dx * dx + dz * dz);
+                    float flare = CloudShape.Footprint(0.82f, p.Anvil);
+                    float anvilReach = cell.Radius * 1.35f * flare;
+                    float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, dist);
+                    shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, p.Anvil);
+                    if (shelf > column) column = shelf;
+                }
+                float cellCrown = cell.Base + (cell.Top - cell.Base) * column;
+                if (cellCrown > top) top = cellCrown;
             }
 
             for (int i = 0; i < CloudClusterCount; i++)
@@ -225,8 +238,8 @@ namespace BoscaliSummer.Features.Weather.Domain
                 float cover = cloud.CoverAt(x, z);
                 clearClusters *= 1f - cover;
                 if (cover > point.CellShape) point.CellShape = cover;
-                float crown = cloud.Base + (cloud.Top - cloud.Base) * (float)Math.Pow(cover, 0.65f);
-                if (crown > top) top = crown;
+                float clusterCrown = cloud.Base + (cloud.Top - cloud.Base) * (float)Math.Pow(cover, 0.65f);
+                if (clusterCrown > top) top = clusterCrown;
             }
 
             float rain = Math.Min(areaRain + frontRain + cellRain, MaxRainRate);
@@ -249,7 +262,13 @@ namespace BoscaliSummer.Features.Weather.Domain
             cloudBase = WeatherMath.Lerp(cloudBase, Math.Min(cloudBase, point.FrontBase), point.FrontCover);
             point.CloudBase = WeatherMath.Clamp(cloudBase, 250f, 3600f);
             float stratiformCover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearClusters);
-            point.CloudTop = Math.Max(point.CloudBase + 1600f + 2200f * stratiformCover, top);
+            CloudGenus genus = CloudShape.Resolve(p);
+            float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, p.LayerDepth), genus.SheetBlend);
+            deck = Math.Max(280f, deck);
+            float crown = top;
+            // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
+            crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, p.LayerDepth)), crown, genus.TowerBlend);
+            point.CloudTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
             point.CloudTop = Math.Max(point.CloudTop,
                 WeatherMath.Lerp(point.CloudBase, point.FrontTop, point.FrontCover));
 
@@ -369,7 +388,9 @@ namespace BoscaliSummer.Features.Weather.Domain
             cloud.Z = WeatherMath.HashRange(seed, 74, 0, 0, -halfZ * 0.85f, halfZ * 0.85f);
             cloud.Radius = WeatherMath.HashRange(seed, 75, 0, 0, 5000f, 9500f);
             cloud.Base = sky.CloudBase;
-            cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 1400f, 3200f) * (0.6f + 0.4f * sky.Cumulus);
+            float puff = sky.PuffDepth >= 200f ? sky.PuffDepth : 900f;
+            cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 0.65f, 1.1f) * puff *
+                (0.75f + 0.25f * sky.Cumulus);
             cloud.Strength = strength;
             float angle = WeatherMath.Hash01(seed, 77) * 2f * (float)Math.PI;
             cloud.AxisX = (float)Math.Cos(angle);

@@ -1,10 +1,10 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Infrastructure.Diagnostics;
+using BoscaliSummer.Core.Diagnostics;
 using HarmonyLib;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Support.Patches
+namespace BoscaliSummer.Modules.Support.Patches
 {
     [HarmonyPatch]
     internal static class SupportMissileDetonatePatch
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Features.Support.Patches
         private static void Prefix(Missile __instance, out bool __state)
         {
             __state = __instance != null && !__instance.disabled &&
-                BoscaliSummer.Runtime.GameAccess.IsServer() &&
+                BoscaliSummer.Core.Game.GameAccess.IsServer() &&
                 __instance.UniqueName?.StartsWith("BoscaliSummer:Support:Rod:", StringComparison.Ordinal) == true;
         }
 

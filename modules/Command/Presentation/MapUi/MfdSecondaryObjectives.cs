@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using BoscaliSummer.Framework.Contracts;
+using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>Why a zero-count tab has nothing to show; the copy names the real reason.</summary>
     internal enum BoardEmptyReason

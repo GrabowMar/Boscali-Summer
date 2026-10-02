@@ -4,7 +4,7 @@ using NOAvionics;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Live kit v2 measurement hooks for the nomodkit sim runner ("call" ops): Start builds three demo consoles

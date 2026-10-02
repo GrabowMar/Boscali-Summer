@@ -1,9 +1,9 @@
-using BoscaliSummer.Features.HighCommand.Runtime;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.HighCommand.Runtime;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.Networking;
 
-namespace BoscaliSummer.Features.HighCommand.Patches
+namespace BoscaliSummer.Modules.HighCommand.Patches
 {
     /// <summary>
     /// Remembers the last damager of a watched VIP asset so a kill can be paid to the

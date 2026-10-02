@@ -2,16 +2,17 @@ using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using BoscaliSummer.Features.Progression.Configuration;
-using BoscaliSummer.Features.Progression.Domain;
-using BoscaliSummer.Features.Progression.Networking;
-using BoscaliSummer.Framework.Contracts;
-using BoscaliSummer.Framework.Lifecycle;
-using BoscaliSummer.Runtime;
+using BoscaliSummer.Modules.Progression.Configuration;
+using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Modules.Progression.Networking;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Progression.Runtime
+namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>
     /// Owns session-scoped perk selections. The server holds every player's state and derives
@@ -306,7 +307,7 @@ namespace BoscaliSummer.Features.Progression.Runtime
 
     /// <summary>
     /// Static locator for the two Harmony patches, which cannot resolve a service instance.
-    /// Nothing else may use it â€” cross-feature access goes through the service registry.
+    /// Nothing else may use it — cross-module access goes through the service registry.
     /// </summary>
     internal static class ProgressionRuntime
     {

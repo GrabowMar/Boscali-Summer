@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>A single, non-interactive glass finish above an MFD's complete UI tree.</summary>
     public sealed class AvDisplayGlass : MonoBehaviour
@@ -9,7 +9,7 @@ namespace NOAvionics.Ui
         private Image image;
         private float nextLightSample;
         private static bool effects = true, autoLight = true;
-        private static float reflection = .6f, scanStrength, edgeStrength, tintStrength = .25f;
+        private static float reflection = .35f, scanStrength, edgeStrength, tintStrength = .25f;
         private static int tintIndex, revision;
         private static Texture2D scanTexture, edgeTexture;
         private static readonly Color[] Tints = { Color.white,
@@ -113,7 +113,7 @@ namespace NOAvionics.Ui
             if (shaderMode)
             {
                 Material m = image.material;
-                m.SetFloat(ReflectionId, reflection);
+                m.SetFloat(ReflectionId, reflection * .45f);
                 m.SetFloat(ScanId, scanStrength);
                 m.SetFloat(EdgeId, edgeStrength);
                 m.SetColor(TintColorId, Tints[tintIndex]);
@@ -124,7 +124,7 @@ namespace NOAvionics.Ui
                 image.enabled = effects;
                 return;
             }
-            image.color = new Color(1f, 1f, 1f, effects ? reflection * level : 0f);
+            image.color = new Color(1f, 1f, 1f, effects ? reflection * level * .45f : 0f);
             // Disable only the Graphic: this driver must stay awake so OFF can be reversed.
             image.enabled = effects && reflection > 0f;
             if (scanlines == null) return;

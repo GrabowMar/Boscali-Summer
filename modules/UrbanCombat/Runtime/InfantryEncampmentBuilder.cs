@@ -144,14 +144,14 @@ namespace BoscaliSummer.Garrisons
         /// <summary>How many camps one stick establishes, per base-of-operations doctrine.</summary>
         internal static int RappelWanted(FactionHQ owner)
         {
-            BoscaliSummer.Framework.Features.ModServices.TryGet(
-                out BoscaliSummer.Framework.Contracts.IGroundForceReadiness readiness);
+            BoscaliSummer.Core.Services.ModuleServices.TryGet(
+                out BoscaliSummer.Core.Contracts.IGroundForceReadiness readiness);
             return Mathf.Clamp(readiness != null ? readiness.InsertionCamps(owner) : 1, 1, MaximumSites);
         }
 
         public static bool DeployRappelEncampment(Vector3 position, FactionHQ owner, Airbase airbase)
         {
-            if (!BoscaliSummer.Runtime.GameAccess.IsServer() || owner == null) return false;
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer() || owner == null) return false;
             // Base-of-operations doctrine decides how many camps one stick establishes.
             int wanted = RappelWanted(owner);
             PruneFallenSites();

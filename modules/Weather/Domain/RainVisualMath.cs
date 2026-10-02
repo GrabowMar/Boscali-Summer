@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Features.Weather.Domain
+namespace BoscaliSummer.Modules.Weather.Domain
 {
     /// <summary>
     /// Pure response curves for falling-rain visuals: emission density, streak alpha,
@@ -8,9 +8,9 @@ namespace BoscaliSummer.Features.Weather.Domain
     /// </summary>
     internal static class RainVisualMath
     {
-        public const int MaxParticles = 1000;
-        public const float BaseEmissionSlow = 350f;
-        public const float BaseEmissionFast = 1600f;
+        public const int MaxParticles = 2500;
+        public const float BaseEmissionSlow = 800f;
+        public const float BaseEmissionFast = 12000f;
         public const float ReferenceSpeed = 250f;
 
         public static float BelowCloudFactor(float cameraHeight, float cloudHeight)

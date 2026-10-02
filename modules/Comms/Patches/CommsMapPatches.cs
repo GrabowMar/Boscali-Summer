@@ -1,7 +1,7 @@
-using BoscaliSummer.Features.Comms.Runtime;
+using BoscaliSummer.Modules.Comms.Runtime;
 using HarmonyLib;
 
-namespace BoscaliSummer.Features.Comms.Patches
+namespace BoscaliSummer.Modules.Comms.Patches
 {
     /// <summary>
     /// While the pen is down, the map holds still. Without this a stroke drags the map under

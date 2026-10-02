@@ -1,7 +1,7 @@
 using NOAvionics;
 using UnityEngine;
 
-namespace BoscaliSummer.Features.Command.Presentation.MapUi
+namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Where the three columns of the maximised map screen begin and end.

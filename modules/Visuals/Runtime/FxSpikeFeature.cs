@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
-namespace BoscaliSummer.Features.Visuals.Runtime
+namespace BoscaliSummer.Modules.Visuals.Runtime
 {
     /// <summary>
     /// Phase-0 spike: a no-op renderer feature proving runtime injection works. It draws nothing;

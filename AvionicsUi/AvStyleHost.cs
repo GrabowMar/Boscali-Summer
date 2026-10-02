@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Shared plumbing of the kit's live <c>.avss</c> sheet (the sheet itself, its themes and their overrides, is
