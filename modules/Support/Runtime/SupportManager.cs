@@ -769,7 +769,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
             if (result == SupportResult.Accepted)
             {
-                localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
+                if ((SupportActionId)message.Action != SupportActionId.JtacUnlase)
+                    localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
                      action.Id == SupportActionId.MtiSweep);

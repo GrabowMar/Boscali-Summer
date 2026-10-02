@@ -187,7 +187,8 @@ namespace BoscaliSummer.Modules.Support.Networking
             float tti = manager.TakeTti(request.RequestId);
             return new SupportResultMessage {
                 Protocol = ProtocolVersion, RequestId = request.RequestId, Action = request.Action,
-                Result = (byte)result, CooldownSeconds = result == SupportResult.Accepted ? cooldown
+                Result = (byte)result, CooldownSeconds = action == SupportActionId.JtacUnlase ? 0f
+                    : result == SupportResult.Accepted ? cooldown
                     : result == SupportResult.Cooldown ? manager.ServerCooldownRemaining(player) : 0f,
                 Radius = radius, X = target.x, Y = target.y, Z = target.z,
                 Contacts = contacts < 0 ? 0 : contacts,
