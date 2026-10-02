@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Networking;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
 using BoscaliSummer.Core.Contracts;
@@ -54,6 +55,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
+        private CreditService credits;
+        private float nextCreditTick;
+        private float lastCreditTick;
         private ManualLogSource logger;
         private ConfigEntry<bool> bypassRequirements;
         private ConfigEntry<bool> disableCooldowns;
@@ -261,6 +265,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             settings = supportSettings;
             perks = playerPerks;
             network = net;
+            credits = new CreditService(net);
             logger = log;
             catalog = new SupportCatalog(supportSettings, fortifications);
         }
@@ -281,6 +286,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             inboundStrikeImpactTime = 0f;
             inboundStrikeConfirmedUntil = 0f;
             ledger.Clear();
+            credits?.Clear();
+            LocalCredit = 0f;
+            LocalFrozenSeconds = 0;
+            nextCreditTick = 0f;
+            lastCreditTick = 0f;
             contactReplies.Clear();
             ttiReplies.Clear();
             if (cruiseTasking != null) cruiseTasking.Clear();
@@ -306,8 +316,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportMapMode.GestureArmed = false;
         }
 
+        private static float MissionNow() =>
+            NetworkSceneSingleton<MissionManager>.i != null
+                ? NetworkSceneSingleton<MissionManager>.i.MissionTime
+                : Time.timeSinceLevelLoad;
+
         private void Update()
         {
+            if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
+            {
+                float missionNow = MissionNow();
+                credits.Tick(missionNow, Mathf.Max(0f, missionNow - lastCreditTick));
+                lastCreditTick = missionNow;
+                nextCreditTick = Time.unscaledTime + 1f;
+            }
+
             // Prune expired active strikes
             float now = Time.timeSinceLevelLoad;
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
@@ -393,8 +416,37 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         // ---- Client view -----------------------------------------------------------------
-        public float LocalAllocation =>
-            GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.Allocation : 0f;
+        public float LocalCredit { get; private set; }
+        public int LocalFrozenSeconds { get; private set; }
+
+        internal void ReceiveCredit(CreditStateMessage message)
+        {
+            LocalCredit = message.Balance;
+            LocalFrozenSeconds = message.FrozenSeconds;
+        }
+
+        /// <summary>CR price of one CALL for the local player (host runs the same QuoteFor).</summary>
+        internal CallQuote Quote(SupportActionId id)
+        {
+            SupportActionDefinition def = catalog != null ? catalog.Find(id) : null;
+            if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null)
+                return new CallQuote(0, "");
+            return QuoteFor(def, player);
+        }
+
+        /// <summary>Whether the local player's faction has earned this tier; unlockText names the next goal.</summary>
+        internal bool Unlocked(SupportActionId id, out string unlockText)
+        {
+            unlockText = "";
+            if (!CallSheet.TryGet(id, out CallRow row) ||
+                !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null)
+                return false;
+            ObjectiveCount census = credits.Census(player.HQ);
+            float minutes = MissionNow() / 60f;
+            bool open = CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
+            if (!open) unlockText = CallFloors.NextUnlock(census.held, census.n, minutes, 1f);
+            return open;
+        }
 
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
@@ -421,7 +473,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public float Cost(SupportActionDefinition action)
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
-            return Cost(action, player);
+            return QuoteFor(action, player).Cost;
         }
 
         /// <summary>
@@ -577,9 +629,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
 
-            if (!BypassRequirements && LocalAllocation + 0.001f < cost)
+            if (!BypassRequirements && LocalFrozenSeconds > 0)
             {
-                Status = "Insufficient allocation (" + cost.ToString("0") + " required).";
+                Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
+                return;
+            }
+
+            if (!BypassRequirements && LocalCredit + 0.001f < cost)
+            {
+                Status = "Low credit (" + cost.ToString("0") + " CR required).";
                 return;
             }
 
@@ -690,23 +748,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             var context = new SupportContext(
                 player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
-            float cost = Cost(action, player);
-            if (cost <= 0f) return SupportResult.CapabilityUnavailable;
-            if (!bypass && player.Allocation + 0.001f < cost) return SupportResult.InsufficientAllocation;
+            CallQuote quote = QuoteFor(action, player);
+            float cost = quote.Cost;
+            if (cost <= 0f || !CallSheet.TryGet(action.Id, out CallRow row)) return SupportResult.CapabilityUnavailable;
+            float missionNow = MissionNow();
+            ObjectiveCount census = credits.Census(player.HQ);
+            if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
+                return SupportResult.NotUnlocked;
+            if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
 
-            SupportResult result = action.Action.Execute(context);
+            SupportResult result;
+            try { result = action.Action.Execute(context); }
+            catch (Exception e)
+            {
+                logger.LogError(e);
+                result = SupportResult.SpawnFailed;
+            }
             if (result != SupportResult.Accepted)
             {
+                if (!bypass) credits.Refund(player, cost, missionNow);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
                 return result;
             }
 
-            if (!bypass && cost > 0f) player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
+            credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,
+                GetEffectRadius(action.Id, player.HQ), missionNow);
             ledger.Accept(playerId, request.RequestId, now);
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target +
-                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " alloc." : "."));
+                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " CR." : "."));
             return SupportResult.Accepted;
         }
 
@@ -719,13 +790,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// Price for one player. No action prices itself from the target, so costing uses a
         /// bare context and both the panel and the host reach the same number.
         /// </summary>
-        private float Cost(SupportActionDefinition action, Player player)
+        internal CallQuote QuoteFor(SupportActionDefinition action, Player player)
         {
-            if (player == null) return 0f;
-            float baseCost = action.Action.BaseCost(new SupportContext(player, default, 0, this));
-            if (baseCost <= 0f) return 0f;
-            return baseCost * EventsCostMultiplier(player) *
-                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+            // BaseCost <= 0 still means "this action is not available on this map".
+            if (player == null || credits == null || !CallSheet.TryGet(action.Id, out CallRow row) ||
+                action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
+                return new CallQuote(0, "");
+            ObjectiveCount census = credits.Census(player.HQ);
+            var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
+                false, null, false, EventsCostMultiplier(player),
+                perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost), settings.PriceKnob.Value);
+            return CallPricing.Quote(row.Tier, inputs);
         }
 
         // ---- Host services ---------------------------------------------------------------

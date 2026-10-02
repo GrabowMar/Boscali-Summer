@@ -38,6 +38,14 @@ namespace BoscaliSummer.Modules.Support.Networking
     }
 
     [NetworkMessage]
+    internal struct CreditStateMessage
+    {
+        public byte Protocol;
+        public int Balance;
+        public int FrozenSeconds;
+    }
+
+    [NetworkMessage]
     internal struct CruiseWaypointMessage
     {
         public byte Protocol;
@@ -106,9 +114,11 @@ namespace BoscaliSummer.Modules.Support.Networking
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
                 clientHandler?.UnregisterHandler<SupportResultMessage>();
+                clientHandler?.UnregisterHandler<CreditStateMessage>();
                 clientHandler?.UnregisterHandler<CruiseLegsMessage>();
                 clientHandler = network.Client.MessageHandler;
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
+                clientHandler.RegisterHandler<CreditStateMessage>(ReceiveCredit, false);
                 clientHandler.RegisterHandler<CruiseLegsMessage>(ReceiveCruiseLegs, false);
             }
         }
@@ -118,6 +128,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             serverHandler?.UnregisterHandler<SupportRequestMessage>();
             serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
+            clientHandler?.UnregisterHandler<CreditStateMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
             queries.Clear();
         }
@@ -199,6 +210,23 @@ namespace BoscaliSummer.Modules.Support.Networking
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
         {
             if (result.Protocol == ProtocolVersion) manager.ReceiveResult(result);
+        }
+
+        private void ReceiveCredit(INetworkPlayer _, CreditStateMessage message)
+        {
+            if (message.Protocol == ProtocolVersion) manager.ReceiveCredit(message);
+        }
+
+        /// <summary>Server to owner: the player's CR balance and wallet freeze.</summary>
+        internal void SendCredit(Player player, int balance, int frozenSeconds)
+        {
+            var message = new CreditStateMessage { Protocol = ProtocolVersion, Balance = balance, FrozenSeconds = frozenSeconds };
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveCredit(message); // the host's own player is served in-process
+                return;
+            }
+            player?.Owner?.Send(message);
         }
 
         /// <summary>Submits a cruise leg intent; validated and broadcast in-process on the server.</summary>
@@ -315,6 +343,18 @@ namespace BoscaliSummer.Modules.Support.Networking
                     X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle()
                 };
             });
+            SetWriter<CreditStateMessage>((w, v) =>
+            {
+                w.WriteByte(v.Protocol);
+                w.WriteInt32(v.Balance);
+                w.WriteInt32(v.FrozenSeconds);
+            });
+            SetReader<CreditStateMessage>(r =>
+            {
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return new CreditStateMessage { Protocol = protocol };
+                return new CreditStateMessage { Protocol = protocol, Balance = r.ReadInt32(), FrozenSeconds = r.ReadInt32() };
+            });
             SetWriter<CruiseWaypointMessage>((w, v) =>
             {
                 w.WriteByte(v.Protocol);
@@ -382,6 +422,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             });
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
+            MessagePacker.RegisterMessage<CreditStateMessage>();
             MessagePacker.RegisterMessage<CruiseWaypointMessage>();
             MessagePacker.RegisterMessage<CruiseLegsMessage>();
         }
