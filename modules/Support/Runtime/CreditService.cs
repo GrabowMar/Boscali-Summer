@@ -31,13 +31,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private readonly SupportNet network;
         private readonly List<float> balances = new List<float>();
-        private readonly Dictionary<ulong, (long key, float at)> sent = new Dictionary<ulong, (long, float)>();
+        private readonly Dictionary<ulong, (int balance, int frozen, float ev, float silent, float at)> sent =
+            new Dictionary<ulong, (int, int, float, float, float)>();
         private readonly HashSet<ulong> seen = new HashSet<ulong>();
         private readonly List<ulong> gone = new List<ulong>();
         private const float ResendSeconds = 10f;
 
         /// <summary>Host's combined price factor for a player (knob x events x perk); sent so clients quote like the host.</summary>
-        public System.Func<Player, float> PriceFactor { get; set; }
+        public System.Func<Player, (float eventFactor, float silentFactor)> PriceFactors { get; set; }
         private readonly Dictionary<FactionHQ, (float at, ObjectiveCount count)> census =
             new Dictionary<FactionHQ, (float, ObjectiveCount)>();
 
@@ -149,12 +150,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             int balance = (int)Ledger.Balance(id);
             int frozen = (int)Ledger.FrozenRemaining(id, now);
-            float factor = PriceFactor != null ? PriceFactor(player) : 1f;
-            long key = ((long)balance * 100000L + frozen) * 31L + System.BitConverter.ToInt32(System.BitConverter.GetBytes(factor), 0);
+            (float ev, float silent) = PriceFactors != null ? PriceFactors(player) : (1f, 1f);
             float clock = Time.unscaledTime;
-            if (sent.TryGetValue(id, out var last) && last.key == key && clock - last.at < ResendSeconds) return;
-            sent[id] = (key, clock);
-            network?.SendCredit(player, balance, frozen, factor);
+            if (sent.TryGetValue(id, out var last) && last.balance == balance && last.frozen == frozen &&
+                last.ev == ev && last.silent == silent && clock - last.at < ResendSeconds) return;
+            sent[id] = (balance, frozen, ev, silent, clock);
+            network?.SendCredit(player, balance, frozen, ev, silent);
         }
     }
 }

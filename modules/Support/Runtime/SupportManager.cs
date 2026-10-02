@@ -266,7 +266,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             perks = playerPerks;
             network = net;
             credits = new CreditService(net);
-            credits.PriceFactor = HostPriceFactor;
+            credits.PriceFactors = HostPriceFactors;
             logger = log;
             catalog = new SupportCatalog(supportSettings, fortifications);
         }
@@ -290,7 +290,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             credits?.Clear();
             LocalCredit = 0f;
             LocalFrozenSeconds = 0;
-            LocalPriceFactor = 1f;
+            LocalEventFactor = 1f;
+            LocalSilentFactor = 1f;
             nextCreditTick = 0f;
             lastCreditTick = 0f;
             contactReplies.Clear();
@@ -420,20 +421,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // ---- Client view -----------------------------------------------------------------
         public float LocalCredit { get; private set; }
         public int LocalFrozenSeconds { get; private set; }
-        public float LocalPriceFactor { get; private set; } = 1f;
+        public float LocalEventFactor { get; private set; } = 1f;
+        public float LocalSilentFactor { get; private set; } = 1f;
 
         internal void ReceiveCredit(CreditStateMessage message)
         {
             LocalCredit = message.Balance;
             LocalFrozenSeconds = message.FrozenSeconds;
-            LocalPriceFactor = float.IsNaN(message.PriceFactor) || message.PriceFactor <= 0f ? 1f : message.PriceFactor;
+            LocalEventFactor = SaneFactor(message.EventFactor);
+            LocalSilentFactor = SaneFactor(message.SilentFactor);
         }
 
         /// <summary>The host's combined knob x events x perk factor for one player.</summary>
-        private float HostPriceFactor(Player player) =>
-            player == null ? 1f
-                : settings.PriceKnob.Value * EventsCostMultiplier(player) *
-                  perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost);
+        private (float eventFactor, float silentFactor) HostPriceFactors(Player player) =>
+            player == null ? (1f, 1f)
+                : (EventsCostMultiplier(player),
+                   settings.PriceKnob.Value * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost));
+
+        private static float SaneFactor(float f) => float.IsNaN(f) || float.IsInfinity(f) || f <= 0f ? 1f : f;
 
         /// <summary>CR price of one CALL for the local player (host runs the same QuoteFor).</summary>
         internal CallQuote Quote(SupportActionId id)
@@ -814,8 +819,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
                 false, null, false,
                 // Clients quote with the factor the host sent, so the panel matches what the host charges.
-                GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalPriceFactor,
-                GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : 1f,
+                GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
+                GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,
                 GameAccess.IsServer() ? settings.PriceKnob.Value : 1f);
             return CallPricing.Quote(row.Tier, inputs);
         }
