@@ -759,10 +759,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Unlocked((SupportActionId)r.Action, out string unlock);
                     return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
                 case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
-                case SupportResult.InvalidTarget: return CallWords.Refusal(CallRefusal.FriendliesClose);
+                case SupportResult.InvalidTarget: return CallWords.Refusal(SupportResult.InvalidTarget);
                 case SupportResult.RateLimited:
                 case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
-                default: return "NEGATIVE: " + Explain((SupportResult)r.Result).ToUpperInvariant();
+                default: return CallWords.Refusal((SupportResult)r.Result);
             }
         }
 
@@ -808,33 +808,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             else
             {
-                Status = name + " denied: " + Explain(result) + ".";
+                Status = Explain(result);
             }
         }
 
-        internal static string Explain(SupportResult result)
-        {
-            switch (result)
-            {
-                case SupportResult.OutOfCoverage: return "outside coverage";
-                case SupportResult.Disabled: return "action disabled";
-                case SupportResult.NotUnlocked: return "not authorised";
-                case SupportResult.InvalidTarget: return "unusable target";
-                case SupportResult.NoMarkTarget: return "no unit at the mark - re-mark on a contact";
-                case SupportResult.StaleIntel: return "stale intel at the grid - task RADAR SCAN first";
-                case SupportResult.OutOfRange: return "target out of range";
-                case SupportResult.NotAirborne: return "you must be in an aircraft";
-                case SupportResult.InsufficientAllocation: return "not enough allocation";
-                case SupportResult.NoStock: return "none left";
-                case SupportResult.Cooldown: return "cooling down";
-                case SupportResult.Busy: return "too many jobs in flight";
-                case SupportResult.Duplicate: return "already handled";
-                case SupportResult.CapabilityUnavailable: return "unavailable on this map";
-                case SupportResult.SpawnFailed: return "could not be delivered";
-                case SupportResult.RateLimited: return "too many requests";
-                default: return "unavailable";
-            }
-        }
+        internal static string Explain(SupportResult result) => CallWords.Refusal(result);
 
         // ---- Server ----------------------------------------------------------------------
 
@@ -1088,7 +1066,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 pendingWaypoint = -1;
                 SupportResult result = (SupportResult)message.Result;
                 Status = result == SupportResult.Accepted ? "Waypoint accepted." :
-                    "Waypoint denied: " + Explain(result) + ".";
+                    Explain(result);
             }
             ActiveStrikeInfo? known = null;
             for (int i = 0; i < activeStrikes.Count; i++)
