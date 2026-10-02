@@ -24,6 +24,7 @@ namespace BoscaliSummer.Core.Modules
 
         public ManualLogSource Logger { get; }
         public ModConfiguration Settings { get; }
+        /// <summary>Read services here; register new ones via AddService so rollback tracks them.</summary>
         public ServiceRegistry Services { get; }
 
         /// <summary>Where this module publishes host-authoritative settings for SET SERVER.</summary>

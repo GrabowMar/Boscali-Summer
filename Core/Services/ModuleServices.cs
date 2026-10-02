@@ -6,6 +6,7 @@ namespace BoscaliSummer.Core.Services
     /// </summary>
     internal static class ModuleServices
     {
+        /// <summary>Main thread only. Set by BoscaliMod at startup, cleared at shutdown.</summary>
         internal static ServiceRegistry Active { get; set; }
 
         internal static bool TryGet<T>(out T service) where T : class

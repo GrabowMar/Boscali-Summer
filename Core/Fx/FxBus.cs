@@ -107,7 +107,7 @@ namespace BoscaliSummer.Core.Fx
                 state["fxMs." + pair.Key] = pair.Value;
         }
 
-        /// <summary>Call on the Unity main thread after feature patches are removed.</summary>
+        /// <summary>Call on the Unity main thread after module patches are removed.</summary>
         public static int Shutdown()
         {
             int failures = effects.ReleaseAll();

@@ -11,7 +11,9 @@ namespace BoscaliSummer.Modules.QoL
 {
     internal sealed class QoLModule : IModule
     {
-        public ModuleMetadata Metadata => new ModuleMetadata("qol", "Quality of life");
+        private static readonly ModuleMetadata Module = new ModuleMetadata("qol", "Quality of life");
+
+        public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[]
         {
             typeof(Patches.NightVisionChoicePatch),

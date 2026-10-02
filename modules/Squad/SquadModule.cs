@@ -12,7 +12,9 @@ namespace BoscaliSummer.Modules.Squad
 {
     internal sealed class SquadModule : IModule
     {
-        public ModuleMetadata Metadata => new ModuleMetadata("squad", "Squad / ace hunts");
+        private static readonly ModuleMetadata Module = new ModuleMetadata("squad", "Squad / ace hunts");
+
+        public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[] { typeof(SquadDamagePatch), typeof(SquadKillPatch), typeof(SquadPilotDeathPatch) };
         public void Install(ModuleContext context)
         {

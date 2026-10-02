@@ -122,9 +122,11 @@ namespace BoscaliSummer.Core
             {
                 modules.Add(new SquadModule());
                 modules.Add(new ProgressionModule());
-                if (settings.Support.Enabled.Value) modules.Add(new SupportModule());
-                if (settings.Command.Enabled.Value) modules.Add(new CommandModule());
             }
+            // Support and Command declare "progression" in metadata, so the graph skips
+            // them with a warning when Progression is off instead of silently.
+            if (settings.Support.Enabled.Value) modules.Add(new SupportModule());
+            if (settings.Command.Enabled.Value) modules.Add(new CommandModule());
             if (settings.DynamicOperations.Enabled.Value) modules.Add(new DynamicOperationsModule());
             if (settings.HighCommand.Enabled.Value) modules.Add(new HighCommandModule());
             // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
@@ -304,6 +306,8 @@ namespace BoscaliSummer.Core
             disposed = true;
             for (int i = loadedModules.Count - 1; i >= 0; i--)
                 loadedModules[i].Harmony.UnpatchSelf();
+            for (int i = loadedModules.Count - 1; i >= 0; i--)
+                loadedModules[i].Context.Rollback();
             int fxFailures = FxBus.Shutdown();
             if (fxFailures > 0) logger.LogWarning("Client FX teardown failures: " + fxFailures);
             loadedModules.Clear();

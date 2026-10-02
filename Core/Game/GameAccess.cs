@@ -222,10 +222,10 @@ namespace BoscaliSummer.Core.Game
             return building != null;
         }
 
-        public static List<Button> GetLeftMfdButtons(VirtualMFD mfd) => leftMfdButtonsRef(mfd);
-        public static List<Button> GetRightMfdButtons(VirtualMFD mfd) => rightMfdButtonsRef(mfd);
-        public static List<MFDScreen> GetLeftMfdScreens(VirtualMFD mfd) => leftMfdScreensRef(mfd);
-        public static List<MFDScreen> GetRightMfdScreens(VirtualMFD mfd) => rightMfdScreensRef(mfd);
+        public static List<Button> GetLeftMfdButtons(VirtualMFD mfd) => leftMfdButtonsRef == null || mfd == null ? null : leftMfdButtonsRef(mfd);
+        public static List<Button> GetRightMfdButtons(VirtualMFD mfd) => rightMfdButtonsRef == null || mfd == null ? null : rightMfdButtonsRef(mfd);
+        public static List<MFDScreen> GetLeftMfdScreens(VirtualMFD mfd) => leftMfdScreensRef == null || mfd == null ? null : leftMfdScreensRef(mfd);
+        public static List<MFDScreen> GetRightMfdScreens(VirtualMFD mfd) => rightMfdScreensRef == null || mfd == null ? null : rightMfdScreensRef(mfd);
         public static AudioSource GetCurrentMusicSource(MusicManager music) =>
             currentMusicSourceRef == null || music == null ? null : currentMusicSourceRef(music);
         public static AudioSource GetFadeMusicSource(MusicManager music) =>
@@ -250,10 +250,10 @@ namespace BoscaliSummer.Core.Game
             if (aiHeloCurrentTargetRef != null && modes != null) aiHeloCurrentTargetRef(modes) = target;
         }
 
-        public static RadialMenuAction[] GetRadialActions(RadialMenuMain menu) => radialActionsRef(menu);
-        public static void SetRadialActions(RadialMenuMain menu, RadialMenuAction[] value) => radialActionsRef(menu) = value;
-        public static Aircraft GetRadialAircraft(RadialMenuMain menu) => radialAircraftRef(menu);
-        public static void InvokeRadialSetupMain(RadialMenuMain menu) => radialSetupMain(menu);
+        public static RadialMenuAction[] GetRadialActions(RadialMenuMain menu) => radialActionsRef == null || menu == null ? null : radialActionsRef(menu);
+        public static void SetRadialActions(RadialMenuMain menu, RadialMenuAction[] value){ if (radialActionsRef != null && menu != null) radialActionsRef(menu) = value; }
+        public static Aircraft GetRadialAircraft(RadialMenuMain menu) => radialAircraftRef == null || menu == null ? null : radialAircraftRef(menu);
+        public static void InvokeRadialSetupMain(RadialMenuMain menu){ if (radialSetupMain != null && menu != null) radialSetupMain(menu); }
 
         /// <summary>Wedge appearance reads and writes. Each fails closed on its own field
         /// so one missing member blanks one copy, never the entry.</summary>
