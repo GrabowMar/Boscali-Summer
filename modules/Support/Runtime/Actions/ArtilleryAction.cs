@@ -1,18 +1,18 @@
 using System.Collections;
-using BoscaliSummer.Modules.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// "Rod from God": one high-velocity projectile per online magazine, up to loaded rods.
-    /// Each shot uses the verified low-yield vanilla missile seam and its own orbit scatter.
+    /// "Rod from God": one high-velocity projectile.
+    /// The shot uses the verified low-yield vanilla missile seam with a small fixed scatter.
     /// </summary>
     internal sealed class ArtilleryAction : ISupportAction
     {
         private const float ReleaseAltitude = 20000f;
         private const float ReleaseSpeed = 2500f;
+        private const float RodScatterMeters = 15f;
 
         public float BaseCost(in SupportContext context) =>
             context.Settings.ArtilleryCost.Value * context.Settings.CostMultiplier.Value;
@@ -35,34 +35,24 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
                     return SupportResult.OutOfRange;
             }
-            if (!context.Host.WindowOpen(context.Owner))
-            {
-                context.Logger.LogInfo("[Support] Rod from God refused: tasking window closed.");
-                return SupportResult.WindowClosed;
-            }
             if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
             {
                 context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
                 return SupportResult.StaleIntel;
             }
-            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RodStrike, out PlatformDenial denial);
-            if (platform == null) return SupportContext.Refusal(denial);
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
-            double now = context.Host.OrbitNow;
-            int shots = platform.RodSalvoCount(now);
+            const int shots = 1;
             var targets = new Vector3[shots];
             for (int i = 0; i < shots; i++)
             {
-                Vector2 miss = Random.insideUnitCircle * platform.PreparedRodScatter(now);
+                Vector2 miss = Random.insideUnitCircle * RodScatterMeters;
                 Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
                 targets[i] = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
                     ? scattered : ground;
             }
-            platform.Consume(PlatformAbility.RodStrike, now, shots);
-            context.Logger.LogInfo("[Support] Rod from God: " + shots + " rod(s) released by " +
-                                   OrbitalPlatform.Callsign + " using " + definition.jsonKey +
-                                   "; " + platform.Rods + " rod(s) left.");
+            context.Logger.LogInfo("[Support] Rod from God: " + shots + " rod(s) released by OPS using " +
+                                   definition.jsonKey + ".");
             context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, targets,
                 SupportNaming.Unique("Rod", context)));
             return SupportResult.Accepted;

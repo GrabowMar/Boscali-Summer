@@ -1,16 +1,12 @@
-using BoscaliSummer.Modules.Support.Domain.SpecOps;
 using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// Reinforces the garrison of a controlled zone, or — inside a SPEC OPS safehouse's controlled sector —
-    /// occupies buildings around the mark in any ground. Crosses into Urban Combat only through
+    /// Reinforces the garrison of a controlled zone. Crosses into Urban Combat only through
     /// <see cref="IZoneFortificationService"/>, which reports false or zero unless it placed
     /// defenders, so the player is never charged for a fortification that silently did nothing.
-    /// Detachment-best rank sizes owned-zone orders; a safehouse order takes its own post
-    /// team's rank, like the SEIZE that placed it. Decided 2026-09-27 (D-3).
     /// </summary>
     internal sealed class FortifyAction : ISupportAction
     {
@@ -28,26 +24,15 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             if (fortifications == null) return SupportResult.CapabilityUnavailable;
 
             Vector3 target = context.Target.ToLocalPosition();
-            SpecOpsDetachment detachment = context.Host.Space.DetachmentFor(context.Owner);
-            int shells = detachment != null ? detachment.GroundReadiness : 1;
+            int shells = 1;
             Airbase zone = SupportTargeting.NearestOwnedAirbase(context.Player, target, out float distance);
             if (zone != null && distance <= Mathf.Max(zone.GetRadius() * 1.5f, MinimumZoneRadius))
                 return fortifications.TryFortify(zone, context.Owner, context.Player, shells)
                     ? SupportResult.Accepted
                     : SupportResult.SpawnFailed;
 
-            // Outside owned ground only a held safehouse lets the order through.
-            GlobalPosition mark = context.Target;
-            if (detachment == null || !detachment.Enabled ||
-                detachment.Covering(FieldMission.Seize, mark.x, mark.z, context.Host.OrbitNow) < 0)
-                return SupportResult.NoFieldPost;
-            int covering = detachment.Covering(FieldMission.Seize, mark.x, mark.z, context.Host.OrbitNow);
-            if (covering < 0 || context.Host.OrbitNow >= detachment.Team(covering).PhaseEnd) return SupportResult.NoFieldPost;
-            int postShells = 1 + detachment.Team(covering).Quality;
-            if (fortifications.TrySeize(mark.x, mark.z, FieldCatalog.SeizeRadius, context.Owner, postShells) <= 0)
-                return SupportResult.SpawnFailed;
-            detachment.ConsumeTeamCharge(covering, context.Host.OrbitNow);
-            return SupportResult.Accepted;
+            // Outside owned ground there is nothing to fortify.
+            return SupportResult.InvalidTarget;
         }
     }
 }

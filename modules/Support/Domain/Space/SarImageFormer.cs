@@ -1,6 +1,6 @@
 using System;
 
-namespace BoscaliSummer.Modules.Support.Domain.Orbital
+namespace BoscaliSummer.Modules.Support.Domain.Space
 {
     /// <summary>Scene geometry for one SAR collect, in theatre metres relative to the scene centre.</summary>
     internal readonly struct SarGeometry

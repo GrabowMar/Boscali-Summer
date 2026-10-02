@@ -80,7 +80,7 @@ namespace BoscaliSummer.Core.Config
             string[] names =
             {
                 "Perk board, squad and aces",
-                "Support call-ins and orbital platforms",
+                "Support CALLS (offboard fires)",
                 "Command map console",
                 "Chain of command",
                 "Threat picture (AI intel)",

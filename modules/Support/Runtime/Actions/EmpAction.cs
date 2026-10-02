@@ -1,5 +1,4 @@
 using System.Collections;
-using BoscaliSummer.Modules.Support.Domain.Orbital;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -39,32 +38,17 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            if (!context.Host.WindowOpen(context.Owner))
-            {
-                context.Logger.LogInfo("[Support] EMP shock refused: tasking window closed.");
-                return SupportResult.WindowClosed;
-            }
             if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
             {
                 context.Logger.LogInfo("[Support] EMP shock refused: stale intel at the grid.");
                 return SupportResult.StaleIntel;
             }
-            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.EmpBurst, out PlatformDenial denial);
-            if (platform == null) return SupportContext.Refusal(denial);
-
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
-            // Capture the banked package before the accepted effect consumes it.
-            float radius = Mathf.Min(context.Settings.EmpRadius.Value * platform.EmpRadiusScale(context.Host.OrbitNow),
-                SupportEffectPolicy.MaxEmpRadius);
-            float duration = SupportEffectPolicy.EmpDuration * platform.EmpDurationScale(context.Host.OrbitNow);
-            platform.Consume(PlatformAbility.EmpBurst, context.Host.OrbitNow);
-            context.Logger.LogInfo("[Support] EMP burst package released by " + OrbitalPlatform.Callsign + " from " +
-                                   platform.Orbit.Code + " orbit.");
-
+            float radius = Mathf.Min(context.Settings.EmpRadius.Value, SupportEffectPolicy.MaxEmpRadius);
+            float duration = SupportEffectPolicy.EmpDuration;
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
-            // The station's online battery banks widen both the jam and its replicated effect.
             // Bound to the ceiling the replicated name can carry, or peers fall back to the default visual.
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
                 radius, duration, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));

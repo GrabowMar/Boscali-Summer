@@ -9,10 +9,8 @@ using UnityEngine.Rendering;
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
-    /// The A1 tasking satellite as a real object in the sky. A fixed schedule annunciator,
-    /// not an orbit: it parks at one bearing from the theatre centre at an apparent size that
-    /// matches the stations, and it is only there while the local faction's tasking window is
-    /// open — the mesh renders the real window schedule, never decoration. Client-local
+    /// The A1 tasking satellite as a real object in the sky. Draws nothing until the
+    /// satellite bird list exists (Plan 2); the mesh and placement code stay. Client-local
     /// presentation: nothing is networked, no collider, so neither physics nor radar rays hit it.
     /// </summary>
     internal sealed class SatelliteSky : MonoBehaviour, ISceneService
@@ -37,6 +35,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         public void Configure(SupportManager manager) => support = manager;
 
+        /// <summary>Until the satellite bird list lands (Plan 2) there is nothing to draw.</summary>
+        private static bool HasBirds => false;
+
         public void ResetForScene()
         {
             if (root != null) Destroy(root.gameObject);
@@ -53,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void LateUpdate()
         {
             if (support == null || Application.isBatchMode || support.Settings == null ||
-                !support.Settings.Enabled.Value || !support.LocalWindowOpen)
+                !support.Settings.Enabled.Value || !HasBirds)
             {
                 Hide();
                 return;

@@ -43,16 +43,12 @@ namespace BoscaliSummer.Core.Config
 
             s.Support.ReconEnabled, s.Support.FortifyEnabled, s.Support.ArtilleryEnabled,
             s.Support.EmpEnabled, s.Support.ElintEnabled, s.Support.MtiEnabled,
-            s.Support.FlareBarrageEnabled, s.Support.CyberEnabled, s.Support.EwEnabled,
-            s.Support.SpecOpsEnabled, s.Support.PlatformCostScale, s.Support.PlatformJettisonRefund,
-            s.Support.PlatformInsertionSeconds, s.Support.PlatformDockingSeconds,
-            s.Support.PlatformDebrisEvents, s.Support.SarSceneRadius, s.Support.ElintCost,
+            s.Support.FlareBarrageEnabled, s.Support.SarSceneRadius, s.Support.ElintCost,
             s.Support.ElintRadius, s.Support.MtiCost, s.Support.CostMultiplier, s.Support.ReconCost,
             s.Support.FortifyCost, s.Support.ArtilleryCost, s.Support.EmpCost, s.Support.EmpRadius,
             s.Support.FlareBarrageCost, s.Support.FlareBarrageRadius, s.Support.FlareBarrageCount,
             s.Support.FlareBarrageDuration, s.Support.MaximumRange, s.Support.RequestCooldown,
-            s.Support.CyberUpgradeCostScale, s.Support.CyberCampaignIntensity, s.Support.CyberReach,
-            s.Support.SpecOpsCostScale,
+            s.Support.PriceKnob, s.Support.EarnKnob,
 
             s.TheaterOps.DirectorFactions, s.TheaterOps.FrontlineTacticsEnabled, s.TheaterOps.OperationOverheadCost,
             s.TheaterOps.OperationWaveBudget, s.TheaterOps.OperationMusterSeconds,

@@ -1,10 +1,6 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
-using BoscaliSummer.Modules.Support.Domain.Orbital;
-using BoscaliSummer.Modules.Support.Domain.SpecOps;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Game;
 using Mirage;
@@ -68,37 +64,13 @@ namespace BoscaliSummer.Modules.Support.Networking
 
     internal sealed class SupportNet : MonoBehaviour
     {
+
         /// <summary>
-        /// Protocol 8 added program investment and EW posture. Protocol 9 replaces
-        /// station-keeping satellites with orbital elements (payload, regime, seed, mission
-        /// clock, battery, magazine) plus undisclosed foreign satellites. Protocol 10 adds the
-        /// base-of-operations ranks (fortification doctrine and insertion rigging) to the
-        /// snapshot and the upgrade command. Protocol 11 replaces the satellites with the
-        /// modular orbital station. Protocol 12 replaces the single EW truck with the CYBER
-        /// network (sites, incidents, notices, origin names) and its site and console
-        /// commands. Protocol 13 raises the network to sixteen slots and adds the static and
-        /// down site flags for the airbase infrastructure. Protocol 14 adds intrusion and field
-        /// operations; protocol 15 adds tactical board state and expected command revisions.
-        /// Protocol 16 removes the truck network: nodes carry a stage and a capstone, the
-        /// faction carries computing and intel, and the snapshot carries the live breach.
-        /// Protocol 18 replaces moving pass seeds with fixed station-sector routes (origin * 9 + destination).
-        /// Protocol 19 extends the SPEC OPS snapshot with three ability recharges and the STEAL mission.
-        /// Protocol 20 stamps the four team-gate cooldowns on the ops snapshot.
-        /// Protocol 21 stamps a stable id on every incident so verb targets survive compaction.
-        /// Protocol 22 replicates the three capstone recharges so clients see the host's cooldowns.
-        /// Protocol 23 carries faction-bound OPS reserve, defender breach alerts and friendly
-        /// SPEC OPS objectives; shared infrastructure no longer spends an individual pilot's allocation.
-        /// Command 9 carries the selected sector in Arg. Protocol 17 replaced the programs, reserves, doctrine and infiltration board with the
-        /// SPEC OPS detachment (teams, objectives, recharges, notices) in its own state message,
-        /// sent before each ops snapshot, and its three orders.
-        /// Protocol 25 adds the JTAC mark/unlase actions and the NoMarkTarget result, the PRSM/cruise
-        /// actions with live-TTI replies, the FIRES intel gate (StaleIntel result, IntelStale mirror) and
-        /// cruise waypoint intents with leg broadcasts.
-        /// Protocol 27 adds per-recipient operator permissions and station platform alignment,
-        /// capacitor, heat, work, boost and crew-bus telemetry (26 never left a worktree probe).
-        /// Older peers must not interpret fleet, hack, team or node ids.
+        /// Protocol 28 removes the old OPS (station, CYBER, SPEC OPS) messages and adds the CR credit
+        /// message; the surviving support request, result and cruise messages are unchanged.
+        /// Older peers must not interpret the retired action and result ids.
         /// </summary>
-        internal const byte ProtocolVersion = 27;
+        internal const byte ProtocolVersion = 28;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -125,28 +97,18 @@ namespace BoscaliSummer.Modules.Support.Networking
                 network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
             {
                 serverHandler?.UnregisterHandler<SupportRequestMessage>();
-                serverHandler?.UnregisterHandler<OpsQueryMessage>();
-                serverHandler?.UnregisterHandler<OpsCommandMessage>();
                 serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
                 queries.Clear();
                 serverHandler = network.Server.MessageHandler;
                 serverHandler.RegisterHandler<SupportRequestMessage>(ReceiveRequest, false);
-                serverHandler.RegisterHandler<OpsQueryMessage>(ReceiveOpsQuery, false);
-                serverHandler.RegisterHandler<OpsCommandMessage>(ReceiveOpsCommand, false);
                 serverHandler.RegisterHandler<CruiseWaypointMessage>(ReceiveWaypoint, false);
             }
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
                 clientHandler?.UnregisterHandler<SupportResultMessage>();
-                clientHandler?.UnregisterHandler<OpsStateMessage>();
-                clientHandler?.UnregisterHandler<SpecOpsStateMessage>();
-                clientHandler?.UnregisterHandler<CyberEffectMessage>();
                 clientHandler?.UnregisterHandler<CruiseLegsMessage>();
                 clientHandler = network.Client.MessageHandler;
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
-                clientHandler.RegisterHandler<OpsStateMessage>(ReceiveOpsState, false);
-                clientHandler.RegisterHandler<SpecOpsStateMessage>(ReceiveSpecOpsState, false);
-                clientHandler.RegisterHandler<CyberEffectMessage>(ReceiveCyberEffect, false);
                 clientHandler.RegisterHandler<CruiseLegsMessage>(ReceiveCruiseLegs, false);
             }
         }
@@ -154,13 +116,8 @@ namespace BoscaliSummer.Modules.Support.Networking
         private void OnDestroy()
         {
             serverHandler?.UnregisterHandler<SupportRequestMessage>();
-            serverHandler?.UnregisterHandler<OpsQueryMessage>();
-            serverHandler?.UnregisterHandler<OpsCommandMessage>();
             serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
-            clientHandler?.UnregisterHandler<OpsStateMessage>();
-            clientHandler?.UnregisterHandler<SpecOpsStateMessage>();
-            clientHandler?.UnregisterHandler<CyberEffectMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
             queries.Clear();
         }
@@ -223,7 +180,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 Duration = action == SupportActionId.Prsm || action == SupportActionId.Cruise ? ClampTti(tti) :
                     action == SupportActionId.Emp ? SupportEffectPolicy.EmpDuration :
                     action == SupportActionId.FlareMissile ? manager.Settings.FlareBarrageDuration.Value :
-                    manager.FieldEffectDuration(action, player != null ? player.HQ : null)
+                    action == SupportActionId.JtacMark ? manager.Settings.JtacMarkDuration.Value : 10f
             };
         }
 
@@ -242,102 +199,6 @@ namespace BoscaliSummer.Modules.Support.Networking
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
         {
             if (result.Protocol == ProtocolVersion) manager.ReceiveResult(result);
-        }
-
-        // ---- Station and infrastructure ----------------------------------------------------
-
-        public void QueryOps()
-        {
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local))
-            {
-                manager.ReceiveOps(manager.Snapshot(local, 0, SupportResult.None));
-                return;
-            }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client != null && client.Active)
-                client.Send(new OpsQueryMessage { Protocol = ProtocolVersion });
-        }
-
-        public void Command(int requestId, OpsCommand command, byte arg, byte arg2, GlobalPosition target, uint revision = 0)
-        {
-            var message = new OpsCommandMessage
-            {
-                Protocol = ProtocolVersion,
-                RequestId = requestId,
-                Command = (byte)command,
-                Arg = arg,
-                Arg2 = arg2,
-                X = target.x,
-                Z = target.z,
-                Revision = revision
-            };
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
-            {
-                SupportResult result = manager.EvaluateCommand(local, message);
-                manager.ReceiveOps(manager.Snapshot(local, requestId, result));
-                return;
-            }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client == null || !client.Active)
-            {
-                manager.ReportOffline();
-                return;
-            }
-            client.Send(message);
-        }
-
-        private void ReceiveOpsQuery(INetworkPlayer sender, OpsQueryMessage query)
-        {
-            if (query.Protocol != ProtocolVersion || !GameAccess.IsServer() || !RateLimit(sender)) return;
-            if (sender == null || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null)
-                return;
-            sender.Send(manager.SpecOpsSnapshot(player));
-            sender.Send(manager.Snapshot(player, 0, SupportResult.None));
-        }
-
-        private void ReceiveOpsCommand(INetworkPlayer sender, OpsCommandMessage command)
-        {
-            if (command.Protocol != ProtocolVersion) return;
-            if (sender == null || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
-            // Like ordinary support requests, orders use the manager's bounded attempt ledger
-            // and always receive an acknowledgement, including rate denials. Polls cannot
-            // consume their slot and leave a valid client pending until timeout.
-            SupportResult result = manager.EvaluateCommand(player, command);
-            sender.Send(manager.SpecOpsSnapshot(player));
-            sender.Send(manager.Snapshot(player, command.RequestId, result));
-        }
-
-        private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage state)
-        {
-            if (state.Protocol == ProtocolVersion) manager.ReceiveOps(state);
-        }
-
-        private void ReceiveSpecOpsState(INetworkPlayer _, SpecOpsStateMessage state)
-        {
-            if (state.Protocol == ProtocolVersion) manager.ReceiveSpecOps(state);
-        }
-
-        private void ReceiveCyberEffect(INetworkPlayer _, CyberEffectMessage message)
-        {
-            if (message.Protocol == ProtocolVersion) manager.ReceiveCyberEffect(message);
-        }
-
-        public void BroadcastCyberEffect(HackKind kind, string factionName, float x, float z, float duration)
-        {
-            if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(new CyberEffectMessage
-            {
-                Protocol = ProtocolVersion,
-                Kind = (byte)kind,
-                FactionName = factionName ?? string.Empty,
-                X = x,
-                Z = z,
-                Duration = duration
-            }, authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
         /// <summary>Submits a cruise leg intent; validated and broadcast in-process on the server.</summary>
@@ -454,146 +315,6 @@ namespace BoscaliSummer.Modules.Support.Networking
                     X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle()
                 };
             });
-            SetWriter<OpsQueryMessage>((w, v) => w.WriteByte(v.Protocol));
-            SetReader<OpsQueryMessage>(r => new OpsQueryMessage { Protocol = r.ReadByte() });
-            SetWriter<OpsCommandMessage>((w, v) =>
-            {
-                w.WriteByte(v.Protocol);
-                w.WritePackedInt32(v.RequestId);
-                w.WriteByte(v.Command);
-                w.WriteByte(v.Arg);
-                w.WriteByte(v.Arg2);
-                w.WriteSingle(v.X);
-                w.WriteSingle(v.Z);
-                w.WriteUInt32(v.Revision);
-            });
-            SetReader<OpsCommandMessage>(r =>
-            {
-                byte protocol = r.ReadByte();
-                if (protocol != ProtocolVersion) return new OpsCommandMessage { Protocol = protocol };
-                return new OpsCommandMessage
-                {
-                    Protocol = protocol,
-                    RequestId = r.ReadPackedInt32(),
-                    Command = r.ReadByte(),
-                    Arg = r.ReadByte(),
-                    Arg2 = r.ReadByte(),
-                    X = r.ReadSingle(),
-                    Z = r.ReadSingle(),
-                    Revision = r.ReadUInt32()
-                };
-            });
-            SetWriter<OpsStateMessage>((w, v) =>
-            {
-                w.WriteByte(v.Protocol);
-                w.WritePackedInt32(v.RequestId);
-                w.WriteByte(v.Result);
-                w.WriteString(v.FactionName ?? string.Empty);
-                w.WriteSingle(v.OpsReserve);
-                w.WriteByte(v.CyberThreatSlot);
-                w.WriteByte(v.IntelStale ? (byte)1 : (byte)0);
-                bool active = v.PlatformActive && OpsStateMessageBuffers.ValidArrays(v);
-                w.WriteByte(active ? (byte)1 : (byte)0);
-                if (active)
-                {
-                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) w.WriteByte(v.PlatformModules[i]);
-                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) w.WriteByte(v.PlatformOffline[i]);
-                    w.WriteByte(v.PlatformRegime);
-                    w.WritePackedInt32(v.PlatformSeed);
-                    w.WriteSingle(v.PlatformClock);
-                    w.WriteByte(v.PlatformHold);
-                    w.WriteSingle(v.PlatformEnergy);
-                    w.WriteSingle(v.PlatformFuel);
-                    w.WriteByte(v.PlatformRods);
-                    w.WriteByte(v.PlatformBrownout ? (byte)1 : (byte)0);
-                    w.WriteByte(v.PlatformPending);
-                    w.WriteByte(v.PlatformPendingCell);
-                    w.WriteSingle(v.PlatformDockIn);
-                    for (int i = 0; i < PlatformAbilities.Count; i++) w.WriteSingle(v.PlatformRecharge[i]);
-                    w.WriteSingle(v.PlatformElapsed);
-                    w.WriteByte(v.PlatformNotice);
-                    w.WriteByte(v.PlatformNoticeCell);
-                    w.WriteByte(v.PlatformNoticeSerial);
-                    w.WriteByte(v.PlatformFocus);
-                    w.WriteSingle(v.PlatformRetaskIn);
-                    w.WriteSingle(v.PlatformSolutionX);
-                    w.WriteSingle(v.PlatformSolutionZ);
-                    w.WriteSingle(v.PlatformSolutionRadius);
-                    w.WriteSingle(v.PlatformSolutionIn);
-                }
-                int foreignCount = Math.Max(0, Math.Min((int)v.ForeignCount, Math.Min(SpaceOperations.MaximumForeign,
-                    Math.Min(v.ForeignRegimes?.Length ?? 0, Math.Min(v.ForeignSeeds?.Length ?? 0,
-                        Math.Min(v.ForeignClocks?.Length ?? 0, v.ForeignLayouts?.Length ?? 0))))));
-                w.WriteByte((byte)foreignCount);
-                for (int i = 0; i < foreignCount; i++)
-                {
-                    w.WriteByte(v.ForeignRegimes[i]);
-                    w.WritePackedInt32(v.ForeignSeeds[i]);
-                    w.WriteSingle(v.ForeignClocks[i]);
-                    w.WritePackedInt32(v.ForeignLayouts[i]);
-                }
-                WriteCyber(w, v.Cyber, v.CyberOriginCount, v.CyberOrigins);
-                for (int i = 0; i < TeamGates.Count; i++)
-                    w.WriteSingle(v.TeamCooldown != null && i < v.TeamCooldown.Length ? v.TeamCooldown[i] : 0f);
-            });
-            SetReader<OpsStateMessage>(r =>
-            {
-                byte protocol = r.ReadByte();
-                var message = OpsStateMessageBuffers.Create();
-                message.Protocol = protocol;
-                if (protocol != ProtocolVersion) return message;
-                message.RequestId = r.ReadPackedInt32();
-                message.Result = r.ReadByte();
-                message.FactionName = r.ReadString();
-                message.OpsReserve = r.ReadSingle();
-                message.CyberThreatSlot = r.ReadByte();
-                message.IntelStale = r.ReadByte() != 0;
-                // A flag or count past its bound is a malformed or hostile message: stop reading
-                // rather than consume bytes that belong to later fields.
-                int active = r.ReadByte();
-                if (active > 1) return new OpsStateMessage { Protocol = 0 };
-                message.PlatformActive = active == 1;
-                if (message.PlatformActive)
-                {
-                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) message.PlatformModules[i] = r.ReadByte();
-                    for (int i = 0; i < OrbitalPlatform.CellCount; i++) message.PlatformOffline[i] = r.ReadByte();
-                    message.PlatformRegime = r.ReadByte();
-                    message.PlatformSeed = r.ReadPackedInt32();
-                    message.PlatformClock = r.ReadSingle();
-                    message.PlatformHold = r.ReadByte();
-                    message.PlatformEnergy = r.ReadSingle();
-                    message.PlatformFuel = r.ReadSingle();
-                    message.PlatformRods = r.ReadByte();
-                    message.PlatformBrownout = r.ReadByte() != 0;
-                    message.PlatformPending = r.ReadByte();
-                    message.PlatformPendingCell = r.ReadByte();
-                    message.PlatformDockIn = r.ReadSingle();
-                    for (int i = 0; i < PlatformAbilities.Count; i++) message.PlatformRecharge[i] = r.ReadSingle();
-                    message.PlatformElapsed = r.ReadSingle();
-                    message.PlatformNotice = r.ReadByte();
-                    message.PlatformNoticeCell = r.ReadByte();
-                    message.PlatformNoticeSerial = r.ReadByte();
-                    message.PlatformFocus = r.ReadByte();
-                    message.PlatformRetaskIn = r.ReadSingle();
-                    message.PlatformSolutionX = r.ReadSingle();
-                    message.PlatformSolutionZ = r.ReadSingle();
-                    message.PlatformSolutionRadius = r.ReadSingle();
-                    message.PlatformSolutionIn = r.ReadSingle();
-                }
-                int foreignCount = r.ReadByte();
-                if (foreignCount > SpaceOperations.MaximumForeign) return new OpsStateMessage { Protocol = 0 };
-                message.ForeignCount = (byte)foreignCount;
-                for (int i = 0; i < foreignCount; i++)
-                {
-                    message.ForeignRegimes[i] = r.ReadByte();
-                    message.ForeignSeeds[i] = r.ReadPackedInt32();
-                    message.ForeignClocks[i] = r.ReadSingle();
-                    message.ForeignLayouts[i] = r.ReadPackedInt32();
-                }
-                if (!ReadCyber(r, ref message)) return new OpsStateMessage { Protocol = 0 };
-                for (int i = 0; i < TeamGates.Count; i++) message.TeamCooldown[i] = r.ReadSingle();
-                return message;
-            });
             SetWriter<CruiseWaypointMessage>((w, v) =>
             {
                 w.WriteByte(v.Protocol);
@@ -659,355 +380,10 @@ namespace BoscaliSummer.Modules.Support.Networking
                 message.Tti = r.ReadSingle();
                 return message;
             });
-            SetWriter<SpecOpsStateMessage>((w, v) =>
-            {
-                w.WriteByte(v.Protocol);
-                if (v.Protocol == ProtocolVersion)
-                {
-                    w.WriteString(v.FactionName ?? string.Empty);
-                    WriteSpecOps(w, v.State);
-                }
-            });
-            SetReader<SpecOpsStateMessage>(r =>
-            {
-                byte protocol = r.ReadByte();
-                var message = new SpecOpsStateMessage { Protocol = protocol, State = new SpecOpsSnapshot() };
-                if (protocol != ProtocolVersion) return message;
-                message.FactionName = r.ReadString();
-                if (!ReadSpecOps(r, message.State)) message.Protocol = 0;
-                return message;
-            });
-            SetWriter<CyberEffectMessage>((w, v) =>
-            {
-                w.WriteByte(v.Protocol);
-                w.WriteByte(v.Kind);
-                w.WriteString(v.FactionName ?? string.Empty);
-                w.WriteSingle(v.X);
-                w.WriteSingle(v.Z);
-                w.WriteSingle(v.Duration);
-            });
-            SetReader<CyberEffectMessage>(r =>
-            {
-                byte protocol = r.ReadByte();
-                var message = new CyberEffectMessage { Protocol = protocol };
-                if (protocol != ProtocolVersion) return message;
-                message.Kind = r.ReadByte();
-                message.FactionName = r.ReadString();
-                message.X = r.ReadSingle();
-                message.Z = r.ReadSingle();
-                message.Duration = r.ReadSingle();
-                return message;
-            });
-            MessagePacker.RegisterMessage<OpsQueryMessage>();
-            MessagePacker.RegisterMessage<OpsCommandMessage>();
-            MessagePacker.RegisterMessage<OpsStateMessage>();
-            MessagePacker.RegisterMessage<SpecOpsStateMessage>();
-            MessagePacker.RegisterMessage<CyberEffectMessage>();
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
             MessagePacker.RegisterMessage<CruiseWaypointMessage>();
             MessagePacker.RegisterMessage<CruiseLegsMessage>();
-        }
-
-        private static readonly CyberSnapshot EmptyCyber = new CyberSnapshot();
-        private static readonly SpecOpsSnapshot EmptySpecOps = new SpecOpsSnapshot();
-
-        /// <summary>The SPEC OPS block: four teams, the objective list, two recharges, the notice
-        /// ring. Counts clamp on write; names clip to the detachment's name length.</summary>
-        private static void WriteSpecOps(NetworkWriter w, SpecOpsSnapshot s)
-        {
-            s = s ?? EmptySpecOps;
-            w.WriteByte(s.Flags);
-            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
-            {
-                w.WriteByte(s.TeamState[i]);
-                w.WriteByte(s.TeamRank[i]);
-                w.WriteByte(s.TeamWins[i]);
-                w.WriteByte(s.TeamMission[i]);
-                w.WriteByte(s.TeamChance[i]);
-                w.WriteByte(s.TeamLoss[i]);
-                w.WriteByte(s.TeamThreat[i]);
-                w.WriteByte(s.TeamRadars[i]);
-                w.WriteByte(s.TeamLast[i]);
-                w.WritePackedInt32(s.TeamAnchor[i]);
-                w.WriteSingle(s.TeamX[i]);
-                w.WriteSingle(s.TeamZ[i]);
-                WriteFieldClock(w, s.TeamRemaining[i]);
-                WriteFieldClock(w, s.TeamDuration[i]);
-                w.WriteString(ClipWireLabel(s.TeamTarget[i], SpecOpsDetachment.NameLength));
-                w.WriteSingle(s.TeamOriginX[i]);
-                w.WriteSingle(s.TeamOriginZ[i]);
-                w.WriteString(ClipWireLabel(s.TeamOrigin[i], SpecOpsDetachment.NameLength));
-            }
-            int objectives = Math.Min((int)s.ObjectiveCount, SpecOpsDetachment.ObjectiveSlots);
-            w.WriteByte((byte)objectives);
-            for (int i = 0; i < objectives; i++)
-            {
-                w.WriteByte(s.ObjectiveKind[i]);
-                w.WritePackedInt32(s.ObjectiveAnchor[i]);
-                w.WriteSingle(s.ObjectiveX[i]);
-                w.WriteSingle(s.ObjectiveZ[i]);
-                w.WriteByte(s.ObjectiveThreat[i]);
-                w.WriteByte(s.ObjectiveRadars[i]);
-                w.WriteByte(s.ObjectiveHostile[i] ? (byte)1 : (byte)0);
-                w.WriteByte(s.ObjectiveFriendly[i] ? (byte)1 : (byte)0);
-                WriteFieldClock(w, s.ObjectiveScout[i]);
-                w.WriteString(ClipWireLabel(s.ObjectiveName[i], SpecOpsDetachment.NameLength));
-            }
-            for (int a = 0; a < FieldCatalog.AbilityCount; a++) w.WriteSingle(s.AbilityRecharge[a]);
-            w.WritePackedInt32(s.NoticeSerial);
-            int notices = Math.Min((int)s.NoticeCount, SpecOpsDetachment.NoticeSlots);
-            w.WriteByte((byte)notices);
-            for (int i = 0; i < notices; i++)
-            {
-                w.WriteByte(s.NoticeKind[i]);
-                w.WriteByte(s.NoticeTeam[i]);
-                w.WriteByte(s.NoticeMission[i]);
-            }
-        }
-
-        /// <summary>False for a count past its bound; values themselves clamp in the model's mirror.</summary>
-        private static bool ReadSpecOps(NetworkReader r, SpecOpsSnapshot s)
-        {
-            s.Clear();
-            s.Flags = r.ReadByte();
-            for (int i = 0; i < SpecOpsDetachment.TeamCount; i++)
-            {
-                s.TeamState[i] = r.ReadByte();
-                s.TeamRank[i] = r.ReadByte();
-                s.TeamWins[i] = r.ReadByte();
-                s.TeamMission[i] = r.ReadByte();
-                s.TeamChance[i] = r.ReadByte();
-                s.TeamLoss[i] = r.ReadByte();
-                s.TeamThreat[i] = r.ReadByte();
-                s.TeamRadars[i] = r.ReadByte();
-                s.TeamLast[i] = r.ReadByte();
-                s.TeamAnchor[i] = r.ReadPackedInt32();
-                s.TeamX[i] = r.ReadSingle();
-                s.TeamZ[i] = r.ReadSingle();
-                s.TeamRemaining[i] = ReadFieldClock(r);
-                s.TeamDuration[i] = ReadFieldClock(r);
-                s.TeamTarget[i] = SpecOpsDetachment.Clip(r.ReadString());
-                s.TeamOriginX[i] = r.ReadSingle();
-                s.TeamOriginZ[i] = r.ReadSingle();
-                s.TeamOrigin[i] = SpecOpsDetachment.Clip(r.ReadString());
-            }
-            int objectives = r.ReadByte();
-            if (objectives > SpecOpsDetachment.ObjectiveSlots) return false;
-            s.ObjectiveCount = (byte)objectives;
-            for (int i = 0; i < objectives; i++)
-            {
-                s.ObjectiveKind[i] = r.ReadByte();
-                s.ObjectiveAnchor[i] = r.ReadPackedInt32();
-                s.ObjectiveX[i] = r.ReadSingle();
-                s.ObjectiveZ[i] = r.ReadSingle();
-                s.ObjectiveThreat[i] = r.ReadByte();
-                s.ObjectiveRadars[i] = r.ReadByte();
-                s.ObjectiveHostile[i] = r.ReadByte() != 0;
-                s.ObjectiveFriendly[i] = r.ReadByte() != 0;
-                s.ObjectiveScout[i] = ReadFieldClock(r);
-                s.ObjectiveName[i] = SpecOpsDetachment.Clip(r.ReadString());
-            }
-            for (int a = 0; a < FieldCatalog.AbilityCount; a++) s.AbilityRecharge[a] = r.ReadSingle();
-            s.NoticeSerial = r.ReadPackedInt32();
-            int notices = r.ReadByte();
-            if (notices > SpecOpsDetachment.NoticeSlots) return false;
-            s.NoticeCount = (byte)notices;
-            for (int i = 0; i < notices; i++)
-            {
-                s.NoticeKind[i] = r.ReadByte();
-                s.NoticeTeam[i] = r.ReadByte();
-                s.NoticeMission[i] = r.ReadByte();
-            }
-            return true;
-        }
-
-        // Decisecond clocks keep four origins and live pressure in one bounded packet.
-        // The host owns the exact clock; clients only display these relative countdowns.
-        private static void WriteFieldClock(NetworkWriter writer, float seconds)
-        {
-            int ticks = float.IsNaN(seconds) || float.IsInfinity(seconds) ? 0 :
-                (int)Math.Round(Math.Max(0f, Math.Min(6553.5f, seconds)) * 10.0);
-            writer.WriteByte((byte)ticks);
-            writer.WriteByte((byte)(ticks >> 8));
-        }
-
-        private static float ReadFieldClock(NetworkReader reader) =>
-            (reader.ReadByte() | reader.ReadByte() << 8) * 0.1f;
-
-        /// <summary>The CYBER block of a snapshot. Counts are clamped to their bounds on write.</summary>
-        private static void WriteCyber(NetworkWriter w, CyberSnapshot c, byte originCount, string[] origins)
-        {
-            c = c ?? EmptyCyber;
-            int nodes = Math.Min((int)c.NodeCount, CyberNetwork.SlotCount);
-            w.WriteByte((byte)nodes);
-            for (int i = 0; i < nodes; i++)
-            {
-                w.WriteByte(c.Slot[i]);
-                w.WriteByte(c.Kind[i]);
-                w.WriteByte(c.Stage[i]);
-                w.WriteSingle(c.X[i]);
-                w.WriteSingle(c.Z[i]);
-                w.WriteByte(c.Flags[i]);
-                w.WriteByte(c.Capstone[i]);
-                w.WriteByte(c.PatchIn[i]);
-                w.WriteByte(c.BaitIn[i]);
-                w.WriteByte(c.LockIn[i]);
-            }
-            w.WriteSingle(c.Computing);
-            w.WriteSingle(c.Intel);
-            for (int u = 0; u < c.Upgrade.Length; u++) w.WriteByte(c.Upgrade[u]);
-            w.WriteByte(c.BreachTarget);
-            w.WriteByte(c.BreachPhase);
-            w.WriteByte(c.BreachFlags);
-            w.WriteSingle(c.BreachTrace);
-            w.WriteSingle(c.BreachIn);
-            w.WriteSingle(c.SpoofIn);
-            w.WriteByte(c.AccessSlot);
-            w.WriteSingle(c.AccessIn);
-            w.WriteSingle(c.AccessRecoveryIn);
-            for (int i = 0; i < c.CapstoneIn.Length; i++) w.WriteSingle(c.CapstoneIn[i]);
-            w.WritePackedInt32(c.Defended);
-            w.WritePackedInt32(c.Breached);            for (int v = 0; v < CyberNetwork.VerbCount; v++) w.WriteSingle(c.Recharge[v]);
-            w.WriteByte(c.Heat);
-            w.WriteSingle(c.NextIncidentIn);
-            w.WriteSingle(c.ExposedIn);
-
-            int incidents = Math.Min((int)c.IncidentCount, CyberNetwork.IncidentSlots);
-            w.WriteByte((byte)incidents);
-            for (int i = 0; i < incidents; i++)
-            {
-                w.WriteByte(c.IncidentId[i]);
-                w.WriteByte(c.IncidentKind[i]);
-                w.WriteByte(c.IncidentState[i]);
-                w.WriteByte(c.IncidentSite[i]);
-                w.WriteByte(c.IncidentOrigin[i]);
-                w.WriteSingle(c.IncidentX[i]);
-                w.WriteSingle(c.IncidentZ[i]);
-                w.WriteSingle(c.IncidentAge[i]);
-                w.WriteSingle(c.IncidentLeft[i]);
-                w.WriteByte(c.IncidentTrace[i]);
-            }
-            for (int f = 0; f < CyberNetwork.MaximumOrigins; f++) w.WriteByte(c.Foothold[f]);
-
-            w.WritePackedInt32(c.NoticeSerial);
-            int notices = Math.Min((int)c.NoticeCount, CyberNetwork.NoticeSlots);
-            w.WriteByte((byte)notices);
-            for (int i = 0; i < notices; i++)
-            {
-                w.WriteByte(c.NoticeKind[i]);
-                w.WriteByte(c.NoticeSite[i]);
-                w.WriteByte(c.NoticeOrigin[i]);
-            }
-
-            int names = origins == null ? 0
-                : Math.Min((int)originCount, Math.Min(origins.Length, OpsStateMessageBuffers.MaximumOriginNames));
-            w.WriteByte((byte)names);
-            for (int i = 0; i < names; i++)
-            {
-                w.WriteString(ClipWireLabel(origins[i], OpsStateMessageBuffers.MaximumOriginLength));
-            }
-        }
-
-        // These are display labels, never faction identities. Budget encoded bytes so
-        // localized names cannot make a bounded snapshot exceed its datagram allowance.
-        private static string ClipWireLabel(string value, int maximumBytes)
-        {
-            if (string.IsNullOrEmpty(value)) return string.Empty;
-            int length = 0, bytes = 0;
-            while (length < value.Length)
-            {
-                char c = value[length];
-                bool pair = char.IsHighSurrogate(c) && length + 1 < value.Length &&
-                    char.IsLowSurrogate(value[length + 1]);
-                int cost = pair ? 4 : c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
-                if (bytes + cost > maximumBytes) break;
-                bytes += cost;
-                length += pair ? 2 : 1;
-            }
-            return length == value.Length ? value : value.Substring(0, length);
-        }
-
-        /// <summary>False for a count past its bound: the rest of the message cannot be trusted.</summary>
-        private static bool ReadCyber(NetworkReader r, ref OpsStateMessage m)
-        {
-            CyberSnapshot c = m.Cyber;
-            int nodes = r.ReadByte();
-            if (nodes > CyberNetwork.SlotCount) return false;
-            c.NodeCount = (byte)nodes;
-            for (int i = 0; i < nodes; i++)
-            {
-                c.Slot[i] = r.ReadByte();
-                c.Kind[i] = r.ReadByte();
-                c.Stage[i] = r.ReadByte();
-                c.X[i] = r.ReadSingle();
-                c.Z[i] = r.ReadSingle();
-                c.Flags[i] = r.ReadByte();
-                c.Capstone[i] = r.ReadByte();
-                c.PatchIn[i] = r.ReadByte();
-                c.BaitIn[i] = r.ReadByte();
-                c.LockIn[i] = r.ReadByte();
-            }
-            c.Computing = r.ReadSingle();
-            c.Intel = r.ReadSingle();
-            for (int u = 0; u < c.Upgrade.Length; u++) c.Upgrade[u] = r.ReadByte();
-            c.BreachTarget = r.ReadByte();
-            c.BreachPhase = r.ReadByte();
-            c.BreachFlags = r.ReadByte();
-            c.BreachTrace = r.ReadSingle();
-            c.BreachIn = r.ReadSingle();
-            c.SpoofIn = r.ReadSingle();
-            c.AccessSlot = r.ReadByte();
-            c.AccessIn = r.ReadSingle();
-            c.AccessRecoveryIn = r.ReadSingle();
-            for (int i = 0; i < c.CapstoneIn.Length; i++) c.CapstoneIn[i] = r.ReadSingle();
-            c.Defended = r.ReadPackedInt32();
-            c.Breached = r.ReadPackedInt32();
-            for (int v = 0; v < CyberNetwork.VerbCount; v++) c.Recharge[v] = r.ReadSingle();
-            c.Heat = r.ReadByte();
-            c.NextIncidentIn = r.ReadSingle();
-            c.ExposedIn = r.ReadSingle();
-
-            int incidents = r.ReadByte();
-            if (incidents > CyberNetwork.IncidentSlots) return false;
-            c.IncidentCount = (byte)incidents;
-            for (int i = 0; i < incidents; i++)
-            {
-                c.IncidentId[i] = r.ReadByte();
-                c.IncidentKind[i] = r.ReadByte();
-                c.IncidentState[i] = r.ReadByte();
-                c.IncidentSite[i] = r.ReadByte();
-                c.IncidentOrigin[i] = r.ReadByte();
-                c.IncidentX[i] = r.ReadSingle();
-                c.IncidentZ[i] = r.ReadSingle();
-                c.IncidentAge[i] = r.ReadSingle();
-                c.IncidentLeft[i] = r.ReadSingle();
-                c.IncidentTrace[i] = r.ReadByte();
-            }
-            for (int f = 0; f < CyberNetwork.MaximumOrigins; f++) c.Foothold[f] = r.ReadByte();
-
-            c.NoticeSerial = r.ReadPackedInt32();
-            int notices = r.ReadByte();
-            if (notices > CyberNetwork.NoticeSlots) return false;
-            c.NoticeCount = (byte)notices;
-            for (int i = 0; i < notices; i++)
-            {
-                c.NoticeKind[i] = r.ReadByte();
-                c.NoticeSite[i] = r.ReadByte();
-                c.NoticeOrigin[i] = r.ReadByte();
-            }
-
-            int names = r.ReadByte();
-            if (names > OpsStateMessageBuffers.MaximumOriginNames) return false;
-            m.CyberOriginCount = (byte)names;
-            for (int i = 0; i < names; i++)
-            {
-                string name = r.ReadString() ?? string.Empty;
-                m.CyberOrigins[i] = name.Length > OpsStateMessageBuffers.MaximumOriginLength
-                    ? name.Substring(0, OpsStateMessageBuffers.MaximumOriginLength)
-                    : name;
-            }
-            return true;
         }
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>

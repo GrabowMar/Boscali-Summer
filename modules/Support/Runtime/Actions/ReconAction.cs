@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Orbital;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
@@ -36,25 +35,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
         public SupportResult Execute(in SupportContext context)
         {
-            if (!context.Host.WindowOpen(context.Owner))
-            {
-                context.Logger.LogInfo("[Support] Radar scan refused: tasking window closed.");
-                return SupportResult.WindowClosed;
-            }
-            OrbitalPlatform platform = context.PlatformAccess(PlatformAbility.RadarScan, out PlatformDenial denial);
-            if (platform == null) return SupportContext.Refusal(denial);
-
             try
             {
-                double now = context.Host.OrbitNow;
                 int contacts = Reveal(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), context.Logger, RevealFilter.Ground,
+                    context.Settings.SarSceneRadius.Value, context.Logger, RevealFilter.Ground,
                     maximumSpeed: StationaryThreshold);
-                context.Host.Space.DetachmentFor(context.Owner)?.ScoutNear(context.Target.x, context.Target.z,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
-                platform.Consume(PlatformAbility.RadarScan, now);
-                platform.RecordSolution(context.Target.x, context.Target.z,
-                    context.Settings.SarSceneRadius.Value * platform.ScanScale(now), now);
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }
