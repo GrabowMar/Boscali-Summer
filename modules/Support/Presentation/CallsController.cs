@@ -90,6 +90,24 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
 
+        public void Disarm()
+        {
+            arm.Clear();
+            manager?.Disarm();
+            Say("DISARMED", AvUiCue.Release);
+        }
+
+        /// <summary>JTAC UNLASE at the current POD / last map pick; no arm step, no floors.</summary>
+        public void Unlase()
+        {
+            if (manager == null) return;
+            if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return; }
+            float now = Time.unscaledTime;
+            if (TryPod(out GlobalPosition pod)) { Fire(SupportActionId.JtacUnlase, pod, now); return; }
+            if (mapAim.HasValue) { Fire(SupportActionId.JtacUnlase, mapAim.Value, now); return; }
+            Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
+        }
+
         /// <summary>Host answer: called by SupportManager.ReceiveResult with the request id and the result words.</summary>
         internal void Answer(int requestId, bool accepted, string words)
         {

@@ -505,6 +505,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return open;
         }
 
+        /// <summary>True when this peer is the host or has a live client link to one.</summary>
+        public bool Online => GameAccess.IsServer() || NetworkManagerNuclearOption.i?.Client?.Active == true;
+
+        /// <summary>The local faction's next tier goal in words, or "" when everything is open.</summary>
+        public string NextUnlockText()
+        {
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null) return "";
+            ObjectiveCount census = credits.Census(player.HQ);
+            return CallFloors.NextUnlock(census.held, census.n, MissionNow() / 60f, 1f);
+        }
+
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
 

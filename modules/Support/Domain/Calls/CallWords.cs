@@ -21,12 +21,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
                 case CallRefusal.FriendliesClose: return "NEGATIVE: FRIENDLIES CLOSE — MOVE THE AIM";
                 case CallRefusal.OutOfRange: return "NEGATIVE: OUT OF RANGE — AIM CLOSER";
                 case CallRefusal.NoAim: return "NEGATIVE: NO AIM — DESIGNATE OR RIGHT-CLICK MAP";
-                case CallRefusal.Offline: return "NEGATIVE: OPS OFFLINE";
+                case CallRefusal.Offline: return "NEGATIVE: OPS OFFLINE — WAIT FOR THE HOST LINK";
                 case CallRefusal.Busy: return "NEGATIVE: LINE BUSY — STAND BY";
                 case CallRefusal.Timeout: return "NEGATIVE: NO ANSWER — CREDIT RETURNED";
                 case CallRefusal.Frozen:
                     return "NEGATIVE: CREDIT FROZEN " + (int)Math.Ceiling(seconds / 60f) + " MIN — NEW FACTION";
-                default: return "NEGATIVE: UNAVAILABLE";
+                default: return "NEGATIVE: UNAVAILABLE — TRY ANOTHER CALL";
             }
         }
 

@@ -201,7 +201,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         public AvControl AddTrailing(AvControl.Spec spec)
         {
-            if (trailing.Count >= 2) return null;
+            if (trailing.Count >= 3) return null;
             AvControl c = AvControl.Make(Rect, spec);
             trailing.Add(c);
             return c;
