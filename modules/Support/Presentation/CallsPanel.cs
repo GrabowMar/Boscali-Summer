@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
+        private float lineHeight = CallLine.Height;
 
         public void Configure(SupportManager supportManager, CallsController callsController)
         {
@@ -188,6 +189,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void BuildConsole(RectTransform rootRect, float height)
         {
             rows.Clear();
+            // 24 px at the 596 px page; a taller (896 px) page spreads the ten rows instead of leaving an empty band.
+            lineHeight = Mathf.Clamp(CallLine.Height + (height - PanelHeight) * 0.085f, CallLine.Height, 52f);
             shell = AvConsole.Build(rootRect, "OPS", "CALLS", 1, Width, height);
             metrics = shell.Metrics("CREDIT", "NEXT");
             BuildPage(shell.Page(0));
@@ -225,7 +228,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             foreach (CallRow row in CallSheet.Rows)
             {
                 SupportActionId id = row.Id;
-                CallLine line = page.Add(new CallLine(page.Content));
+                CallLine line = page.Add(new CallLine(page.Content, lineHeight));
                 line.AddControl(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary), "Arm this CALL; press again to fire.");
                 line.AddControl(new AvControl.Spec("★", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
                 if (id == SupportActionId.JtacMark)

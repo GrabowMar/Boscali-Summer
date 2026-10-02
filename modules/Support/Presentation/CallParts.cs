@@ -266,6 +266,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     internal sealed class CallLine : AvPart
     {
         public const float Height = 24f;
+        private readonly float rowHeight;
         private const float PadX = 8f, CtlH = 20f, CallW = 40f, StarW = 24f, UnlaseW = 56f, Gap = 3f;
         private readonly AvFrame frame;
         private readonly Image rail;
@@ -274,8 +275,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private AvState tone = AvState.Info;
         private bool hover, armed, dim;
 
-        public CallLine(RectTransform parent)
+        /// <summary>A line of <paramref name="lineHeight"/> px (never below <see cref="Height"/>): a taller panel spreads the rows instead of leaving an empty band.</summary>
+        public CallLine(RectTransform parent, float lineHeight = Height)
         {
+            rowHeight = Mathf.Max(Height, lineHeight);
             Rect = AvLay.Child(parent, "CallLine");
             frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
             AvLay.Fill(frame.rectTransform);
@@ -322,13 +325,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Layout();
         }
 
-        public override float Measure(float width) => Height;
+        public override float Measure(float width) => rowHeight;
 
         public override void Place(AvSlot s) { base.Place(s); Layout(); }
 
         private void Layout()
         {
-            float w = PlacedWidth > 0f ? PlacedWidth : AvTokens.PanelWidth - 30f, h = Height;
+            float w = PlacedWidth > 0f ? PlacedWidth : AvTokens.PanelWidth - 30f, h = rowHeight;
             AvLay.Place(rail.rectTransform, 0f, 0f, 3f, h);
             float x = w - PadX;
             for (int i = controls.Count - 1; i >= 0; i--)
@@ -342,12 +345,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
             OpsText.Place(name, PadX + 2f, 0f, 100f, h);
             OpsText.Place(tier, 112f, 0f, 54f, h);
             OpsText.Place(cost, 166f, 0f, 40f, h);
-            bool chip = reason.text.Length > 0;
+            // The reason chip is shown only when it fits beside the whole state word; a long word (ARMED — PRESS AGAIN,
+            // a lock reason) or a third control wins the room, the price stays and the hover help carries the rest.
+            float stateW = Natural(state), reasonW = Natural(reason);
+            bool chip = reason.text.Length > 0 && 210f + reasonW + 6f + stateW <= right;
             reason.gameObject.SetActive(chip);
-            OpsText.Place(reason, 210f, 0f, 58f, h);
-            float sx = chip ? 272f : 210f;
+            if (chip) OpsText.Place(reason, 210f, 0f, reasonW + 2f, h);
+            float sx = chip ? 210f + reasonW + 6f : 210f;
             OpsText.Place(state, sx, 0f, Mathf.Max(20f, right - sx), h);
         }
+
+        private static float Natural(TMP_Text t) =>
+            t.text.Length == 0 ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, 1000f, 100f).x) + 2f;
 
         public override void Restyle()
         {

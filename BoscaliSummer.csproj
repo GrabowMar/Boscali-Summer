@@ -18,6 +18,13 @@
     <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
 
+  <ItemGroup Label="Offline render harness">
+    <!-- The nomod panel-atlas harness (scratch Unity project) builds CallsPanel and paints CallTile directly. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BoscaliSupportPreview</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
     <Compile Include="modules\**\*.cs" />
