@@ -7,6 +7,7 @@ using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Networking;
+using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
@@ -650,50 +651,50 @@ namespace BoscaliSummer.Modules.Support.Runtime
             RequestAt(action, target);
         }
 
-        public void RequestAt(SupportActionId action, GlobalPosition target)
+        public int RequestAt(SupportActionId action, GlobalPosition target)
         {
             if (pending)
             {
                 Status = "REQUEST PENDING - wait for host acknowledgement.";
-                return;
+                return 0;
             }
 
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             if (def == null || !def.Enabled)
             {
                 Status = "Action unavailable.";
-                return;
+                return 0;
             }
 
             float cost = Cost(def);
             if (cost <= 0f)
             {
                 Status = "Action unavailable on this map.";
-                return;
+                return 0;
             }
 
             if (!IsAuthorised(def))
             {
                 Status = "Action not authorised.";
-                return;
+                return 0;
             }
 
             if (LocalCooldownRemaining > 0.5f)
             {
                 Status = "Support network cooling down.";
-                return;
+                return 0;
             }
 
             if (!BypassRequirements && LocalFrozenSeconds > 0)
             {
                 Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
-                return;
+                return 0;
             }
 
             if (!BypassRequirements && LocalCredit + 0.001f < cost)
             {
                 Status = "Low credit (" + cost.ToString("0") + " CR required).";
-                return;
+                return 0;
             }
 
             pending = true;
@@ -701,6 +702,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
             network.Request(++nextRequestId, action, target);
+            return nextRequestId;
         }
 
         /// <summary>Called when the request could not leave this machine at all.</summary>
@@ -710,6 +712,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Status = "No host connection.";
         }
 
+        private CallsController calls;
+        internal void AttachCalls(CallsController controller) => calls = controller;
+
+        private string CallWordsFor(in SupportResultMessage r)
+        {
+            switch ((SupportResult)r.Result)
+            {
+                case SupportResult.InsufficientAllocation: return CallWords.Refusal(CallRefusal.LowCredit, need: Quote((SupportActionId)r.Action).Cost);
+                case SupportResult.Cooldown: return CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(r.CooldownSeconds));
+                case SupportResult.NotUnlocked:
+                    Unlocked((SupportActionId)r.Action, out string unlock);
+                    return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
+                case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
+                case SupportResult.InvalidTarget: return CallWords.Refusal(CallRefusal.FriendliesClose);
+                case SupportResult.RateLimited:
+                case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
+                default: return "NEGATIVE: " + Explain((SupportResult)r.Result).ToUpperInvariant();
+            }
+        }
+
         internal void ReceiveResult(SupportResultMessage message)
         {
             if (!pending || message.RequestId != nextRequestId || message.Action != (byte)pendingAction) return;
@@ -717,6 +739,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportResult result = (SupportResult)message.Result;
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
             string name = action != null ? action.Name : "Support";
+            calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
             if (result == SupportResult.Accepted)
             {
                 localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;

@@ -34,6 +34,9 @@ namespace BoscaliSummer.Modules.Support
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
 
+            CallsController calls = context.AddSceneService<CallsController>(54);
+            context.Services.TryGet(out IObservationSource observations);
+
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
@@ -41,7 +44,9 @@ namespace BoscaliSummer.Modules.Support
             context.AddService<ICameraTargetService>(manager);
             context.AddService<ITheaterStrikePicture>(manager);
             context.AddService<IGroundForceReadiness>(manager);
-            hudLine.Configure(manager);
+            calls.Configure(manager, context.Settings.Support, observations);
+            manager.AttachCalls(calls);
+            hudLine.Configure(manager, calls);
             satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));
