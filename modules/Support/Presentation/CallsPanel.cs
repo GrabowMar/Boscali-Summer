@@ -230,7 +230,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 SupportActionId id = row.Id;
                 CallLine line = page.Add(new CallLine(page.Content, lineHeight));
                 line.AddControl(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary), "Arm this CALL; press again to fire.");
-                line.AddControl(new AvControl.Spec("★", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
+                line.AddControl(new AvControl.Spec("PIN", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
                 if (id == SupportActionId.JtacMark)
                     line.AddControl(new AvControl.Spec("UNLASE", () => calls?.Unlase(), AvButtonStyle.Quiet),
                         "Clear the lase at the current POD or map aim. Free.");
@@ -317,7 +317,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 }
             }
             button.Label = (slot + 1) + " · EMPTY";
-            if (button.Help == null || !button.Help.StartsWith("Empty")) button.Help = "Empty slot: press ★ on a call to pin it here.";
+            if (button.Help == null || !button.Help.StartsWith("Empty")) button.Help = "Empty slot: press PIN on a call to pin it here.";
             button.Interactable = false;
             button.Armed = false;
         }
