@@ -261,6 +261,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
         public bool RequestPending => pending;
+        internal void AbandonPending() => pending = false;
 
         public void Configure(
             SupportSettings supportSettings, IPlayerPerks playerPerks,
@@ -601,13 +602,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>Arms a right-click on the map that only reports the point back; nothing is sent.</summary>
-        public void ArmLocalPick(string label, Action<GlobalPosition> onPick)
+        public bool ArmLocalPick(string label, Action<GlobalPosition> onPick)
         {
-            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return;
+            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return false;
             localPick = onPick;
             ArmedAction = null;
             ArmedFrame = Time.frameCount;
             Status = "PICK: " + label + " — Right-click on map (ESC to cancel).";
+            return true;
         }
 
         public bool LocalPickArmed => localPick != null;

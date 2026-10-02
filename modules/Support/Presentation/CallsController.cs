@@ -52,25 +52,37 @@ namespace BoscaliSummer.Modules.Support.Presentation
             LastWordsAt = -100f;
         }
 
+        /// <summary>The shared pre-flight: busy, unlocked, thawed, off cooldown, affordable. Says why and returns false.</summary>
+        private bool Check(SupportActionId id)
+        {
+            if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return false; }
+            if (!manager.Unlocked(id, out string unlock)) { Say(CallWords.Refusal(CallRefusal.Locked, unlock: unlock), AvUiCue.Caution); return false; }
+            if (manager.LocalFrozenSeconds > 0) { Say(CallWords.Refusal(CallRefusal.Frozen, seconds: manager.LocalFrozenSeconds), AvUiCue.Caution); return false; }
+            if (manager.LocalCooldownRemaining > 0.5f)
+            {
+                Say(CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(manager.LocalCooldownRemaining)), AvUiCue.Caution);
+                return false;
+            }
+            int cost = manager.Quote(id).Cost;
+            if (manager.LocalCredit + 0.001f < cost) { Say(CallWords.Refusal(CallRefusal.LowCredit, need: cost), AvUiCue.Caution); return false; }
+            return true;
+        }
+
         public void Press(SupportActionId id)
         {
             if (manager == null) return;
             float now = Time.unscaledTime;
-            if (request.Pending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return; }
-            if (!manager.Unlocked(id, out string unlock)) { Say(CallWords.Refusal(CallRefusal.Locked, unlock: unlock), AvUiCue.Caution); return; }
-            if (manager.LocalFrozenSeconds > 0) { Say(CallWords.Refusal(CallRefusal.Frozen, seconds: manager.LocalFrozenSeconds), AvUiCue.Caution); return; }
-            int cost = manager.Quote(id).Cost;
-            if (manager.LocalCredit + 0.001f < cost) { Say(CallWords.Refusal(CallRefusal.LowCredit, need: cost), AvUiCue.Caution); return; }
+            if (!Check(id)) return;
 
             if (arm.Press(id, now) == ArmStep.Armed)
             {
                 mapAim = null;
-                manager.ArmLocalPick(CallSheet.TryGet(id, out CallRow row) ? row.Label : "CALL", point =>
+                bool mapOk = manager.ArmLocalPick(Label(id), point =>
                 {
                     mapAim = point;
-                    if (arm.Armed == id) Fire(id, point, Time.unscaledTime); // right-click while armed fires at once
+                    if (arm.Armed == id && Check(id)) Fire(id, point, Time.unscaledTime); // right-click while armed fires at once
                 });
-                Say("ARMED · " + Label(id) + " · PRESS AGAIN OR RIGHT-CLICK MAP", AvUiCue.Engage);
+                Say("ARMED · " + Label(id) + (mapOk ? " · PRESS AGAIN OR RIGHT-CLICK MAP" : " · PRESS AGAIN TO FIRE (MAP BUSY)"), AvUiCue.Engage);
                 return;
             }
             if (TryPod(out GlobalPosition pod)) { Fire(id, pod, now); return; }
@@ -87,10 +99,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void Fire(SupportActionId id, GlobalPosition target, float now)
         {
+            int requestId = manager.RequestAt(id, target);
+            if (requestId <= 0) { Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; } // arm stays
             arm.Clear();
             manager.Disarm();
-            int requestId = manager.RequestAt(id, target);
-            if (requestId <= 0) { Say(manager.Status, AvUiCue.Caution); return; }
+            if (!manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Offline), AvUiCue.Caution); return; }
             request.Begin(requestId, manager.Quote(id).Cost, now);
             AimNow = AimSource.None;
             Say("PENDING · " + Label(id), AvUiCue.Press);
@@ -101,7 +114,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (manager == null) return;
             float now = Time.unscaledTime;
             if (arm.Tick(now)) { manager.Disarm(); Say("DISARMED", AvUiCue.Release); }
-            if (request.Tick(now, out _)) Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution);
+            if (request.Tick(now, out _)) { manager.AbandonPending(); Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution); }
             AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue);
 
             if (GameplayUI.GameIsPaused || InputFieldChecker.InsideInputField || !Application.isFocused) return;
