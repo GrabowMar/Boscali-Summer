@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// The HUD's own screen-space overlay: one root canvas with no raycaster (the HUD never

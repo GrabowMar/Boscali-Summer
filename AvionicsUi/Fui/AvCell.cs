@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Toggle cell (replaces the solid-green PagingGrid cell): outline + LED + faint select wash + mono state word.
@@ -38,6 +38,7 @@ namespace NOAvionics.Ui
             c.title = AvText.Make(c.Rect, "Title", AvTextRole.Label, titleText, TextAlignmentOptions.TopLeft, true);
             c.sub = AvText.Make(c.Rect, "Sub", AvTextRole.ProseSmall, subText ?? "", TextAlignmentOptions.TopLeft, true);
             c.stateWord = AvText.Make(c.Rect, "State", AvTextRole.DataSmall, "", TextAlignmentOptions.TopRight);
+            AvText.Fit(c.stateWord, false); // custom state words shrink into the 34 px box, never spill
             c.fx = AvFx.On(c.frame);
             AvHit hit = AvHit.On(c.frame);
             hit.Hover = h => { c.hover = h; c.Restyle(); };

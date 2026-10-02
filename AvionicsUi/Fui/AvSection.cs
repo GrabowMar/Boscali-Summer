@@ -3,25 +3,28 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Section header: icon + TITLE ···· caption over a hairline. The caption drops to a second line rather than clip.</summary>
     public sealed class AvSection : AvPart
     {
         private const float Line = 22f;
         private readonly TMP_Text icon, title, caption;
-        private readonly Image rule;
+        private readonly Image rule, cap;
         private bool twoLines;
         private float captionH = Line;
 
-        public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText)
+        public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText = null)
         {
             Rect = AvLay.Child(parent, "Section " + titleText);
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
+            title.font = AvType.Face(AvFace.Cond);
+            title.characterSpacing = 8f;
             AvText.Fit(title, false);
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, captionText ?? "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
+            cap = AvLay.Solid(Rect, "Cap", Color.clear);
             Restyle();
         }
 
@@ -47,6 +50,7 @@ namespace NOAvionics.Ui
             AvLay.Place(caption.rectTransform, twoLines ? 22f : 0f, twoLines ? Line : 0f, twoLines ? slot.W - 22f : slot.W, twoLines ? captionH : Line);
             caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
+            AvLay.Place(cap.rectTransform, 0f, slot.H - 1.5f, 22f, 1.5f);
         }
 
         public override void Restyle()
@@ -55,6 +59,7 @@ namespace NOAvionics.Ui
             icon.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-icon").Color, AvTheme.RailInfo);
             caption.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Disabled);
             rule.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section").Border, AvTheme.Hairline);
+            cap.color = title.color;
         }
     }
 }

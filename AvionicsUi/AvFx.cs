@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Packs an effect into this Graphic's vertices: UV1 = (u, v, aspect, 0), UV2 = (id, start, intensity, param).

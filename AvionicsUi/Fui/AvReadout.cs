@@ -2,7 +2,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>The one hero reading of a page: mono value + unit + caption.</summary>
     public sealed class AvReadout : AvPart
@@ -15,6 +15,7 @@ namespace NOAvionics.Ui
             Rect = AvLay.Child(parent, "Readout");
             value = AvText.Make(Rect, "Value", AvTextRole.Display);
             unit = AvText.Make(Rect, "Unit", AvTextRole.Label);
+            AvText.Fit(value, false); AvText.Fit(unit, false); // long readings shrink, never spill past the unit
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro);
             Restyle();
         }

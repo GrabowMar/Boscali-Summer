@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Kit v2 typography. Faces come from avionics-ui.bundle; when it is absent every face falls

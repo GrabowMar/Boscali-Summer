@@ -1,5 +1,0 @@
-{
-  "name": "BoscaliWeatherEnv",
-  "references": ["Unity.TextMeshPro", "Unity.ugui"],
-  "includePlatforms": ["Editor"]
-}

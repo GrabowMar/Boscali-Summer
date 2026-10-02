@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     public sealed class AvSlider : AvPart
     {
@@ -20,6 +20,7 @@ namespace NOAvionics.Ui
             get = get01; set = set01; text = valueText;
             label = AvText.Make(Rect, "Label", AvTextRole.Label, labelText, TextAlignmentOptions.MidlineLeft, true);
             value = AvText.Make(Rect, "Value", AvTextRole.Data, "", TextAlignmentOptions.MidlineRight);
+            AvText.Fit(value, false); // long values shrink into their 40% box, never spill
             var go = new GameObject("Track", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
             track = go.AddComponent<AvGaugeGraphic>();
@@ -50,7 +51,7 @@ namespace NOAvionics.Ui
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            AvLay.Place(label.rectTransform, 0f, 0f, s.W * 0.6f, 20f);
+            AvLay.Place(label.rectTransform, 0f, 0f, s.W * 0.6f, s.H - 22f);
             AvLay.Place(value.rectTransform, s.W * 0.6f, 0f, s.W * 0.4f, 20f);
             AvLay.Place((RectTransform)track.transform, 0f, s.H - 14f, s.W, 8f);
         }

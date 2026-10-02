@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     public enum AvTickRate { Fast, Slow }
 

@@ -1,7 +1,7 @@
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Chrome icons as glyphs of the bundled Tabler SDF font: crisp at any size, tinted by vertex colour, batched with text.</summary>
     public static class AvIcons

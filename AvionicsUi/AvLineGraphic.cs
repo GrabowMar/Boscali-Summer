@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Polyline with optional gradient fill-under, one mesh (UILineRenderer-class, own code). Capped at 512 points.</summary>
     public sealed class AvLineGraphic : MaskableGraphic

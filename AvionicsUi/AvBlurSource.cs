@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Opt-in frosted glass for floating windows. After the last camera renders (before overlay UI),

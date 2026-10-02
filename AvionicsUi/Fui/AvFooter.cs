@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Console footer: a fixed two-line strip of sentence-case status / help. Its height never changes (a
@@ -12,7 +12,8 @@ namespace NOAvionics.Ui
     public sealed class AvFooter : AvPart
     {
         private readonly Image back;
-        private readonly TMP_Text text;
+        private readonly AvFrame tag;
+        private readonly TMP_Text text, tagText;
         private AvState state;
         private string baseText = "", hint;
 
@@ -20,10 +21,18 @@ namespace NOAvionics.Ui
         {
             Rect = AvLay.Child(parent, "Footer");
             back = AvLay.Solid(Rect, "Back", Color.clear); AvLay.Fill(back.rectTransform);
-            text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft, true);
+            AvSurfaceGradient.Apply(back, Color.white, new Color(.72f, .77f, .79f, 1f));
+            // The badge sits in its own container so the frame is not read as the backing of the footer text beside it.
+            RectTransform badge = AvLay.Child(Rect, "TipBadge");
+            AvLay.Place(badge, AvGridTokens.Pad, 8f, TagW, 18f);
+            tag = AvFrame.Add(badge, "TipTag", default(AvChamfer)); tag.Stroke = 0f; AvLay.Fill(tag.rectTransform);
+            tagText = AvText.Make(badge, "TipWord", AvTextRole.Micro, "TIP", TextAlignmentOptions.Center);
+            AvText.Fit(tagText, false);
+            text = AvText.Make(Rect, "Text", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
             AvText.Fit(text, true);
-            AvLay.Fill(text.rectTransform, 0f); text.rectTransform.offsetMin = new Vector2(AvGridTokens.Pad, 0f);
-            text.rectTransform.offsetMax = new Vector2(-AvGridTokens.Pad, 0f);
+            AvLay.Fill(text.rectTransform, 0f); text.rectTransform.offsetMin = new Vector2(TagW + 2f * AvGridTokens.Pad, 6f);
+            text.rectTransform.offsetMax = new Vector2(-AvGridTokens.Pad, -6f);
+            AvLay.Fill(tagText.rectTransform);
             Restyle();
         }
 
@@ -41,7 +50,10 @@ namespace NOAvionics.Ui
         {
             hint = string.IsNullOrEmpty(value) ? null : value;
             text.text = hint ?? baseText;
+            Restyle();
         }
+
+        private const float TagW = 34f;
 
         public override float Measure(float width) => AvGridTokens.Footer;
 
@@ -49,7 +61,10 @@ namespace NOAvionics.Ui
         {
             AvStyle s = AvStyleHost.FuiStyle("footer " + AvStates.Class(state));
             back.color = AvStyleHost.Resolve(s.Background, AvTheme.SurfaceInert);
-            text.color = AvStyleHost.Resolve(s.Color, AvTheme.Dim);
+            text.color = AvStyleHost.Resolve(hint != null ? AvStyleHost.FuiStyle("title").Color : s.Color, AvTheme.Dim);
+            tag.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + (hint != null || state == AvState.Inert ? "ready" : AvStates.Class(state))).Background, AvTheme.Accent), Color.clear);
+            tagText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
+            tagText.text = hint != null ? "TIP" : "SYS";
         }
     }
 }

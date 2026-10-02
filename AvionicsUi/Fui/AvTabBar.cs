@@ -2,7 +2,7 @@ using System;
 using NOAvionics;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Icon + label tabs; the latched one carries a 2 px select rail and a shine. Labels shrink, never wrap

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// A tiny reveal driver: an alpha fade and a scale punch, each running on a fixed

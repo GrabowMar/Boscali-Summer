@@ -1,0 +1,8 @@
+Unity UI Toolkit Extensions, StepProgressBar by SimonDarksideJ (BSD 3-Clause; see LICENSE.txt).
+https://github.com/Unity-UI-Extensions/com.unity.uitoolkitextensions
+Source commit: 9144c4ca6dec55f78a6197a2ce1944ea11dc98a6
+Source path: Runtime/Controls/StepProgressBar/StepProgressBar.cs
+Adapted in AvionicsUi/Fui/AvStepProgress.cs: bounded current/max step state,
+normalized progress and percentage fill width. Ported from VisualElement to the existing
+uGUI canvas; vertex colour shading replaces per-update generated gradient textures.
+This is a source adaptation, not a runtime migration to UI Toolkit or a complete package installation.

@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Crisp 4-direction outline for text over the moving map (NicerOutline-class). Capped at 4x vertices.</summary>
     public sealed class AvOutline : BaseMeshEffect

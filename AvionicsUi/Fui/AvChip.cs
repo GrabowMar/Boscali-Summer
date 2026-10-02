@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Status chip: 2 px state rail + word (with ▲/✕ glyph for caution/danger).</summary>
     public sealed class AvChip : AvPart

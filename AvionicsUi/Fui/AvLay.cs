@@ -2,7 +2,7 @@ using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Top-left placement in panel units, and the canvas split that keeps text rebuilds local (spec §8).</summary>
     public static class AvLay

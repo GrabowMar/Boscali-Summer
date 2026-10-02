@@ -3,7 +3,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Text input: navigation stripped, Rewired keyboard held while focused (flight keys never fire).</summary>
     public sealed class AvField : AvPart

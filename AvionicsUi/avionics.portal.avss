@@ -1,0 +1,22 @@
+/* Portal · FUI x F-35 hybrid. Cyan = ready/key, amber = caution, red = danger. friendly/hostile follow the game. */
+:root {
+  ground:          #090F11 ff;
+  surface:         #162025 ff;
+  surface-raised:  #263339 ff;
+  surface-inert:   #10191D ff;
+  surface-sunken:  #0B1215 ff;
+  hairline:        #53636B 80;
+  frame:           #83969D 98;
+  ink:             #F3F0E8;
+  ink-dim:         #B4C4CA;
+  ink-muted:       #90A5AE;
+  key:             #55D9EF;
+  select:          #55D9EF;
+  ready:           #55D9EF;
+  caution:         #F5BA56;
+  danger:          #FF695B;
+  info:            #8FD8FF;
+  inert:           #3A4855 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

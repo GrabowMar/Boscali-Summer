@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// A passive batched mesh for one <see cref="AvQuadBuffer"/>: the caller fills the

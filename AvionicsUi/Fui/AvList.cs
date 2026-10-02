@@ -3,7 +3,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Paged, pooled row list with a pager line ("PREV  1–5 OF 23  NEXT"). Pool ceiling 64 rows.</summary>
     public sealed class AvList : AvPart
@@ -27,7 +27,7 @@ namespace NOAvionics.Ui
                 if (ticker != null) ticker.Register(rows[i]);
             }
             prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-            next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
+            next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
             range = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
         }
 

@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Caution/danger card: 3 px rail, icon, title, wrapped body. Dissolves in; danger pulses.</summary>
     public sealed class AvAlert : AvPart
@@ -30,7 +30,9 @@ namespace NOAvionics.Ui
         {
             state = st == AvState.Danger ? AvState.Danger : AvState.Caution;
             AvIcons.Set(icon, glyph == AvIcon.None ? AvIcon.AlertTriangle : glyph, AvGridTokens.IconTool);
-            title.text = AvStates.Glyph(state) + (t ?? "");
+            // No state glyph prefix: the icon already is the caution triangle, so a second
+            // ▲/✕ in the title reads as a duplicated icon. Rail + icon + title colour carry R1.
+            title.text = t ?? "";
             body.text = b ?? "";
             bool was = Rect.gameObject.activeSelf;
             Rect.gameObject.SetActive(true);

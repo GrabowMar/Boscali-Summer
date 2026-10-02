@@ -4,7 +4,7 @@ using NOAvionics;
 using Unity.Profiling;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// Vertical flow of parts inside a page. A line is one full-width part or N equal columns.
@@ -40,6 +40,17 @@ namespace NOAvionics.Ui
         public float Width { get; }
         public float Inner => math.Inner;
         public float ContentHeight { get; private set; }
+
+        private float viewport;
+
+        /// <summary>Visible page height. Content shorter than this gives its leftover height to parts with <see cref="AvPart.Grow"/>.</summary>
+        public float ViewportHeight
+        {
+            get => viewport;
+            set { if (Mathf.Abs(value - viewport) < 0.5f) return; viewport = value; RequestRelayout(); }
+        }
+
+        public T Add<T>(T part, float grow) where T : AvPart { part.Grow = grow; return Add(part); }
 
         public T Add<T>(T part) where T : AvPart
         {
@@ -148,7 +159,11 @@ namespace NOAvionics.Ui
                 pending = false;
                 suspects.Clear();
                 float before = ContentHeight;
-                math.Reset();
+                // Pass 1: measure every line. Pass 2: hand leftover viewport height to growing lines, then place.
+                var heights = new float[lines.Count];
+                var live = new bool[lines.Count];
+                var grow = new float[lines.Count];
+                float natural = 2f * AvGridTokens.Pad - AvGridTokens.Gap, weights = 0f;
                 for (int i = 0; i < lines.Count; i++)
                 {
                     AvPart[] line = lines[i];
@@ -165,8 +180,21 @@ namespace NOAvionics.Ui
                         float ph = p.Measure(w);
                         p.PlacedHeight = ph;
                         h = Mathf.Max(h, ph);
+                        grow[i] = Mathf.Max(grow[i], p.Grow);
                     }
-                    if (!any) continue;   // a fully hidden line collapses, gap included
+                    live[i] = any; heights[i] = h;
+                    if (!any) continue;
+                    natural += h + AvGridTokens.Gap;
+                    weights += grow[i];
+                }
+                float extra = viewport > 0f && weights > 0f ? Mathf.Max(0f, viewport - natural) : 0f;
+                math.Reset();
+                for (int i = 0; i < lines.Count; i++)
+                {
+                    if (!live[i]) continue;   // a fully hidden line collapses, gap included
+                    AvPart[] line = lines[i];
+                    int cols = lineColumns[i];
+                    float h = heights[i] + (extra > 0f ? extra * grow[i] / weights : 0f);
                     if (cols == 1) line[0].Place(math.Take(h));
                     else
                     {

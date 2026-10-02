@@ -2,7 +2,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>Framed group with corner brackets, an optional title and its own nested flow.</summary>
     public sealed class AvCard : AvPart

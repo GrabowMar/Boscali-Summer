@@ -4,7 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace NOAvionics.Ui
+namespace NOAvionics
 {
     /// <summary>
     /// The chrome every kit v2 console wears (spec §6.2): chamfered frame, header (id / title / page index),
@@ -25,6 +25,10 @@ namespace NOAvionics.Ui
         private readonly Canvas[] pageCanvases;
         private readonly AvFlow[] flows;
         private readonly Image scanCover;
+        private readonly AvDecorGraphic decor;
+        private readonly TMP_Text serial;
+        private string baseTitle;
+        private bool cursorOn;
         private AvFx scanFx;
         private AvChip[] chips = new AvChip[0];
         private AvMetric[] metrics = new AvMetric[0];
@@ -47,11 +51,19 @@ namespace NOAvionics.Ui
 
             frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(10f));
             AvLay.Fill(frame.rectTransform);
+            AvBundle.Engraving(Root, 0.035f);
             headerBack = AvLay.Solid(Root, "Header", Color.clear);
             idPlate = AvLay.Solid(Root, "IdPlate", Color.clear);
+            AvSurfaceGradient.Apply(headerBack, Color.white, new Color(.65f, .71f, .74f, 1f));
+            AvSurfaceGradient.Apply(idPlate, Color.white, new Color(.65f, .71f, .74f, 1f));
             idText = AvText.Make(Root, "Id", AvTextRole.Head, id, TextAlignmentOptions.Center);
             titleText = AvText.Make(Root, "Title", AvTextRole.Head, title);
+            titleText.fontSize = 15f;
+            titleText.characterSpacing = 7f;
+            AvText.Fit(titleText, false);
             pageIndex = AvText.Make(Root, "PageIndex", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
+            baseTitle = title;
+            serial = AvText.Make(Root, "Serial", AvTextRole.Micro, AvPortalMath.Serial(id), TextAlignmentOptions.MidlineRight);
 
             live = AvLay.Child(Root, "Live");
             AvLay.Nest(live, false);
@@ -80,6 +92,12 @@ namespace NOAvionics.Ui
             scanCover = AvLay.Solid(bodyRect, "ScanCover", Color.clear);
             scanCover.enabled = false;
 
+            var decorGo = new GameObject("Decor", typeof(RectTransform), typeof(CanvasRenderer));
+            decorGo.transform.SetParent(Root, false);
+            AvLay.Fill((RectTransform)decorGo.transform);
+            decor = decorGo.AddComponent<AvDecorGraphic>();
+            decor.raycastTarget = false;
+
             Footer = new AvFooter(Root);
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
@@ -92,7 +110,20 @@ namespace NOAvionics.Ui
             float width = AvTokens.PanelWidth, float height = AvTokens.PanelHeight) =>
             new AvConsole(host, id, title, pages, width, height);
 
-        public void SetTitle(string t) { if (titleText.text != t) titleText.text = t ?? ""; }
+        public void SetTitle(string t) { baseTitle = t ?? ""; ShowTitle(); }
+
+        private void ShowTitle()
+        {
+            string t = baseTitle + (cursorOn && AvText.Width(titleText) + 16f < titleText.rectTransform.rect.width ? "_" : "");
+            if (titleText.text != t) titleText.text = t;
+        }
+
+        private void BlinkCursor()
+        {
+            bool on = !AvFxDriver.ReducedMotion && !cursorOn;
+            if (on == cursorOn) return;
+            cursorOn = on; ShowTitle();
+        }
 
         public AvChip[] Chips(int count)
         {
@@ -155,7 +186,9 @@ namespace NOAvionics.Ui
             AvLay.Place(headerBack.rectTransform, 0f, 0f, width, AvGridTokens.Header);
             AvLay.Place(idPlate.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
             AvLay.Place(idText.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
-            AvLay.Place(titleText.rectTransform, 66f, 0f, width - 66f - 64f, AvGridTokens.Header);
+            AvLay.Place(titleText.rectTransform, 66f, 0f, width - 66f - 116f, AvGridTokens.Header);
+            AvLay.Place(serial.rectTransform, width - 116f, 0f, 54f, AvGridTokens.Header);
+            decor.RulerTop = AvGridTokens.Header; decor.SetVerticesDirty();
             AvLay.Place(pageIndex.rectTransform, width - 60f, 0f, 56f, AvGridTokens.Header);
             y += AvGridTokens.Header + 4f;
 
@@ -179,6 +212,7 @@ namespace NOAvionics.Ui
             float bodyH = Mathf.Max(0f, height - footerH - y);
             AvLay.Place(bodyRect, 0f, y, width, bodyH);
             AvLay.Place(viewport, 0f, 0f, width, bodyH);
+            foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
             AvLay.Place((RectTransform)scrollbar.transform, width - pad - AvGridTokens.Gutter + 2f, 2f, 4f, bodyH - 4f);
             AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
             for (int i = 0; i < PageCount; i++) { pageRects[i].anchoredPosition = Vector2.zero; }
@@ -213,6 +247,8 @@ namespace NOAvionics.Ui
             idText.color = AvStyleHost.Resolve(p.Color, AvTheme.TextPrimary);
             titleText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
             pageIndex.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("page-index").Color, AvTheme.Dim);
+            serial.color = decor.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("decor").Background, AvTheme.Hairline);
+            serial.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("decor").Color, AvTheme.Disabled);
             scrollbar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
             scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
         }
