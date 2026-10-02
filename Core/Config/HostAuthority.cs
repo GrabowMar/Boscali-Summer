@@ -43,10 +43,8 @@ namespace BoscaliSummer.Core.Config
 
             s.Support.ReconEnabled, s.Support.FortifyEnabled, s.Support.ArtilleryEnabled,
             s.Support.EmpEnabled, s.Support.ElintEnabled, s.Support.MtiEnabled,
-            s.Support.FlareBarrageEnabled, s.Support.SarSceneRadius, s.Support.ElintCost,
-            s.Support.ElintRadius, s.Support.MtiCost, s.Support.CostMultiplier, s.Support.ReconCost,
-            s.Support.FortifyCost, s.Support.ArtilleryCost, s.Support.EmpCost, s.Support.EmpRadius,
-            s.Support.FlareBarrageCost, s.Support.FlareBarrageRadius, s.Support.FlareBarrageCount,
+            s.Support.FlareBarrageEnabled, s.Support.SarSceneRadius,
+            s.Support.ElintRadius, s.Support.EmpRadius, s.Support.FlareBarrageRadius, s.Support.FlareBarrageCount,
             s.Support.FlareBarrageDuration, s.Support.MaximumRange, s.Support.RequestCooldown,
             s.Support.PriceKnob, s.Support.EarnKnob,
 

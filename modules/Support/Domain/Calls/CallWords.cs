@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
                 case CallRefusal.None: return "";
                 case CallRefusal.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + need + " CR";
                 case CallRefusal.Cooldown: return "NEGATIVE: COOLDOWN " + seconds + "s";
-                case CallRefusal.Locked: return "NEGATIVE: LOCKED — " + (unlock ?? "HOLD MORE GROUND");
+                case CallRefusal.Locked: return "NEGATIVE: LOCKED — " + (string.IsNullOrEmpty(unlock) ? "HOLD MORE GROUND" : unlock);
                 case CallRefusal.FriendliesClose: return "NEGATIVE: FRIENDLIES CLOSE — MOVE THE AIM";
                 case CallRefusal.OutOfRange: return "NEGATIVE: OUT OF RANGE — AIM CLOSER";
                 case CallRefusal.NoAim: return "NEGATIVE: NO AIM — DESIGNATE OR RIGHT-CLICK MAP";

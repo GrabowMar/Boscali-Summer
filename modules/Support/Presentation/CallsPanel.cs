@@ -214,7 +214,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvControl abort = banner.AddControl(new AvControl.Spec("ABORT", () => calls?.Disarm(), AvButtonStyle.Danger));
             abort.Help = "Disarm the armed CALL. Nothing is spent.";
 
-            page.Section(AvIcon.Bolt, "FAVOURITES", "KEYS 1–4 · PRESS TWICE TO FIRE");
+            page.Section(AvIcon.Bolt, "FAVOURITES", "PRESS TWICE TO FIRE · BIND KEYS IN F1");
             var specs = new AvControl.Spec[4];
             for (int i = 0; i < specs.Length; i++)
             {

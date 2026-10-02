@@ -70,9 +70,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal interface ISupportAction
     {
         /// <summary>
-        /// Allocation price before perk discounts, derived from vanilla unit value where the
-        /// action spawns something. Returns 0 when the action cannot currently price itself,
-        /// which the manager treats as unavailable rather than free.
+        /// Availability flag: 1 when this action is usable on this map, 0 when it is not (the manager reports
+        /// CapabilityUnavailable). The price is CallSheet x CallPricing, never this value.
         /// </summary>
         float BaseCost(in SupportContext context);
 

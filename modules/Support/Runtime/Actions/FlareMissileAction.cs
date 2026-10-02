@@ -15,8 +15,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float ReleaseAltitude = 6000f;
         private const float ReleaseSpeed = 1200f;
 
-        public float BaseCost(in SupportContext context) =>
-            context.Settings.FlareBarrageCost.Value * context.Settings.CostMultiplier.Value;
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {

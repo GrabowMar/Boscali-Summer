@@ -230,10 +230,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return remaining > 0f ? remaining : 0f;
         }
 
-        public void Accept(ulong playerId, int requestId, float now)
+        public void Accept(ulong playerId, int requestId, float now, bool startCooldown = true)
         {
             PlayerState state = Get(playerId);
-            state.LastAccepted = now;
+            if (startCooldown) state.LastAccepted = now;
             if (!state.Accepted.Add(requestId)) return;
             state.AcceptedOrder.Enqueue(requestId);
             while (state.AcceptedOrder.Count > historyLimit)

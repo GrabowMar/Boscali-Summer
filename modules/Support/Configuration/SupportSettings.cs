@@ -16,27 +16,16 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
-        public ConfigEntry<float> ElintCost { get; }
-        public ConfigEntry<float> MtiCost { get; }
         public ConfigEntry<float> ElintRadius { get; }
 
-        public ConfigEntry<float> CostMultiplier { get; }
-        public ConfigEntry<float> ReconCost { get; }
-        public ConfigEntry<float> FortifyCost { get; }
-        public ConfigEntry<float> ArtilleryCost { get; }
-        public ConfigEntry<float> PrsmCost { get; }
-        public ConfigEntry<float> CruiseCost { get; }
         public ConfigEntry<int> CruiseSalvo { get; }
         public ConfigEntry<int> CruiseLiveCap { get; }
         public ConfigEntry<float> IntelFreshSeconds { get; }
         public ConfigEntry<float> IntelGateRadius { get; }
-        public ConfigEntry<float> EmpCost { get; }
         public ConfigEntry<float> EmpRadius { get; }
-        public ConfigEntry<float> FlareBarrageCost { get; }
         public ConfigEntry<float> FlareBarrageRadius { get; }
         public ConfigEntry<int> FlareBarrageCount { get; }
         public ConfigEntry<float> FlareBarrageDuration { get; }
-        public ConfigEntry<float> JtacMarkCost { get; }
         public ConfigEntry<float> JtacMarkDuration { get; }
 
         public ConfigEntry<float> MaximumRange { get; }
@@ -98,52 +87,10 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Half-width of a radar scan scene. " +
                     "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
                     new AcceptableValueRange<float>(400f, 4000f)));
-            ElintCost = config.Bind("Support", "ElintSweepCost", 400f,
-                new ConfigDescription(
-                    "Allocation charged for one ELINT sweep, before CostMultiplier and the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
             ElintRadius = config.Bind("Support", "ElintSweepRadiusMeters", 8000f,
                 new ConfigDescription(
                     "Radius around the mark searched for emitting enemy radars.",
                     new AcceptableValueRange<float>(1000f, 40000f)));
-            MtiCost = config.Bind("Support", "MtiSweepCost", 500f,
-                new ConfigDescription(
-                    "Allocation charged for one MTI sweep, before CostMultiplier and the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-
-            CostMultiplier = config.Bind("Support", "CostMultiplier", 1f,
-                new ConfigDescription(
-                    "Scales every support cost at once. 1.0 charges roughly what the effect is " +
-                    "worth and stays balanced when the game rebalances. Raise it to make support " +
-                    "a real sacrifice, drop it toward 0 for a sandbox. " +
-                    "Host-authoritative: the host's value applies and is shown on every OPS page.",
-                    new AcceptableValueRange<float>(0f, 10f)));
-            ReconCost = config.Bind("Support", "ReconCost", 600f,
-                new ConfigDescription(
-                    "Allocation charged for one radar scan, before CostMultiplier and " +
-                    "the Logistics Officer perk. Recon spawns nothing, so it is priced flat.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            FortifyCost = config.Bind("Support", "ZoneFortificationCost", 1200f,
-                new ConfigDescription(
-                    "Allocation charged for reinforcing a controlled zone, before CostMultiplier " +
-                    "and the Logistics Officer perk. Charged only once the host has verified it " +
-                    "can actually place defenders.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            ArtilleryCost = config.Bind("Support", "FireMissionCost", 900f,
-                new ConfigDescription(
-                    "Allocation charged for one Rod from God strike, before CostMultiplier and " +
-                    "the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            PrsmCost = config.Bind("Support", "PrsmStrikeCost", 1100f,
-                new ConfigDescription(
-                    "Allocation charged for one PRSM strike, before CostMultiplier and " +
-                    "the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
-            CruiseCost = config.Bind("Support", "CruiseStrikeCost", 1600f,
-                new ConfigDescription(
-                    "Allocation charged for one cruise salvo, before CostMultiplier and " +
-                    "the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
             CruiseSalvo = config.Bind("Support", "CruiseSalvoSize", 4,
                 new ConfigDescription(
                     "Missiles per cruise salvo. Host-authoritative.",
@@ -162,21 +109,11 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 new ConfigDescription(
                     "Radius around the grid searched for a fresh HQ track before a strike releases.",
                     new AcceptableValueRange<float>(100f, 10000f)));
-            EmpCost = config.Bind("Support", "EmpShockCost", 1500f,
-                new ConfigDescription(
-                    "Allocation charged for one EMP shock, before CostMultiplier and the " +
-                    "Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
             EmpRadius = config.Bind("Support", "EmpShockRadiusMeters", 12000f,
                 new ConfigDescription(
                     "Radius around the mark whose hostile radars are jammed by the geomagnetic phase of " +
                     "an EMP shock. Friendly units are unaffected.",
                     new AcceptableValueRange<float>(1000f, 60000f)));
-            FlareBarrageCost = config.Bind("Support", "FlareBarrageCost", 500f,
-                new ConfigDescription(
-                    "Allocation charged for one Flare Barrage countermeasure rocket, before " +
-                    "CostMultiplier and the Logistics Officer perk.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
             FlareBarrageRadius = config.Bind("Support", "FlareBarrageRadiusMeters", 4000f,
                 new ConfigDescription(
                     "Radius around the mark in which hostile IR missiles are seduced and misguided.",
@@ -189,11 +126,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 new ConfigDescription(
                     "Total duration in seconds of the continuous flare countermeasure barrage.",
                     new AcceptableValueRange<float>(5f, 45f)));
-            JtacMarkCost = config.Bind("Support", "JtacMarkCost", 400f,
-                new ConfigDescription(
-                    "Allocation charged for one JTAC mark or unlase, before CostMultiplier and " +
-                    "the Logistics Officer perk. Recovery costs the same as the mark.",
-                    new AcceptableValueRange<float>(0f, 20000f)));
             JtacMarkDuration = config.Bind("Support", "JtacMarkDurationSeconds", 120f,
                 new ConfigDescription(
                     "Seconds a JTAC lase lives before the host clears it. Host-authoritative.",

@@ -664,8 +664,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             RequestAt(action, target);
         }
 
-        public int RequestAt(SupportActionId action, GlobalPosition target)
+        /// <summary>True when the last RequestAt could not leave this machine (no host link).</summary>
+        public bool LastRequestOffline { get; private set; }
+
+        /// <summary>
+        /// Submits one request. <paramref name="begun"/> receives the request id BEFORE the network send, because a
+        /// server peer evaluates and answers synchronously inside this call.
+        /// </summary>
+        public int RequestAt(SupportActionId action, GlobalPosition target, Action<int> begun = null)
         {
+            LastRequestOffline = false;
             if (pending)
             {
                 Status = "REQUEST PENDING - wait for host acknowledgement.";
@@ -692,13 +700,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return 0;
             }
 
-            if (LocalCooldownRemaining > 0.5f)
+            bool free = action == SupportActionId.JtacUnlase; // no cooldown, no freeze, no charge
+            if (!free && LocalCooldownRemaining > 0.5f)
             {
                 Status = "Support network cooling down.";
                 return 0;
             }
 
-            if (!BypassRequirements && LocalFrozenSeconds > 0)
+            if (!free && !BypassRequirements && LocalFrozenSeconds > 0)
             {
                 Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
                 return 0;
@@ -714,14 +723,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             pendingSince = Time.unscaledTime;
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
-            network.Request(++nextRequestId, action, target);
-            return nextRequestId;
+            int id = ++nextRequestId;
+            begun?.Invoke(id);
+            network.Request(id, action, target);
+            return id;
         }
 
         /// <summary>Called when the request could not leave this machine at all.</summary>
         internal void ReportOffline()
         {
             pending = false;
+            LastRequestOffline = true;
             Status = "No host connection.";
         }
 
@@ -733,7 +745,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch ((SupportResult)r.Result)
             {
                 case SupportResult.InsufficientAllocation: return CallWords.Refusal(CallRefusal.LowCredit, need: Quote((SupportActionId)r.Action).Cost);
-                case SupportResult.Cooldown: return CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(r.CooldownSeconds));
+                case SupportResult.Cooldown:
+                    return CallWords.Refusal(CallRefusal.Cooldown,
+                        seconds: Mathf.CeilToInt(r.CooldownSeconds > 0.01f ? r.CooldownSeconds : LocalCooldownRemaining));
                 case SupportResult.NotUnlocked:
                     Unlocked((SupportActionId)r.Action, out string unlock);
                     return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
@@ -834,13 +848,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !HostAuthorised(player, action)) return SupportResult.NotUnlocked;
-            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
+            // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
+            bool free = action.Id == SupportActionId.JtacUnlase;
+            if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
                 return SupportResult.Cooldown;
 
             var context = new SupportContext(
                 player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
-            // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
-            bool free = action.Id == SupportActionId.JtacUnlase;
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
@@ -868,7 +882,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return result;
             }
 
-            ledger.Accept(playerId, request.RequestId, now);
+            ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
             try
             {
                 credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,
@@ -885,6 +899,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             perks.Grants(PlayerIdentity.Of(player), action.Capability);
 
         internal float ServerCooldownFor(Player player) => CooldownFor(player);
+
+        /// <summary>Seconds left on this player's host cooldown; what a Cooldown refusal tells the client.</summary>
+        internal float ServerCooldownRemaining(Player player) =>
+            player == null || DisableCooldowns ? 0f
+                : ledger.CooldownRemaining(PlayerIdentity.Of(player), Time.unscaledTime, CooldownFor(player));
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a

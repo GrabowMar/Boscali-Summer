@@ -12,8 +12,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class MtiAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) =>
-            context.Settings.MtiCost.Value * context.Settings.CostMultiplier.Value;
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {

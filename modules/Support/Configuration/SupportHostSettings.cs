@@ -31,9 +31,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Locates emitting enemy ground and ship radars near the mark.")
                 .Toggle(6, settings.FlareBarrageEnabled, "FLARE BARRAGE",
                     "An airburst countermeasure rocket that disperses intense flares, seducing and misguiding hostile IR missiles in the area.")
-                .Number(10, settings.CostMultiplier, "COST SCALE",
-                    "Scales every support cost at once. 1.0 charges roughly what the effect is worth.",
-                    0.05f, v => v.ToString("0.00") + "x")
                 .Number(11, settings.RequestCooldown, "REQUEST COOLDOWN",
                     "Cooldown after an accepted request, per player and shared across all actions.",
                     5f, v => v.ToString("0") + " s")
