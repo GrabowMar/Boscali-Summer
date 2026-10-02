@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Press(SupportActionId id)
         {
             if (manager == null) return;
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (!Check(id)) return;
 
             if (arm.Press(id, now) == ArmStep.Armed)
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     lastMapPick = point;
                     armHasPick = false; // the manager consumed its pick
                     if (arm.Armed != id) return;
-                    if (Check(id)) Fire(id, point, Time.unscaledTime); // right-click while armed fires at once
+                    if (Check(id)) Fire(id, point, SupportManager.MissionNow()); // right-click while armed fires at once
                     else arm.Clear(); // the pick is spent, so the arm is too; Check already worded why
                 });
                 armHasPick = mapOk;
@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             if (manager == null) return;
             if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return; }
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (TryPod(out GlobalPosition pod)) { Fire(SupportActionId.JtacUnlase, pod, now); return; }
             if (lastMapPick.HasValue) { Fire(SupportActionId.JtacUnlase, lastMapPick.Value, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
@@ -156,7 +156,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void Update()
         {
             if (manager == null) return;
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (arm.Tick(now)) { manager.Disarm(); Say("DISARMED", AvUiCue.Release); }
             else if (arm.Armed != null && armHasPick && !manager.LocalPickArmed)
             {
@@ -203,7 +203,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void Say(string words, AvUiCue cue)
         {
             LastWords = words ?? "";
-            LastWordsAt = Time.unscaledTime;
+            LastWordsAt = SupportManager.MissionNow();
             AvUiSound.Play(cue);
         }
 

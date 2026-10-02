@@ -148,8 +148,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             try
             {
                 // Legs sent before guidance starts are overwritten by the seeker; wait it out.
-                float settle = Time.time + 5f;
-                while (Time.time < settle)
+                float settle = SupportManager.MissionNow() + 5f;
+                while (SupportManager.MissionNow() < settle)
                 {
                     if (!FirstMissile(strike, out Missile young)) yield break;
                     if (young.timeSinceSpawn > GuidanceSettleSeconds) break;
@@ -158,8 +158,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 while (strike.Legs.Count > 0)
                 {
                     SendToAll(strike, strike.Legs[0]);
-                    float deadline = Time.time + LegTimeoutSeconds;
-                    while (Time.time < deadline)
+                    float deadline = SupportManager.MissionNow() + LegTimeoutSeconds;
+                    while (SupportManager.MissionNow() < deadline)
                     {
                         if (strike.Legs.Count == 0) break;
                         if (!FirstSeeker(strike, out OpticalSeekerCruiseMissile seeker)) yield break;

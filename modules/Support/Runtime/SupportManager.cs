@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private const float ClickSlopPixels = 8f;
 
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
-        private const float ReplyTimeout = 5f;
+        private const float ReplyTimeout = CallRequestTracker.TimeoutSeconds;
 
         /// <summary>Concurrent strike jobs per faction, per <see cref="SupportPool"/>.</summary>
         private readonly Dictionary<FactionHQ, int[]> strikeJobs = new Dictionary<FactionHQ, int[]>();
@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 float.IsInfinity(x) || float.IsInfinity(z) || float.IsInfinity(vicinity) ||
                 vicinity < 0f)
                 return false;
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             float soonest = float.MaxValue;
             for (int i = 0; i < activeStrikes.Count; i++)
             {
@@ -193,7 +193,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void RegisterActiveStrike(
             int requestId, SupportActionId action, GlobalPosition target, float radius, float etaSeconds, string name, float duration)
         {
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             float impact = now + etaSeconds;
             float linger = duration;
             float expiry = impact + linger;
@@ -218,7 +218,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void RegisterInboundStrike(string strikeName, float etaSeconds)
         {
             inboundStrikeName = strikeName;
-            inboundStrikeImpactTime = Time.timeSinceLevelLoad + etaSeconds;
+            inboundStrikeImpactTime = MissionNow() + etaSeconds;
             inboundStrikeConfirmedUntil = 0f;
         }
 
@@ -226,7 +226,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             get
             {
-                float now = Time.timeSinceLevelLoad;
+                float now = MissionNow();
                 if (inboundStrikeImpactTime > 0f)
                 {
                     if (now < inboundStrikeImpactTime)
@@ -361,7 +361,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        private static float MissionNow() =>
+        /// <summary>Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start.</summary>
+        internal static float MissionNow() =>
             NetworkSceneSingleton<MissionManager>.i != null
                 ? NetworkSceneSingleton<MissionManager>.i.MissionTime
                 : Time.timeSinceLevelLoad;
@@ -377,7 +378,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             // Prune expired active strikes
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
             {
                 if (!activeStrikes[i].IsActive(now))
@@ -403,12 +404,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool anyArmed = ArmedAction.HasValue || localPick != null;
             SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
-            if (pendingWaypoint != -1 && Time.unscaledTime > pendingWaypointUntil)
+            if (pendingWaypoint != -1 && now > pendingWaypointUntil)
             {
                 pendingWaypoint = -1;
                 Status = "No response from host.";
             }
-            if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
+            if (pending && now - pendingSince > ReplyTimeout)
             {
                 pending = false;
                 Status = "No response from host.";
@@ -517,7 +518,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         public float LocalCooldownRemaining =>
-            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - MissionNow());
 
         /// <summary>
         /// The cooldown this peer would show: the host's configured seconds scaled by the
@@ -720,7 +721,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             pending = true;
-            pendingSince = Time.unscaledTime;
+            pendingSince = MissionNow();
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
             int id = ++nextRequestId;
@@ -770,7 +771,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (result == SupportResult.Accepted)
             {
                 if ((SupportActionId)message.Action != SupportActionId.JtacUnlase)
-                    localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
+                    localCooldownUntil = DisableCooldowns ? 0f : MissionNow() + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
                      action.Id == SupportActionId.MtiSweep);
@@ -842,11 +843,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (action == null) return SupportResult.CapabilityUnavailable;
 
             ulong playerId = PlayerIdentity.Of(player);
-            float now = Time.unscaledTime;
+            float now = MissionNow();
             bool bypass = BypassRequirements;
 
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
-            if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
+            // Transport abuse limits keep wall time; gameplay cooldowns use mission time.
+            if (!DisableCooldowns && ledger.IsRateLimited(playerId, Time.unscaledTime, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !HostAuthorised(player, action)) return SupportResult.NotUnlocked;
             // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
@@ -859,7 +861,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
-            float missionNow = MissionNow();
+            float missionNow = now;
             if (!free)
             {
                 ObjectiveCount census = credits.Census(player.HQ);
@@ -904,7 +906,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Seconds left on this player's host cooldown; what a Cooldown refusal tells the client.</summary>
         internal float ServerCooldownRemaining(Player player) =>
             player == null || DisableCooldowns ? 0f
-                : ledger.CooldownRemaining(PlayerIdentity.Of(player), Time.unscaledTime, CooldownFor(player));
+                : ledger.CooldownRemaining(PlayerIdentity.Of(player), MissionNow(), CooldownFor(player));
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -1008,7 +1010,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
             pendingWaypoint = requestId;
-            pendingWaypointUntil = Time.unscaledTime + ReplyTimeout;
+            pendingWaypointUntil = MissionNow() + ReplyTimeout;
             network.SendWaypoint(requestId, point, clear);
         }
 
@@ -1023,7 +1025,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
             if (clear) Tasking.ClearLegs(strike);
-            else Tasking.QueueLeg(strike, leg, Time.timeSinceLevelLoad, settings.MaximumRange.Value);
+            else Tasking.QueueLeg(strike, leg, MissionNow(), settings.MaximumRange.Value);
         }
 
         private void BroadcastLegs(CruiseTasking.Strike strike, SupportResult result)

@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (calls.Pending) { text = "CALL PENDING"; detail = ""; tone = HudTone.Info; return true; }
             if (!string.IsNullOrEmpty(calls.LastWords) && calls.LastWords.StartsWith("NEGATIVE")
-                && UnityEngine.Time.unscaledTime - calls.LastWordsAt < 4f)
+                && SupportManager.MissionNow() - calls.LastWordsAt < 4f)
             {
                 text = calls.LastWords; detail = ""; tone = HudTone.Warning; return true;
             }
