@@ -5,17 +5,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 {
     internal enum EarnKind : byte { None, Kill, Capture, Recon, Jamming, Support }
 
-    /// <summary>Core §6.2: vanilla reward allocation → CR.</summary>
+    /// <summary>Core §6.2: kill value / 10; other earnings ride the vanilla allocation reward.</summary>
     internal static class EarningRules
     {
         public const float CreditPerAllocation = 10f, KillCap = 50f, CaptureCredit = 40f, MinorCap = 20f;
 
-        public static float FromReward(EarnKind kind, float rewardAllocation, bool repeatType, bool opsAssisted)
+        public static float FromReward(EarnKind kind, float rewardAllocation, bool repeatType, bool opsAssisted, float unitValue = 0f)
         {
             if (kind == EarnKind.None) return 0f;
             if (kind == EarnKind.Capture) return CaptureCredit;
-            if (float.IsNaN(rewardAllocation) || float.IsInfinity(rewardAllocation) || rewardAllocation <= 0f) return 0f;
-            float credit = rewardAllocation * CreditPerAllocation;
+            float source = kind == EarnKind.Kill ? unitValue : rewardAllocation;
+            if (float.IsNaN(source) || float.IsInfinity(source) || source <= 0f) return 0f;
+            float credit = kind == EarnKind.Kill ? source / 10f : source * CreditPerAllocation;
             if (kind != EarnKind.Kill) return Math.Min(MinorCap, credit);
             credit = Math.Min(KillCap, credit);
             if (repeatType) credit *= 0.5f;

@@ -341,7 +341,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 GlobalPosition at = target.GlobalPosition();
                 assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
             }
-            credits.Earn(player, EarningRules.FromReward(kind, rewardAllocation, repeat, assisted) * settings.EarnKnob.Value, now);
+            float unitValue = target != null && target.definition != null ? target.definition.value : 0f;
+            float earned = EarningRules.FromReward(kind, rewardAllocation, repeat, assisted, unitValue) * settings.EarnKnob.Value;
+            credits.Earn(player, earned, now);
+            if (kind == EarnKind.Kill && Plugin.Settings?.Diagnostics.VerboseLogging.Value == true)
+                logger.LogInfo("[Support.Credit] target=" + (target?.definition?.unitName ?? "unknown") +
+                    " value=" + unitValue + " allocation=" + rewardAllocation + " CR=" + earned +
+                    " repeat=" + repeat + " assisted=" + assisted + " earnScale=" + settings.EarnKnob.Value);
         }
 
         private static EarnKind KindOf(FactionHQ.RewardType type)
