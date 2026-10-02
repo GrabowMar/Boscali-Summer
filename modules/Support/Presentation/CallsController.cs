@@ -47,6 +47,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             arm.Clear();
             request.Clear();
+            pinCycle = 0;
             mapAim = null;
             LastWords = "";
             LastWordsAt = -100f;
@@ -89,6 +90,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (mapAim.HasValue) { Fire(id, mapAim.Value, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
+
+        /// <summary>Pin a call into the first empty favourite slot, else cycle through the four.</summary>
+        public void Pin(SupportActionId id)
+        {
+            for (int i = 0; i < Favourites.Length; i++)
+            {
+                if (Favourites[i].HasValue) continue;
+                Favourites[i] = id;
+                return;
+            }
+            Favourites[pinCycle] = id;
+            pinCycle = (pinCycle + 1) % Favourites.Length;
+        }
+
+        private int pinCycle;
 
         public void Disarm()
         {

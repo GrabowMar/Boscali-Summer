@@ -680,7 +680,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             float cost = Cost(def);
-            if (cost <= 0f)
+            if (cost <= 0f && action != SupportActionId.JtacUnlase) // UNLASE is free by design
             {
                 Status = "Action unavailable on this map.";
                 return 0;
@@ -839,14 +839,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             var context = new SupportContext(
                 player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
-            CallQuote quote = QuoteFor(action, player);
-            float cost = quote.Cost;
-            if (cost <= 0f || !CallSheet.TryGet(action.Id, out CallRow row)) return SupportResult.CapabilityUnavailable;
+            // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
+            bool free = action.Id == SupportActionId.JtacUnlase;
+            float cost = free ? 0f : QuoteFor(action, player).Cost;
+            CallRow row = default;
+            if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
             float missionNow = MissionNow();
-            ObjectiveCount census = credits.Census(player.HQ);
-            if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
-                return SupportResult.NotUnlocked;
-            if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
+            if (!free)
+            {
+                ObjectiveCount census = credits.Census(player.HQ);
+                if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
+                    return SupportResult.NotUnlocked;
+                if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
+            }
 
             SupportResult result;
             try { result = action.Action.Execute(context); }
@@ -857,7 +862,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (result != SupportResult.Accepted)
             {
-                if (!bypass) credits.Refund(player, cost, missionNow);
+                if (!bypass && !free) credits.Refund(player, cost, missionNow);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
                 return result;

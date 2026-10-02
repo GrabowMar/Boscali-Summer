@@ -22,11 +22,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private const float Width = AvTokens.PanelWidth;
         private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.15f;
-        private const float CollapseBelow = 500f; // the 420 px panel: one list instead of three sections
 
         private readonly List<CallTile> tiles = new List<CallTile>(16);
-        private readonly Dictionary<SupportActionId, ActionTile> rows = new Dictionary<SupportActionId, ActionTile>();
-        private readonly ActionTile[] favourites = new ActionTile[4];
+        private readonly Dictionary<SupportActionId, CallLine> rows = new Dictionary<SupportActionId, CallLine>();
+        private AvControl[] favourites = new AvControl[0];
 
         private SupportManager manager;
         private CallsController calls;
@@ -38,7 +37,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private AvMetric[] metrics;
         private BriefCard banner;
 
-        private int nextPin;
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
@@ -60,8 +58,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             metrics = null;
             banner = null;
             rows.Clear();
-            for (int i = 0; i < favourites.Length; i++) favourites[i] = null;
-            nextPin = 0;
+            favourites = new AvControl[0];
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -193,7 +190,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             rows.Clear();
             shell = AvConsole.Build(rootRect, "OPS", "CALLS", 1, Width, height);
             metrics = shell.Metrics("CREDIT", "NEXT");
-            BuildPage(shell.Page(0), height < CollapseBelow);
+            BuildPage(shell.Page(0));
             shell.Finish();
         }
 
@@ -208,40 +205,33 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // ---- Page ------------------------------------------------------------------------
 
-        private void BuildPage(AvFlow page, bool collapse)
+        private void BuildPage(AvFlow page)
         {
             banner = page.Add(new BriefCard(page.Content));
             AvControl abort = banner.AddControl(new AvControl.Spec("ABORT", () => calls?.Disarm(), AvButtonStyle.Danger));
             abort.Help = "Disarm the armed CALL. Nothing is spent.";
 
             page.Section(AvIcon.Bolt, "FAVOURITES", "KEYS 1–4 · PRESS TWICE TO FIRE");
-            for (int i = 0; i < favourites.Length; i++)
+            var specs = new AvControl.Spec[4];
+            for (int i = 0; i < specs.Length; i++)
             {
                 int slot = i;
-                favourites[i] = page.Add(new ActionTile(page.Content, AvIcon.Bolt));
-                favourites[i].AddTrailing(new AvControl.Spec("CALL", () => PressFavourite(slot), AvButtonStyle.Primary));
+                specs[i] = new AvControl.Spec((i + 1) + " ·", () => PressFavourite(slot), AvButtonStyle.Primary);
             }
+            favourites = page.Buttons(specs).Controls;
+            foreach (AvControl c in favourites) c.SingleLine();
 
-            if (collapse) page.Section(AvIcon.Target, "CALLS", "LIGHT → STRATEGIC");
-            CallTier? section = null;
+            // 10 fixed one-line rows, LIGHT -> STRATEGIC; the tier word sits on each row instead of a section header.
             foreach (CallRow row in CallSheet.Rows)
             {
-                if (!collapse && section != row.Tier)
-                {
-                    section = row.Tier;
-                    page.Section(AvIcon.Target, CallWords.TierWord(row.Tier), "");
-                }
                 SupportActionId id = row.Id;
-                ActionTile tile = page.Add(new ActionTile(page.Content, AvIcon.Target));
-                tile.AddTrailing(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary));
-                AvControl star = tile.AddTrailing(new AvControl.Spec("★", () => Pin(id), AvButtonStyle.Quiet));
-                if (star != null) star.Help = "Pin to the next favourite slot.";
+                CallLine line = page.Add(new CallLine(page.Content));
+                line.AddControl(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary), "Arm this CALL; press again to fire.");
+                line.AddControl(new AvControl.Spec("★", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
                 if (id == SupportActionId.JtacMark)
-                {
-                    AvControl unlase = tile.AddTrailing(new AvControl.Spec("UNLASE", () => calls?.Unlase(), AvButtonStyle.Quiet));
-                    if (unlase != null) unlase.Help = "Clear the lase at the current POD or map aim.";
-                }
-                rows[id] = tile;
+                    line.AddControl(new AvControl.Spec("UNLASE", () => calls?.Unlase(), AvButtonStyle.Quiet),
+                        "Clear the lase at the current POD or map aim. Free.");
+                rows[id] = line;
             }
         }
 
@@ -250,14 +240,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (calls == null || slot < 0 || slot >= calls.Favourites.Length) return;
             SupportActionId? id = calls.Favourites[slot];
             if (id.HasValue) calls.Press(id.Value);
-        }
-
-        private void Pin(SupportActionId id)
-        {
-            if (calls == null) return;
-            calls.Favourites[nextPin] = id;
-            nextPin = (nextPin + 1) % calls.Favourites.Length;
-            nextRefresh = 0f;
         }
 
         // ---- Refresh and paint ------------------------------------------------------------
@@ -280,10 +262,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 }
                 tiles.Add(t);
             }
-            Paint(tiles, (int)manager.LocalCredit + " CR", manager.NextUnlockText(), calls.LastWords);
+            Paint(tiles, (int)manager.LocalCredit + " CR", manager.NextUnlockText(), calls.LastWords, calls.Pending);
         }
 
-        internal void Paint(IReadOnlyList<CallTile> view, string balanceText, string nextUnlock, string words)
+        internal void Paint(IReadOnlyList<CallTile> view, string balanceText, string nextUnlock, string words, bool pending = false)
         {
             if (shell == null) return;
             words = words ?? "";
@@ -297,15 +279,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool armed = false;
             foreach (CallTile t in view)
             {
-                if (!rows.TryGetValue(t.Id, out ActionTile tile)) continue;
-                tile.Set(t.Label, t.StateWord, t.CostText, t.Reason, StateOf(t.State), AvIcon.Target);
-                tile.Dim = !t.Enabled;
-                tile.Armed = t.State == CallState.Armed;
-                armed |= tile.Armed;
+                if (!rows.TryGetValue(t.Id, out CallLine line)) continue;
+                line.Set(t, StateOf(t.State));
+                line.Dim = !t.Enabled;
+                line.Armed = t.State == CallState.Armed;
+                armed |= line.Armed;
             }
             for (int i = 0; i < favourites.Length; i++) PaintFavourite(i, view);
 
-            bool pending = words.StartsWith("PENDING", StringComparison.Ordinal);
             banner.Set(armed ? "▲ CALL ARMED" : pending ? "CALL PENDING" : "HOTLINE",
                 words.Length == 0 ? "HOTLINE OPEN · PRESS A CALL TO ARM" : words,
                 armed ? AvState.Caution : pending ? AvState.Info
@@ -315,8 +296,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void PaintFavourite(int slot, IReadOnlyList<CallTile> view)
         {
-            ActionTile tile = favourites[slot];
-            if (tile == null) return;
+            if (slot >= favourites.Length) return;
+            AvControl button = favourites[slot];
             SupportActionId? id = calls != null && slot < calls.Favourites.Length ? calls.Favourites[slot] : null;
             if (id.HasValue)
             {
@@ -324,15 +305,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 {
                     CallTile t = view[i];
                     if (t.Id != id.Value) continue;
-                    tile.Set((slot + 1) + " · " + t.Label, t.StateWord, t.CostText, t.Reason, StateOf(t.State), AvIcon.Bolt);
-                    tile.Dim = !t.Enabled;
-                    tile.Armed = t.State == CallState.Armed;
+                    button.Label = (slot + 1) + " · " + t.Label;
+                    string tip = t.Label + " · " + t.StateWord + " · " + t.CostText;
+                    if (button.Help != tip) button.Help = tip;
+                    button.Interactable = t.Enabled;
+                    button.Armed = t.State == CallState.Armed;
                     return;
                 }
             }
-            tile.Set((slot + 1) + " · EMPTY", "★ A CALL BELOW", "", "", AvState.Inert, AvIcon.Bolt);
-            tile.Dim = true;
-            tile.Armed = false;
+            button.Label = (slot + 1) + " · EMPTY";
+            if (button.Help == null || !button.Help.StartsWith("Empty")) button.Help = "Empty slot: press ★ on a call to pin it here.";
+            button.Interactable = false;
+            button.Armed = false;
         }
 
         private static AvState StateOf(CallState s) =>

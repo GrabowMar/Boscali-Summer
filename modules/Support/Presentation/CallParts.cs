@@ -1,5 +1,6 @@
 using NOAvionics;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -254,6 +255,114 @@ namespace BoscaliSummer.Modules.Support.Presentation
             value.color = dim ? OpsInk.Muted : OpsInk.Word(state == AvState.Inert ? AvState.Info : state);
             unit.color = OpsInk.Muted;
             foreach (AvControl c in trailing) c.Restyle();
+        }
+    }
+
+    /// <summary>
+    /// One CALL as a single fixed-height line: name, tier word, price, reason chip, state word and up to three
+    /// controls. Text shrinks toward the 10 px floor; the line never wraps, so its height is constant and a
+    /// refresh can never move the page.
+    /// </summary>
+    internal sealed class CallLine : AvPart
+    {
+        public const float Height = 24f;
+        private const float PadX = 8f, CtlH = 20f, CallW = 40f, StarW = 24f, UnlaseW = 56f, Gap = 3f;
+        private readonly AvFrame frame;
+        private readonly Image rail;
+        private readonly TMP_Text name, tier, cost, reason, state;
+        private readonly List<AvControl> controls = new List<AvControl>(3);
+        private AvState tone = AvState.Info;
+        private bool hover, armed, dim;
+
+        public CallLine(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "CallLine");
+            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
+            AvLay.Fill(frame.rectTransform);
+            rail = AvLay.Solid(Rect, "Rail", Color.clear);
+            name = Micro(OpsText.Line(Rect, "Name", AvTextRole.Label, TextAlignmentOptions.MidlineLeft));
+            tier = Micro(OpsText.Line(Rect, "Tier", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft));
+            cost = Micro(OpsText.Line(Rect, "Cost", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight));
+            reason = Micro(OpsText.Line(Rect, "Reason", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft));
+            state = Micro(OpsText.Line(Rect, "State", AvTextRole.Micro, TextAlignmentOptions.MidlineRight));
+            AvHit hit = AvHit.On(frame);
+            hit.Hover = h => { hover = h; Restyle(); };
+            Restyle();
+        }
+
+        private static TMP_Text Micro(TMP_Text t) { t.fontSizeMin = AvTokens.FontMicro; return t; }
+
+        public AvControl AddControl(AvControl.Spec spec, string help = null)
+        {
+            if (controls.Count >= 3) return null;
+            AvControl c = AvControl.Make(Rect, spec);
+            c.SingleLine();
+            if (help != null) c.Help = help;
+            controls.Add(c);
+            return c;
+        }
+
+        /// <summary>The CALL button (first control) glows while this line is armed.</summary>
+        public bool Armed
+        {
+            get => armed;
+            set { if (armed == value) return; armed = value; if (controls.Count > 0) controls[0].Armed = value; Restyle(); }
+        }
+
+        public bool Dim { get => dim; set { if (dim == value) return; dim = value; Restyle(); } }
+
+        public void Set(CallTile t, AvState st)
+        {
+            OpsText.Set(name, t.Label);
+            OpsText.Set(tier, t.TierWord);
+            OpsText.Set(cost, t.CostText);
+            OpsText.Set(reason, t.Reason);
+            OpsText.Set(state, t.StateWord);
+            if (st != tone) { tone = st; Restyle(); }
+            Layout();
+        }
+
+        public override float Measure(float width) => Height;
+
+        public override void Place(AvSlot s) { base.Place(s); Layout(); }
+
+        private void Layout()
+        {
+            float w = PlacedWidth > 0f ? PlacedWidth : AvTokens.PanelWidth - 30f, h = Height;
+            AvLay.Place(rail.rectTransform, 0f, 0f, 3f, h);
+            float x = w - PadX;
+            for (int i = controls.Count - 1; i >= 0; i--)
+            {
+                float cw = i == 0 ? CallW : i == 1 ? StarW : UnlaseW;
+                x -= cw;
+                AvLay.Place(controls[i].Rect, x, (h - CtlH) * 0.5f, cw, CtlH);
+                x -= Gap;
+            }
+            float right = x - 2f;
+            OpsText.Place(name, PadX + 2f, 0f, 100f, h);
+            OpsText.Place(tier, 112f, 0f, 54f, h);
+            OpsText.Place(cost, 166f, 0f, 40f, h);
+            bool chip = reason.text.Length > 0;
+            reason.gameObject.SetActive(chip);
+            OpsText.Place(reason, 210f, 0f, 58f, h);
+            float sx = chip ? 272f : 210f;
+            OpsText.Place(state, sx, 0f, Mathf.Max(20f, right - sx), h);
+        }
+
+        public override void Restyle()
+        {
+            string st = armed ? "armed" : hover ? "hover" : null;
+            AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(tone), st);
+            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
+                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            Color hue = OpsInk.Rail(tone);
+            rail.color = armed ? OpsInk.Select : hue;
+            name.color = dim ? OpsInk.Muted : OpsInk.Ink;
+            tier.color = OpsInk.Muted;
+            cost.color = dim ? OpsInk.Muted : OpsInk.Word(tone == AvState.Inert ? AvState.Info : tone);
+            reason.color = OpsInk.Dim;
+            state.color = OpsInk.Word(tone);
+            foreach (AvControl c in controls) c.Restyle();
         }
     }
 }
