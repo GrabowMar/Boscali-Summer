@@ -263,6 +263,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             IZoneFortificationService fortifications, SupportNet net, ManualLogSource log)
         {
             settings = supportSettings;
+            Active = this;
             perks = playerPerks;
             network = net;
             credits = new CreditService(net);
@@ -279,6 +280,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void ResetForScene()
         {
+            if (Active == this) Active = null;
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
@@ -317,6 +319,44 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             ResetForScene();
             SupportMapMode.GestureArmed = false;
+        }
+
+        /// <summary>The live manager, or null; set in Configure, cleared on teardown.</summary>
+        internal static SupportManager Active { get; private set; }
+
+        internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
+        {
+            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
+            EarnKind kind = KindOf(type);
+            if (kind == EarnKind.None) return;
+            float now = MissionNow();
+            ulong id = PlayerIdentity.Of(player);
+            bool repeat = kind == EarnKind.Kill && target != null &&
+                credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
+            bool assisted = false;
+            if (kind == EarnKind.Kill && target != null)
+            {
+                GlobalPosition at = target.GlobalPosition();
+                assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
+            }
+            credits.Earn(player, EarningRules.FromReward(kind, rewardAllocation, repeat, assisted) * settings.EarnKnob.Value, now);
+        }
+
+        private static EarnKind KindOf(FactionHQ.RewardType type)
+        {
+            switch (type)
+            {
+                case FactionHQ.RewardType.Kill: return EarnKind.Kill;
+                case FactionHQ.RewardType.CaptureLocation: return EarnKind.Capture;
+                case FactionHQ.RewardType.Recon: return EarnKind.Recon;
+                case FactionHQ.RewardType.Jamming: return EarnKind.Jamming;
+                case FactionHQ.RewardType.Supply:
+                case FactionHQ.RewardType.Refuel:
+                case FactionHQ.RewardType.Repair:
+                case FactionHQ.RewardType.RescuePilots:
+                case FactionHQ.RewardType.CapturePilots: return EarnKind.Support;
+                default: return EarnKind.None; // RewardType.None: DynamicOperations' own payouts, not OPS earnings
+            }
         }
 
         private static float MissionNow() =>
