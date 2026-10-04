@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private float standoff = MinStandoff;
         private float softness;
         private OpticalVerdict verdict = OpticalVerdict.Ok;
-        private bool posed;
+        private bool posed, cleared;
 
         // Fog changes made while the feed camera renders, and the proof they were put back.
         private bool fogSaved;
@@ -75,7 +75,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private int rowCount;
         private readonly List<OpticalBracket> brackets = new List<OpticalBracket>(SpaceWire.MaxContacts);
 
-        public Texture Output => colour;
+        /// <summary>The picture, or null while the camera refuses (night, no sky state): a refused feed shows words, never the last frame.</summary>
+        public Texture Output => verdict == OpticalVerdict.Ok ? colour : null;
         public Camera Camera => cam;
         public int FramesRendered { get; private set; }
 
@@ -163,7 +164,24 @@ namespace BoscaliSummer.Modules.Support.Visuals
         {
             verdict = SpaceFeedRules.Optical(known, sky);
             softness = verdict == OpticalVerdict.Ok ? SpaceFeedRules.Softness(sky) : 0f;
-            if (verdict != OpticalVerdict.Ok) { posed = false; brackets.Clear(); }
+            if (verdict != OpticalVerdict.Ok)
+            {
+                posed = false;
+                brackets.Clear();
+                ClearPicture();
+            }
+        }
+
+        /// <summary>Blank the render target so a refusal can never leave the last daytime frame behind.</summary>
+        private void ClearPicture()
+        {
+            if (colour == null || cleared) return;
+            cleared = true;
+            if (cam != null) cam.enabled = false;
+            RenderTexture previous = RenderTexture.active;
+            RenderTexture.active = colour;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = previous;
         }
 
         /// <summary>
@@ -202,6 +220,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public void Aim(Vector3 aimLocal, Vector3 lineOfSight, Vector3 along, float footprint, float framesPerSecond)
         {
             if (cam == null || colour == null || verdict != OpticalVerdict.Ok) return;
+            cleared = false;
             Vector3 los = lineOfSight.sqrMagnitude > 1e-6f ? lineOfSight.normalized : Vector3.up;
 
             // Adaptive standoff: scale camera distance proportional to footprint

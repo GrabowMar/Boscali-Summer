@@ -40,8 +40,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private const float RayLift = 4000f;
         private const float PreviewInterval = 0.8f;
         private const int MaximumClassified = 4096;
-        // A ray may pass through this many Unit colliders before it is treated as blocked (a shadow, not a return).
-        private const int MaximumUnitSkips = 4;
+        // A ray may pass through this many Unit colliders; a denser stack is not a shadow (that would punch holes that reveal
+        // unrevealed bases) but a plain terrain return at the last surface met.
+        private const int MaximumUnitSkips = 12;
         private const float UnitSkipStep = 0.05f;
 
         private enum Surface : byte
@@ -53,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             Water
         }
 
-        private enum Probe : byte { Hit, Open, Blocked }
+        private enum Probe : byte { Hit, Open }
 
         private readonly Dictionary<int, Surface> surfaces = new Dictionary<int, Surface>();
         private readonly HashSet<int> approved = new HashSet<int>();
@@ -235,13 +236,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             Vector3 ground = centreLocal + new Vector3((float)x, 0f, (float)z);
             Vector3 origin = ground + los * RayLift;
 
-            Probe probe = Trace(origin, out RaycastHit hit);
-            if (probe == Probe.Blocked) return;
+            Probe probe = Trace(origin, out RaycastHit hit, out bool exhausted);
             if (probe == Probe.Hit)
             {
                 Vector3 relative = hit.point - centreLocal;
-                Surface surface = Classify(hit.collider, hit.point.y);
-                former.Add(relative.x, relative.y, relative.z, Backscatter(surface, hit.normal), 0.0);
+                // Skips used up under a stack of Unit colliders: a plain terrain return, never a shadow and never a unit.
+                Surface surface = exhausted ? Surface.Terrain : Classify(hit.collider, hit.point.y);
+                former.Add(relative.x, relative.y, relative.z, Backscatter(surface, exhausted ? Vector3.up : hit.normal), 0.0);
                 return;
             }
 
@@ -255,20 +256,24 @@ namespace BoscaliSummer.Modules.Support.Visuals
         }
 
         /// <summary>The first terrain, structure or water surface along the ray, looking through Unit colliders.</summary>
-        private Probe Trace(Vector3 origin, out RaycastHit hit)
+        private Probe Trace(Vector3 origin, out RaycastHit hit, out bool exhausted)
         {
             float remaining = RayLift * 2f;
+            exhausted = false;
+            RaycastHit last = default;
             for (int skips = 0; skips <= MaximumUnitSkips; skips++)
             {
                 if (!Physics.Raycast(origin, -los, out hit, remaining, layerMask, QueryTriggerInteraction.Ignore)) return Probe.Open;
                 if (Classify(hit.collider, hit.point.y) != Surface.Unit) return Probe.Hit;
+                last = hit;
                 float advance = hit.distance + UnitSkipStep;
                 origin -= los * advance;
                 remaining -= advance;
                 if (remaining <= 0f) break;
             }
-            hit = default;
-            return Probe.Blocked;
+            hit = last;
+            exhausted = true;
+            return Probe.Hit;
         }
 
         private Surface Classify(Collider collider, float height)
