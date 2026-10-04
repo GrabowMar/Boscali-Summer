@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     minimumSpeed, maximumSpeed, out SpaceRevealWindow window)) return -1;
             var units = UnitRegistry.allUnits;
             if (units == null || units.Count > MaximumNativeUnits) return -1;
-            // The RADAR bird stays busy for ObservationSeconds (SupportCatalog), so one window per bird never
+            // The RADAR bird stays busy for BirdBusySeconds (SupportCatalog), so one window per bird never
             // overwrites a live scan/MTI footprint.
             windows[(int)source] = window;
             Tick(now);

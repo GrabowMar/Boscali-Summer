@@ -400,11 +400,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         private static readonly MissionClock Clock = new MissionClock();
+        private static float nextClockWarning;
 
         /// <summary>
-        /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a client
-        /// that has not synced the MissionManager (missing, unspawned, unset start time, or a throwing read) keeps the
-        /// last good value, and the result is finite and never decreases within a scene.
+        /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a multiplayer
+        /// peer (host included) whose MissionManager is missing or has not started (multiplayerStartTime unset, so the raw
+        /// value is lobby time) keeps the last good value; the result is finite, never decreases within a scene, and
+        /// re-baselines if a transient ever latched high.
         /// </summary>
         internal static float MissionNow()
         {
@@ -413,11 +415,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             try
             {
                 MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (mission == null) { raw = Time.timeSinceLevelLoad; valid = GameManager.gameState != GameState.Multiplayer; }
-                else if (GameManager.gameState != GameState.Multiplayer || GameAccess.IsServer() || mission.multiplayerStartTime > 0d)
+                if (GameManager.gameState != GameState.Multiplayer)
+                { raw = mission != null ? mission.MissionTime : Time.timeSinceLevelLoad; valid = true; }
+                else if (mission != null && mission.multiplayerStartTime > 0d)
                 { raw = mission.MissionTime; valid = true; }
             }
-            catch { valid = false; }
+            catch (Exception e)
+            {
+                valid = false;
+                if (Time.unscaledTime >= nextClockWarning)
+                {
+                    nextClockWarning = Time.unscaledTime + 30f;
+                    Plugin.Logger?.LogWarning("[Support] Mission clock read failed; holding the last good time: " + e.Message);
+                }
+            }
             return Clock.Read(raw, valid, Time.frameCount);
         }
 

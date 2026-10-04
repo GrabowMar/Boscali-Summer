@@ -6,6 +6,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal readonly struct SpaceRevealWindow
     {
         public const float ObservationSeconds = 20f;
+        /// <summary>RADAR bird busy time: the window plus a margin so Execute lag cannot overlap two windows.</summary>
+        public const float BirdBusySeconds = ObservationSeconds + 1f;
         public readonly BirdKind Source;
         public readonly float X, Z, Radius, CreatedAt, ExpiresAt, MinimumSpeed, MaximumSpeed;
 
