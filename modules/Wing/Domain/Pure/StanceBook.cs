@@ -169,8 +169,10 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         /// <summary>Just enough JSON for this file: objects, arrays, strings, numbers, true/false/null. Throws FormatException.</summary>
         private sealed class MiniJson
         {
+            /// <summary>The file nests three deep; anything past this is corrupt (review fix: deep nesting overflowed the stack).</summary>
+            private const int MaxDepth = 32;
             private readonly string s;
-            private int p;
+            private int p, depth;
 
             public MiniJson(string text) { s = text; }
 
@@ -189,8 +191,13 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
                 Ws();
                 if (p >= s.Length) throw new FormatException("unexpected end");
                 char c = s[p];
-                if (c == '{') return Obj();
-                if (c == '[') return Arr();
+                if (c == '{' || c == '[')
+                {
+                    if (++depth > MaxDepth) throw new FormatException("nested deeper than " + MaxDepth + " at " + p);
+                    object v = c == '{' ? (object)Obj() : Arr();
+                    depth--;
+                    return v;
+                }
                 if (c == '"') return Str();
                 if (Lit("true")) return true;
                 if (Lit("false")) return false;

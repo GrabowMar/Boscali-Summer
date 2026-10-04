@@ -15,6 +15,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal static class WmcStanceFiles
     {
         private static StanceBook book;
+        /// <summary>The file exists but could not be read (locked, no access): SAVE must not overwrite it with the built-ins.</summary>
+        private static bool unreadable;
 
         private static string FilePath => Path.Combine(WingConfig.RecordsRoot, "stances.user.json");
 
@@ -32,10 +34,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 catch (Exception e)
                 {
                     errors.Add(e.Message);
+                    unreadable = true;
                 }
                 book = StanceBook.FromJson(json, StanceDoctrine.BuiltIns, errors);
                 foreach (string e in errors) WingLog.Logger.LogWarning("[Stances] stances.user.json: " + e);
-                if (errors.Count > 0 && File.Exists(FilePath))
+                if (errors.Count > 0 && !unreadable && File.Exists(FilePath))
                     try
                     {
                         File.Copy(FilePath, FilePath + ".bad", true);
@@ -52,13 +55,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Writes the book; false (logged) when the write failed.</summary>
         public static bool Save()
         {
+            StanceBook b = Book;
+            if (unreadable)
+            {
+                WingLog.Logger.LogWarning("[Stances] not saving: stances.user.json could not be read this session, so it is left as it is");
+                return false;
+            }
             try
             {
                 Directory.CreateDirectory(WingConfig.RecordsRoot);
                 string tmp = FilePath + ".tmp";
-                File.WriteAllText(tmp, Book.ToJson());
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                File.Move(tmp, FilePath);
+                File.WriteAllText(tmp, b.ToJson());
+                if (File.Exists(FilePath)) File.Replace(tmp, FilePath, null);
+                else File.Move(tmp, FilePath);
                 return true;
             }
             catch (Exception e)

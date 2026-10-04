@@ -24,6 +24,13 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
 
         public int Count => count;
 
+        /// <summary>Empties the feed (a new mission's wing).</summary>
+        public void Clear()
+        {
+            System.Array.Clear(ring, 0, Capacity);
+            head = count = 0;
+        }
+
         public void Push(float time, string who, string what, bool accepted, string reason)
         {
             ring[head] = new AckLine { Time = time, Who = who ?? "", What = what, Accepted = accepted, Reason = reason };

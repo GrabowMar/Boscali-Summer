@@ -83,6 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public void Activate()
         {
             Members.Clear();
+            ResetStation();
             ResetElements();
             FieldRegistry.Clear();
             // R7: the saved pilots join every mission as ROOKIEs (re-read, so a hand edit or another machine's save shows).

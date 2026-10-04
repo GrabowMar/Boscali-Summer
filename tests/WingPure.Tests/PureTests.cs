@@ -170,4 +170,34 @@ namespace WingPure.Tests
             TestAssert.That(AckWords.Who(2, 0, 0, 2) == "2 AC", "members without a known number");
         }
     }
+
+    internal static class ReviewFixTests
+    {
+        public static void Run()
+        {
+            var built = new[] { new Stance { Id = "reserve", Name = "RESERVE", Axes = new byte[8], BuiltIn = true } };
+            // Important 1: deep nesting reports, never overflows the stack
+            var errs = new List<string>();
+            StanceBook deep = StanceBook.FromJson(new string('[', 100000), built, errs);
+            TestAssert.That(errs.Count > 0 && deep.All.Count == 1, "deep nesting is a reported error, built-ins kept");
+            // coverage: \u escapes, bad axes, slot to a missing stance, user id colliding with a built-in
+            var e2 = new List<string>();
+            StanceBook b = StanceBook.FromJson("{\"stances\":[{\"id\":\"h\\u0041\",\"name\":\"X\",\"axes\":[0,0,0,0,0,0,0,0]},{\"id\":\"bad\",\"axes\":[1,2]},{\"id\":\"reserve\",\"axes\":[0,0,0,0,0,0,0,0]}],\"slots\":[\"reserve\",null,null,\"gone\",\"hA\",null]}", built, e2);
+            TestAssert.That(b.Find("hA") != null, "unicode escape decodes");
+            TestAssert.That(b.Find("bad") == null && e2.Count >= 2, "short axes and built-in collision are reported");
+            TestAssert.That(b.Slot(3) == null && b.Slot(4).Id == "hA" && b.Find("reserve").BuiltIn, "missing slot id is empty; built-in wins");
+            // Important 2: closure sampled on a cadence, not per caller
+            var s = new ClosureSample();
+            TestAssert.That(StationMath.Sample(ref s, 300f, 10f) == 0f, "first sample has no closure");
+            TestAssert.That(StationMath.Sample(ref s, 299.9f, 10.02f) == 0f, "a second caller inside the window reuses the value");
+            float c = StationMath.Sample(ref s, 290f, 10.5f);
+            TestAssert.That(Math.Abs(c - 20f) < 0.01f, "after the window closure is computed over the real interval");
+            TestAssert.That(StationMath.Sample(ref s, 289f, 10.55f) == c, "cached until the next window");
+            // Minor 5: the feed clears between missions
+            var f = new AckFeed();
+            f.Push(1f, "#2", "X", true, null);
+            f.Clear();
+            TestAssert.That(f.Count == 0 && f.Newest(0).Who == null, "clear empties the feed");
+        }
+    }
 }
