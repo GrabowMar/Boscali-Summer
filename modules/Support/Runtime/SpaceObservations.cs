@@ -230,7 +230,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Vector3 point = unit.transform.position;
             Vector3 start = point + Vector3.up * 20000f;
             // Reuse vanilla's target-radius-aware occlusion. Magnification models the orbital sensor,
-            // while the bounded host footprint supplies its acquisition range. Task7 adds optical weather.
+            // while the bounded host footprint supplies its acquisition range. Weather sizes the OPTICAL window (SpaceFeedRules); it never occludes single units.
             return unit.LineOfSight(start, 1000f);
         }
     }

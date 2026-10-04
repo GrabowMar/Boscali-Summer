@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
+        public ConfigEntry<float> OpticalSceneRadius { get; }
         public ConfigEntry<float> ElintRadius { get; }
 
         public ConfigEntry<int> CruiseSalvo { get; }
@@ -86,6 +87,11 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 new ConfigDescription(
                     "Half-width of a radar scan scene. " +
                     "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
+                    new AcceptableValueRange<float>(400f, 4000f)));
+            OpticalSceneRadius = config.Bind("Support", "OpticalSceneRadiusMeters", 1000f,
+                new ConfigDescription(
+                    "Half-width of a clear-day optical camera window. Cloud and rain shrink it (full cover halves it) and " +
+                    "the optical bird refuses at night; ground units inside it are revealed to the faction.",
                     new AcceptableValueRange<float>(400f, 4000f)));
             ElintRadius = config.Bind("Support", "ElintSweepRadiusMeters", 8000f,
                 new ConfigDescription(

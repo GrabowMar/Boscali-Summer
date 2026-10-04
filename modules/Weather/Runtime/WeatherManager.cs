@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     // floating origin. Positioning clouds, shadows and rain before that drew them against
     // the old origin for one frame on every shift: a ~1 km flash while flying.
     [DefaultExecutionOrder(100)]
-    internal sealed class WeatherManager : MonoBehaviour, ISceneService
+    internal sealed class WeatherManager : MonoBehaviour, ISceneService, IWeatherView
     {
         private WeatherSettings settings;
         private WeatherNet network;
@@ -130,6 +130,23 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal Vector2 FieldPosition => fieldPosition;
 
         public bool IsEnabled => settings != null && settings.Enabled.Value;
+
+        /// <summary>
+        /// The field at a global point for sky-dependent sensors (Support's SPACE feed reads it through IWeatherView). False while the
+        /// module is off or the field is not built: callers must not assume a clear sky. Read-only; changes no weather behaviour.
+        /// </summary>
+        bool IWeatherView.TrySample(float globalX, float globalZ, out WeatherViewSample sample)
+        {
+            sample = default;
+            WeatherField built = Field;
+            LevelInfo level = LevelInfo.i;
+            if (!IsEnabled || built == null || level == null ||
+                float.IsNaN(globalX) || float.IsInfinity(globalX) || float.IsNaN(globalZ) || float.IsInfinity(globalZ)) return false;
+            WeatherPoint point = built.Sample(globalX, globalZ);
+            sample = new WeatherViewSample(Mathf.Clamp01(point.Cover), point.CloudBase, point.CloudTop,
+                Mathf.Clamp01(point.RainRate / 20f), WeatherViewSample.IsNightHour(level.timeOfDay));
+            return true;
+        }
 
         public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet,
             ManualLogSource log)

@@ -183,7 +183,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         UplinkDown = 129,
         BirdNotReady = 130,
         /// <summary>A friendly player aircraft is inside the scaled standoff of the impact point.</summary>
-        FriendlyNear = 131
+        FriendlyNear = 131,
+        /// <summary>The OPTICAL bird has no night picture (the game has no thermal path); RADAR still works.</summary>
+        OpticalNight = 132,
+        /// <summary>No sky state is available to size or refuse the optical window.</summary>
+        SkyUnknown = 133
     }
 
     /// <summary>

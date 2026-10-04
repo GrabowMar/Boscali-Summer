@@ -269,6 +269,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
         int ISupportHost.OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
             float minimumSpeed, float maximumSpeed) => space?.OpenWindow(owner, point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
+        int ISupportHost.OpenOpticalWindow(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal)
+        {
+            refusal = SupportResult.SpawnFailed;
+            return space != null ? space.OpenOptical(owner, point, baseRadius, out refusal) : -1;
+        }
         internal SpaceObservations SpaceObservationsFor(FactionHQ owner) => space?.ObservationsFor(owner);
         internal MarkVerdict ConfirmSpaceMark(Player player, int id)
         {

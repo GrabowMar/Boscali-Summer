@@ -18,12 +18,15 @@ namespace BoscaliSummer.Modules.Support.Visuals
     /// <summary>
     /// Client-local SAR scene formation. Rays are cast from the sensor direction over the
     /// scene's range × azimuth grid during the collect window — a bounded number per frame —
-    /// against terrain, structures and water. Contacts come only from host-approved reveals,
-    /// never from a client's local unit registry. Each hit scatters by surface class
-    /// and local incidence and is handed to <see cref="SarImageFormer"/>, which lays heights
-    /// over, displaces movers, leaves shadow where no ray landed and speckles the result. The
-    /// preview re-forms at a low rate so the scene visibly builds azimuth line by azimuth line.
-    /// Gameplay (the host reveal) never depends on this image.
+    /// against terrain, structures and water. Environmental backscatter never includes a Unit
+    /// collider: a ray that meets one continues to what lies beneath it. Units appear only through
+    /// <see cref="AddApprovedContact(in FeedContact)"/>, fed from the host-revealed faction mirror,
+    /// never from a client's local unit registry. Each hit scatters by surface class and local
+    /// incidence and is handed to <see cref="SarImageFormer"/>, which lays heights over, displaces
+    /// movers, leaves shadow where no ray landed and speckles the result. The preview re-forms at a
+    /// low presentation rate so the scene visibly builds azimuth line by azimuth line; the collect
+    /// and processing durations run on mission time. Gameplay (the host reveal) never depends on
+    /// this image.
     /// </summary>
     internal sealed class SarCollector
     {
@@ -37,17 +40,23 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private const float RayLift = 4000f;
         private const float PreviewInterval = 0.8f;
         private const int MaximumClassified = 4096;
+        // A ray may pass through this many Unit colliders before it is treated as blocked (a shadow, not a return).
+        private const int MaximumUnitSkips = 4;
+        private const float UnitSkipStep = 0.05f;
 
         private enum Surface : byte
         {
             Terrain,
             Smooth,
             Structure,
-            Target,
+            Unit,
             Water
         }
 
+        private enum Probe : byte { Hit, Open, Blocked }
+
         private readonly Dictionary<int, Surface> surfaces = new Dictionary<int, Surface>();
+        private readonly HashSet<int> approved = new HashSet<int>();
         private readonly Color32[] pixels = new Color32[ImageWidth * ImageHeight];
         private SarImageFormer former;
         private Vector3 centreLocal;
@@ -57,9 +66,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private int nextRay;
         private int totalRays;
         private float elapsed;
+        private float lastMissionNow;
         private float nextPreview;
         private int layerMask;
         private int rangeOversample = RangeOversample;
+        private bool dirty;
 
         public SarPhase Phase { get; private set; }
         public Texture2D Image { get; private set; }
@@ -68,8 +79,15 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public double SlantRange { get; private set; }
         public int Contacts { get; set; }
 
+        /// <summary>
+        /// False while the product is not on screen: formation continues on mission time but the texture is not rebuilt
+        /// until it is visible again (one render then catches up).
+        /// </summary>
+        public bool Visible { get; set; } = true;
+
+        /// <param name="missionNow">Mission time at the start of the collect (<c>SupportManager.MissionNow()</c>).</param>
         public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state,
-                          double sceneHalfSize, int seed)
+                          double sceneHalfSize, int seed, float missionNow)
         {
             if (Image == null)
             {
@@ -98,10 +116,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             totalRays = former.RayCount(rangeOversample);
             nextRay = 0;
             elapsed = 0f;
+            lastMissionNow = missionNow;
             nextPreview = 0f;
             ProcessingProgress = 0f;
             Contacts = 0;
+            dirty = false;
             surfaces.Clear();
+            approved.Clear();
 
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float wind = level != null ? level.windSpeed : 5f;
@@ -112,21 +133,28 @@ namespace BoscaliSummer.Modules.Support.Visuals
             Phase = SarPhase.Collecting;
         }
 
-        public void Tick(float deltaTime)
+        /// <summary>
+        /// Advance on mission time: a pause holds the collect, and a clock re-baseline never steps it back. Only the low-rate
+        /// preview texture upload follows presentation time.
+        /// </summary>
+        public void Tick(float missionNow)
         {
             if (former == null) return;
+            float delta = missionNow > lastMissionNow ? missionNow - lastMissionNow : 0f;
+            lastMissionNow = missionNow;
             switch (Phase)
             {
                 case SarPhase.Collecting:
                 {
-                    elapsed += deltaTime;
+                    elapsed += delta;
                     int due = Mathf.Min(totalRays, Mathf.CeilToInt(totalRays * Mathf.Clamp01(elapsed / CollectSeconds)));
                     int budget = Mathf.Min(Mathf.Max(50, Mathf.RoundToInt(
                         MaximumRaysPerFrame * FxBus.Scales.RenderTargets)), due - nextRay);
                     for (int i = 0; i < budget; i++) Cast(nextRay++);
-                    if (elapsed >= nextPreview)
+                    if (budget > 0) dirty = true;
+                    if (Time.unscaledTime >= nextPreview && dirty && Visible)
                     {
-                        nextPreview = elapsed + PreviewInterval;
+                        nextPreview = Time.unscaledTime + PreviewInterval;
                         Render();
                     }
                     if (nextRay >= totalRays)
@@ -137,24 +165,69 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     break;
                 }
                 case SarPhase.Processing:
-                    elapsed += deltaTime;
+                    elapsed += delta;
                     ProcessingProgress = Mathf.Clamp01(elapsed / ProcessingSeconds);
                     if (elapsed >= ProcessingSeconds)
                     {
-                        Render();
+                        dirty = true;
+                        if (Visible) Render();
                         Phase = SarPhase.Complete;
                     }
+                    break;
+                case SarPhase.Complete:
+                    if (dirty && Visible) Render(); // an approved contact arrived late, or the view was hidden at completion
                     break;
             }
         }
 
+        /// <summary>Feed close or scene reset: the texture, the former and every approved id go.</summary>
         public void Dispose()
         {
             if (Image != null) UnityEngine.Object.Destroy(Image);
             Image = null;
             former = null;
+            surfaces.Clear();
+            approved.Clear();
+            Contacts = 0;
+            dirty = false;
             Phase = SarPhase.Idle;
         }
+
+        /// <summary>
+        /// A host-revealed ground contact as a SAR return. <paramref name="relativeX"/>, <paramref name="relativeY"/> and
+        /// <paramref name="relativeZ"/> are metres from the scene centre. This and its overload are the only way a Unit
+        /// contributes to the image. False when no collect is running, a value is not finite or the bound is reached.
+        /// </summary>
+        public bool AddApprovedContact(float relativeX, float relativeY, float relativeZ, float radialVelocity, float sigma)
+        {
+            if (former == null || Phase == SarPhase.Idle || Contacts >= SpaceWire.MaxContacts ||
+                !Finite(relativeX) || !Finite(relativeY) || !Finite(relativeZ) || !Finite(radialVelocity) || !Finite(sigma) || sigma <= 0f)
+                return false;
+            former.Add(relativeX, relativeY, relativeZ, sigma, radialVelocity);
+            Contacts++;
+            dirty = true;
+            return true;
+        }
+
+        /// <summary>
+        /// A mirror row (host-revealed, the faction's view) placed at its authorised global coordinates, on the ground under
+        /// them. Each contact id contributes once per collect.
+        /// </summary>
+        public bool AddApprovedContact(in FeedContact row)
+        {
+            if (former == null || !Finite(row.X) || !Finite(row.Z) || approved.Contains(row.Id) || approved.Count >= SpaceWire.MaxContacts)
+                return false;
+            var point = new GlobalPosition(row.X, 0f, row.Z);
+            Vector3 local = point.ToLocalPosition();
+            if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
+            Vector3 relative = local - centreLocal;
+            if (!AddApprovedContact(relative.x, relative.y, relative.z, SpaceFeedRules.SarContactRadial(row.Moving),
+                SpaceFeedRules.SarApprovedSigma)) return false;
+            approved.Add(row.Id);
+            return true;
+        }
+
+        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private void Cast(int index)
         {
@@ -162,15 +235,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             Vector3 ground = centreLocal + new Vector3((float)x, 0f, (float)z);
             Vector3 origin = ground + los * RayLift;
 
-            if (Physics.Raycast(origin, -los, out RaycastHit hit, RayLift * 2f, layerMask, QueryTriggerInteraction.Ignore))
+            Probe probe = Trace(origin, out RaycastHit hit);
+            if (probe == Probe.Blocked) return;
+            if (probe == Probe.Hit)
             {
                 Vector3 relative = hit.point - centreLocal;
                 Surface surface = Classify(hit.collider, hit.point.y);
-                double sigma = Backscatter(surface, hit.normal);
-                double radial = 0.0;
-                if (surface == Surface.Target && hit.rigidbody != null)
-                    radial = Vector3.Dot(hit.rigidbody.velocity, los);
-                former.Add(relative.x, relative.y, relative.z, sigma, radial);
+                former.Add(relative.x, relative.y, relative.z, Backscatter(surface, hit.normal), 0.0);
                 return;
             }
 
@@ -183,33 +254,51 @@ namespace BoscaliSummer.Modules.Support.Visuals
             former.Add(offset.x, offset.y, offset.z, 0.003 * windRoughness, 0.0);
         }
 
+        /// <summary>The first terrain, structure or water surface along the ray, looking through Unit colliders.</summary>
+        private Probe Trace(Vector3 origin, out RaycastHit hit)
+        {
+            float remaining = RayLift * 2f;
+            for (int skips = 0; skips <= MaximumUnitSkips; skips++)
+            {
+                if (!Physics.Raycast(origin, -los, out hit, remaining, layerMask, QueryTriggerInteraction.Ignore)) return Probe.Open;
+                if (Classify(hit.collider, hit.point.y) != Surface.Unit) return Probe.Hit;
+                float advance = hit.distance + UnitSkipStep;
+                origin -= los * advance;
+                remaining -= advance;
+                if (remaining <= 0f) break;
+            }
+            hit = default;
+            return Probe.Blocked;
+        }
+
         private Surface Classify(Collider collider, float height)
         {
-            if (collider.gameObject.layer == PhysicsLayers.Water || height <= Datum.LocalSeaY + 0.3f) return Surface.Water;
+            if (collider.gameObject.layer == PhysicsLayers.Water) return Surface.Water;
             int id = collider.GetInstanceID();
-            if (surfaces.TryGetValue(id, out Surface known)) return known;
-
-            Surface surface;
-            if (collider.attachedRigidbody != null && collider.GetComponentInParent<Unit>() != null)
+            if (!surfaces.TryGetValue(id, out Surface known))
             {
-                surface = Surface.Target;
+                if (collider.GetComponentInParent<Unit>() != null)
+                {
+                    known = Surface.Unit;
+                }
+                else
+                {
+                    string name = collider.name;
+                    if (name.IndexOf("terrain", StringComparison.OrdinalIgnoreCase) >= 0) known = Surface.Terrain;
+                    else if (name.IndexOf("road", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             name.IndexOf("runway", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             name.IndexOf("taxi", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             name.IndexOf("apron", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             name.IndexOf("pad", StringComparison.OrdinalIgnoreCase) >= 0)
+                        known = Surface.Smooth;
+                    else known = Surface.Structure;
+                }
+                if (surfaces.Count >= MaximumClassified) surfaces.Clear();
+                surfaces[id] = known;
             }
-            else
-            {
-                string name = collider.name;
-                if (name.IndexOf("terrain", StringComparison.OrdinalIgnoreCase) >= 0) surface = Surface.Terrain;
-                else if (name.IndexOf("road", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         name.IndexOf("runway", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         name.IndexOf("taxi", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         name.IndexOf("apron", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                         name.IndexOf("pad", StringComparison.OrdinalIgnoreCase) >= 0)
-                    surface = Surface.Smooth;
-                else surface = Surface.Structure;
-            }
-
-            if (surfaces.Count >= MaximumClassified) surfaces.Clear();
-            surfaces[id] = surface;
-            return surface;
+            // A Unit is never environment, even where it floats; sea level otherwise reads as water.
+            if (known != Surface.Unit && height <= Datum.LocalSeaY + 0.3f) return Surface.Water;
+            return known;
         }
 
         private double Backscatter(Surface surface, Vector3 normal)
@@ -217,8 +306,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
             double cosLocal = Math.Max(0.0, Vector3.Dot(normal, los));
             switch (surface)
             {
-                case Surface.Target:
-                    return 30.0;
                 case Surface.Smooth:
                     // Pavement is a mirror at X-band: almost nothing comes back off-specular.
                     return 0.012 * Math.Pow(cosLocal, 6.0);
@@ -240,6 +327,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void Render()
         {
             if (former == null || Image == null) return;
+            dirty = false;
             // The collect's noise floor rises with range: a steeper, closer look is cleaner.
             double floor = 0.0004 * Math.Pow(SlantRange / 600000.0, 2.0);
             byte[] bytes = former.Form(2, floor);

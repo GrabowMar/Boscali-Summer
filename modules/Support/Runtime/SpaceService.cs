@@ -82,6 +82,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float minimumSpeed, float maximumSpeed) =>
             ObservationsFor(owner)?.Open(point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
 
+        /// <summary>
+        /// The host side of the optical camera task: read the sky at the aim, refuse with words at night or when the sky is unknown,
+        /// otherwise open an OPTICAL reveal window whose radius the weather policy sized. Contacts it admits stay revealed for the
+        /// window's 20 mission seconds, so <see cref="SpaceObservations.Tick"/> no longer forgets optical-sourced reveals.
+        /// </summary>
+        internal int OpenOptical(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal)
+        {
+            refusal = SupportResult.Accepted;
+            bool known = SpaceSky.TrySample(point, out WeatherViewSample sky);
+            OpticalVerdict verdict = SpaceFeedRules.Optical(known, sky);
+            if (verdict != OpticalVerdict.Ok)
+            {
+                refusal = verdict == OpticalVerdict.NightUnavailable ? SupportResult.OpticalNight : SupportResult.SkyUnknown;
+                return -1;
+            }
+            int admitted = OpenWindow(owner, point, SpaceFeedRules.OpticalRadius(baseRadius, sky), BirdKind.Optical, 0f, float.MaxValue);
+            if (admitted < 0) refusal = SupportResult.SpawnFailed;
+            return admitted;
+        }
+
         public SpaceFamilyState ReadFamily(FactionHQ owner, float now) =>
             TryGetState(owner, out SpaceState state) ? state.Family(now) : SpaceFamilyState.Dark;
 

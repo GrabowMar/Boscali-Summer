@@ -30,6 +30,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         int OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
             float minimumSpeed, float maximumSpeed);
 
+        /// <summary>
+        /// Opens the OPTICAL reveal window at the point, sized by the sky there. Returns the contacts admitted, or -1 with the
+        /// refusal (OpticalNight, SkyUnknown or SpawnFailed) when no window opened.
+        /// </summary>
+        int OpenOpticalWindow(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal);
+
         bool TryReserve(FactionHQ owner, SupportPool pool);
         void Release(FactionHQ owner, SupportPool pool);
         void Run(IEnumerator routine);
