@@ -68,4 +68,26 @@ namespace WingPure.Tests
             TestAssert.That(!StanceDiff.Changed(m, -1) && !StanceDiff.Changed(m, 8), "out-of-range axis is unchanged");
         }
     }
+
+    internal static class StationMathTests
+    {
+        public static void Run()
+        {
+            TestAssert.That(StationMath.Phase(1f, false, 4f) == StationPhase.InSlot, "sigma 1 and small error is in slot");
+            TestAssert.That(StationMath.Phase(1f, false, 40f) == StationPhase.PreSlot, "sigma 1 but far is pre-slot");
+            TestAssert.That(StationMath.Phase(0.6f, false, 300f) == StationPhase.PreSlot, "mid sigma is pre-slot");
+            TestAssert.That(StationMath.Phase(0.1f, false, 900f) == StationPhase.Cutoff, "low sigma is cutoff");
+            TestAssert.That(StationMath.Phase(1f, true, 4f) == StationPhase.Behind, "falling behind wins");
+            TestAssert.That(Math.Abs(StationMath.Closure(320f, 300f, 1f) - 20f) < 0.01f, "closing 20 m/s");
+            TestAssert.That(StationMath.Closure(300f, 300f, 0f) == 0f, "dt 0 gives no closure");
+            TestAssert.That(Math.Abs(StationMath.EtaSeconds(300f, 20f) - 15f) < 0.01f, "eta = error / closure");
+            TestAssert.That(float.IsPositiveInfinity(StationMath.EtaSeconds(300f, -3f)), "opening gap has no eta");
+            // QuantiseClamps (review focus 3)
+            TestAssert.That(StationMath.QuantiseError(30000f) == 255 && StationMath.QuantiseError(-5f) == 0, "error clamps");
+            TestAssert.That(StationMath.Error(StationMath.QuantiseError(304f)) == 300f, "error rounds to 10 m");
+            TestAssert.That(StationMath.QuantiseClosure(400f) == 127 && StationMath.QuantiseClosure(-400f) == -127, "closure clamps");
+            TestAssert.That(StationMath.QuantiseError(float.NaN) == 0 && StationMath.QuantiseClosure(float.NaN) == 0, "NaN quantises to 0");
+            TestAssert.That(StationMath.Word(StationPhase.PreSlot) == "PRE-SLOT" && StationMath.Word(StationPhase.InSlot) == "IN SLOT", "words");
+        }
+    }
 }
