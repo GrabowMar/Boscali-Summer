@@ -7,7 +7,9 @@ using NOAvionics;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-    [BepInDependency("com.marci.wingcommand", "0.9.2.6")]
+    // Wing Command ships inside Boscali Summer (modules/Wing); a standalone WingCommand.dll
+    // alongside it would double every patch and fight over the same wing, so BepInEx skips us.
+    [BepInIncompatibility("com.marci.wingcommand")]
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";
