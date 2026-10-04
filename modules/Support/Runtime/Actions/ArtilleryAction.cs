@@ -1,4 +1,5 @@
 using System.Collections;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -29,15 +30,21 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
-            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
+            // A claimed TASKED call aims at its post's fixed MARK point, already confirmed by the host from a reveal
+            // window, so the pilot-range and fresh-intel gates of a free-aimed rod do not apply to it.
+            TaskedLaunchJob tasked = context.Tasked;
+            if (tasked == null)
             {
-                if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
-                    return SupportResult.OutOfRange;
-            }
-            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
-            {
-                context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
-                return SupportResult.StaleIntel;
+                if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
+                {
+                    if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
+                        return SupportResult.OutOfRange;
+                }
+                if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
+                {
+                    context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
+                    return SupportResult.StaleIntel;
+                }
             }
             int scene = context.Host.SceneGeneration;
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
@@ -48,6 +55,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             try
             {
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.UplinkDown;
+                if (tasked != null && !tasked.CanLaunch) return SupportResult.UplinkDown;
+                // Task 5 swaps this STANDARD scatter for SpaceFireControl.TrySample(tasked.Aim ...) on a confirmed MARK.
                 Vector2 miss = Random.insideUnitCircle * RodScatterMeters;
                 Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
                 Vector3 target = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
@@ -59,7 +68,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (missile == null) return SupportResult.SpawnFailed;
                 missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
                 missile.Arm();
-                if (!context.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
+                // The receipt is the only thing that makes this a launch. A refused receipt deletes the spawn below.
+                // TASKED settles the board, escrow and bird together; a direct rod commits the bird alone.
+                if (tasked != null) { if (!tasked.ReportSpawn()) return SupportResult.SpawnFailed; }
+                else if (!context.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
                 launched = true;
                 // After the receipt, cosmetic failures cannot refund an already-live physical weapon.
                 try { Visuals.KineticRodStrikeVisuals.Track(missile, target); }

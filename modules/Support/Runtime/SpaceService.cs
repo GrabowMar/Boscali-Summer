@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public IReadOnlyList<Unit> View;
             public bool Field;
             public SpaceObservations Observations;
+            public TaskedDesk Tasked;
         }
         private readonly struct Candidate
         {
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             foreach (var pair in factions)
             {
+                pair.Value.Tasked?.Retire(); // returns in-flight escrow and makes every old launch callback inert
                 pair.Value.State.Clear();
                 pair.Value.Observations?.Dispose();
             }
@@ -80,6 +82,43 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public SpaceFamilyState ReadFamily(FactionHQ owner, float now) =>
             TryGetState(owner, out SpaceState state) ? state.Family(now) : SpaceFamilyState.Dark;
 
+        // ---- TASKED calls (host authority; Task 6 network handlers call these) ---------------------
+
+        private bool TryDesk(Player player, out TaskedDesk desk)
+        {
+            desk = null;
+            if (!GameAccess.IsServer() || player == null || player.HQ == null || PlayerIdentity.Of(player) == PlayerIdentity.None ||
+                manager?.Settings == null || !manager.Settings.Enabled.Value || !factions.TryGetValue(player.HQ, out FactionSpace faction)) return false;
+            desk = faction.Tasked;
+            return desk != null;
+        }
+
+        /// <summary>Posts the player's confirmed MARKs as one TASKED call. Replays by (player, request id).</summary>
+        internal TaskedResult SendTasked(Player player, int[] markIds, int requestId) =>
+            TryDesk(player, out TaskedDesk desk) ? desk.Send(PlayerIdentity.Of(player), requestId, markIds)
+                : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+
+        /// <summary>
+        /// Queues a claim. The host arbitrates inside a 200 ms window (favorite first, then receipt order); the winner's
+        /// escrow, launch and settlement follow on the host tick and the verdict arrives through <see cref="TryTaskedResult"/>.
+        /// </summary>
+        internal TaskedResult ClaimTasked(Player player, int postId, int requestId, bool favorite = false) =>
+            TryDesk(player, out TaskedDesk desk) ? desk.Claim(PlayerIdentity.Of(player), requestId, postId, favorite)
+                : new TaskedResult(TaskedOutcome.Unavailable, postId, requestId);
+
+        internal bool TryTaskedResult(Player player, int requestId, out TaskedResult result)
+        {
+            result = default;
+            return TryDesk(player, out TaskedDesk desk) && desk.TryResult(PlayerIdentity.Of(player), requestId, out result);
+        }
+
+        /// <summary>Wires the push for queued claims that resolve later (Task 6 answers the client from it).</summary>
+        internal void SubscribeTasked(FactionHQ owner, Action<ulong, int, TaskedResult> handler)
+        {
+            if (owner != null && handler != null && factions.TryGetValue(owner, out FactionSpace faction) && faction.Tasked != null)
+                faction.Tasked.Resolved += handler;
+        }
+
         private void Update()
         {
             if (manager?.Settings == null || !manager.Settings.Enabled.Value)
@@ -95,6 +134,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer &&
                 GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
+            // Claim arbitration is 200 ms: the desks run every frame, the 1 s world refresh below does not.
+            foreach (var pair in factions) pair.Value.Tasked?.Tick();
             if (now < nextTick) return;
             nextTick = now + 1f;
             spawner.RetryCleanup();
@@ -186,6 +227,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
                 View = Array.AsReadOnly(array), Field = fromOrigin, Observations = new SpaceObservations(owner) };
+            faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             return true;
         }
 

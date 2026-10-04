@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// action; this class owns only authority, economy, bounded concurrency and the client's
     /// view of its own request.
     /// </summary>
-        internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
+        internal sealed partial class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
             IGroundForceReadiness, ITheaterStrikePicture
         {
         private const int MaximumStrikeJobs = 2;

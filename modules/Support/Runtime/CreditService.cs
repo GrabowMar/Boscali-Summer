@@ -48,8 +48,34 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public RepeatTracker Repeats { get; } = new RepeatTracker();
         public AssistRegistry Assists { get; } = new AssistRegistry();
         public CreditActivity Activity { get; } = new CreditActivity();
+        /// <summary>Operator fee income cap (core §6.2); kill-assist income shares this meter when it is built.</summary>
+        public OperatorIncomeMeter OperatorIncome { get; } = new OperatorIncomeMeter();
+        /// <summary>The TASKED call money path over this service's own wallets and HQ FUND.</summary>
+        public TaskedWallets Tasked { get; }
 
-        public CreditService(SupportNet network) => this.network = network;
+        public CreditService(SupportNet network)
+        {
+            this.network = network;
+            Tasked = new TaskedWallets(Ledger, Fund, OperatorIncome) { Changed = Mirror };
+        }
+
+        /// <summary>
+        /// Pays a verified contributor by identity (disconnected is fine; switched or frozen is refused). The receipt
+        /// conserves <paramref name="amount"/>: only <c>Unapplied</c> is still owed to the earned faction's HQ FUND.
+        /// </summary>
+        public ContributorCreditReceipt EarnContributor(ulong playerId, int earnedFaction, float amount, float missionNow) =>
+            Tasked.EarnContributor(playerId, earnedFaction, amount, missionNow);
+
+        private void Mirror(ulong id)
+        {
+            if (FactionRegistry.GetAllHQs() == null) return;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            {
+                if (hq == null) continue;
+                foreach (Player player in hq.GetPlayers(false))
+                    if (player != null && PlayerIdentity.Of(player) == id) { SendIfChanged(player, id, SupportManager.MissionNow()); return; }
+            }
+        }
 
         public void Tick(float now, float dt)
         {
@@ -167,6 +193,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Repeats.Clear();
             Assists.Clear();
             Activity.Clear();
+            OperatorIncome.Clear();
             sent.Clear();
             census.Clear();
         }

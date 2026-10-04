@@ -55,9 +55,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly int RequestId;
         public readonly ISupportHost Host;
         public readonly SpaceActionTransaction SpaceTask;
+        /// <summary>Set only for a claimed TASKED call: the action must report its physical launch to this job.</summary>
+        public readonly TaskedLaunchJob Tasked;
 
         public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
-            SpaceActionTransaction spaceTask = null)
+            SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null)
         {
             Player = player;
             Owner = player == null ? null : player.HQ;
@@ -65,6 +67,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             RequestId = requestId;
             Host = host;
             SpaceTask = spaceTask;
+            Tasked = tasked;
         }
 
         public SupportSettings Settings => Host.Settings;
