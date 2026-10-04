@@ -30,14 +30,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<TaskedPostInfo> posts = new List<TaskedPostInfo>(TaskedBoard.MaxCalls);
         private Player current;
         private FactionHQ resolving;
+        private readonly List<Player> roster = new List<Player>(SpaceContacts.MaxPlayers);
         private float nextPoll, nextWarning;
+        private readonly System.Random random = new System.Random(Guid.NewGuid().GetHashCode());
 
         public SpaceNetHost(SupportManager manager, SpaceService space, SupportNet net)
         {
             this.manager = manager; this.space = space; this.net = net;
             commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this);
             subs = new SpaceSubscriptions(SupportNet.ProtocolVersion);
+            Salt = NewSalt();
         }
+
+        private uint NewSalt() => unchecked((uint)random.Next() * 2654435761u ^ (uint)random.Next());
+
+        /// <summary>A per-mission secret that never leaves the host: it salts the noise in the probable class shown before a verdict.</summary>
+        public uint Salt { get; private set; }
 
         public SpaceCommandHost Commands => commands;
         public SpaceSubscriptions Subscriptions => subs;
@@ -47,6 +55,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             commands.ResetForScene();
             subs.Clear();
             nextPoll = 0f;
+            Salt = NewSalt();
         }
 
         // ---- Commands ---------------------------------------------------------------------------
@@ -63,17 +72,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
             current = player; resolving = null;
             try
             {
+                // A fresh join (a new link, or a restarted client whose request ids start over) never inherits an old identity's
+                // receipts: they were answers to a different session.
+                if (subs.Ensure(id)) commands.Cache.Forget(id);
                 switch (command.Kind)
                 {
                     case SpaceCommandKind.OpenFeed:
-                        if (commands.Admit(id, wall) && subs.OpenFeed(id, now)) Poll(player, now);
+                        // The feed lease and the poll throttle run on wall time; the message timestamp is mission time.
+                        if (commands.Admit(id, wall) && subs.OpenFeed(id, wall)) Poll(player, now, wall);
                         break;
                     case SpaceCommandKind.FeedActivity:
                         // Keeps the lease only. Effort still comes from the ordinary input pulse, never from this message.
-                        if (commands.Admit(id, wall)) subs.Touch(id, now);
+                        if (commands.Admit(id, wall)) subs.Touch(id, wall);
                         break;
                     case SpaceCommandKind.CloseFeed:
-                        if (commands.Admit(id, wall)) { subs.CloseFeed(id); Poll(player, now); }
+                        if (commands.Admit(id, wall)) { subs.CloseFeed(id); Poll(player, now, wall); }
                         break;
                     default:
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
@@ -114,24 +127,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 List<Player> players = hq != null ? hq.GetPlayers(false) : null;
                 if (players == null) continue;
-                for (int i = 0; i < players.Count; i++) Poll(players[i], now);
+                // GetPlayers hands out a shared list that nested calls refill: poll a private copy.
+                roster.Clear();
+                for (int i = 0; i < players.Count && roster.Count < roster.Capacity; i++) roster.Add(players[i]);
+                for (int i = 0; i < roster.Count; i++) Poll(roster[i], now, wall);
             }
             subs.EndRound();
         }
 
-        private void Poll(Player player, float now)
+        private void Poll(Player player, float now, float wall)
         {
             if (player == null || player.HQ == null) return;
             ulong id = PlayerIdentity.Of(player);
             if (id == PlayerIdentity.None) return;
+            if (subs.Ensure(id)) commands.Cache.Forget(id); // first sight of this identity this session
             subs.Keep(id);
-            if (!subs.Due(id, now)) return;
+            if (!subs.Due(id, wall)) return;
             try
             {
-                bool feeding = subs.IsFeeding(id, now);
+                bool feeding = subs.IsFeeding(id, wall);
                 space.FillFeed(player, feeding, scratch, reveals, marks, posts); // fills a not-Active, rowless view when the faction has no SPACE
-                SpaceStateData message = subs.Next(id, manager.FactionKeyOf(player.HQ), scratch, now);
-                if (message != null) net.SendSpaceState(player, message);
+                SpaceStateData message = subs.Next(id, manager.FactionKeyOf(player.HQ), scratch, now, wall);
+                // A message that did not fit one writer buffer carries its TASKED rows in a follow-up, sent right after.
+                for (SpaceStateData part = message; part != null; part = part.Follow) net.SendSpaceState(player, part);
             }
             catch (Exception e)
             {
@@ -145,6 +163,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         // ---- ISpaceCommandPorts (host decisions; the sender is `current`) -----------------------
+
+        public float Now => SupportManager.MissionNow();
 
         public MarkVerdict Mark(ulong player, int contactId) =>
             Is(player) ? manager.ConfirmSpaceMark(current, contactId) : MarkVerdict.NoContact;

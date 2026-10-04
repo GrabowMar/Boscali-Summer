@@ -36,7 +36,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public void Clear() => buckets.Clear();
-        public void Forget(ulong player) => buckets.Remove(player);
 
         private bool EvictIdle(float wall)
         {
@@ -78,6 +77,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             public int Fingerprint;
             public SpaceReply Reply;
             public bool Pending;
+            public float At;
         }
 
         private sealed class Ring { public readonly List<Entry> Entries = new List<Entry>(PerPlayer); public long Touched; }
@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         /// <summary>Claims a slot before the request runs, so a request that cannot be remembered is never executed. False: refuse it.</summary>
-        public bool Begin(ulong player, int epoch, int channel, in SpaceCommand command)
+        public bool Begin(ulong player, int epoch, int channel, in SpaceCommand command, float now)
         {
             if (player == 0 || command.RequestId <= 0) return false;
             if (!players.TryGetValue(player, out Ring ring))
@@ -117,7 +117,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             ring.Entries.Add(new Entry
             {
-                Key = new Key(epoch, channel, command.RequestId), Kind = command.Kind, Fingerprint = command.Fingerprint(), Pending = true,
+                Key = new Key(epoch, channel, command.RequestId), Kind = command.Kind, Fingerprint = command.Fingerprint(), Pending = true, At = now,
                 Reply = new SpaceReply(command.Protocol, command.Kind, command.RequestId, 0)
             });
             return true;
@@ -129,6 +129,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Entry e = Get(player, new Key(epoch, channel, request));
             if (e == null) return;
             e.Reply = reply; e.Pending = pending;
+        }
+
+        /// <summary>Request ids of this player's pending entries that have waited longer than <paramref name="ttl"/> mission seconds.</summary>
+        public int StalePending(ulong player, float now, float ttl, List<int> into)
+        {
+            into.Clear();
+            if (players.TryGetValue(player, out Ring ring))
+                for (int i = 0; i < ring.Entries.Count; i++)
+                    if (ring.Entries[i].Pending && !(now - ring.Entries[i].At < ttl)) into.Add(ring.Entries[i].Key.Request);
+            return into.Count;
         }
 
         /// <summary>The queued claim reached its final verdict. False when the receipt was already gone.</summary>
@@ -176,6 +186,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>What the host decides for a SPACE command. Nothing here accepts a faction, price, class or favourite from the client.</summary>
     internal interface ISpaceCommandPorts
     {
+        /// <summary>Host mission time (seconds), for the pending-entry deadline.</summary>
+        float Now { get; }
         MarkVerdict Mark(ulong player, int contactId);
         TaskedResult Send(ulong player, int requestId, int[] markIds);
         /// <summary>No favourite flag: the host holds no knowledge of a pilot's CALLS favourites, so arbitration is receipt order.</summary>
@@ -193,12 +205,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         /// <summary>SPACE request ids live in their own channel: they can never collide with CALLS request ids.</summary>
         public const int Channel = 2;
-        public const int CallsChannel = 1;
+        /// <summary>A queued claim older than this (mission seconds) is settled from the desk's own receipt or dropped, so pinned entries can never refuse forever.</summary>
+        public const float PendingSeconds = 60f;
 
         private readonly byte protocol;
         private readonly ISpaceCommandPorts ports;
         private readonly SpaceCommandLimiter limiter = new SpaceCommandLimiter();
         private readonly SpaceReplayCache cache = new SpaceReplayCache();
+        private readonly List<int> stale = new List<int>(SpaceReplayCache.PerPlayer);
 
         public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports) { this.protocol = protocol; this.ports = ports; }
 
@@ -231,7 +245,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     else reply = known.AsReplay();
                     return true;
             }
-            if (!cache.Begin(player, epoch, Channel, command)) { reply = Refusal(command, RefusalKind.Busy); return true; }
+            if (!cache.Begin(player, epoch, Channel, command, ports.Now) && !(SettleStale(player, epoch) && cache.Begin(player, epoch, Channel, command, ports.Now)))
+            {
+                reply = Refusal(command, RefusalKind.Busy);
+                return true;
+            }
             try
             {
                 reply = Execute(player, command);
@@ -241,6 +259,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 cache.Abort(player, epoch, Channel, command.RequestId);
                 throw;
+            }
+            return true;
+        }
+
+        /// <summary>Old pending claims fall back to the desk: a final receipt completes the entry, none at all drops it.</summary>
+        private bool SettleStale(ulong player, int epoch)
+        {
+            if (cache.StalePending(player, ports.Now, PendingSeconds, stale) == 0) return false;
+            for (int i = 0; i < stale.Count; i++)
+            {
+                int request = stale[i];
+                if (ports.TryTaskedResult(player, request, out TaskedResult result) && result.Final)
+                    cache.Resolve(player, epoch, Channel, request, ForTasked(SpaceCommandKind.ClaimTasked, request, result));
+                else
+                    cache.Abort(player, epoch, Channel, request);
             }
             return true;
         }
@@ -288,5 +321,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return new SpaceReply(protocol, c.Kind, c.RequestId,
                 (byte)(why == RefusalKind.Changed ? TaskedOutcome.Unavailable : TaskedOutcome.Busy), c.Kind == SpaceCommandKind.ClaimTasked ? c.Target : 0);
         }
+    }
+
+    /// <summary>
+    /// In-process replies (singleplayer and the listen-host player) are queued and delivered on the next frame, never from inside
+    /// the request call: the requester only learns its request id when the call returns, so a verdict raised earlier would find
+    /// nobody waiting for it. Bounded; a full queue refuses (the caller logs) rather than growing.
+    /// </summary>
+    internal sealed class SpaceReplyQueue
+    {
+        public const int Capacity = 64;
+        private readonly Queue<SpaceReply> queue = new Queue<SpaceReply>(Capacity);
+
+        public int Count => queue.Count;
+        public bool Enqueue(in SpaceReply reply)
+        {
+            if (queue.Count >= Capacity) return false;
+            queue.Enqueue(reply);
+            return true;
+        }
+        public bool TryDequeue(out SpaceReply reply)
+        {
+            reply = default;
+            if (queue.Count == 0) return false;
+            reply = queue.Dequeue();
+            return true;
+        }
+        public void Clear() => queue.Clear();
     }
 }

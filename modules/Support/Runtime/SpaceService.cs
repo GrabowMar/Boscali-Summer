@@ -152,21 +152,28 @@ namespace BoscaliSummer.Modules.Support.Runtime
             into.UplinksTotal = (byte)faction.State.UplinkCount;
             into.LiveMarks = (byte)Math.Min(SpaceContacts.MaxMarks, contacts.MarkCount);
             into.Gate = manager.TaskedGate(viewer, out int detail);
-            into.GateDetail = Math.Max(0, detail);
+            detail = Math.Max(0, detail);
+            // A cooldown or freeze counts down on the client: send its deadline (mission time), not seconds left, so a cooling
+            // member is not sent a new value every second.
+            into.GateDetail = SpaceMirror.GateIsDeadline(into.Gate) ? (int)Math.Ceiling(now + detail) : detail;
+            uint salt = manager.SpaceNet != null ? manager.SpaceNet.Salt : 0u;
             if (!rows) return true;
             into.Feed = true;
             contacts.CopyReveals(now, reveals);
             for (int i = 0; i < reveals.Count && into.Contacts.Count < SpaceWire.MaxContacts; i++)
             {
                 SpaceContact c = reveals[i];
+                // One row the wire cannot carry is dropped here, not allowed to make the whole message unreadable.
+                if (!SpaceWire.Codable(c.X) || !SpaceWire.Codable(c.Z)) continue;
                 // The verdict (truth) stays on the host: the client is told a deterministic, noisy probable class.
-                ProbableClass probable = SpaceProbable.Of(c.Classification, c.Id, c.ObservationGeneration, out byte percent);
+                ProbableClass probable = SpaceProbable.Of(c.Classification, c.Id, c.ObservationGeneration, salt, out byte percent);
                 into.Contacts.Add(new FeedContact { Id = c.Id, UnitId = faction.Observations.UnitIdOf(c.Id), X = c.X, Z = c.Z,
                     Class = probable, Percent = percent, Moving = c.Moving, Source = c.Source, Expires = c.ExpiresAt });
             }
             contacts.CopyMarks(now, marks);
             for (int i = 0; i < marks.Count && into.Marks.Count < SpaceWire.MaxMarks; i++)
-                into.Marks.Add(new FeedMark { Id = marks[i].Id, X = marks[i].X, Z = marks[i].Z, Moving = marks[i].Moving,
+                if (SpaceWire.Codable(marks[i].X) && SpaceWire.Codable(marks[i].Z))
+                    into.Marks.Add(new FeedMark { Id = marks[i].Id, X = marks[i].X, Z = marks[i].Z, Moving = marks[i].Moving,
                     Source = marks[i].Source, Expires = marks[i].ExpiresAt });
             if (faction.Tasked == null) return true;
             faction.Tasked.Board.Snapshot(now, posts);
@@ -185,16 +192,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     for (int p = 0; p < split.Payouts.Length; p++) shared += split.Payouts[p].Amount;
                     payoff = (int)Math.Round(shared);
                 }
-                var ids = new int[call.MarkCount];
-                byte sources = 0;
-                for (int m = 0; m < ids.Length; m++)
+                // The post is a host snapshot of fixed ground points taken at SEND; the client shows them for the post's whole life.
+                var points = new FeedPoint[call.MarkCount];
+                bool codable = points.Length > 0;
+                for (int m = 0; m < points.Length && codable; m++)
                 {
                     SpaceMark mark = call.MarkAt(m);
-                    ids[m] = mark.Id;
-                    sources |= (byte)(mark.Source == BirdKind.Radar ? 2 : 1);
+                    codable = SpaceWire.Codable(mark.X) && SpaceWire.Codable(mark.Z);
+                    points[m] = new FeedPoint { X = mark.X, Z = mark.Z, Source = mark.Source };
                 }
+                if (!codable) continue; // a post the wire cannot describe is not offered rather than poisoning the message
                 into.Posts.Add(new FeedPost { CallId = call.Id, Action = call.Action, WatchOfficer = call.WatchOfficer, Own = own,
-                    Launching = posts[i].Held, Sources = sources, MarkIds = ids, Price = price, Payoff = payoff, Expires = call.ExpiresAt,
+                    Launching = posts[i].Launching, Points = points, Price = price, Payoff = payoff, Expires = call.ExpiresAt,
                     Claimant = posts[i].Held ? manager.PlayerLabel(viewer.HQ, posts[i].Holder) : "" });
             }
             return true;

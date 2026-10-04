@@ -114,14 +114,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Id == o.Id && SpaceMirror.SamePoint(X, o.X) && SpaceMirror.SamePoint(Z, o.Z) && Moving == o.Moving && Source == o.Source && SpaceMirror.SameExpiry(Expires, o.Expires);
     }
 
+    /// <summary>One of a post's fixed ground points: the host snapshot taken at SEND, valid for the post's whole 600 s.</summary>
+    internal struct FeedPoint
+    {
+        public float X, Z;
+        public BirdKind Source;
+        public bool SameAs(in FeedPoint o) => SpaceMirror.SamePoint(X, o.X) && SpaceMirror.SamePoint(Z, o.Z) && Source == o.Source;
+    }
+
     internal struct FeedPost
     {
         public int CallId;
         public SupportActionId Action;
+        /// <summary>Launching is a held, physically launching call only; the 2 s reservation window is not shown as launching.</summary>
         public bool WatchOfficer, Own, Launching;
-        /// <summary>Bit 0 OPTICAL, bit 1 RADAR: the sources of the post's MARKs.</summary>
-        public byte Sources;
-        public int[] MarkIds;
+        /// <summary>The post's snapshot ground points (1..6, fixed at SEND). The first is where the rod flies.</summary>
+        public FeedPoint[] Points;
         /// <summary>CR this viewer pays to claim it now (host quote, 0 when free) and the share that goes to contributors.</summary>
         public int Price, Payoff;
         public float Expires;
@@ -131,11 +139,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool SameAs(in FeedPost o)
         {
             if (CallId != o.CallId || Action != o.Action || WatchOfficer != o.WatchOfficer || Own != o.Own ||
-                Launching != o.Launching || Sources != o.Sources || Price != o.Price || Payoff != o.Payoff ||
+                Launching != o.Launching || Price != o.Price || Payoff != o.Payoff ||
                 !SpaceMirror.SameExpiry(Expires, o.Expires) || (Claimant ?? "") != (o.Claimant ?? "")) return false;
-            int a = MarkIds?.Length ?? 0, b = o.MarkIds?.Length ?? 0;
+            int a = Points?.Length ?? 0, b = o.Points?.Length ?? 0;
             if (a != b) return false;
-            for (int i = 0; i < a; i++) if (MarkIds[i] != o.MarkIds[i]) return false;
+            for (int i = 0; i < a; i++) if (!Points[i].SameAs(o.Points[i])) return false;
             return true;
         }
     }
@@ -156,7 +164,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public byte UplinksLive, UplinksTotal, LiveMarks;
         /// <summary>Why this viewer cannot claim a TASKED call right now (None when they can); <see cref="GateDetail"/> is its number.</summary>
         public TaskedOutcome Gate;
+        /// <summary>
+        /// A quantity for the gate word (a price short, say). For COOLDOWN and FROZEN it is a host mission-time deadline in
+        /// seconds, so the client counts down locally and a cooling member does not get a packet every second.
+        /// </summary>
         public int GateDetail;
+        /// <summary>Not serialized: a message that did not fit one buffer is sent in two; the sender sends this one right after.</summary>
+        public SpaceStateData Follow;
         public readonly List<FeedContact> Contacts = new List<FeedContact>();
         public readonly List<int> RemovedContacts = new List<int>();
         public readonly List<FeedMark> Marks = new List<FeedMark>();
@@ -173,7 +187,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Wire coordinates are signed 24-bit decimetres: +-838 km at 0.1 m, three bytes each. -8388608 is the invalid marker.</summary>
         public const float CoordinateLimit = 838860f;
         private const int InvalidCoordinate = -8388608;
-        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 11, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
+        /// <summary>Largest state message the sender emits in one piece (Mirage pools 1300 B writer buffers).</summary>
+        public const int StateBudget = 1200;
+        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 16, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
         private const byte FlagFull = 1, FlagActive = 2, FlagFeed = 4;
 
         // ---- Command ---------------------------------------------------------------------------
@@ -296,10 +312,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 WriteVar(w, (uint)Math.Max(0, p.CallId));
                 w.WriteByte((byte)p.Action);
                 w.WriteByte((byte)((p.WatchOfficer ? 1 : 0) | (p.Own ? 2 : 0) | (p.Launching ? 4 : 0)));
-                w.WriteByte((byte)(p.Sources & 3));
-                int marks = Math.Min(p.MarkIds?.Length ?? 0, TaskedBoard.MaxMarks);
-                w.WriteByte((byte)marks);
-                for (int j = 0; j < marks; j++) WriteVar(w, (uint)Math.Max(0, p.MarkIds[j]));
+                int points = Math.Min(p.Points?.Length ?? 0, TaskedBoard.MaxMarks);
+                byte radar = 0;
+                for (int j = 0; j < points; j++) if (p.Points[j].Source == BirdKind.Radar) radar |= (byte)(1 << j);
+                w.WriteByte(radar);
+                w.WriteByte((byte)points);
+                for (int j = 0; j < points; j++) { WriteCoordinate(w, p.Points[j].X); WriteCoordinate(w, p.Points[j].Z); }
                 WriteVar(w, (uint)Math.Max(0, p.Price));
                 WriteVar(w, (uint)Math.Max(0, p.Payoff));
                 WriteExpiry(w, p.Expires, s.Now);
@@ -351,22 +369,44 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             for (int i = 0; i < n; i++)
             {
                 if (!ReadInt(r, out int call) || !r.TryReadByte(out byte action) || !CallSheet.TryGet((SupportActionId)action, out _) ||
-                    !r.TryReadByte(out byte bits) || (bits & ~7) != 0 || !r.TryReadByte(out byte sources) || (sources & ~3) != 0 ||
-                    !r.TryReadByte(out byte markCount) || markCount == 0 || markCount > TaskedBoard.MaxMarks || r.Remaining < markCount) return Bad();
-                var marks = new int[markCount];
-                for (int j = 0; j < markCount; j++) if (!ReadInt(r, out marks[j])) return Bad();
+                    !r.TryReadByte(out byte bits) || (bits & ~7) != 0 || !r.TryReadByte(out byte radar) || (radar & ~63) != 0 ||
+                    !r.TryReadByte(out byte pointCount) || pointCount == 0 || pointCount > TaskedBoard.MaxMarks || (radar >> pointCount) != 0 ||
+                    r.Remaining < pointCount * 6) return Bad();
+                var points = new FeedPoint[pointCount];
+                for (int j = 0; j < pointCount; j++)
+                {
+                    if (!ReadCoordinate(r, out float px) || !ReadCoordinate(r, out float pz)) return Bad();
+                    points[j] = new FeedPoint { X = px, Z = pz, Source = (radar & (1 << j)) != 0 ? BirdKind.Radar : BirdKind.Optical };
+                }
                 if (!ReadInt(r, out int price) || !ReadInt(r, out int payoff) || !ReadExpiry(r, now, out float expires) ||
                     !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return Bad();
                 s.Posts.Add(new FeedPost
                 {
                     CallId = call, Action = (SupportActionId)action, WatchOfficer = (bits & 1) != 0, Own = (bits & 2) != 0, Launching = (bits & 4) != 0,
-                    Sources = sources, MarkIds = marks, Price = price, Payoff = payoff, Expires = expires, Claimant = claimant
+                    Points = points, Price = price, Payoff = payoff, Expires = expires, Claimant = claimant
                 });
             }
             return ReadIds(r, s.RemovedPosts, MaxPosts) ? s : Bad();
         }
 
         private static SpaceStateData Bad() => new SpaceStateData();
+
+        /// <summary>True when the wire can carry this coordinate (finite, inside +-838 km). Hosts filter rows with this.</summary>
+        public static bool Codable(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= CoordinateLimit;
+
+        private sealed class CountingWriter : ISpaceWriter
+        {
+            public int Bytes;
+            public void WriteByte(byte value) => Bytes++;
+        }
+
+        /// <summary>Exact encoded size of a state message, for the one-buffer budget.</summary>
+        public static int StateSize(SpaceStateData s)
+        {
+            var counter = new CountingWriter();
+            WriteState(counter, s);
+            return counter.Bytes;
+        }
 
         // ---- Primitives ------------------------------------------------------------------------
 

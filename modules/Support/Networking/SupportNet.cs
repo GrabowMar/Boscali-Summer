@@ -312,7 +312,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             if (player == null) return;
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
             {
-                manager.ReceiveSpaceReply(reply);
+                manager.QueueSpaceReply(reply); // delivered next frame, after the requester holds its request id
                 return;
             }
             player.Owner?.Send(new SpaceReplyMessage { Reply = reply });

@@ -37,15 +37,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int ShareCount => shares?.Length ?? 0;
         public SpaceMark MarkAt(int index) => marks[index];
 
-        /// <summary>The first MARK still inside its deadline: the fixed ground point a rod may be aimed at.</summary>
-        public bool TryLiveMark(float now, out SpaceMark mark)
-        {
-            if (marks != null && SpaceRules.MissionTime(now))
-                for (int i = 0; i < marks.Length; i++)
-                    if (now < marks[i].ExpiresAt) { mark = marks[i]; return true; }
-            mark = default;
-            return false;
-        }
         public EffortShare ShareAt(int index) => shares[index];
         public SpaceMark[] CopyMarks() => marks == null ? Array.Empty<SpaceMark>() : (SpaceMark[])marks.Clone();
         public EffortShare[] CopyShares() => shares == null ? Array.Empty<EffortShare>() : (EffortShare[])shares.Clone();
@@ -82,9 +73,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal readonly struct TaskedPostInfo
     {
         public readonly TaskedCall Call;
+        /// <summary>A pilot holds the post: reserved for 2 s, or physically launching.</summary>
         public readonly bool Held;
+        /// <summary>Physically launching only (not the 2 s reservation).</summary>
+        public readonly bool Launching;
         public readonly ulong Holder;
-        public TaskedPostInfo(TaskedCall call, bool held, ulong holder) { Call = call; Held = held; Holder = holder; }
+        public TaskedPostInfo(TaskedCall call, bool held, bool launching, ulong holder) { Call = call; Held = held; Launching = launching; Holder = holder; }
     }
 
     internal readonly struct TaskedClaim
@@ -233,7 +227,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             call = null; return false;
         }
 
-        /// <summary>The board as a viewer may see it: every post still alive, whether a pilot holds it, and who.</summary>
+        /// <summary>
+        /// The board as a viewer may see it: every post inside its own 600 s life (a post is a fixed snapshot of ground points,
+        /// so a lapsed MARK never hides it), whether a pilot holds it, and who.
+        /// </summary>
         public int Snapshot(float now, List<TaskedPostInfo> into)
         {
             into.Clear();
@@ -241,9 +238,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!SpaceRules.MissionTime(now)) return 0;
             foreach (Entry entry in calls.Values)
             {
-                if (!entry.Call.Valid(now) || !entry.Call.TryLiveMark(now, out _)) continue;
+                if (!entry.Call.Valid(now)) continue;
                 bool held = entry.Status != Status.Available;
-                into.Add(new TaskedPostInfo(entry.Call, held, held ? entry.Claim.Pilot : 0UL));
+                into.Add(new TaskedPostInfo(entry.Call, held, entry.Status == Status.Launching, held ? entry.Claim.Pilot : 0UL));
             }
             return into.Count;
         }
@@ -334,9 +331,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     if (now < entry.LaunchAt + LaunchSeconds) continue;
                     ResetClaim(entry);
                 }
-                // A post whose every MARK has lapsed is dead: nothing can be aimed, so it must not hold a slot or delay
-                // the effort refund, and clients are never offered it. (LAUNCHING returned above; it owns its own deadline.)
-                if (now >= entry.Call.ExpiresAt || !entry.Call.TryLiveMark(now, out _)) expiredCalls.Add(pair.Key);
+                if (now >= entry.Call.ExpiresAt) expiredCalls.Add(pair.Key);
                 else if (entry.Status == Status.Reserved && now >= entry.Claim.ReservationExpiresAt) ResetClaim(entry);
             }
             for (int i = 0; i < expiredCalls.Count; i++)

@@ -137,15 +137,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             Desk = desk; Slot = slot; Claim = claim; Call = call; Pilot = pilot; RequestId = requestId; Escrow = escrow;
             LaunchedAt = launchedAt; CallId = call.Id; Action = call.Action;
-            // The rod flies at the first MARK still live now; none live aims at the first one, which is already lapsed and fails closed.
-            if (!call.TryLiveMark(launchedAt, out SpaceMark mark)) mark = call.MarkAt(0);
+            // A post is a host snapshot of fixed ground points taken at SEND: the rod flies at the first one for the post's whole
+            // 600 s life, whether or not the MARK it came from has since lapsed.
+            SpaceMark mark = call.MarkAt(0);
             Aim = new TaskedAim(mark.X, mark.Z, true, mark.Source == BirdKind.Radar);
-            AimMarkExpiresAt = mark.ExpiresAt;
             ImpactX = mark.X; ImpactZ = mark.Z;
         }
 
-        /// <summary>Deadline of the MARK this job aims at.</summary>
-        public readonly float AimMarkExpiresAt;
         /// <summary>Where the rod will actually land (the sampled impact); the friendly standoff is judged here. Defaults to the aim.</summary>
         public float ImpactX { get; private set; }
         public float ImpactZ { get; private set; }
@@ -462,7 +460,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (job == null || job.Final || retired || !ReferenceEquals(job.Desk, this)) return false;
             float now = ports.Now;
-            return SpaceRules.MissionTime(now) && board.CanLaunch(job.Claim, now) && MarkLive(job, now) && Clear(job) && job.Slot.CanCommit();
+            return SpaceRules.MissionTime(now) && board.CanLaunch(job.Claim, now) && Clear(job) && job.Slot.CanCommit();
         }
 
         /// <summary>Why a launch right now would be refused, for the typed receipt and words. None when it would be accepted.</summary>
@@ -473,13 +471,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!SpaceRules.MissionTime(now)) return TaskedOutcome.DeliveryFailed;
             if (now >= job.LaunchedAt + TaskedBoard.LaunchSeconds) return TaskedOutcome.TimedOut;
             if (!board.CanLaunch(job.Claim, now)) return TaskedOutcome.DeliveryFailed;
-            if (!MarkLive(job, now)) return TaskedOutcome.MarkExpired;
             if (!Clear(job)) return TaskedOutcome.FriendlyNear;
             return job.Slot.CanCommit() ? TaskedOutcome.None : TaskedOutcome.UplinkDown;
         }
-
-        /// <summary>The rod's fixed ground point is the MARK the job was aimed at: a lapsed MARK is never fired at.</summary>
-        private static bool MarkLive(TaskedLaunchJob job, float now) => now < job.AimMarkExpiresAt;
 
         /// <summary>Friendly standoff on the sampled impact. A port fault fails closed.</summary>
         private bool Clear(TaskedLaunchJob job)
@@ -556,8 +550,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private TaskedOutcome Judge(ulong player, TaskedCall call, float now, out int fee, out int detail)
         {
             fee = 0; detail = 0;
-            // A post lives while any of its MARKs does; with none live it is refused before anything is reserved or spent.
-            if (!call.TryLiveMark(now, out _)) return TaskedOutcome.MarkExpired;
             TaskedOutcome refusal = ports.Authorize(player, call.Action, true, out int baseline, out bool charge, out detail);
             if (refusal != TaskedOutcome.None || !charge) return refusal;
             bool own = !call.WatchOfficer && call.Maker == player;

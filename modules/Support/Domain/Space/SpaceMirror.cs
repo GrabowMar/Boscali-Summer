@@ -10,9 +10,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// </summary>
     internal static class SpaceProbable
     {
-        public static ProbableClass Of(ContactClass truth, int id, int generation, out byte percent)
+        /// <param name="salt">A host-only per-mission secret: without it a client could predict the noise from ids it can see.</param>
+        public static ProbableClass Of(ContactClass truth, int id, int generation, uint salt, out byte percent)
         {
-            uint h = Deterministic.Hash(id, generation, 0x5ACE);
+            uint h = Deterministic.Hash(id, generation, 0x5ACE, unchecked((int)salt));
             int roll = (int)(h % 100u);
             percent = (byte)(55 + (int)((h >> 8) % 36u)); // 55..90
             bool hostile = truth == ContactClass.EnemyGround || truth == ContactClass.Decoy;
@@ -131,6 +132,27 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return d;
         }
 
+        /// <summary>CR short for a price is a quantity; the cooldown and wallet-freeze seconds are sent as a mission-time deadline.</summary>
+        public static bool GateIsDeadline(TaskedOutcome gate) => gate == TaskedOutcome.Cooldown || gate == TaskedOutcome.Frozen;
+
+        /// <summary>
+        /// Keeps one message inside one writer buffer: when it is larger than the budget the TASKED rows move to a follow-up
+        /// delta of the same generation (the client applies a full, then that delta). The follow-up carries no headline change.
+        /// </summary>
+        public static SpaceStateData Split(SpaceStateData d)
+        {
+            if (d == null || SpaceWire.StateSize(d) <= SpaceWire.StateBudget || (d.Posts.Count == 0 && d.RemovedPosts.Count == 0)) return d;
+            var follow = new SpaceStateData
+            {
+                Protocol = d.Protocol, Full = false, Active = d.Active, Feed = d.Feed, Generation = d.Generation, Now = d.Now,
+                Family = d.Family, UplinksLive = d.UplinksLive, UplinksTotal = d.UplinksTotal, LiveMarks = d.LiveMarks, Gate = d.Gate, GateDetail = d.GateDetail
+            };
+            follow.Posts.AddRange(d.Posts); follow.RemovedPosts.AddRange(d.RemovedPosts);
+            d.Posts.Clear(); d.RemovedPosts.Clear();
+            d.Follow = follow;
+            return d;
+        }
+
         /// <summary>True when a delta would tell the subscriber nothing new.</summary>
         public static bool Quiet(SpaceFeedState previous, SpaceFeedState next, SpaceStateData delta) =>
             previous != null && previous.ScalarsEqual(next) && !delta.HasRows;
@@ -142,22 +164,35 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
     /// <summary>
     /// The client's copy of its own faction's SPACE view. It trusts nothing about order: a delta that does not belong to the
-    /// mirror's current generation is dropped and flags <see cref="NeedsFull"/>; a full from an older generation is dropped.
-    /// Times are converted to the client's own mission clock when a row arrives, so <see cref="Prune"/> and the UI never mix domains.
+    /// mirror's current generation is dropped and flags <see cref="NeedsFull"/>; a full that is not newer than anything seen on
+    /// this link is dropped. Times are converted to the client's own mission clock when a row arrives, so the UI never mixes
+    /// clock domains.
     /// </summary>
     internal sealed class SpaceFeedMirror
     {
         private bool hasFull;
         public SpaceFeedState State { get; private set; } = new SpaceFeedState();
         public int Generation { get; private set; }
+        /// <summary>
+        /// The highest full generation applied on this link. A faction or scene reset keeps it, so an in-flight full of the old
+        /// faction (or scene) can never be accepted afterwards; only a new link clears it (<see cref="ResetLink"/>).
+        /// </summary>
+        public int Floor { get; private set; }
         /// <summary>A delta arrived that the mirror cannot place: ask the host for a fresh full.</summary>
         public bool NeedsFull { get; private set; }
         /// <summary>The headline (family, uplinks) has been heard from the host at least once since the last reset.</summary>
         public bool Known => hasFull;
 
+        /// <summary>Faction or scene change: forget the view but keep the generation floor.</summary>
         public void Reset()
         {
             State = new SpaceFeedState(); Generation = 0; hasFull = false; NeedsFull = false;
+        }
+
+        /// <summary>A new connection (possibly a new host process whose generations restart): forget everything.</summary>
+        public void ResetLink()
+        {
+            Reset(); Floor = 0;
         }
 
         public bool Apply(SpaceStateData d, byte protocol, float clientNow)
@@ -165,13 +200,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (d == null || d.Protocol != protocol || d.Generation <= 0 || !SpaceRules.MissionTime(clientNow)) return false;
             if (d.Full)
             {
-                if (d.Generation < Generation) return false; // an older subscription (or old faction) can never restore state
+                if (d.Generation <= Floor) return false; // an older subscription, faction or scene can never restore state
                 var fresh = new SpaceFeedState();
                 if (!Merge(fresh, d, clientNow, true)) return false;
-                State = fresh; Generation = d.Generation; hasFull = true; NeedsFull = false;
+                State = fresh; Generation = d.Generation; Floor = d.Generation; hasFull = true; NeedsFull = false;
                 return true;
             }
-            if (!hasFull || d.Generation != Generation) { if (d.Generation >= Generation) NeedsFull = true; return false; }
+            if (!hasFull || d.Generation != Generation) { if (d.Generation > Floor) NeedsFull = true; return false; }
             SpaceFeedState merged = State.Clone();
             if (!Merge(merged, d, clientNow, false)) { NeedsFull = true; return false; }
             State = merged;
@@ -181,9 +216,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool Merge(SpaceFeedState into, SpaceStateData d, float clientNow, bool full)
         {
             into.Active = d.Active; into.Feed = d.Feed; into.Family = d.Family; into.UplinksLive = d.UplinksLive;
-            into.UplinksTotal = d.UplinksTotal; into.LiveMarks = d.LiveMarks; into.Gate = d.Gate; into.GateDetail = d.GateDetail;
-            if (!d.Active || !d.Feed) { into.ClearRows(); return true; }
+            into.UplinksTotal = d.UplinksTotal; into.LiveMarks = d.LiveMarks; into.Gate = d.Gate;
             float offset = clientNow - d.Now;
+            // A cooldown or freeze arrives as a host deadline: convert it to this clock like every other deadline.
+            into.GateDetail = SpaceMirror.GateIsDeadline(d.Gate) ? d.GateDetail + (int)Math.Round(offset) : d.GateDetail;
+            if (!d.Active || !d.Feed) { into.ClearRows(); return true; }
             if (full) into.ClearRows();
             for (int i = 0; i < d.RemovedContacts.Count; i++) { int at = SpaceMirror.IndexOf(into.Contacts, d.RemovedContacts[i]); if (at >= 0) into.Contacts.RemoveAt(at); }
             for (int i = 0; i < d.RemovedMarks.Count; i++) { int at = SpaceMirror.IndexOf(into.Marks, d.RemovedMarks[i]); if (at >= 0) into.Marks.RemoveAt(at); }
@@ -208,21 +245,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             return into.WithinBounds(); // merged rows beyond the caps mean a corrupt stream: reject, never grow
         }
-
-        /// <summary>Drops rows whose deadline passed on the client clock (the host also removes them, this just keeps them from lingering).</summary>
-        public void Prune(float clientNow)
-        {
-            if (!SpaceRules.MissionTime(clientNow)) return;
-            SpaceFeedState s = State;
-            for (int i = s.Contacts.Count - 1; i >= 0; i--) if (clientNow >= s.Contacts[i].Expires) s.Contacts.RemoveAt(i);
-            for (int i = s.Marks.Count - 1; i >= 0; i--) if (clientNow >= s.Marks[i].Expires) s.Marks.RemoveAt(i);
-            for (int i = s.Posts.Count - 1; i >= 0; i--) if (clientNow >= s.Posts[i].Expires) s.Posts.RemoveAt(i);
-        }
     }
 
     /// <summary>
     /// Host side: one record per faction member (passive headline) with an optional feed lease (rows). Faction membership comes
     /// from the caller each poll, never from the client, and a change of faction bumps the generation and forces a full.
+    /// Scheduling (the lease, the poll throttle) runs on wall time so time acceleration cannot flicker the feed; the message
+    /// timestamp is the separate mission time. A caller that has only one clock passes it as both.
     /// </summary>
     internal sealed class SpaceSubscriptions
     {
@@ -248,19 +277,29 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Last generation handed out. Never decreases, not even across a scene reset.</summary>
         public int Generation => generation;
 
-        public bool IsFeeding(ulong player, float now) =>
-            subs.TryGetValue(player, out Sub s) && s.Feed && SpaceRules.MissionTime(now) && now < s.FeedUntil;
+        public bool Has(ulong player) => subs.ContainsKey(player);
+
+        /// <summary>Creates the member's record when absent. True only when it was newly created (a fresh join).</summary>
+        public bool Ensure(ulong player)
+        {
+            if (player == 0 || subs.ContainsKey(player) || subs.Count >= MaxSubscribers) return false;
+            subs[player] = new Sub();
+            return true;
+        }
+
+        public bool IsFeeding(ulong player, float wall) =>
+            subs.TryGetValue(player, out Sub s) && s.Feed && SpaceRules.MissionTime(wall) && wall < s.FeedUntil;
 
         /// <summary>Starts or refreshes a feed lease and forces a fresh full. False when the table is full of live members.</summary>
-        public bool OpenFeed(ulong player, float now)
+        public bool OpenFeed(ulong player, float wall)
         {
-            if (player == 0 || !SpaceRules.MissionTime(now)) return false;
+            if (player == 0 || !SpaceRules.MissionTime(wall)) return false;
             if (!subs.TryGetValue(player, out Sub s))
             {
                 if (subs.Count >= MaxSubscribers) return false;
                 subs[player] = s = new Sub();
             }
-            s.Feed = true; s.NeedFull = true; s.FeedUntil = now + FeedLeaseSeconds;
+            s.Feed = true; s.NeedFull = true; s.FeedUntil = wall + FeedLeaseSeconds;
             return true;
         }
 
@@ -268,10 +307,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// Operator input on an open feed keeps the lease. From a member with no open feed it is the client saying it lost sync
         /// (a rejected delta): the host answers with a fresh headline full. Unknown members are untouched.
         /// </summary>
-        public void Touch(ulong player, float now)
+        public void Touch(ulong player, float wall)
         {
-            if (!subs.TryGetValue(player, out Sub s) || !SpaceRules.MissionTime(now)) return;
-            if (s.Feed && now < s.FeedUntil) s.FeedUntil = now + FeedLeaseSeconds;
+            if (!subs.TryGetValue(player, out Sub s) || !SpaceRules.MissionTime(wall)) return;
+            if (s.Feed && wall < s.FeedUntil) s.FeedUntil = wall + FeedLeaseSeconds;
             else s.NeedFull = true;
         }
 
@@ -281,8 +320,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public void Clear() { subs.Clear(); removed.Clear(); }
-
-        public bool Remove(ulong player) => subs.Remove(player);
 
         /// <summary>Marks the start of a poll round; anything not polled before <see cref="EndRound"/> has left the faction.</summary>
         public void BeginRound() { foreach (var pair in subs) pair.Value.Seen = false; }
@@ -299,44 +336,46 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void Keep(ulong player) { if (subs.TryGetValue(player, out Sub s)) s.Seen = true; }
 
         /// <summary>True when this member could be sent something now (throttle or a pending full).</summary>
-        public bool Due(ulong player, float now) =>
-            !subs.TryGetValue(player, out Sub s) || s.NeedFull || !SpaceRules.MissionTime(now) || now >= s.NextAt ||
-            (s.Feed && now >= s.FeedUntil);
+        public bool Due(ulong player, float wall) =>
+            !subs.TryGetValue(player, out Sub s) || s.NeedFull || !SpaceRules.MissionTime(wall) || wall >= s.NextAt ||
+            (s.Feed && wall >= s.FeedUntil);
 
         /// <summary>
         /// The message that brings this member's mirror up to <paramref name="current"/>, or null when nothing changed or the
         /// table is full. <paramref name="current"/> must carry rows only when <see cref="IsFeeding"/>; it is copied, never kept.
-        /// A null/!Active current (the faction has no SPACE) still reaches the member so a stale mirror clears.
+        /// A !Active current (the faction has no SPACE) still reaches the member so a stale mirror clears. A message larger than
+        /// <see cref="SpaceWire.StateBudget"/> comes back with its TASKED rows in <see cref="SpaceStateData.Follow"/>.
         /// </summary>
-        public SpaceStateData Next(ulong player, int faction, SpaceFeedState current, float now)
+        public SpaceStateData Next(ulong player, int faction, SpaceFeedState current, float now, float wall = float.NaN)
         {
-            if (player == 0 || current == null || !SpaceRules.MissionTime(now)) return null;
+            if (float.IsNaN(wall)) wall = now;
+            if (player == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall)) return null;
             if (!subs.TryGetValue(player, out Sub s))
             {
                 if (subs.Count >= MaxSubscribers) return null;
                 subs[player] = s = new Sub();
             }
             s.Seen = true;
-            if (s.Feed && now >= s.FeedUntil) { s.Feed = false; s.NeedFull = true; }
+            if (s.Feed && wall >= s.FeedUntil) { s.Feed = false; s.NeedFull = true; }
             if (s.Faction != faction) { s.Faction = faction; s.NeedFull = true; s.Last = null; }
-            if (!s.NeedFull && now < s.NextAt) return null;
+            if (!s.NeedFull && wall < s.NextAt) return null;
             if (current.Feed && !s.Feed)
             {
                 // Rows were built for a member without a lease: they never go out, only the headline does.
                 current = current.Clone(); current.Feed = false; current.ClearRows();
             }
-            s.NextAt = now + PollSeconds;
+            s.NextAt = wall + PollSeconds;
             if (s.NeedFull || s.Last == null)
             {
                 if (generation == int.MaxValue) return null;
                 SpaceStateData full = SpaceMirror.Diff(null, current, protocol, s.Generation = ++generation, now, true);
                 s.Last = SpaceMirror.Advance(null, current, full); s.NeedFull = false;
-                return full;
+                return SpaceMirror.Split(full);
             }
             SpaceStateData delta = SpaceMirror.Diff(s.Last, current, protocol, s.Generation, now, false);
             if (SpaceMirror.Quiet(s.Last, current, delta)) return null;
             s.Last = SpaceMirror.Advance(s.Last, current, delta);
-            return delta;
+            return SpaceMirror.Split(delta);
         }
     }
 }

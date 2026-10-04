@@ -19,9 +19,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private readonly SpaceFeedMirror spaceMirror = new SpaceFeedMirror();
         private SpaceNetHost spaceNet;
-        private int spaceRequestId, mirrorFaction;
+        private readonly SpaceReplyQueue inProcessReplies = new SpaceReplyQueue();
+        // SPACE request ids are monotonic within a session but start at a random 31-bit value, so a restarted or rejoining client
+        // can never reuse an id the host still remembers for the same identity.
+        private int spaceRequestId = NewSessionSeed(), mirrorFaction;
         private bool spaceFeedWanted;
         private float nextFeedKeep, nextResync;
+
+        private static int NewSessionSeed() => new System.Random(Guid.NewGuid().GetHashCode()).Next(1, int.MaxValue / 2);
 
         internal SpaceNetHost SpaceNet => spaceNet;
         /// <summary>The local player's faction view as the host last told it (family, uplinks, live MARKs; rows while the feed is open).</summary>
@@ -64,6 +69,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- Family for prices and the sky ----------------------------------------------------
 
+        /// <summary>Whether this faction has the given bird (host: its SPACE state; client: the mirror, own faction only).</summary>
+        internal bool HasSpaceBird(FactionHQ owner, BirdKind bird)
+        {
+            if (owner == null) return false;
+            if (GameAccess.IsServer()) return TryGetSpaceState(owner, out SpaceState state) && state.HasBird(bird);
+            return spaceMirror.Known && spaceMirror.State.Active && GameManager.GetLocalPlayer<Player>(out Player local) &&
+                local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount;
+        }
+
         /// <summary>
         /// The faction's SPACE family. The host reads its own state; a client reads the mirror (and only for its own faction), so a
         /// client's degraded +40 % quote and the satellite sky match what the host charges and shows.
@@ -101,12 +115,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
             catch (Exception e) { logger?.LogError(e); }
         }
 
-        /// <summary>A fresh client link: nothing from an earlier session may be shown or restored.</summary>
-        internal void OnSpaceLinked() => ResetSpaceMirror();
+        /// <summary>
+        /// In-process verdict (singleplayer, listen-host): queued and delivered on the next frame, never from inside the request
+        /// call, because the requester only learns its request id when the call returns.
+        /// </summary>
+        internal void QueueSpaceReply(SpaceReply reply)
+        {
+            if (!inProcessReplies.Enqueue(reply)) logger?.LogWarning("[Support.Space] In-process reply queue full; a verdict was dropped.");
+        }
+
+        /// <summary>A fresh client link: nothing from an earlier session may be shown or restored, not even the generation floor.</summary>
+        internal void OnSpaceLinked()
+        {
+            spaceMirror.ResetLink();
+            ResetSpaceMirror();
+        }
 
         private void ResetSpaceMirror()
         {
+            // Faction and scene resets keep the mirror's generation floor: an in-flight full of the old faction stays refused.
             spaceMirror.Reset();
+            inProcessReplies.Clear();
             spaceFeedWanted = false;
             mirrorFaction = 0;
             nextFeedKeep = nextResync = 0f;
@@ -114,6 +143,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void UpdateSpaceMirror()
         {
+            while (inProcessReplies.TryDequeue(out SpaceReply queued)) ReceiveSpaceReply(queued);
             if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null && local.HQ != null)
             {
                 int key = FactionKeyOf(local.HQ);
