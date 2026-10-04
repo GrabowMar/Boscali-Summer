@@ -202,6 +202,25 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
+        /// <summary>Live reveals, host truth included: the caller derives the probable class for a client, never the verdict.</summary>
+        public int CopyReveals(float now, List<SpaceContact> into)
+        {
+            into.Clear();
+            if (!SpaceRules.MissionTime(now)) return 0;
+            foreach (var pair in reveals)
+                if (now >= pair.Value.ObservedAt && now < pair.Value.ExpiresAt) into.Add(pair.Value);
+            return into.Count;
+        }
+
+        public int CopyMarks(float now, List<SpaceMark> into)
+        {
+            into.Clear();
+            if (!SpaceRules.MissionTime(now)) return 0;
+            foreach (var pair in marks)
+                if (now >= pair.Value.ConfirmedAt && now < pair.Value.Mark.ExpiresAt) into.Add(pair.Value.Mark);
+            return into.Count;
+        }
+
         public void Prune(float now)
         {
             if (!SpaceRules.MissionTime(now)) return;

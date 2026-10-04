@@ -79,6 +79,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= 10000000f;
     }
 
+    internal readonly struct TaskedPostInfo
+    {
+        public readonly TaskedCall Call;
+        public readonly bool Held;
+        public readonly ulong Holder;
+        public TaskedPostInfo(TaskedCall call, bool held, ulong holder) { Call = call; Held = held; Holder = holder; }
+    }
+
     internal readonly struct TaskedClaim
     {
         public readonly int CallId, RequestId, SceneGeneration, CallGeneration;
@@ -225,6 +233,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             call = null; return false;
         }
 
+        /// <summary>The board as a viewer may see it: every post still alive, whether a pilot holds it, and who.</summary>
+        public int Snapshot(float now, List<TaskedPostInfo> into)
+        {
+            into.Clear();
+            SyncContacts();
+            if (!SpaceRules.MissionTime(now)) return 0;
+            foreach (Entry entry in calls.Values)
+            {
+                if (!entry.Call.Valid(now) || !entry.Call.TryLiveMark(now, out _)) continue;
+                bool held = entry.Status != Status.Available;
+                into.Add(new TaskedPostInfo(entry.Call, held, held ? entry.Claim.Pilot : 0UL));
+            }
+            return into.Count;
+        }
+
         public bool EnqueueClaim(int callId, int requestId, ulong pilot, bool favorite, float now)
         {
             SyncContacts();
@@ -311,7 +334,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     if (now < entry.LaunchAt + LaunchSeconds) continue;
                     ResetClaim(entry);
                 }
-                if (now >= entry.Call.ExpiresAt) expiredCalls.Add(pair.Key);
+                // A post whose every MARK has lapsed is dead: nothing can be aimed, so it must not hold a slot or delay
+                // the effort refund, and clients are never offered it. (LAUNCHING returned above; it owns its own deadline.)
+                if (now >= entry.Call.ExpiresAt || !entry.Call.TryLiveMark(now, out _)) expiredCalls.Add(pair.Key);
                 else if (entry.Status == Status.Reserved && now >= entry.Claim.ReservationExpiresAt) ResetClaim(entry);
             }
             for (int i = 0; i < expiredCalls.Count; i++)

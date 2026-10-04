@@ -110,6 +110,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return Contacts.Mark(player, id, now, recentInput);
         }
 
+        /// <summary>The native ground PersistentID.Id (uint) behind an admitted contact id; 0 when it has none. Never an aircraft.</summary>
+        public uint UnitIdOf(int id) =>
+            ids.TryGetValue(id, out Entry entry) && entry.Unit != null && Ground(entry.Unit) ? entry.Unit.persistentID.Id : 0u;
+
         /// <summary>Only currently admitted units may contribute pixels. A surviving MARK is a ground point.</summary>
         public bool TryApprovedUnit(int id, float now, out Unit unit)
         {

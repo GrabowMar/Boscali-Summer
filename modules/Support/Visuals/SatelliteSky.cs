@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private SupportManager support;
         private readonly Transform[] birds = new Transform[SpaceRules.BirdCount];
         private Mesh mesh;
-        private SpaceState state;
+        private bool present;
         private float nextState;
         private Material hullMaterial;
         private Material panelMaterial;
@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
             if (mesh != null) Destroy(mesh);
             mesh = null;
-            state = null;
+            present = false;
             nextState = 0f;
             if (hullMaterial != null) Destroy(hullMaterial);
             if (panelMaterial != null) Destroy(panelMaterial);
@@ -67,10 +67,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
             if (SupportManager.MissionNow() >= nextState)
             {
                 nextState = SupportManager.MissionNow() + 5f;
-                state = GameManager.GetLocalPlayer<Player>(out Player player) && player != null &&
-                    support.TryGetSpaceState(player.HQ, out SpaceState current) ? current : null;
+                // Host: the faction's actual SPACE state. Client: the mirror of it, so the sky matches the host.
+                present = GameManager.GetLocalPlayer<Player>(out Player player) && player != null &&
+                    support.TryGetSpaceFamily(player.HQ, out _);
             }
-            if (state == null) { Hide(); return; }
+            if (!present) { Hide(); return; }
             if (mesh == null) Build();
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float night = level != null ? 1f - Mathf.InverseLerp(0.02f, 0.4f, level.GetAmbientLight()) : 0f;
@@ -80,7 +81,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 Vector3 offset = Directions[i] * DisplayRange;
                 birds[i].position = new GlobalPosition(offset.x, offset.y, offset.z).ToLocalPosition();
                 birds[i].localScale = new Vector3(size, size, size);
-                birds[i].gameObject.SetActive(state.HasBird((BirdKind)i));
+                birds[i].gameObject.SetActive(true); // all three birds are persistent for a faction with SPACE
             }
             Color hull = Color.Lerp(HullDay, HullNight, night);
             hullMaterial.SetColor(BaseColor, hull);

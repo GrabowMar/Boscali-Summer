@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private float nextTick;
         private float nextCleanup;
         private float nextTaskedWarning;
+        private bool coarse; // mirror gate reads use the 1 Hz world state instead of re-sampling natives per viewer
         public int Generation { get; private set; } = 1;
         internal UplinkSpawner Spawner => spawner;
 
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 pair.Value.Observations?.Dispose();
             }
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
+            manager?.SpaceNet?.ResetForScene(); // old receipts and every faction subscription end with the scene
             factions.Clear();
             nextAttempt.Clear();
             nextTick = 0f;
@@ -65,7 +67,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             state = null;
             if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
-            Refresh(owner, faction, SupportManager.MissionNow()); // Final host gates observe native loss immediately.
+            if (!coarse) Refresh(owner, faction, SupportManager.MissionNow()); // Final host gates observe native loss immediately.
             state = faction.State;
             return true;
         }
@@ -120,6 +122,92 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 faction.Tasked.Resolved += handler;
         }
 
+        /// <summary>
+        /// Fills one viewer's faction view: the headline always, the rows only for an open feed. Everything a client may learn is
+        /// derived here from the host's own state; nothing is read from the client. False when the faction has no SPACE.
+        /// </summary>
+        internal bool FillFeed(Player viewer, bool rows, SpaceFeedState into, List<SpaceContact> reveals, List<SpaceMark> marks,
+            List<TaskedPostInfo> posts)
+        {
+            coarse = true; // display reads use the 1 Hz world state; only host gates re-sample the natives
+            try { return FillFeedCore(viewer, rows, into, reveals, marks, posts); }
+            finally { coarse = false; }
+        }
+
+        private bool FillFeedCore(Player viewer, bool rows, SpaceFeedState into, List<SpaceContact> reveals, List<SpaceMark> marks,
+            List<TaskedPostInfo> posts)
+        {
+            into.Active = false; into.Feed = false; into.Family = SpaceFamilyState.Dark;
+            into.UplinksLive = 0; into.UplinksTotal = 0; into.LiveMarks = 0; into.Gate = TaskedOutcome.None; into.GateDetail = 0;
+            into.ClearRows();
+            if (viewer == null || viewer.HQ == null || manager == null || !factions.TryGetValue(viewer.HQ, out FactionSpace faction) ||
+                faction.Observations == null) return false;
+            float now = SupportManager.MissionNow();
+            if (!SpaceRules.MissionTime(now)) return false;
+            SpaceContacts contacts = faction.Observations.Contacts;
+            contacts.Prune(now);
+            into.Active = true;
+            into.Family = faction.State.Family(now);
+            into.UplinksLive = (byte)faction.State.LiveUplinkCount;
+            into.UplinksTotal = (byte)faction.State.UplinkCount;
+            into.LiveMarks = (byte)Math.Min(SpaceContacts.MaxMarks, contacts.MarkCount);
+            into.Gate = manager.TaskedGate(viewer, out int detail);
+            into.GateDetail = Math.Max(0, detail);
+            if (!rows) return true;
+            into.Feed = true;
+            contacts.CopyReveals(now, reveals);
+            for (int i = 0; i < reveals.Count && into.Contacts.Count < SpaceWire.MaxContacts; i++)
+            {
+                SpaceContact c = reveals[i];
+                // The verdict (truth) stays on the host: the client is told a deterministic, noisy probable class.
+                ProbableClass probable = SpaceProbable.Of(c.Classification, c.Id, c.ObservationGeneration, out byte percent);
+                into.Contacts.Add(new FeedContact { Id = c.Id, UnitId = faction.Observations.UnitIdOf(c.Id), X = c.X, Z = c.Z,
+                    Class = probable, Percent = percent, Moving = c.Moving, Source = c.Source, Expires = c.ExpiresAt });
+            }
+            contacts.CopyMarks(now, marks);
+            for (int i = 0; i < marks.Count && into.Marks.Count < SpaceWire.MaxMarks; i++)
+                into.Marks.Add(new FeedMark { Id = marks[i].Id, X = marks[i].X, Z = marks[i].Z, Moving = marks[i].Moving,
+                    Source = marks[i].Source, Expires = marks[i].ExpiresAt });
+            if (faction.Tasked == null) return true;
+            faction.Tasked.Board.Snapshot(now, posts);
+            int baseline = manager.TaskedBaseline(viewer, out bool charge);
+            ulong viewerId = PlayerIdentity.Of(viewer);
+            for (int i = 0; i < posts.Count && into.Posts.Count < SpaceWire.MaxPosts; i++)
+            {
+                TaskedCall call = posts[i].Call;
+                bool own = !call.WatchOfficer && call.Maker == viewerId;
+                int price = 0, payoff = 0;
+                if (charge)
+                {
+                    price = Math.Max(0, TaskedFees.Quote(call.Action, baseline, call.HumanProfile, own));
+                    FeeSettlement split = TaskedFees.Split(price, call.WatchOfficer, call.CopyShares(), call.HumanProfile);
+                    float shared = 0f;
+                    for (int p = 0; p < split.Payouts.Length; p++) shared += split.Payouts[p].Amount;
+                    payoff = (int)Math.Round(shared);
+                }
+                var ids = new int[call.MarkCount];
+                byte sources = 0;
+                for (int m = 0; m < ids.Length; m++)
+                {
+                    SpaceMark mark = call.MarkAt(m);
+                    ids[m] = mark.Id;
+                    sources |= (byte)(mark.Source == BirdKind.Radar ? 2 : 1);
+                }
+                into.Posts.Add(new FeedPost { CallId = call.Id, Action = call.Action, WatchOfficer = call.WatchOfficer, Own = own,
+                    Launching = posts[i].Held, Sources = sources, MarkIds = ids, Price = price, Payoff = payoff, Expires = call.ExpiresAt,
+                    Claimant = posts[i].Held ? manager.PlayerLabel(viewer.HQ, posts[i].Holder) : "" });
+            }
+            return true;
+        }
+
+        /// <summary>The pilot currently holding a post of this faction (for the CLAIMED BY words).</summary>
+        internal bool TryHolder(FactionHQ owner, int callId, out ulong pilot)
+        {
+            pilot = 0;
+            return owner != null && factions.TryGetValue(owner, out FactionSpace faction) && faction.Tasked != null &&
+                faction.Tasked.TryHolder(callId, out pilot);
+        }
+
         private void Update()
         {
             if (manager?.Settings == null || !manager.Settings.Enabled.Value)
@@ -149,6 +237,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     }
                 }
             }
+            try { manager.SpaceNet?.Tick(); }
+            catch (Exception e)
+            {
+                if (Time.unscaledTime >= nextTaskedWarning)
+                {
+                    nextTaskedWarning = Time.unscaledTime + 10f;
+                    Plugin.Logger?.LogWarning("[Support.Space] Mirror poll failed: " + e.Message);
+                }
+            }
             if (now < nextTick) return;
             nextTick = now + 1f;
             spawner.RetryCleanup();
@@ -164,6 +261,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (TryEstablish(hq, out faction))
                 {
                     factions.Add(hq, faction);
+                    FactionHQ resolvedFor = hq;
+                    SubscribeTasked(resolvedFor, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(resolvedFor, player, request, result));
                     Plugin.Logger?.LogInfo("[Support.Space] " + hq.name + ": " + faction.Links.Length +
                         " native uplink(s), OPTICAL / RADAR / KINETIC ready" + (faction.Field ? " [FIELD site]" : "."));
                 }

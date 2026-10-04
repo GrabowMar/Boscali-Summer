@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Game;
 using Mirage;
@@ -78,6 +79,18 @@ namespace BoscaliSummer.Modules.Support.Networking
         public float Tti;
     }
 
+    /// <summary>Client to host SPACE request. Wraps the engine-free command; protocol and request id travel inside it.</summary>
+    [NetworkMessage]
+    internal struct SpaceCommandMessage { public SpaceCommand Command; }
+
+    /// <summary>Host to the requesting player: the verdict of one MARK, SEND or CLAIM (also the late push of a queued claim).</summary>
+    [NetworkMessage]
+    internal struct SpaceReplyMessage { public SpaceReply Reply; }
+
+    /// <summary>Host to members of one faction only: headline always, rows while that member feed is open. Full or delta.</summary>
+    [NetworkMessage]
+    internal struct SpaceStateMessage { public SpaceStateData Data; }
+
     internal sealed class SupportNet : MonoBehaviour
     {
 
@@ -85,8 +98,10 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// Protocol 29 adds a coalesced player input intent so parked remote operators can earn the active trickle.
         /// The host derives receipt time and limits pulses; the intent carries no credit or client timestamp.
         /// Older peers must not interpret the retired action and result ids.
+        /// Protocol 31 adds the faction-only SPACE mirror: SpaceCommand / SpaceReply / SpaceState messages. Every one carries this
+        /// byte and a mismatched byte decodes to an empty message. No faction, price, class or favourite is ever sent by a client.
         /// </summary>
-        internal const byte ProtocolVersion = 30;
+        internal const byte ProtocolVersion = 31;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -116,21 +131,28 @@ namespace BoscaliSummer.Modules.Support.Networking
                 serverHandler?.UnregisterHandler<SupportRequestMessage>();
                 serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
                 serverHandler?.UnregisterHandler<ActivityPulseMessage>();
+                serverHandler?.UnregisterHandler<SpaceCommandMessage>();
                 queries.Clear();
                 serverHandler = network.Server.MessageHandler;
                 serverHandler.RegisterHandler<SupportRequestMessage>(ReceiveRequest, false);
                 serverHandler.RegisterHandler<CruiseWaypointMessage>(ReceiveWaypoint, false);
                 serverHandler.RegisterHandler<ActivityPulseMessage>(ReceiveActivityPulse, false);
+                serverHandler.RegisterHandler<SpaceCommandMessage>(ReceiveSpaceCommand, false);
             }
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
                 clientHandler?.UnregisterHandler<SupportResultMessage>();
                 clientHandler?.UnregisterHandler<CreditStateMessage>();
                 clientHandler?.UnregisterHandler<CruiseLegsMessage>();
+                clientHandler?.UnregisterHandler<SpaceReplyMessage>();
+                clientHandler?.UnregisterHandler<SpaceStateMessage>();
                 clientHandler = network.Client.MessageHandler;
+                manager?.OnSpaceLinked(); // a fresh link: nothing from an earlier session may be shown
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
                 clientHandler.RegisterHandler<CreditStateMessage>(ReceiveCredit, false);
                 clientHandler.RegisterHandler<CruiseLegsMessage>(ReceiveCruiseLegs, false);
+                clientHandler.RegisterHandler<SpaceReplyMessage>(ReceiveSpaceReply, false);
+                clientHandler.RegisterHandler<SpaceStateMessage>(ReceiveSpaceState, false);
             }
         }
 
@@ -139,6 +161,9 @@ namespace BoscaliSummer.Modules.Support.Networking
             serverHandler?.UnregisterHandler<SupportRequestMessage>();
             serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
             serverHandler?.UnregisterHandler<ActivityPulseMessage>();
+            serverHandler?.UnregisterHandler<SpaceCommandMessage>();
+            clientHandler?.UnregisterHandler<SpaceReplyMessage>();
+            clientHandler?.UnregisterHandler<SpaceStateMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
             clientHandler?.UnregisterHandler<CreditStateMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
@@ -260,6 +285,66 @@ namespace BoscaliSummer.Modules.Support.Networking
             if (player?.Owner == null) return false;
             player.Owner.Send(message);
             return true;
+        }
+
+        // ---- SPACE (faction-only mirror and replayed MARK / SEND / CLAIM) ---------------------------
+
+        /// <summary>
+        /// Submits one SPACE command. The server own player runs the same evaluator in-process (singleplayer and listen-host
+        /// never depend on the custom-message pipe); a remote client sends it. False when nothing could be sent.
+        /// </summary>
+        internal bool RequestSpace(SpaceCommand command)
+        {
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            {
+                manager.SpaceNet?.Receive(local, command);
+                return true;
+            }
+            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            if (client == null || !client.Active) return false;
+            client.Send(new SpaceCommandMessage { Command = command });
+            return true;
+        }
+
+        /// <summary>Server to one requester. Only the requesting player is ever addressed.</summary>
+        internal void SendSpaceReply(Player player, SpaceReply reply)
+        {
+            if (player == null) return;
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveSpaceReply(reply);
+                return;
+            }
+            player.Owner?.Send(new SpaceReplyMessage { Reply = reply });
+        }
+
+        /// <summary>Server to one faction member (the caller selects members by their faction; nothing is broadcast).</summary>
+        internal void SendSpaceState(Player player, SpaceStateData data)
+        {
+            if (player == null || data == null) return;
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveSpaceState(data);
+                return;
+            }
+            player.Owner?.Send(new SpaceStateMessage { Data = data });
+        }
+
+        private void ReceiveSpaceCommand(INetworkPlayer sender, SpaceCommandMessage message)
+        {
+            if (message.Command.Protocol != ProtocolVersion || message.Command.Kind == SpaceCommandKind.None || !GameAccess.IsServer() ||
+                sender == null || !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
+            manager.SpaceNet?.Receive(player, message.Command);
+        }
+
+        private void ReceiveSpaceReply(INetworkPlayer _, SpaceReplyMessage message)
+        {
+            if (message.Reply.Protocol == ProtocolVersion) manager.ReceiveSpaceReply(message.Reply);
+        }
+
+        private void ReceiveSpaceState(INetworkPlayer _, SpaceStateMessage message)
+        {
+            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveSpaceState(message.Data);
         }
 
         /// <summary>Submits a cruise leg intent; validated and broadcast in-process on the server.</summary>
@@ -457,13 +542,77 @@ namespace BoscaliSummer.Modules.Support.Networking
                 message.Tti = r.ReadSingle();
                 return message;
             });
+            SetWriter<SpaceCommandMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { SpaceWire.WriteCommand(WireOut, v.Command); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<SpaceCommandMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new SpaceCommandMessage { Command = SpaceWire.ReadCommand(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; } // a malformed message is inert, never a crash
+                finally { WireIn.R = null; }
+            });
+            SetWriter<SpaceReplyMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { SpaceWire.WriteReply(WireOut, v.Reply); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<SpaceReplyMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new SpaceReplyMessage { Reply = SpaceWire.ReadReply(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
+            SetWriter<SpaceStateMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { SpaceWire.WriteState(WireOut, v.Data ?? new SpaceStateData { Protocol = ProtocolVersion }); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<SpaceStateMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new SpaceStateMessage { Data = SpaceWire.ReadState(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
             MessagePacker.RegisterMessage<CreditStateMessage>();
             MessagePacker.RegisterMessage<ActivityPulseMessage>();
             MessagePacker.RegisterMessage<CruiseWaypointMessage>();
             MessagePacker.RegisterMessage<CruiseLegsMessage>();
+            MessagePacker.RegisterMessage<SpaceCommandMessage>();
+            MessagePacker.RegisterMessage<SpaceReplyMessage>();
+            MessagePacker.RegisterMessage<SpaceStateMessage>();
         }
+
+        // Mirage reads and writes go through these two adapters so the SPACE codec stays engine-free and testable.
+        private sealed class WireWriter : ISpaceWriter
+        {
+            public NetworkWriter W;
+            public void WriteByte(byte value) => W.WriteByte(value);
+        }
+
+        private sealed class WireReader : ISpaceReader
+        {
+            public NetworkReader R;
+            public int Remaining => Math.Max(0, (R.BitLength - R.BitPosition) >> 3);
+            public bool TryReadByte(out byte value)
+            {
+                if (Remaining < 1) { value = 0; return false; }
+                value = R.ReadByte();
+                return true;
+            }
+        }
+
+        private static readonly WireWriter WireOut = new WireWriter();
+        private static readonly WireReader WireIn = new WireReader();
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>
             Bind(typeof(Writer<T>), "Write", writer);

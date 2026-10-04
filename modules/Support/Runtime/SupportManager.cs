@@ -262,7 +262,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         int ISupportHost.SceneGeneration => sceneGeneration;
         bool ISupportHost.TryGetSpaceState(FactionHQ owner, out SpaceState state) => TryGetSpaceState(owner, out state);
 
-        internal void AttachSpace(SpaceService service) => space = service;
+        internal void AttachSpace(SpaceService service)
+        {
+            space = service;
+            spaceNet = new SpaceNetHost(this, service, network);
+        }
         int ISupportHost.OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
             float minimumSpeed, float maximumSpeed) => space?.OpenWindow(owner, point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
         internal SpaceObservations SpaceObservationsFor(FactionHQ owner) => space?.ObservationsFor(owner);
@@ -309,6 +313,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
             Clock.Reset();
             space?.ResetForScene();
+            ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
             RodGuard.Reset();
@@ -457,6 +462,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void Update()
         {
+            UpdateSpaceMirror();
             if (ActivityScene && !GameplayUI.GameIsPaused && Application.isFocused && Input.anyKeyDown) RecordLocalInput();
             if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
             {
@@ -1024,8 +1030,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
                 return new CallQuote(0, "");
             ObjectiveCount census = credits.Census(player.HQ);
+            // The host reads its own SPACE state; a client reads the faction mirror, so both quote the same +40 % when degraded.
             bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
-                TryGetSpaceState(player.HQ, out SpaceState state) && state.Family(MissionNow()) == SpaceFamilyState.Degraded;
+                TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
             var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
                 degraded, "UPLINK DOWN", false,
                 // Clients quote with the factor the host sent, so the panel matches what the host charges.

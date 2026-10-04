@@ -304,6 +304,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return queued;
         }
 
+        /// <summary>The pilot currently holding a post (a claim won and not yet fired or released), for the CLAIMED BY words.</summary>
+        public bool TryHolder(int callId, out ulong pilot)
+        {
+            pilot = 0;
+            var info = new List<TaskedPostInfo>(TaskedBoard.MaxCalls);
+            board.Snapshot(ports.Now, info);
+            for (int i = 0; i < info.Count; i++)
+                if (info[i].Call.Id == callId && info[i].Held) { pilot = info[i].Holder; return true; }
+            return false;
+        }
+
         public bool TryResult(ulong player, int requestId, out TaskedResult result)
         {
             if (receipts.TryGetValue(new Key(player, requestId, Kind.Claim), out Receipt claim)) { result = claim.Result; return true; }
