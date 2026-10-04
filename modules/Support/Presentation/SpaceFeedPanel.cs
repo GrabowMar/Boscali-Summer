@@ -150,7 +150,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             zoomButton = Button(Rect, "ZOOM WIDE", () => Do(actions.CycleZoom), AvButtonStyle.Quiet, tb.X + 2f * (bw + 4f), tb.Y, bw, tb.H,
                 "Cycle the picture zoom: WIDE, MID, CLOSE. CLOSE centres on the selected target.");
             fullButton = Button(Rect, full ? "EXIT" : "OPEN FULL", () => Do(actions.ToggleFull), AvButtonStyle.Quiet, tb.X + 3f * (bw + 4f), tb.Y, bw, tb.H,
-                full ? "Close the full-screen feed (Esc)." : "Open the full-screen feed. Flight controls stay live.");
+                full ? "Close the full-screen feed (Esc)." : "Open the full-screen feed. Keyboard and joystick stay live; the mouse drives the feed.");
 
             // ---- Picture ----
             FeedBox im = layout.Image;

@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case MarkVerdict.Friendly: words = "NEGATIVE: FRIENDLY — DO NOT STRIKE"; break;
                 case MarkVerdict.Decoy: words = "MARK: DECOY — NOT A REAL TARGET"; break;
                 case MarkVerdict.RateLimited: words = "NEGATIVE: TOO MANY MARKS — WAIT A MOMENT"; break;
-                default: words = "NEGATIVE: NO CONTACT — IT MAY HAVE EXPIRED"; break; // NoContact and a full table read the same
+                default: words = "NEGATIVE: NO CONTACT — RE-SELECT A TARGET"; break; // NoContact and a full table read the same
             }
             return replayed ? "EARLIER MARK · " + words : words;
         }

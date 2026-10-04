@@ -241,7 +241,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             TaskedReceiptState state = TaskedReceipts.State(reply.Tasked, launching);
             string words = TaskedReceipts.Words(state, reply.Tasked, reply.Detail);
             if (reply.Tasked == TaskedOutcome.ClaimedByOther && !string.IsNullOrEmpty(reply.Claimant))
-                words = "NEGATIVE: CLAIMED BY " + reply.Claimant;
+                words = "NEGATIVE: CLAIMED BY " + reply.Claimant + " — IT REOPENS IF THEIR LAUNCH FAILS";
             if (reply.Replayed) words = "EARLIER · " + words; // a retry replays the original receipt: history, not a new event
             AnswerTasked(reply.RequestId, state, words);
         }

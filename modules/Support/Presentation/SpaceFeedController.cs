@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SpaceFeedPanel compact;
         private SpaceFeedWindow window;
         private bool compactVisible, leaseOpen, dirty;
-        private float nextRefresh, nextActivity;
+        private float nextRefresh, nextActivity, failedUntil;
         private int lastFaction;
 
         private SatelliteImager imager;
@@ -155,14 +155,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (!wanted) return;
 
             float wall = Time.unscaledTime;
+            if (wall < failedUntil) return; // a refresh fault holds the feed off for a moment, however often the panel re-shows it
             if (!dirty && wall < nextRefresh) { sar?.Tick(now); return; }
             nextRefresh = wall + (WindowOpen ? RefreshFull : RefreshCompact);
             dirty = false;
             try { Refresh(now); }
             catch (Exception e)
             {
+                failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
                 logger?.LogError("SPACE feed refresh failed: " + e);
-                compactVisible = false; // a fault must not repeat every frame
+                compactVisible = false;
                 CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
             }
         }
@@ -260,11 +262,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (imager != null) imager.Visible = false;
             if (sar != null) sar.Visible = false;
 
-            if (!known || !state.Active) { view.Refusal = "NEGATIVE: NO SPACE LINK — YOUR FACTION HAS NO SATELLITES"; return; }
+            if (!known || !state.Active) { view.Refusal = "NEGATIVE: NO SPACE LINK — HOLD AN UPLINK SITE"; return; }
             if (state.Family == SpaceFamilyState.Dark) { view.Refusal = "NEGATIVE: SPACE OFFLINE — RESTORE AN UPLINK SITE"; return; }
             if (!GameManager.GetLocalPlayer(out Player player) || player == null || !manager.HasSpaceBird(player.HQ, draft.Source))
             {
-                view.Refusal = "NEGATIVE: NO " + (draft.Source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " SATELLITE";
+                view.Refusal = draft.Source == BirdKind.Optical
+                    ? "NEGATIVE: NO OPTICAL SATELLITE — SWITCH TO THE RADAR BIRD"
+                    : "NEGATIVE: NO RADAR SATELLITE — SWITCH TO THE OPTICAL BIRD";
                 return;
             }
             if (draft.Source == BirdKind.Optical) FillOptical(state, now);
@@ -298,7 +302,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 return;
             }
             EnsureImager();
-            if (imager == null) { view.Refusal = "NEGATIVE: CAMERA UNAVAILABLE"; return; }
+            if (imager == null) { view.Refusal = "NEGATIVE: CAMERA UNAVAILABLE — REOPEN THE FEED"; return; }
             bool haveSky = SpaceSky.TrySample(aim, out WeatherViewSample sky);
             imager.SetSky(haveSky, sky);
             if (imager.Verdict != OpticalVerdict.Ok)
@@ -338,7 +342,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             for (int i = 0; i < state.Contacts.Count; i++)
                 if (state.Contacts[i].Source == BirdKind.Radar) sar.AddApprovedContact(state.Contacts[i]);
             sar.Tick(now);
-            if (sar.Image == null) { view.Refusal = "NEGATIVE: RADAR PRODUCT UNAVAILABLE"; return; }
+            if (sar.Image == null) { view.Refusal = "NEGATIVE: RADAR PRODUCT UNAVAILABLE — FIRE RADAR SCAN AGAIN"; return; }
             view.ImageKind = FeedImageKind.Sar;
             view.Image = sar.Image;
             view.ImageAspect = SarCollector.ImageWidth / (float)SarCollector.ImageHeight;
@@ -492,7 +496,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (callRecent && (!feedRecent || callAt >= feedWordsAt)) { words = calls.LastWords; tone = ToneOf(words); }
             else if (feedRecent) { words = feedWords; tone = feedTone; }
             else if (calls != null && calls.Armed != null) { words = "ARMED CALL · PRESS ITS CALL AGAIN, OR RIGHT-CLICK THE MAP"; tone = AvState.Caution; }
-            else { words = view.Ground ? "READY · CLICK A TARGET, CONFIRM, THEN SEND" : "READY · FLY ON: THE FEED KEEPS YOUR CONTROLS"; tone = AvState.Ready; }
+            else { words = view.Ground ? "READY · CLICK A TARGET, CONFIRM, THEN SEND" : "READY · FLY ON: KEYBOARD AND JOYSTICK STAY LIVE"; tone = AvState.Ready; }
             view.Words = words;
             view.WordsTone = tone;
         }
@@ -518,7 +522,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             draft.Touch(SupportManager.MissionNow());
             // Real input keeps the host's feed lease; the manager also keeps it alive, so one nudge every two seconds is plenty.
             if (manager != null && Time.unscaledTime >= nextActivity) { nextActivity = Time.unscaledTime + 2f; manager.SpaceFeedActivity(); }
-            dirty = true;
         }
 
         public void SelectEntry(int id)
@@ -545,7 +548,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (manager == null || index < 0 || !SpaceFeedEntries.CanConfirm(entries[index]) || markRequest != 0) return;
             if (manager.SpaceMirror.State.LiveMarks >= SpaceWire.MaxMarks) { Say("NEGATIVE: 12 OF 12 MARKS HELD — SEND OR WAIT", AvState.Danger, AvUiCue.Caution); return; }
             int id = manager.SpaceMark(entries[index].Id);
-            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — MARK NOT SENT", AvState.Danger, AvUiCue.Caution); return; }
+            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
             markRequest = id; // registered before the verdict: in-process replies land on the next Update
             markAt = SupportManager.MissionNow();
             Say("MARK SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
@@ -560,7 +563,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             var ids = new int[n];
             Array.Copy(sendIds, ids, n);
             int id = manager.SpaceSend(ids);
-            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — SEND NOT SENT", AvState.Danger, AvUiCue.Caution); return; }
+            if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
             sendRequest = id;
             sendAt = SupportManager.MissionNow();
             Say("SEND SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
@@ -604,7 +607,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (!draft.CanRestore(now) && !compactVisible) draft.Clear();
             draft.Touch(now);
             dirty = true;
-            if (!window.Open(view)) Say("NEGATIVE: FEED UNAVAILABLE — NO OPERATOR", AvState.Danger, AvUiCue.Caution);
+            if (!window.Open(view)) Say("NEGATIVE: FEED UNAVAILABLE — SPAWN OR TAKE A SEAT", AvState.Danger, AvUiCue.Caution);
         }
 
         internal void CloseWindow(FeedCloseReason reason, bool quiet)

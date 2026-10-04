@@ -92,9 +92,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             feed?.SetCompactVisible(visible && shell != null && shell.CurrentPage == SpacePage);
-            if (!visible || shell == null || shell.CurrentPage != CallsPage || Time.unscaledTime < nextRefresh) return;
+            if (!visible || shell == null || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
+            if (shell.CurrentPage != CallsPage)
+            {
+                // The balance rides in the title of both pages: a TASKED claim charged on SPACE must show without a visit to CALLS.
+                string credit = (int)manager.LocalCredit + " CR";
+                if (credit != titleShown) ShowTitle(credit);
+                return;
+            }
             try { Refresh(); }
             catch (Exception e)
             {

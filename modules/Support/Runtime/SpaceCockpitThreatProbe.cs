@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal static class SpaceCockpitThreatProbe
     {
         public const float SpikeHoldSeconds = 4f;
-        private const float PollSeconds = 0.25f, BanditFreshSeconds = 10f, EmitterForgetSeconds = 30f;
+        private const float PollSeconds = 0.25f, BanditFreshSeconds = 10f, EmitterForgetSeconds = 30f, ReLockSilenceSeconds = 6f;
         private const int MaxEmitters = 32, MaxTracksExamined = 256;
 
         private struct Emitter { public bool Engaged; public float Seen; }
@@ -128,7 +128,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 bool spike;
                 if (Emitters.TryGetValue(key, out Emitter known))
                 {
-                    spike = engaged && !known.Engaged; // a rising edge, not a steady repeat
+                    // A rising edge, not a steady repeat; an emitter silent for a while and then re-reported is a new lock.
+                    spike = (engaged && !known.Engaged) || now - known.Seen > ReLockSilenceSeconds;
                     Emitters[key] = new Emitter { Engaged = engaged, Seen = now };
                 }
                 else

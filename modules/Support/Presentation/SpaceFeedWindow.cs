@@ -55,14 +55,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             window = AvWindow.Build(uiRoot, "SpaceFeed", "SPACE FEED · OPERATOR VIEW", WindowWidth, WindowHeight, SortOrder);
             window.Closed += OnWindowClosed;
-            window.CloseControl.Help = "Close the feed (Esc). Flight controls were never taken.";
+            window.CloseControl.Help = "Close the feed (Esc). Keyboard and joystick stay live; the mouse drives the feed.";
             float boardWidth = Mathf.Min(WindowWidth, 1880f) - 2f * AvGridTokens.Pad - AvGridTokens.Gutter;
             float boardHeight = Mathf.Min(WindowHeight, 1040f) - TitleHeight - AvGridTokens.Footer - OpsPage.FlowInset;
             AvFlow body = window.Body;
             body.ViewportHeight = boardHeight + OpsPage.FlowInset;
             panel = new SpaceFeedPanel(body.Content, owner, boardWidth, boardHeight, true);
             body.Add(panel);
-            window.Footer.Set("Flight, weapon and escape keys stay live. The feed closes after 8 s without input.", AvState.Inert);
+            window.Footer.Set("Keyboard and joystick stay live; the mouse drives the feed. The feed closes after 8 s without input.", AvState.Inert);
         }
 
         /// <summary>Opens the window if an operator exists. False (and nothing taken) when there is none.</summary>
@@ -73,6 +73,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (!SpaceCockpitThreatProbe.TryRead(out CockpitThreatSnapshot snap) || !snap.ValidOperator) return false;
             requireOwnship = snap.ValidOwnship; // the entry context: a ground operator never needs an aircraft, an airborne one always does
             closing = false;
+            closeReason = FeedCloseReason.UserExit; // the X button closes without Close(reason): never reuse the last session's reason
             try
             {
                 window.Show();

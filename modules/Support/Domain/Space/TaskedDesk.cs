@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case TaskedOutcome.UplinkDown: return "NEGATIVE: UPLINK DOWN — RESTORE THE SITE";
                 case TaskedOutcome.DeliveryFailed: return "NEGATIVE: LAUNCH FAILED — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.TimedOut: return "NEGATIVE: LAUNCH TIMED OUT — NOTHING CHARGED, CALL REOPENED";
-                case TaskedOutcome.SceneEnded: return "NEGATIVE: MISSION ENDED";
+                case TaskedOutcome.SceneEnded: return "NEGATIVE: MISSION ENDED — START A NEW MISSION";
                 case TaskedOutcome.Reopened: return "NEGATIVE: CALL REOPENED — PRESS AGAIN";
                 case TaskedOutcome.FriendlyNear: return "NEGATIVE: FRIENDLY TOO CLOSE TO THE IMPACT — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.MarkExpired: return "NEGATIVE: MARK EXPIRED — NOTHING CHARGED, MARK AGAIN";
