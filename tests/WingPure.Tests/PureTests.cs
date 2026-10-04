@@ -90,4 +90,18 @@ namespace WingPure.Tests
             TestAssert.That(StationMath.Word(StationPhase.PreSlot) == "PRE-SLOT" && StationMath.Word(StationPhase.InSlot) == "IN SLOT", "words");
         }
     }
+
+    internal static class LegMathTests
+    {
+        public static void Run()
+        {
+            TestAssert.That(Math.Abs(LegMath.BearingDeg(0, 0, 0, 100) - 0f) < 0.01f, "north is 0");
+            TestAssert.That(Math.Abs(LegMath.BearingDeg(0, 0, 100, 0) - 90f) < 0.01f, "east is 90");
+            TestAssert.That(Math.Abs(LegMath.BearingDeg(0, 0, -100, 0) - 270f) < 0.01f, "west is 270");
+            TestAssert.That(Math.Abs(LegMath.Distance(0, 0, 3000, 4000) - 5000f) < 0.01f, "distance");
+            TestAssert.That(Math.Abs(LegMath.EtaSeconds(5000f, 250f) - 20f) < 0.01f, "eta");
+            TestAssert.That(float.IsPositiveInfinity(LegMath.EtaSeconds(5000f, 0f)), "no speed no eta");
+            TestAssert.That(LegMath.Clock(252f) == "4:12" && LegMath.Clock(float.PositiveInfinity) == "—", "clock words");
+        }
+    }
 }
