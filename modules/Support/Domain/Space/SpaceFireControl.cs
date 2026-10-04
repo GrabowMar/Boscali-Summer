@@ -52,6 +52,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
+        /// <summary>The impact for a host-created TASKED aim: its fixed ground point and confirmed-MARK provenance.</summary>
+        public static bool TrySampleAim(in TaskedAim aim, float angleSample, float radiusSample, out SpaceImpact impact) =>
+            TrySample(aim.X, aim.Z, aim.ConfirmedMark, aim.SarOnly, angleSample, radiusSample, out impact);
+
         private static double DistanceSquared(in SpaceImpact impact, float x, float z)
         {
             double dx = (double)impact.X - x, dz = (double)impact.Z - z;

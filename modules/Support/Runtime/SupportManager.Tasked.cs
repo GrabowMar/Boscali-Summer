@@ -115,8 +115,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportResult result;
             try { result = definition.Action.Execute(context); }
             catch (Exception e) { logger.LogError(e); result = SupportResult.SpawnFailed; }
-            if (result != SupportResult.Accepted) job.ReportFailure();
-            else if (!job.Final) job.ReportFailure(); // Accepted without a physical receipt is not a launch
+            if (result != SupportResult.Accepted) job.ReportFailure(TaskedReason(result, job));
+            // A rod waiting out its prelaunch dwell reports its receipt or failure itself; anything else that is accepted
+            // without a physical receipt is not a launch.
+            else if (!job.Final && !job.Deferred) job.ReportFailure();
+        }
+
+        /// <summary>The typed receipt for an action that refused the launch: its own named reason, else why the job cannot go.</summary>
+        private static TaskedOutcome TaskedReason(SupportResult result, TaskedLaunchJob job)
+        {
+            switch (result)
+            {
+                case SupportResult.FriendlyNear: return TaskedOutcome.FriendlyNear;
+                case SupportResult.UplinkDown:
+                case SupportResult.InvalidTarget:
+                    TaskedOutcome why = job.WhyNot;
+                    return why == TaskedOutcome.None ? TaskedOutcome.DeliveryFailed : why;
+                default: return TaskedOutcome.DeliveryFailed;
+            }
         }
 
         internal void TaskedFired(FactionHQ owner, TaskedLaunchJob job)

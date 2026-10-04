@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         Posted, Queued, Fired,
         Unavailable, NoCall, NotPosted, ClaimedByOther, Busy,
         LowCredit, Frozen, Locked, Cooldown, BirdBusy, UplinkDown,
-        DeliveryFailed, TimedOut, SceneEnded, Reopened
+        DeliveryFailed, TimedOut, SceneEnded, Reopened, FriendlyNear, MarkExpired
     }
 
     internal static class TaskedWords
@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case TaskedOutcome.TimedOut: return "NEGATIVE: LAUNCH TIMED OUT — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.SceneEnded: return "NEGATIVE: MISSION ENDED";
                 case TaskedOutcome.Reopened: return "NEGATIVE: CALL REOPENED — PRESS AGAIN";
+                case TaskedOutcome.FriendlyNear: return "NEGATIVE: FRIENDLY TOO CLOSE TO THE IMPACT — NOTHING CHARGED, CALL REOPENED";
+                case TaskedOutcome.MarkExpired: return "NEGATIVE: MARK EXPIRED — NOTHING CHARGED, MARK AGAIN";
                 default: return CallWords.Refusal(CallRefusal.Unavailable);
             }
         }
@@ -136,9 +138,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool Final { get; internal set; }
         public bool Spawned { get; internal set; }
+        /// <summary>The launcher is holding the rod for a prelaunch dwell and will report a receipt or a failure later.</summary>
+        public bool Deferred { get; private set; }
+
+        /// <summary>Declares a delayed launch. False once the job is final (nothing may be held for it any more).</summary>
+        public bool Defer()
+        {
+            if (Final) return false;
+            Deferred = true;
+            return true;
+        }
 
         /// <summary>Non-mutating preflight to run immediately before the native spawn.</summary>
         public bool CanLaunch => Desk.CanLaunch(this);
+        /// <summary>The typed reason <see cref="CanLaunch"/> is false right now (None while it is true).</summary>
+        public TaskedOutcome WhyNot => Desk.WhyNot(this);
         /// <summary>The native launch happened. False means the receipt was refused: delete that spawn.</summary>
         public bool ReportSpawn() => Desk.ReportSpawn(this);
         /// <summary>No native launch happened: the escrow returns and the call reopens.</summary>
@@ -416,19 +430,30 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (job == null || job.Final || retired || !ReferenceEquals(job.Desk, this)) return false;
             float now = ports.Now;
-            return SpaceRules.MissionTime(now) && board.CanLaunch(job.Claim, now) && job.Slot.CanCommit();
+            return SpaceRules.MissionTime(now) && board.CanLaunch(job.Claim, now) && MarkLive(job, now) && job.Slot.CanCommit();
         }
+
+        /// <summary>Why a launch right now would be refused, for the typed receipt and words. None when it would be accepted.</summary>
+        internal TaskedOutcome WhyNot(TaskedLaunchJob job)
+        {
+            if (job == null || retired) return TaskedOutcome.DeliveryFailed;
+            float now = ports.Now;
+            if (!SpaceRules.MissionTime(now)) return TaskedOutcome.DeliveryFailed;
+            if (now >= job.LaunchedAt + TaskedBoard.LaunchSeconds) return TaskedOutcome.TimedOut;
+            if (!board.CanLaunch(job.Claim, now)) return TaskedOutcome.DeliveryFailed;
+            if (!MarkLive(job, now)) return TaskedOutcome.MarkExpired;
+            return job.Slot.CanCommit() ? TaskedOutcome.None : TaskedOutcome.UplinkDown;
+        }
+
+        /// <summary>The rod's fixed ground point is the post's first MARK: a lapsed MARK is never fired at.</summary>
+        private static bool MarkLive(TaskedLaunchJob job, float now) =>
+            job.Call.MarkCount > 0 && now < job.Call.MarkAt(0).ExpiresAt;
 
         internal bool ReportSpawn(TaskedLaunchJob job)
         {
             if (job == null || job.Final || !ReferenceEquals(job.Desk, this)) return false; // a replayed or stale receipt never counts
             float now = ports.Now;
-            if (retired || !SpaceRules.MissionTime(now) || !board.CanLaunch(job.Claim, now) || !job.Slot.CanCommit())
-            {
-                Fail(job, !retired && SpaceRules.MissionTime(now) && now >= job.LaunchedAt + TaskedBoard.LaunchSeconds
-                    ? TaskedOutcome.TimedOut : TaskedOutcome.DeliveryFailed);
-                return false;
-            }
+            if (!CanLaunch(job)) { Fail(job, WhyNot(job)); return false; }
             if (!board.Commit(job.Claim, now)) { Fail(job, TaskedOutcome.DeliveryFailed); return false; }
             job.Final = true; job.Spawned = true;
             inflight.Remove(job);

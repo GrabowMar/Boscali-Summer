@@ -181,7 +181,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecOpsRefused = 128,
         UplinkDown = 129,
-        BirdNotReady = 130
+        BirdNotReady = 130,
+        /// <summary>A friendly player aircraft is inside the scaled standoff of the impact point.</summary>
+        FriendlyNear = 131
     }
 
     /// <summary>
