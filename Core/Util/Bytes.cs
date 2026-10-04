@@ -9,7 +9,7 @@ namespace BoscaliSummer.Core.Util
     /// <summary>Wire protocol constants (spec M6 §2).</summary>
     internal static class Protocol
     {
-        public const byte Version = 1;
+        public const byte Version = 2;
         public const int MaxString = 64, MaxMessage = 1024;
 
         /// <summary>Reading is strict (invalid UTF-8 fails the read); writing is lenient (a lone surrogate becomes U+FFFD
