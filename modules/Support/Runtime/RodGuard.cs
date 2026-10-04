@@ -13,6 +13,37 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         /// <summary>Flight time the warning is planned with; learns from rods that really landed.</summary>
         public static readonly RodFlightEstimate Flight = new RodFlightEstimate();
+        private static MissileDefinition estimateFor;
+
+        /// <summary>Measured flights belong to one rod prefab: a different resolved definition starts the estimate over.</summary>
+        public static void Track(MissileDefinition definition)
+        {
+            if (ReferenceEquals(estimateFor, definition)) return;
+            estimateFor = definition;
+            Flight.Reset();
+        }
+
+        /// <summary>A new scene forgets the measured flights.</summary>
+        public static void Reset()
+        {
+            estimateFor = null;
+            Flight.Reset();
+        }
+
+        /// <summary>The resolved shell's motor facts for the launch log, so a live fixture can check the flight-time floor.</summary>
+        public static string Describe(MissileDefinition definition)
+        {
+            try
+            {
+                Missile prefab = definition != null && definition.unitPrefab != null ? definition.unitPrefab.GetComponent<Missile>() : null;
+                if (prefab == null) return "no missile component";
+                string top;
+                try { top = prefab.GetTopSpeed(RodTiming.ReleaseAltitude, 0f).ToString("0"); } catch { top = "?"; }
+                return definition.jsonKey + " thrust " + prefab.GetThrust().ToString("0") + " N, burn " +
+                    prefab.GetTotalBurnTime().ToString("0.0") + " s, deltaV " + prefab.CalcDeltaV().ToString("0") + " m/s, topSpeed " + top + " m/s";
+            }
+            catch (System.Exception e) { return "unreadable (" + e.Message + ")"; }
+        }
 
         public static float StandoffRadius() => SpaceStandoff.Radius(TheaterFrame.Resolve().magnitude);
 

@@ -311,6 +311,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             space?.ResetForScene();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
+            RodGuard.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
             Visuals.SupportParticles.Reset();
             inboundStrikeName = null;

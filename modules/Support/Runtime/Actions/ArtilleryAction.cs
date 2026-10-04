@@ -54,6 +54,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 return SupportResult.CapabilityUnavailable;
             }
             if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
+            RodGuard.Track(definition);
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
             // A claimed TASKED call aims at its post's fixed MARK point, already confirmed by the host from a reveal
@@ -86,16 +87,19 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             int scene = context.Host.SceneGeneration;
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
+            // Plain field copies only: anything that can throw is computed inside the try, so the slot cannot leak.
             var shot = new Shot
             {
                 Host = context.Host, Logger = context.Logger, Owner = context.Owner, Definition = definition,
-                SpaceTask = context.SpaceTask, Tasked = tasked, Impact = impactPoint, Scene = scene,
-                Name = SupportNaming.Unique("Rod", context) + ":0",
-                Guide = context.Player?.Aircraft != null ? context.Player.Aircraft.UniqueName : string.Empty
+                SpaceTask = context.SpaceTask, Tasked = tasked, Impact = impactPoint, Scene = scene
             };
             bool poolOwned = true; // until a launch or a dwell takes over releasing the slot
             try
             {
+                shot.Name = SupportNaming.Unique("Rod", context) + ":0";
+                shot.Guide = context.Player?.Aircraft != null ? context.Player.Aircraft.UniqueName : string.Empty;
+                // The friendly standoff is judged on the sampled impact by every TASKED launch gate (CanLaunch, WhyNot, ReportSpawn).
+                if (tasked != null && !tasked.SetImpact(impactPoint.x, impactPoint.z)) return SupportResult.InvalidTarget;
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.UplinkDown;
                 if (tasked != null && !tasked.CanLaunch) return TaskedRefusal(tasked);
                 // Refused before anything is warned or spent: no friendly may be inside the standoff of the impact.
@@ -145,6 +149,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             switch (job.WhyNot)
             {
+                case TaskedOutcome.FriendlyNear: return SupportResult.FriendlyNear;
                 case TaskedOutcome.MarkExpired:
                 case TaskedOutcome.TimedOut: return SupportResult.InvalidTarget;
                 default: return SupportResult.UplinkDown;
@@ -183,6 +188,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (shot.Tasked != null) { if (!shot.Tasked.ReportSpawn()) return SupportResult.SpawnFailed; }
                 else if (!shot.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
                 launched = true;
+                shot.Logger.LogInfo("[Support] Rod launched: " + RodGuard.Describe(shot.Definition) + "; flight estimate " +
+                    RodGuard.Flight.Seconds.ToString("0.0") + " s from " + RodGuard.Flight.Count + " measured.");
                 // After the receipt, cosmetic failures cannot refund an already-live physical weapon.
                 try { Visuals.KineticRodStrikeVisuals.Track(missile, target); }
                 catch (System.Exception e) { shot.Logger.LogWarning("[Support] Rod visual unavailable: " + e.Message); }
@@ -275,8 +282,12 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 float launched = SupportManager.MissionNow();
                 float deadline = launched + 30f;
                 while (SupportManager.MissionNow() < deadline && missile != null && !missile.disabled) yield return null;
-                if (missile != null && !missile.disabled && spawner != null && spawner.IsServer)
-                    spawner.ServerObjectManager.Destroy(missile.gameObject); // Expiry is not an impact.
+                bool ended = missile == null || missile.disabled;
+                if (!ended)
+                {
+                    // Expiry is not an impact and never a flight sample.
+                    if (spawner != null && spawner.IsServer) spawner.ServerObjectManager.Destroy(missile.gameObject);
+                }
                 else if (shot.Host.SceneGeneration == shot.Scene) // a scene teardown is not a landing
                 {
                     float flight = SupportManager.MissionNow() - launched;

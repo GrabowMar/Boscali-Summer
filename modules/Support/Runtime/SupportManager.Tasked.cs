@@ -183,6 +183,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             manager.ReserveTasked(service, owner, call.Action, out refusal);
 
         public void Fired(TaskedLaunchJob job) => manager.TaskedFired(owner, job);
+        public bool ImpactClear(float x, float z) => !RodGuard.FriendlyNear(owner, new GlobalPosition(x, 0f, z));
         public void Warn(string message) => Plugin.Logger?.LogWarning(message);
         public void Launch(TaskedLaunchJob job) => manager.LaunchTasked(owner, job);
     }

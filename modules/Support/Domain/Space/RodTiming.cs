@@ -21,19 +21,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The geometry the native rod is released with (shared with the action that spawns it).</summary>
         public const float ReleaseAltitude = 20000f, ReleaseSpeed = 2500f;
         /// <summary>
-        /// Lower bound of the flight until real rods have been measured: the 20 km fall at the 2.5 km/s release speed is 8 s
-        /// without drag, and gravity can add well under 4 % of that speed, so no rod can land in under about 7.4 s. Using a
-        /// bound that is too short only lengthens the dwell; the lead can never come out under 15 s because of it.
+        /// Lower bound of the flight until real rods have been measured. The drag-free fall from 20 km at the 2.5 km/s release
+        /// speed is 8 s, but a resolved shell prefab may carry a motor (Missile.MotorThrust) that accelerates it, so the floor
+        /// leaves a wide margin below that. A floor that is too short only lengthens the dwell.
         /// </summary>
-        public const float MinimumFlightSeconds = 7f;
+        public const float MinimumFlightSeconds = 5f;
+        /// <summary>Taken off any flight estimate before planning, so the real lead stays above 15 s even if the rod flies exactly the estimate.</summary>
+        public const float FlightMarginSeconds = 1f;
 
         public static float Dwell(float flightSeconds) =>
             !SpaceRules.Finite(flightSeconds) || flightSeconds <= 0f ? WarningSeconds : Math.Max(0f, WarningSeconds - flightSeconds);
 
         public static RodSchedule Plan(float now, float flightSeconds)
         {
-            float flight = !SpaceRules.Finite(flightSeconds) || flightSeconds <= 0f ? 0f : flightSeconds;
-            float launch = now + Dwell(flightSeconds);
+            float estimate = !SpaceRules.Finite(flightSeconds) || flightSeconds <= 0f ? 0f : flightSeconds;
+            float flight = Math.Max(0f, estimate - FlightMarginSeconds);
+            float launch = now + Dwell(flight);
             return new RodSchedule(now, launch, launch + flight);
         }
     }
@@ -62,6 +65,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 return shortest;
             }
         }
+
+        /// <summary>Forget every sample (a different rod prefab or a new scene invalidates them).</summary>
+        public void Reset() { Count = 0; next = 0; }
 
         public bool Record(float seconds)
         {

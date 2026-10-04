@@ -36,6 +36,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int MarkCount => marks?.Length ?? 0;
         public int ShareCount => shares?.Length ?? 0;
         public SpaceMark MarkAt(int index) => marks[index];
+
+        /// <summary>The first MARK still inside its deadline: the fixed ground point a rod may be aimed at.</summary>
+        public bool TryLiveMark(float now, out SpaceMark mark)
+        {
+            if (marks != null && SpaceRules.MissionTime(now))
+                for (int i = 0; i < marks.Length; i++)
+                    if (now < marks[i].ExpiresAt) { mark = marks[i]; return true; }
+            mark = default;
+            return false;
+        }
         public EffortShare ShareAt(int index) => shares[index];
         public SpaceMark[] CopyMarks() => marks == null ? Array.Empty<SpaceMark>() : (SpaceMark[])marks.Clone();
         public EffortShare[] CopyShares() => shares == null ? Array.Empty<EffortShare>() : (EffortShare[])shares.Clone();
