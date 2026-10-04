@@ -54,4 +54,18 @@ namespace WingPure.Tests
             TestAssert.That(e.All.Count == StanceBook.MaxStances, "stance count is bounded");
         }
     }
+
+    internal static class StanceDiffTests
+    {
+        public static void Run()
+        {
+            byte[] a = { 1, 0, 1, 1, 1, 1, 0, 1 };
+            byte[] b = { 1, 0, 1, 1, 1, 1, 0, 0 };
+            int m = StanceDiff.Mask(a, b);
+            TestAssert.That(StanceDiff.Count(m) == 1 && StanceDiff.Changed(m, 7) && !StanceDiff.Changed(m, 0), "one radar change");
+            TestAssert.That(StanceDiff.Mask(a, a) == 0, "same doctrine has no diff");
+            TestAssert.That(StanceDiff.Mask(null, b) == 0 && StanceDiff.Mask(a, new byte[3]) == 0, "bad input reads as no diff");
+            TestAssert.That(!StanceDiff.Changed(m, -1) && !StanceDiff.Changed(m, 8), "out-of-range axis is unchanged");
+        }
+    }
 }
