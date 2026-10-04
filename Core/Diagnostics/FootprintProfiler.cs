@@ -27,6 +27,7 @@ namespace BoscaliSummer.Core.Diagnostics
         private const string ModulePatchOwnerPrefix = Plugin.PluginGuid + ".module.";
         private const int RingSize = 1024;
         private const int TopMethods = 40;
+        private const int TopSpikes = 20;
 
         internal struct Mark
         {
@@ -77,6 +78,13 @@ namespace BoscaliSummer.Core.Diagnostics
         private static string mode = "off";
 
         public static bool Running { get; private set; }
+
+        /// <summary>
+        /// Extra Boscali methods to wrap on the next <see cref="Start"/>: "Type.Method" (every
+        /// overload) or "Type.*" (every declared method), separated by ';' or ','. Type is the
+        /// simple or nested name, matched in the Boscali assembly only.
+        /// </summary>
+        public static string Watch { get; set; } = "";
 
         /// <summary>"updates" wraps Unity callbacks and patches; "deep" also wraps Tick methods.</summary>
         public static string Start(bool deep)
@@ -304,6 +312,7 @@ namespace BoscaliSummer.Core.Diagnostics
                     // A type that references an absent optional assembly cannot be inspected; skip it.
                 }
             }
+            AddWatched(found, assembly);
             foreach (var original in Harmony.GetAllPatchedMethods())
             {
                 var info = Harmony.GetPatchInfo(original);
@@ -313,6 +322,40 @@ namespace BoscaliSummer.Core.Diagnostics
                 AddPatches(found, info.Finalizers, original, assembly);
             }
             return found;
+        }
+
+        private static void AddWatched(Dictionary<MethodBase, Slot> found, Assembly assembly)
+        {
+            if (string.IsNullOrWhiteSpace(Watch)) return;
+            const BindingFlags declared = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public |
+                BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+            foreach (string raw in Watch.Split(';', ','))
+            {
+                string spec = raw.Trim();
+                int dot = spec.LastIndexOf('.');
+                if (dot <= 0 || dot == spec.Length - 1) continue;
+                string typeName = spec.Substring(0, dot);
+                string methodName = spec.Substring(dot + 1);
+                foreach (var type in LoadableTypes(assembly))
+                {
+                    if (type == null || type.ContainsGenericParameters || type == typeof(FootprintProfiler)) continue;
+                    if (type.Name != typeName && type.FullName != typeName) continue;
+                    try
+                    {
+                        foreach (var method in type.GetMethods(declared))
+                        {
+                            if (methodName != "*" && method.Name != methodName) continue;
+                            if (method.IsAbstract || method.ContainsGenericParameters || method.GetMethodBody() == null) continue;
+                            if (!found.ContainsKey(method))
+                                found[method] = NewSlot(type, type.Name + "." + method.Name, "watch");
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // Uninspectable type: nothing to watch.
+                    }
+                }
+            }
         }
 
         private static void AddPatches(Dictionary<MethodBase, Slot> found, IEnumerable<Patch> patches,
@@ -409,10 +452,15 @@ namespace BoscaliSummer.Core.Diagnostics
                 sb.Append('}');
             }
             sb.Append("],\"methods\":[");
-            int limit = System.Math.Min(TopMethods, methods.Count);
-            for (int i = 0; i < limit; i++)
+            // Top by average cost, plus the worst single frames: a rare hitch has a small average.
+            var listed = new List<Slot>(methods.GetRange(0, System.Math.Min(TopMethods, methods.Count)));
+            var bySpike = new List<Slot>(methods);
+            bySpike.Sort((a, b) => b.MaxFrameTicks.CompareTo(a.MaxFrameTicks));
+            for (int i = 0; i < bySpike.Count && i < TopSpikes; i++)
+                if (!listed.Contains(bySpike[i])) listed.Add(bySpike[i]);
+            for (int i = 0; i < listed.Count; i++)
             {
-                var slot = methods[i];
+                var slot = listed[i];
                 if (i > 0) sb.Append(',');
                 sb.Append('{');
                 Str(sb, "method", slot.Name, first: true);

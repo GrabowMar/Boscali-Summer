@@ -9,7 +9,7 @@ namespace BoscaliSummer.Core.Diagnostics
     /// <c>string Control(string key, string value)</c> returning one JSON object. The bridge
     /// finds it by reflection, so Boscali takes no reference on nomodkit. Both run on the
     /// Unity main thread (the bridge pumps requests from Update).
-    /// Controls: profiling=on|deep|off, reset.
+    /// Controls: profiling=on|deep|off, reset, watch=Type.Method;Type.* (applies on the next start).
     /// </summary>
     public static class NOModKitTelemetry
     {
@@ -30,11 +30,14 @@ namespace BoscaliSummer.Core.Diagnostics
                         }
                         string mode = FootprintProfiler.Start(wanted == "deep");
                         return "{\"ok\":true,\"profiling\":true,\"mode\":\"" + mode + "\"}";
+                    case "watch":
+                        FootprintProfiler.Watch = value ?? "";
+                        return "{\"ok\":true,\"applies\":\"next profiling start\"}";
                     case "reset":
                         FootprintProfiler.ResetWindow();
                         return "{\"ok\":true}";
                     default:
-                        return "{\"ok\":false,\"error\":\"unknown key; use profiling=on|deep|off or reset\"}";
+                        return "{\"ok\":false,\"error\":\"unknown key; use profiling=on|deep|off, reset or watch\"}";
                 }
             }
             catch (Exception ex)
