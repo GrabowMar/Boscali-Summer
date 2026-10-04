@@ -47,7 +47,8 @@ namespace BoscaliSummer.Core.Diagnostics
             public bool Touched;
         }
 
-        private static readonly Dictionary<MethodBase, Slot> slots = new Dictionary<MethodBase, Slot>();
+        // Keyed by method handle: reflection objects for one method need not compare equal.
+        private static readonly Dictionary<IntPtr, Slot> slots = new Dictionary<IntPtr, Slot>();
         private static readonly List<Slot> touched = new List<Slot>(64);
         private static readonly long[] frameRing = new long[RingSize];
         private static readonly double TicksToMs = 1000.0 / Stopwatch.Frequency;
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Core.Diagnostics
                 try
                 {
                     harmony.Patch(pair.Key, prefix: prefix, finalizer: finalizer);
-                    slots[pair.Key] = pair.Value;
+                    slots[pair.Key.MethodHandle.Value] = pair.Value;
                     instrumented++;
                 }
                 catch (Exception ex)
@@ -227,7 +228,7 @@ namespace BoscaliSummer.Core.Diagnostics
             long elapsed = Stopwatch.GetTimestamp() - __state.Ticks;
             long alloc = allocSupported ? GC.GetAllocatedBytesForCurrentThread() - __state.Alloc : 0;
             depth--;
-            if (!Running || !slots.TryGetValue(__originalMethod, out var slot)) return;
+            if (!Running || __originalMethod == null || !slots.TryGetValue(__originalMethod.MethodHandle.Value, out var slot)) return;
             int frame = Time.frameCount;
             if (frame != lastFrame) RollFrame(frame);
             slot.Ticks += elapsed;
@@ -283,16 +284,24 @@ namespace BoscaliSummer.Core.Diagnostics
             foreach (var type in LoadableTypes(assembly))
             {
                 if (type == null || type.ContainsGenericParameters || type == typeof(FootprintProfiler)) continue;
-                bool behaviour = typeof(MonoBehaviour).IsAssignableFrom(type);
-                foreach (var method in type.GetMethods(declared))
+                try
                 {
-                    if (method.IsAbstract || method.ContainsGenericParameters || method.GetMethodBody() == null) continue;
-                    string name = method.Name;
-                    bool unity = behaviour && !method.IsStatic && method.GetParameters().Length == 0 &&
-                        (name == "Update" || name == "LateUpdate" || name == "FixedUpdate");
-                    bool tick = deep && (name == "Tick" || name == "FixedTick" || name == "LateTick");
-                    if (!unity && !tick) continue;
-                    found[method] = NewSlot(type, type.Name + "." + name, unity ? "update" : "tick");
+                    bool behaviour = typeof(MonoBehaviour).IsAssignableFrom(type);
+                    foreach (var method in type.GetMethods(declared))
+                    {
+                        string name = method.Name;
+                        bool unity = behaviour && !method.IsStatic &&
+                            (name == "Update" || name == "LateUpdate" || name == "FixedUpdate");
+                        bool tick = deep && (name == "Tick" || name == "FixedTick" || name == "LateTick");
+                        if (!unity && !tick) continue;
+                        if (method.IsAbstract || method.ContainsGenericParameters || method.GetMethodBody() == null) continue;
+                        if (unity && method.GetParameters().Length != 0) continue;
+                        found[method] = NewSlot(type, type.Name + "." + name, unity ? "update" : "tick");
+                    }
+                }
+                catch (Exception)
+                {
+                    // A type that references an absent optional assembly cannot be inspected; skip it.
                 }
             }
             foreach (var original in Harmony.GetAllPatchedMethods())
