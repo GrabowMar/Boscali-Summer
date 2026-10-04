@@ -104,4 +104,19 @@ namespace WingPure.Tests
             TestAssert.That(LegMath.Clock(252f) == "4:12" && LegMath.Clock(float.PositiveInfinity) == "—", "clock words");
         }
     }
+
+    internal static class RibbonTests
+    {
+        public static void Run()
+        {
+            var r = new RibbonId[Ribbons.Max];
+            TestAssert.That(Ribbons.For(0, 0, 0, r) == 0, "rookie with nothing has no ribbons");
+            int n = Ribbons.For(12, 8, 2, r);
+            TestAssert.That(n == 5 && r[0] == RibbonId.Kills5 && r[1] == RibbonId.Kills10 && r[2] == RibbonId.Sorties5 && r[3] == RibbonId.Wingman && r[4] == RibbonId.Veteran, "veteran with 12 kills");
+            TestAssert.That(Ribbons.For(99, 99, 4, r) == Ribbons.Max, "everything earned fills the rack");
+            TestAssert.That(Ribbons.For(5, 0, 0, new RibbonId[1]) == 1, "never writes past the array");
+            TestAssert.That(Ribbons.For(5, 5, 1, null) == 0, "null rack writes nothing");
+            TestAssert.That(Ribbons.Word(RibbonId.Kills10) == "10 KILLS", "word");
+        }
+    }
 }
