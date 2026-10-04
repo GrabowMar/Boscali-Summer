@@ -12,6 +12,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> CruiseEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> MtiEnabled { get; }
+        public ConfigEntry<bool> SatCameraEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
 
@@ -78,6 +79,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
             MtiEnabled = config.Bind("Support", "MtiSweep", true,
                 "MTI sweep: tracks moving enemy ground " +
                 "contacts near the mark. Shares the radar scan tasking. Spawns nothing.");
+            SatCameraEnabled = config.Bind("Support", "SatCamera", true,
+                "SAT CAMERA: the OPTICAL bird looks at the mark in daylight; ground units inside its window are revealed to the " +
+                "faction. Refuses at night and with no sky state. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding hostile IR-seeking missiles in the area. " +

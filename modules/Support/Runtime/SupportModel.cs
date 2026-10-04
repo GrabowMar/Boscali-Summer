@@ -47,7 +47,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         JtacMark = 28,
         JtacUnlase = 29,
         Prsm = 30,
-        Cruise = 31
+        Cruise = 31,
+        /// <summary>SAT CAMERA: the OPTICAL bird opens a camera reveal window. Appended after the highest id (31); never reuse retired ids.</summary>
+        SatCamera = 32
     }
 
     internal enum SupportResult : byte

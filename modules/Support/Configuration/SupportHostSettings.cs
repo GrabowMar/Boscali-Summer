@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     5f, v => v.ToString("0") + " s")
                 .Toggle(13, settings.MtiEnabled, "MTI SWEEP",
                     "Tracks moving enemy ground contacts near the mark. Shares the radar scan recharge.")
+                .Toggle(16, settings.SatCameraEnabled, "SAT CAMERA",
+                    "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

@@ -164,6 +164,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportActionId.MtiSweep:
                 case SupportActionId.Recon:
                     return settings != null ? settings.SarSceneRadius.Value : 1000f;
+                case SupportActionId.SatCamera:
+                    return settings != null ? settings.OpticalSceneRadius.Value : 1000f;
                 case SupportActionId.ElintSweep:
                     return settings != null ? settings.ElintRadius.Value : 8000f;
                 case SupportActionId.FlareMissile:
@@ -874,7 +876,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     localCooldownUntil = DisableCooldowns ? 0f : MissionNow() + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
-                     action.Id == SupportActionId.MtiSweep);
+                     action.Id == SupportActionId.MtiSweep || action.Id == SupportActionId.SatCamera);
                 Status = sweep
                     ? name + " complete: " + Mathf.Max(0, message.Contacts) + " contact(s)."
                     : name + " accepted.";

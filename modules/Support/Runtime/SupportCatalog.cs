@@ -36,6 +36,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction(),
                 SpaceBirdRequirement.Radar, BirdTask.Mti, SpaceRevealWindow.BirdBusySeconds));
 
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.SatCamera, "SAT CAMERA",
+                "OPTICAL bird images the mark in daylight and reveals ground units in its window through a live uplink.",
+                SupportCapabilities.Recon, settings.SatCameraEnabled, new SatelliteCameraAction(),
+                SpaceBirdRequirement.Optical, BirdTask.Camera, SpaceRevealWindow.BirdBusySeconds));
+
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(
                     SupportActionId.Fortify, "ZONE FORTIFICATION",
