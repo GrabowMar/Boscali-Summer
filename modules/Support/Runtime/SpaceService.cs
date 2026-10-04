@@ -155,8 +155,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             detail = Math.Max(0, detail);
             // A cooldown or freeze counts down on the client: send its deadline (mission time), not seconds left, so a cooling
             // member is not sent a new value every second.
-            into.GateDetail = SpaceMirror.GateIsDeadline(into.Gate) ? (int)Math.Ceiling(now + detail) : detail;
-            uint salt = manager.SpaceNet != null ? manager.SpaceNet.Salt : 0u;
+            // The deadline comes from the unrounded remaining time (the integer detail would flip it by a second every poll).
+            into.GateDetail = into.Gate == TaskedOutcome.Cooldown ? SpaceMirror.GateDeadline(now, manager.ServerCooldownRemaining(viewer))
+                : SpaceMirror.GateIsDeadline(into.Gate) ? SpaceMirror.GateDeadline(now, detail) : detail;
+            ulong salt = manager.SpaceNet != null ? manager.SpaceNet.Salt : 0UL;
             if (!rows) return true;
             into.Feed = true;
             contacts.CopyReveals(now, reveals);

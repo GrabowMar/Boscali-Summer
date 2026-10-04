@@ -11,9 +11,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal static class SpaceProbable
     {
         /// <param name="salt">A host-only per-mission secret: without it a client could predict the noise from ids it can see.</param>
-        public static ProbableClass Of(ContactClass truth, int id, int generation, uint salt, out byte percent)
+        public static ProbableClass Of(ContactClass truth, int id, int generation, ulong salt, out byte percent)
         {
-            uint h = Deterministic.Hash(id, generation, 0x5ACE, unchecked((int)salt));
+            uint h = Deterministic.Hash(id, generation, unchecked((int)salt), unchecked((int)(salt >> 32)));
             int roll = (int)(h % 100u);
             percent = (byte)(55 + (int)((h >> 8) % 36u)); // 55..90
             bool hostile = truth == ContactClass.EnemyGround || truth == ContactClass.Decoy;
@@ -136,6 +136,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public static bool GateIsDeadline(TaskedOutcome gate) => gate == TaskedOutcome.Cooldown || gate == TaskedOutcome.Frozen;
 
         /// <summary>
+        /// The deadline for a countdown gate from the UNROUNDED seconds left: rounded to a tenth before the ceiling so float noise
+        /// at an integer deadline cannot flip it, and the same deadline is computed at every poll of one cooldown.
+        /// </summary>
+        public static int GateDeadline(float now, float remaining) =>
+            (int)Math.Ceiling(Math.Round((double)now + Math.Max(0f, remaining), 1));
+
+        /// <summary>
         /// Keeps one message inside one writer buffer: when it is larger than the budget the TASKED rows move to a follow-up
         /// delta of the same generation (the client applies a full, then that delta). The follow-up carries no headline change.
         /// </summary>
@@ -206,7 +213,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 State = fresh; Generation = d.Generation; Floor = d.Generation; hasFull = true; NeedsFull = false;
                 return true;
             }
-            if (!hasFull || d.Generation != Generation) { if (d.Generation > Floor) NeedsFull = true; return false; }
+            if (!hasFull)
+            {
+                // After a reset the host's next delta is of the generation we already applied (== Floor): the mirror is empty and the
+                // host will not resend a full by itself, so ask. Anything older than the floor is a stale packet of the old view.
+                if (d.Generation >= Floor) NeedsFull = true;
+                return false;
+            }
+            if (d.Generation != Generation) { if (d.Generation > Floor) NeedsFull = true; return false; }
             SpaceFeedState merged = State.Clone();
             if (!Merge(merged, d, clientNow, false)) { NeedsFull = true; return false; }
             State = merged;

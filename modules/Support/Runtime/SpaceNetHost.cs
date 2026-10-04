@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private FactionHQ resolving;
         private readonly List<Player> roster = new List<Player>(SpaceContacts.MaxPlayers);
         private float nextPoll, nextWarning;
-        private readonly System.Random random = new System.Random(Guid.NewGuid().GetHashCode());
 
         public SpaceNetHost(SupportManager manager, SpaceService space, SupportNet net)
         {
@@ -42,10 +41,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Salt = NewSalt();
         }
 
-        private uint NewSalt() => unchecked((uint)random.Next() * 2654435761u ^ (uint)random.Next());
+        /// <summary>64 bits from the operating system CSPRNG.</summary>
+        private static ulong NewSalt()
+        {
+            var bytes = new byte[8];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(bytes);
+            return BitConverter.ToUInt64(bytes, 0);
+        }
 
         /// <summary>A per-mission secret that never leaves the host: it salts the noise in the probable class shown before a verdict.</summary>
-        public uint Salt { get; private set; }
+        public ulong Salt { get; private set; }
 
         public SpaceCommandHost Commands => commands;
         public SpaceSubscriptions Subscriptions => subs;
