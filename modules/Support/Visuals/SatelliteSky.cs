@@ -21,6 +21,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private static readonly Vector3[] Directions = { new Vector3(0.5f, 1.1f, -0.65f).normalized,
             new Vector3(-0.8f, 1.2f, -0.15f).normalized, new Vector3(0.2f, 1.1f, 0.8f).normalized };
+        /// <summary>The direction from the ground up to a bird: the feed's line of sight for that bird's sensor.</summary>
+        internal static Vector3 LineOfSight(BirdKind bird) => Directions[Mathf.Clamp((int)bird, 0, Directions.Length - 1)];
+
         private static readonly Color HullDay = new Color(0.86f, 0.92f, 0.96f, 1f);
         private static readonly Color HullNight = new Color(0.72f, 1f, 0.94f, 1f);
         private static readonly Color Panel = new Color(0.16f, 0.26f, 0.52f, 1f);

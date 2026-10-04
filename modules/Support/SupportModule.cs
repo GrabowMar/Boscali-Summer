@@ -52,8 +52,10 @@ namespace BoscaliSummer.Modules.Support
             calls.Configure(manager, context.Settings.Support, observations);
             manager.AttachCalls(calls);
             hudLine.Configure(manager, calls);
+            SpaceFeedController feed = context.AddSceneService<SpaceFeedController>(57);
+            feed.Configure(manager, calls, context.Settings.Support, context.Logger);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
-            panel.Configure(manager, calls);
+            panel.Configure(manager, calls, feed);
             satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));

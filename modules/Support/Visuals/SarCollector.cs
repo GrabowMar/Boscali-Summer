@@ -228,6 +228,20 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return true;
         }
 
+        /// <summary>Where a mirror row falls in the SAR picture (0..1, origin bottom-left, like a RawImage), false when it is outside it.</summary>
+        public bool TryProject(in FeedContact row, out Vector2 uv)
+        {
+            uv = default;
+            if (former == null || !Finite(row.X) || !Finite(row.Z)) return false;
+            var point = new GlobalPosition(row.X, 0f, row.Z);
+            Vector3 local = point.ToLocalPosition();
+            if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
+            Vector3 relative = local - centreLocal;
+            if (!former.Project(relative.x, relative.y, relative.z, SpaceFeedRules.SarContactRadial(row.Moving), out int column, out int rowIndex)) return false;
+            uv = new Vector2((column + 0.5f) / ImageWidth, (ImageHeight - 1 - rowIndex + 0.5f) / ImageHeight);
+            return true;
+        }
+
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private void Cast(int index)

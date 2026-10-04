@@ -133,6 +133,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public GlobalPosition RadarScanTarget { get; private set; }
         public int RadarScanContacts { get; private set; }
 
+        /// <summary>Latest accepted SAT CAMERA of the local player: where the optical bird last looked.</summary>
+        public int CameraSerial { get; private set; }
+        public GlobalPosition CameraTarget { get; private set; }
+
         /// <summary>Display the same owned-zone footprint that FORTIFY executes.</summary>
         public void ResolveMapArea(SupportActionId action, ref GlobalPosition target, ref float radius)
         {
@@ -890,6 +894,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     RadarScanSerial++;
                     Status = name + " accepted: imaging, " + RadarScanContacts +
                         (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
+                }
+                if (action != null && action.Id == SupportActionId.SatCamera && Finite(message.X) && Finite(message.Z))
+                {
+                    CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
+                    CameraSerial++;
+                    Status = name + " accepted: imaging, " + Mathf.Max(0, message.Contacts) + " contact(s) revealed.";
                 }
                 float eta = action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) ? message.Duration :
                             action != null && action.Id == SupportActionId.Artillery ? 8f :

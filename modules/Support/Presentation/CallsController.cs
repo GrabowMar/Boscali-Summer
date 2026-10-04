@@ -4,6 +4,7 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BepInEx.Configuration;
 using NOAvionics;
@@ -23,6 +24,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private readonly ArmState arm = new ArmState();
         private readonly CallRequestTracker request = new CallRequestTracker();
+        private readonly TaskedIntent tasked = new TaskedIntent();
+        private const float ClaimTimeoutSeconds = 30f;
+        private int callGeneration = 1;           // bumps on teardown and disarm: an old TASKED arm can never fire after either
+        private int claimRequest, claimPost;      // the one TASKED claim in flight (SPACE request id), 0 when none
+        private float claimStartedAt;
         private SupportManager manager;
         private SupportSettings settings;
         private IObservationSource observations;
@@ -43,12 +49,20 @@ namespace BoscaliSummer.Modules.Support.Presentation
             this.settings = settings;
             this.observations = observations;
             for (int i = 0; i < Favourites.Length; i++) Favourites[i] = Defaults[i];
+            if (manager != null) manager.SpaceReplied += OnSpaceReply;
+        }
+
+        private void OnDestroy()
+        {
+            if (manager != null) manager.SpaceReplied -= OnSpaceReply;
         }
 
         public void ResetForScene()
         {
             arm.Clear();
             request.Clear();
+            ClearTasked();
+            claimRequest = claimPost = 0; // a scene change abandons any claim in flight: its receipt belongs to the old scene
             pinCycle = 0;
             mapAim = null;
             lastMapPick = null;
@@ -82,6 +96,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             if (arm.Press(id, now) == ArmStep.Armed)
             {
+                tasked.Clear(); // a STANDARD arm gives way to nothing and a TASKED arm gives way to it
                 mapAim = null;
                 bool mapOk = manager.ArmLocalPick(Label(id), point =>
                 {
@@ -119,8 +134,116 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Disarm()
         {
             arm.Clear();
+            ClearTasked();
             manager?.Disarm();
             Say("DISARMED", AvUiCue.Release);
+        }
+
+        // ---- TASKED claims (the SPACE feed's cards) ---------------------------------------------------------------------
+        // A TASKED claim is its own path. It must never go through Press/Fire: those price STANDARD, give the POD and the map
+        // pick priority and would overwrite the MARK. The host prices the claim from the post and derives the aim itself.
+
+        /// <summary>The post whose second press would claim it, 0 when none.</summary>
+        public int ArmedTasked => tasked.PostId;
+
+        /// <summary>A claim is in flight and has not reached a final receipt.</summary>
+        public bool TaskedPending => claimRequest != 0;
+
+        /// <summary>The post the in-flight claim is for, 0 when none.</summary>
+        public int ClaimingPost => claimPost;
+
+        private void ClearTasked()
+        {
+            tasked.Clear();
+            callGeneration++;
+        }
+
+        private bool TryFindPost(int postId, out FeedPost post)
+        {
+            var posts = manager.SpaceMirror.State.Posts;
+            for (int i = 0; i < posts.Count; i++)
+                if (posts[i].CallId == postId) { post = posts[i]; return true; }
+            post = default;
+            return false;
+        }
+
+        /// <summary>
+        /// The TASKED preflight on the mirrored post: busy, link, post status, the host's claim gate for this viewer and the host
+        /// quote on the post (never the STANDARD price). Says why and returns false.
+        /// </summary>
+        private bool CheckTasked(in FeedPost post, float now)
+        {
+            if (request.Pending || manager.RequestPending || claimRequest != 0) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return false; }
+            SpaceFeedState state = manager.SpaceMirror.State;
+            if (!manager.SpaceMirror.Known || !state.Active) { Say(CallWords.Refusal(CallRefusal.Offline), AvUiCue.Caution); return false; }
+            switch (SpaceFeedRules.PostStatusOf(post, now))
+            {
+                case PostStatus.Stale: Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution); return false;
+                case PostStatus.Launching: Say(TaskedWords.Of(TaskedOutcome.ClaimedByOther), AvUiCue.Caution); return false;
+            }
+            if (state.Gate != TaskedOutcome.None)
+            {
+                int detail = SpaceMirror.GateIsDeadline(state.Gate) ? Mathf.Max(1, state.GateDetail - Mathf.FloorToInt(now)) : state.GateDetail;
+                Say(TaskedWords.Of(state.Gate, detail), AvUiCue.Caution);
+                return false;
+            }
+            if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
+            {
+                Say(CallWords.Refusal(CallRefusal.LowCredit, need: post.Price), AvUiCue.Caution);
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>First press arms exactly this post; the next press on it (same mirror and call generation) sends the claim.</summary>
+        public void PressTasked(int postId)
+        {
+            if (manager == null) return;
+            float now = SupportManager.MissionNow();
+            if (!TryFindPost(postId, out FeedPost post))
+            {
+                tasked.Clear();
+                Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution);
+                return;
+            }
+            if (!CheckTasked(post, now)) { tasked.Clear(); return; }
+            if (tasked.Press(postId, manager.SpaceMirror.Generation, callGeneration, now) == ArmStep.Armed)
+            {
+                arm.Clear();
+                manager.Disarm(); // one armed intent at a time: a STANDARD arm gives way
+                Say("ARMED · TASKED " + (post.Points != null ? post.Points.Length : 0) + " TARGET" +
+                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " CR" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
+                return;
+            }
+            // No aim is sent: the host claims the post's own stored ground point and prices it itself.
+            int id = manager.SpaceClaim(postId);
+            if (id <= 0) { Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; }
+            claimRequest = id; // registered before any verdict: in-process replies arrive on the next Update
+            claimPost = postId;
+            claimStartedAt = now;
+            AnswerTasked(id, TaskedReceiptState.Pending, TaskedReceipts.Words(TaskedReceiptState.Pending, TaskedOutcome.Queued, 0));
+        }
+
+        /// <summary>The receipt of the claim: PENDING and LAUNCHING are not SHOT; only the physical launch is.</summary>
+        internal void AnswerTasked(int requestId, TaskedReceiptState state, string words)
+        {
+            if (requestId != claimRequest) return; // a late answer to a claim already finished or cleared
+            if (state == TaskedReceiptState.Launched || state == TaskedReceiptState.Refused) { claimRequest = 0; claimPost = 0; }
+            Say(words, state == TaskedReceiptState.Launched ? AvUiCue.Confirm
+                : state == TaskedReceiptState.Refused ? AvUiCue.Caution
+                : state == TaskedReceiptState.Launching ? AvUiCue.Engage : AvUiCue.Press);
+        }
+
+        private void OnSpaceReply(SpaceReply reply)
+        {
+            if (reply.Kind != SpaceCommandKind.ClaimTasked || reply.RequestId != claimRequest || claimRequest == 0) return;
+            bool launching = TryFindPost(claimPost, out FeedPost post) && post.Launching;
+            TaskedReceiptState state = TaskedReceipts.State(reply.Tasked, launching);
+            string words = TaskedReceipts.Words(state, reply.Tasked, reply.Detail);
+            if (reply.Tasked == TaskedOutcome.ClaimedByOther && !string.IsNullOrEmpty(reply.Claimant))
+                words = "NEGATIVE: CLAIMED BY " + reply.Claimant;
+            if (reply.Replayed) words = "EARLIER · " + words; // a retry replays the original receipt: history, not a new event
+            AnswerTasked(reply.RequestId, state, words);
         }
 
         /// <summary>JTAC UNLASE at the current POD / last map pick; no arm step, no floors.</summary>
@@ -164,6 +287,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Say("DISARMED", AvUiCue.Release);
             }
             if (request.Tick(now, out _)) { manager.AbandonPending(); Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution); }
+            if (tasked.Tick(now)) Say("DISARMED", AvUiCue.Release);
+            else if (tasked.PostId != 0 && (tasked.Revalidate(manager.SpaceMirror.Generation, callGeneration) || !StillOpen(tasked.PostId, now)))
+            {
+                tasked.Clear(); // the board moved or the post went stale under the arm: it can never fire
+                Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution);
+            }
+            if (claimRequest != 0 && now - claimStartedAt > ClaimTimeoutSeconds)
+            {
+                claimRequest = claimPost = 0;
+                Say("NEGATIVE: NO ANSWER — CHECK THE BOARD BEFORE PRESSING AGAIN", AvUiCue.Caution);
+            }
             AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue);
 
             if (GameplayUI.GameIsPaused || InputFieldChecker.InsideInputField || !Application.isFocused) return;
@@ -172,6 +306,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Poll(settings.CallKey3, 2);
             Poll(settings.CallKey4, 3);
         }
+
+        private bool StillOpen(int postId, float now) =>
+            TryFindPost(postId, out FeedPost post) && SpaceFeedRules.PostStatusOf(post, now) == PostStatus.Open;
 
         private void Poll(ConfigEntry<KeyboardShortcut> key, int slot)
         {
