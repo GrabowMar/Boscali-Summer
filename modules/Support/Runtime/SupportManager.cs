@@ -307,6 +307,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void ResetForScene()
         {
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
+            Clock.Reset();
             space?.ResetForScene();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
@@ -349,27 +350,35 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportMapMode.GestureArmed = false;
         }
 
+        /// <summary>Non-kill earnings (capture, recon, jamming, support). Kills arrive through <see cref="CreditFromKill"/>.</summary>
         internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
         {
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
             EarnKind kind = KindOf(type);
-            if (kind == EarnKind.None) return;
+            if (kind == EarnKind.None || kind == EarnKind.Kill) return;
+            float earned = EarningRules.FromReward(kind, rewardAllocation, false, false) * settings.EarnKnob.Value;
+            credits.Earn(player, earned, MissionNow());
+        }
+
+        /// <summary>
+        /// One call per contributor from vanilla <c>ReportKillAction</c>; <paramref name="damageShare"/> is that
+        /// contributor's share of the damage, so every contributor is paid their share of the target value.
+        /// </summary>
+        internal void CreditFromKill(Player player, Unit target, float damageShare)
+        {
+            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
+                target == null) return;
             float now = MissionNow();
             ulong id = PlayerIdentity.Of(player);
-            bool repeat = kind == EarnKind.Kill && target != null &&
-                credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
-            bool assisted = false;
-            if (kind == EarnKind.Kill && target != null)
-            {
-                GlobalPosition at = target.GlobalPosition();
-                assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
-            }
-            float unitValue = target != null && target.definition != null ? target.definition.value : 0f;
-            float earned = EarningRules.FromReward(kind, rewardAllocation, repeat, assisted, unitValue) * settings.EarnKnob.Value;
+            bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
+            GlobalPosition at = target.GlobalPosition();
+            bool assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
+            float unitValue = target.definition != null ? target.definition.value : 0f;
+            float earned = EarningRules.FromKill(unitValue, damageShare, repeat, assisted) * settings.EarnKnob.Value;
             credits.Earn(player, earned, now);
-            if (kind == EarnKind.Kill && Plugin.Settings?.Diagnostics.VerboseLogging.Value == true)
-                logger.LogInfo("[Support.Credit] target=" + (target?.definition?.unitName ?? "unknown") +
-                    " value=" + unitValue + " allocation=" + rewardAllocation + " CR=" + earned +
+            if (Plugin.Settings?.Diagnostics.VerboseLogging.Value == true)
+                logger.LogInfo("[Support.Credit] target=" + (target.definition?.unitName ?? "unknown") +
+                    " value=" + unitValue + " share=" + damageShare + " CR=" + earned +
                     " repeat=" + repeat + " assisted=" + assisted + " earnScale=" + settings.EarnKnob.Value);
         }
 
@@ -390,11 +399,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        /// <summary>Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start.</summary>
-        internal static float MissionNow() =>
-            NetworkSceneSingleton<MissionManager>.i != null
-                ? NetworkSceneSingleton<MissionManager>.i.MissionTime
-                : Time.timeSinceLevelLoad;
+        private static readonly MissionClock Clock = new MissionClock();
+
+        /// <summary>
+        /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a client
+        /// that has not synced the MissionManager (missing, unspawned, unset start time, or a throwing read) keeps the
+        /// last good value, and the result is finite and never decreases within a scene.
+        /// </summary>
+        internal static float MissionNow()
+        {
+            float raw = 0f;
+            bool valid = false;
+            try
+            {
+                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+                if (mission == null) { raw = Time.timeSinceLevelLoad; valid = GameManager.gameState != GameState.Multiplayer; }
+                else if (GameManager.gameState != GameState.Multiplayer || GameAccess.IsServer() || mission.multiplayerStartTime > 0d)
+                { raw = mission.MissionTime; valid = true; }
+            }
+            catch { valid = false; }
+            return Clock.Read(raw, valid, Time.frameCount);
+        }
 
         private static bool ActivityScene =>
             GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer;
@@ -729,46 +754,46 @@ namespace BoscaliSummer.Modules.Support.Runtime
             LastRequestOffline = false;
             if (pending)
             {
-                Status = "REQUEST PENDING - wait for host acknowledgement.";
+                Status = CallWords.Refusal(CallRefusal.Busy);
                 return 0;
             }
 
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             if (def == null || !def.Enabled)
             {
-                Status = "Action unavailable.";
+                Status = CallWords.Refusal(CallRefusal.Unavailable);
                 return 0;
             }
 
             float cost = Cost(def);
             if (cost <= 0f && action != SupportActionId.JtacUnlase) // UNLASE is free by design
             {
-                Status = "Action unavailable on this map.";
+                Status = SupportWords.Refusal(SupportResult.CapabilityUnavailable);
                 return 0;
             }
 
             if (!IsAuthorised(def))
             {
-                Status = "Action not authorised.";
+                Status = CallWords.Refusal(CallRefusal.Unavailable);
                 return 0;
             }
 
             bool free = action == SupportActionId.JtacUnlase; // no cooldown, no freeze, no charge
             if (!free && LocalCooldownRemaining > 0.5f)
             {
-                Status = "Support network cooling down.";
+                Status = CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(LocalCooldownRemaining));
                 return 0;
             }
 
             if (!free && !BypassRequirements && LocalFrozenSeconds > 0)
             {
-                Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
+                Status = CallWords.Refusal(CallRefusal.Frozen, seconds: LocalFrozenSeconds);
                 return 0;
             }
 
             if (!BypassRequirements && LocalCredit + 0.001f < cost)
             {
-                Status = "Low credit (" + cost.ToString("0") + " CR required).";
+                Status = CallWords.Refusal(CallRefusal.LowCredit, need: Mathf.CeilToInt(cost));
                 return 0;
             }
 
@@ -805,10 +830,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Unlocked((SupportActionId)r.Action, out string unlock);
                     return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
                 case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
-                case SupportResult.InvalidTarget: return CallWords.Refusal(SupportResult.InvalidTarget);
+                case SupportResult.InvalidTarget: return SupportWords.Refusal(SupportResult.InvalidTarget);
                 case SupportResult.RateLimited:
                 case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
-                default: return CallWords.Refusal((SupportResult)r.Result);
+                default: return SupportWords.Refusal((SupportResult)r.Result);
             }
         }
 
@@ -858,7 +883,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        internal static string Explain(SupportResult result) => CallWords.Refusal(result);
+        internal static string Explain(SupportResult result) => SupportWords.Refusal(result);
 
         // ---- Server ----------------------------------------------------------------------
 
