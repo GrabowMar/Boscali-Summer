@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportActionId.Recon, "RADAR SCAN",
                 "RADAR bird reveals stationary ground contacts through a live uplink.",
                 SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction(),
-                SpaceBirdRequirement.Radar, BirdTask.Scan));
+                SpaceBirdRequirement.Radar, BirdTask.Scan, SpaceRevealWindow.ObservationSeconds));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.ElintSweep, "ELINT SWEEP",
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportActionId.MtiSweep, "MTI SWEEP",
                 "RADAR bird reveals moving ground contacts through a live uplink.",
                 SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction(),
-                SpaceBirdRequirement.Radar, BirdTask.Mti));
+                SpaceBirdRequirement.Radar, BirdTask.Mti, SpaceRevealWindow.ObservationSeconds));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(

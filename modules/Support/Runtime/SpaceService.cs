@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime
@@ -21,6 +22,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public IReadOnlyList<Unit> View;
             public bool Bootstrap;
             public Action<Airbase> CaptureHandler;
+            public SpaceObservations Observations;
         }
         private readonly struct Candidate
         {
@@ -47,6 +49,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions)
             {
                 pair.Value.State.Clear();
+                pair.Value.Observations?.Dispose();
                 if (pair.Value.CaptureHandler != null) pair.Key.onAirbaseAdded -= pair.Value.CaptureHandler;
             }
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
@@ -68,6 +71,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal IReadOnlyList<Unit> UplinksFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.View : Array.Empty<Unit>();
+
+        internal SpaceObservations ObservationsFor(FactionHQ owner) =>
+            owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.Observations : null;
+
+        internal int OpenWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
+            float minimumSpeed, float maximumSpeed) =>
+            ObservationsFor(owner)?.Open(point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
 
         internal bool Bootstrap(FactionHQ owner, int heldObjectives, float now)
         {
@@ -123,6 +133,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private static void Refresh(FactionHQ owner, FactionSpace faction, float now)
         {
+            faction.Observations?.Tick(now);
             for (int i = 0; i < faction.Links.Length; i++)
             {
                 Unit link = faction.Links[i];
@@ -188,7 +199,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
-                View = Array.AsReadOnly(array), Bootstrap = bootstrap };
+                View = Array.AsReadOnly(array), Bootstrap = bootstrap, Observations = new SpaceObservations(owner) };
             if (bootstrap)
             {
                 FactionSpace captured = faction;

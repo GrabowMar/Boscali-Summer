@@ -263,6 +263,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         bool ISupportHost.TryGetSpaceState(FactionHQ owner, out SpaceState state) => TryGetSpaceState(owner, out state);
 
         internal void AttachSpace(SpaceService service) => space = service;
+        int ISupportHost.OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
+            float minimumSpeed, float maximumSpeed) => space?.OpenWindow(owner, point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
+        internal SpaceObservations SpaceObservationsFor(FactionHQ owner) => space?.ObservationsFor(owner);
+        internal MarkVerdict ConfirmSpaceMark(Player player, int id)
+        {
+            if (!GameAccess.IsServer() || player == null || player.HQ == null) return MarkVerdict.NoContact;
+            bool recent = credits != null && credits.Activity.IsActive(PlayerIdentity.Of(player), false, MissionNow());
+            return space?.ObservationsFor(player.HQ)?.Mark(PlayerIdentity.Of(player), id, recent) ?? MarkVerdict.NoContact;
+        }
         internal bool TryGetSpaceState(FactionHQ owner, out SpaceState state)
         {
             state = null;

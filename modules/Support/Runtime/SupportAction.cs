@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         VanillaSupportCatalog Vanilla { get; }
         int SceneGeneration { get; }
         bool TryGetSpaceState(FactionHQ owner, out SpaceState state);
+        int OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
+            float minimumSpeed, float maximumSpeed);
 
         bool TryReserve(FactionHQ owner, SupportPool pool);
         void Release(FactionHQ owner, SupportPool pool);
