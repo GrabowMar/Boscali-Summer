@@ -134,7 +134,37 @@ namespace BoscaliSummer.Core.Diagnostics
             if (gcAllocRecorder.Valid) gcAllocRecorder.Dispose();
             gcAllocRecorder = default;
             depth = 0;
-            log?.LogInfo("Footprint: stopped after " + (stopFrame - startFrame) + " frames.");
+            LogSummary();
+        }
+
+        /// <summary>A few log lines so the measurement is readable without the bridge.</summary>
+        private static void LogSummary()
+        {
+            if (log == null) return;
+            int frames = System.Math.Max(1, stopFrame - startFrame);
+            var modules = new Dictionary<string, long>();
+            var methods = new List<Slot>();
+            foreach (var slot in slots.Values)
+            {
+                if (slot.Calls == 0) continue;
+                methods.Add(slot);
+                modules.TryGetValue(slot.Module, out long ticks);
+                modules[slot.Module] = ticks + slot.Ticks;
+            }
+            var ordered = new List<KeyValuePair<string, long>>(modules);
+            ordered.Sort((a, b) => b.Value.CompareTo(a.Value));
+            methods.Sort((a, b) => b.Ticks.CompareTo(a.Ticks));
+            var line = new StringBuilder("Footprint: Boscali ");
+            line.Append((outerTotalTicks * TicksToMs / frames).ToString("0.000", CultureInfo.InvariantCulture))
+                .Append(" ms/frame over ").Append(frames).Append(" frames; by module:");
+            for (int i = 0; i < ordered.Count && i < 12; i++)
+                line.Append(' ').Append(ordered[i].Key).Append('=')
+                    .Append((ordered[i].Value * TicksToMs / frames).ToString("0.000", CultureInfo.InvariantCulture));
+            log.LogInfo(line.ToString());
+            for (int i = 0; i < methods.Count && i < 10; i++)
+                log.LogInfo("Footprint:   " + (methods[i].Ticks * TicksToMs / frames).ToString("0.000", CultureInfo.InvariantCulture) +
+                    " ms/frame, max " + (methods[i].MaxFrameTicks * TicksToMs).ToString("0.00", CultureInfo.InvariantCulture) +
+                    " ms  " + methods[i].Name);
         }
 
         /// <summary>Zeroes the counters without re-patching (a fresh window).</summary>
