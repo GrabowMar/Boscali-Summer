@@ -53,6 +53,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         public OperatorIncomeMeter Income { get; }
         public Action<ulong> Changed { get; set; }
 
+        // A presentation mirror failing must never turn an already-mutated balance into a thrown transaction.
+        private void Notify(ulong id)
+        {
+            try { Changed?.Invoke(id); } catch { }
+        }
+
         public TaskedWallets(CreditLedger ledger, HqFundLedger fund, OperatorIncomeMeter income)
         {
             Ledger = ledger; Fund = fund; Income = income;
@@ -65,14 +71,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         public bool TrySpend(ulong id, float amount, float now)
         {
             if (!Ledger.TrySpend(id, amount, now)) return false;
-            Changed?.Invoke(id);
+            Notify(id);
             return true;
         }
 
         public void Refund(ulong id, float amount)
         {
             Ledger.Refund(id, amount);
-            Changed?.Invoke(id);
+            Notify(id);
         }
 
         public void AddHq(int faction, float amount) => Fund.Add(faction, amount);
@@ -89,7 +95,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             float overflow = allowed > 0f ? Ledger.Credit(playerId, allowed) : 0f;
             float wallet = allowed - overflow;
             if (overflow > 0f) Fund.Add(earnedFaction, overflow);
-            if (wallet > 0f) Changed?.Invoke(playerId);
+            if (wallet > 0f) Notify(playerId);
             return new ContributorCreditReceipt(wallet, overflow, amount - allowed);
         }
     }

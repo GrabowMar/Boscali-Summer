@@ -232,6 +232,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return remaining > 0f ? remaining : 0f;
         }
 
+        /// <summary>Starts the player's request cooldown without remembering any request id (TASKED fires use their own receipts).</summary>
+        public void StartCooldown(ulong playerId, float now) => Get(playerId).LastAccepted = now;
+
         public void Accept(ulong playerId, int requestId, float now, bool startCooldown = true)
         {
             PlayerState state = Get(playerId);

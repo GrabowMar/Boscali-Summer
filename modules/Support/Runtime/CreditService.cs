@@ -68,13 +68,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void Mirror(ulong id)
         {
-            if (FactionRegistry.GetAllHQs() == null) return;
-            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            // Never throws: a failed mirror retries on the next Tick, the debit/refund it follows already happened.
+            try
             {
-                if (hq == null) continue;
-                foreach (Player player in hq.GetPlayers(false))
-                    if (player != null && PlayerIdentity.Of(player) == id) { SendIfChanged(player, id, SupportManager.MissionNow()); return; }
+                if (FactionRegistry.GetAllHQs() == null) return;
+                foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+                {
+                    if (hq == null) continue;
+                    foreach (Player player in hq.GetPlayers(false))
+                        if (player != null && PlayerIdentity.Of(player) == id) { SendIfChanged(player, id, SupportManager.MissionNow()); return; }
+                }
             }
+            catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support.Credit] Wallet mirror skipped: " + e.Message); }
         }
 
         public void Tick(float now, float dt)

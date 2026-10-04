@@ -116,12 +116,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             try { result = definition.Action.Execute(context); }
             catch (Exception e) { logger.LogError(e); result = SupportResult.SpawnFailed; }
             if (result != SupportResult.Accepted) job.ReportFailure();
+            else if (!job.Final) job.ReportFailure(); // Accepted without a physical receipt is not a launch
         }
 
         internal void TaskedFired(FactionHQ owner, TaskedLaunchJob job)
         {
             float now = MissionNow();
-            ledger.Accept(job.Pilot, job.RequestId, now, startCooldown: true);
+            // TASKED receipts live only in the desk; the CALLS ledger gets the cooldown, never this request id.
+            ledger.StartCooldown(job.Pilot, now);
             Player pilot = FindPlayer(owner, job.Pilot);
             if (pilot != null) credits?.RecordInput(pilot, now);
             try { credits.Assists.Record(credits.FactionKey(owner), job.Aim.X, job.Aim.Z, GetEffectRadius(job.Action, owner), now); }

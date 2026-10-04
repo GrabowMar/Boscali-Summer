@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportManager manager;
         private float nextTick;
         private float nextCleanup;
+        private float nextTaskedWarning;
         public int Generation { get; private set; } = 1;
         internal UplinkSpawner Spawner => spawner;
 
@@ -135,7 +136,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
             // Claim arbitration is 200 ms: the desks run every frame, the 1 s world refresh below does not.
-            foreach (var pair in factions) pair.Value.Tasked?.Tick();
+            foreach (var pair in factions)
+            {
+                // One faction's desk fault must not stop the other desks or the world refresh.
+                try { pair.Value.Tasked?.Tick(); }
+                catch (Exception e)
+                {
+                    if (Time.unscaledTime >= nextTaskedWarning)
+                    {
+                        nextTaskedWarning = Time.unscaledTime + 10f;
+                        Plugin.Logger?.LogWarning("[Support.Tasked] Desk tick failed: " + e.Message);
+                    }
+                }
+            }
             if (now < nextTick) return;
             nextTick = now + 1f;
             spawner.RetryCleanup();

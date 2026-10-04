@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         Posted, Queued, Fired,
         Unavailable, NoCall, NotPosted, ClaimedByOther, Busy,
         LowCredit, Frozen, Locked, Cooldown, BirdBusy, UplinkDown,
-        DeliveryFailed, TimedOut, SceneEnded
+        DeliveryFailed, TimedOut, SceneEnded, Reopened
     }
 
     internal static class TaskedWords
@@ -35,9 +35,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case TaskedOutcome.Cooldown: return CallWords.Refusal(CallRefusal.Cooldown, seconds: detail);
                 case TaskedOutcome.BirdBusy: return "NEGATIVE: BIRD BUSY — WAIT FOR THE NEXT TASK";
                 case TaskedOutcome.UplinkDown: return "NEGATIVE: UPLINK DOWN — RESTORE THE SITE";
-                case TaskedOutcome.DeliveryFailed: return "NEGATIVE: DELIVERY FAILED — CR RETURNED, CLAIM AGAIN";
-                case TaskedOutcome.TimedOut: return "NEGATIVE: LAUNCH TIMED OUT — CR RETURNED, CLAIM AGAIN";
+                case TaskedOutcome.DeliveryFailed: return "NEGATIVE: LAUNCH FAILED — NOTHING CHARGED, CALL REOPENED";
+                case TaskedOutcome.TimedOut: return "NEGATIVE: LAUNCH TIMED OUT — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.SceneEnded: return "NEGATIVE: MISSION ENDED";
+                case TaskedOutcome.Reopened: return "NEGATIVE: CALL REOPENED — PRESS AGAIN";
                 default: return CallWords.Refusal(CallRefusal.Unavailable);
             }
         }
@@ -198,6 +199,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public TaskedResult Send(ulong player, int requestId, int[] markIds)
         {
+            try { return SendCore(player, requestId, markIds); }
+            catch (Exception e)
+            {
+                Warn("Send threw: " + e.Message);
+                return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+            }
+        }
+
+        private TaskedResult SendCore(ulong player, int requestId, int[] markIds)
+        {
             if (player == 0 || requestId <= 0) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
             var key = new Key(player, requestId, Kind.Send);
             if (receipts.TryGetValue(key, out Receipt known)) return known.Result.AsReplay();
@@ -222,6 +233,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         // ---- CLAIM -----------------------------------------------------------------------------
 
         public TaskedResult Claim(ulong player, int requestId, int callId, bool favorite = false)
+        {
+            try { return ClaimCore(player, requestId, callId, favorite); }
+            catch (Exception e)
+            {
+                Warn("Claim threw: " + e.Message);
+                return new TaskedResult(TaskedOutcome.Unavailable, callId, requestId);
+            }
+        }
+
+        private TaskedResult ClaimCore(ulong player, int requestId, int callId, bool favorite)
         {
             if (player == 0 || requestId <= 0) return new TaskedResult(TaskedOutcome.Unavailable, callId, requestId);
             var key = new Key(player, requestId, Kind.Claim);
@@ -269,72 +290,126 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             advancing = true;
             try
             {
-                for (int i = inflight.Count - 1; i >= 0; i--)
-                    if (i < inflight.Count && now >= inflight[i].LaunchedAt + TaskedBoard.LaunchSeconds) Fail(inflight[i], TaskedOutcome.TimedOut);
-                if (waiting.Count > 0 || now >= nextHousekeeping)
+                try
                 {
-                    nextHousekeeping = now + HousekeepingSeconds;
-                    profile?.Observe(ports.Humans, now);
-                    board.Prune(now);
+                    for (int i = inflight.Count - 1; i >= 0; i--)
+                        if (i < inflight.Count && now >= inflight[i].LaunchedAt + TaskedBoard.LaunchSeconds) Fail(inflight[i], TaskedOutcome.TimedOut);
+                    if (waiting.Count > 0 || now >= nextHousekeeping)
+                    {
+                        nextHousekeeping = now + HousekeepingSeconds;
+                        profile?.Observe(ports.Humans, now);
+                        board.Prune(now);
+                    }
                 }
+                catch (Exception e) { Warn("Housekeeping threw: " + e.Message); }
                 for (int i = waiting.Count - 1; i >= 0; i--)
                 {
                     if (i >= waiting.Count) continue;
                     Waiting queue = waiting[i];
-                    if (!board.TryGet(queue.CallId, out TaskedCall call))
+                    try
                     {
-                        waiting.RemoveAt(i);
-                        FinishAll(queue, TaskedOutcome.NoCall);
-                        continue;
+                        if (!board.TryGet(queue.CallId, out TaskedCall call))
+                        {
+                            waiting.RemoveAt(i);
+                            FinishAll(queue, TaskedOutcome.NoCall);
+                        }
+                        else if (now >= queue.FirstAt + TaskedBoard.ArbitrationSeconds)
+                        {
+                            waiting.RemoveAt(i);
+                            Arbitrate(queue, call, now);
+                        }
                     }
-                    if (now < queue.FirstAt + TaskedBoard.ArbitrationSeconds) continue;
-                    waiting.RemoveAt(i);
-                    if (!board.TryReserve(queue.CallId, now, out TaskedClaim claim)) { FinishAll(queue, TaskedOutcome.NoCall); continue; }
-                    Contender winner = null;
-                    for (int c = 0; c < queue.Contenders.Count; c++)
+                    catch (Exception e)
                     {
-                        Contender contender = queue.Contenders[c];
-                        if (contender.Pilot == claim.Pilot && contender.RequestId == claim.RequestId) { winner = contender; continue; }
-                        Finish(new Key(contender.Pilot, contender.RequestId, Kind.Claim), TaskedOutcome.ClaimedByOther, queue.CallId, 0, 0);
+                        Warn("Arbitration threw: " + e.Message);
+                        if (i < waiting.Count && ReferenceEquals(waiting[i], queue)) waiting.RemoveAt(i);
+                        FinishAll(queue, TaskedOutcome.Reopened); // contenders still pending; finished ones are untouched
                     }
-                    if (winner == null) { board.Release(claim); continue; }
-                    Start(winner, claim, call, now);
                 }
             }
             finally { advancing = false; }
         }
 
+        private void Arbitrate(Waiting queue, TaskedCall call, float now)
+        {
+            if (!board.TryReserve(queue.CallId, now, out TaskedClaim claim)) { FinishAll(queue, TaskedOutcome.NoCall); return; }
+            Contender winner = null;
+            for (int c = 0; c < queue.Contenders.Count; c++)
+                if (queue.Contenders[c].Pilot == claim.Pilot && queue.Contenders[c].RequestId == claim.RequestId) winner = queue.Contenders[c];
+            if (winner == null) { board.Release(claim); FinishAll(queue, TaskedOutcome.Reopened); return; }
+            bool launching = Start(winner, claim, call, now);
+            // Losers hear the truth only once the winner's outcome is known: held by a live launch, or the call reopened.
+            TaskedOutcome verdict = launching ? TaskedOutcome.ClaimedByOther : TaskedOutcome.Reopened;
+            for (int c = 0; c < queue.Contenders.Count; c++)
+                if (!ReferenceEquals(queue.Contenders[c], winner))
+                    Finish(new Key(queue.Contenders[c].Pilot, queue.Contenders[c].RequestId, Kind.Claim), verdict, queue.CallId, 0, 0);
+        }
+
         // ---- Launch ----------------------------------------------------------------------------
 
-        private void Start(Contender winner, in TaskedClaim claim, TaskedCall call, float now)
+        /// <summary>
+        /// Revalidate, reserve, escrow, begin launch, start the launcher. Fail-closed: any exception undoes exactly what
+        /// was taken. Returns true when the launch started (the winner holds the call), false when it was refused first.
+        /// </summary>
+        private bool Start(Contender winner, in TaskedClaim claim, TaskedCall call, float now)
         {
             var key = new Key(winner.Pilot, winner.RequestId, Kind.Claim);
-            // Revalidate everything the host decides, then take the money only after the bird is ours.
-            TaskedOutcome refusal = Judge(winner.Pilot, call, now, out int fee, out int detail);
-            if (refusal != TaskedOutcome.None) { board.Release(claim); Finish(key, refusal, call.Id, 0, detail); return; }
-            ITaskedSlot slot = ports.Reserve(winner.Pilot, call, out refusal);
-            if (slot == null) { board.Release(claim); Finish(key, refusal == TaskedOutcome.None ? TaskedOutcome.BirdBusy : refusal, call.Id, 0, 0); return; }
-            if (fee > 0 && !wallets.TrySpend(winner.Pilot, fee, now))
+            ITaskedSlot slot = null;
+            int spent = 0;
+            TaskedLaunchJob job = null;
+            try
             {
-                slot.Cancel(); board.Release(claim);
-                Finish(key, TaskedOutcome.LowCredit, call.Id, 0, fee);
-                return;
+                // Revalidate everything the host decides, then take the money only after the bird is ours.
+                TaskedOutcome refusal = Judge(winner.Pilot, call, now, out int fee, out int detail);
+                if (refusal != TaskedOutcome.None) { board.Release(claim); Finish(key, refusal, call.Id, 0, detail); return false; }
+                slot = ports.Reserve(winner.Pilot, call, out refusal);
+                if (slot == null) { board.Release(claim); Finish(key, refusal == TaskedOutcome.None ? TaskedOutcome.BirdBusy : refusal, call.Id, 0, 0); return false; }
+                if (fee > 0)
+                {
+                    if (!wallets.TrySpend(winner.Pilot, fee, now))
+                    {
+                        slot.Cancel(); board.Release(claim);
+                        Finish(key, TaskedOutcome.LowCredit, call.Id, 0, fee);
+                        return false;
+                    }
+                    spent = fee;
+                }
+                if (!board.BeginLaunch(claim, now))
+                {
+                    Undo(winner.Pilot, spent, slot, claim);
+                    Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0);
+                    return false;
+                }
+                job = new TaskedLaunchJob(this, slot, claim, call, winner.Pilot, winner.RequestId, fee, now);
+                inflight.Add(job);
             }
-            if (!board.BeginLaunch(claim, now))
+            catch (Exception e)
             {
-                if (fee > 0) wallets.Refund(winner.Pilot, fee);
-                slot.Cancel(); board.Release(claim);
-                Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0);
-                return;
+                Warn("Start threw: " + e.Message);
+                if (job != null) Fail(job, TaskedOutcome.DeliveryFailed);
+                else { Undo(winner.Pilot, spent, slot, claim); Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0); }
+                return false;
             }
-            var job = new TaskedLaunchJob(this, slot, claim, call, winner.Pilot, winner.RequestId, fee, now);
-            inflight.Add(job);
             try { launcher.Launch(job); }
             catch (Exception e)
             {
-                ports.Warn("[Support.Tasked] Launch threw: " + e.Message);
+                Warn("Launch threw: " + e.Message);
                 if (!job.Spawned) Fail(job, TaskedOutcome.DeliveryFailed);
             }
+            return true;
+        }
+
+        /// <summary>Returns exactly what a failed start took: the escrow, the bird and the claim. Each step is isolated.</summary>
+        private void Undo(ulong pilot, int spent, ITaskedSlot slot, in TaskedClaim claim)
+        {
+            if (spent > 0) try { wallets.Refund(pilot, spent); } catch (Exception e) { Warn("Refund threw: " + e.Message); }
+            if (slot != null) try { slot.Cancel(); } catch (Exception e) { Warn("Bird release threw: " + e.Message); }
+            try { board.Release(claim); } catch (Exception e) { Warn("Claim release threw: " + e.Message); }
+        }
+
+        private void Warn(string message)
+        {
+            try { ports.Warn("[Support.Tasked] " + message); } catch { }
         }
 
         internal bool CanLaunch(TaskedLaunchJob job)
@@ -358,10 +433,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             job.Final = true; job.Spawned = true;
             inflight.Remove(job);
             bool committed = false;
-            try { committed = job.Slot.Commit(); } catch (Exception e) { ports.Warn("[Support.Tasked] Bird commit threw: " + e.Message); }
-            if (!committed) ports.Warn("[Support.Tasked] Physical launch accepted but the bird commit was refused.");
-            Settle(job, now);
-            try { ports.Fired(job); } catch (Exception e) { ports.Warn("[Support.Tasked] Fired callback threw: " + e.Message); }
+            try { committed = job.Slot.Commit(); } catch (Exception e) { Warn("Bird commit threw: " + e.Message); }
+            if (!committed) Warn("Physical launch accepted but the bird commit was refused.");
+            // The rod is live and the board/bird are committed: a settlement fault is logged, never undone.
+            try { Settle(job, now); } catch (Exception e) { Warn("Settlement threw after a physical launch: " + e.Message); }
+            try { ports.Fired(job); } catch (Exception e) { Warn("Fired callback threw: " + e.Message); }
             Finish(new Key(job.Pilot, job.RequestId, Kind.Claim), TaskedOutcome.Fired, job.CallId, job.Escrow, 0);
             return true;
         }
@@ -378,9 +454,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (job.Final) return;
             job.Final = true;
             inflight.Remove(job);
-            if (job.Escrow > 0) wallets.Refund(job.Pilot, job.Escrow);
-            try { job.Slot.Cancel(); } catch (Exception e) { ports.Warn("[Support.Tasked] Bird release threw: " + e.Message); }
-            board.Release(job.Claim);
+            Undo(job.Pilot, job.Escrow, job.Slot, job.Claim);
             Finish(new Key(job.Pilot, job.RequestId, Kind.Claim), outcome, job.CallId, 0, 0);
         }
 
@@ -400,7 +474,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 try { hq += wallets.EarnContributor(payout.Player, faction, payout.Amount, now).Unapplied; }
                 catch (Exception e)
                 {
-                    ports.Warn("[Support.Tasked] Contributor payout threw: " + e.Message);
+                    Warn("Contributor payout threw: " + e.Message);
                     hq += payout.Amount;
                 }
             }
@@ -498,7 +572,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             else return;
             try { Resolved?.Invoke(key.Player, key.Request, result); }
-            catch (Exception e) { ports.Warn("[Support.Tasked] Resolved handler threw: " + e.Message); }
+            catch (Exception e) { Warn("Resolved handler threw: " + e.Message); }
         }
     }
 }
