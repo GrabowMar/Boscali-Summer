@@ -119,4 +119,25 @@ namespace WingPure.Tests
             TestAssert.That(Ribbons.Word(RibbonId.Kills10) == "10 KILLS", "word");
         }
     }
+
+    internal static class AckFeedTests
+    {
+        public static void Run()
+        {
+            var f = new AckFeed();
+            f.Push(10f, "#3", "CAP 41-07", true, null);
+            f.Push(11f, "#4", "ECM", false, "no pod");
+            TestAssert.That(f.Count == 2 && f.Newest(0).Who == "#4", "newest first");
+            TestAssert.That(f.Newest(1).Chip() == "#3 WILCO · CAP 41-07", "accepted chip words");
+            TestAssert.That(f.Newest(0).Chip() == "#4 UNABLE · NO POD", "refused chip uses the reason, upper case");
+            var chips = new AckLine[AckFeed.MaxChips];
+            TestAssert.That(f.Chips(12f, chips) == 2 && f.Chips(13.5f, chips) == 1 && f.Chips(20f, chips) == 0, "chips last 3 s");
+            // RingIsBounded (review focus 4)
+            for (int i = 0; i < 50; i++) f.Push(30f, "#2", "ORDER " + i, true, null);
+            TestAssert.That(f.Count == AckFeed.Capacity && f.Newest(0).What == "ORDER 49", "ring keeps the newest 16");
+            TestAssert.That(f.Newest(AckFeed.Capacity - 1).What == "ORDER 34", "oldest kept is the 16th newest");
+            TestAssert.That(f.Chips(30.5f, new AckLine[AckFeed.MaxChips]) == AckFeed.MaxChips, "at most two chips");
+            TestAssert.That(f.Newest(99).Who == null && f.Newest(-1).Who == null, "out of range is empty");
+        }
+    }
 }
