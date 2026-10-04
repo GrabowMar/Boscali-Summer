@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Support
             context.Services.TryGet(out IZoneFortificationService fortifications);
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
+            SpaceService space = context.AddSceneService<SpaceService>(51);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
@@ -40,6 +41,8 @@ namespace BoscaliSummer.Modules.Support
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
+            space.Configure(manager);
+            manager.AttachSpace(space);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);

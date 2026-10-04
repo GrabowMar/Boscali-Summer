@@ -51,6 +51,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
                 case SupportResult.RateLimited: return Refusal(CallRefusal.Busy);
                 case SupportResult.Duplicate: return "NEGATIVE: ALREADY HANDLED — CHECK THE CALL STATUS";
                 case SupportResult.CapabilityUnavailable: return "NEGATIVE: UNAVAILABLE ON THIS MAP — TRY ANOTHER CALL";
+                case SupportResult.UplinkDown: return "NEGATIVE: UPLINK DOWN — RESTORE THE SITE";
+                case SupportResult.BirdNotReady: return "NEGATIVE: BIRD BUSY — WAIT FOR THE NEXT TASK";
                 case SupportResult.SpawnFailed: return "NEGATIVE: DELIVERY FAILED — TRY AGAIN";
                 default: return Refusal(CallRefusal.Unavailable);
             }

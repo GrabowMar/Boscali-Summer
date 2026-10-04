@@ -179,7 +179,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         BreachRefused = 96,
 
         /// <summary>Retired with the old OPS; never reuse.</summary>
-        SpecOpsRefused = 128
+        SpecOpsRefused = 128,
+        UplinkDown = 129,
+        BirdNotReady = 130
     }
 
     /// <summary>

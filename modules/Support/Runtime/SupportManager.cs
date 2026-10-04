@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
 using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
@@ -60,6 +61,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private IPlayerPerks perks;
         private SupportNet network;
         private CreditService credits;
+        private SpaceService space;
+        private int sceneGeneration = 1;
         private float nextCreditTick;
         private float lastCreditTick;
         private ManualLogSource logger;
@@ -256,6 +259,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
+        int ISupportHost.SceneGeneration => sceneGeneration;
+        bool ISupportHost.TryGetSpaceState(FactionHQ owner, out SpaceState state) => TryGetSpaceState(owner, out state);
+
+        internal void AttachSpace(SpaceService service) => space = service;
+        internal bool TryGetSpaceState(FactionHQ owner, out SpaceState state)
+        {
+            state = null;
+            return space != null && space.TryGetState(owner, out state);
+        }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -285,6 +297,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void ResetForScene()
         {
+            sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
+            space?.ResetForScene();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
@@ -331,6 +345,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
             EarnKind kind = KindOf(type);
             if (kind == EarnKind.None) return;
+            if (kind == EarnKind.Capture) space?.Captured(player.HQ);
             float now = MissionNow();
             ulong id = PlayerIdentity.Of(player);
             bool repeat = kind == EarnKind.Kill && target != null &&
@@ -530,7 +545,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return false;
             ObjectiveCount census = credits.Census(player.HQ);
             float minutes = MissionNow() / 60f;
-            bool open = CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
+            SupportActionDefinition definition = catalog?.Find(id);
+            bool bootstrap = definition != null && definition.RequiredBird != SpaceBirdRequirement.None &&
+                space != null && space.Bootstrap(player.HQ, census.held, MissionNow());
+            bool open = bootstrap || CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
             if (!open) unlockText = CallFloors.NextUnlock(census.held, census.n, minutes, 1f);
             return open;
         }
@@ -852,19 +870,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ulong playerId = PlayerIdentity.Of(player);
             float now = MissionNow();
             bool bypass = BypassRequirements;
+            int scene = sceneGeneration;
 
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
             // Transport abuse limits keep wall time; gameplay cooldowns use mission time.
             if (!DisableCooldowns && ledger.IsRateLimited(playerId, Time.unscaledTime, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !HostAuthorised(player, action)) return SupportResult.NotUnlocked;
+            SpaceState spaceState = null;
+            if (action.RequiredBird != SpaceBirdRequirement.None)
+            {
+                if (!TryGetSpaceState(player.HQ, out spaceState)) return SupportResult.CapabilityUnavailable;
+                if (spaceState.LiveUplinkCount == 0) return SupportResult.UplinkDown;
+                if (!HasRequiredBird(spaceState, action.RequiredBird)) return SupportResult.CapabilityUnavailable;
+                if (action.SpaceTask.HasValue && !spaceState.CanStart(action.SpaceTask.Value, now)) return SupportResult.BirdNotReady;
+            }
             // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
             bool free = action.Id == SupportActionId.JtacUnlase;
             if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
                 return SupportResult.Cooldown;
 
-            var context = new SupportContext(
-                player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
@@ -872,10 +897,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!free)
             {
                 ObjectiveCount census = credits.Census(player.HQ);
-                if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
+                bool bootstrap = action.RequiredBird != SpaceBirdRequirement.None && space != null &&
+                    space.Bootstrap(player.HQ, census.held, missionNow);
+                if (!bypass && !bootstrap && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
                     return SupportResult.NotUnlocked;
-                if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
             }
+
+            SpaceActionTransaction transaction = null;
+            if (action.SpaceTask.HasValue)
+            {
+                if (spaceState == null || !spaceState.TryReserve(action.SpaceTask.Value, now, out SpaceTaskReservation receipt))
+                    return SupportResult.BirdNotReady;
+                transaction = new SpaceActionTransaction(space, player.HQ, spaceState, receipt, action.TaskSeconds);
+            }
+            if (!bypass && !free && !credits.TrySpend(player, cost, missionNow))
+            {
+                transaction?.Cancel();
+                return SupportResult.InsufficientAllocation;
+            }
+            var context = new SupportContext(player, new GlobalPosition(request.X, request.Y, request.Z),
+                request.RequestId, this, transaction);
+            if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
 
             SupportResult result;
             try { result = action.Action.Execute(context); }
@@ -884,8 +926,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 logger.LogError(e);
                 result = SupportResult.SpawnFailed;
             }
+            if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
+            if (transaction?.PhysicalLaunch == true) result = SupportResult.Accepted;
+            if (result == SupportResult.Accepted && transaction != null &&
+                (action.RequiresPhysicalLaunch ? !transaction.PhysicalLaunch : !transaction.Commit()))
+                result = SupportResult.SpawnFailed;
             if (result != SupportResult.Accepted)
             {
+                transaction?.Cancel();
                 if (!bypass && !free) credits.Refund(player, cost, missionNow);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
@@ -905,6 +953,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " CR." : "."));
             return SupportResult.Accepted;
         }
+
+        private static bool HasRequiredBird(SpaceState state, SpaceBirdRequirement requirement) => requirement switch
+        {
+            SpaceBirdRequirement.Optical => state.HasBird(BirdKind.Optical),
+            SpaceBirdRequirement.Radar => state.HasBird(BirdKind.Radar),
+            SpaceBirdRequirement.Kinetic => state.HasBird(BirdKind.Kinetic),
+            SpaceBirdRequirement.OpticalOrRadar => state.HasBird(BirdKind.Optical) || state.HasBird(BirdKind.Radar),
+            _ => requirement == SpaceBirdRequirement.None
+        };
 
         private bool HostAuthorised(Player player, SupportActionDefinition action) =>
             perks.Grants(PlayerIdentity.Of(player), action.Capability);
@@ -927,8 +984,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
                 return new CallQuote(0, "");
             ObjectiveCount census = credits.Census(player.HQ);
+            bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
+                TryGetSpaceState(player.HQ, out SpaceState state) && state.Family(MissionNow()) == SpaceFamilyState.Degraded;
             var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
-                false, null, false,
+                degraded, "UPLINK DOWN", false,
                 // Clients quote with the factor the host sent, so the panel matches what the host charges.
                 GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
                 GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,
@@ -942,7 +1001,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (owner == null) return fallbackJobs;
             if (strikeJobs.TryGetValue(owner, out int[] jobs)) return jobs;
-            if (strikeJobs.Count >= MaximumFactionPools) strikeJobs.Clear();
+            if (strikeJobs.Count >= MaximumFactionPools) return null;
             jobs = new int[2];
             strikeJobs.Add(owner, jobs);
             return jobs;
@@ -952,14 +1011,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             int[] jobs = JobsFor(owner);
             int index = (int)pool;
-            if (index < 0 || index >= jobs.Length || jobs[index] >= MaximumStrikeJobs) return false;
+            if (jobs == null || index < 0 || index >= jobs.Length || jobs[index] >= MaximumStrikeJobs) return false;
             jobs[index]++;
             return true;
         }
 
         void ISupportHost.Release(FactionHQ owner, SupportPool pool)
         {
-            int[] jobs = JobsFor(owner);
+            // Cleanup must never recreate a pool after ResetForScene.
+            if (owner == null || !strikeJobs.TryGetValue(owner, out int[] jobs)) return;
             int index = (int)pool;
             if (index >= 0 && index < jobs.Length && jobs[index] > 0) jobs[index]--;
         }

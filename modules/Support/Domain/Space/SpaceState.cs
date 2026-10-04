@@ -118,15 +118,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        public bool Commit(in SpaceTaskReservation reservation, float now, float taskSeconds)
+        public bool CanCommit(in SpaceTaskReservation reservation, float now, float taskSeconds)
         {
             if (!Owns(reservation, out int bird) || !SpaceRules.MissionTime(now) || Family(now) == SpaceFamilyState.Dark ||
                 now < birds[bird].ReservedAt || !SpaceRules.MissionTime(taskSeconds)) return false;
             float busyUntil = now + taskSeconds;
             float coolingUntil = now + SpaceRules.Cooldown(reservation.Task) * CooldownFactor;
-            if (!SpaceRules.Finite(busyUntil) || !SpaceRules.Finite(coolingUntil)) return false;
-            birds[bird] = new BirdSlot { BusyUntil = busyUntil };
-            cooldownUntil[(int)reservation.Task] = coolingUntil;
+            return SpaceRules.Finite(busyUntil) && SpaceRules.Finite(coolingUntil);
+        }
+
+        public bool Commit(in SpaceTaskReservation reservation, float now, float taskSeconds)
+        {
+            if (!CanCommit(reservation, now, taskSeconds)) return false;
+            SpaceRules.TryBird(reservation.Task, out BirdKind bird);
+            birds[(int)bird] = new BirdSlot { BusyUntil = now + taskSeconds };
+            cooldownUntil[(int)reservation.Task] = now + SpaceRules.Cooldown(reservation.Task) * CooldownFactor;
             return true;
         }
 

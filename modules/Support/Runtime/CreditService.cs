@@ -173,14 +173,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void SendIfChanged(Player player, ulong id, float now)
         {
+            // Presentation failure cannot turn an already-mutated host debit into a thrown transaction.
+            try { SendState(player, id, now); }
+            catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support.Credit] State mirror will retry: " + e.Message); }
+        }
+
+        private void SendState(Player player, ulong id, float now)
+        {
             int balance = (int)Ledger.Balance(id);
             int frozen = (int)Ledger.FrozenRemaining(id, now);
             (float ev, float silent) = PriceFactors != null ? PriceFactors(player) : (1f, 1f);
             float clock = Time.unscaledTime;
             if (sent.TryGetValue(id, out var last) && last.balance == balance && last.frozen == frozen &&
                 last.ev == ev && last.silent == silent && clock - last.at < ResendSeconds) return;
+            if (network == null) return;
+            if (!network.SendCredit(player, balance, frozen, ev, silent)) return;
             sent[id] = (balance, frozen, ev, silent, clock);
-            network?.SendCredit(player, balance, frozen, ev, silent);
         }
     }
 }

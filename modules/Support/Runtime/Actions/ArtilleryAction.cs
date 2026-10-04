@@ -39,69 +39,75 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
                 return SupportResult.StaleIntel;
             }
+            int scene = context.Host.SceneGeneration;
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
-            const int shots = 1;
-            var targets = new Vector3[shots];
-            for (int i = 0; i < shots; i++)
-            {
-                Vector2 miss = Random.insideUnitCircle * RodScatterMeters;
-                Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
-                targets[i] = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
-                    ? scattered : ground;
-            }
-            context.Logger.LogInfo("[Support] Rod from God: " + shots + " rod(s) released by OPS using " +
-                                   definition.jsonKey + ".");
-            context.Host.Run(Strike(context.Host, context.Player, context.Owner, definition, targets,
-                SupportNaming.Unique("Rod", context)));
-            return SupportResult.Accepted;
-        }
-
-        private static IEnumerator Strike(
-            ISupportHost host, Player player, FactionHQ owner, MissileDefinition definition,
-            Vector3[] targets, string unique)
-        {
+            Missile missile = null;
+            bool launched = false;
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             try
             {
-                Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-                if (spawner == null || owner == null) yield break;
-                string guide = player != null && player.Aircraft != null
-                    ? player.Aircraft.UniqueName
-                    : string.Empty;
-                var missiles = new Missile[targets.Length];
-                for (int i = 0; i < targets.Length; i++)
+                if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.UplinkDown;
+                Vector2 miss = Random.insideUnitCircle * RodScatterMeters;
+                Vector3 aim = ground + new Vector3(miss.x, 0f, miss.y);
+                Vector3 target = SupportTargeting.TryMapPoint(aim.ToGlobalPosition(), out Vector3 scattered)
+                    ? scattered : ground;
+                string guide = context.Player?.Aircraft != null ? context.Player.Aircraft.UniqueName : string.Empty;
+                missile = spawner.SpawnSavedMissile(definition.unitPrefab,
+                    (target + Vector3.up * ReleaseAltitude).ToGlobalPosition(), Quaternion.LookRotation(Vector3.down),
+                    context.Owner, string.Empty, guide, Vector3.down * ReleaseSpeed, SupportNaming.Unique("Rod", context) + ":0");
+                if (missile == null) return SupportResult.SpawnFailed;
+                missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
+                missile.Arm();
+                if (!context.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
+                launched = true;
+                // After the receipt, cosmetic failures cannot refund an already-live physical weapon.
+                try { Visuals.KineticRodStrikeVisuals.Track(missile, target); }
+                catch (System.Exception e) { context.Logger.LogWarning("[Support] Rod visual unavailable: " + e.Message); }
+                try { context.Host.Run(Flight(context.Host, context.Owner, missile, spawner, scene)); }
+                catch (System.Exception e)
                 {
-                    Vector3 target = targets[i];
-                    Missile missile = spawner.SpawnSavedMissile(
-                        definition.unitPrefab,
-                        (target + Vector3.up * ReleaseAltitude).ToGlobalPosition(),
-                        Quaternion.LookRotation(Vector3.down), owner, string.Empty, guide,
-                        Vector3.down * ReleaseSpeed, unique + ":" + i);
-                    missiles[i] = missile;
-                    if (missile != null)
-                    {
-                        missile.SetAimpoint(target.ToGlobalPosition(), Vector3.zero);
-                        missile.Arm();
-                        Visuals.KineticRodStrikeVisuals.Track(missile, target);
-                    }
-                    if (i + 1 < targets.Length) yield return new WaitForSeconds(0.35f);
+                    if (context.Host.SceneGeneration == scene) context.Host.Release(context.Owner, SupportPool.Strike);
+                    context.Logger.LogWarning("[Support] Native rod launched without cleanup coroutine: " + e.Message);
                 }
-                float deadline = Time.time + 30f;
-                while (Time.time < deadline)
-                {
-                    bool flying = false;
-                    for (int i = 0; i < missiles.Length; i++)
-                        flying |= missiles[i] != null && !missiles[i].disabled;
-                    if (!flying) break;
-                    yield return null;
-                }
-                for (int i = 0; i < missiles.Length; i++)
-                    if (missiles[i] != null && !missiles[i].disabled)
-                        spawner.ServerObjectManager.Destroy(missiles[i].gameObject); // Expiry is not an impact.
+                return SupportResult.Accepted;
             }
             finally
             {
-                host.Release(owner, SupportPool.Strike);
+                if (!launched)
+                {
+                    try
+                    {
+                        if (missile != null)
+                        {
+                            // Verified native disabled state prevents motor, collision, damage and detonation.
+                            try
+                            {
+                                missile.Networkdisabled = true;
+                                missile.gameObject.SetActive(false);
+                                if (spawner != null && spawner.IsServer && spawner.ServerObjectManager != null)
+                                    spawner.ServerObjectManager.Destroy(missile.gameObject);
+                            }
+                            finally { if (missile != null) UnityEngine.Object.Destroy(missile.gameObject); }
+                        }
+                    }
+                    finally { if (context.Host.SceneGeneration == scene) context.Host.Release(context.Owner, SupportPool.Strike); }
+                }
+            }
+        }
+
+        private static IEnumerator Flight(ISupportHost host, FactionHQ owner, Missile missile, Spawner spawner, int scene)
+        {
+            try
+            {
+                float deadline = SupportManager.MissionNow() + 30f;
+                while (SupportManager.MissionNow() < deadline && missile != null && !missile.disabled) yield return null;
+                if (missile != null && !missile.disabled && spawner != null && spawner.IsServer)
+                    spawner.ServerObjectManager.Destroy(missile.gameObject); // Expiry is not an impact.
+            }
+            finally
+            {
+                if (host.SceneGeneration == scene) host.Release(owner, SupportPool.Strike);
             }
         }
     }

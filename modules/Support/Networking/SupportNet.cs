@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// The host derives receipt time and limits pulses; the intent carries no credit or client timestamp.
         /// Older peers must not interpret the retired action and result ids.
         /// </summary>
-        internal const byte ProtocolVersion = 29;
+        internal const byte ProtocolVersion = 30;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -249,15 +249,17 @@ namespace BoscaliSummer.Modules.Support.Networking
         }
 
         /// <summary>Server to owner: the player's CR balance and wallet freeze.</summary>
-        internal void SendCredit(Player player, int balance, int frozenSeconds, float eventFactor, float silentFactor)
+        internal bool SendCredit(Player player, int balance, int frozenSeconds, float eventFactor, float silentFactor)
         {
             var message = new CreditStateMessage { Protocol = ProtocolVersion, Balance = balance, FrozenSeconds = frozenSeconds, EventFactor = eventFactor, SilentFactor = silentFactor };
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
             {
                 manager.ReceiveCredit(message); // the host's own player is served in-process
-                return;
+                return true;
             }
-            player?.Owner?.Send(message);
+            if (player?.Owner == null) return false;
+            player.Owner.Send(message);
+            return true;
         }
 
         /// <summary>Submits a cruise leg intent; validated and broadcast in-process on the server.</summary>

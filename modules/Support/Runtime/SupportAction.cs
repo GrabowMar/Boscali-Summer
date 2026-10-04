@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using NuclearOption.Networking;
 using UnityEngine;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
@@ -24,6 +25,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         SupportSettings Settings { get; }
         ManualLogSource Logger { get; }
         VanillaSupportCatalog Vanilla { get; }
+        int SceneGeneration { get; }
+        bool TryGetSpaceState(FactionHQ owner, out SpaceState state);
 
         bool TryReserve(FactionHQ owner, SupportPool pool);
         void Release(FactionHQ owner, SupportPool pool);
@@ -49,14 +52,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly GlobalPosition Target;
         public readonly int RequestId;
         public readonly ISupportHost Host;
+        public readonly SpaceActionTransaction SpaceTask;
 
-        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host)
+        public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
+            SpaceActionTransaction spaceTask = null)
         {
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;
             RequestId = requestId;
             Host = host;
+            SpaceTask = spaceTask;
         }
 
         public SupportSettings Settings => Host.Settings;
@@ -98,12 +104,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly string Description;
         public readonly string Capability;
         public readonly ISupportAction Action;
+        public readonly SpaceBirdRequirement RequiredBird;
+        public readonly BirdTask? SpaceTask;
+        public readonly float TaskSeconds;
+        public readonly bool RequiresPhysicalLaunch;
 
         private readonly ConfigEntry<bool> enabled;
 
         public SupportActionDefinition(
             SupportActionId id, string name, string description, string capability,
-            ConfigEntry<bool> enabled, ISupportAction action)
+            ConfigEntry<bool> enabled, ISupportAction action,
+            SpaceBirdRequirement requiredBird = SpaceBirdRequirement.None, BirdTask? spaceTask = null,
+            float taskSeconds = 0f, bool requiresPhysicalLaunch = false)
         {
             Id = id;
             Name = name;
@@ -111,6 +123,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Capability = capability;
             this.enabled = enabled;
             Action = action;
+            RequiredBird = requiredBird;
+            SpaceTask = spaceTask;
+            TaskSeconds = taskSeconds;
+            RequiresPhysicalLaunch = requiresPhysicalLaunch;
         }
 
         public bool Enabled => enabled == null || enabled.Value;
