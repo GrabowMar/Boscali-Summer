@@ -87,8 +87,8 @@ namespace BoscaliSummer.Core.Diagnostics
             ResetCounters();
             var targets = CollectTargets(deep);
             harmony = new Harmony(HarmonyId);
-            var prefix = new HarmonyMethod(AccessTools.Method(typeof(FootprintProfiler), nameof(Prefix)));
-            var finalizer = new HarmonyMethod(AccessTools.Method(typeof(FootprintProfiler), nameof(Finalizer)));
+            var prefix = new HarmonyMethod(typeof(FootprintProfiler).GetMethod(nameof(Prefix), BindingFlags.NonPublic | BindingFlags.Static));
+            var finalizer = new HarmonyMethod(typeof(FootprintProfiler).GetMethod(nameof(Finalizer), BindingFlags.NonPublic | BindingFlags.Static));
             instrumented = 0;
             failed = 0;
             foreach (var pair in targets)
