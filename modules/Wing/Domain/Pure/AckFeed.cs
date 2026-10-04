@@ -47,4 +47,17 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             return n;
         }
     }
+
+    /// <summary>The "who" of an ack chip: WING, an element letter, or #n (+k for more members). Kind is ScopeKind as a byte
+    /// (0 wing, 1 element, 2 members); firstNumber is the first member's #n, 0 when unknown.</summary>
+    internal static class AckWords
+    {
+        public static string Who(byte kind, int element, int firstNumber, int memberCount)
+        {
+            if (kind == 1 && element >= 0 && element < 4) return ((char)('A' + element)).ToString();
+            if (kind != 2) return "WING";
+            if (firstNumber <= 0) return memberCount + " AC";
+            return "#" + firstNumber + (memberCount > 1 ? " +" + (memberCount - 1) : "");
+        }
+    }
 }

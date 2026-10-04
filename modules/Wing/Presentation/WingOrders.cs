@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static OrderResult Run(WingOrder o)
         {
             OrderResult r = OrderExecutor.Execute(o);
+            WingAcks.Push(o, r);
             string text = r.Accepted ? r.Ack : r.Reason;
             if (!string.IsNullOrEmpty(text)) WingToast.Show(text);
             return r;

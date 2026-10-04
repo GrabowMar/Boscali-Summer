@@ -158,4 +158,16 @@ namespace WingPure.Tests
             TestAssert.That(ChordResolver.Resolve(true, true, false, '4').Kind == ChordKind.None, "typing swallows chords");
         }
     }
+
+    internal static class AckWordsTests
+    {
+        public static void Run()
+        {
+            TestAssert.That(AckWords.Who(0, 0, 0, 0) == "WING", "wing scope");
+            TestAssert.That(AckWords.Who(1, 1, 0, 0) == "B" && AckWords.Who(1, 9, 0, 0) == "WING", "element letter; bad element reads wing");
+            TestAssert.That(AckWords.Who(2, 0, 3, 1) == "#3", "one member");
+            TestAssert.That(AckWords.Who(2, 0, 3, 3) == "#3 +2", "several members");
+            TestAssert.That(AckWords.Who(2, 0, 0, 2) == "2 AC", "members without a known number");
+        }
+    }
 }
