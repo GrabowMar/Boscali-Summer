@@ -77,6 +77,10 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private int nextLineId = 1;
         private float nextTraceRefresh;
         private float nextBuildAttempt;
+        // One planning attempt in flight, stepped inside PlanBudgetMs per frame.
+        private const double PlanBudgetMs = 2.0;
+        private TrenchPlanner.PlanJob planJob;
+        private int planMaximum;
         private float nextSimulationTick;
         private float nextSeedDelay;
         private float nextGrowthWarning;
@@ -210,6 +214,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
 
         public void ResetForScene()
         {
+            planJob = null;
             foreach (var work in works.Values) work.Remove();
             works.Clear();
             foreach (var garrison in garrisons.Values) garrison.Remove();
@@ -270,18 +275,26 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (Datum.origin == null) return;
             if (Time.unscaledTime < nextSeedDelay) return;
 
-            if (Time.unscaledTime >= nextTraceRefresh)
+            if (planJob != null)
             {
-                nextTraceRefresh = Time.unscaledTime + TraceRefreshSeconds;
-                RebuildFactionList();
-                RefreshTraces();
-                RefreshAirfields();
+                // The trace cursor stays frozen until the attempt in flight lands.
+                if (TrenchPlanner.StepPlan(planJob, PlanBudgetMs)) FinishBuild();
             }
-            int maximum = Math.Min(MaximumActiveLines, settings.MaxTrenchPositions.Value);
-            if (lines.Count < maximum && Time.unscaledTime >= nextBuildAttempt)
+            else
             {
-                nextBuildAttempt = Time.unscaledTime + BuildAttemptSeconds;
-                TryBuildOne(maximum);
+                if (Time.unscaledTime >= nextTraceRefresh)
+                {
+                    nextTraceRefresh = Time.unscaledTime + TraceRefreshSeconds;
+                    RebuildFactionList();
+                    RefreshTraces();
+                    RefreshAirfields();
+                }
+                int maximum = Math.Min(MaximumActiveLines, settings.MaxTrenchPositions.Value);
+                if (lines.Count < maximum && Time.unscaledTime >= nextBuildAttempt)
+                {
+                    nextBuildAttempt = Time.unscaledTime + BuildAttemptSeconds;
+                    TryBuildOne(maximum);
+                }
             }
 
             float now = Time.time;
@@ -464,9 +477,22 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (TrenchRoadIndex.EnsureBuilt())
                 roadAt = (x, z) => TrenchRoadIndex.TryDistance(x, z, TrenchTraceMath.RoadClearDistance,
                     out float ditch) ? ditch : float.NaN;
-            bool planned = TrenchPlanner.TryPlanWindow(nextLineId, owner.name + "_Front_" + nextLineId, owner,
+            planJob = TrenchPlanner.BeginPlanWindow(nextLineId, owner.name + "_Front_" + nextLineId, owner,
                 tracePressure[trace], tracePoints, offset, length, windowStart, territory,
-                out TrenchLine line, out int next, out TrenchRefusal refusal, foliageAt, roadAt, airfieldX, airfieldZ, airfieldCount);
+                foliageAt, roadAt, airfieldX, airfieldZ, airfieldCount);
+            planMaximum = maximum;
+        }
+
+        /// <summary>The rest of one attempt, once its plan has finished stepping.</summary>
+        private void FinishBuild()
+        {
+            TrenchPlanner.PlanJob job = planJob;
+            planJob = null;
+            int maximum = planMaximum;
+            bool planned = job.Planned;
+            TrenchLine line = job.Line;
+            int next = job.NextStation;
+            TrenchRefusal refusal = job.Refusal;
             if (!planned)
             {
                 NotePlanRefusal(refusal);
@@ -652,7 +678,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 }
 
                 if (suppressed) line.NextGrowthAt = Math.Max(line.NextGrowthAt, garrison.SuppressedUntil);
-                if (!advancedOne && TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
+                if (!advancedOne && planJob == null && TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
                 {
                     advancedOne = true;
                     line.NextGrowthAt = now + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
