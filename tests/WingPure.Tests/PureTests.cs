@@ -140,4 +140,22 @@ namespace WingPure.Tests
             TestAssert.That(f.Newest(99).Who == null && f.Newest(-1).Who == null, "out of range is empty");
         }
     }
+
+    internal static class ChordResolverTests
+    {
+        public static void Run()
+        {
+            TestAssert.That(ChordResolver.Resolve(false, false, false, '1').Kind == ChordKind.None, "no wing key no chord");
+            Chord s = ChordResolver.Resolve(true, false, false, '4');
+            TestAssert.That(s.Kind == ChordKind.Stance && s.Index == 3, "wing+4 is stance slot 4");
+            TestAssert.That(ChordResolver.Resolve(true, false, false, '7').Kind == ChordKind.None, "7 is not a stance");
+            Chord o = ChordResolver.Resolve(true, false, false, 'z');
+            TestAssert.That(o.Kind == ChordKind.Order && o.Index == 8, "wing+Z is the ninth command-card key (CAP)");
+            TestAssert.That(ChordResolver.Resolve(true, false, false, '!').Kind == ChordKind.None, "unmapped key is nothing");
+            Chord l = ChordResolver.Resolve(true, false, true, '0');
+            TestAssert.That(l.Kind == ChordKind.Ladder && l.Index == 0, "digits walk the open ladder");
+            // TypingSwallowsChords (review focus 5)
+            TestAssert.That(ChordResolver.Resolve(true, true, false, '4').Kind == ChordKind.None, "typing swallows chords");
+        }
+    }
 }
