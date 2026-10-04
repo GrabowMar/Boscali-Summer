@@ -354,7 +354,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
             EarnKind kind = KindOf(type);
             if (kind == EarnKind.None) return;
-            if (kind == EarnKind.Capture) space?.Captured(player.HQ);
             float now = MissionNow();
             ulong id = PlayerIdentity.Of(player);
             bool repeat = kind == EarnKind.Kill && target != null &&
@@ -554,10 +553,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return false;
             ObjectiveCount census = credits.Census(player.HQ);
             float minutes = MissionNow() / 60f;
-            SupportActionDefinition definition = catalog?.Find(id);
-            bool bootstrap = definition != null && definition.RequiredBird != SpaceBirdRequirement.None &&
-                space != null && space.Bootstrap(player.HQ, census.held, MissionNow());
-            bool open = bootstrap || CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
+            bool open = CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
             if (!open) unlockText = CallFloors.NextUnlock(census.held, census.n, minutes, 1f);
             return open;
         }
@@ -906,9 +902,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!free)
             {
                 ObjectiveCount census = credits.Census(player.HQ);
-                bool bootstrap = action.RequiredBird != SpaceBirdRequirement.None && space != null &&
-                    space.Bootstrap(player.HQ, census.held, missionNow);
-                if (!bypass && !bootstrap && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
+                if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
                     return SupportResult.NotUnlocked;
             }
 

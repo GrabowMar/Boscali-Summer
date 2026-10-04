@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public const int MaxCalls = 12, MaxMarks = 6, MaxClaimants = 128;
         public const int MaxConsumedTokens = MaxCalls * MaxMarks + SpaceContacts.MaxMarks;
-        public const float CallSeconds = 600f, ArbitrationSeconds = .2f, ReservationSeconds = 2f;
+        public const float CallSeconds = 600f, ArbitrationSeconds = .2f, ReservationSeconds = 2f, LaunchSeconds = 30f;
         private enum Status : byte { Available, Reserved, Launching }
 
         private readonly struct Contender
@@ -259,7 +259,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             SyncContacts();
             if (!SpaceRules.MissionTime(now) || !TryClaim(claim, out Entry entry) || !entry.Call.Valid(now)) return false;
             return entry.Status == Status.Reserved ? now >= entry.ReservedAt && now < claim.ReservationExpiresAt :
-                entry.Status == Status.Launching && now >= entry.LaunchAt;
+                entry.Status == Status.Launching && now >= entry.LaunchAt && now < entry.LaunchAt + LaunchSeconds;
         }
 
         public bool BeginLaunch(in TaskedClaim claim, float now)
@@ -274,7 +274,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             SyncContacts();
             if (!SpaceRules.MissionTime(now) || !TryClaim(claim, out Entry entry) ||
-                entry.Status != Status.Launching || now < entry.LaunchAt) return false;
+                entry.Status != Status.Launching || now < entry.LaunchAt || now >= entry.LaunchAt + LaunchSeconds) return false;
             calls.Remove(claim.CallId);
             if (fired < int.MaxValue) fired++;
             return true;
@@ -294,7 +294,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             foreach (var pair in calls)
             {
                 Entry entry = pair.Value;
-                if (entry.Status == Status.Launching) continue;
+                // LAUNCHING outlives the 2 s reservation but not LaunchSeconds: a launch that never reports a receipt
+                // is released (escrow handled by the caller) and the post returns to Available or expires normally.
+                if (entry.Status == Status.Launching)
+                {
+                    if (now < entry.LaunchAt + LaunchSeconds) continue;
+                    ResetClaim(entry);
+                }
                 if (now >= entry.Call.ExpiresAt) expiredCalls.Add(pair.Key);
                 else if (entry.Status == Status.Reserved && now >= entry.Claim.ReservationExpiresAt) ResetClaim(entry);
             }

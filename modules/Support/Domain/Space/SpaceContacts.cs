@@ -4,6 +4,7 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
     internal enum ContactClass : byte { EnemyGround, Neutral, Friendly, Decoy, PlayerAircraft }
+    // Capacity is retained for id stability but Mark never returns it: it would reveal that an id is admitted.
     internal enum MarkVerdict : byte { NoContact, Confirmed, Neutral, Friendly, Decoy, RateLimited, Capacity }
 
     internal readonly struct SpaceMark
@@ -150,14 +151,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (retired || player == 0 || !SpaceRules.MissionTime(now)) return MarkVerdict.NoContact;
             Prune(now);
             bool admitted = reveals.TryGetValue(id, out SpaceContact contact) && now >= contact.ObservedAt;
+            // No verdict before the quota check may depend on whether the id is admitted, or probing leaks live ids.
             if (!players.TryGetValue(player, out PlayerRecord record))
             {
-                if (players.Count >= MaxPlayers) return admitted ? MarkVerdict.Capacity : MarkVerdict.NoContact;
+                if (players.Count >= MaxPlayers) return MarkVerdict.NoContact;
                 players[player] = record = new PlayerRecord();
             }
-            bool permitted = record.Attempt(now);
+            if (!record.Attempt(now)) return MarkVerdict.RateLimited;
             if (!admitted) return MarkVerdict.NoContact;
-            if (!permitted) return MarkVerdict.RateLimited;
             if (contact.Classification != ContactClass.EnemyGround)
             {
                 record.AddEffort(-2);
@@ -171,7 +172,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             if (confirmed.TryGetValue(id, out int generation) && generation == contact.ObservationGeneration)
                 return marks.ContainsKey(id) ? MarkVerdict.Confirmed : MarkVerdict.NoContact;
-            if (marks.Count >= MaxMarks && !marks.ContainsKey(id)) return MarkVerdict.Capacity;
+            // A full table answers NO CONTACT: Capacity here would confirm the id is a live enemy contact. The
+            // faction's live MARK count is public state the feed shows without any per-id verdict.
+            if (marks.Count >= MaxMarks && !marks.ContainsKey(id)) return MarkVerdict.NoContact;
             float lifetime = contact.Moving ? MovingMarkSeconds : StaticMarkSeconds;
             if (!Deadline(now, lifetime, out float expiresAt)) return MarkVerdict.NoContact;
             var mark = new SpaceMark(id, contact.X, contact.Z, contact.Moving, expiresAt, contact.Source);

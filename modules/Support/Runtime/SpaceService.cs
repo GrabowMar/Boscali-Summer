@@ -20,8 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public Unit[] Links;
             public float[] Baseline;
             public IReadOnlyList<Unit> View;
-            public bool Bootstrap;
-            public Action<Airbase> CaptureHandler;
+            public bool Field;
             public SpaceObservations Observations;
         }
         private readonly struct Candidate
@@ -50,7 +49,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 pair.Value.State.Clear();
                 pair.Value.Observations?.Dispose();
-                if (pair.Value.CaptureHandler != null) pair.Key.onAirbaseAdded -= pair.Value.CaptureHandler;
             }
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
             factions.Clear();
@@ -78,18 +76,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int OpenWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
             float minimumSpeed, float maximumSpeed) =>
             ObservationsFor(owner)?.Open(point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
-
-        internal bool Bootstrap(FactionHQ owner, int heldObjectives, float now)
-        {
-            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
-            if (heldObjectives > 0 || now >= 600f) faction.Bootstrap = false;
-            return faction.Bootstrap;
-        }
-
-        internal void Captured(FactionHQ owner)
-        {
-            if (owner != null && factions.TryGetValue(owner, out FactionSpace faction)) faction.Bootstrap = false;
-        }
 
         public SpaceFamilyState ReadFamily(FactionHQ owner, float now) =>
             TryGetState(owner, out SpaceState state) ? state.Family(now) : SpaceFamilyState.Dark;
@@ -125,7 +111,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     factions.Add(hq, faction);
                     Plugin.Logger?.LogInfo("[Support.Space] " + hq.name + ": " + faction.Links.Length +
-                        " native uplink(s), OPTICAL / RADAR / KINETIC ready" + (faction.Bootstrap ? " [FIELD]" : "."));
+                        " native uplink(s), OPTICAL / RADAR / KINETIC ready" + (faction.Field ? " [FIELD site]" : "."));
                 }
                 break; // Expensive initial world sampling is limited to one faction per mission second.
             }
@@ -177,7 +163,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
             }
             if (links.Count == 0) BorrowAfloat(owner, span.magnitude, links);
-            bool bootstrap = false;
+            bool fromOrigin = false;
             if (links.Count == 0 && UnitRegistry.allUnits != null)
             {
                 // Native stored spawn origins are only candidates; terrain/mission/ownership rules still apply.
@@ -191,7 +177,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (unit is Aircraft) origin.y = Datum.LocalSeaY + 100f;
                     if (!GroundPlacement.DryGround(origin, out _) || !TryAround(owner, origin, null, span.magnitude, out Candidate field)) continue;
                     Create(owner, field, links);
-                    if (links.Count > 0) { bootstrap = true; break; }
+                    if (links.Count > 0) { fromOrigin = true; break; }
                 }
             }
             if (links.Count == 0) return false;
@@ -199,13 +185,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
-                View = Array.AsReadOnly(array), Bootstrap = bootstrap, Observations = new SpaceObservations(owner) };
-            if (bootstrap)
-            {
-                FactionSpace captured = faction;
-                captured.CaptureHandler = _ => captured.Bootstrap = false;
-                owner.onAirbaseAdded += captured.CaptureHandler;
-            }
+                View = Array.AsReadOnly(array), Field = fromOrigin, Observations = new SpaceObservations(owner) };
             return true;
         }
 

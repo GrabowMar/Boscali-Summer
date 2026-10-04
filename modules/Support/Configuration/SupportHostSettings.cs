@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Images a scene and reveals stationary ground contacts. Spawns nothing.")
                 .Toggle(2, settings.FortifyEnabled, "ZONE FORTIFICATION",
                     "Reinforce a friendly controlled zone. Refused, and nothing charged, when defenders cannot be placed.")
-                .Toggle(3, settings.ArtilleryEnabled, "ROD FROM GOD",
+                .Toggle(3, settings.ArtilleryEnabled, "ORBITAL ROD",
                     "Orbital kinetic strike: one high-velocity projectile onto the mark.")
                 .Toggle(4, settings.EmpEnabled, "EMP SHOCK",
                     "High-altitude airburst: the prompt pulse upsets electronics, the geomagnetic phase jams radars across a wide area.")
