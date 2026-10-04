@@ -99,8 +99,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly Dictionary<ulong, PlayerRecord> players = new Dictionary<ulong, PlayerRecord>();
         private readonly List<int> expired = new List<int>(MaxReveals);
         private int nextGeneration;
+        private int stateGeneration = 1;
+        private bool retired;
 
         public int Count => reveals.Count;
+        public int Generation => retired ? 0 : stateGeneration;
         public int MarkCount => marks.Count;
         public int PlayerCount => players.Count;
         public int ConfirmedObservationCount => confirmed.Count;
@@ -109,7 +112,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool Reveal(int id, ContactClass classification, int typeId, float x, float z, bool moving,
             float now, BirdKind source = BirdKind.Optical)
         {
-            if (id <= 0 || typeId < 0 || (byte)classification >= (byte)ContactClass.PlayerAircraft ||
+            if (retired || id <= 0 || typeId < 0 || (byte)classification >= (byte)ContactClass.PlayerAircraft ||
                 !Coordinate(x) || !Coordinate(z) || !SpaceRules.MissionTime(now) ||
                 !Deadline(now, RevealSeconds, out _) || (source != BirdKind.Optical && source != BirdKind.Radar)) return false;
             Prune(now);
@@ -144,7 +147,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public MarkVerdict Mark(ulong player, int id, float now, bool recentInput)
         {
-            if (player == 0 || !SpaceRules.MissionTime(now)) return MarkVerdict.NoContact;
+            if (retired || player == 0 || !SpaceRules.MissionTime(now)) return MarkVerdict.NoContact;
             Prune(now);
             bool admitted = reveals.TryGetValue(id, out SpaceContact contact) && now >= contact.ObservedAt;
             if (!players.TryGetValue(player, out PlayerRecord record))
@@ -211,6 +214,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void Clear()
         {
             reveals.Clear(); confirmed.Clear(); marks.Clear(); players.Clear(); expired.Clear();
+            if (stateGeneration == int.MaxValue) retired = true;
+            else stateGeneration++;
             // Observation ids never restart inside this object; old immutable provenance cannot match a new observation.
         }
 
