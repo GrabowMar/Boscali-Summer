@@ -865,9 +865,9 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Session.Networking.SessionHello", new[] { "Protocol:System.Byte", "Version:System.String" }),
     ("BoscaliSummer.Modules.Session.Networking.HostSettingsMessage", new[] { "Protocol:System.Byte", "Version:System.String", "Flags:System.Byte", "Keys:System.String[]", "Values:System.String[]" }),
     ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityQuery", new[] { "Protocol:System.Byte" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontQuery", new[] { "Protocol:System.Byte" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontIntent", new[] { "Protocol:System.Byte", "Kind:System.Byte", "Posture:System.Byte", "Id:System.Int32", "Revision:System.Int32" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "Faction:System.String", "Fronts:BoscaliSummer.Core.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Core.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Core.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
+    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontQuery", new[] { "Protocol:System.Byte", "Session:System.Int32" }),
+    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontIntent", new[] { "Protocol:System.Byte", "Kind:System.Byte", "Posture:System.Byte", "Id:System.Int32", "Revision:System.Int32", "RequestId:System.Int32", "Session:System.Int32", "HostEpoch:System.Int32" }),
+    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "HasSnapshot:System.Boolean", "Session:System.Int32", "HostEpoch:System.Int32", "Faction:System.String", "Fronts:BoscaliSummer.Core.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Core.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Core.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
     ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single", "FieldSets:System.Byte", "FieldSalt:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldFrontTurn:System.Byte" }),
@@ -877,7 +877,7 @@ foreach (var contract in new[] {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;
     string[] actual = type.GetFields(BindingFlags.Public | BindingFlags.Instance).OrderBy(field => field.MetadataToken)
         .Select(field => field.Name + ":" + field.FieldType.FullName).ToArray();
-    if (!actual.SequenceEqual(contract.Item2)) throw new InvalidOperationException(contract.Item1 + " wire fields changed");
+    if (!actual.SequenceEqual(contract.Item2)) throw new InvalidOperationException(contract.Item1 + " wire fields changed: " + string.Join("|", actual));
 }
 ProbeOperationSerialization(pluginAssembly, mirageAssembly);
 ProbeSquadSerialization(pluginAssembly, mirageAssembly);
@@ -1263,7 +1263,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 28)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 32)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -1314,13 +1314,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)28); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)32); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)28); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)32); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -1331,7 +1331,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type creditType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", true)!;
     object credit = Activator.CreateInstance(creditType)!;
-    Set(credit, "Protocol", (byte)28); Set(credit, "Balance", 420);
+    Set(credit, "Protocol", (byte)32); Set(credit, "Balance", 420);
     Set(credit, "FrozenSeconds", 12); Set(credit, "EventFactor", 1.5f); Set(credit, "SilentFactor", 0.8f);
     Roundtrip(creditType, credit, "owner credit state");
     // Request parsing preserves its header; the host rejects it in Evaluate after decoding.
@@ -1347,7 +1347,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type waypointType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseWaypointMessage", true)!;
     object waypoint = Activator.CreateInstance(waypointType)!;
-    Set(waypoint, "Protocol", (byte)28); Set(waypoint, "RequestId", 913);
+    Set(waypoint, "Protocol", (byte)32); Set(waypoint, "RequestId", 913);
     Set(waypoint, "X", 1234.5f); Set(waypoint, "Z", -3456.5f); Set(waypoint, "Clear", true);
     object waypointBack = Roundtrip(waypointType, waypoint, "cruise waypoint");
     if ((int)Get(waypointBack, "RequestId") != 913 || !(bool)Get(waypointBack, "Clear"))
@@ -1357,7 +1357,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type legsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseLegsMessage", true)!;
     object legs = Activator.CreateInstance(legsType)!;
-    Set(legs, "Protocol", (byte)28); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
+    Set(legs, "Protocol", (byte)32); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
     Set(legs, "Result", (byte)1); Set(legs, "FactionName", "BOSCALI"); Set(legs, "LegCount", (byte)2);
     Set(legs, "X", new float[] { 1000f, 2000f, 0f, 0f, 0f, 0f });
     Set(legs, "Z", new float[] { -1000f, -2000f, 0f, 0f, 0f, 0f });
@@ -1370,7 +1370,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     if ((byte)Get(Decode(legsType, new byte[] { 18 }), "Protocol") != 18)
         throw new InvalidOperationException("Cruise legs did not leave an old header unread");
 
-    Console.WriteLine("  Support protocol-28 serializers: requests, results, owner credits, cruise waypoints/legs and retired-header rejection");
+    Console.WriteLine("  Support protocol-32 serializers: requests, results, owner credits, cruise waypoints/legs and retired-header rejection");
 }
 
 static void ProbeEventsSerialization(Assembly plugin, Assembly mirage)
@@ -1806,16 +1806,16 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("TheaterOps did not reject an old intent header");
 
     Type livingNet = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontNet", true)!;
-    if ((byte)livingNet.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 1)
+    if ((byte)livingNet.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 2)
         throw new InvalidOperationException("Living Front protocol changed without updating its probe");
     livingNet.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type livingQueryType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontQuery", true)!;
     object livingQuery = Activator.CreateInstance(livingQueryType)!;
-    Set(livingQuery, "Protocol", (byte)1);
+    Set(livingQuery, "Protocol", (byte)2); Set(livingQuery, "Session", 5);
     Roundtrip(livingQueryType, livingQuery, "living query");
     Type livingIntentType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontIntent", true)!;
     object livingIntent = Activator.CreateInstance(livingIntentType)!;
-    Set(livingIntent, "Protocol", (byte)1); Set(livingIntent, "Kind", (byte)0);
+    Set(livingIntent, "Protocol", (byte)2); Set(livingIntent, "RequestId", 11); Set(livingIntent, "Session", 5); Set(livingIntent, "HostEpoch", 3); Set(livingIntent, "Kind", (byte)0);
     Set(livingIntent, "Posture", (byte)0); Set(livingIntent, "Id", 7);
     Set(livingIntent, "Revision", 4);
     Roundtrip(livingIntentType, livingIntent, "living intent");
@@ -1826,7 +1826,7 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
     frontArray.SetValue(front, 0);
     Type livingSnapshotType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", true)!;
     object livingSnapshot = Activator.CreateInstance(livingSnapshotType)!;
-    Set(livingSnapshot, "Protocol", (byte)1); Set(livingSnapshot, "Posture", (byte)1);
+    Set(livingSnapshot, "Protocol", (byte)2); Set(livingSnapshot, "HasSnapshot", true); Set(livingSnapshot, "Session", 5); Set(livingSnapshot, "HostEpoch", 3); Set(livingSnapshot, "Posture", (byte)1);
     Set(livingSnapshot, "Faction", "Coalition"); Set(livingSnapshot, "Fronts", frontArray);
     Set(livingSnapshot, "Proposals", Array.CreateInstance(
         plugin.GetType("BoscaliSummer.Core.Contracts.TheaterProposalView", true)!, 0));
@@ -1838,7 +1838,7 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Living Front snapshot did not roundtrip");
 
     Console.WriteLine("  TheaterOps protocol-3 serializers: query, active priority, clear sentinel, operation board, board clear, old-header rejection, influence intent, director state, director log");
-    Console.WriteLine("  Living Front protocol-1 serializers: faction snapshot, front, query, and validated intent roundtrip");
+    Console.WriteLine("  Living Front protocol-2 serializers: faction snapshot, front, query, and validated intent roundtrip");
 }
 
 sealed class ProbeSignatureNames : ISignatureTypeProvider<string, object>
