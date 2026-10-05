@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// Protocol 35 adds OPERATIONS: four SpaceCommand kinds (OpFund, OpPlan, OpCancel, OpSync; a domain and a tier, a kind and an opaque target id, never a price or a faction) and the
         /// OpsStateMessage (own bars and satellites, enemy pings only, ASAT flights for everyone).
         /// </summary>
-        internal const byte ProtocolVersion = 35;
+        internal const byte ProtocolVersion = 36;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;

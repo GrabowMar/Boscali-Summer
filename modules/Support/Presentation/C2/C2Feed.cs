@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private CallsController calls;
         private object faction;
         private bool creditPrimed, spacePrimed;
-        private int cyberSeq = -1, sofSeq = -1, opsSeq = -1, opsPingSeq = -1;
+        private int cyberSeq = -1, sofSeq = -1, opsSeq = -1, opsPingSeq = -1, watchSeq = -1;
         private float lastCredit, pendingDelta, nextCredit, nextTick, nextThreatLine, lastDeltaAt;
         private int lastDelta;
         private byte lastLive, lastTotal;
@@ -65,7 +65,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             console.Clear();
             notices.Reset();
             creditPrimed = spacePrimed = false;
-            cyberSeq = -1; sofSeq = -1; opsSeq = opsPingSeq = -1;
+            cyberSeq = -1; sofSeq = -1; opsSeq = opsPingSeq = watchSeq = -1;
             pendingDelta = 0f;
             nextCredit = nextTick = 0f;
             lastThreat = "";
@@ -182,11 +182,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void Ops(float wall)
         {
             OpsMirror mirror = manager.OpsMirror;
-            if (!mirror.Known || !mirror.State.Active) { opsSeq = opsPingSeq = -1; return; }
-            int newest = 0, newestPing = 0;
+            if (!mirror.Known || !mirror.State.Active) { opsSeq = opsPingSeq = watchSeq = -1; return; }
+            int newest = 0, newestPing = 0, newestWatch = 0;
             foreach (OpsEventRow e in mirror.State.Events) newest = Mathf.Max(newest, e.Seq);
             foreach (OpsPingRow p in mirror.State.Pings) newestPing = Mathf.Max(newestPing, p.Seq);
-            if (opsSeq < 0) { opsSeq = newest; opsPingSeq = newestPing; return; }
+            foreach (WatchLogRow l in mirror.State.Log) newestWatch = Mathf.Max(newestWatch, l.Seq);
+            if (opsSeq < 0) { opsSeq = newest; opsPingSeq = newestPing; watchSeq = newestWatch; return; }
+            // WATCH OFFICER OVERLORD's own actions, each with the reason it gave (the faction's own console only: the enemy learns of them through traces, pings and real sensing).
+            foreach (WatchLogRow l in mirror.State.Log)
+                if (l.Seq > watchSeq) console.Add(WatchWords.Domain(l.Domain) + " · " + WatchWords.Line(l), C2Tone.Info, wall);
+            watchSeq = Mathf.Max(watchSeq, newestWatch);
             foreach (OpsEventRow e in mirror.State.Events)
             {
                 if (e.Seq <= opsSeq) continue;

@@ -63,12 +63,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public readonly List<OpsPingRow> Pings = new List<OpsPingRow>();
         public readonly List<OpsEventRow> Events = new List<OpsEventRow>();
         public readonly List<OpsFlightRow> Flights = new List<OpsFlightRow>();
+        /// <summary>The last OVERLORD actions of the viewer's own faction (a reason code and two arguments each): the console reads them. Never another faction's.</summary>
+        public readonly List<WatchLogRow> Log = new List<WatchLogRow>();
 
         public OpsStateData Clone()
         {
             var c = new OpsStateData { Protocol = Protocol, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
-            c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights);
+            c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Log.AddRange(Log);
             return c;
         }
 
@@ -82,7 +84,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public bool SameAs(OpsStateData o)
         {
             if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown ||
-                Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count) return false;
+                Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Log.Count != o.Log.Count) return false;
             for (int i = 0; i < BirdPercent.Length; i++) if (BirdPercent[i] != o.BirdPercent[i]) return false;
             for (int i = 0; i < Rows.Count; i++)
             {
@@ -94,6 +96,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < Pings.Count; i++)
                 if (Pings[i].Seq != o.Pings[i].Seq || Pings[i].Detail != o.Pings[i].Detail || Pings[i].Phase != o.Pings[i].Phase || Pings[i].Kind != o.Pings[i].Kind || (Pings[i].Name ?? "") != (o.Pings[i].Name ?? "")) return false;
             for (int i = 0; i < Events.Count; i++) if (Events[i].Seq != o.Events[i].Seq) return false;
+            for (int i = 0; i < Log.Count; i++) if (Log[i].Seq != o.Log[i].Seq) return false;
             for (int i = 0; i < Flights.Count; i++)
                 if (Flights[i].Id != o.Flights[i].Id || !SpaceMirror.SamePoint(Flights[i].X, o.Flights[i].X) || !SpaceMirror.SamePoint(Flights[i].Z, o.Flights[i].Z) ||
                     !SpaceMirror.SameExpiry(Flights[i].EndsAt, o.Flights[i].EndsAt)) return false;
@@ -101,11 +104,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
     }
 
-    /// <summary>Engine-free OPERATIONS state codec (protocol 35). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
+    /// <summary>Engine-free OPERATIONS state codec (protocol 36). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class OpsWire
     {
-        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxName = 12;
-        private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8;
+        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxName = 12, MaxLog = WatchLogRing.Capacity;
+        private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinLogBytes = 4;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
 
         public static void WriteState(ISpaceWriter w, OpsStateData s)
@@ -158,6 +161,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 SpaceWire.WriteExpiry(w, f.EndsAt, s.Now);
                 w.WriteByte(f.Seconds);
             }
+            n = Math.Min(s.Log.Count, MaxLog);
+            w.WriteByte((byte)n);
+            for (int i = 0; i < n; i++)
+            {
+                WatchLogRow l = s.Log[i];
+                SpaceWire.WriteVar(w, (uint)Math.Max(0, l.Seq));
+                w.WriteByte((byte)((int)l.Domain | ((int)l.Code << 2)));
+                w.WriteByte(l.A); w.WriteByte(l.B);
+            }
         }
 
         public static OpsStateData ReadState(ISpaceReader r, byte protocol)
@@ -205,6 +217,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                     !SpaceWire.ReadExpiry(r, now, out float ends) || !r.TryReadByte(out byte seconds)) return Bad();
                 s.Flights.Add(new OpsFlightRow { Id = id, X = x, Z = z, EndsAt = ends <= now ? 0f : ends, Seconds = seconds });
             }
+            if (!r.TryReadByte(out n) || n > MaxLog || r.Remaining < n * MinLogBytes) return Bad();
+            for (int i = 0; i < n; i++)
+            {
+                if (!SpaceWire.ReadInt(r, out int lseq) || lseq <= 0 || !r.TryReadByte(out byte bits) || (bits & 3) > (int)WatchDomain.Ops ||
+                    (bits >> 2) < (int)WatchCode.CyberHop || (bits >> 2) > (int)WatchCode.OpFund || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b)) return Bad();
+                s.Log.Add(new WatchLogRow { Seq = lseq, Domain = (WatchDomain)(bits & 3), Code = (WatchCode)(bits >> 2), A = a, B = b });
+            }
             return s;
         }
 
@@ -239,7 +258,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public bool Apply(OpsStateData d, byte protocol, float clientNow)
         {
             if (d == null || d.Protocol != protocol || d.Seq <= 0 || d.Seq <= Floor || !SpaceRules.MissionTime(clientNow)) return false;
-            if (d.Rows.Count > OpsWire.MaxRows || d.Pings.Count > OpsWire.MaxPings || d.Events.Count > OpsWire.MaxEvents || d.Flights.Count > OpsWire.MaxFlights) return false;
+            if (d.Rows.Count > OpsWire.MaxRows || d.Pings.Count > OpsWire.MaxPings || d.Events.Count > OpsWire.MaxEvents || d.Flights.Count > OpsWire.MaxFlights || d.Log.Count > OpsWire.MaxLog) return false;
             float offset = clientNow - d.Now;
             OpsStateData copy = d.Clone();
             copy.Now = clientNow;

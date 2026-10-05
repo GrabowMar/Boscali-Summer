@@ -1,14 +1,15 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Tests.Features.Support
 {
-    /// <summary>M6a protocol 35: OPERATIONS commands and replies, the faction-only state, its mirror, subscriptions, notices and words.</summary>
+    /// <summary>M6a/M6b protocol 36: OPERATIONS commands and replies, the faction-only state, its mirror, subscriptions, notices and words.</summary>
     internal static class OpsWireTests
     {
-        private const byte P = 35;
+        private const byte P = 36;
 
         private sealed class BufW : ISpaceWriter
         {
@@ -88,6 +89,9 @@ namespace BoscaliSummer.Tests.Features.Support
             s.Events.Add(new OpsEventRow { Seq = 7, Kind = OpEventKind.Execute, Domain = OpDomain.Cyber, Op = OpKind.Asat });
             s.Events.Add(new OpsEventRow { Seq = 8, Kind = OpEventKind.Broken, Domain = OpDomain.Sof, Op = OpKind.Fob });
             s.Flights.Add(new OpsFlightRow { Id = 3, X = 5000f, Z = -2000f, EndsAt = 560f, Seconds = 60 });
+            s.Log.Add(new WatchLogRow { Seq = 4, Domain = WatchDomain.Cyber, Code = WatchCode.CyberHop, A = (byte)NodeKind.SamC2, B = 0 });
+            s.Log.Add(new WatchLogRow { Seq = 5, Domain = WatchDomain.Sof, Code = WatchCode.SofSabotage, A = 5, B = 65 });
+            s.Log.Add(new WatchLogRow { Seq = 130, Domain = WatchDomain.Ops, Code = WatchCode.OpFund, A = (byte)OpKind.ZeroDay, B = 64 });
             return s;
         }
 
@@ -107,6 +111,11 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(r.Pings.Count, 3, "pings"); Eq(r.Pings[0].Name, "BOSCALI", "ping name"); Eq(r.Pings[1].Phase, OpPingPhase.Execute, "ping phase");
             TestAssert.That(r.Pings[2].Phase == OpPingPhase.Loss && r.Pings[2].Detail == 2, "a loss ping names the bird");
             Eq(r.Events.Count, 2, "events"); Eq(r.Events[1].Kind, OpEventKind.Broken, "event kind"); Eq(r.Events[1].Domain, OpDomain.Sof, "event domain");
+            Eq(r.Log.Count, 3, "OVERLORD log rows");
+            TestAssert.That(r.Log[0].Seq == 4 && r.Log[0].Domain == WatchDomain.Cyber && r.Log[0].Code == WatchCode.CyberHop && r.Log[0].A == 1 && r.Log[0].B == 0, "log row 0");
+            TestAssert.That(r.Log[1].Domain == WatchDomain.Sof && r.Log[1].Code == WatchCode.SofSabotage && r.Log[1].A == 5 && r.Log[1].B == 65, "log row 1");
+            TestAssert.That(r.Log[2].Seq == 130 && r.Log[2].Domain == WatchDomain.Ops && r.Log[2].Code == WatchCode.OpFund, "a sequence over 127 survives the varint");
+            Eq(WatchWords.Line(r.Log[1]), "OVERLORD · SABOTAGE EW TRUCK — B-1, ODDS 65 %", "the console words come from the mirrored row alone");
             Eq(r.Flights.Count, 1, "flights"); TestAssert.That(r.Flights[0].Id == 3 && r.Flights[0].Seconds == 60 && Math.Abs(r.Flights[0].EndsAt - 560f) < 0.2f, "flight");
             TestAssert.That(r.TryRow(OpDomain.Sof, out OpsRow sof) && sof.Kind == OpKind.Fob && !new OpsStateData().TryRow(OpDomain.Cyber, out _), "TryRow finds a domain");
 
@@ -120,6 +129,15 @@ namespace BoscaliSummer.Tests.Features.Support
             byte[] bad = (byte[])bytes.Clone(); // header: P, flags, seq (1 byte), now (4) => the bird mask is byte 7
             bad[7] = 0x08;
             Eq(OpsWire.ReadState(new BufR(bad), P).Protocol, (byte)0, "a bird mask above 7 is refused");
+            // A log row with a domain or a code that does not exist is refused whole, never guessed at.
+            byte[] logBytes = Sta(s);
+            int logAt = logBytes.Length - 13; // rows of 4, 4 and 5 bytes (the third sequence needs a two-byte varint): the first row starts here
+            byte[] badDomain = (byte[])logBytes.Clone(); badDomain[logAt + 1] = (byte)(3 | ((int)WatchCode.CyberHop << 2));
+            Eq(OpsWire.ReadState(new BufR(badDomain), P).Protocol, (byte)0, "log domain 3 is refused");
+            byte[] badCode = (byte[])logBytes.Clone(); badCode[logAt + 1] = (byte)(0 | (63 << 2));
+            Eq(OpsWire.ReadState(new BufR(badCode), P).Protocol, (byte)0, "an unknown reason code is refused");
+            byte[] zeroSeq = (byte[])logBytes.Clone(); zeroSeq[logAt] = 0;
+            Eq(OpsWire.ReadState(new BufR(zeroSeq), P).Protocol, (byte)0, "log sequence 0 is refused");
             var worst = Full();
             while (worst.Pings.Count < 4) worst.Pings.Add(new OpsPingRow { Kind = OpKind.Fob, Phase = OpPingPhase.Half, Seq = 10 + worst.Pings.Count, Until = 600f, Name = "ABCDEFGHIJKL" });
             while (worst.Events.Count < 3) worst.Events.Add(new OpsEventRow { Seq = 20, Kind = OpEventKind.Half, Domain = OpDomain.Cyber, Op = OpKind.ZeroDay });
@@ -136,6 +154,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(mirror.State.Now, 520f, "re-based onto the client clock");
             TestAssert.That(Math.Abs(mirror.State.Rows[0].EndsAt - 568f) < 0.01f && Math.Abs(mirror.State.Pings[0].Until - 580f) < 0.01f && Math.Abs(mirror.State.Flights[0].EndsAt - 580f) < 0.01f, "deadlines shift by the clock offset");
             TestAssert.That(!mirror.BirdUp(BirdKind.Optical) && mirror.BirdUp(BirdKind.Radar) && !mirror.BirdUp(BirdKind.Kinetic), "dead birds read from the mask");
+            TestAssert.That(mirror.State.Log.Count == 3 && mirror.State.Log[2].Seq == 130, "the log rides the mirror");
             TestAssert.That(!mirror.Apply(s, P, 521f), "the same sequence is dropped");
             s.Seq = 8;
             TestAssert.That(!mirror.Apply(s, P, 521f), "an older sequence is dropped");
