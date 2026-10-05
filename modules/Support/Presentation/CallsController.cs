@@ -193,7 +193,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 case PostStatus.Stale: Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution); return false;
                 case PostStatus.Launching: Say(TaskedWords.Of(TaskedOutcome.ClaimedByOther), AvUiCue.Caution); return false;
             }
-            if (state.Gate != TaskedOutcome.None)
+            if (state.Gate != TaskedOutcome.None && post.Domain != TaskedDomain.Cyber) // the headline gate is the rod's: a CYBER package has no bird
             {
                 int detail = SpaceMirror.GateIsDeadline(state.Gate) ? Mathf.Max(1, state.GateDetail - Mathf.FloorToInt(now)) : state.GateDetail;
                 Say(TaskedWords.Of(state.Gate, detail), AvUiCue.Caution);

@@ -549,19 +549,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
             int points = post.Points != null ? post.Points.Length : 0;
-            string label = CallSheet.TryGet(post.Action, out CallRow row) ? row.Label : "TASKED";
+            string label = TaskedKinds.Label(post.Action);
+            bool cyber = post.Domain == TaskedDomain.Cyber;
             string longTitle = label + " · " + points + " TARGET" + (points == 1 ? "" : "S") + (post.Payoff > 0 ? " · PAYOFF " + post.Payoff + " CR" : "");
             BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
             int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
             // The source is who posted it: OVERLORD (the watch officer), an OPERATOR by name, or your own call.
-            string sub = (source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
+            string sub = (cyber ? "NET" : source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
                 (post.WatchOfficer ? "OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
                 (left / 60) + ":" + (left % 60).ToString("00");
             var card = new FeedCardView
             {
                 Present = true, PostId = post.CallId, Title = label + " · " + points + " TGT", Chip = post.Payoff > 0 ? "+" + post.Payoff + " CR" : "",
-                Sub = sub, Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true, Button = "CLAIM"
+                Sub = sub, Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true, Button = "CLAIM", Slab = TaskedKinds.Slab(post.Domain)
             };
+            if (cyber) card.Title = label;
             string detail;
             if (status == PostStatus.Stale) { card.State = "STALE"; detail = "STALE · NO LONGER OPEN"; card.Tone = AvState.Inert; card.Enabled = false; card.Price = ""; card.Button = "CLOSED"; }
             else if (calls != null && calls.TaskedPending && calls.ClaimingPost == post.CallId)
@@ -574,7 +576,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             else if (calls != null && calls.ArmedTasked == post.CallId)
             { card.State = "ARMED"; detail = "ARMED — PRESS EXECUTE AGAIN TO FIRE"; card.Tone = AvState.Caution; card.Armed = true; card.Button = "EXECUTE"; }
-            else if (state.Gate != TaskedOutcome.None)
+            else if (state.Gate != TaskedOutcome.None && !cyber) // the gate is the rod's (a busy KINETIC bird): a CYBER package has no bird
             { card.State = GateShort(state); detail = GateWord(state); card.Tone = AvState.Caution; } // still pressable: the press answers with the host's NEGATIVE words
             else if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
             { card.State = "LOW CR"; detail = "NEED " + post.Price + " CR"; card.Tone = AvState.Danger; }

@@ -38,6 +38,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool Present, Armed, Enabled;
         public int PostId;
         public string Title, Chip, Sub, Price, State, Detail, Button;
+        /// <summary>The domain slab of the post (SPC, CYB, SOF); empty reads SPC.</summary>
+        public string Slab;
         public AvState Tone;
     }
 

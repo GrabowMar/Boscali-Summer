@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 if (!on) continue;
                 ids[i] = c.PostId;
                 rows[i].Armed = c.Armed;
-                rows[i].Set("SPC", c.Title, c.Chip, AvState.Ready, c.Sub, c.Price, c.State, c.Tone, c.Button,
+                rows[i].Set(string.IsNullOrEmpty(c.Slab) ? "SPC" : c.Slab, c.Title, c.Chip, AvState.Ready, c.Sub, c.Price, c.State, c.Tone, c.Button,
                     c.Armed ? AvButtonStyle.Danger : c.Enabled && c.Tone == AvState.Ready ? AvButtonStyle.Primary : AvButtonStyle.Default, c.Enabled);
                 rows[i].SetHelp(c.Detail, "");
                 if (rows[i].Primary.Help != c.Detail) rows[i].Primary.Help = c.Detail;
