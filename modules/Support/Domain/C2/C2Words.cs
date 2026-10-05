@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
     internal enum C2Tone : byte { Info, Warn, Danger }
     internal enum C2Tab : byte { Cap = 1, Orbit = 2, Net = 3, Sof = 4, Board = 5 }
     /// <summary>The cockpit HUD notices that wear a C2 strip: a new TASKED post, an inbound warning, the enemy intent.</summary>
-    internal enum C2HudKind : byte { Tasked, Inbound, Intent }
+    internal enum C2HudKind : byte { Tasked, Inbound, Intent, CyberHeld, CyberTraced }
 
     /// <summary>Words for the SATCOM C2 terminal. Session, key rotation and auth codes are cosmetic and deterministic.</summary>
     internal static class C2Words
@@ -75,10 +75,11 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
 
         /// <summary>The 14 px strip word above a HUD notice: <c>C2 // TASKED // NEW POST</c>, <c>C2 // INBOUND</c>, <c>C2 // INT</c>.</summary>
         public static string HudStrip(C2HudKind kind) =>
-            kind == C2HudKind.Tasked ? "C2 // TASKED // NEW POST" : kind == C2HudKind.Inbound ? "C2 // INBOUND" : "C2 // INT";
+            kind == C2HudKind.Tasked ? "C2 // TASKED // NEW POST" : kind == C2HudKind.Inbound ? "C2 // INBOUND" :
+            kind == C2HudKind.CyberHeld ? "C2 // CYBER // NODE HELD" : kind == C2HudKind.CyberTraced ? "C2 // CYBER // TRACED" : "C2 // INT";
 
         /// <summary>The tone of that strip: caution for a post, danger for an inbound warning, info for intent.</summary>
         public static C2Tone HudStripTone(C2HudKind kind) =>
-            kind == C2HudKind.Tasked ? C2Tone.Warn : kind == C2HudKind.Inbound ? C2Tone.Danger : C2Tone.Info;
+            kind == C2HudKind.Tasked || kind == C2HudKind.CyberHeld ? C2Tone.Warn : kind == C2HudKind.Inbound || kind == C2HudKind.CyberTraced ? C2Tone.Danger : C2Tone.Info;
     }
 }

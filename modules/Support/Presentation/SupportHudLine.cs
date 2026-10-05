@@ -1,5 +1,6 @@
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
@@ -22,6 +23,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private CallsController calls;
         private SupportManager manager;
         private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
+        private readonly CyberNoticeTracker cyberNotices = new CyberNoticeTracker();
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
@@ -74,6 +76,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             float now = SupportManager.MissionNow();
             // Mission time restarted (a new scene): a notice from the old clock must not linger.
             if (noticeText != null && noticeUntil - now > SpaceNoticeTracker.ToastSeconds + 0.5f) noticeText = null;
+            CyberNoticeKind cyber = cyberNotices.Observe(manager.CyberMirror.Known, manager.CyberMirror.State, now, quiet);
+            if (cyber != CyberNoticeKind.None)
+            {
+                noticeText = cyber == CyberNoticeKind.Traced ? "INTRUSION TRACED · EW TRUCK REVEALED" : "NODE HELD · HOLD EFFECT RUNNING";
+                noticeKind = cyber == CyberNoticeKind.Traced ? C2HudKind.CyberTraced : C2HudKind.CyberHeld;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(cyber == CyberNoticeKind.Traced ? AvUiCue.Caution : AvUiCue.Confirm);
+            }
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;
             noticeText = notice.Text;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using TMPro;
@@ -33,6 +34,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public AimSource Aim;
         public string AimGrid = "";
         public int LastDelta;
+        /// <summary>The faction's CYBER state as the mirror last heard it (null state or <see cref="CyberKnown"/> false: nothing heard yet).</summary>
+        public CyberStateData Cyber;
+        public bool CyberKnown;
     }
 
     /// <summary>

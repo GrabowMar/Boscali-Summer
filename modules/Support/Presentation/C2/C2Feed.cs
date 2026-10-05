@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.C2;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using NuclearOption.Networking;
@@ -23,6 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private CallsController calls;
         private object faction;
         private bool creditPrimed, spacePrimed;
+        private int cyberSeq = -1;
         private float lastCredit, pendingDelta, nextCredit, nextTick, nextThreatLine, lastDeltaAt;
         private int lastDelta;
         private byte lastLive, lastTotal;
@@ -61,6 +63,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             console.Clear();
             notices.Reset();
             creditPrimed = spacePrimed = false;
+            cyberSeq = -1;
             pendingDelta = 0f;
             nextCredit = nextTick = 0f;
             lastThreat = "";
@@ -95,6 +98,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
             Credit(wall);
             Space();
+            Cyber(wall);
             if (watching) Threat(wall);
         }
 
@@ -134,6 +138,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
             SpaceNotice notice = notices.Observe(true, state, SupportManager.MissionNow(), false);
             if (notice.Kind != SpaceNoticeKind.None) console.Add(notice.Text, C2Tone.Info, Time.unscaledTime);
+        }
+
+        /// <summary>One console line per new CYBER event of the faction (real intrusion events only); the first sight of a mirror is silent.</summary>
+        private void Cyber(float wall)
+        {
+            CyberMirror mirror = manager.CyberMirror;
+            if (!mirror.Known) { cyberSeq = -1; return; }
+            int newest = 0;
+            foreach (CyberEventRow e in mirror.State.Events) newest = Mathf.Max(newest, e.Seq);
+            if (cyberSeq < 0) { cyberSeq = newest; return; }
+            foreach (CyberEventRow e in mirror.State.Events)
+            {
+                if (e.Seq <= cyberSeq) continue;
+                bool bad = e.Kind == CyberEventKind.Traced || (e.Kind == CyberEventKind.Released && e.Reason != IntrusionEnd.Burned && e.Reason != IntrusionEnd.Dropped);
+                console.Add("CYBER · " + CyberNetWords.EventLine(e, SupportManager.MissionNow()) + (e.Own ? "" : " · TEAM"), bad ? C2Tone.Warn : C2Tone.Info, wall);
+            }
+            cyberSeq = Mathf.Max(cyberSeq, newest);
         }
 
         private void Threat(float wall)

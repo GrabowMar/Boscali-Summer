@@ -4,6 +4,7 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BepInEx.Configuration;
@@ -248,6 +249,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void OnSpaceReply(SpaceReply reply)
         {
+            if (reply.Kind >= SpaceCommandKind.CyberHop && reply.Kind <= SpaceCommandKind.CyberDrop)
+            {
+                // A CYBER verdict (HOP / BURN / DROP): its words reach the console and the NET footer; a refusal also cautions.
+                CyberResult verdict = new CyberResult(reply.CyberVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
             if (reply.Kind != SpaceCommandKind.ClaimTasked || reply.RequestId != claimRequest || claimRequest == 0) return;
             bool launching = TryFindPost(claimPost, out FeedPost post) && post.Launching;
             TaskedReceiptState state = TaskedReceipts.State(reply.Tasked, launching);

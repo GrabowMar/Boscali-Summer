@@ -8,6 +8,7 @@ using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -52,7 +53,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private C2Footer footer;
         private CapPage cap;
         private BoardPage boardPage;
-        private DomainOfflinePage netPage, sofPage;
+        private CyberNetPage netPage;
+        private DomainOfflinePage sofPage;
         private C2Tab tab = C2Tab.Cap;
         private int sceneGeneration;
 
@@ -87,9 +89,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             footer = null;
             cap = null;
             boardPage = null;
-            netPage = sofPage = null;
+            netPage = null;
+            sofPage = null;
             spacePanel = null;
             tab = C2Tab.Cap;
+            manager?.SetCyberWanted(false);
             sceneGeneration++;
             c2.Clear();
             chromeKey = footerKey = "";
@@ -308,7 +312,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvLay.Place(spacePanel.Rect, 0f, 0f, Width, pageH);
             ticker.Register(spacePanel);
             feed?.AttachCompact(spacePanel);
-            netPage = new DomainOfflinePage(pages[(int)C2Tab.Net - 1], Width, pageH, CallFamily.Cyber, calls, p => t.Register(p));
+            netPage = new CyberNetPage(pages[(int)C2Tab.Net - 1], Width, pageH, calls, p => t.Register(p),
+                id => manager?.CyberHop(id), id => manager?.CyberBurn(id), id => manager?.CyberDrop(id));
             sofPage = new DomainOfflinePage(pages[(int)C2Tab.Sof - 1], Width, pageH, CallFamily.Sof, calls, p => t.Register(p));
             boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
             feed?.AttachBoard(boardPage);
@@ -349,6 +354,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void SelectTab(C2Tab next)
         {
             tab = next;
+            manager?.SetCyberWanted(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i] != null) pages[i].gameObject.SetActive(i == (int)next - 1);
             chromeKey = footerKey = "";
@@ -409,6 +415,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.Aim = calls.AimNow;
             view.AimGrid = AimGridNow();
             view.LastDelta = c2.LastDelta;
+            view.Cyber = manager.CyberMirror.State;
+            view.CyberKnown = manager.CyberMirror.Known;
             FillChrome(view);
         }
 
@@ -479,7 +487,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintChrome(C2Tab t, CapView v)
         {
             string key = string.Concat((int)t, "|", v.Faction, "|", v.Alert, "|", v.Credit, "|", v.Callsign, "|", v.Session, "|", v.KeyRot, "|",
-                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles));
+                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1);
             if (key == chromeKey) return;
             chromeKey = key;
 
@@ -487,7 +495,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool alert = v.Alert.Length > 0;
             chrome.SetBanner(C2Words.Banner(v.Faction, area), alert ? AvState.Danger : AvState.Caution);
             string title, sub;
-            if (t == C2Tab.Net) { title = "NETWORK OPERATIONS"; sub = "NO EW ASSETS ONLINE"; }
+            if (t == C2Tab.Net) { title = "NETWORK OPERATIONS"; sub = CyberNetWords.Sub(v.CyberKnown ? v.Cyber : null); }
             else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = "NO TEAMS RAISED"; }
             else if (t == C2Tab.Board) { title = "TASKED BOARD"; sub = "LIVE POSTS · " + v.BoardCount; }
             else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SENSOR, TRACK FILE, TASKED"; }
@@ -528,10 +536,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             {
                 // The domain is offline, but its real CALL rows work: a refusal from one of them replaces the standing (info) words.
                 string said = v.Words ?? "";
-                bool refused = C2Cap.StartsNegative(said);
+                string standing = (tab == C2Tab.Net ? netPage?.Words : sofPage?.Words) ?? "";
+                bool refused = C2Cap.StartsNegative(said) || C2Cap.StartsNegative(standing); // the page's own standing words may be a NEGATIVE too (CYBER OFFLINE)
                 slab = refused ? "NEG" : "INFO";
                 tone = refused ? AvState.Danger : AvState.Info;
-                words = refused ? said : (tab == C2Tab.Net ? netPage : sofPage)?.Words ?? "";
+                words = C2Cap.StartsNegative(said) ? said : standing;
             }
             else { slab = "INT"; tone = AvState.Info; words = ""; }
             // ABORT rides the footer on every page that has no abort of its own (CAP has one in the EXECUTE box) while a call is armed.
