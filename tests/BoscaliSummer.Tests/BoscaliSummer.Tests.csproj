@@ -16,6 +16,7 @@
     <Compile Include="..\..\modules\Support\Domain\Calls\*.cs" LinkBase="Features\Support\Calls" />
     <Compile Include="..\..\modules\Support\Domain\Space\*.cs" LinkBase="Features\Support\Space" />
     <Compile Include="..\..\modules\Support\Domain\Cyber\*.cs" LinkBase="Features\Support\Cyber" />
+    <Compile Include="..\..\modules\Support\Domain\Sof\*.cs" LinkBase="Features\Support\Sof" />
     <Compile Include="..\..\modules\Support\Domain\C2\*.cs" LinkBase="Features\Support\C2" />
     <Compile Include="..\..\Core\Contracts\FxBudget.cs" Link="Framework\FxBudget.cs" />
     <Compile Include="..\..\Core\Contracts\IWeatherView.cs" Link="Framework\IWeatherView.cs" />

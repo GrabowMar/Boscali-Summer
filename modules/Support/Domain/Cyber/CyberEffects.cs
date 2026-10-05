@@ -6,7 +6,7 @@ using BoscaliSummer.Modules.Support.Runtime;
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     /// <summary>What a held node or a fired package does to the enemy. Stable values (they never cross the wire, but logs and tests name them).</summary>
-    internal enum EffectKind : byte { RadarJam = 0, SamBlock = 1, HoldFire = 2, RelaySilence = 3, BirdJam = 4, TraceBoost = 5 }
+    internal enum EffectKind : byte { RadarJam = 0, SamBlock = 1, HoldFire = 2, RelaySilence = 3, BirdJam = 4, TraceBoost = 5, TraceCut = 6 }
 
     internal enum EffectSource : byte { Hold = 0, Package = 1 }
 
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     internal sealed class CyberEffectBook
     {
         public const int Capacity = 32;
-        public const float RadarFactor = 0.4f, BirdCooldownFactor = 1.5f, BirdOpticalFactor = 0.5f, TraceBoostFactor = 1.3f, SamReacquireSeconds = 10f;
+        public const float RadarFactor = 0.4f, BirdCooldownFactor = 1.5f, BirdOpticalFactor = 0.5f, TraceBoostFactor = 1.3f, TraceCutFactor = 0.7f, SamReacquireSeconds = 10f;
         private readonly List<CyberEffect> effects = new List<CyberEffect>(Capacity);
 
         public int Count => effects.Count;
@@ -147,6 +147,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// <summary>Trace multiplier for intrusions of <paramref name="intruder"/> (an enemy holds its data center node).</summary>
         public float TraceFactor(int intruder, float now) => Any(EffectKind.TraceBoost, intruder, now) ? TraceBoostFactor : 1f;
 
+        /// <summary>Trace multiplier of <paramref name="intruder"/> after a SOF NETWORK TAP on the enemy network (-30 %); 1 when none runs.</summary>
+        public float TraceCut(int intruder, float now) => Any(EffectKind.TraceCut, intruder, now) ? TraceCutFactor : 1f;
+
         private bool Any(EffectKind kind, int victim, float now)
         {
             for (int i = 0; i < effects.Count; i++)
@@ -236,6 +239,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                     return new CyberEffect(EffectKind.TraceBoost, EffectSource.Hold, node.Id, owner, node.Victim, node.X, node.Z, 0f, 0u, CyberEffectBook.TraceBoostFactor, float.PositiveInfinity);
             }
         }
+
+        /// <summary>A SOF NETWORK TAP (spec 2.3): the owner's own intrusions trace 30 % slower for <paramref name="seconds"/>. It lives in the owner's own book, victim = owner.</summary>
+        public static CyberEffect Tap(int owner, int sourceId, float seconds, float now) =>
+            new CyberEffect(EffectKind.TraceCut, EffectSource.Package, sourceId, owner, owner, 0f, 0f, 0f, 0u, CyberEffectBook.TraceCutFactor, now + seconds);
 
         /// <summary>The effect of a fired package: area effects centred on the posted node point, against every other faction, for the package seconds (x1.5 EXPLOIT).</summary>
         public static CyberEffect Package(in PackageDef def, int callId, float x, float z, int owner, bool exploit, float now)

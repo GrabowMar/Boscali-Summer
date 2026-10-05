@@ -466,7 +466,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         {
             float f = Anchors.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f;
             float enemy = EnemyTraceFactor != null ? EnemyTraceFactor(now) : 1f;
-            return CyberRules.ClampFactor(f * (float.IsNaN(enemy) || enemy < 1f ? 1f : enemy));
+            return CyberRules.ClampFactor(f * (float.IsNaN(enemy) || enemy < 1f ? 1f : enemy) * Effects.TraceCut(ports.Owner, now));
         }
 
         /// <summary>The scene ended: every intrusion ends and every effect clears.</summary>
