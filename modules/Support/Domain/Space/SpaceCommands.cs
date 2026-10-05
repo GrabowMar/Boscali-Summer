@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -197,6 +198,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         string Claimant(int callId);
     }
 
+    /// <summary>What the host decides for a CYBER verb (HOP, BURN, DROP). The sender is the transport-authenticated player; a node id is opaque.</summary>
+    internal interface ICyberCommandPorts
+    {
+        CyberResult Cyber(ulong player, SpaceCommandKind kind, int target);
+    }
+
     /// <summary>
     /// The one evaluator every SPACE command goes through (remote sender, listen-host and singleplayer alike): rate limit, exact
     /// replay, changed-payload refusal, then the host decision. The sender's identity and faction come from the transport.
@@ -210,11 +217,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private readonly byte protocol;
         private readonly ISpaceCommandPorts ports;
+        private readonly ICyberCommandPorts cyber;
         private readonly SpaceCommandLimiter limiter = new SpaceCommandLimiter();
         private readonly SpaceReplayCache cache = new SpaceReplayCache();
         private readonly List<int> stale = new List<int>(SpaceReplayCache.PerPlayer);
 
-        public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports) { this.protocol = protocol; this.ports = ports; }
+        public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports, ICyberCommandPorts cyber = null) { this.protocol = protocol; this.ports = ports; this.cyber = cyber; }
 
         public SpaceCommandLimiter Limiter => limiter;
         public SpaceReplayCache Cache => cache;
@@ -296,6 +304,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)verdict);
                 case SpaceCommandKind.SendTasked:
                     return ForTasked(c.Kind, c.RequestId, ports.Send(player, c.RequestId, c.Ids));
+                case SpaceCommandKind.CyberHop:
+                case SpaceCommandKind.CyberBurn:
+                case SpaceCommandKind.CyberDrop:
+                    // Every node id, valid or not, takes the same path; the desk answers NO TARGET for unknown, hidden and foreign ids alike.
+                    CyberResult done = cyber != null ? cyber.Cyber(player, c.Kind, c.Target) : new CyberResult(CyberOutcome.Unavailable);
+                    return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)done.Outcome, done.NodeId, done.Charged, done.Detail);
                 default:
                     return ForTasked(c.Kind, c.RequestId, ports.Claim(player, c.RequestId, c.Target));
             }
@@ -316,6 +330,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// </summary>
         private SpaceReply Refusal(in SpaceCommand c, RefusalKind why)
         {
+            if (c.IsCyberVerb)
+                return new SpaceReply(protocol, c.Kind, c.RequestId,
+                    (byte)(why == RefusalKind.Limited ? CyberOutcome.RateLimited : why == RefusalKind.Changed ? CyberOutcome.NoTarget : CyberOutcome.Unavailable));
             if (c.Kind == SpaceCommandKind.Mark)
                 return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)(why == RefusalKind.Limited ? MarkVerdict.RateLimited : MarkVerdict.NoContact));
             return new SpaceReply(protocol, c.Kind, c.RequestId,

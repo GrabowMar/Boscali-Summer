@@ -1267,7 +1267,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 32)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 33)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -1318,13 +1318,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)32); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)33); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)32); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)33); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -1335,7 +1335,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type creditType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", true)!;
     object credit = Activator.CreateInstance(creditType)!;
-    Set(credit, "Protocol", (byte)32); Set(credit, "Balance", 420);
+    Set(credit, "Protocol", (byte)33); Set(credit, "Balance", 420);
     Set(credit, "FrozenSeconds", 12); Set(credit, "EventFactor", 1.5f); Set(credit, "SilentFactor", 0.8f);
     Roundtrip(creditType, credit, "owner credit state");
     // Request parsing preserves its header; the host rejects it in Evaluate after decoding.
@@ -1351,7 +1351,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type waypointType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseWaypointMessage", true)!;
     object waypoint = Activator.CreateInstance(waypointType)!;
-    Set(waypoint, "Protocol", (byte)32); Set(waypoint, "RequestId", 913);
+    Set(waypoint, "Protocol", (byte)33); Set(waypoint, "RequestId", 913);
     Set(waypoint, "X", 1234.5f); Set(waypoint, "Z", -3456.5f); Set(waypoint, "Clear", true);
     object waypointBack = Roundtrip(waypointType, waypoint, "cruise waypoint");
     if ((int)Get(waypointBack, "RequestId") != 913 || !(bool)Get(waypointBack, "Clear"))
@@ -1361,7 +1361,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type legsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseLegsMessage", true)!;
     object legs = Activator.CreateInstance(legsType)!;
-    Set(legs, "Protocol", (byte)32); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
+    Set(legs, "Protocol", (byte)33); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
     Set(legs, "Result", (byte)1); Set(legs, "FactionName", "BOSCALI"); Set(legs, "LegCount", (byte)2);
     Set(legs, "X", new float[] { 1000f, 2000f, 0f, 0f, 0f, 0f });
     Set(legs, "Z", new float[] { -1000f, -2000f, 0f, 0f, 0f, 0f });
@@ -1374,7 +1374,25 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     if ((byte)Get(Decode(legsType, new byte[] { 18 }), "Protocol") != 18)
         throw new InvalidOperationException("Cruise legs did not leave an old header unread");
 
-    Console.WriteLine("  Support protocol-32 serializers: requests, results, owner credits, cruise waypoints/legs and retired-header rejection");
+    Type cyberType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CyberStateMessage", true)!;
+    Type cyberDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Cyber.CyberStateData", true)!;
+    object cyberData = Activator.CreateInstance(cyberDataType)!;
+    Set(cyberData, "Protocol", (byte)33); Set(cyberData, "Active", true); Set(cyberData, "Seq", 7);
+    Set(cyberData, "Now", 12.5f); Set(cyberData, "IntrusionCap", (byte)2); Set(cyberData, "HeldTotal", (byte)1);
+    object cyberMessage = Activator.CreateInstance(cyberType)!;
+    Set(cyberMessage, "Data", cyberData);
+    object cyberBack = Get(Decode(cyberType, Encode(cyberType, cyberMessage)), "Data");
+    if ((byte)Get(cyberBack, "Protocol") != 33 || (int)Get(cyberBack, "Seq") != 7 || !(bool)Get(cyberBack, "Active") ||
+        Math.Abs((float)Get(cyberBack, "Now") - 12.5f) > 0.001f || (byte)Get(cyberBack, "IntrusionCap") != 2 || (byte)Get(cyberBack, "HeldTotal") != 1)
+        throw new InvalidOperationException("CYBER state roundtrip failed");
+    object cyberForeign = Get(Decode(cyberType, new byte[] { 27 }), "Data");
+    if ((byte)Get(cyberForeign, "Protocol") != 27 || (bool)Get(cyberForeign, "Active"))
+        throw new InvalidOperationException("CYBER state did not leave a foreign header unread");
+    object cyberEmpty = Get(Decode(cyberType, new byte[0]), "Data");
+    if ((byte)Get(cyberEmpty, "Protocol") != 0)
+        throw new InvalidOperationException("An empty CYBER message must read inert");
+
+    Console.WriteLine("  Support protocol-33 serializers: requests, results, owner credits, cruise waypoints/legs, the faction-only CYBER state and retired-header rejection");
 }
 
 static void ProbeEventsSerialization(Assembly plugin, Assembly mirage)

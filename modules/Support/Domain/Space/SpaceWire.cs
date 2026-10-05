@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -9,7 +10,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     // the two byte interfaces; nothing here ever allocates from a claimed count, and every reader returns an inert value
     // (Protocol 0, or the foreign Protocol byte alone) instead of throwing.
 
-    internal enum SpaceCommandKind : byte { None = 0, OpenFeed = 1, Mark = 2, SendTasked = 3, ClaimTasked = 4, FeedActivity = 5, CloseFeed = 6 }
+    internal enum SpaceCommandKind : byte
+    {
+        None = 0, OpenFeed = 1, Mark = 2, SendTasked = 3, ClaimTasked = 4, FeedActivity = 5, CloseFeed = 6,
+        /// <summary>CYBER verbs (protocol 33). Target = an opaque node id (0 = the whole intrusion for a drop). CyberSync asks for a fresh CYBER state.</summary>
+        CyberHop = 7, CyberBurn = 8, CyberDrop = 9, CyberSync = 10
+    }
 
     /// <summary>What the feed may say about a contact before its MARK verdict. Never the truth: see <see cref="SpaceProbable"/>.</summary>
     internal enum ProbableClass : byte { Unknown = 0, Hostile = 1, Neutral = 2, Friendly = 3 }
@@ -40,7 +46,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Protocol = protocol; Kind = kind; RequestId = requestId; Target = target; Ids = ids;
         }
 
-        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.ClaimTasked;
+        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.ClaimTasked || IsCyberVerb;
+
+        public bool IsCyberVerb => Kind == SpaceCommandKind.CyberHop || Kind == SpaceCommandKind.CyberBurn || Kind == SpaceCommandKind.CyberDrop;
 
         /// <summary>Stable digest of what the request asks for. A replayed request id with another payload is refused.</summary>
         public int Fingerprint()
@@ -83,6 +91,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public SpaceReply With(string claimant) => new SpaceReply(Protocol, Kind, RequestId, Outcome, CallId, Charged, Detail, Replayed, claimant);
         public MarkVerdict Verdict => (MarkVerdict)Outcome;
         public TaskedOutcome Tasked => (TaskedOutcome)Outcome;
+        /// <summary>CYBER verbs carry a <see cref="CyberOutcome"/> byte; <see cref="CallId"/> is the node id.</summary>
+        public CyberOutcome CyberVerdict => (CyberOutcome)Outcome;
         /// <summary>The queued claim has not resolved yet: a later push carries the final verdict.</summary>
         public bool Pending => Kind == SpaceCommandKind.ClaimTasked && Outcome == (byte)TaskedOutcome.Queued;
     }
@@ -225,6 +235,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 case SpaceCommandKind.Mark:
                 case SpaceCommandKind.ClaimTasked:
+                case SpaceCommandKind.CyberHop:
+                case SpaceCommandKind.CyberBurn:
+                case SpaceCommandKind.CyberDrop:
                     WriteVar(w, (uint)Math.Max(0, c.Target));
                     break;
                 case SpaceCommandKind.SendTasked:
@@ -240,13 +253,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!r.TryReadByte(out byte version)) return default;
             if (version != protocol) return new SpaceCommand(version, SpaceCommandKind.None, 0);
-            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.CloseFeed ||
+            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.CyberSync ||
                 !ReadInt(r, out int request)) return default;
             var kind = (SpaceCommandKind)kindByte;
             switch (kind)
             {
                 case SpaceCommandKind.Mark:
                 case SpaceCommandKind.ClaimTasked:
+                case SpaceCommandKind.CyberHop:
+                case SpaceCommandKind.CyberBurn:
+                case SpaceCommandKind.CyberDrop:
                     return ReadInt(r, out int target) ? new SpaceCommand(version, kind, request, target) : default;
                 case SpaceCommandKind.SendTasked:
                     if (!r.TryReadByte(out byte count) || count == 0 || count > SpaceCommand.MaxIds || r.Remaining < count) return default;
@@ -278,11 +294,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!r.TryReadByte(out byte version)) return default;
             if (version != protocol) return new SpaceReply(version, SpaceCommandKind.None, 0, 0);
             if (!r.TryReadByte(out byte kindByte) || (kindByte != (byte)SpaceCommandKind.Mark && kindByte != (byte)SpaceCommandKind.SendTasked &&
-                kindByte != (byte)SpaceCommandKind.ClaimTasked) || !ReadInt(r, out int request) ||
+                kindByte != (byte)SpaceCommandKind.ClaimTasked && (kindByte < (byte)SpaceCommandKind.CyberHop || kindByte > (byte)SpaceCommandKind.CyberDrop)) || !ReadInt(r, out int request) ||
                 !r.TryReadByte(out byte outcome) || !r.TryReadByte(out byte replay) || replay > 1 ||
                 !ReadInt(r, out int call) || !ReadInt(r, out int charged) || !ReadInt(r, out int detail) ||
                 !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return default;
-            int max = kindByte == (byte)SpaceCommandKind.Mark ? (int)MarkVerdict.Capacity : (int)TaskedOutcome.MarkExpired;
+            int max = kindByte == (byte)SpaceCommandKind.Mark ? (int)MarkVerdict.Capacity :
+                kindByte >= (byte)SpaceCommandKind.CyberHop ? (int)CyberWords.MaxOutcome : (int)TaskedOutcome.MarkExpired;
             if (outcome > max) return default; // an unknown verdict is never guessed at
             return new SpaceReply(version, (SpaceCommandKind)kindByte, request, outcome, call, charged, detail, replay == 1, claimant);
         }
@@ -342,7 +359,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 FeedPost p = s.Posts[i];
                 WriteVar(w, (uint)Math.Max(0, p.CallId));
                 w.WriteByte((byte)p.Action);
-                w.WriteByte((byte)((p.WatchOfficer ? 1 : 0) | (p.Own ? 2 : 0) | (p.Launching ? 4 : 0)));
+                w.WriteByte((byte)((p.WatchOfficer ? 1 : 0) | (p.Own ? 2 : 0) | (p.Launching ? 4 : 0) | ((int)p.Domain << 3)));
                 int points = Math.Min(p.Points?.Length ?? 0, TaskedBoard.MaxMarks);
                 byte radar = 0;
                 for (int j = 0; j < points; j++) if (p.Points[j].Source == BirdKind.Radar) radar |= (byte)(1 << j);
@@ -372,7 +389,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 !ReadInt(r, out int gateDetail) || !ReadInt(r, out int newest)) return Bad();
             if (newest > 0)
             {
-                if (!r.TryReadByte(out byte newestAction) || !CallSheet.TryGet((SupportActionId)newestAction, out _) ||
+                if (!r.TryReadByte(out byte newestAction) || !TaskedKinds.TryGet((SupportActionId)newestAction, out _) ||
                     !r.TryReadByte(out byte newestBits) || (newestBits & ~31) != 0 || (newestBits & 7) < 1 || (newestBits & 7) > TaskedBoard.MaxMarks ||
                     !ReadText(r, MaxMaker, out string newestMaker)) return Bad();
                 s.NewestPost = newest; s.NewestAction = (SupportActionId)newestAction; s.NewestTargets = (byte)(newestBits & 7);
@@ -410,8 +427,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!r.TryReadByte(out n) || n > MaxPosts || r.Remaining < n * MinPostBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
-                if (!ReadInt(r, out int call) || !r.TryReadByte(out byte action) || !CallSheet.TryGet((SupportActionId)action, out _) ||
-                    !r.TryReadByte(out byte bits) || (bits & ~7) != 0 || !r.TryReadByte(out byte radar) || (radar & ~63) != 0 ||
+                if (!ReadInt(r, out int call) || !r.TryReadByte(out byte action) || !TaskedKinds.TryGet((SupportActionId)action, out _) ||
+                    !r.TryReadByte(out byte bits) || (bits & ~31) != 0 || ((bits >> 3) & 3) != (int)TaskedKinds.DomainOf((SupportActionId)action) || !r.TryReadByte(out byte radar) || (radar & ~63) != 0 ||
                     !r.TryReadByte(out byte pointCount) || pointCount == 0 || pointCount > TaskedBoard.MaxMarks || (radar >> pointCount) != 0 ||
                     r.Remaining < pointCount * 6) return Bad();
                 var points = new FeedPoint[pointCount];
@@ -452,13 +469,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         // ---- Primitives ------------------------------------------------------------------------
 
-        private static void WriteVar(ISpaceWriter w, uint value)
+        internal static void WriteVar(ISpaceWriter w, uint value)
         {
             while (value >= 0x80u) { w.WriteByte((byte)(value | 0x80u)); value >>= 7; }
             w.WriteByte((byte)value);
         }
 
-        private static bool ReadVar(ISpaceReader r, out uint value)
+        internal static bool ReadVar(ISpaceReader r, out uint value)
         {
             value = 0;
             for (int shift = 0; shift < 35; shift += 7)
@@ -471,7 +488,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return false;
         }
 
-        private static bool ReadInt(ISpaceReader r, out int value)
+        internal static bool ReadInt(ISpaceReader r, out int value)
         {
             value = 0;
             if (!ReadVar(r, out uint raw) || raw > int.MaxValue) return false;
@@ -479,13 +496,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static void WriteFloat(ISpaceWriter w, float value)
+        internal static void WriteFloat(ISpaceWriter w, float value)
         {
             int bits = BitConverter.SingleToInt32Bits(value);
             w.WriteByte((byte)bits); w.WriteByte((byte)(bits >> 8)); w.WriteByte((byte)(bits >> 16)); w.WriteByte((byte)(bits >> 24));
         }
 
-        private static bool ReadFloat(ISpaceReader r, out float value)
+        internal static bool ReadFloat(ISpaceReader r, out float value)
         {
             value = 0;
             if (r.Remaining < 4 || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b) || !r.TryReadByte(out byte c) || !r.TryReadByte(out byte d)) return false;
@@ -493,14 +510,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static void WriteCoordinate(ISpaceWriter w, float value)
+        internal static void WriteCoordinate(ISpaceWriter w, float value)
         {
             // A value the wire cannot carry is written as the invalid marker so the reader refuses the whole message.
             int v = SpaceRules.Finite(value) && Math.Abs(value) <= CoordinateLimit ? (int)Math.Round(value * 10d) : InvalidCoordinate;
             w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); w.WriteByte((byte)(v >> 16));
         }
 
-        private static bool ReadCoordinate(ISpaceReader r, out float value)
+        internal static bool ReadCoordinate(ISpaceReader r, out float value)
         {
             value = 0;
             if (!r.TryReadByte(out byte a) || !r.TryReadByte(out byte b) || !r.TryReadByte(out byte c)) return false;
@@ -525,14 +542,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static void WriteExpiry(ISpaceWriter w, float expires, float now)
+        internal static void WriteExpiry(ISpaceWriter w, float expires, float now)
         {
             double left = SpaceRules.Finite(expires) && SpaceRules.Finite(now) ? Math.Round((expires - now) * 10d) : 0d;
             int ds = (int)Math.Max(0d, Math.Min(MaxExpiryDeciseconds, left));
             w.WriteByte((byte)ds); w.WriteByte((byte)(ds >> 8));
         }
 
-        private static bool ReadExpiry(ISpaceReader r, float now, out float expires)
+        internal static bool ReadExpiry(ISpaceReader r, float now, out float expires)
         {
             expires = 0;
             if (!r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi)) return false;
@@ -558,14 +575,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static void WriteText(ISpaceWriter w, string text, int max)
+        internal static void WriteText(ISpaceWriter w, string text, int max)
         {
             text = Clean(text, max);
             w.WriteByte((byte)text.Length);
             for (int i = 0; i < text.Length; i++) w.WriteByte((byte)text[i]);
         }
 
-        private static bool ReadText(ISpaceReader r, int max, out string text)
+        internal static bool ReadText(ISpaceReader r, int max, out string text)
         {
             text = "";
             if (!r.TryReadByte(out byte n) || n > max || r.Remaining < n) return false;

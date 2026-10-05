@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
 using NuclearOption.Networking;
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// message. Replies and state go only to members of the faction that owns the data, and every faction member hears the
     /// small headline (family, uplinks, live MARKs) so client prices and the sky match the host without opening the feed.
     /// </summary>
-    internal sealed class SpaceNetHost : ISpaceCommandPorts
+    internal sealed class SpaceNetHost : ISpaceCommandPorts, ICyberCommandPorts
     {
         private const float PollWallSeconds = .25f;
 
@@ -25,6 +26,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly SpaceCommandHost commands;
         private readonly SpaceSubscriptions subs;
         private readonly SpaceFeedState scratch = new SpaceFeedState();
+        private readonly CyberSubscriptions cyberSubs = new CyberSubscriptions();
+        private readonly CyberStateData cyberScratch = new CyberStateData();
+        private readonly HashSet<ulong> rosterIds = new HashSet<ulong>();
         private readonly List<SpaceContact> reveals = new List<SpaceContact>(SpaceContacts.MaxReveals);
         private readonly List<SpaceMark> marks = new List<SpaceMark>(SpaceContacts.MaxMarks);
         private readonly List<TaskedPostInfo> posts = new List<TaskedPostInfo>(TaskedBoard.MaxCalls);
@@ -36,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public SpaceNetHost(SupportManager manager, SpaceService space, SupportNet net)
         {
             this.manager = manager; this.space = space; this.net = net;
-            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this);
+            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this, this);
             subs = new SpaceSubscriptions(SupportNet.ProtocolVersion);
             Salt = NewSalt();
         }
@@ -59,6 +63,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             commands.ResetForScene();
             subs.Clear();
+            cyberSubs.Clear();
             nextPoll = 0f;
             Salt = NewSalt();
         }
@@ -92,6 +97,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         break;
                     case SpaceCommandKind.CloseFeed:
                         if (commands.Admit(id, wall)) { subs.CloseFeed(id); Poll(player, now, wall); }
+                        break;
+                    case SpaceCommandKind.CyberSync:
+                        // A client that lost its CYBER mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
+                        if (commands.Admit(id, wall)) cyberSubs.Resync(id);
                         break;
                     default:
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
@@ -128,6 +137,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs == null) return;
             subs.BeginRound();
+            rosterIds.Clear();
             foreach (FactionHQ hq in hqs)
             {
                 List<Player> players = hq != null ? hq.GetPlayers(false) : null;
@@ -135,9 +145,34 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 // GetPlayers hands out a shared list that nested calls refill: poll a private copy.
                 roster.Clear();
                 for (int i = 0; i < players.Count && roster.Count < roster.Capacity; i++) roster.Add(players[i]);
-                for (int i = 0; i < roster.Count; i++) Poll(roster[i], now, wall);
+                for (int i = 0; i < roster.Count; i++) { Poll(roster[i], now, wall); PollCyber(roster[i], now, wall); }
             }
             subs.EndRound();
+            cyberSubs.Prune(rosterIds);
+        }
+
+        /// <summary>The faction's CYBER state to one member: change-only, one message per two seconds at most, always the full state.</summary>
+        private void PollCyber(Player player, float now, float wall)
+        {
+            if (player == null || player.HQ == null || manager.Cyber == null) return;
+            ulong id = PlayerIdentity.Of(player);
+            if (id == PlayerIdentity.None) return;
+            rosterIds.Add(id);
+            try
+            {
+                cyberScratch.Protocol = SupportNet.ProtocolVersion;
+                manager.Cyber.FillState(player, cyberScratch);
+                CyberStateData send = cyberSubs.Next(id, manager.FactionKeyOf(player.HQ), cyberScratch, now, wall);
+                if (send != null) net.SendCyberState(player, send);
+            }
+            catch (Exception e)
+            {
+                if (Time.unscaledTime >= nextWarning)
+                {
+                    nextWarning = Time.unscaledTime + 10f;
+                    Plugin.Logger?.LogWarning("[Support.Cyber] Mirror send failed: " + e.Message);
+                }
+            }
         }
 
         private void Poll(Player player, float now, float wall)
@@ -212,6 +247,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             FactionHQ owner = resolving != null ? resolving : current?.HQ;
             return owner != null && space.TryHolder(owner, callId, out ulong pilot) ? manager.PlayerLabel(owner, pilot) : "";
         }
+
+        // ---- ICyberCommandPorts ---------------------------------------------------------------------
+
+        public CyberResult Cyber(ulong player, SpaceCommandKind kind, int target) =>
+            Is(player) ? manager.RunCyberVerb(current, kind == SpaceCommandKind.CyberHop ? CyberVerb.Hop : kind == SpaceCommandKind.CyberBurn ? CyberVerb.Burn : CyberVerb.Drop, target)
+                : new CyberResult(CyberOutcome.Unavailable);
 
         private bool Is(ulong player) => current != null && PlayerIdentity.Of(current) == player;
     }
