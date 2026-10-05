@@ -4,8 +4,10 @@ using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Modules.Support.Visuals;
 using NOAvionics;
@@ -40,6 +42,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly List<int> postOrder = new List<int>(SpaceWire.MaxPosts);
         private readonly int[] sendIds = new int[SpaceCommand.MaxIds];
 
+        private readonly C2ChromeView chrome = new C2ChromeView();
+        private C2Feed c2;
+        private Action<C2ChromeView> chromeFill;
+        private int pageRows = SpaceFeedRules.ContactsPerPage;
+        private float nextChrome;
         private SpaceFeedPanel compact;
         private SpaceFeedWindow window;
         private bool compactVisible, leaseOpen, dirty;
@@ -69,7 +76,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (manager != null) manager.SpaceReplied += OnReply;
         }
 
-        /// <summary>The compact page of the OPS console; null until it is built.</summary>
+        /// <summary>
+        /// The OPS console hands over the one host console of this client and the way to fill the shared C2 chrome, so the station
+        /// shows the same banner, session line and console as the MFD pages without a second source of either.
+        /// </summary>
+        internal void AttachConsole(C2Feed console, Action<C2ChromeView> fillChrome) { c2 = console; chromeFill = fillChrome; dirty = true; }
+
+        /// <summary>The ORBIT page of the OPS console; null until it is built.</summary>
         internal void AttachCompact(SpaceFeedPanel panel) { compact = panel; dirty = true; }
 
         /// <summary>The OPS console says whether the SPACE page is on screen.</summary>
@@ -205,15 +218,20 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool known = mirror.Known;
 
             SpaceFeedEntries.Build(state.Contacts, state.Marks, now, entries);
-            view.Pages = SpaceFeedRules.PageCount(entries.Count);
-            draft.Page = SpaceFeedRules.ClampPage(draft.Page, entries.Count);
+            // The station lists six tracks per page, the ORBIT page as many as its box holds; one page index serves whichever shows.
+            pageRows = WindowOpen ? SpaceFeedLayout.Tiles6 : compact != null ? Math.Min(SpaceFeedLayout.Tiles6, compact.Layout.TrackRows) : SpaceFeedLayout.Tiles6;
+            view.Pages = SpaceFeedRules.PageCount(entries.Count, pageRows);
+            draft.Page = SpaceFeedRules.ClampPage(draft.Page, entries.Count, pageRows);
             if (draft.Selected != 0 && IndexOf(draft.Selected) < 0) draft.Selected = 0;
             view.Page = draft.Page;
+            view.SelectedId = draft.Selected;
+            view.Console = c2?.Console;
             view.Source = draft.Source;
             view.Zoom = draft.Zoom;
             view.ZoomEnabled = draft.Source == BirdKind.Optical;
 
             FillThreat();
+            FillBirds(state, known, now);
             FillImage(state, known, now);
             view.Status = StatusFor(state, known);
             view.StatusTone = !known || !state.Active || state.Family == SpaceFamilyState.Dark ? AvState.Danger
@@ -232,7 +250,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (WindowOpen)
             {
                 view.TaskedCaption = SpaceFeedRules.CaptionOf(postOrder.Count, window.Panel.Layout.CardCount);
-                window.Panel.Paint(view);
+                if (Time.unscaledTime >= nextChrome) { nextChrome = Time.unscaledTime + 0.25f; chromeFill?.Invoke(chrome); } // identity strings: no need at 12 Hz
+                window.Paint(view, chrome);
             }
         }
 
@@ -250,6 +269,26 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.ThreatActive = strip.Length > 0;
             view.Threat = view.ThreatActive ? "WARNING · " + strip
                 : snap.ValidOwnship ? "NO CRITICAL WARNING" : "GROUND OPERATOR · NO COCKPIT WARNINGS";
+        }
+
+        /// <summary>
+        /// The three constellation cells: each bird's real state from the faction mirror (NO LINK / NO BIRD / OFFLINE / the RADAR scan
+        /// countdown / READY). The orbit art and the altitude figures beside them are cosmetic.
+        /// </summary>
+        private void FillBirds(SpaceFeedState state, bool known, float now)
+        {
+            bool linked = known && state.Active;
+            bool haveLocal = GameManager.GetLocalPlayer(out Player player) && player != null;
+            int radarSeconds = SpaceFeedRules.RadarReadySeconds(state.RadarReadyAt, now);
+            bool radarUnavailable = state.RadarReadyAt == SpaceWire.RadarUnavailable;
+            for (int i = 0; i < view.Birds.Length; i++)
+            {
+                var bird = (BirdKind)i;
+                bool has = linked && haveLocal && manager.HasSpaceBird(player.HQ, bird);
+                string word = C2Orbit.BirdState(bird, linked, has, state.Family, radarSeconds, radarUnavailable, out C2Tone tone);
+                view.Birds[i] = new FeedBirdView { State = word, Tone = C2Kit.StateOf(tone) };
+            }
+            view.ConstellationMeta = C2Orbit.ConstellationMeta(known, state.Active, state.UplinksLive, state.UplinksTotal, state.Family);
         }
 
         private string StatusFor(SpaceFeedState state, bool known)
@@ -399,15 +438,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void FillTiles()
         {
-            int first = draft.Page * SpaceFeedRules.ContactsPerPage;
+            int first = draft.Page * pageRows;
             for (int i = 0; i < view.Tiles.Length; i++)
             {
                 int at = first + i;
-                if (at >= entries.Count) { view.Tiles[i] = default; continue; }
+                if (i >= pageRows || at >= entries.Count) { view.Tiles[i] = default; continue; }
                 FeedEntry e = entries[at];
                 view.Tiles[i] = new FeedTileView
                 {
                     Present = true, Id = e.Id, Class = e.Class, Marked = e.Marked, Selected = e.Id == draft.Selected,
+                    Percent = e.Percent, Moving = e.Moving, FixedPoint = e.Kind == FeedEntryKind.Mark,
                     Title = SpaceFeedEntries.Title(e), Sub = SpaceFeedEntries.Sub(e)
                 };
             }
@@ -436,14 +476,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool confirmable = linked && index >= 0 && SpaceFeedEntries.CanConfirm(entries[index]) && markRequest == 0;
             view.ConfirmFull = confirmable && state.LiveMarks >= SpaceWire.MaxMarks;
             view.CanConfirm = confirmable && !view.ConfirmFull;
-            view.ConfirmHelp = view.ConfirmFull ? "12 of 12 MARKs held: SEND them or wait for one to expire."
+            view.ConfirmHelp = view.ConfirmFull ? "12 of 12 MARKs held: TRANSMIT them or wait for one to expire."
                 : index < 0 ? "Select a contact bracket or target first."
                 : !SpaceFeedEntries.CanConfirm(entries[index]) ? "This target is already MARKed, or is a fixed MARK point."
                 : "MARK the selected target. The host answers CONFIRMED, NEUTRAL, DECOY or FRIENDLY; only CONFIRMED can be posted.";
             view.SendCount = linked ? Math.Min(SpaceCommand.MaxIds, state.Marks.Count) : 0;
             view.CanSend = linked && state.Marks.Count > 0 && sendRequest == 0;
             view.SendHelp = state.Marks.Count == 0 ? "No live MARKs: CONFIRM a target first."
-                : "Post your live MARKs as one TASKED call. The first pilot to claim it fires.";
+                : "Post your live MARKs as one TASKED call to the board. The first pilot to claim it fires.";
         }
 
         private void FillPosts(SpaceFeedState state, float now)
@@ -474,27 +514,36 @@ namespace BoscaliSummer.Modules.Support.Presentation
             PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
             int points = post.Points != null ? post.Points.Length : 0;
             string label = CallSheet.TryGet(post.Action, out CallRow row) ? row.Label : "TASKED";
-            string title = label + " · " + points + " TARGET" + (points == 1 ? "" : "S") + (post.Payoff > 0 ? " · PAYOFF " + post.Payoff + " CR" : "");
+            string longTitle = label + " · " + points + " TARGET" + (points == 1 ? "" : "S") + (post.Payoff > 0 ? " · PAYOFF " + post.Payoff + " CR" : "");
             BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
             int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
+            // The source is who posted it: OVERLORD (the watch officer), an OPERATOR by name, or your own call.
             string sub = (source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
                 (post.WatchOfficer ? "OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
                 (left / 60) + ":" + (left % 60).ToString("00");
             var card = new FeedCardView
             {
-                Present = true, PostId = post.CallId, Title = title, Sub = sub,
-                Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true
+                Present = true, PostId = post.CallId, Title = label + " · " + points + " TGT", Chip = post.Payoff > 0 ? "+" + post.Payoff + " CR" : "",
+                Sub = sub, Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true, Button = "CLAIM"
             };
-            if (status == PostStatus.Stale) { card.State = "STALE"; card.Tone = AvState.Inert; card.Enabled = false; card.Price = ""; }
+            string detail;
+            if (status == PostStatus.Stale) { card.State = "STALE"; detail = "STALE · NO LONGER OPEN"; card.Tone = AvState.Inert; card.Enabled = false; card.Price = ""; card.Button = "CLOSED"; }
             else if (calls != null && calls.TaskedPending && calls.ClaimingPost == post.CallId)
-            { card.State = post.Launching ? "LAUNCHING" : "PENDING"; card.Tone = AvState.Info; card.Enabled = false; }
+            { card.State = post.Launching ? "LAUNCH" : "PENDING"; detail = post.Launching ? "LAUNCHING" : "PENDING · WAITING FOR THE HOST"; card.Tone = AvState.Info; card.Enabled = false; card.Button = "WAIT"; }
             else if (status == PostStatus.Launching)
-            { card.State = string.IsNullOrEmpty(post.Claimant) ? "LAUNCHING" : "LAUNCHING · " + post.Claimant; card.Tone = AvState.Info; card.Enabled = false; }
+            {
+                card.State = "LAUNCH";
+                detail = string.IsNullOrEmpty(post.Claimant) ? "LAUNCHING" : "LAUNCHING · " + post.Claimant;
+                card.Tone = AvState.Info; card.Enabled = false; card.Button = "WAIT";
+            }
             else if (calls != null && calls.ArmedTasked == post.CallId)
-            { card.State = "ARMED — PRESS AGAIN"; card.Tone = AvState.Caution; card.Armed = true; }
-            else if (state.Gate != TaskedOutcome.None) { card.State = GateWord(state); card.Tone = AvState.Caution; }
-            else if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price) { card.State = "NEED " + post.Price + " CR"; card.Tone = AvState.Danger; }
-            else { card.State = SpaceFeedRules.PostWord(status); card.Tone = AvState.Ready; }
+            { card.State = "ARMED"; detail = "ARMED — PRESS EXECUTE AGAIN TO FIRE"; card.Tone = AvState.Caution; card.Armed = true; card.Button = "EXECUTE"; }
+            else if (state.Gate != TaskedOutcome.None)
+            { card.State = GateShort(state); detail = GateWord(state); card.Tone = AvState.Caution; } // still pressable: the press answers with the host's NEGATIVE words
+            else if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
+            { card.State = "LOW CR"; detail = "NEED " + post.Price + " CR"; card.Tone = AvState.Danger; }
+            else { card.State = SpaceFeedRules.PostWord(status); detail = SpaceFeedRules.PostWord(status) + " · CLAIM TO ARM, EXECUTE TO FIRE"; card.Tone = AvState.Ready; }
+            card.Detail = longTitle + " · " + sub + " · " + detail;
             return card;
         }
 
@@ -512,6 +561,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
         }
 
+        /// <summary>The same refusal in the eight characters a row's state column holds; the full word rides the hover help.</summary>
+        private static string GateShort(SpaceFeedState state)
+        {
+            switch (state.Gate)
+            {
+                case TaskedOutcome.Cooldown: return "COOLDOWN";
+                case TaskedOutcome.Frozen: return "FROZEN";
+                case TaskedOutcome.Locked: return "LOCKED";
+                case TaskedOutcome.BirdBusy: return "BUSY";
+                case TaskedOutcome.UplinkDown: return "UPL DOWN";
+                case TaskedOutcome.LowCredit: return "LOW CR";
+                default: return "N/A";
+            }
+        }
+
         private void FillWords(float now)
         {
             string words = ""; AvState tone = AvState.Inert;
@@ -522,7 +586,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             else if (feedRecent) { words = feedWords; tone = feedTone; }
             else if (calls != null && calls.Armed != null) { words = "ARMED CALL · PRESS ITS CALL AGAIN, OR RIGHT-CLICK THE MAP"; tone = AvState.Caution; }
             else if (IntentWords.IsKnown(manager.SpaceMirror.State.Intent)) { words = manager.SpaceMirror.State.Intent; tone = AvState.Info; } // the footer
-            else { words = view.Ground ? "READY · CLICK A TARGET, CONFIRM, THEN SEND" : "READY · FLY ON: KEYBOARD AND JOYSTICK STAY LIVE"; tone = AvState.Ready; }
+            else { words = view.Ground ? "READY · CLICK A TARGET, CONFIRM, THEN TRANSMIT" : "READY · FLY ON: KEYBOARD AND JOYSTICK STAY LIVE"; tone = AvState.Ready; }
             view.Words = words;
             view.WordsTone = tone;
         }
@@ -537,6 +601,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feedWords = words ?? "";
             feedTone = tone;
             feedWordsAt = SupportManager.MissionNow();
+            c2?.Add(feedWords, C2Cap.LineTone(feedWords)); // a real feed event: it belongs on the host console too
             AvUiSound.Play(cue);
             dirty = true;
         }
@@ -557,7 +622,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         }
 
         public void PrevPage() { draft.Page = Math.Max(0, draft.Page - 1); dirty = true; }
-        public void NextPage() { draft.Page = SpaceFeedRules.ClampPage(draft.Page + 1, entries.Count); dirty = true; }
+        public void NextPage() { draft.Page = SpaceFeedRules.ClampPage(draft.Page + 1, entries.Count, pageRows); dirty = true; }
 
         public void SetSource(BirdKind source)
         {
@@ -572,7 +637,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             int index = IndexOf(draft.Selected);
             if (manager == null || index < 0 || !SpaceFeedEntries.CanConfirm(entries[index]) || markRequest != 0) return;
-            if (manager.SpaceMirror.State.LiveMarks >= SpaceWire.MaxMarks) { Say("NEGATIVE: 12 OF 12 MARKS HELD — SEND OR WAIT", AvState.Danger, AvUiCue.Caution); return; }
+            if (manager.SpaceMirror.State.LiveMarks >= SpaceWire.MaxMarks) { Say("NEGATIVE: 12 OF 12 MARKS HELD — TRANSMIT OR WAIT", AvState.Danger, AvUiCue.Caution); return; }
             int id = manager.SpaceMark(entries[index].Id);
             if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
             markRequest = id; // registered before the verdict: in-process replies land on the next Update
@@ -592,7 +657,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (id <= 0) { Say("NEGATIVE: NO HOST LINK — WAIT FOR THE LINK, THEN PRESS AGAIN", AvState.Danger, AvUiCue.Caution); return; }
             sendRequest = id;
             sendAt = SupportManager.MissionNow();
-            Say("SEND SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
+            Say("TRANSMIT SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
         }
 
         public void PressCard(int postId) => calls?.PressTasked(postId);

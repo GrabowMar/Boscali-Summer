@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using Rewired;
@@ -10,7 +12,9 @@ using UnityEngine.EventSystems;
 namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
-    /// The full-screen SPACE feed. It stays open on RWR, MAWS, bandit and terrain warnings (the strip says so and the vanilla
+    /// The full-screen SPACE tasking station: the C2 chrome (banner, header, session line), the warning bar, the sensor frame on the
+    /// left and the control column on the right (constellation, track file, CONFIRM / TRANSMIT, the top TASKED posts, the host
+    /// console), then the C2 footer. It stays open on RWR, MAWS, bandit and terrain warnings (the strip says so and the vanilla
     /// receiver keeps playing its own alert); it closes only on an explicit exit, eight seconds without real input, loss of the
     /// ownship an airborne-open window needs, a lost operator or faction, or lost focus.
     ///
@@ -29,6 +33,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SpaceFeedController owner;
         private AvWindow window;
         private SpaceFeedPanel panel;
+        private SpaceStation station;
         private readonly FeedInputLease lease = new FeedInputLease();
         private readonly List<AvHit> hits = new List<AvHit>(96);
         private AvHit hovered;
@@ -60,10 +65,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             float boardHeight = Mathf.Min(WindowHeight, 1040f) - TitleHeight - AvGridTokens.Footer - OpsPage.FlowInset;
             AvFlow body = window.Body;
             body.ViewportHeight = boardHeight + OpsPage.FlowInset;
-            panel = new SpaceFeedPanel(body.Content, owner, boardWidth, boardHeight, true);
-            body.Add(panel);
+            station = new SpaceStation(body.Content, owner, boardWidth, boardHeight, window.Ticker.Register);
+            panel = station.Panel;
+            body.Add(station);
             window.Footer.Set("Keyboard and joystick stay live; the mouse drives the feed. The feed closes after 8 s without input.", AvState.Inert);
         }
+
+        /// <summary>Paints the station: the shared chrome, the panel and the C2 footer (the footer carries the intent and the words).</summary>
+        internal void Paint(SpaceFeedView view, C2ChromeView chrome) => station.Paint(view, chrome);
 
         /// <summary>Opens the window if an operator exists. False (and nothing taken) when there is none.</summary>
         internal bool Open(SpaceFeedView view)

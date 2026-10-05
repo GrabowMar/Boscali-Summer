@@ -64,6 +64,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feed = feedController;
             logger = ((ISupportHost)supportManager).Logger;
             c2.Attach(manager, calls);
+            feed?.AttachConsole(c2, FillChrome);
         }
 
         public void ResetForScene()
@@ -243,8 +244,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             AvTicker t = ticker;
             cap = new CapPage(pages[(int)C2Tab.Cap - 1], Width, pageH, calls, p => t.Register(p));
-            spacePanel = new SpaceFeedPanel(pages[(int)C2Tab.Orbit - 1], feed, OpsPage.BoardWidth, pageH - 2f * AvGridTokens.Gap, false);
-            AvLay.Place(spacePanel.Rect, (Width - OpsPage.BoardWidth) * 0.5f, AvGridTokens.Gap, OpsPage.BoardWidth, pageH - 2f * AvGridTokens.Gap);
+            spacePanel = new SpaceFeedPanel(pages[(int)C2Tab.Orbit - 1], feed, Width, pageH, false);
+            AvLay.Place(spacePanel.Rect, 0f, 0f, Width, pageH);
             ticker.Register(spacePanel);
             feed?.AttachCompact(spacePanel);
             BuildPlaceholder(pages[(int)C2Tab.Net - 1], "NET");
@@ -344,7 +345,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             view.Tiles.Clear();
             view.Tiles.AddRange(tiles);
-            view.Credit = (int)manager.LocalCredit;
             view.NextUnlock = manager.NextUnlockText();
             view.Words = calls.LastWords;
             view.Pending = calls.Pending;
@@ -352,37 +352,44 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.Aim = calls.AimNow;
             view.AimGrid = calls.Armed.HasValue && calls.TryAimPoint(out GlobalPosition p) ? TheaterGrid.Kilometres(p.x, p.z) : "";
             view.LastDelta = c2.LastDelta;
-            view.Console = c2.Console;
-            view.Alert = c2.Alert;
-            view.Link = manager.Online;
+            FillChrome(view);
+        }
+
+        /// <summary>Everything the shared C2 chrome shows (identity, ledger, session line, board count), for the MFD pages and the station.</summary>
+        private void FillChrome(C2ChromeView v)
+        {
+            v.Credit = (int)manager.LocalCredit;
+            v.Console = c2.Console;
+            v.Alert = c2.Alert;
+            v.Link = manager.Online;
 
             float now = SupportManager.MissionNow();
-            view.KeyRot = C2Words.KeyRotation(now);
+            v.KeyRot = C2Words.KeyRotation(now);
             if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null)
             {
-                view.Faction = player.HQ != null && player.HQ.faction != null ? player.HQ.faction.factionName : "";
-                view.Callsign = Callsign(player);
-                view.Session = C2Words.Session(PlayerIdentity.Of(player), sceneGeneration);
+                v.Faction = player.HQ != null && player.HQ.faction != null ? player.HQ.faction.factionName : "";
+                v.Callsign = Callsign(player);
+                v.Session = C2Words.Session(PlayerIdentity.Of(player), sceneGeneration);
             }
 
             SpaceFeedMirror mirror = manager.SpaceMirror;
             SpaceFeedState state = mirror.State;
             if (mirror.Known && state.Active)
             {
-                view.Uplinks = state.UplinksLive + "/" + state.UplinksTotal;
-                view.UplinkTone = state.UplinksTotal > 0 && state.UplinksLive >= state.UplinksTotal ? AvState.Ready
+                v.Uplinks = state.UplinksLive + "/" + state.UplinksTotal;
+                v.UplinkTone = state.UplinksTotal > 0 && state.UplinksLive >= state.UplinksTotal ? AvState.Ready
                     : state.UplinksLive == 0 ? AvState.Danger : AvState.Caution;
-                view.Space = C2Feed.SpaceWord(state.Family);
+                v.Space = C2Feed.SpaceWord(state.Family);
                 int open = 0;
                 for (int i = 0; i < state.Posts.Count; i++)
                     if (SpaceFeedRules.PostStatusOf(state.Posts[i], now) == PostStatus.Open) open++;
-                view.BoardCount = open;
+                v.BoardCount = open;
             }
             else
             {
-                view.Uplinks = view.Space = "";
-                view.UplinkTone = AvState.Inert;
-                view.BoardCount = 0;
+                v.Uplinks = v.Space = "";
+                v.UplinkTone = AvState.Inert;
+                v.BoardCount = 0;
             }
         }
 
@@ -415,7 +422,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (t == C2Tab.Net) { title = "NETWORK OPERATIONS"; sub = "NO EW ASSETS ONLINE"; }
             else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = "NO TEAMS RAISED"; }
             else if (t == C2Tab.Board) { title = "TASKED BOARD"; sub = "LIVE POSTS · " + v.BoardCount; }
-            else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SPACE FEED"; }
+            else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SENSOR, TRACK FILE, TASKED"; }
             else { title = "ORBITAL SUPPORT"; sub = "CAP · " + CapPage.Authorized(v.Tiles) + " CALLS AUTHORIZED"; }
             chrome.SetHeader(title, sub, alert ? C2Words.Fit(v.Alert, 18) : null);
             chrome.SetLedger(v.Credit);
@@ -435,7 +442,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 words = C2Cap.FooterWords(v.Words, v.NextUnlock);
                 tone = armed ? AvState.Caution : v.Pending ? AvState.Info : C2Cap.StartsNegative(v.Words) ? AvState.Danger : AvState.Ready;
             }
-            else if (tab == C2Tab.Orbit) { slab = "READY"; tone = AvState.Ready; words = "ORBIT FEED · OPEN FULL FOR THE TASKING STATION"; }
+            else if (tab == C2Tab.Orbit)
+            {
+                // The ORBIT page's words (a verdict, a refusal, the enemy intent, a hint) ride the shared footer.
+                string said = spacePanel != null ? spacePanel.Words : "";
+                tone = spacePanel != null && said.Length > 0 ? spacePanel.WordsTone : AvState.Ready;
+                words = said.Length > 0 ? said : "ORBIT FEED · OPEN FULL FOR THE TASKING STATION";
+                slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
+            }
             else { slab = "INT"; tone = AvState.Info; words = "THIS PAGE ARRIVES IN A LATER STEP"; }
             string key = slab + "|" + (int)tone + "|" + words;
             if (key == footerKey) return;

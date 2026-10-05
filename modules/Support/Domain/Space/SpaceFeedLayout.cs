@@ -13,79 +13,136 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     }
 
     /// <summary>
-    /// The SPACE feed board's fixed arithmetic. Every row has a constant height after construction; only the image takes what is
-    /// left. Nothing scrolls and a refresh never moves a row, because no height here depends on live text.
+    /// The ORBIT page's fixed arithmetic, for the compact page under the C2 chrome and for the full-screen station. Every row has a
+    /// constant height after construction; only the sensor picture takes what is left. Nothing scrolls and a refresh never moves a
+    /// row, because no height here depends on live text. Coordinates are board units, origin top-left of the area handed to
+    /// <see cref="Compute"/> (the page below the chrome, or the station below its chrome).
     /// </summary>
     internal sealed class SpaceFeedLayout
     {
-        public const float Gap = 5f, ThreatH = 24f, ToolbarH = 28f, StatusH = 20f, TileH = 36f, ActionsH = 28f,
-            HeaderH = 18f, CardH = 40f, WordsH = 22f, ColumnWidth = 458f, MaxCards = 6f, ThreatFullH = 36f;
+        /// <summary>Height of a C2 box header (mirrors C2Box.HeaderH; Domain cannot reference Presentation).</summary>
+        public const float BoxHeader = 20f;
+        public const float StripH = 22f, WarnFullH = 36f, ToolbarH = 26f, RowH = 26f, RowPitch = 28f, ButtonsH = 30f, CardH = 38f,
+            CardPitch = 40f, ArtH = 70f, CellsH = 34f, CompactCellsH = 30f, ColumnWidth = 458f, MinImageTall = 150f, MinImageShort = 100f,
+            ConsoleLineH = 14f, ConsolePad = 4f, SensorChrome = 51f, TaskedFixed = 22f;
         public const int Tiles6 = SpaceFeedRules.ContactsPerPage;
 
+        /// <summary>The full-screen station.</summary>
         public bool Full { get; private set; }
-        public FeedBox Threat, Toolbar, Image, Status, Tiles, Actions, TaskedHeader, Words;
-        public FeedBox[] Cards = new FeedBox[0];
-        public int CardCount => Cards.Length;
+        /// <summary>The constellation box carries the cosmetic orbit art (tall pages and the station); short pages show the three cells only.</summary>
+        public bool Art { get; private set; }
+        public FeedBox Threat, Constellation, ConstArt, ConstCells, Sensor, Toolbar, Image, Track, Buttons, Tasked, Console;
+        public int TrackRows, CardRows, ConsoleLines;
         /// <summary>The lowest edge of any box.</summary>
         public float Bottom { get; private set; }
+        public int CardCount => CardRows;
 
-        /// <param name="full">The full-screen board: the image on the left, the control column fixed at 464 wide on the right.</param>
+        /// <param name="full">The station: the sensor frame on the left, the control column fixed at 458 wide on the right.</param>
         public static SpaceFeedLayout Compute(float width, float height, bool full)
         {
             var l = new SpaceFeedLayout { Full = full };
-            if (!full) l.Compact(width, height); else l.FullScreen(width, height);
-            float bottom = Math.Max(Math.Max(l.Image.Bottom, l.Words.Bottom), l.Threat.Bottom);
-            for (int i = 0; i < l.Cards.Length; i++) bottom = Math.Max(bottom, l.Cards[i].Bottom);
+            if (!full) l.Compact(width, height); else l.Station(width, height);
+            float bottom = Math.Max(Math.Max(l.Sensor.Bottom, l.Tasked.Bottom), Math.Max(l.Track.Bottom, l.Threat.Bottom));
+            bottom = Math.Max(bottom, Math.Max(l.Constellation.Bottom, l.Buttons.Bottom));
+            if (l.ConsoleLines > 0) bottom = Math.Max(bottom, l.Console.Bottom);
             l.Bottom = bottom;
             return l;
         }
 
         private void Compact(float w, float h)
         {
-            int cards = h < 600f ? 1 : h < 700f ? 2 : 3;
-            float fixedHeight = ThreatH + ToolbarH + StatusH + TileH + ActionsH + HeaderH + cards * CardH + WordsH + (7 + cards) * Gap;
-            float image = Math.Max(60f, h - fixedHeight);
-            float y = 0f;
-            Threat = new FeedBox(0f, y, w, ThreatH); y += ThreatH + Gap;
-            Toolbar = new FeedBox(0f, y, w, ToolbarH); y += ToolbarH + Gap;
-            Image = new FeedBox(0f, y, w, image); y += image + Gap;
-            Status = new FeedBox(0f, y, w, StatusH); y += StatusH + Gap;
-            Tiles = new FeedBox(0f, y, w, TileH); y += TileH + Gap;
-            Actions = new FeedBox(0f, y, w, ActionsH); y += ActionsH + Gap;
-            Stack(0f, w, ref y, cards);
+            Art = h >= 600f;
+            float g = Art ? 6f : 4f;
+            TrackRows = Art ? 5 : 4;
+            float y = g;
+            Threat = new FeedBox(0f, y, w, StripH); y += StripH + g;
+            if (Art)
+            {
+                float ch = 21f + ArtH + CellsH + 1f;
+                Constellation = new FeedBox(0f, y, w, ch);
+                ConstArt = new FeedBox(1f, y + 21f, w - 2f, ArtH);
+                ConstCells = new FeedBox(1f, y + 21f + ArtH, w - 2f, CellsH);
+                y += ch + g;
+            }
+            else
+            {
+                Constellation = new FeedBox(0f, y, w, CompactCellsH);
+                ConstArt = new FeedBox(0f, y, w, 0f);
+                ConstCells = new FeedBox(1f, y, w - 2f, CompactCellsH);
+                y += CompactCellsH + g;
+            }
+            float trackH = TaskedFixed + TrackRows * RowPitch;
+            float below = SensorChrome + g + trackH + g + ButtonsH + g + g;
+            float pool = h - y - below - TaskedFixed;
+            float minImage = Art ? MinImageTall : MinImageShort;
+            CardRows = Art ? Math.Max(1, Math.Min(4, (int)Math.Floor((pool - minImage) / CardPitch))) : 1;
+            float image = Math.Max(60f, pool - CardRows * CardPitch);
+            Sensor = new FeedBox(0f, y, w, SensorChrome + image);
+            PlaceSensor();
+            y += Sensor.H + g;
+            Track = new FeedBox(0f, y, w, trackH); y += trackH + g;
+            Buttons = new FeedBox(0f, y, w, ButtonsH); y += ButtonsH + g;
+            Tasked = new FeedBox(0f, y, w, TaskedFixed + CardRows * CardPitch);
+            Console = new FeedBox(0f, 0f, 0f, 0f);
+            ConsoleLines = 0;
         }
 
-        private void FullScreen(float w, float h)
+        private void Station(float w, float h)
         {
+            Art = true;
+            const float g = 6f;
+            Threat = new FeedBox(0f, 0f, w, WarnFullH);
+            float y = WarnFullH + g;
             float column = Math.Min(ColumnWidth, w * 0.4f);
             float x = w - column;
-            Threat = new FeedBox(0f, 0f, w, ThreatFullH); // the full-screen strip is taller and its words larger: it must read at a glance
-            float top = ThreatFullH + Gap;
-            Image = new FeedBox(0f, top, Math.Max(60f, x - Gap), Math.Max(60f, h - top));
-            float y = top;
-            Toolbar = new FeedBox(x, y, column, ToolbarH); y += ToolbarH + Gap;
-            Status = new FeedBox(x, y, column, StatusH); y += StatusH + Gap;
-            Tiles = new FeedBox(x, y, column, TileH); y += TileH + Gap;
-            Actions = new FeedBox(x, y, column, ActionsH); y += ActionsH + Gap;
-            float rest = h - y - HeaderH - Gap - WordsH - Gap;
-            int cards = (int)Math.Max(1f, Math.Min(MaxCards, (float)Math.Floor((rest + Gap) / (CardH + Gap))));
-            Stack(x, column, ref y, cards);
+            Sensor = new FeedBox(0f, y, Math.Max(120f, x - g), Math.Max(SensorChrome + 60f, h - y));
+            PlaceSensor();
+            float ch = 21f + ArtH + CellsH + 1f;
+            Constellation = new FeedBox(x, y, column, ch);
+            ConstArt = new FeedBox(x + 1f, y + 21f, column - 2f, ArtH);
+            ConstCells = new FeedBox(x + 1f, y + 21f + ArtH, column - 2f, CellsH);
+            y += ch + g;
+            TrackRows = Tiles6;
+            float trackH = TaskedFixed + TrackRows * RowPitch;
+            Track = new FeedBox(x, y, column, trackH); y += trackH + g;
+            Buttons = new FeedBox(x, y, column, ButtonsH); y += ButtonsH + g;
+            CardRows = 3;
+            Tasked = new FeedBox(x, y, column, TaskedFixed + CardRows * CardPitch); y += Tasked.H + g;
+            float rest = h - y;
+            ConsoleLines = (int)Math.Floor((rest - 2f * ConsolePad) / ConsoleLineH);
+            if (ConsoleLines < 2) { ConsoleLines = 0; Console = new FeedBox(x, y, column, 0f); }
+            else
+            {
+                ConsoleLines = Math.Min(ConsoleLines, 28);
+                Console = new FeedBox(x, y, column, ConsoleLines * ConsoleLineH + 2f * ConsolePad);
+            }
         }
 
-        private void Stack(float x, float w, ref float y, int cards)
+        private void PlaceSensor()
         {
-            TaskedHeader = new FeedBox(x, y, w, HeaderH); y += HeaderH + Gap;
-            Cards = new FeedBox[cards];
-            for (int i = 0; i < cards; i++) { Cards[i] = new FeedBox(x, y, w, CardH); y += CardH + Gap; }
-            Words = new FeedBox(x, y, w, WordsH);
+            Toolbar = new FeedBox(Sensor.X + 2f, Sensor.Y + 22f, Sensor.W - 4f, ToolbarH);
+            Image = new FeedBox(Sensor.X + 1f, Sensor.Y + 50f, Sensor.W - 2f, Math.Max(0f, Sensor.H - SensorChrome));
         }
 
-        /// <summary>The six tile boxes of a page inside <see cref="Tiles"/>, with a 4 unit gap.</summary>
-        public FeedBox Tile(int index)
+        /// <summary>One track-file row inside <see cref="Track"/>.</summary>
+        public FeedBox TrackRow(int index) => new FeedBox(Track.X + 2f, Track.Y + 22f + index * RowPitch, Track.W - 4f, RowH);
+
+        /// <summary>One TASKED row inside <see cref="Tasked"/>.</summary>
+        public FeedBox CardRow(int index) => new FeedBox(Tasked.X + 2f, Tasked.Y + 22f + index * CardPitch, Tasked.W - 4f, CardH);
+
+        /// <summary>One of the three constellation bird cells inside <see cref="ConstCells"/>.</summary>
+        public FeedBox BirdCell(int index)
         {
-            const float g = 4f;
-            float w = (Tiles.W - g * (Tiles6 - 1)) / Tiles6;
-            return new FeedBox(Tiles.X + index * (w + g), Tiles.Y, w, Tiles.H);
+            float w = ConstCells.W / 3f;
+            return new FeedBox(ConstCells.X + index * w, ConstCells.Y, w, ConstCells.H);
+        }
+
+        /// <summary>The CONFIRM (0) and TRANSMIT (1) buttons inside <see cref="Buttons"/>.</summary>
+        public FeedBox ActionButton(int index)
+        {
+            const float g = 6f;
+            float w = (Buttons.W - 2f * 2f - g) / 2f;
+            return new FeedBox(Buttons.X + 2f + index * (w + g), Buttons.Y, w, Buttons.H);
         }
     }
 

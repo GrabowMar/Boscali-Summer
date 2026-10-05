@@ -213,6 +213,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public static int PageCount(int contacts) => contacts <= 0 ? 1 : (contacts + ContactsPerPage - 1) / ContactsPerPage;
         public static int ClampPage(int page, int contacts) => Math.Max(0, Math.Min(page, PageCount(contacts) - 1));
 
+        /// <summary>Paging for a surface that shows <paramref name="perPage"/> track-file rows (the compact page shows fewer than the station).</summary>
+        public static int PageCount(int contacts, int perPage) => contacts <= 0 || perPage <= 0 ? 1 : (contacts + perPage - 1) / perPage;
+        public static int ClampPage(int page, int contacts, int perPage) => Math.Max(0, Math.Min(page, PageCount(contacts, perPage) - 1));
+
         /// <summary>Ground width the imager frames at a zoom step: the whole window, half, a quarter.</summary>
         public static float Footprint(int step, float windowRadius)
         {

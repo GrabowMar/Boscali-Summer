@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Presentation.C2;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -20,26 +22,34 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Label;
     }
 
-    /// <summary>One of the six fixed contact targets.</summary>
+    /// <summary>One track-file row: a host-revealed contact (or a MARK whose reveal lapsed, a fixed point).</summary>
     internal struct FeedTileView
     {
-        public bool Present, Selected, Marked;
+        public bool Present, Selected, Marked, Moving, FixedPoint;
         public int Id;
+        public byte Percent;
         public ProbableClass Class;
         public string Title, Sub;
     }
 
-    /// <summary>One TASKED card: target and payoff, source, the host quote and one state word.</summary>
+    /// <summary>One TASKED row: target count and payoff, source, the host quote, a short state word and the full words for the hover help.</summary>
     internal struct FeedCardView
     {
         public bool Present, Armed, Enabled;
         public int PostId;
-        public string Title, Sub, Price, State;
+        public string Title, Chip, Sub, Price, State, Detail, Button;
+        public AvState Tone;
+    }
+
+    /// <summary>One constellation cell: the bird, its real state word and the tone of that word.</summary>
+    internal struct FeedBirdView
+    {
+        public string State;
         public AvState Tone;
     }
 
     /// <summary>
-    /// The one view model both surfaces paint: the compact page on the OPS MFD and the full-screen window. Built each refresh
+    /// The one view model both surfaces paint: the ORBIT page on the OPS MFD and the full-screen station. Built each refresh
     /// by <see cref="SpaceFeedController"/> from the faction mirror (never from a client registry); reused, never reallocated.
     /// </summary>
     internal sealed class SpaceFeedView
@@ -58,16 +68,22 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Status = "";
         public AvState StatusTone = AvState.Inert;
         public readonly FeedTileView[] Tiles = new FeedTileView[SpaceFeedRules.ContactsPerPage];
-        /// <summary>The single line that replaces the six contact targets when none is revealed (empty when there are contacts).</summary>
+        /// <summary>The single line that replaces the track-file rows when none is revealed (empty when there are contacts).</summary>
         public string NoContacts = "";
         public AvState NoContactsTone = AvState.Inert;
         public int Page, Pages = 1;
+        public int SelectedId;
         public bool CanConfirm, CanSend, ConfirmFull, ZoomEnabled = true;
         public int SendCount;
         public string ConfirmHelp = "", SendHelp = "";
         public string TaskedCaption = "";
         public readonly FeedCardView[] Cards = new FeedCardView[6];
         public int CardCount;
+        /// <summary>The three bird cells in <see cref="BirdKind"/> order: OPTICAL, RADAR, KINETIC.</summary>
+        public readonly FeedBirdView[] Birds = new FeedBirdView[3];
+        public string ConstellationMeta = "";
+        /// <summary>The host console the station shows (the OPS page shows it on CAP).</summary>
+        public C2Console Console;
         public string Words = "";
         public AvState WordsTone = AvState.Inert;
     }
@@ -89,73 +105,115 @@ namespace BoscaliSummer.Modules.Support.Presentation
     }
 
     /// <summary>
-    /// The SPACE feed board: threat strip, source/zoom/full toolbar, the picture with host-revealed brackets, one status line,
-    /// six fixed 36 px contact targets with a page switch, CONFIRM / SEND, the TASKED cards and one words line. Every row height
-    /// is fixed after construction (<see cref="SpaceFeedLayout"/>); only the picture takes the leftover height. Text shrinks
-    /// toward the 10 px floor, never wraps and never moves a row.
+    /// The SPACE feed, laid out as the ORBIT page of the C2 terminal (and, wider, as the full-screen tasking station): threat strip,
+    /// constellation cells with the cosmetic orbit art, the sensor frame (OPTICAL / RADAR / ZOOM / FULL toolbar, the picture with
+    /// host-revealed brackets and a one-line status), the track file with its page buttons, CONFIRM / TRANSMIT and the TASKED rows.
+    /// Every height is fixed after construction (<see cref="SpaceFeedLayout"/>); only the picture takes the leftover height. Text is
+    /// fitted with an ellipsis to its slot, never wraps and never moves a row. The panel owns no policy: every press is a request.
     /// </summary>
     internal sealed class SpaceFeedPanel : AvPart
     {
-        private const float Pad = 6f;
+        private static readonly BirdKind[] Birds = { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic };
         private readonly ISpaceFeedActions actions;
         private readonly SpaceFeedLayout layout;
-        private readonly bool full;
-        private readonly float boardWidth, boardHeight;
+        private readonly float boardHeight;
+        private readonly List<AvPart> parts = new List<AvPart>();
 
-        // Threat strip, words line, status line.
-        private readonly Image threatBack, threatRail, wordsBack, wordsRail;
-        private readonly TMP_Text threatText, wordsText, statusText, captionText, hintText, noContactsText;
+        // Threat strip.
+        private readonly Image threatBack, threatRail;
+        private readonly TMP_Text threatText;
 
-        // Toolbar and actions.
-        private readonly AvControl opticalButton, radarButton, zoomButton, fullButton, prevButton, nextButton, confirmButton, sendButton;
-        private readonly TMP_Text pageText;
+        // Constellation.
+        private readonly C2Box constBox;
+        private readonly AvFrame constFrame;
+        private readonly OrbitArt art;
+        private readonly TMP_Text[] birdKey = new TMP_Text[3], birdState = new TMP_Text[3], birdTele = new TMP_Text[3];
+        private readonly Image[] cellRule = new Image[2];
 
-        // Picture.
+        // Sensor frame.
+        private readonly C2Box sensorBox;
+        private readonly AvControl opticalButton, radarButton, zoomButton, fullButton;
         private readonly RectTransform imageRoot;
-        private readonly Image imageBack;
+        private readonly Image imageBack, statusBack;
         private readonly RawImage picture;
-        private readonly TMP_Text refusalText;
+        private readonly TMP_Text refusalText, statusText;
         private readonly Bracket[] brackets = new Bracket[SpaceFeedView.MaxBrackets];
 
-        // Tiles and cards.
-        private readonly Tile[] tiles = new Tile[SpaceFeedLayout.Tiles6];
-        private readonly Card[] cards;
+        // Track file, actions, TASKED.
+        private readonly C2Box trackBox, taskedBox;
+        private readonly AvControl prevButton, nextButton, confirmButton, sendButton;
+        private readonly C2Row[] trackRows, cardRows;
+        private readonly int[] trackIds, cardIds;
+        private readonly TMP_Text noContactsText, noTaskedText;
+        private readonly C2ConsoleView consoleView;
 
-        private AvState threatTone = AvState.Inert, wordsTone = AvState.Inert;
-        private SpaceFeedView last;
+        private AvState threatTone = AvState.Inert;
+        private string threatRaw = "", statusRaw = "", noTaskedRaw = "";
+        private AvState statusTone = AvState.Info;
 
         public SpaceFeedPanel(RectTransform parent, ISpaceFeedActions actions, float width, float height, bool full)
         {
             this.actions = actions ?? NullActions.Instance;
-            this.full = full;
-            boardWidth = width;
             boardHeight = height;
             layout = SpaceFeedLayout.Compute(width, height, full);
             Rect = AvLay.Child(parent, "SpaceFeed");
             AvLay.Place(Rect, 0f, 0f, width, height);
 
-            // ---- Threat strip ----
+            // ---- Threat strip (the warning bar in the station) ----
             threatBack = AvLay.Solid(Rect, "ThreatBack", Color.clear);
             threatRail = AvLay.Solid(Rect, "ThreatRail", Color.clear);
-            threatText = Line(Rect, "Threat", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-            if (full) { threatText.fontSize = 22f; threatText.fontSizeMax = 22f; }
+            threatText = C2Kit.Mono(Rect, "Threat", full ? 16f : 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             Put(threatBack.rectTransform, layout.Threat);
             AvLay.Place(threatRail.rectTransform, layout.Threat.X, layout.Threat.Y, 3f, layout.Threat.H);
-            AvLay.Place(threatText.rectTransform, layout.Threat.X + 10f, layout.Threat.Y, layout.Threat.W - 14f, layout.Threat.H);
+            Put(threatText.rectTransform, new FeedBox(layout.Threat.X + 10f, layout.Threat.Y, layout.Threat.W - 14f, layout.Threat.H));
 
-            // ---- Toolbar ----
+            // ---- Constellation ----
+            if (layout.Art)
+            {
+                constBox = Add(new C2Box(Rect, "CONSTELLATION"));
+                constBox.BodyHeight = layout.Constellation.H - C2Box.HeaderH;
+                constBox.Place(Slot(layout.Constellation));
+                art = Add(new OrbitArt(Rect, layout.ConstArt.W, layout.ConstArt.H));
+                AvLay.Place(art.Rect, layout.ConstArt.X, layout.ConstArt.Y, layout.ConstArt.W, layout.ConstArt.H);
+            }
+            else
+            {
+                constFrame = AvFrame.Add(Rect, "ConstFrame", default(AvChamfer));
+                Put(constFrame.rectTransform, layout.Constellation);
+            }
+            for (int i = 0; i < 3; i++)
+            {
+                FeedBox cell = layout.BirdCell(i);
+                birdKey[i] = C2Kit.Mono(Rect, "BirdKey" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
+                birdState[i] = C2Kit.Mono(Rect, "BirdState" + i, 12f, TextAlignmentOptions.MidlineRight, true);
+                birdTele[i] = C2Kit.Mono(Rect, "BirdTele" + i, 10f, TextAlignmentOptions.MidlineLeft);
+                C2Kit.Place(birdKey[i], cell.X + 8f, cell.Y + 2f, cell.W * 0.5f - 8f, 13f);
+                C2Kit.Place(birdState[i], cell.X + cell.W * 0.5f, cell.Y + 1f, cell.W * 0.5f - 8f, 16f);
+                C2Kit.Place(birdTele[i], cell.X + 8f, cell.Y + cell.H - 13f, cell.W - 12f, 12f);
+                birdKey[i].text = C2Orbit.BirdName(Birds[i]);
+                birdTele[i].text = C2Orbit.Telemetry(Birds[i]); // cosmetic
+                if (i > 0)
+                {
+                    cellRule[i - 1] = AvLay.Solid(Rect, "CellRule" + i, Color.clear);
+                    AvLay.Place(cellRule[i - 1].rectTransform, cell.X, cell.Y + 3f, 1f, cell.H - 6f);
+                }
+            }
+
+            // ---- Sensor frame ----
+            sensorBox = Add(new C2Box(Rect, "SENSOR FRAME"));
+            sensorBox.BodyHeight = layout.Sensor.H - C2Box.HeaderH;
+            sensorBox.Place(Slot(layout.Sensor));
             FeedBox tb = layout.Toolbar;
             float bw = (tb.W - 3f * 4f) / 4f;
-            opticalButton = Button(Rect, "OPTICAL", () => Do(() => actions.SetSource(BirdKind.Optical)), AvButtonStyle.Default, tb.X, tb.Y, bw, tb.H,
+            opticalButton = Button("OPTICAL", () => Do(() => this.actions.SetSource(BirdKind.Optical)), AvButtonStyle.Default, tb.X, tb.Y, bw, tb.H,
                 "Show the OPTICAL bird's camera picture. Daylight only: cloud softens it, night refuses.");
-            radarButton = Button(Rect, "RADAR", () => Do(() => actions.SetSource(BirdKind.Radar)), AvButtonStyle.Default, tb.X + (bw + 4f), tb.Y, bw, tb.H,
+            radarButton = Button("RADAR", () => Do(() => this.actions.SetSource(BirdKind.Radar)), AvButtonStyle.Default, tb.X + (bw + 4f), tb.Y, bw, tb.H,
                 "Show the RADAR bird's SAR product from the last RADAR SCAN or MTI SWEEP.");
-            zoomButton = Button(Rect, "ZOOM WIDE", () => Do(actions.CycleZoom), AvButtonStyle.Quiet, tb.X + 2f * (bw + 4f), tb.Y, bw, tb.H,
+            zoomButton = Button("ZOOM WIDE", () => Do(this.actions.CycleZoom), AvButtonStyle.Quiet, tb.X + 2f * (bw + 4f), tb.Y, bw, tb.H,
                 "Cycle the picture zoom: WIDE, MID, CLOSE. CLOSE centres on the selected target.");
-            fullButton = Button(Rect, full ? "EXIT" : "OPEN FULL", () => Do(actions.ToggleFull), AvButtonStyle.Quiet, tb.X + 3f * (bw + 4f), tb.Y, bw, tb.H,
-                full ? "Close the full-screen feed (Esc)." : "Open the full-screen feed. Keyboard and joystick stay live; the mouse drives the feed.");
+            fullButton = Button(full ? "EXIT" : "OPEN FULL", () => Do(this.actions.ToggleFull), AvButtonStyle.Quiet, tb.X + 3f * (bw + 4f), tb.Y, bw, tb.H,
+                full ? "Close the full-screen feed (Esc)." : "Open the full-screen tasking station. Keyboard and joystick stay live; the mouse drives the feed.");
 
-            // ---- Picture ----
             FeedBox im = layout.Image;
             imageRoot = AvLay.Child(Rect, "Picture");
             AvLay.Place(imageRoot, im.X, im.Y, im.W, im.H);
@@ -171,55 +229,68 @@ namespace BoscaliSummer.Modules.Support.Presentation
             picture.enabled = false;
             refusalText = AvText.Make(imageRoot, "Refusal", AvTextRole.Prose, "", TextAlignmentOptions.Center, true);
             AvLay.Fill(refusalText.rectTransform, 12f);
-            for (int i = 0; i < brackets.Length; i++) brackets[i] = new Bracket(imageRoot, i, id => Do(() => actions.SelectEntry(id)));
+            statusBack = AvLay.Solid(imageRoot, "StatusBack", Color.clear);
+            statusBack.raycastTarget = false;
+            AvLay.Place(statusBack.rectTransform, 0f, im.H - 16f, im.W, 16f);
+            statusText = C2Kit.Mono(imageRoot, "Status", 10f, TextAlignmentOptions.MidlineLeft);
+            C2Kit.Place(statusText, 6f, im.H - 16f, im.W - 12f, 16f);
+            for (int i = 0; i < brackets.Length; i++) brackets[i] = new Bracket(imageRoot, i, id => Do(() => this.actions.SelectEntry(id)));
 
-            // ---- Status ----
-            statusText = Line(Rect, "Status", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-            Put(statusText.rectTransform, layout.Status);
-
-            // ---- Tiles ----
-            for (int i = 0; i < tiles.Length; i++)
+            // ---- Track file ----
+            trackBox = Add(new C2Box(Rect, "TRACK FILE · HOST-REVEALED ONLY"));
+            trackBox.BodyHeight = layout.Track.H - C2Box.HeaderH;
+            trackBox.MetaInset = 62f;
+            trackBox.Place(Slot(layout.Track));
+            float navX = layout.Track.Right - 6f - 24f;
+            prevButton = IconButton(AvIcon.ChevronLeft, () => Do(this.actions.PrevPage), navX - 26f, layout.Track.Y + 1f, 24f, 18f, "Previous page of contact targets.");
+            nextButton = IconButton(AvIcon.ChevronRight, () => Do(this.actions.NextPage), navX, layout.Track.Y + 1f, 24f, 18f, "Next page of contact targets.");
+            trackRows = new C2Row[layout.TrackRows];
+            trackIds = new int[layout.TrackRows];
+            for (int i = 0; i < trackRows.Length; i++)
             {
-                FeedBox box = layout.Tile(i);
-                tiles[i] = new Tile(Rect, box, id => Do(() => actions.SelectEntry(id)));
+                int slot = i;
+                trackRows[i] = Add(new C2Row(Rect, SpaceFeedLayout.RowH, false));
+                trackRows[i].Place(Slot(layout.TrackRow(i)));
+                trackRows[i].Primary.Clicked += () => Do(() => this.actions.SelectEntry(trackIds[slot]));
             }
-
-            // The one line that stands in for the six targets when the faction has no revealed contact (the tiles hide meanwhile).
-            noContactsText = Line(Rect, "NoContacts", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-            Put(noContactsText.rectTransform, new FeedBox(layout.Tiles.X + 8f, layout.Tiles.Y, layout.Tiles.W - 12f, layout.Tiles.H));
+            noContactsText = C2Kit.Mono(Rect, "NoContacts", 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            noContactsText.richText = false;
+            FeedBox r0 = layout.TrackRow(0);
+            C2Kit.Place(noContactsText, r0.X + 8f, r0.Y, r0.W - 16f, SpaceFeedLayout.RowH * 2f);
+            noContactsText.enableWordWrapping = true;
+            noContactsText.alignment = TextAlignmentOptions.TopLeft;
             noContactsText.gameObject.SetActive(false);
 
             // ---- Actions ----
-            FeedBox ac = layout.Actions;
-            const float navW = 48f, pageW = 52f, g = 4f;
-            float rest = ac.W - (navW * 2f + pageW + 4f * g);
-            float actionW = rest * 0.5f;
-            prevButton = Button(Rect, "PREV", () => Do(actions.PrevPage), AvButtonStyle.Quiet, ac.X, ac.Y, navW, ac.H, "Previous page of contact targets.");
-            pageText = Line(Rect, "Page", AvTextRole.Micro, TextAlignmentOptions.Center);
-            AvLay.Place(pageText.rectTransform, ac.X + navW + g, ac.Y, pageW, ac.H);
-            nextButton = Button(Rect, "NEXT", () => Do(actions.NextPage), AvButtonStyle.Quiet, ac.X + navW + g + pageW + g, ac.Y, navW, ac.H, "Next page of contact targets.");
-            float cx = ac.X + navW * 2f + pageW + 3f * g;
-            confirmButton = Button(Rect, "CONFIRM", () => Do(actions.Confirm), AvButtonStyle.Primary, cx, ac.Y, actionW, ac.H,
+            FeedBox c0 = layout.ActionButton(0), c1 = layout.ActionButton(1);
+            confirmButton = Button("CONFIRM", () => Do(this.actions.Confirm), AvButtonStyle.Primary, c0.X, c0.Y, c0.W, c0.H,
                 "MARK the selected target. The host answers CONFIRMED, NEUTRAL, DECOY or FRIENDLY; only CONFIRMED can be posted.");
-            sendButton = Button(Rect, "SEND", () => Do(actions.Send), AvButtonStyle.Primary, cx + actionW + g, ac.Y, actionW, ac.H,
-                "Post your live MARKs as one TASKED call. The first pilot to claim it fires.");
+            sendButton = Button("TRANSMIT", () => Do(this.actions.Send), AvButtonStyle.Primary, c1.X, c1.Y, c1.W, c1.H,
+                "Post your live MARKs as one TASKED call to the board. The first pilot to claim it fires.");
 
-            // ---- TASKED cards ----
-            FeedBox th = layout.TaskedHeader;
-            captionText = Line(Rect, "Tasked", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-            AvLay.Place(captionText.rectTransform, th.X, th.Y, th.W * 0.4f, th.H);
-            hintText = Line(Rect, "TaskedHint", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
-            AvLay.Place(hintText.rectTransform, th.X + th.W * 0.4f, th.Y, th.W * 0.6f, th.H);
-            cards = new Card[layout.CardCount];
-            for (int i = 0; i < cards.Length; i++) cards[i] = new Card(Rect, layout.Cards[i], id => Do(() => actions.PressCard(id)));
+            // ---- TASKED ----
+            taskedBox = Add(new C2Box(Rect, "TASKED CALLS"));
+            taskedBox.BodyHeight = layout.Tasked.H - C2Box.HeaderH;
+            taskedBox.Place(Slot(layout.Tasked));
+            cardRows = new C2Row[layout.CardRows];
+            cardIds = new int[layout.CardRows];
+            for (int i = 0; i < cardRows.Length; i++)
+            {
+                int slot = i;
+                cardRows[i] = Add(new C2Row(Rect, SpaceFeedLayout.CardH, true));
+                cardRows[i].Place(Slot(layout.CardRow(i)));
+                cardRows[i].Primary.Clicked += () => Do(() => this.actions.PressCard(cardIds[slot]));
+            }
+            noTaskedText = C2Kit.Mono(Rect, "NoTasked", 10.5f, TextAlignmentOptions.MidlineLeft);
+            FeedBox t0 = layout.CardRow(0);
+            C2Kit.Place(noTaskedText, t0.X + 8f, t0.Y, t0.W - 16f, SpaceFeedLayout.CardH);
 
-            // ---- Words ----
-            wordsBack = AvLay.Solid(Rect, "WordsBack", Color.clear);
-            wordsRail = AvLay.Solid(Rect, "WordsRail", Color.clear);
-            wordsText = Line(Rect, "Words", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-            Put(wordsBack.rectTransform, layout.Words);
-            AvLay.Place(wordsRail.rectTransform, layout.Words.X, layout.Words.Y, 3f, layout.Words.H);
-            AvLay.Place(wordsText.rectTransform, layout.Words.X + 10f, layout.Words.Y, layout.Words.W - 14f, layout.Words.H);
+            // ---- Host console (station only) ----
+            if (layout.ConsoleLines > 0)
+            {
+                consoleView = Add(new C2ConsoleView(Rect, layout.ConsoleLines));
+                consoleView.Place(Slot(layout.Console));
+            }
 
             Restyle();
         }
@@ -227,16 +298,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public RectTransform ImageRoot => imageRoot;
         public SpaceFeedLayout Layout => layout;
 
-        /// <summary>A kit v2 standalone console for the offline render harness: the OPS chrome with this page alone.</summary>
-        internal static SpaceFeedPanel BuildForHarness(RectTransform root, float height)
+        /// <summary>The footer words and tone of the last paint (the ORBIT page hands them to the OPS footer; the station has its own).</summary>
+        public string Words { get; private set; } = "";
+        public AvState WordsTone { get; private set; } = AvState.Inert;
+
+        private T Add<T>(T part) where T : AvPart
         {
-            AvConsole shell = AvConsole.Build(root, "OPS", "SPACE", 1, AvTokens.PanelWidth, height);
-            AvFlow page = shell.Page(0);
-            float body = OpsPage.BodyHeight(height, tabs: true);
-            var panel = new SpaceFeedPanel(page.Content, NullActions.Instance, OpsPage.BoardWidth, body - OpsPage.FlowInset, false);
-            page.Add(panel);
-            shell.Finish();
-            return panel;
+            parts.Add(part);
+            return part;
         }
 
         private void Do(Action act)
@@ -258,39 +327,47 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Paint(SpaceFeedView view)
         {
             if (view == null) return;
-            last = view;
+            Words = view.Words;
+            WordsTone = view.WordsTone;
 
             SetTone(ref threatTone, view.ThreatActive ? AvState.Danger : view.Ground ? AvState.Inert : AvState.Ready);
-            OpsText.Set(threatText, view.Threat);
-            SetTone(ref wordsTone, view.WordsTone);
-            OpsText.Set(wordsText, view.Words);
-            OpsText.Set(statusText, view.Status);
-            statusText.color = OpsInk.Word(view.StatusTone == AvState.Inert ? AvState.Info : view.StatusTone);
-            OpsText.Set(pageText, "PAGE " + (view.Page + 1) + "/" + Math.Max(1, view.Pages));
+            SetText(threatText, ref threatRaw, view.Threat, layout.Threat.W - 18f);
 
+            PaintConstellation(view);
+
+            sensorBox.SetMeta(C2Orbit.SensorMeta(view.Source, view.Zoom, view.ZoomEnabled));
             opticalButton.Latched = view.Source == BirdKind.Optical;
             radarButton.Latched = view.Source == BirdKind.Radar;
             SetLabel(zoomButton, view.ZoomEnabled ? "ZOOM " + SpaceFeedRules.ZoomWord(view.Zoom) : "ZOOM FIXED");
             SetEnabled(zoomButton, view.ZoomEnabled);
-            SetEnabled(prevButton, view.Page > 0);
-            SetEnabled(nextButton, view.Page + 1 < view.Pages);
+            PaintPicture(view);
+            SetText(statusText, ref statusRaw, view.Status, layout.Image.W - 14f);
+            if (statusTone != view.StatusTone) { statusTone = view.StatusTone; RestyleStatus(); }
+
+            PaintTrack(view);
+
             SetEnabled(confirmButton, view.CanConfirm);
-            SetLabel(confirmButton, view.ConfirmFull ? "MARKS FULL" : "CONFIRM");
+            SetLabel(confirmButton, C2Orbit.ConfirmLabel(view.SelectedId, view.ConfirmFull));
             SetHelp(confirmButton, view.ConfirmHelp);
             SetEnabled(sendButton, view.CanSend);
-            SetLabel(sendButton, view.SendCount > 0 ? "SEND " + view.SendCount : "SEND");
+            SetLabel(sendButton, C2Orbit.TransmitLabel(view.SendCount));
             SetHelp(sendButton, view.SendHelp);
 
-            PaintPicture(view);
-            bool none = view.NoContacts.Length > 0;
-            for (int i = 0; i < tiles.Length; i++) { tiles[i].SetVisible(!none); tiles[i].Paint(view.Tiles[i]); }
-            if (noContactsText.gameObject.activeSelf != none) noContactsText.gameObject.SetActive(none);
-            OpsText.Set(noContactsText, view.NoContacts);
-            noContactsText.color = OpsInk.Word(view.NoContactsTone == AvState.Inert ? AvState.Info : view.NoContactsTone);
+            PaintTasked(view);
+            consoleView?.Show(view.Console);
+        }
 
-            OpsText.Set(captionText, view.TaskedCaption);
-            OpsText.Set(hintText, view.CardCount > 0 ? "CLICK A CARD TO ARM · CLICK AGAIN TO FIRE" : "NOTHING POSTED · MARK, THEN SEND");
-            for (int i = 0; i < cards.Length; i++) cards[i].Paint(i < view.CardCount ? view.Cards[i] : default);
+        private void PaintConstellation(SpaceFeedView view)
+        {
+            constBox?.SetMeta(view.ConstellationMeta);
+            for (int i = 0; i < 3; i++)
+            {
+                FeedBirdView b = view.Birds[i];
+                string word = string.IsNullOrEmpty(b.State) ? "—" : b.State;
+                if (OpsText.Set(birdState[i], word) || birdState[i].color != OpsInk.Word(b.Tone))
+                    birdState[i].color = b.Tone == AvState.Inert ? OpsInk.Muted : OpsInk.Word(b.Tone);
+            }
+            art?.SetStates(view.Birds[0].Tone, view.Birds[1].Tone, view.Birds[2].Tone);
         }
 
         private void PaintPicture(SpaceFeedView view)
@@ -319,54 +396,129 @@ namespace BoscaliSummer.Modules.Support.Presentation
             for (int i = shown; i < brackets.Length; i++) brackets[i].Hide();
         }
 
+        private void PaintTrack(SpaceFeedView view)
+        {
+            bool none = view.NoContacts.Length > 0;
+            trackBox.SetMeta(none ? "NO TRACKS" : C2Orbit.PageMeta(view.Page, view.Pages));
+            SetEnabled(prevButton, !none && view.Page > 0);
+            SetEnabled(nextButton, !none && view.Page + 1 < view.Pages);
+            if (noContactsText.gameObject.activeSelf != none) noContactsText.gameObject.SetActive(none);
+            OpsText.Set(noContactsText, view.NoContacts);
+            noContactsText.color = OpsInk.Word(view.NoContactsTone == AvState.Inert ? AvState.Info : view.NoContactsTone);
+            for (int i = 0; i < trackRows.Length; i++)
+            {
+                FeedTileView t = i < view.Tiles.Length ? view.Tiles[i] : default;
+                bool on = t.Present && !none;
+                if (trackRows[i].Rect.gameObject.activeSelf != on) trackRows[i].Rect.gameObject.SetActive(on);
+                if (!on) continue;
+                trackIds[i] = t.Id;
+                AvState cls = t.Class == ProbableClass.Hostile ? AvState.Danger : t.Class == ProbableClass.Friendly ? AvState.Ready
+                    : t.Class == ProbableClass.Neutral ? AvState.Info : AvState.Caution;
+                trackRows[i].Armed = t.Selected;
+                trackRows[i].Set(C2Orbit.TrackId(t.Id), t.Title, t.Percent > 0 && t.Percent <= 100 ? t.Percent + "%" : "", cls, "",
+                    t.Moving ? "MOVING" : "STATIC", t.Marked ? "MARKED" : t.FixedPoint ? "FIXED" : "", t.Marked ? AvState.Ready : AvState.Inert,
+                    t.Selected ? "SELECTED" : "SELECT", t.Selected ? AvButtonStyle.Default : AvButtonStyle.Primary, !t.Selected);
+                trackRows[i].SetHelp("Select this target on the picture. CONFIRM then MARKs it.", "");
+            }
+        }
+
+        private void PaintTasked(SpaceFeedView view)
+        {
+            taskedBox.SetTitle(view.TaskedCaption);
+            taskedBox.SetMeta(C2Orbit.TaskedMeta(view.CardCount));
+            bool none = view.CardCount == 0;
+            string empty = "NO TASKED CALL · POSTED CALLS APPEAR HERE";
+            if (noTaskedText.gameObject.activeSelf != none) noTaskedText.gameObject.SetActive(none);
+            SetText(noTaskedText, ref noTaskedRaw, none ? empty : "", layout.CardRow(0).W - 16f);
+            noTaskedText.color = OpsInk.Muted;
+            for (int i = 0; i < cardRows.Length; i++)
+            {
+                FeedCardView c = i < view.CardCount ? view.Cards[i] : default;
+                bool on = c.Present;
+                if (cardRows[i].Rect.gameObject.activeSelf != on) cardRows[i].Rect.gameObject.SetActive(on);
+                if (!on) continue;
+                cardIds[i] = c.PostId;
+                cardRows[i].Armed = c.Armed;
+                cardRows[i].Set((i + 1).ToString("00"), c.Title, c.Chip, AvState.Ready, c.Sub, c.Price, c.State, c.Tone, c.Button,
+                    c.Armed ? AvButtonStyle.Danger : c.Enabled && c.Tone == AvState.Ready ? AvButtonStyle.Primary : AvButtonStyle.Default, c.Enabled);
+                cardRows[i].SetHelp(c.Detail, "");
+                if (cardRows[i].Primary.Help != c.Detail) cardRows[i].Primary.Help = c.Detail;
+            }
+        }
+
         private void SetTone(ref AvState current, AvState next)
         {
             if (current == next) return;
             current = next;
-            Restyle();
+            RestyleStrip();
         }
+
+        private void SetText(TMP_Text text, ref string raw, string value, float room)
+        {
+            string v = value ?? "";
+            if (v == raw && text.text.Length > 0 == (v.Length > 0)) return;
+            raw = v;
+            OpsText.Set(text, C2Kit.FitTo(text, v, room));
+        }
+
+        // ---- Theme -----------------------------------------------------------------------------------------------
 
         public override void Restyle()
         {
             if (threatBack == null) return;
-            Color Back(AvState s) => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row " + AvStates.Class(s)).Background, AvTheme.SurfaceInert);
-            threatBack.color = threatTone == AvState.Danger ? Color.Lerp(Back(threatTone), OpsInk.Rail(AvState.Danger), 0.22f) : Back(threatTone);
-            threatRail.color = OpsInk.Rail(threatTone);
-            threatText.color = threatTone == AvState.Inert ? OpsInk.Dim : OpsInk.Word(threatTone);
-            wordsBack.color = Back(wordsTone);
-            wordsRail.color = OpsInk.Rail(wordsTone);
-            wordsText.color = wordsTone == AvState.Inert ? OpsInk.Dim : OpsInk.Word(wordsTone);
-            statusText.color = OpsInk.Word(AvState.Info);
-            pageText.color = OpsInk.Dim;
-            captionText.color = OpsInk.Key;
-            hintText.color = OpsInk.Muted;
+            RestyleStrip();
+            RestyleStatus();
             imageBack.color = new Color(0.02f, 0.03f, 0.03f, 1f);
+            foreach (AvPart p in parts) p.Restyle();
+            constFrame?.Paint(OpsInk.Inert, OpsInk.Hairline);
+            foreach (TMP_Text t in birdKey) if (t != null) t.color = OpsInk.Muted;
+            foreach (TMP_Text t in birdTele) if (t != null) t.color = OpsInk.Dim;
+            foreach (Image r in cellRule) if (r != null) r.color = OpsInk.Hairline;
+            if (art != null) art.Restyle();
             foreach (AvControl c in new[] { opticalButton, radarButton, zoomButton, fullButton, prevButton, nextButton, confirmButton, sendButton })
                 c?.Restyle();
-            if (tiles != null) foreach (Tile t in tiles) t?.Restyle();
-            if (cards != null) foreach (Card c in cards) c?.Restyle();
+            if (noTaskedText != null) noTaskedText.color = OpsInk.Muted;
             if (brackets != null) foreach (Bracket b in brackets) b?.Restyle();
         }
 
-        // ---- Small helpers ---------------------------------------------------------------------------------------
-
-        private static TMP_Text Line(RectTransform parent, string name, AvTextRole role, TextAlignmentOptions align)
+        private void RestyleStrip()
         {
-            TMP_Text t = OpsText.Line(parent, name, role, align);
-            t.fontSizeMin = AvTokens.FontMicro;
-            return t;
+            if (threatBack == null) return;
+            AvStyle row = AvStyleHost.FuiStyle("row " + AvStates.Class(threatTone));
+            Color back = AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert);
+            threatBack.color = threatTone == AvState.Danger ? Color.Lerp(back, OpsInk.Rail(AvState.Danger), 0.22f) : back;
+            threatRail.color = OpsInk.Rail(threatTone);
+            threatText.color = threatTone == AvState.Inert ? OpsInk.Dim : OpsInk.Word(threatTone);
         }
+
+        private void RestyleStatus()
+        {
+            if (statusBack == null) return;
+            statusBack.color = OpsInk.A(AvStyleHost.FuiColor("ground", Color.black), 0.72f);
+            statusText.color = OpsInk.Word(statusTone == AvState.Inert ? AvState.Info : statusTone);
+        }
+
+        // ---- Small helpers ---------------------------------------------------------------------------------------
 
         private static void SetEnabled(AvControl c, bool enabled) { if (c.Interactable != enabled) c.Interactable = enabled; }
         private static void SetLabel(AvControl c, string label) { if (c.Label != label) c.Label = label; }
         private static void SetHelp(AvControl c, string help) { if (!string.IsNullOrEmpty(help) && c.Help != help) c.Help = help; }
 
         private static void Put(RectTransform t, FeedBox b) => AvLay.Place(t, b.X, b.Y, b.W, b.H);
+        private static AvSlot Slot(FeedBox b) => new AvSlot(b.X, b.Y, b.W, b.H);
 
-        private static AvControl Button(RectTransform parent, string label, Action click, AvButtonStyle style, float x, float y, float w, float h, string help)
+        private AvControl Button(string label, Action click, AvButtonStyle style, float x, float y, float w, float h, string help)
         {
-            AvControl c = AvControl.Make(parent, new AvControl.Spec(label, click, style));
+            AvControl c = AvControl.Make(Rect, new AvControl.Spec(label, click, style));
             c.SingleLine();
+            c.Help = help;
+            AvLay.Place(c.Rect, x, y + 1f, w, h - 2f);
+            return c;
+        }
+
+        private AvControl IconButton(AvIcon icon, Action click, float x, float y, float w, float h, string help)
+        {
+            AvControl c = AvControl.Make(Rect, new AvControl.Spec("", click, AvButtonStyle.Quiet, icon));
             c.Help = help;
             AvLay.Place(c.Rect, x, y, w, h);
             return c;
@@ -406,7 +558,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 outline.Bracket = 5f;
                 outline.raycastTarget = false;
                 AvLay.Place(outline.rectTransform, (Hit - Box) * 0.5f, (Hit - Box) * 0.5f, Box, Box);
-                label = Line(root, "Label", AvTextRole.Micro, TextAlignmentOptions.Top);
+                label = OpsText.Line(root, "Label", AvTextRole.Micro, TextAlignmentOptions.Top);
+                label.fontSizeMin = AvTokens.FontMicro;
                 AvLay.Place(label.rectTransform, -30f, Hit - 6f, Hit + 60f, 14f);
                 label.enableWordWrapping = false;
                 root.gameObject.SetActive(false);
@@ -435,117 +588,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
         }
 
-        /// <summary>A fixed 36 px contact target: class word over percent/state, selected and MARKed marks.</summary>
-        private sealed class Tile
-        {
-            private readonly RectTransform root;
-            private readonly AvFrame frame;
-            private readonly Image rail;
-            private readonly TMP_Text title, sub;
-            private int id;
-            private bool present, selected, marked, hover;
-            private ProbableClass cls;
-
-            public Tile(RectTransform parent, FeedBox box, Action<int> select)
-            {
-                root = AvLay.Child(parent, "Tile");
-                AvLay.Place(root, box.X, box.Y, box.W, box.H);
-                frame = AvFrame.Add(root, "Frame", default(AvChamfer));
-                AvLay.Fill(frame.rectTransform);
-                rail = AvLay.Solid(root, "Rail", Color.clear);
-                AvLay.Place(rail.rectTransform, 0f, 0f, 3f, box.H);
-                title = Line(root, "Title", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-                sub = Line(root, "Sub", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-                AvLay.Place(title.rectTransform, 8f, 2f, box.W - 10f, 16f);
-                AvLay.Place(sub.rectTransform, 8f, 18f, box.W - 10f, 15f);
-                AvHit hit = AvHit.On(frame);
-                hit.Hover = h => { hover = h; Restyle(); };
-                hit.Click = e => { if (present && e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) select(id); };
-                Restyle();
-            }
-
-            public void SetVisible(bool visible) { if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible); }
-
-            public void Paint(in FeedTileView v)
-            {
-                bool changed = present != v.Present || selected != v.Selected || marked != v.Marked || cls != v.Class;
-                present = v.Present; selected = v.Selected; marked = v.Marked; cls = v.Class; id = v.Id;
-                OpsText.Set(title, v.Present ? v.Title : "—");
-                OpsText.Set(sub, v.Present ? v.Sub : "NO TARGET");
-                if (changed) Restyle();
-            }
-
-            public void Restyle()
-            {
-                if (frame == null) return;
-                AvStyle r = AvStyleHost.FuiStyle("row inert", selected ? "armed" : hover && present ? "hover" : null);
-                frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                    r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-                rail.color = !present ? OpsInk.Hairline : selected ? OpsInk.Select : marked ? OpsInk.Rail(AvState.Ready) : ClassInk(cls);
-                title.color = present ? OpsInk.Ink : OpsInk.Muted;
-                sub.color = marked ? OpsInk.Word(AvState.Ready) : OpsInk.Dim;
-            }
-        }
-
-        /// <summary>A TASKED card: target and payoff, source, the host quote (price) and one state word.</summary>
-        private sealed class Card
-        {
-            private readonly AvFrame frame;
-            private readonly Image rail;
-            private readonly TMP_Text title, sub, price, state;
-            private int postId;
-            private bool present, armed, enabled, hover;
-            private AvState tone = AvState.Inert;
-
-            public Card(RectTransform parent, FeedBox box, Action<int> press)
-            {
-                RectTransform root = AvLay.Child(parent, "Card");
-                AvLay.Place(root, box.X, box.Y, box.W, box.H);
-                frame = AvFrame.Add(root, "Frame", default(AvChamfer));
-                AvLay.Fill(frame.rectTransform);
-                rail = AvLay.Solid(root, "Rail", Color.clear);
-                AvLay.Place(rail.rectTransform, 0f, 0f, 3f, box.H);
-                float right = Math.Min(132f, box.W * 0.3f), left = box.W - right - 14f;
-                title = Line(root, "Title", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
-                sub = Line(root, "Sub", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-                price = Line(root, "Price", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
-                state = Line(root, "State", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
-                AvLay.Place(title.rectTransform, 10f, 3f, left, 18f);
-                AvLay.Place(sub.rectTransform, 10f, 21f, left, 16f);
-                AvLay.Place(price.rectTransform, box.W - right - 6f, 3f, right, 18f);
-                AvLay.Place(state.rectTransform, box.W - right - 6f, 21f, right, 16f);
-                AvHit hit = AvHit.On(frame);
-                hit.Hover = h => { hover = h; Restyle(); };
-                hit.Click = e => { if (present && enabled && e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) press(postId); };
-                root.gameObject.SetActive(true);
-                Restyle();
-            }
-
-            public void Paint(in FeedCardView v)
-            {
-                bool changed = present != v.Present || armed != v.Armed || enabled != v.Enabled || tone != v.Tone;
-                present = v.Present; armed = v.Armed; enabled = v.Enabled; tone = v.Tone; postId = v.PostId;
-                OpsText.Set(title, v.Present ? v.Title : "NO TASKED CALL");
-                OpsText.Set(sub, v.Present ? v.Sub : "POSTED CALLS APPEAR HERE");
-                OpsText.Set(price, v.Present ? v.Price : "");
-                OpsText.Set(state, v.Present ? v.State : "");
-                if (changed) Restyle();
-            }
-
-            public void Restyle()
-            {
-                if (frame == null) return;
-                AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(present ? tone : AvState.Inert), armed ? "armed" : hover && enabled ? "hover" : null);
-                frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                    r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-                rail.color = armed ? OpsInk.Select : present ? OpsInk.Rail(tone) : OpsInk.Hairline;
-                title.color = present ? OpsInk.Ink : OpsInk.Muted;
-                sub.color = OpsInk.Dim;
-                price.color = present ? OpsInk.Word(tone == AvState.Inert ? AvState.Info : tone) : OpsInk.Muted;
-                state.color = present ? OpsInk.Word(tone) : OpsInk.Muted;
-            }
-        }
-
         /// <summary>Does nothing: the offline harness paints without a controller.</summary>
         private sealed class NullActions : ISpaceFeedActions
         {
@@ -563,7 +605,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         }
     }
 
-    /// <summary>Shared arithmetic of the OPS console pages (CALLS and SPACE).</summary>
+    /// <summary>Shared arithmetic of the OPS console pages and the station.</summary>
     internal static class OpsPage
     {
         /// <summary>The flow's own top and bottom padding (pad above and below); a page's content must fit its viewport minus this.</summary>
@@ -571,9 +613,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         /// <summary>The width a full-width part gets in a page flow of a standard console (480 less both pads and the gutter).</summary>
         public const float BoardWidth = AvTokens.PanelWidth - 2f * AvGridTokens.Pad - AvGridTokens.Gutter;
-
-        /// <summary>Viewport height of one page under the chrome: header, optional tab bar, the footer. No chip or metric strip.</summary>
-        public static float BodyHeight(float consoleHeight, bool tabs) =>
-            consoleHeight - AvGridTokens.Footer - (AvGridTokens.Header + 4f) - (tabs ? AvGridTokens.Tab + 4f : 0f);
     }
 }

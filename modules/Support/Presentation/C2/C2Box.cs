@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly TMP_Text titleText, metaText;
         private readonly RectTransform body;
         private string titleRaw, metaRaw = "";
-        private float width = AvTokens.PanelWidth, bodyHeight = 40f;
+        private float width = AvTokens.PanelWidth, bodyHeight = 40f, metaInset;
 
         public C2Box(RectTransform parent, string title)
         {
@@ -42,6 +42,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             get => bodyHeight;
             set { if (Mathf.Approximately(value, bodyHeight)) return; bodyHeight = value; Layout(); Changed(); }
+        }
+
+        /// <summary>Width kept free at the right end of the header for controls placed over it (page buttons); the meta text sits left of it.</summary>
+        public float MetaInset
+        {
+            get => metaInset;
+            set { if (Mathf.Approximately(value, metaInset)) return; metaInset = value; Layout(); }
         }
 
         public void SetTitle(string title)
@@ -77,11 +84,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(rule.rectTransform, 1f, HeaderH, w - 2f, 1f);
             string title = C2Kit.FitTo(titleText, titleRaw, w - 2f * Pad);
             float titleW = Mathf.Min(w - 2f * Pad, C2Kit.Width(titleText, title) + 2f);
-            float metaW = Mathf.Max(0f, w - 2f * Pad - titleW - 12f);
+            float metaW = Mathf.Max(0f, w - 2f * Pad - titleW - 12f - metaInset);
             OpsText.Set(titleText, title);
             OpsText.Set(metaText, C2Kit.FitTo(metaText, metaRaw, metaW));
             C2Kit.Place(titleText, Pad, 0f, titleW, HeaderH);
-            C2Kit.Place(metaText, w - Pad - metaW, 0f, metaW, HeaderH);
+            C2Kit.Place(metaText, w - Pad - metaInset - metaW, 0f, metaW, HeaderH);
             AvLay.Place(body, 1f, HeaderH + 1f, w - 2f, Mathf.Max(0f, bodyHeight - 2f));
         }
 

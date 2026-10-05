@@ -15,7 +15,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     internal sealed class C2Chrome : AvPart
     {
         public const float Height = 106f;
-        private const float BannerH = 16f, HeaderH = 36f, SessionH = 18f, TabsH = 36f, PadX = 8f, LedgerW = 74f;
+        /// <summary>Banner, header and session line only: the full-screen station's chrome (18 + 40 + 18).</summary>
+        public const float StationHeight = 76f;
+        private const float SessionH = 18f, PadX = 8f, LedgerW = 74f;
+        private readonly float BannerH = 16f, HeaderH = 36f, TabsH = 36f;
+        private readonly bool station;
         private const int TabCount = 5;
 
         private readonly Image bannerBack;
@@ -34,9 +38,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private bool link = true;
         private C2Tab active = C2Tab.Cap;
 
-        public C2Chrome(RectTransform parent, Action<C2Tab> onTab)
+        /// <param name="station">The full-screen station's chrome: banner 18, header 40, no tab strip (<see cref="StationHeight"/>).</param>
+        public C2Chrome(RectTransform parent, Action<C2Tab> onTab, bool station = false)
         {
             this.onTab = onTab;
+            this.station = station;
+            if (station) { BannerH = 18f; HeaderH = 40f; TabsH = 0f; }
             Rect = AvLay.Child(parent, "C2Chrome");
 
             bannerBack = AvLay.Solid(Rect, "BannerBack", Color.clear);
@@ -74,7 +81,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             Layout();
         }
 
-        public override float Measure(float w) => Height;
+        public override float Measure(float w) => station ? StationHeight : Height;
 
         public override void Place(AvSlot s)
         {
@@ -148,14 +155,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             OpsText.Set(bannerText, C2Kit.FitTo(bannerText, bannerRaw, w - 2f * PadX));
 
             AvLay.Place(header, 0f, BannerH, w, HeaderH);
-            AvLay.Place(plate.rectTransform, PadX, 6f, 28f, 24f);
-            AvLay.Place(plateText.rectTransform, PadX, 6f, 28f, 24f);
+            float dy = (HeaderH - 36f) * 0.5f;
+            AvLay.Place(plate.rectTransform, PadX, 6f + dy, 28f, 24f);
+            AvLay.Place(plateText.rectTransform, PadX, 6f + dy, 28f, 24f);
 
             string ledgerText = credit.ToString(System.Globalization.CultureInfo.InvariantCulture);
             OpsText.Set(ledgerValue, ledgerText);
             float ledgerX = w - PadX - LedgerW;
-            C2Kit.Place(ledgerValue, ledgerX, 1f, LedgerW, 21f);
-            C2Kit.Place(ledgerKey, ledgerX - 10f, 22f, LedgerW + 10f, 12f);
+            C2Kit.Place(ledgerValue, ledgerX, 1f + dy, LedgerW, 21f);
+            C2Kit.Place(ledgerKey, ledgerX - 10f, 22f + dy, LedgerW + 10f, 12f);
 
             bool alert = alertRaw.Length > 0;
             float titleX = PadX + 28f + 8f, right = ledgerX - 8f;
@@ -168,20 +176,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 OpsText.Set(alertText, C2Kit.FitTo(alertText, alertRaw, room - 12f));
                 alertW = Mathf.Min(room, C2Kit.Width(alertText, alertText.text) + 14f);
                 float ax = right - alertW;
-                AvLay.Place(alertBack.rectTransform, ax, 8f, alertW, 20f);
-                C2Kit.Place(alertText, ax, 8f, alertW, 20f);
+                AvLay.Place(alertBack.rectTransform, ax, 8f + dy, alertW, 20f);
+                C2Kit.Place(alertText, ax, 8f + dy, alertW, 20f);
                 alertW += 6f;
             }
             float textW = Mathf.Max(20f, right - titleX - alertW);
             OpsText.Set(title, C2Kit.FitTo(title, titleRaw, textW));
             OpsText.Set(sub, C2Kit.FitTo(sub, subRaw, textW));
-            C2Kit.Place(title, titleX, 1f, textW, 20f);
-            C2Kit.Place(sub, titleX, 21f, textW, 13f);
+            C2Kit.Place(title, titleX, 1f + dy, textW, 20f);
+            C2Kit.Place(sub, titleX, 21f + dy, textW, 13f);
 
             AvLay.Place(session, 0f, BannerH + HeaderH, w, SessionH);
             RebuildSession(w);
             AvLay.Place(sessionRule.rectTransform, 0f, SessionH - 1f, w, 1f);
 
+            tabRow.gameObject.SetActive(!station);
             AvLay.Place(tabRow, 0f, BannerH + HeaderH + SessionH, w, TabsH);
             float tw = (w - 2f * 2f - 4f * 2f) / TabCount;
             for (int i = 0; i < TabCount; i++) AvLay.Place(tabs[i].Rect, 2f + i * (tw + 2f), 2f, tw, TabsH - 4f);

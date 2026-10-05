@@ -10,26 +10,29 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.C2
 {
+    /// <summary>What the shared C2 chrome paints on every surface (CAP, ORBIT, the full-screen station): identity, ledger, session line.</summary>
+    internal class C2ChromeView
+    {
+        public int Credit;
+        public C2Console Console;
+        public string Faction = "", Callsign = "", Session = "", KeyRot = "", Uplinks = "", Space = "", Alert = "";
+        public AvState UplinkTone = AvState.Inert;
+        public bool Link = true;
+        public int BoardCount;
+    }
+
     /// <summary>Everything the CAP page and the C2 chrome paint, built each refresh from the manager and the controller (never from game objects).</summary>
-    internal sealed class CapView
+    internal sealed class CapView : C2ChromeView
     {
         public const int FavouriteSlots = 4;
 
         public readonly List<CallTile> Tiles = new List<CallTile>(16);
-        public int Credit;
         public string NextUnlock = "", Words = "";
         public bool Pending;
         public readonly SupportActionId?[] Favourites = new SupportActionId?[FavouriteSlots];
         public AimSource Aim;
         public string AimGrid = "";
         public int LastDelta;
-        public C2Console Console;
-
-        // Chrome (shared by every tab).
-        public string Faction = "", Callsign = "", Session = "", KeyRot = "", Uplinks = "", Space = "", Alert = "";
-        public AvState UplinkTone = AvState.Inert;
-        public bool Link = true;
-        public int BoardCount;
     }
 
     /// <summary>
