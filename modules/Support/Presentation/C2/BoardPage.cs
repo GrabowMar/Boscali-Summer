@@ -107,7 +107,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             {
                 notices = Make(new C2Box(parent, "NOTICES"));
                 notices.BodyHeight = NoticeBody;
-                notices.SetMeta("TASKED + INTENT ONLY");
+                notices.SetMeta("TASKED · INTENT · OPERATIONS");
                 notices.Place(new AvSlot(0f, height - gap - noticeH, width, noticeH));
                 quietWord = C2Kit.Mono(notices.Body, "QuietWord", 12f, TextAlignmentOptions.MidlineLeft, true, 1f);
                 quietSub = C2Kit.Mono(notices.Body, "QuietSub", 10f, TextAlignmentOptions.MidlineLeft);

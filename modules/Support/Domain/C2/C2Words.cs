@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
     internal enum C2Tone : byte { Info, Warn, Danger }
     internal enum C2Tab : byte { Cap = 1, Orbit = 2, Net = 3, Sof = 4, Board = 5 }
     /// <summary>The cockpit HUD notices that wear a C2 strip: a new TASKED post, an inbound warning, the enemy intent.</summary>
-    internal enum C2HudKind : byte { Tasked, Inbound, Intent, CyberHeld, CyberTraced, SofPinned, SofLost, SofDone }
+    internal enum C2HudKind : byte { Tasked, Inbound, Intent, CyberHeld, CyberTraced, SofPinned, SofLost, SofDone, OpsExecute, OpsBroken, OpsDone, OpsPing }
 
     /// <summary>Words for the SATCOM C2 terminal. Session, key rotation and auth codes are cosmetic and deterministic.</summary>
     internal static class C2Words
@@ -77,11 +77,13 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
         public static string HudStrip(C2HudKind kind) =>
             kind == C2HudKind.Tasked ? "C2 // TASKED // NEW POST" : kind == C2HudKind.Inbound ? "C2 // INBOUND" :
             kind == C2HudKind.CyberHeld ? "C2 // CYBER // NODE HELD" : kind == C2HudKind.CyberTraced ? "C2 // CYBER // TRACED" :
-            kind == C2HudKind.SofPinned ? "C2 // SOF // TEAM PINNED" : kind == C2HudKind.SofLost ? "C2 // SOF // TEAM LOST" : kind == C2HudKind.SofDone ? "C2 // SOF // MISSION COMPLETE" : "C2 // INT";
+            kind == C2HudKind.SofPinned ? "C2 // SOF // TEAM PINNED" : kind == C2HudKind.SofLost ? "C2 // SOF // TEAM LOST" : kind == C2HudKind.SofDone ? "C2 // SOF // MISSION COMPLETE" :
+            kind == C2HudKind.OpsExecute ? "C2 // OPERATION // EXECUTE T-60" : kind == C2HudKind.OpsBroken ? "C2 // OPERATION // BROKEN" :
+            kind == C2HudKind.OpsDone ? "C2 // OPERATION // EXECUTED" : kind == C2HudKind.OpsPing ? "C2 // OPERATION // ENEMY" : "C2 // INT";
 
         /// <summary>The tone of that strip: caution for a post, danger for an inbound warning, info for intent.</summary>
         public static C2Tone HudStripTone(C2HudKind kind) =>
-            kind == C2HudKind.Tasked || kind == C2HudKind.CyberHeld || kind == C2HudKind.SofPinned ? C2Tone.Warn :
-            kind == C2HudKind.Inbound || kind == C2HudKind.CyberTraced || kind == C2HudKind.SofLost ? C2Tone.Danger : C2Tone.Info;
+            kind == C2HudKind.Tasked || kind == C2HudKind.CyberHeld || kind == C2HudKind.SofPinned || kind == C2HudKind.OpsExecute ? C2Tone.Warn :
+            kind == C2HudKind.Inbound || kind == C2HudKind.CyberTraced || kind == C2HudKind.SofLost || kind == C2HudKind.OpsBroken || kind == C2HudKind.OpsPing ? C2Tone.Danger : C2Tone.Info;
     }
 }

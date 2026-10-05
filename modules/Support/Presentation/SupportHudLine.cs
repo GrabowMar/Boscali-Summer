@@ -1,6 +1,7 @@
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -26,6 +27,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
         private readonly CyberNoticeTracker cyberNotices = new CyberNoticeTracker();
         private readonly SofNoticeTracker sofNotices = new SofNoticeTracker();
+        private readonly OpsNoticeTracker opsNotices = new OpsNoticeTracker();
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
@@ -93,6 +95,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 noticeKind = sofKind == SofNoticeKind.Pinned ? C2HudKind.SofPinned : sofKind == SofNoticeKind.Lost ? C2HudKind.SofLost : C2HudKind.SofDone;
                 noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
                 AvUiSound.Play(sofKind == SofNoticeKind.Success ? AvUiCue.Confirm : AvUiCue.Caution);
+            }
+            OpsNotice opsNotice = opsNotices.Observe(manager.OpsMirror.Known, manager.OpsMirror.State, now, quiet);
+            if (opsNotice.Kind != OpsNoticeKind.None)
+            {
+                // Own EXECUTE / BROKEN / EXECUTED, or an enemy ping: the words are the notice, the 14 px strip says it is an OPERATION.
+                noticeText = opsNotice.Text;
+                noticeKind = opsNotice.Kind == OpsNoticeKind.Execute ? C2HudKind.OpsExecute : opsNotice.Kind == OpsNoticeKind.Broken ? C2HudKind.OpsBroken :
+                    opsNotice.Kind == OpsNoticeKind.Done ? C2HudKind.OpsDone : C2HudKind.OpsPing;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(opsNotice.Kind == OpsNoticeKind.Done ? AvUiCue.Confirm : AvUiCue.Caution);
             }
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
@@ -41,6 +42,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>The faction's SOF state as the mirror last heard it (null state or <see cref="SofKnown"/> false: nothing heard yet).</summary>
         public SofStateData Sof;
         public bool SofKnown;
+        /// <summary>The faction's OPERATIONS state as the mirror last heard it (own bars, enemy pings, flights). Null state or <see cref="OpsKnown"/> false: nothing heard yet.</summary>
+        public OpsStateData Ops;
+        public bool OpsKnown;
     }
 
     /// <summary>

@@ -314,14 +314,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
             ticker.Register(spacePanel);
             feed?.AttachCompact(spacePanel);
             netPage = new CyberNetPage(pages[(int)C2Tab.Net - 1], Width, pageH, calls, p => t.Register(p),
-                id => manager?.CyberHop(id), id => manager?.CyberBurn(id), id => manager?.CyberDrop(id));
+                id => manager?.CyberHop(id), id => manager?.CyberBurn(id), id => manager?.CyberDrop(id), OpsActions());
             sofPage = new SofPage(pages[(int)C2Tab.Sof - 1], Width, pageH, calls, p => t.Register(p), new SofPageActions
             {
                 Raise = () => manager?.SofRaise(),
                 Order = (slot, verb) => manager?.SofOrder(slot, verb),
                 Divert = (slot, x, z) => manager?.SofDivert(slot, x, z),
                 Mission = (slot, kind, id, x, z) => manager?.SofMission(slot, kind, id, x, z),
-                Pick = (label, onPick) => manager != null && manager.ArmLocalPick(label, point => onPick((float)point.x, (float)point.z))
+                Pick = (label, onPick) => manager != null && manager.ArmLocalPick(label, point => onPick((float)point.x, (float)point.z)),
+                Ops = OpsActions()
             });
             boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
             feed?.AttachBoard(boardPage);
@@ -336,6 +337,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             chromeKey = footerKey = "";
             SelectTab(C2Tab.Cap);
         }
+
+        /// <summary>The OPERATION box's three requests, sent through the manager (a press is a request, never an effect).</summary>
+        private OpsBoxActions OpsActions() => new OpsBoxActions
+        {
+            Fund = (domain, large) => manager?.OpsFund(domain, large),
+            Plan = (kind, target) => manager?.OpsPlan(kind, target),
+            Cancel = domain => manager?.OpsCancel(domain)
+        };
 
         /// <summary>The QUIET switch of the BOARD page: flips the existing client QuietNotices setting.</summary>
         private void ToggleQuiet()
@@ -364,6 +373,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             tab = next;
             manager?.SetCyberWanted(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
             manager?.SetSofWanted(next == C2Tab.Sof); // likewise the SOF page for the SOF mirror
+            manager?.SetOpsWanted(next == C2Tab.Net || next == C2Tab.Sof); // and both for the OPERATIONS mirror (their OPERATION box)
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i] != null) pages[i].gameObject.SetActive(i == (int)next - 1);
             chromeKey = footerKey = "";
@@ -428,6 +438,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.CyberKnown = manager.CyberMirror.Known;
             view.Sof = manager.SofMirror.State;
             view.SofKnown = manager.SofMirror.Known;
+            view.Ops = manager.OpsMirror.State;
+            view.OpsKnown = manager.OpsMirror.Known;
             FillChrome(view);
         }
 
@@ -498,7 +510,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintChrome(C2Tab t, CapView v)
         {
             string key = string.Concat((int)t, "|", v.Faction, "|", v.Alert, "|", v.Credit, "|", v.Callsign, "|", v.Session, "|", v.KeyRot, "|",
-                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1, "|", v.SofKnown && v.Sof != null ? v.Sof.Seq : -1);
+                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1, "|", v.SofKnown && v.Sof != null ? v.Sof.Seq : -1, "|", v.OpsKnown && v.Ops != null ? v.Ops.Seq : -1);
             if (key == chromeKey) return;
             chromeKey = key;
 

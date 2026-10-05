@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -25,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private CallsController calls;
         private object faction;
         private bool creditPrimed, spacePrimed;
-        private int cyberSeq = -1, sofSeq = -1;
+        private int cyberSeq = -1, sofSeq = -1, opsSeq = -1, opsPingSeq = -1;
         private float lastCredit, pendingDelta, nextCredit, nextTick, nextThreatLine, lastDeltaAt;
         private int lastDelta;
         private byte lastLive, lastTotal;
@@ -64,7 +65,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             console.Clear();
             notices.Reset();
             creditPrimed = spacePrimed = false;
-            cyberSeq = -1; sofSeq = -1;
+            cyberSeq = -1; sofSeq = -1; opsSeq = opsPingSeq = -1;
             pendingDelta = 0f;
             nextCredit = nextTick = 0f;
             lastThreat = "";
@@ -101,6 +102,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             Space();
             Cyber(wall);
             Sof(wall);
+            Ops(wall);
             if (watching) Threat(wall);
         }
 
@@ -174,6 +176,30 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 console.Add("SOF · " + SofPageWords.EventLine(e), bad ? C2Tone.Warn : C2Tone.Info, wall);
             }
             sofSeq = Mathf.Max(sofSeq, newest);
+        }
+
+        /// <summary>One console line per new OPERATIONS event of the faction and per new enemy ping (real events only); the first sight of a mirror is silent.</summary>
+        private void Ops(float wall)
+        {
+            OpsMirror mirror = manager.OpsMirror;
+            if (!mirror.Known || !mirror.State.Active) { opsSeq = opsPingSeq = -1; return; }
+            int newest = 0, newestPing = 0;
+            foreach (OpsEventRow e in mirror.State.Events) newest = Mathf.Max(newest, e.Seq);
+            foreach (OpsPingRow p in mirror.State.Pings) newestPing = Mathf.Max(newestPing, p.Seq);
+            if (opsSeq < 0) { opsSeq = newest; opsPingSeq = newestPing; return; }
+            foreach (OpsEventRow e in mirror.State.Events)
+            {
+                if (e.Seq <= opsSeq) continue;
+                bool bad = e.Kind == OpEventKind.Broken || e.Kind == OpEventKind.CounterTrace || e.Kind == OpEventKind.Stalled;
+                console.Add("OPERATION · " + OpsWords.Event(e.Kind, e.Op), bad ? C2Tone.Warn : C2Tone.Info, wall);
+            }
+            foreach (OpsPingRow p in mirror.State.Pings)
+            {
+                if (p.Seq <= opsPingSeq) continue;
+                console.Add("OPERATION · " + OpsWords.Ping(p.Kind, p.Phase, p.Name, p.Detail), p.Phase == OpPingPhase.Half ? C2Tone.Warn : C2Tone.Danger, wall);
+            }
+            opsSeq = Mathf.Max(opsSeq, newest);
+            opsPingSeq = Mathf.Max(opsPingSeq, newestPing);
         }
 
         private void Threat(float wall)

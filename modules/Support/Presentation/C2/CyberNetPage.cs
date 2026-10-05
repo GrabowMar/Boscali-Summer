@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using TMPro;
@@ -26,6 +27,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Action<AvPart> register;
         private readonly Action<int> hop, burn, drop;
         private readonly C2ConsoleView console;
+        private readonly OpsBox ops;
         private readonly C2Box map, intrusion, anchors, callsBox;
         private readonly float mapW, mapH;
         private readonly Image[] gridLines;
@@ -46,6 +48,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly List<CapPage.RowMemo> memos = new List<CapPage.RowMemo>(2);
         private readonly CyberMapProjection projection = new CyberMapProjection();
         private readonly List<MapPoint> fit = new List<MapPoint>(32);
+        private readonly List<Rect> placed = new List<Rect>(48);
         private readonly List<EwSource> sources = new List<EwSource>(2);
         private readonly List<CyberNode> graphNodes = new List<CyberNode>(CyberWire.MaxNodes);
         private readonly List<CyberEdge> graphEdges = new List<CyberEdge>(CyberGraph.MaxEdges);
@@ -55,7 +58,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private const int CirclePoints = 64;
         private readonly float[] circleX = new float[CirclePoints + 1], circleY = new float[CirclePoints + 1];
         private readonly float[] edgeX = new float[2], edgeY = new float[2];
-        private int paintedSeq = -1, paintedSelected = -1, paintedSecond = -1;
+        private int paintedSeq = -1, paintedSelected = -1, paintedSecond = -1, paintedOps = -1;
         private float nextPress;
         private bool hasOwn;
 
@@ -63,7 +66,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public string Words { get; private set; } = "SELECT A NODE ON THE MAP · HOP STARTS AN INTRUSION";
 
         public CyberNetPage(RectTransform parent, float width, float height, CallsController calls, Action<AvPart> register,
-            Action<int> hop, Action<int> burn, Action<int> drop)
+            Action<int> hop, Action<int> burn, Action<int> drop, OpsBoxActions opsActions = null)
         {
             this.width = width;
             this.register = register ?? (_ => { });
@@ -78,7 +81,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             float callsBody = ids.Count * (rowH + 2f) + 2f;
             float intrusionBody = full ? 124f : 96f;
             float anchorsBody = full ? Notes * 16f + 8f : 0f;
-            float fixedH = gap + consoleH + gap + (C2Box.HeaderH + intrusionBody) + gap + (full ? C2Box.HeaderH + anchorsBody + gap : 0f) +
+            float fixedH = gap + consoleH + gap + (C2Box.HeaderH + intrusionBody) + gap + OpsBox.HeightFor(full) + gap + (full ? C2Box.HeaderH + anchorsBody + gap : 0f) +
                 (C2Box.HeaderH + callsBody) + gap + C2Box.HeaderH + 2f;
             float mapBody = Mathf.Max(110f, height - fixedH);
             mapW = width - 2f; mapH = mapBody - 2f;
@@ -151,6 +154,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             hopButton.Help = "Start an intrusion on the selected node (30 CR), or go deeper from a node you hold (free). Hopping raises your TRACE bar.";
             burnButton.Help = "Release the held node and post its BURN package on the TASKED board for any pilot to fire.";
             dropButton.Help = "Release the selected node, or the whole intrusion when none is selected. No package.";
+
+            ops = new OpsBox(parent, width, full, OpDomain.Cyber, new[] { OpKind.Asat, OpKind.ZeroDay }, opsActions, register);
+            ops.Place(new AvSlot(0f, y, width, OpsBox.HeightFor(full)));
+            y += OpsBox.HeightFor(full) + gap;
 
             if (full)
             {
@@ -252,9 +259,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             float now = SupportManager.MissionNow();
             int second = Mathf.FloorToInt(now);
             int seq = s != null ? s.Seq : -2;
-            if (seq != paintedSeq || selected != paintedSelected || second != paintedSecond)
+            int opsSeq = v.OpsKnown && v.Ops != null ? v.Ops.Seq : -2;
+            if (seq != paintedSeq || selected != paintedSelected || second != paintedSecond || opsSeq != paintedOps)
             {
-                paintedSeq = seq; paintedSelected = selected; paintedSecond = second;
+                paintedSeq = seq; paintedSelected = selected; paintedSecond = second; paintedOps = opsSeq;
+                ops.Paint(v.Ops, v.OpsKnown, (kind, list) => Choices(s, kind, list), now);
                 PaintMap(s, now);
                 PaintIntrusion(s, now);
                 PaintAnchors(s, now);
@@ -263,9 +272,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             PaintCalls(v);
         }
 
+        /// <summary>What a CYBER operation may aim at: the three satellite classes, or a SAM C2 node the faction can see (ids as the host listed them).</summary>
+        private static void Choices(CyberStateData s, OpKind kind, List<OpChoice> into)
+        {
+            if (kind == OpKind.Asat)
+            {
+                for (int i = 0; i < 3; i++) into.Add(new OpChoice(i, OpsWords.Bird(i)));
+                return;
+            }
+            if (kind != OpKind.ZeroDay || s == null || !s.Active) return;
+            foreach (CyberNodeRow n in s.Nodes) if (n.Kind == NodeKind.SamC2 && into.Count < 8) into.Add(new OpChoice(n.Id, OpsWords.TargetWord(OpKind.ZeroDay, n.Id)));
+        }
+
         private string StandingWords(CyberStateData s, string said)
         {
             if (!string.IsNullOrEmpty(said) && C2Cap.StartsNegative(said)) return said;
+            if (!string.IsNullOrEmpty(ops.Words)) return ops.Words;
             if (s == null) return "WAITING FOR THE HOST · CYBER LINK";
             if (!s.Active) return "NEGATIVE: CYBER OFFLINE — NO EW TRUCK STANDING, CALLS STILL LIVE";
             return hasOwn ? "INTRUSION RUNNING · WATCH THE TRACE BAR, BURN BEFORE IT FILLS" : "SELECT A NODE ON THE MAP · HOP STARTS AN INTRUSION";
@@ -292,6 +314,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (!active) return;
 
             fit.Clear();
+            placed.Clear();
             sources.Clear();
             foreach (CyberAnchorRow a in s.Anchors)
             {
@@ -317,7 +340,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 anchorTags[slot].gameObject.SetActive(true);
                 OpsText.Set(anchorTags[slot], tag);
                 anchorTags[slot].color = OpsInk.Word(tone);
-                C2Kit.Place(anchorTags[slot], Mathf.Min(mapW - 26f, p.X + 7f), p.Y - 7f, 26f, 14f);
+                Vector2 tagAt = MapDeclutter.Free(placed, Mathf.Min(mapW - 26f, p.X + 7f), p.Y - 7f, 26f, 14f, mapW, mapH);
+                C2Kit.Place(anchorTags[slot], tagAt.x, tagAt.y, 26f, 14f);
                 if (truck && a.Health != AnchorHealth.Down && truckOrdinal <= reach.Length)
                 {
                     sources.Add(new EwSource(truckOrdinal - 1, a.X, a.Z, AnchorRules.Reach(a.Health)));
@@ -332,7 +356,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 CyberNodeRow n = s.Nodes[i];
                 graphNodes.Add(new CyberNode(n.Id, n.Kind, n.X, n.Z, 0u, 0f, 0));
                 MapPoint p = projection.ToScreen(n.X, n.Z);
-                float bx = Mathf.Clamp(p.X - 17f, 0f, mapW - 34f), by = Mathf.Clamp(p.Y - 9f, 0f, mapH - 18f);
+                Vector2 markAt = MapDeclutter.Free(placed, p.X - 17f, p.Y - 9f, 34f, 18f, mapW, mapH);
+                float bx = markAt.x, by = markAt.y;
                 markIds[i] = n.Id;
                 AvControl m = marks[i];
                 m.Rect.gameObject.SetActive(true);
@@ -501,7 +526,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             hopBack.color = OpsInk.Inert; traceBack.color = OpsInk.Inert;
             for (int i = 0; i < marks.Length; i++) marks[i]?.Restyle();
             hopButton?.Restyle(); burnButton?.Restyle(); dropButton?.Restyle();
-            paintedSeq = -1; // repaint with the new palette
+            ops?.Restyle();
+            paintedSeq = paintedOps = -1; // repaint with the new palette
         }
     }
 }

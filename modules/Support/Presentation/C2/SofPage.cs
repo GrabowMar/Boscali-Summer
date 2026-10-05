@@ -4,6 +4,7 @@ using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
@@ -22,6 +23,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public Action<int, MissionKind, int, float, float> Mission;
         /// <summary>Arms a right-click on the map and reports the world point; false when the map input is busy.</summary>
         public Func<string, Action<float, float>, bool> Pick;
+        /// <summary>The OPERATION box (FORWARD OPERATING BASE): FUND, PLAN, CANCEL.</summary>
+        public OpsBoxActions Ops;
     }
 
     /// <summary>
@@ -39,6 +42,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Action<AvPart> register;
         private readonly SofPageActions act;
         private readonly C2ConsoleView console;
+        private readonly OpsBox ops;
         private readonly C2Box map, teamsBox, callsBox;
         private readonly float mapW, mapH, rowH;
         private readonly Image[] gridLines;
@@ -63,7 +67,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly List<MapPoint> fit = new List<MapPoint>(48);
         private readonly List<Rect> placed = new List<Rect>(40);
         private SofStateData state;
-        private int selectedTeam = -1, selectedTarget, paintedSeq = -1, paintedSecond = -1, paintedSelTeam = -2, paintedSelTarget = -1;
+        private int selectedTeam = -1, selectedTarget, paintedSeq = -1, paintedSecond = -1, paintedSelTeam = -2, paintedSelTarget = -1, paintedOps = -1;
         private float pickX, pickZ, nextPress;
         private bool hasPick;
         private string standing = "SELECT A TEAM, THEN A TARGET · PICK ARMS A MAP CLICK";
@@ -87,7 +91,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             float callRowH = full ? 40f : 26f;
             float callsBody = ids.Count * (callRowH + 2f) + 2f;
             float teamsBody = Slots * rowH + 6f + 2f * (ButtonH + 4f) + (full ? 18f : 14f);
-            float fixedH = gap + consoleH + gap + (C2Box.HeaderH + teamsBody) + gap + (C2Box.HeaderH + callsBody) + gap + C2Box.HeaderH + 2f;
+            float fixedH = gap + consoleH + gap + (C2Box.HeaderH + teamsBody) + gap + OpsBox.HeightFor(full) + gap + (C2Box.HeaderH + callsBody) + gap + C2Box.HeaderH + 2f;
             float mapBody = Mathf.Max(100f, height - fixedH);
             mapW = width - 2f; mapH = mapBody - 2f;
 
@@ -186,6 +190,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             seize.Help = "SEIZE the selected building: 120 s on site. Held 10 minutes; it observes 3 km around and is a lift and exfil point. 50 CR.";
             tap.Help = "NETWORK TAP the selected relay or data center: 60 s on site, then your intrusions trace 30 % slower for 10 minutes and enemy intrusions are counted. 40 CR.";
             pick.Help = "PICK: right-click the maximised map to choose a point. The nearest revealed target is selected; with none, RECON or DIVERT the point.";
+
+            ops = new OpsBox(parent, width, full, OpDomain.Sof, new[] { OpKind.Fob }, act.Ops, register);
+            ops.Place(new AvSlot(0f, y, width, OpsBox.HeightFor(full)));
+            y += OpsBox.HeightFor(full) + gap;
 
             callsBox = Make(new C2Box(parent, "SOF CALLS"));
             callsBox.BodyHeight = callsBody;
@@ -340,14 +348,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (selectedTeam >= 0 && (state == null || !HasTeam(selectedTeam))) selectedTeam = -1;
             if (selectedTeam < 0 && state != null) selectedTeam = FirstTeam();
             if (selectedTarget != 0 && !TryTarget(selectedTarget, out _)) selectedTarget = 0;
-            if (seq != paintedSeq || selectedTeam != paintedSelTeam || selectedTarget != paintedSelTarget || second != paintedSecond)
+            int opsSeq = v.OpsKnown && v.Ops != null ? v.Ops.Seq : -2;
+            if (seq != paintedSeq || selectedTeam != paintedSelTeam || selectedTarget != paintedSelTarget || second != paintedSecond || opsSeq != paintedOps)
             {
-                paintedSeq = seq; paintedSelTeam = selectedTeam; paintedSelTarget = selectedTarget; paintedSecond = second;
+                paintedSeq = seq; paintedSelTeam = selectedTeam; paintedSelTarget = selectedTarget; paintedSecond = second; paintedOps = opsSeq;
+                ops.Paint(v.Ops, v.OpsKnown, (kind, list) => Choices(kind, list), now);
                 PaintMap(now);
                 PaintTeams(v, now);
             }
             Words = StandingWords(v);
+            if (ops.Words.Length > 0 && !C2Cap.StartsNegative(Words)) Words = ops.Words; // a countdown or a paused operation outranks the standing hint
             PaintCalls(v);
+        }
+
+        /// <summary>What the FORWARD OPERATING BASE may be built on: a building the faction holds right now (ids as the host listed them, matching the H tags on the map).</summary>
+        private void Choices(OpKind kind, List<OpChoice> into)
+        {
+            if (kind != OpKind.Fob || state == null) return;
+            foreach (SofHeldRow h in state.Held) if (into.Count < 4) into.Add(new OpChoice(h.Id, OpsWords.TargetWord(OpKind.Fob, h.Id)));
         }
 
         private bool HasTeam(int slot)
@@ -436,7 +454,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 heldDots[i].gameObject.SetActive(true); heldDots[i].color = OpsInk.Rail(AvState.Info);
                 AvLay.Place(heldDots[i].rectTransform, p.X - 4f, p.Y - 4f, 8f, 8f);
                 heldTags[i].gameObject.SetActive(true);
-                OpsText.Set(heldTags[i], "H" + (i + 1) + " " + SofWords.Clock(h.Until - now));
+                OpsText.Set(heldTags[i], "H" + h.Id + " " + SofWords.Clock(h.Until - now));
                 heldTags[i].color = OpsInk.Word(AvState.Info);
                 Vector2 tag = Free(p.X + 7f, p.Y - 7f, 54f, 14f);
                 C2Kit.Place(heldTags[i], tag.x, tag.y, 54f, 14f);
@@ -496,32 +514,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
         }
 
-        private static readonly Vector2[] Nudges =
-        {
-            new Vector2(0f, 0f), new Vector2(0f, -20f), new Vector2(0f, 20f), new Vector2(38f, 0f), new Vector2(-38f, 0f), new Vector2(38f, -20f), new Vector2(-38f, -20f),
-            new Vector2(38f, 20f), new Vector2(-38f, 20f), new Vector2(0f, -40f), new Vector2(0f, 40f), new Vector2(76f, 0f), new Vector2(-76f, 0f), new Vector2(76f, -20f),
-            new Vector2(-76f, -20f), new Vector2(76f, 20f), new Vector2(-76f, 20f), new Vector2(38f, -40f), new Vector2(-38f, -40f), new Vector2(38f, 40f), new Vector2(-38f, 40f),
-            new Vector2(0f, -60f), new Vector2(0f, 60f), new Vector2(114f, 0f), new Vector2(-114f, 0f), new Vector2(114f, -20f), new Vector2(-114f, -20f), new Vector2(114f, 20f),
-            new Vector2(-114f, 20f), new Vector2(76f, -40f), new Vector2(-76f, -40f), new Vector2(76f, 40f), new Vector2(-76f, 40f), new Vector2(0f, -80f), new Vector2(0f, 80f)
-        };
-
-        /// <summary>Greedy label declutter: the nearest free spot (inside the map) to the wanted one, tried in a fixed order, so two map labels never share pixels.</summary>
-        private Vector2 Free(float x, float y, float w, float h)
-        {
-            Vector2 first = new Vector2(Mathf.Clamp(x, 0f, mapW - w), Mathf.Clamp(y, 0f, mapH - h));
-            for (int i = 0; i < Nudges.Length; i++)
-            {
-                float nx = Mathf.Clamp(x + Nudges[i].x, 0f, mapW - w), ny = Mathf.Clamp(y + Nudges[i].y, 0f, mapH - h);
-                var r = new Rect(nx - 1f, ny - 1f, w + 2f, h + 2f);
-                bool hit = false;
-                for (int k = 0; k < placed.Count && !hit; k++) hit = placed[k].Overlaps(r);
-                if (hit) continue;
-                placed.Add(r);
-                return new Vector2(nx, ny);
-            }
-            placed.Add(new Rect(first.x, first.y, w, h));
-            return first;
-        }
+        /// <summary>Greedy label declutter (see <see cref="MapDeclutter"/>): the nearest free spot inside the map, so two map labels never share pixels.</summary>
+        private Vector2 Free(float x, float y, float w, float h) => MapDeclutter.Free(placed, x, y, w, h, mapW, mapH);
 
         private bool TeamRow(int slot, out SofTeamRow row)
         {
@@ -628,7 +622,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             for (int i = 0; i < Slots; i++) { rowBack[i].color = OpsInk.Inert; rowButtons[i]?.Restyle(); teamMarks[i]?.Restyle(); }
             for (int i = 0; i < targetMarks.Length; i++) targetMarks[i]?.Restyle();
             foreach (AvControl c in new[] { raise, push, hold, divert, exfil, lift, stop, recon, lase, sabot, seize, tap, pick }) c?.Restyle();
-            paintedSeq = -1; // repaint with the new palette
+            ops?.Restyle();
+            paintedSeq = paintedOps = -1; // repaint with the new palette
         }
     }
 }

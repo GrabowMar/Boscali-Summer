@@ -68,6 +68,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             }
         }
 
+        /// <summary>One line of what the operation does and what stops it (the box hint on the tall pages).</summary>
+        public static string Hint(OpKind kind)
+        {
+            switch (kind)
+            {
+                case OpKind.Asat: return "KILLS ONE ENEMY SATELLITE · BREAKS ON DATA CENTER OR LAUNCHER LOSS";
+                case OpKind.ZeroDay: return "ONE SAM NET CANNOT LAUNCH FOR 3 MIN · HALF NEAR AN ENEMY EW TRUCK";
+                case OpKind.Fob: return "HELD BUILDING BECOMES A FOB 20 MIN: +1 TEAM, RAISE, REARM, REFUEL";
+                default: return "";
+            }
+        }
+
+        /// <summary>What an operator must do before the operation can start (no valid target in the list).</summary>
+        public static string NeedTarget(OpKind kind) =>
+            kind == OpKind.ZeroDay ? "REVEAL A SAM SITE FIRST (HOP TO IT OR SCAN IT)" : kind == OpKind.Fob ? "SEIZE A BUILDING FIRST (SOF SEIZE)" : "PICK A SATELLITE";
+
         /// <summary>The anchor line shown while an operation is paused: what to protect or restore.</summary>
         public static string Anchor(OpKind kind) =>
             kind == OpKind.Fob ? "HELD BUILDING" : "DATA CENTER";

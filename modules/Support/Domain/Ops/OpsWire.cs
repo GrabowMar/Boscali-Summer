@@ -365,6 +365,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             }
         }
 
+        /// <summary>The box's detail line: the bar, the viewer's own share and the work share while funding; what to protect in the countdown; what is running after it.</summary>
+        public static string Detail(in OpsRow r, float now)
+        {
+            if (r.Kind == OpKind.None || r.State == OpState.Idle) return "";
+            switch (r.State)
+            {
+                case OpState.Execute:
+                    return "PROTECT THE " + OpsWords.Anchor(r.Kind) + (r.Kind == OpKind.Asat ? " AND THE LAUNCHER" : "");
+                case OpState.Done:
+                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + OpsWords.Clock(r.EndsAt - now) : "EXECUTED";
+                default:
+                    return r.Percent + " % OF " + r.Goal + " CR · YOURS " + r.MyCr + " CR" + (r.WorkPercent > 0 ? " · WORK " + r.WorkPercent + " %" : "") +
+                        (r.State == OpState.Broken ? " · BROKEN, FUND TO RESUME" : r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");
+            }
+        }
+
         /// <summary>The satellite state line (NET page): which birds are dead and how far their rebuild has come; empty when all are up.</summary>
         public static string Birds(OpsStateData s)
         {

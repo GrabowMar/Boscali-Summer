@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -272,6 +273,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             {
                 // A SOF verdict (RAISE / ORDER / MISSION / DIVERT): its words reach the console and the SOF footer; a refusal also cautions.
                 var verdict = new SofResult(reply.SofVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind >= SpaceCommandKind.OpFund && reply.Kind <= SpaceCommandKind.OpCancel)
+            {
+                // An OPERATIONS verdict (FUND / PLAN / CANCEL): its words reach the console and the NET and SOF footers; a refusal also cautions.
+                var verdict = new OpResult((OpOutcome)reply.Outcome, (OpKind)Mathf.Clamp(reply.CallId, 0, (int)OpKind.Fob), reply.Charged, reply.Detail);
                 Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
                 return;
             }
