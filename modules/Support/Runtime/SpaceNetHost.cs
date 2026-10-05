@@ -171,20 +171,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public float Now => SupportManager.MissionNow();
 
-        // These two ports run only for a command that passed the rate limit, the replay cache and validation, so a garbage or replayed
-        // command can never keep OVERLORD out. A human MARK or SEND is the SPACE work OVERLORD yields to; a CLAIM (firing) is not.
+        // These two ports run only for a command that passed the rate limit, the replay cache and validation, and only a verdict on a
+        // real contact or a posted call counts, so garbage, replays and refusals can never keep OVERLORD out. A human MARK or SEND is
+        // the SPACE work OVERLORD yields to; a CLAIM (firing) is not.
         public MarkVerdict Mark(ulong player, int contactId)
         {
             if (!Is(player)) return MarkVerdict.NoContact;
-            space?.NoteHumanSpaceVerb(current);
-            return manager.ConfirmSpaceMark(current, contactId);
+            MarkVerdict verdict = manager.ConfirmSpaceMark(current, contactId);
+            if (verdict != MarkVerdict.NoContact && verdict != MarkVerdict.RateLimited && verdict != MarkVerdict.Capacity) NoteWork();
+            return verdict;
         }
 
         public TaskedResult Send(ulong player, int requestId, int[] markIds)
         {
             if (!Is(player)) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
-            space?.NoteHumanSpaceVerb(current);
-            return manager.SendTasked(current, markIds, requestId);
+            TaskedResult result = manager.SendTasked(current, markIds, requestId);
+            if (result.Outcome == TaskedOutcome.Posted || result.Outcome == TaskedOutcome.Queued) NoteWork();
+            return result;
+        }
+
+        private void NoteWork()
+        {
+            try { space?.NoteHumanSpaceVerb(current); }
+            catch (Exception e) { Debug.LogError(e); }
         }
 
         // No favourite flag: the host holds no knowledge of a pilot's CALLS favourites (they live in the client's own settings),

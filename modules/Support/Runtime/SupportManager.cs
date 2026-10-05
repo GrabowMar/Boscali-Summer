@@ -934,8 +934,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             ulong playerId = PlayerIdentity.Of(player);
             float now = MissionNow();
-            // A human tasking a scan or the camera is working SPACE: OVERLORD steps back. Firing a rod or any other CALL is not.
-            if (WatchOfficerPolicy.CountsAsHumanWork(action.Id)) space?.NoteHumanSpaceVerb(player);
             bool bypass = BypassRequirements;
             int scene = sceneGeneration;
 
@@ -1006,6 +1004,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
+            // An accepted scan or camera tasking is a human working SPACE: OVERLORD steps back. Replays, refusals,
+            // rods and every other CALL are not.
+            if (WatchOfficerPolicy.CountsAsHumanWork(action.Id))
+            {
+                try { space?.NoteHumanSpaceVerb(player); }
+                catch (Exception e) { logger.LogError(e); }
+            }
             credits?.RecordInput(player, missionNow);
             try
             {
