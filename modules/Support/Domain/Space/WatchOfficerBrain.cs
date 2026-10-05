@@ -73,7 +73,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 host.Gather(now, ref inputs, targets, sites);
                 plan = Policy.Think(inputs, targets, sites);
                 Thinks++;
-                if (plan.Action == WatchAction.Post) Post(host, plan, now);
+                if (plan.Why != WatchWhy.NotDue && Policy.HasStranded) RetryStranded(host, now); // finish the last post first
+                else if (plan.Action == WatchAction.Post) Post(host, plan, now);
                 else if (plan.Action == WatchAction.Scan) Scan(host, plan, now);
             }
             LastPlan = plan;
@@ -96,14 +97,28 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (ok == 0) { Failures++; return; }
             TaskedOutcome outcome = host.Send(marked, ok);
             if (outcome == TaskedOutcome.Posted) { Posts++; Policy.NotePosted(marked, ok, now); }
-            else { Failures++; Policy.NoteFailed(marked, ok, now); }
+            else
+            {
+                // The MARKs are confirmed and live: keep them for a retry instead of stranding their slots.
+                Failures++; Policy.NoteFailed(marked, ok, now); Policy.NoteStranded(marked, ok);
+            }
+        }
+
+        private void RetryStranded(IWatchHost host, float now)
+        {
+            int n = Policy.CopyStranded(marked);
+            TaskedOutcome outcome = n > 0 ? host.Send(marked, n) : TaskedOutcome.NotPosted;
+            bool posted = outcome == TaskedOutcome.Posted;
+            if (posted) { Posts++; Policy.NotePosted(marked, n, now); }
+            else { Failures++; Policy.Defer(now, WatchOfficerPolicy.FailureBackoffSeconds); }
+            Policy.NoteStrandedTry(posted);
         }
 
         private void Scan(IWatchHost host, in WatchPlan plan, float now)
         {
             var site = new WatchSite(plan.SiteKey, plan.SiteX, plan.SiteZ);
             if (host.Scan(plan.Scan, site)) { Scans++; Policy.NoteScan(now, plan.SiteKey); }
-            else { Failures++; Policy.NoteScanFailed(now); }
+            else { Failures++; Policy.NoteScanFailed(now, plan.SiteKey); }
         }
     }
 }

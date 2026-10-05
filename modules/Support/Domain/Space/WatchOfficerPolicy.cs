@@ -37,7 +37,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public readonly int Key;
         public readonly float X, Z;
-        public WatchSite(int key, float x, float z) { Key = key; X = x; Z = z; }
+        /// <summary>The OPTICAL bird could image this very site right now: daylight and a sky clear enough (the host samples it per site).</summary>
+        public readonly bool OpticalOk;
+        public WatchSite(int key, float x, float z, bool opticalOk = false) { Key = key; X = x; Z = z; OpticalOk = opticalOk; }
     }
 
     /// <summary>The host facts one think needs. Times are mission seconds; a ready-in of zero or less is ready now.</summary>
@@ -49,8 +51,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool Linked;
         public int BoardCount, BoardCapacity, OverlordPosts, LiveMarks;
         public float RodReadyIn, RadarReadyIn, OpticalReadyIn;
-        /// <summary>The OPTICAL bird could image a point right now: daylight and a sky readable enough to refuse nothing.</summary>
-        public bool OpticalOk;
     }
 
     /// <summary>One decision. A post carries up to three contact ids; a scan carries a site and the bird to use.</summary>
@@ -100,6 +100,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int RememberedSites => scanned.Count;
 
         // ---- Idle rule ---------------------------------------------------------------------------
+
+        /// <summary>
+        /// Which CALLS count as a human working SPACE: only the scan and the camera. Firing a rod, a TASKED claim or any other CALL is
+        /// not SPACE work and never suspends OVERLORD (the other human verbs are the MARK and SEND commands).
+        /// </summary>
+        public static bool CountsAsHumanWork(Runtime.SupportActionId action) =>
+            action == Runtime.SupportActionId.Recon || action == Runtime.SupportActionId.SatCamera;
 
         /// <summary>A human of this faction did a SPACE domain verb (MARK, SEND, CLAIM, a scan). Looking at the feed is not work.</summary>
         public void RecordHuman(float now)
@@ -206,10 +213,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (float.IsNaN(noTargetSince)) noTargetSince = now;
             if (now - noTargetSince < NoContactSeconds) return WatchPlan.Idle(WatchWhy.Waiting);
             if (gate != WatchWhy.None) return WatchPlan.Idle(gate);
-            WatchScan kind;
-            if (inputs.RadarReadyIn <= 0f) kind = WatchScan.Radar; // SAR works through cloud and at night: the safe default
-            else if (inputs.OpticalOk && inputs.OpticalReadyIn <= 0f) kind = WatchScan.Optical;
-            else return WatchPlan.Idle(WatchWhy.ScanNotReady);
             int site = -1;
             float oldest = float.PositiveInfinity;
             for (int i = 0; sites != null && i < sites.Count; i++)
@@ -219,6 +222,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 if (site < 0 || last < oldest) { site = i; oldest = last; }
             }
             if (site < 0) return WatchPlan.Idle(WatchWhy.NoSite);
+            // The bird is chosen for the site actually picked: SAR works through cloud and at night, so it is the default; optical
+            // only when this site's sky is clear by day and the radar bird is not available.
+            WatchScan kind;
+            if (inputs.RadarReadyIn <= 0f) kind = WatchScan.Radar;
+            else if (sites[site].OpticalOk && inputs.OpticalReadyIn <= 0f) kind = WatchScan.Optical;
+            else return WatchPlan.Idle(WatchWhy.ScanNotReady);
             return new WatchPlan(WatchAction.Scan, WatchWhy.None, kind, sites[site].Key, sites[site].X, sites[site].Z);
         }
 
@@ -285,6 +294,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void NoteScan(float now, int siteKey)
         {
             if (!SpaceRules.MissionTime(now)) return;
+            StampSite(now, siteKey);
+            noTargetSince = now; // the next scan is a full 90 s of silence away
+        }
+
+        private void StampSite(float now, int siteKey)
+        {
             if (!scanned.ContainsKey(siteKey) && scanned.Count >= MaxSites)
             {
                 int oldest = 0;
@@ -293,7 +308,35 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 scanned.Remove(oldest);
             }
             scanned[siteKey] = now;
-            noTargetSince = now; // the next scan is a full 90 s of silence away
+        }
+
+        // ---- MARKs OVERLORD confirmed whose SEND failed ----------------------------------------
+
+        public const int MaxStrandedTries = 3;
+        private readonly int[] stranded = new int[MaxTargets];
+        private int strandedCount, strandedTries;
+
+        /// <summary>OVERLORD's confirmed MARKs are live but unposted: they are tried again on a later think rather than stranding mark slots.</summary>
+        public bool HasStranded => strandedCount > 0;
+
+        public void NoteStranded(int[] ids, int count)
+        {
+            strandedCount = 0; strandedTries = 0;
+            for (int i = 0; ids != null && i < count && i < ids.Length && strandedCount < stranded.Length; i++)
+                if (ids[i] > 0) stranded[strandedCount++] = ids[i];
+        }
+
+        public int CopyStranded(int[] into)
+        {
+            int n = Math.Min(strandedCount, into.Length);
+            Array.Copy(stranded, into, n);
+            return n;
+        }
+
+        /// <summary>A retry's result. A post, or the third refusal, ends it; the marks then lapse on their own clock.</summary>
+        public void NoteStrandedTry(bool posted)
+        {
+            if (posted || ++strandedTries >= MaxStrandedTries) strandedCount = 0;
         }
 
         /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while a human works the domain).</summary>
@@ -302,16 +345,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
         }
 
-        public void NoteScanFailed(float now)
+        /// <summary>A refused scan backs off thirty seconds and stamps its site, so the next scan rotates to another one.</summary>
+        public void NoteScanFailed(float now, int siteKey = int.MinValue)
         {
-            if (SpaceRules.MissionTime(now)) nextThinkAt = Math.Max(nextThinkAt, now + ScanFailureBackoffSeconds);
+            if (!SpaceRules.MissionTime(now)) return;
+            nextThinkAt = Math.Max(nextThinkAt, now + ScanFailureBackoffSeconds);
+            if (siteKey != int.MinValue) StampSite(now, siteKey);
         }
 
         /// <summary>Scene change: forget every post, scan, MARK and human verb.</summary>
         public void Reset()
         {
             markHead = markCount = 0;
-            remembered.Clear(); scanned.Clear();
+            remembered.Clear(); scanned.Clear(); strandedCount = strandedTries = 0;
             nextThinkAt = 0f; lastHumanAt = float.NegativeInfinity; noTargetSince = float.NaN;
         }
 

@@ -205,6 +205,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Largest state message the sender emits in one piece (Mirage pools 1300 B writer buffers).</summary>
         public const int StateBudget = 1200;
         public const int MaxMaker = 16, MaxIntent = 56;
+        /// <summary><see cref="SpaceStateData.RadarReadyAt"/> value for "the RADAR scan cannot be taken": disabled by the host or no live uplink.</summary>
+        public const int RadarUnavailable = int.MaxValue;
+        /// <summary>Largest real deadline a reader accepts (mission seconds); anything above it, short of the marker, is clamped.</summary>
+        public const int MaxDeadline = 100000000;
         private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 17, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
         private const byte FlagFull = 1, FlagActive = 2, FlagFeed = 4;
 
@@ -373,7 +377,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 s.NewestWatchOfficer = (newestBits & 8) != 0; s.NewestOwn = (newestBits & 16) != 0; s.NewestMaker = newestMaker;
             }
             if (!ReadInt(r, out int radarReady) || !ReadText(r, MaxIntent, out string intent)) return Bad();
-            s.RadarReadyAt = radarReady; s.Intent = intent;
+            s.RadarReadyAt = radarReady == RadarUnavailable ? RadarUnavailable : Math.Min(radarReady, MaxDeadline); s.Intent = intent;
             s.Full = (flags & FlagFull) != 0; s.Active = (flags & FlagActive) != 0; s.Feed = (flags & FlagFeed) != 0;
             s.Generation = generation; s.Now = now; s.Family = (SpaceFamilyState)family; s.Gate = (TaskedOutcome)gate; s.GateDetail = gateDetail;
             if (!s.Active || !s.Feed) return s;

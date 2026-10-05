@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 try { run.Brain.Step(run.Host, missionNow); }
                 catch (Exception e)
                 {
-                    // One faction's fault never stops another's; the throttle gives the same fault ten seconds before it repeats.
+                    // One faction's fault never stops another's; the throttle gives the same fault thirty seconds before it repeats.
                     run.Brain.Policy.NoteScanFailed(missionNow);
                     Plugin.Logger?.LogWarning("[Support.Overlord] " + run.Host.Name + " step failed: " + e.Message);
                 }
@@ -122,7 +122,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!service.TryWatchParts(owner, out SpaceState state, out SpaceObservations observations, out TaskedDesk desk)) return;
                 SpaceContacts contacts = observations.Contacts;
                 contacts.Prune(now);
-                desk.Board.Prune(now);
                 inputs.Linked = state.LiveUplinkCount > 0;
                 inputs.BoardCount = desk.Board.Count;
                 inputs.BoardCapacity = desk.Capacity;
@@ -148,7 +147,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     targets.Add(new WatchTarget(c.Id, c.X, c.Z, value, kind, c.Moving, IsStrategic(unit), c.ExpiresAt, FrontMeters(c.X, c.Z)));
                 }
                 for (int i = 0; i < sites.Count; i++) into.Add(sites[i]);
-                if (inputs.RadarReadyIn > 0f && into.Count > 0) inputs.OpticalOk = OpticalDay(into[0]);
             }
 
             private float Ready(SpaceState state, SupportActionId action, BirdTask task, float now) =>
@@ -205,14 +203,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     int at = siteRank.Count;
                     while (at > 0 && siteRank[at - 1] > rank) at--;
                     if (at >= MaximumSites) continue;
-                    sites.Insert(at, new WatchSite(airbase.GetInstanceID(), p.x, p.z)); siteRank.Insert(at, rank);
+                    // The optical verdict is per site (its own sky), sampled with the map every ten seconds.
+                    sites.Insert(at, new WatchSite(airbase.GetInstanceID(), p.x, p.z, OpticalDay(p.x, p.z))); siteRank.Insert(at, rank);
                     if (sites.Count > MaximumSites) { sites.RemoveAt(sites.Count - 1); siteRank.RemoveAt(siteRank.Count - 1); }
                 }
             }
 
-            private static bool OpticalDay(in WatchSite site)
+            private static bool OpticalDay(float x, float z)
             {
-                if (!SpaceSky.TrySample(new GlobalPosition(site.X, 0f, site.Z), out WeatherViewSample sky)) return false;
+                if (!SpaceSky.TrySample(new GlobalPosition(x, 0f, z), out WeatherViewSample sky)) return false;
                 return SpaceFeedRules.Optical(true, sky) == OpticalVerdict.Ok && SpaceFeedRules.RadiusFactor(sky, false) >= 0.75f;
             }
 
@@ -243,6 +242,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 float now = SupportManager.MissionNow();
                 if (!state.TryReserve(radar ? BirdTask.Scan : BirdTask.Camera, now, out SpaceTaskReservation receipt)) return false;
                 var transaction = new SpaceActionTransaction(service, owner, state, receipt, manager.TaskSecondsOf(action));
+                // No free reveal: if the task could not be committed after the window opens, it must not open at all.
+                if (!transaction.CanLaunch) { transaction.Cancel(); return false; }
                 int contacts;
                 var point = new GlobalPosition(site.X, 0f, site.Z);
                 try

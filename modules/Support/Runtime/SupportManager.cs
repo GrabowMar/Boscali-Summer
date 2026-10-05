@@ -934,8 +934,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             ulong playerId = PlayerIdentity.Of(player);
             float now = MissionNow();
-            // A human working a bird is working SPACE: OVERLORD steps back (it never counts an open feed, only these verbs).
-            if (action.SpaceTask.HasValue) space?.NoteHumanSpaceVerb(player);
+            // A human tasking a scan or the camera is working SPACE: OVERLORD steps back. Firing a rod or any other CALL is not.
+            if (WatchOfficerPolicy.CountsAsHumanWork(action.Id)) space?.NoteHumanSpaceVerb(player);
             bool bypass = BypassRequirements;
             int scene = sceneGeneration;
 

@@ -415,9 +415,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.NoContactsTone = AvState.Inert;
             if (!known || !state.Active || !state.Feed || entries.Count > 0) return;
             int seconds = SpaceFeedRules.RadarReadySeconds(state.RadarReadyAt, now);
-            view.NoContacts = SpaceFeedRules.NoContactsLine(state.Family, state.UplinksLive, seconds);
+            bool unavailable = state.RadarReadyAt == SpaceWire.RadarUnavailable;
+            view.NoContacts = SpaceFeedRules.NoContactsLine(state.Family, state.UplinksLive, seconds, unavailable);
             view.NoContactsTone = state.Family == SpaceFamilyState.Dark || state.UplinksLive <= 0 ? AvState.Danger
-                : seconds <= 0 ? AvState.Ready : AvState.Caution;
+                : unavailable ? AvState.Caution : seconds <= 0 ? AvState.Ready : AvState.Caution;
         }
 
         private void FillActions(SpaceFeedState state, bool known)
@@ -469,7 +470,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
             int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
             string sub = (source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
-                (post.WatchOfficer ? "WATCH OFFICER OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
+                (post.WatchOfficer ? "OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
                 (left / 60) + ":" + (left % 60).ToString("00");
             var card = new FeedCardView
             {

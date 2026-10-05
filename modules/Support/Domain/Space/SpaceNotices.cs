@@ -31,11 +31,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>
     /// ENEMY INTENT words. The host takes the enemy faction's named main effort (a public map objective the AI is steered at, read
     /// through a Core contract) and says only its name: never a coordinate, never a unit, and UNKNOWN when nothing is exposed.
+    /// Only an AI-led enemy has an intent to read: a faction with a human in it is steered by that human, so it is UNKNOWN.
+    /// The word is FOCUSING, not attacking: the director's target may be a point it defends.
     /// </summary>
     internal static class IntentWords
     {
         public const string Unknown = "ENEMY INTENT: UNKNOWN";
-        private const string Lead = "ENEMY INTENT: MAIN EFFORT AT ";
+        private const string Lead = "ENEMY INTENT: FOCUSING ";
+
+        /// <summary>The words for an enemy faction with <paramref name="enemyHumans"/> humans and the director's named objective.</summary>
+        public static string ForEnemy(int enemyHumans, string objectiveLabel) => enemyHumans > 0 ? Unknown : Line(objectiveLabel);
 
         public static string Line(string objectiveLabel)
         {

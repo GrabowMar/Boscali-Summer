@@ -123,7 +123,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return words;
         }
 
-        private static string ReadIntent(FactionHQ owner)
+        private string ReadIntent(FactionHQ owner)
         {
             if (!ModuleServices.TryGet(out IEnemyIntentSource source) || (source is UnityEngine.Object unity && unity == null)) return IntentWords.Unknown;
             var hqs = FactionRegistry.GetAllHQs();
@@ -131,7 +131,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null || hq == owner || hq.faction == null) continue;
-                if (source.TryGetMainEffort(hq.faction.factionName, out string label)) return IntentWords.Line(label);
+                // A human-led enemy has no director intent to show (its main effort is whatever its humans do): UNKNOWN.
+                if (manager == null || manager.HumanCount(hq) > 0) continue;
+                if (source.TryGetMainEffort(hq.faction.factionName, out string label)) return IntentWords.ForEnemy(0, label);
             }
             return IntentWords.Unknown;
         }
@@ -146,10 +148,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return SpaceWire.Clean(label, SpaceWire.MaxMaker);
         }
 
-        private static int RadarDeadline(SpaceState state, float now)
+        private int RadarDeadline(SpaceState state, float now)
         {
+            // A scan the host has switched off, or with no live uplink, is "unavailable", never "ready".
+            if (manager == null || !manager.ActionEnabled(SupportActionId.Recon)) return SpaceWire.RadarUnavailable;
             float wait = state.ReadyIn(BirdTask.Scan, now);
-            return float.IsInfinity(wait) || wait <= 0.05f ? 0 : SpaceMirror.GateDeadline(now, wait);
+            if (float.IsInfinity(wait)) return SpaceWire.RadarUnavailable;
+            return wait <= 0.05f ? 0 : SpaceMirror.GateDeadline(now, wait);
         }
 
         internal SpaceObservations ObservationsFor(FactionHQ owner) =>

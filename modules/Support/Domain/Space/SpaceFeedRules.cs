@@ -261,7 +261,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Seconds until the RADAR bird can scan again, from the host's mission-time deadline mapped onto this clock (0 = ready).</summary>
         public static int RadarReadySeconds(int deadline, float now)
         {
-            if (deadline <= 0 || !SpaceRules.MissionTime(now)) return 0;
+            if (deadline <= 0 || deadline == SpaceWire.RadarUnavailable || !SpaceRules.MissionTime(now)) return 0;
             return Math.Max(0, (int)Math.Ceiling(deadline - (double)now));
         }
 
@@ -269,9 +269,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// The one line that replaces the contact targets when the faction has none revealed: the legal next step (a RADAR SCAN, ready
         /// or when) or that SPACE is offline. It never suggests a target; it says how to get one.
         /// </summary>
-        public static string NoContactsLine(SpaceFamilyState family, int uplinksLive, int radarSeconds)
+        public static string NoContactsLine(SpaceFamilyState family, int uplinksLive, int radarSeconds, bool radarUnavailable = false)
         {
             if (family == SpaceFamilyState.Dark || uplinksLive <= 0) return "NO CONTACTS — SPACE OFFLINE · RESTORE A SITE";
+            if (radarUnavailable) return "NO CONTACTS — RADAR UNAVAILABLE · TRY SAT CAMERA";
             if (radarSeconds <= 0) return "NO CONTACTS — RADAR SCAN READY";
             return "NO CONTACTS — RADAR READY " + (radarSeconds / 60) + ":" + (radarSeconds % 60).ToString("00");
         }

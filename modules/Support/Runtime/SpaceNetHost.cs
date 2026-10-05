@@ -94,8 +94,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         if (commands.Admit(id, wall)) { subs.CloseFeed(id); Poll(player, now, wall); }
                         break;
                     default:
-                        // MARK, SEND and CLAIM are the SPACE domain verbs: a human doing one is working SPACE, so OVERLORD steps back.
-                        space?.NoteHumanSpaceVerb(player);
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
                             net.SendSpaceReply(player, reply);
                         break;
@@ -173,11 +171,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public float Now => SupportManager.MissionNow();
 
-        public MarkVerdict Mark(ulong player, int contactId) =>
-            Is(player) ? manager.ConfirmSpaceMark(current, contactId) : MarkVerdict.NoContact;
+        // These two ports run only for a command that passed the rate limit, the replay cache and validation, so a garbage or replayed
+        // command can never keep OVERLORD out. A human MARK or SEND is the SPACE work OVERLORD yields to; a CLAIM (firing) is not.
+        public MarkVerdict Mark(ulong player, int contactId)
+        {
+            if (!Is(player)) return MarkVerdict.NoContact;
+            space?.NoteHumanSpaceVerb(current);
+            return manager.ConfirmSpaceMark(current, contactId);
+        }
 
-        public TaskedResult Send(ulong player, int requestId, int[] markIds) =>
-            Is(player) ? manager.SendTasked(current, markIds, requestId) : new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+        public TaskedResult Send(ulong player, int requestId, int[] markIds)
+        {
+            if (!Is(player)) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+            space?.NoteHumanSpaceVerb(current);
+            return manager.SendTasked(current, markIds, requestId);
+        }
 
         // No favourite flag: the host holds no knowledge of a pilot's CALLS favourites (they live in the client's own settings),
         // so a client can never assert priority. Arbitration is receipt order inside the 200 ms window.

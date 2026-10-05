@@ -152,6 +152,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             to.RadarReadyAt = from.RadarReadyAt; to.Intent = from.Intent ?? "";
         }
 
+        /// <summary>
+        /// A host deadline moved onto the client's clock with clamped arithmetic: zero stays zero, the unavailable marker stays itself,
+        /// and no offset can wrap an int.
+        /// </summary>
+        public static int ShiftDeadline(int deadline, float offset)
+        {
+            if (deadline <= 0) return 0;
+            if (deadline == SpaceWire.RadarUnavailable) return deadline;
+            double shifted = (double)deadline + (SpaceRules.Finite(offset) ? Math.Round(offset) : 0d);
+            return (int)Math.Max(1d, Math.Min(SpaceWire.MaxDeadline, shifted));
+        }
+
         /// <summary>CR short for a price is a quantity; the cooldown and wallet-freeze seconds are sent as a mission-time deadline.</summary>
         public static bool GateIsDeadline(TaskedOutcome gate) => gate == TaskedOutcome.Cooldown || gate == TaskedOutcome.Frozen;
 
@@ -255,10 +267,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             into.UplinksTotal = d.UplinksTotal; into.LiveMarks = d.LiveMarks; into.Gate = d.Gate;
             float offset = clientNow - d.Now;
             // A cooldown or freeze arrives as a host deadline: convert it to this clock like every other deadline.
-            into.GateDetail = SpaceMirror.GateIsDeadline(d.Gate) ? d.GateDetail + (int)Math.Round(offset) : d.GateDetail;
+            into.GateDetail = SpaceMirror.GateIsDeadline(d.Gate) ? SpaceMirror.ShiftDeadline(d.GateDetail, offset) : d.GateDetail;
             into.NewestPost = d.NewestPost; into.NewestAction = d.NewestAction; into.NewestTargets = d.NewestTargets;
             into.NewestWatchOfficer = d.NewestWatchOfficer; into.NewestOwn = d.NewestOwn; into.NewestMaker = d.NewestMaker ?? ""; into.Intent = d.Intent ?? "";
-            into.RadarReadyAt = d.RadarReadyAt > 0 ? d.RadarReadyAt + (int)Math.Round(offset) : 0;
+            into.RadarReadyAt = SpaceMirror.ShiftDeadline(d.RadarReadyAt, offset);
             if (!d.Active || !d.Feed) { into.ClearRows(); return true; }
             if (full) into.ClearRows();
             for (int i = 0; i < d.RemovedContacts.Count; i++) { int at = SpaceMirror.IndexOf(into.Contacts, d.RemovedContacts[i]); if (at >= 0) into.Contacts.RemoveAt(at); }
