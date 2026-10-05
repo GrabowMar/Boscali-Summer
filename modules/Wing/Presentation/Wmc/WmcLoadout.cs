@@ -14,11 +14,10 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>LOADOUT (spec WMC rebuild §LOADOUT), the 0.9 v2 page with its critique fixed, now a kit v2 flow: a build card that says
-    /// it is a saved preset (SUPPLY's FIT flies it) with its NAME field, airframe tiles, a template bar (NEW · COPY · DELETE,
-    /// two-press), a HARDPOINTS table where a station is one row everywhere and only CLEAR empties one, a store popup beside its
-    /// row, and a LIVERY per airframe that the spawn now wears. Templates and liveries live in this machine's config, so a client
-    /// edits its own.</summary>
+    /// <summary>LOADOUT (spec 2026-10-04 §SUPPLY × LOADOUT, "One Sheet"): a build card that says it is a saved preset (SUPPLY's FIT
+    /// flies it), NAME, AIRFRAME ◂ ▸, TEMPLATE chips with NEW · COPY · DELETE (two-press), HARDPOINTS as a small station map beside the
+    /// station table with the store picker kept open below (every store with its verdict word and mass), and a LIVERY row. Templates and
+    /// liveries live in this machine's config, so a client edits its own.</summary>
     internal sealed partial class WmcLoadout : IWmcPage
     {
         private readonly WmcControls ids;
@@ -53,12 +52,22 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow = pageFlow;
             ticker = pageTicker;
             BuildCard(flow);
-            BuildTiles(flow);
+            BuildAirframeRow(flow);
             BuildTemplateBar(flow);
             BuildHardpoints(flow);
             BuildLivery(flow);
-            // Last, so its list draws over the page.
-            popup = new AvPopup(flow.Content, flow.Width);
+        }
+
+        /// <summary>SUPPLY's EDIT ›: LOADOUT edits <paramref name="definition"/> and, when given, the template <paramref name="templateId"/>.</summary>
+        public void Edit(AircraftDefinition definition, string templateId)
+        {
+            if (definition == null) return;
+            airframe = definition;
+            if (templateId != null && definition.jsonKey != null) editing[definition.jsonKey] = templateId;
+            hpResetPending = true;
+            deleteGate = new ConfirmGate();
+            liveryFor = null;
+            pageKey = int.MinValue;
         }
 
         /// <summary>LOADOUT came into view: the airframe list and the faction's liveries are read again.</summary>
@@ -180,16 +189,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             unchecked
             {
                 key = (current != null ? current.Id.GetHashCode() : 1) + WingLoadoutTemplates.Revision * 31 + (airframe != null ? airframe.GetHashCode() : 0)
-                    + tilePage * 7 + hpList.Page * 131 + (client ? 3 : 0) + (asking ? 5 : 0) + (nameField.Dirty ? 17 : 0) + airframes.Count * 1009
-                    + (WingRequisition.FitOf(airframe) != null ? WingRequisition.FitOf(airframe).GetHashCode() : 0) + mission.Rank * 13
-                    + (mission.TacticalOpen ? 19 : 0) + (mission.StrategicOpen ? 23 : 0);
+                    + selStation * 7 + pickerPage * 131 + hpBoard.Page * 197 + (client ? 3 : 0) + (asking ? 5 : 0) + (nameField.Dirty ? 17 : 0)
+                    + airframes.Count * 1009 + (WingRequisition.FitOf(airframe) != null ? WingRequisition.FitOf(airframe).GetHashCode() : 0)
+                    + mission.Rank * 13 + (mission.TacticalOpen ? 19 : 0) + (mission.StrategicOpen ? 23 : 0);
             }
             nameField.EditingId = current?.Id;
             if (key != pageKey)
             {
                 pageKey = key;
                 RefreshCard(asking);
-                RefreshTiles();
+                RefreshAirframeRow();
                 RefreshTemplateBar(asking);
                 RefreshHardpoints();
                 RefreshLivery();
@@ -213,7 +222,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildCard(AvFlow f)
         {
-            f.Section(AvIcon.AdjustmentsHorizontal, "BUILD", "PRESET · SUPPLY FIT");
             card = f.Add(new WmcBuildCard(f.Content));
             nameField = f.Add(new WmcNameField(f.Content, "NAME", TemplateNames.MaxChars, CommitName,
                 "The template's name as SUPPLY's FIT lists it: Enter saves it (16 characters at most)."));
@@ -226,8 +234,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string state;
             chipShown = LoadoutWords.Chip(current != null, nameField.Dirty, supplyFit, out state);
             Sprite icon = airframe != null ? IconFactory.Aircraft(airframe) : null;
-            card.Set(airframe != null ? LoadoutWords.Title(code, current?.Name) : "NO AIRFRAME", airframe != null
-                ? LoadoutWords.Build(summary, current != null, summary.Refused) : "Pick an airframe below", chipShown, state, asking ? "warn" : state, icon,
+            string chain = airframe != null ? LoadoutWords.Build(summary, current != null, summary.Refused) : "Pick an airframe below";
+            if (airframe != null && current != null) chain += " · " + LoadoutWords.UsedBy(supplyFit ? 1 : 0);
+            card.Set(airframe != null ? LoadoutWords.Title(code, current?.Name) : "NO AIRFRAME", chain, chipShown, state, asking ? "warn" : state, icon,
                 summary.Stations > 0 ? (float)summary.Fitted / summary.Stations : 0f);
             nameField.SetText(current?.Name ?? "");
             nameField.SetInteractable(current != null);
@@ -242,9 +251,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         // ---------------------------------------------------------------- the LIVERY row
 
-        private AvSection liverySection;
-        private AvRow liveryRow;
-        private AvControl liveryPrev, liveryNext;
+        private WmcPickRow liveryRow;
         private readonly List<WingLoadoutTemplates.LiveryOption> liveries = new List<WingLoadoutTemplates.LiveryOption>();
         private readonly List<string> liveryTokens = new List<string>();
         private AircraftDefinition liveryFor;
@@ -252,12 +259,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildLivery(AvFlow f)
         {
-            liverySection = f.Section(AvIcon.Sticker, "LIVERY", "");
-            liveryRow = f.Add(new AvRow(f.Content));
-            liveryPrev = liveryRow.AddTrailing(new AvControl.Spec("", () => StepLivery(-1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-            liveryNext = liveryRow.AddTrailing(new AvControl.Spec("", () => StepLivery(1), AvButtonStyle.Quiet, AvIcon.ChevronRight));
-            ids.Add("lo.livery.prev", liveryPrev);
-            ids.Add("lo.livery.next", liveryNext);
+            liveryRow = f.Add(new WmcPickRow(f.Content, "LIVERY", false, StepLivery, null));
+            ids.Add("lo.livery.prev", liveryRow.Prev);
+            ids.Add("lo.livery.next", liveryRow.Next);
+        }
+
+        /// <summary>A livery's swatch: STANDARD is the console's neutral, any other label gets a hue from its name (a livery has no
+        /// colour the page can read).</summary>
+        private static Color Swatch(string label, bool standard)
+        {
+            if (standard) return new Color(0.29f, 0.36f, 0.40f, 1f);
+            int h = 17;
+            foreach (char ch in label ?? "") h = unchecked(h * 31 + ch);
+            return Color.HSVToRGB((h & 0xFFFF) / 65535f, 0.42f, 0.62f);
         }
 
         private void RefreshLivery()
@@ -271,19 +285,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 liveryTokens.Clear();
                 foreach (WingLoadoutTemplates.LiveryOption o in liveries) liveryTokens.Add(o.Token);
             }
-            string code = airframe != null ? SupplyWords.Code(airframe.code, airframe.unitName) : WmcText.Unknown;
-            liverySection.SetCaption(LoadoutWords.LiveryKey(code));
             int i = LiveryChoice.IndexOf(liveryTokens, WingLoadoutTemplates.LiveryTokenOf(airframe));
             bool can = airframe != null && liveries.Count > 1;
-            liveryRow.Set(liveries.Count > 0 ? LoadoutWords.Livery(liveries[i].Label) : LoadoutWords.Standard, "", "", AvState.Info);
+            string label = liveries.Count > 0 ? liveries[i].Label : LoadoutWords.Standard;
+            liveryRow.Set(LoadoutWords.Livery(label), liveries.Count > 0 ? "· " + (i + 1) + " / " + liveries.Count : "", null,
+                Swatch(label, liveries.Count == 0 || i == 0));
             string tip = can ? "The livery this airframe's wingmen wear (STANDARD: the faction's own)."
                 : airframe == null ? "Pick an airframe first." : "This faction offers no other livery for it.";
-            foreach (AvControl b in new[] { liveryPrev, liveryNext })
-            {
-                b.Interactable = can;
-                b.Help = tip;
-            }
-            liveryRow.Help = tip;
+            liveryRow.SetEnabled(can, tip);
         }
 
         private void StepLivery(int dir)

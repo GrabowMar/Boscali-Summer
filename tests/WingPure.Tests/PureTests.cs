@@ -200,4 +200,49 @@ namespace WingPure.Tests
             TestAssert.That(f.Count == 0 && f.Newest(0).Who == null, "clear empties the feed");
         }
     }
+
+    internal static class LadderStateTests
+    {
+        public static void Run()
+        {
+            var l = new LadderState();
+            l.Reset();
+            TestAssert.That(l.Press(3, 5, LadderState.AutoPerPage(5), null) == LadderKind.Moved && l.Who == 2 && l.Step == LadderStep.Do, "WHO pick moves to DO");
+            TestAssert.That(l.Press(9, 24, 4, null) == LadderKind.None, "a digit past the page does nothing");
+            TestAssert.That(LadderState.MoreDigit(24, 4) == 5 && LadderState.PageCount(24, 4) == 6, "six groups, MORE on 5");
+            TestAssert.That(l.Press(5, 24, 4, null) == LadderKind.Moved && l.Page == 1 && l.Step == LadderStep.Do, "MORE turns the page");
+            TestAssert.That(l.Press(2, 24, 4, i => i == 5) == LadderKind.Moved && l.Do == 5 && l.Step == LadderStep.Where, "needs WHERE -> WHERE");
+            TestAssert.That(l.Press(3, 7, LadderState.AutoPerPage(7), null) == LadderKind.Send && l.Where == 2, "WHERE pick sends");
+            l.Reset();
+            l.Press(1, 3, 9, null);
+            l.Press(1, 24, 4, i => true);
+            TestAssert.That(l.Press(0, 3, 9, null) == LadderKind.Moved && l.Step == LadderStep.Do && l.Where == -1, "0 from WHERE is DO");
+            TestAssert.That(l.Press(0, 24, 4, null) == LadderKind.Moved && l.Step == LadderStep.Who && l.Do == -1, "0 from DO is WHO");
+            TestAssert.That(l.Press(0, 3, 9, null) == LadderKind.Close, "0 from WHO closes");
+            l.Reset();
+            l.Press(1, 3, 9, null);
+            TestAssert.That(l.Press(4, 24, 4, i => false) == LadderKind.Send && l.Do == 3 && l.Who == 0, "a Now order sends at DO");
+            l.OpenAt(13, 4);
+            TestAssert.That(l.Step == LadderStep.Where && l.Who == 0 && l.Do == 13, "OpenAt sits at WHERE");
+            TestAssert.That(l.Press(0, 4, 9, null) == LadderKind.Moved && l.Step == LadderStep.Do && l.Page == 3, "back from OpenAt shows the order's own group");
+            TestAssert.That(LadderState.AutoPerPage(9) == 9 && LadderState.AutoPerPage(10) == 8 && LadderState.MoreDigit(10, 8) == 9, "ten choices: eight and MORE");
+            TestAssert.That(LadderState.OnPage(10, 8, 1) == 2 && LadderState.OnPage(10, 8, 5) == 0, "last page, out of range page");
+            l.Reset();
+            TestAssert.That(l.Press(9, 10, 8, null) == LadderKind.Moved && l.Page == 1 && l.Press(9, 10, 8, null) == LadderKind.Moved && l.Page == 0, "MORE wraps");
+            TestAssert.That(l.Press(-1, 3, 9, null) == LadderKind.None && l.Press(10, 3, 9, null) == LadderKind.None, "not a digit");
+        }
+    }
+
+    internal static class BadgeGlyphsTests
+    {
+        public static void Run()
+        {
+            TestAssert.That(BadgeGlyphs.Label("B4", ' ', false, false, false) == "B4", "no glyphs leaves the badge alone");
+            TestAssert.That(BadgeGlyphs.Label("B4", 'R', false, false, false) == "B4 R", "stance initial");
+            string all = BadgeGlyphs.Label("A2", 'E', true, true, true);
+            TestAssert.That(all.StartsWith("A2 E") && all.Contains(">F<") && all.Contains(">D<") && all.Contains(">S<"), "F, D and S follow the stance");
+            TestAssert.That(BadgeGlyphs.Label("A2", ' ', true, false, false).Contains(">F<"), "a letter without a stance");
+            TestAssert.That(BadgeGlyphs.Mask('R', true, false, false) != BadgeGlyphs.Mask('R', false, false, false), "mask tells a change");
+        }
+    }
 }

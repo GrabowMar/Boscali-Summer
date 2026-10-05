@@ -56,6 +56,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return caption == "ALL FITTED" || s.Length + 3 + caption.Length > BuildChars ? s : s + " · " + caption;
         }
 
+        /// <summary>Which SUPPLY fit flies this template: "USED BY 1 SUPPLY FIT" (a template is one airframe's, so 0 or 1).</summary>
+        public static string UsedBy(int fits) => fits <= 0 ? "NOT USED BY SUPPLY" : "USED BY " + N(fits) + (fits == 1 ? " SUPPLY FIT" : " SUPPLY FITS");
+
+        /// <summary>The station picker's head: "STATION 3 · INNER L" (the number is 1-based).</summary>
+        public static string PickerHead(int station, string name) => "STATION " + N(station + 1) + " · " + (name ?? "").ToUpperInvariant();
+
+        public static string PickerHolds(string label) => string.IsNullOrEmpty(label) ? "EMPTY" : WmcText.Cut(label, 30) + " IS FITTED";
+
+        public const string HardpointsCaption = "TAP A STATION · STORES SAY WHY THEY ARE BLOCKED";
+
         /// <summary>The station's name and, for a pair or a multi-pylon set, how many pylons it fits ("Fuselage Pylon ×2").</summary>
         public static string StationName(string name, int pylons)
         {

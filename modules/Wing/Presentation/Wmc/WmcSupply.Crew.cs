@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
@@ -17,32 +18,27 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed partial class WmcSupply
     {
         private readonly InboundRow[] inbound = new InboundRow[8];
-        private WmcHidable inboundBlock;
-        private AvSection inboundSection;
-        private AvList inboundList;
-        private int inboundCount, inboundChipShown = -1, inboundKey = int.MinValue;
+        private WmcStripBlock inboundBlock;
+        private int inboundCount, inboundKey = int.MinValue;
 
         private void BuildInbound()
         {
-            inboundBlock = flow.Add(new WmcHidable(flow, ticker, pageIndex, "Inbound"));
-            AvFlow f = inboundBlock.Flow;
-            inboundSection = f.Section(AvIcon.ArrowUp, SupplyWords.InboundTitle, "");
-            inboundList = f.Add(new AvList(f.Content, ticker, BezelLayout.InboundMax, BindInbound));
+            inboundBlock = flow.Add(new WmcStripBlock(flow.Content, "Inbound", BezelLayout.InboundMax, null, null));
+            inboundBlock.SetShown(false);
         }
 
-        /// <summary>Launches on their way (queued, spawning, taxiing, departing, joining with an ETA), the last row "+n MORE"
-        /// beyond four; a row's text is rebuilt only when its launch, phase or ETA second changes.</summary>
+        /// <summary>Launches on their way (queued, spawning, taxiing, departing, joining with an ETA), the last strip "+n MORE"
+        /// beyond four; a strip's text is rebuilt only when its launch, phase or ETA second changes.</summary>
         private void RefreshInbound()
         {
             inboundCount = client || SpawnService.Instance == null ? 0 : SpawnService.Instance.Inbound(inbound);
-            inboundBlock.SetShown(inboundCount > 0);
-            if (inboundCount != inboundChipShown)
+            int rows = BezelLayout.InboundRows(inboundCount);
+            if (inboundBlock.Shown != rows > 0)
             {
-                inboundChipShown = inboundCount;
-                inboundSection.SetCaption(SupplyWords.InboundChip(inboundCount));
+                inboundBlock.SetShown(rows > 0);
+                inboundKey = int.MinValue;
                 relayout = true;
             }
-            int rows = BezelLayout.InboundRows(inboundCount);
             int key = rows * 7919 + inboundCount;
             unchecked
             {
@@ -56,31 +52,37 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (key == inboundKey) return;
             inboundKey = key;
-            inboundList.SetCount(rows);
+            for (int i = 0; i < inboundBlock.Capacity; i++)
+            {
+                if (i >= rows) inboundBlock.Hide(i);
+                else BindInbound(i);
+            }
             relayout = true;
         }
 
-        private void BindInbound(int item, AvRow row)
+        private void BindInbound(int item)
         {
             bool more = item == BezelLayout.InboundMax - 1 && inboundCount > BezelLayout.InboundMax;
             InboundRow r = inbound[item];
-            AvState state = more || r.Phase == InboundPhase.Queued || r.Phase == InboundPhase.Spawning ? AvState.Inert
+            if (more)
+            {
+                inboundBlock.Set(item, "", AvState.Inert, InboundWords.More(inboundCount - (BezelLayout.InboundMax - 1)), "", -1f, "", AvState.Inert, AvState.Inert);
+                return;
+            }
+            AvState state = r.Phase == InboundPhase.Queued || r.Phase == InboundPhase.Spawning ? AvState.Inert
                 : r.Phase == InboundPhase.Joining ? AvState.Ready : AvState.Info;
-            row.Set(more ? InboundWords.More(inboundCount - (BezelLayout.InboundMax - 1)) : InboundText(r), "", "", state);
-        }
-
-        private static string InboundText(in InboundRow r)
-        {
             string code = r.Type != null ? SupplyWords.Code(r.Type.code, r.Type.unitName) : WmcText.Unknown;
-            string s = InboundWords.Row(code, r.Pilot != null ? WmcText.Cut(r.Pilot.Callsign, PilotPick.CallsignChars) : null, r.Phase, r.Eta);
-            return r.Field != null && float.IsNaN(r.Eta) ? s + " · " + BaseName.Short(WingRequisition.NameOf(r.Field)).ToUpperInvariant() : s;
+            string pilot = r.Pilot != null ? WmcText.Cut(r.Pilot.Callsign, PilotPick.CallsignChars) : null;
+            string sub = (pilot != null ? pilot + " · " : "") + InboundWords.Phase(r.Phase)
+                + (r.Field != null ? " · " + BaseName.Short(WingRequisition.NameOf(r.Field)).ToUpperInvariant() : "");
+            string eta = float.IsNaN(r.Eta) ? "" : "JOIN " + LegMath.Clock(r.Eta);
+            inboundBlock.Set(item, "INBOUND", AvState.Info, code, sub, SupplyWords.InboundProgress(r.Phase), eta, AvState.Info, state);
         }
 
         // ---------------------------------------------------------------- ADOPT
 
-        private WmcHidable adoptBlock;
+        private WmcStripBlock adoptBlock;
         private AvControl adoptButton;
-        private WmcLines adoptNote;
         private readonly List<Aircraft> recruits = new List<Aircraft>();
         private ConfirmGate adoptGate = new ConfirmGate();
         private float adoptCost;
@@ -90,12 +92,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildAdopt()
         {
-            adoptBlock = flow.Add(new WmcHidable(flow, ticker, pageIndex, "Adopt"));
-            AvFlow f = adoptBlock.Flow;
-            adoptButton = f.Buttons(new AvControl.Spec("ADOPT", Adopt, AvButtonStyle.Primary, AvIcon.UsersGroup)).Controls[0];
+            adoptBlock = flow.Add(new WmcStripBlock(flow.Content, "Adopt", 1, null, (r, k) => Adopt(), new AvControl.Spec("ADOPT", null, AvButtonStyle.Primary)));
+            adoptBlock.SetShown(false);
+            adoptButton = adoptBlock.Button(0, 0);
             adoptButton.Help = "Take command of the friendly AI selected on the map: press twice, the cost is shown.";
             ids.Add("sup.adopt", adoptButton);
-            adoptNote = f.Add(new WmcLines(f.Content, 1));
         }
 
         /// <summary>Friendly AI selected on the map that can join (host only) and what they cost; the faction's others that
@@ -137,7 +138,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             CountAdopt(c);
             adoptVisible = AdoptRow.Visible(recruits.Count, client);
-            adoptBlock.SetShown(adoptVisible);
+            if (adoptBlock.Shown != adoptVisible)
+            {
+                adoptBlock.SetShown(adoptVisible);
+                adoptShown = int.MinValue;
+                relayout = true;
+            }
             int hash = recruits.Count;
             unchecked
             {
@@ -158,9 +164,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (key == adoptShown) return;
             adoptShown = key;
-            adoptButton.Label = AdoptRow.Label(recruits.Count, adoptCost, asking);
+            adoptButton.Label = asking ? "ADOPT?" : "ADOPT";
             adoptButton.Latched = asking;
-            adoptNote.Set(0, AdoptRow.Note(adoptSkipped, adoptWhy));
+            AircraftDefinition first = recruits.Count > 0 ? recruits[0].definition : null;
+            string what = first != null ? SupplyWords.Code(first.code, first.unitName) : WmcText.Unknown;
+            adoptBlock.Set(0, "ADOPT", AvState.Info, recruits.Count > 1 ? what + " ×" + recruits.Count : what, AdoptRow.Note(adoptSkipped, adoptWhy), -1f,
+                Credits.Price(adoptCost), AvState.Info, AvState.Info);
             relayout = true;
         }
 
@@ -203,22 +212,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         // ---------------------------------------------------------------- step 1 PILOT & CREW
 
         private const string PilotTip = "Choose who flies the next requisition: free pilots only, the most senior first.";
-        private AvSection pilotSection;
+        private WmcHeadBar pilotHead;
         private WmcPilotCard pilotCard;
-        private AvStepper pilotStepper;
-        private string pilotCounter = "";
         private readonly List<WingPilot> free = new List<WingPilot>();
         private int pilotVersion = int.MinValue;
         private bool pilotClient;
 
         private void BuildPilot(AvFlow f)
         {
-            pilotSection = f.Section(AvIcon.User, "1 · " + SupplyWords.PilotTitle, "");
-            // The card is not a click target (0.9 critique: a dead card click); only the stepper acts.
-            pilotCard = f.Add(new WmcPilotCard(f.Content));
-            pilotStepper = f.Add(new AvStepper(f.Content, "NEXT PILOT", () => pilotCounter, () => StepPilot(-1), () => StepPilot(1)));
-            ids.Add("sup.pilot.prev", pilotStepper.Minus);
-            ids.Add("sup.pilot.next", pilotStepper.Plus);
+            pilotHead = f.Add(new WmcHeadBar(f.Content, AvIcon.User, "1 · " + SupplyWords.PilotTitle));
+            // The card is not a click target (0.9 critique: a dead card click); only its arrows act.
+            pilotCard = f.Add(new WmcPilotCard(f.Content, StepPilot));
+            ids.Add("sup.pilot.prev", pilotCard.Prev);
+            ids.Add("sup.pilot.next", pilotCard.Next);
             SetStepper(true, PilotTip);
         }
 
@@ -233,10 +239,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (client)
             {
                 pilotCard.Set(WmcText.Unknown, "THE HOST KEEPS THE ROSTER", "", AvState.Inert);
-                pilotCounter = WmcText.Unknown;
-                pilotStepper.Refresh();
                 pilotCard.Portrait.Set(null);
-                StepCaption(pilotSection, WmcText.Unknown, "inert");
+                pilotHead.SetCaption(StepCaption(WmcText.Unknown, "inert"));
                 SetStepper(false, ClientWhy);
                 return;
             }
@@ -247,15 +251,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 PilotPick.RankLine(up != null ? WingPilotRoster.RankName(up.Rank) : null, up != null ? up.Xp : 0), PilotPick.Status(up != null),
                 up != null ? AvState.Info : AvState.Inert);
             pilotCard.Portrait.Set(up);
-            pilotCounter = PilotPick.Counter(i, free.Count);
-            pilotStepper.Refresh();
-            StepCaption(pilotSection, PilotPick.State(free.Count), free.Count > 0 ? "live" : "info");
+            pilotHead.SetCaption(StepCaption(SupplyWords.PilotCaption(i, free.Count), free.Count > 0 ? "live" : "info"));
             SetStepper(free.Count > 1, free.Count == 1 ? "Only one pilot is free." : "Nobody is free: a new pilot is drafted at launch.");
         }
 
         private void SetStepper(bool on, string why)
         {
-            foreach (AvControl b in new[] { pilotStepper.Minus, pilotStepper.Plus })
+            foreach (AvControl b in new[] { pilotCard.Prev, pilotCard.Next })
             {
                 b.Interactable = on;
                 b.Help = on ? PilotTip : why;

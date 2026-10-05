@@ -62,6 +62,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextSpacing { get; }
+        public ConfigEntry<KeyboardShortcut> KeyBuddyAttack { get; }
+        public ConfigEntry<KeyboardShortcut> KeyNextField { get; }
+        public ConfigEntry<KeyboardShortcut> KeyMoveAhead { get; }
         public ConfigEntry<KeyboardShortcut> KeyDismiss { get; }
         public ConfigEntry<KeyboardShortcut> KeyWmc { get; }
         public ConfigEntry<KeyboardShortcut> KeyApLevel { get; }
@@ -70,6 +73,10 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<KeyboardShortcut> KeyApVerticalSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApSpeed { get; }
         public ConfigEntry<KeyboardShortcut> KeyApOff { get; }
+        /// <summary>The wing key (spec 2026-10-04 §2): hold it for the Call Ladder; with 1-6 a stance, with a command-card letter an order.</summary>
+        public ConfigEntry<KeyboardShortcut> KeyWing { get; }
+        /// <summary>The wing key on a joystick button (device:button, as the Hotas section); empty is unbound.</summary>
+        public ConfigEntry<string> HotasWingKey { get; }
         /// <summary>Spec M7 §4: joystick bindings by command name, and the button logger.</summary>
         public System.Collections.Generic.KeyValuePair<string, ConfigEntry<string>>[] Hotas { get; }
         public ConfigEntry<bool> HotasLogButtons { get; }
@@ -213,6 +220,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
             KeyNextShape = Key(c, "NextShape", "Next formation shape in the family.", 48);
             KeyNextSpacing = Key(c, "NextSpacing", "Next spacing preset (Close, Standard, Open, Spread).", 47);
             KeyDismiss = Key(c, "Dismiss", "Release every wingman to the game's AI.", 46);
+            KeyBuddyAttack = Key(c, "BuddyAttack", "The wing attacks your locked target with you.", 46);
+            KeyNextField = Key(c, "NextField", "Next airfield for landings and launches.", 46);
+            KeyMoveAhead = Key(c, "MoveAhead", "The wing moves 10 km ahead of you, then orbits.", 46);
             KeyWmc = Key(c, "Wmc", "Open the WMC on the map: maximizes the map and shows the WMC screen (planning is on the main map).", 45);
             KeyApLevel = Key(c, "AutopilotLevel", "Autopilot: wings level.", 45);
             KeyApHeading = Key(c, "AutopilotHeading", "Autopilot: hold the current heading.", 44);
@@ -220,6 +230,11 @@ namespace BoscaliSummer.Modules.Wing.Configuration
             KeyApVerticalSpeed = Key(c, "AutopilotVerticalSpeed", "Autopilot: hold the current vertical speed.", 42);
             KeyApSpeed = Key(c, "AutopilotSpeed", "Autopilot: toggle speed hold at the current speed.", 41);
             KeyApOff = Key(c, "AutopilotOff", "Autopilot: all holds off.", 40);
+            KeyWing = Key(c, "WingKey", "Hold for the Call Ladder on the HUD strip: then 1-6 picks a stance, a command-card letter (Q W E R / A S D F / ...) gives " +
+                "that order to the wing, Enter opens the ladder and its digits walk WHO, DO, WHERE (0 is back). Keys are read only while this is held.", 51);
+            HotasWingKey = c.Bind("Hotas", "WingKey", "", new ConfigDescription(
+                "Joystick button for the wing key: device:button, e.g. \"T.16000M:6\" or \"any:6\". Empty: unbound. The keyboard digits and letters " +
+                "still read the chords while it is held.", null, new ConfigurationManagerAttributes { Order = 32 }));
 
             Hotas = new System.Collections.Generic.KeyValuePair<string, ConfigEntry<string>>[HotasCommands.Length];
             for (int i = 0; i < HotasCommands.Length; i++)

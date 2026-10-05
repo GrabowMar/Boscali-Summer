@@ -63,4 +63,62 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
     }
+    /// <summary>The AIRCRAFT damage map's parts: each part's place in the aircraft's own frame (sideways, along the length), remembered while
+    /// the part is attached, because a detached part is no longer where it was; its state (whole, hit, lost) read from the game's hit points
+    /// (100 a part, as the DAMAGED alert reads them). One per inspected aircraft; nothing is stored beyond a few floats.</summary>
+    internal sealed class PartMap
+    {
+        public const int Max = 96, HitBelow = 75;
+        private readonly float[] homeX = new float[Max], homeZ = new float[Max];
+        private readonly bool[] known = new bool[Max];
+        private uint forId;
+
+        public void Gather(WingMember m, uint id, ref MemberDetail d)
+        {
+            if (d.Parts == null) d.Parts = new PartDot[Max];
+            d.PartCount = d.PartsLost = d.PartsHit = 0;
+            Aircraft a = m.Aircraft;
+            if (id != forId)
+            {
+                forId = id;
+                System.Array.Clear(known, 0, known.Length);
+            }
+            var parts = a != null && !a.disabled ? a.partLookup : null;
+            if (parts == null) return;
+            int n = System.Math.Min(parts.Count, Max);
+            float maxX = 0f, minZ = float.MaxValue, maxZ = float.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                UnitPart p = parts[i];
+                if (p == null) continue;
+                if (!p.IsDetached())
+                {
+                    UnityEngine.Vector3 l = a.transform.InverseTransformPoint(p.transform.position);
+                    homeX[i] = l.x;
+                    homeZ[i] = l.z;
+                    known[i] = true;
+                }
+                if (!known[i]) continue;
+                maxX = System.Math.Max(maxX, System.Math.Abs(homeX[i]));
+                minZ = System.Math.Min(minZ, homeZ[i]);
+                maxZ = System.Math.Max(maxZ, homeZ[i]);
+            }
+            float midZ = (minZ + maxZ) * 0.5f, halfZ = System.Math.Max(0.5f, (maxZ - minZ) * 0.5f), halfX = System.Math.Max(0.5f, maxX);
+            for (int i = 0; i < n; i++)
+            {
+                UnitPart p = parts[i];
+                if (p == null) continue;
+                bool lost = p.IsDetached();
+                bool hit = !lost && p.hitPoints < HitBelow;
+                if (lost) d.PartsLost++;
+                else if (hit) d.PartsHit++;
+                if (!known[i]) continue;
+                d.Parts[d.PartCount++] = new PartDot
+                {
+                    X = UnityEngine.Mathf.Clamp(homeX[i] / halfX, -1f, 1f), Z = UnityEngine.Mathf.Clamp((homeZ[i] - midZ) / halfZ, -1f, 1f),
+                    State = (byte)(lost ? 2 : hit ? 1 : 0),
+                };
+            }
+        }
+    }
 }
