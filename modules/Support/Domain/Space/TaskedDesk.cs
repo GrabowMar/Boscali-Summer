@@ -298,7 +298,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 float now = ports.Now;
                 if (retired || maker == 0 || maker == SpaceContacts.WatchOfficerId || nodeId <= 0 || !SpaceRules.MissionTime(now) ||
-                    !CyberPackages.TryOfAction(action, out _) || !SpaceRules.Finite(effort) || effort <= 0f)
+                    !TaskedKinds.IsHostPost(action) || !SpaceRules.Finite(effort) || effort <= 0f)
                     return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
                 if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
                 int humans = profile.Observe(ports.Humans, now);
@@ -314,6 +314,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 Warn("PostPackage threw: " + e.Message);
                 return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
+            }
+        }
+
+        /// <summary>Withdraws the open post of <paramref name="action"/> whose one point has mark id <paramref name="markId"/> (a SOF team post that no longer applies). False when none was open.</summary>
+        public bool WithdrawPost(SupportActionId action, int markId)
+        {
+            try
+            {
+                var info = new List<TaskedPostInfo>(TaskedBoard.MaxCalls);
+                board.Snapshot(ports.Now, info);
+                for (int i = 0; i < info.Count; i++)
+                    if (info[i].Call.Action == action && !info[i].Held && info[i].Call.MarkCount > 0 && info[i].Call.MarkAt(0).Id == markId) return board.Withdraw(info[i].Call.Id);
+                return false;
+            }
+            catch (Exception e)
+            {
+                Warn("WithdrawPost threw: " + e.Message);
+                return false;
             }
         }
 

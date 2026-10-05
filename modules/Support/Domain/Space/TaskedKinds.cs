@@ -1,5 +1,6 @@
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -31,6 +32,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 kind = new TaskedKind(action, TaskedDomain.Cyber, def.Tier, def.Label);
                 return true;
             }
+            if (SofPosts.IsPost(action))
+            {
+                kind = new TaskedKind(action, TaskedDomain.Sof, CallTier.Light, SofPosts.Label(action));
+                return true;
+            }
             if (CallSheet.TryGet(action, out CallRow row))
             {
                 kind = new TaskedKind(action, row.Family == CallFamily.Cyber ? TaskedDomain.Cyber : row.Family == CallFamily.Sof ? TaskedDomain.Sof : TaskedDomain.Space,
@@ -40,6 +46,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             kind = default;
             return false;
         }
+
+        /// <summary>A host-built post (a CYBER package or a SOF team post): one fixed point, the maker the only contributor, never a SPACE rod.</summary>
+        public static bool IsHostPost(SupportActionId action) => SofPosts.IsPost(action) || CyberPackages.TryOfAction(action, out _);
 
         public static TaskedDomain DomainOf(SupportActionId action) => TryGet(action, out TaskedKind kind) ? kind.Domain : TaskedDomain.Space;
 

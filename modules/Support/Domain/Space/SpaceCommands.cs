@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -204,6 +205,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         CyberResult Cyber(ulong player, SpaceCommandKind kind, int target);
     }
 
+    /// <summary>What the host decides for a SOF command (RAISE, ORDER, MISSION, DIVERT). The sender is the transport-authenticated player; a target id is opaque.</summary>
+    internal interface ISofCommandPorts
+    {
+        SofResult Sof(ulong player, in SpaceCommand command);
+    }
+
     /// <summary>
     /// The one evaluator every SPACE command goes through (remote sender, listen-host and singleplayer alike): rate limit, exact
     /// replay, changed-payload refusal, then the host decision. The sender's identity and faction come from the transport.
@@ -218,11 +225,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly byte protocol;
         private readonly ISpaceCommandPorts ports;
         private readonly ICyberCommandPorts cyber;
+        private readonly ISofCommandPorts sof;
         private readonly SpaceCommandLimiter limiter = new SpaceCommandLimiter();
         private readonly SpaceReplayCache cache = new SpaceReplayCache();
         private readonly List<int> stale = new List<int>(SpaceReplayCache.PerPlayer);
 
-        public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports, ICyberCommandPorts cyber = null) { this.protocol = protocol; this.ports = ports; this.cyber = cyber; }
+        public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports, ICyberCommandPorts cyber = null, ISofCommandPorts sof = null) { this.protocol = protocol; this.ports = ports; this.cyber = cyber; this.sof = sof; }
 
         public SpaceCommandLimiter Limiter => limiter;
         public SpaceReplayCache Cache => cache;
@@ -310,6 +318,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     // Every node id, valid or not, takes the same path; the desk answers NO TARGET for unknown, hidden and foreign ids alike.
                     CyberResult done = cyber != null ? cyber.Cyber(player, c.Kind, c.Target) : new CyberResult(CyberOutcome.Unavailable);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)done.Outcome, done.NodeId, done.Charged, done.Detail);
+                case SpaceCommandKind.SofRaise:
+                case SpaceCommandKind.SofOrder:
+                case SpaceCommandKind.SofMission:
+                case SpaceCommandKind.SofDivert:
+                    // Every team and target id, valid or not, takes the same path; the desk answers NO TARGET for unknown, hidden and foreign ids alike.
+                    SofResult ran = sof != null ? sof.Sof(player, c) : new SofResult(SofOutcome.Unavailable);
+                    return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)ran.Outcome, ran.Slot, ran.Charged, ran.Detail);
                 default:
                     return ForTasked(c.Kind, c.RequestId, ports.Claim(player, c.RequestId, c.Target));
             }
@@ -333,6 +348,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (c.IsCyberVerb)
                 return new SpaceReply(protocol, c.Kind, c.RequestId,
                     (byte)(why == RefusalKind.Limited ? CyberOutcome.RateLimited : why == RefusalKind.Changed ? CyberOutcome.NoTarget : CyberOutcome.Unavailable));
+            if (c.IsSofVerb)
+                return new SpaceReply(protocol, c.Kind, c.RequestId,
+                    (byte)(why == RefusalKind.Limited ? SofOutcome.RateLimited : why == RefusalKind.Changed ? SofOutcome.NoTarget : SofOutcome.Unavailable));
             if (c.Kind == SpaceCommandKind.Mark)
                 return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)(why == RefusalKind.Limited ? MarkVerdict.RateLimited : MarkVerdict.NoContact));
             return new SpaceReply(protocol, c.Kind, c.RequestId,

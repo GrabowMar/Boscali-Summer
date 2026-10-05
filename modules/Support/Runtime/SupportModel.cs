@@ -55,7 +55,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         CyberSamNetDown = 34,
         CyberSpoofIff = 35,
         CyberBirdJam = 36,
-        CyberBlackout = 37
+        CyberBlackout = 37,
+        /// <summary>SOF team posts (TASKED board only; never CALL rows). Appended after the highest id (37).</summary>
+        SofCover = 38,
+        SofLase = 39
     }
 
     internal enum SupportResult : byte

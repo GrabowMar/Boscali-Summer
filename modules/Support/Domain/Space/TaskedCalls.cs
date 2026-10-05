@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -327,6 +328,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (TryClaim(claim, out Entry entry)) ResetClaim(entry);
         }
 
+        /// <summary>Takes an unclaimed post off the board (a SOF post whose team is no longer in need). A held or launching post stays.</summary>
+        public bool Withdraw(int callId)
+        {
+            SyncContacts();
+            if (!calls.TryGetValue(callId, out Entry entry) || entry.Status != Status.Available || entry.Claims.Count > 0) return false;
+            calls.Remove(callId);
+            return true;
+        }
+
         public void Prune(float now)
         {
             SyncContacts();
@@ -458,6 +468,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public static int Quote(SupportActionId action, int hostBaselinePrice, int humanProfile, bool ownCall)
         {
+            if (SofPosts.IsPost(action)) return ValidProfile(humanProfile) ? 0 : -1; // a SOF post is a service: free to claim
             if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !TaskedKinds.TryGet(action, out TaskedKind row)) return -1;
             if ((humanProfile == 1 && ownCall) || (humanProfile >= 2 && humanProfile <= 4)) return 0;
             return action == SupportActionId.Artillery ? Math.Max(1, (int)Math.Round(hostBaselinePrice * .25d, MidpointRounding.AwayFromZero)) :
