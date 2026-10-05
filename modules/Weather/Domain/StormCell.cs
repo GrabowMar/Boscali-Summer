@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float level = CloudLevel;
             if (level <= 0f) return 0f;
             float dx = x - X, dz = z - Z;
-            float d = (float)Math.Sqrt(dx * dx + dz * dz);
+            float d = EllipticDistance(dx, dz);
             return level * (1f - WeatherMath.Smoothstep(Radius * 1.0f, Radius * 2.2f, d));
         }
 
@@ -88,7 +88,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float ShapeAt(float x, float z)
         {
             float dx = x - X, dz = z - Z;
-            return CloudLevel * Gauss2(dx, dz, Radius * 1.4f);
+            return CloudLevel * Elliptic(dx, dz, Radius * 1.4f);
+        }
+
+        /// <summary>Metres from the buoyant core in its fixed wind-oriented footprint.
+        /// Rain, ordinary cloud and the crown use the same ellipse.</summary>
+        public float EllipticDistance(float dx, float dz)
+        {
+            float speed = (float)Math.Sqrt(VelocityX * VelocityX + VelocityZ * VelocityZ);
+            if (speed < 0.1f) return (float)Math.Sqrt(dx * dx + dz * dz);
+            float ax = VelocityX / speed, az = VelocityZ / speed;
+            float along = (dx * ax + dz * az) / 1.3f;
+            float across = -dx * az + dz * ax;
+            return (float)Math.Sqrt(along * along + across * across);
         }
 
         /// <summary>0..1 how deep a point is in the core (rain-weighted), for HUD and hazard.</summary>
@@ -157,7 +169,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const int CellsPerCluster = 3;
 
         public static int Fill(StormCell[] cells, uint layout, StateParams sky, float halfX, float halfZ,
-            float driftX, float driftZ)
+            float driftX, float driftZ, SkySplit spine = default)
         {
             int count = 0;
             float convective = WeatherMath.Clamp01(sky.Convective);
@@ -190,6 +202,22 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     VelocityX = driftX,
                     VelocityZ = driftZ,
                 };
+                if (cluster < 2 && spine.MeanderWavelength > 0f)
+                {
+                    // Two families bead the leading edge; two remain isolated. The curve,
+                    // sibling spacing and side of the line are layout properties, never
+                    // functions of convection, severity, radius or activation.
+                    float span = Math.Min(halfX, halfZ);
+                    float along = (cluster == 0 ? -0.42f : 0.42f) * span +
+                        WeatherMath.HashRange(clusterSeed, 12, 0, 0, -0.12f, 0.12f) * span +
+                        (slot % CellsPerCluster - 1) * 5000f +
+                        WeatherMath.HashRange(cellSeed, 12, 1, 0, -1200f, 1200f);
+                    float tx = -spine.NormalZ * along, tz = spine.NormalX * along;
+                    float offset = spine.SignedDistance(tx, tz) - 2000f +
+                        WeatherMath.HashRange(cellSeed, 13, 1, 0, -1600f, 1600f);
+                    cell.X = WeatherMath.Clamp(tx + spine.NormalX * offset, -halfX * 0.96f, halfX * 0.96f);
+                    cell.Z = WeatherMath.Clamp(tz + spine.NormalZ * offset, -halfZ * 0.96f, halfZ * 0.96f);
+                }
                 cell.Radius = WeatherMath.Lerp(
                     WeatherMath.HashRange(cellSeed, 2, 0, 0, 1500f, 4000f) * (0.7f + 0.3f * convective),
                     WeatherMath.HashRange(cellSeed, 2, 0, 0, 2500f, 5000f), severe);

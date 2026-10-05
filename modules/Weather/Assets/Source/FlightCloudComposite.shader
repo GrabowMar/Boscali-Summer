@@ -107,6 +107,7 @@ Shader "Boscali/FlightCloudComposite"
             float4 _CloudCamDelta;
             float4 _CloudChecker;
             float _CloudHistoryValid;
+            float _CloudFlashChange;
 
             struct rv2f { float4 pos : SV_POSITION; };
             struct ResolveOut
@@ -168,6 +169,8 @@ Shader "Boscali/FlightCloudComposite"
                 // nearby volume. Reduce history when translation is large relative to it.
                 // Distant skies keep the same temporal savings and accumulation.
                 float motion = max(saturate(length(_CloudCamDelta.xyz) / max(4.0, distance * 0.08)), _CloudCamDelta.w);
+                // Fresh neighbours expose a local flash promptly without clearing sky history.
+                motion = max(motion, saturate(_CloudFlashChange * 12.0));
                 if (!fresh) { o.colour = lerp(carried, upsampled, motion); return o; }
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames; dense texels track the

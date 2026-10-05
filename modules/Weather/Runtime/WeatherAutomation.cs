@@ -17,6 +17,51 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     /// </list></summary>
     public static class WeatherAutomation
     {
+        private static bool captureProfile;
+        private static int originalWidth, originalHeight;
+        private static FullScreenMode originalScreenMode;
+
+        /// <summary>Bounded visual-test profile. RestoreCapture returns the previous display mode.</summary>
+        public static Dictionary<string, object> PrepareCapture(Dictionary<string, object> args)
+        {
+            if (Application.isBatchMode) return Fail("PrepareCapture", "requires a rendered game window");
+            if (!captureProfile)
+            {
+                originalWidth = Screen.width;
+                originalHeight = Screen.height;
+                originalScreenMode = Screen.fullScreenMode;
+                captureProfile = true;
+            }
+            Screen.SetResolution(1920, 1080, FullScreenMode.Windowed);
+            return new Dictionary<string, object> { { "ok", true }, { "requestedWidth", 1920 },
+                { "requestedHeight", 1080 }, { "restoreWidth", originalWidth }, { "restoreHeight", originalHeight } };
+        }
+
+        public static Dictionary<string, object> RestoreCapture(Dictionary<string, object> args)
+        {
+            RestoreCaptureProfile();
+            return new Dictionary<string, object> { { "ok", true } };
+        }
+
+        internal static void RestoreCaptureProfile()
+        {
+            Find()?.SetCaptureRainVisuals(null);
+            if (captureProfile)
+                Screen.SetResolution(originalWidth, originalHeight, originalScreenMode);
+            captureProfile = false;
+        }
+
+        /// <summary>Temporary visual-test toggle; does not write configuration and clears with the capture/scene.</summary>
+        public static Dictionary<string, object> SetRainVisuals(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("SetRainVisuals", "no weather manager in this scene");
+            if (!(Arg(args, "enabled") is bool enabled)) return Fail("SetRainVisuals", "enabled must be a boolean");
+            manager.SetCaptureRainVisuals(enabled);
+            manager.LogAutomation("SetRainVisuals: " + enabled);
+            return Readout(manager);
+        }
+
         /// <summary>Snap the weather to <c>conditions</c> (default 0.92), <c>cloudHeight</c> metres (default 4500)
         /// and optional forced <c>rain</c>. Without rain, the model controls precipitation.
         /// Optionally follows the scenario unit named by <c>follow</c>.</summary>
@@ -42,6 +87,20 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     Mathf.Clamp(Number(args, "modelAge", 0f), 0f, 14400f), fixtureRegime);
             string followed = Follow(args);
             manager.LogAutomation($"ForceWeather: conditions {conditions:F2}, cloud {cloud:F0} m, rain {(rain.HasValue ? rain.Value.ToString("F2") : "AUTO")}, follow {followed ?? "-"}");
+            return Readout(manager);
+        }
+
+        /// <summary>Apply an existing console preset through its native host-authoritative path.</summary>
+        public static Dictionary<string, object> ApplyScenario(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("ApplyScenario", "no weather manager in this scene");
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer()) return Fail("ApplyScenario", "weather presets are host-only");
+            if (!Enum.TryParse(Text(args, "scenario"), true, out WeatherScenario scenario) ||
+                !Enum.IsDefined(typeof(WeatherScenario), scenario))
+                return Fail("ApplyScenario", "unknown console weather preset");
+            manager.ApplyScenario(scenario);
+            manager.LogAutomation("ApplyScenario: " + scenario);
             return Readout(manager);
         }
 
@@ -87,6 +146,21 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 throw new InvalidOperationException("Weather capture requested before cloud renderer/native takeover was ready.");
             manager.LogAutomation("Readout: " + Describe(state));
             return state;
+        }
+
+        /// <summary>Read-only bounded search for an interior in the currently displayed cloud maps.</summary>
+        public static Dictionary<string, object> CloudProbe(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("CloudProbe", "no weather manager in this scene");
+            float x = Number(args, "x", 0f), z = Number(args, "z", 0f), radius = Number(args, "radius", 8000f);
+            float minRain = Number(args, "minRain", 0f);
+            if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(z) || float.IsInfinity(z) ||
+                float.IsNaN(radius) || float.IsInfinity(radius) || float.IsNaN(minRain) || float.IsInfinity(minRain))
+                return Fail("CloudProbe", "coordinates and rain threshold must be finite");
+            Dictionary<string, object> result = manager.ProbeCloud(x, z, radius, Mathf.Clamp(minRain, 0f, 100f));
+            manager.LogAutomation("CloudProbe: " + Describe(result));
+            return result;
         }
 
         private static Dictionary<string, object> Readout(WeatherManager manager)

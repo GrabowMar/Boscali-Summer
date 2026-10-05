@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> TerrainRainEnabled { get; }
         public ConfigEntry<bool> RainAtmosphereEnabled { get; }
         public ConfigEntry<bool> LightningEnabled { get; }
+        public ConfigEntry<bool> ReducedFlashes { get; }
 
         public ConfigEntry<KeyCode> ConsoleKey { get; }
         public ConfigEntry<bool> ConsoleKeyRequiresCtrl { get; }
@@ -98,7 +99,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
 
             RainDensity = config.Bind(section, "RainDensity", 1.0f,
                 new ConfigDescription(
-                    "Density multiplier for falling rain streaks. The 1000-particle budget stays fixed.",
+                    "Density multiplier for falling rain streaks. The 2500-particle budget stays fixed.",
                     new AcceptableValueRange<float>(0.25f, 2.0f)));
 
             CanopyRainEnabled = config.Bind(section, "CanopyRainEnabled", true,
@@ -115,8 +116,9 @@ namespace BoscaliSummer.Modules.Weather.Configuration
                 "At most eight visible terrain submeshes receive an extra texture-free pass.");
 
             LightningEnabled = config.Bind(section, "LightningEnabled", true,
-                "Lightning flashes and delayed thunder in heavy rain. The flash pulses the vanilla " +
-                "sun and is restored exactly when it ends.");
+                "Spatial storm lightning and delayed thunder. Client-local presentation; no aircraft physics changes.");
+            ReducedFlashes = config.Bind(section, "ReducedFlashes", false,
+                "Suppress visible storm bolts and cloud flashes while independently enabled storm audio remains available.");
 
             RainAtmosphereEnabled = config.Bind(section, "RainAtmosphereEnabled", true,
                 "Thicken and grey the haze and dim ambient light under local rain. Layered on the " +

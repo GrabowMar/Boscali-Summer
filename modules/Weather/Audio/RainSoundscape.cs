@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Audio
 {
-    /// <summary>Two bounded, baked loops: rain rush outside and drops on cockpit glass.</summary>
+    /// <summary>One audible loop per view: exterior rush or cockpit glass patter.</summary>
     internal sealed class RainSoundscape : MonoBehaviour
     {
         private const int SampleRate = 22050;
@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         internal bool ClipsReady => rushClip != null && patterClip != null;
         internal bool IsRouted => rush != null && rush.outputAudioMixerGroup != null;
-        internal bool IsPlaying => playing && rush != null && rush.isPlaying;
+        internal bool IsPlaying => playing && ((rush != null && rush.isPlaying) || (patter != null && patter.isPlaying));
         internal float RushVolume => rush != null ? rush.volume : 0f;
         internal float PatterVolume => patter != null ? patter.volume : 0f;
 
@@ -68,19 +68,22 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 rush.outputAudioMixerGroup = mixer;
                 patter.outputAudioMixerGroup = mixer;
             }
-            // Do not bypass the game's effects-volume control while its mixer is unavailable.
-            float targetRush = enabled && mixer != null
-                ? Mathf.Clamp01(rain * 0.28f + cloud * 0.12f) * (cockpit ? 0.65f : 1f) : 0f;
-            float targetPatter = enabled && mixer != null && cockpit
-                ? Mathf.Clamp01(glassMoisture * 0.38f + rain * 0.07f) : 0f;
+            if (!enabled || mixer == null) { Stop(); return; }
+            // Wind owns cockpit airflow. Condensation is not exterior falling-rain sound.
+            float targetRush = !cockpit ? Mathf.Clamp01(rain * 0.28f) : 0f;
+            // Slow condensation has no drop-impact sound. Actual rainfall drives patter.
+            float targetPatter = cockpit ? Mathf.Clamp01(rain * 0.35f) : 0f;
+            AudioSource selected = cockpit ? patter : rush;
+            AudioSource other = cockpit ? rush : patter;
+            other.Stop(); other.volume = 0f;
 
             if (!playing && (targetRush > 0.01f || targetPatter > 0.01f) && FxVoiceBus.TryStartLoop(VoiceId))
             {
-                rush.Play();
-                patter.Play();
+                selected.Play();
                 playing = true;
             }
             if (!playing) return;
+            if (!selected.isPlaying && (targetRush > 0.01f || targetPatter > 0.01f)) selected.Play();
 
             float step = Mathf.Max(0f, Time.deltaTime) * 0.5f;
             rush.volume = Mathf.MoveTowards(rush.volume, targetRush, step);
@@ -197,11 +200,13 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         private void Stop()
         {
-            rush.Stop();
-            patter.Stop();
+            if (rush != null) { rush.Stop(); rush.volume = 0f; }
+            if (patter != null) { patter.Stop(); patter.volume = 0f; }
             FxVoiceBus.EndLoop(VoiceId);
             playing = false;
         }
+
+        internal void Release() => Stop();
 
         private void OnDestroy()
         {

@@ -220,6 +220,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             WeatherField localField = weather.Field;
             WeatherPoint localPoint = weather.LocalWeather;
             bool built = localField != null && localField.IsBuilt;
+            if (built) regime = RegimeSnapshot.FromType(localField.Timeline.To);
             float cloudShift = built ? weather.CurrentCloudHeight - localField.Regional().CloudBase : 0f;
             float deck = built ? localPoint.CloudBase + cloudShift : weather.CurrentCloudHeight;
             float cloudTop = built ? localPoint.CloudTop + cloudShift : deck + 1500f;
@@ -228,8 +229,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z,
                 out float kts, out int towards, out int from);
 
-            Camera camera = Camera.main;
-            Vector3 samplePos = camera != null ? camera.transform.position : Vector3.zero;
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
+            float cameraAltitude = camera != null ? (float)camera.transform.GlobalPosition().y : 0f;
+            bool hasViewAir = weather.TryGet(out var viewAir);
             SolarData solar = weather.GetSolarData();
             LunarData lunar = weather.GetLunarData();
 
@@ -272,7 +274,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Code = regime.Code,
                 Name = regime.Name,
                 Briefing = regime.TacticalBriefing,
-                Cover = cond,
+                Cover = built ? localPoint.Cover : cond,
                 Deck = deck,
                 Top = cloudTop,
                 VisibilityKm = built ? localPoint.VisibilityKm : -1f,
@@ -282,9 +284,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 WindFrom = from,
                 WindTo = towards,
                 HasCamera = camera != null,
-                CameraAlt = samplePos.y,
-                AirDensity = camera != null ? LevelInfo.GetAirDensity(samplePos.y) : 0f,
-                SoundSpeed = camera != null ? LevelInfo.GetSpeedOfSound(samplePos.y) : 0f,
+                CameraAlt = cameraAltitude,
+                AirDensity = camera != null ? LevelInfo.GetAirDensity(cameraAltitude) : 0f,
+                SoundSpeed = camera != null ? LevelInfo.GetSpeedOfSound(cameraAltitude) : 0f,
+                HasViewAir = hasViewAir,
+                ViewCloud = hasViewAir ? viewAir.CloudDensity01 : 0f,
+                ViewRain = hasViewAir ? viewAir.Precipitation01 : 0f,
+                ViewMoisture = hasViewAir ? viewAir.Condensation01 : 0f,
+                ViewTemperature = hasViewAir ? viewAir.TemperatureC : 0f,
                 SunElevation = solar.ElevationDegrees,
                 SunAzimuth = solar.AzimuthDegrees,
                 TimeOfDay = level.timeOfDay,

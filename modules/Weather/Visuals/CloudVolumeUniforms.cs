@@ -20,7 +20,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public float Extinction;
         /// <summary>Lightning flash envelope, 0..1: lights the cloud cores the sun cannot reach.</summary>
         public float Flash;
+        public Vector4 FlashA, FlashB;
         public bool LowDetail;
+        public bool RainVisualsEnabled;
         public float DeltaTime;
     }
 
@@ -52,7 +54,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FogId = Shader.PropertyToID("_CloudFogColor");
         private static readonly int ExtinctionId = Shader.PropertyToID("_CloudAirExtinction");
         private static readonly int FlashId = Shader.PropertyToID("_CloudFlash");
+        private static readonly int FlashAId = Shader.PropertyToID("_CloudFlashA");
+        private static readonly int FlashBId = Shader.PropertyToID("_CloudFlashB");
+        private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
         private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
+        private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
         private static readonly int LayerDepthId = Shader.PropertyToID("_LayerDepth");
         private static readonly int LayerSmoothId = Shader.PropertyToID("_LayerSmooth");
         private static readonly int MidCoverId = Shader.PropertyToID("_MidCover");
@@ -94,6 +100,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool hasPrevious;
         private int checkerFrame;
         private float jitterPhase;
+        private float previousFlash;
+        internal float[] HeroStrengths => heroShown;
 
         /// <summary>0..1 how far the console fog bank has built up.</summary>
         internal float FogShown => fogShown;
@@ -102,6 +110,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             for (int i = 0; i < heroShown.Length; i++) { heroShown[i] = 0f; heroSite[i] = Vector2.zero; }
             fogShown = 0f;
+            previousFlash = 0f;
+            hasPrevious = false;
+            checkerFrame = 0;
+            jitterPhase = 0f;
         }
 
         /// <summary>Jump set-pieces and fog to their targets (the bench, or a preload).</summary>
@@ -141,8 +153,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 heroA[i] = new Vector4(s.X, s.Z, s.Heading, (float)s.Kind);
                 heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
                 if (s.Kind == SuperstructureKind.StormEye) eye = new Vector4(s.X, s.Z, s.Size, heroShown[i]);
-                heroBottom = Mathf.Min(heroBottom, 300f + frame.CloudShift);
-                heroTop = Mathf.Max(heroTop, s.Top + 1500f + frame.CloudShift);
+                // Set-pieces use absolute seeded heights in both CPU and shader bodies.
+                // Native cloud-height changes shift the ordinary weather volume only.
+                heroBottom = Mathf.Min(heroBottom, 300f);
+                heroTop = Mathf.Max(heroTop, s.Top + 1500f);
             }
             // The console fog bank eases in and out like the set-pieces.
             fogShown = Mathf.MoveTowards(fogShown, (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f,
@@ -164,7 +178,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetColor(FogId, frame.Fog);
             material.SetFloat(ExtinctionId, frame.Extinction);
             material.SetFloat(FlashId, frame.Flash);
+            material.SetVector(FlashAId, frame.FlashA);
+            material.SetVector(FlashBId, frame.FlashB);
+            Shader.SetGlobalFloat(FlashChangeId, Mathf.Abs(frame.Flash - previousFlash));
+            previousFlash = frame.Flash;
             material.SetFloat(StormId, sky.Severity);
+            material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // Cloud genera for the current state (they fade with it).
             material.SetFloat(LayerDepthId, sky.LayerDepth);
             material.SetFloat(LayerSmoothId, sky.LayerSmooth);
@@ -231,20 +250,18 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Last frame's rotation and projection (OpenGL convention: uv v up, like the
             // targets), applied to points relative to last frame's camera.
             Vector3 delta = globalPosition - previousPosition;
-            // Static views freeze the march dither so accumulation converges bit-exact;
-            // rotation counts as motion for the resolve (history alone ghosts on pans).
+            // Rays reproject exactly under rotation. Preserve accumulation on ordinary pans;
+            // the previous 0.5-degree threshold discarded it and exposed a quarter-size grid.
             float rotAngle = hasPrevious ? Quaternion.Angle(t.rotation, previousQuat) : 180f;
-            bool staticView = hasPrevious && delta.sqrMagnitude < 0.0025f && rotAngle < 0.01f &&
-                Mathf.Abs(camera.fieldOfView - previousFov) < 0.05f;
-            float rotMotion = hasPrevious ? Mathf.Clamp01(rotAngle * 2f) : 1f;
+            float rotMotion = hasPrevious ? Mathf.Clamp01(rotAngle * 0.15f) : 1f;
             bool reusable = hasPrevious && delta.sqrMagnitude < 2000f * 2000f &&
-                Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f;
+                Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f && rotAngle < 45f;
             Shader.SetGlobalMatrix(PrevMatrixId, camera.projectionMatrix * previousRotation);
             Shader.SetGlobalVector(CamDeltaId, new Vector4(delta.x, delta.y, delta.z, rotMotion));
             Vector2 offset = CheckerOrder[checkerFrame & 3];
             // The march dither cycles each frame (golden-ratio steps never line up with the
             // 4-frame checkerboard period), so temporal accumulation converges to smooth cloud.
-            if (!staticView) jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
+            jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
             Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, jitterPhase, reusable ? 1f : 0f));
             checkerFrame++;
             previousRotation = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.Rotate(Quaternion.Inverse(t.rotation));

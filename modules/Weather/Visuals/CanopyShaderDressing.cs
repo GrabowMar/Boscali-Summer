@@ -3,6 +3,7 @@ using UnityEngine;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering;
+using BoscaliSummer.Modules.Weather.Domain;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
@@ -22,6 +23,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int SunColorId = Shader.PropertyToID("_SunColor");
         private static readonly int FogColorId = Shader.PropertyToID("_FogColor");
         private static readonly int RefractId = Shader.PropertyToID("_Refract");
+        private static readonly int FrostId = Shader.PropertyToID("_Frost");
+        private static readonly int PaneBoundsId = Shader.PropertyToID("_PaneBounds");
 
         private const float PatternDensity = 3f; // tiles/m, mirrors the shader
         private const float GravityTiles = 0.08f; // parked beads creep; airflow drives fast runoff
@@ -35,6 +38,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Color sunColor = Color.black;
         private Color fogColor = new Color(0.55f, 0.6f, 0.68f, 1f);
         private bool refract;
+        private float recentLiquid, frost;
+        internal float Frost => frost;
 
         public string EffectId => "canopy";
 
@@ -50,6 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             state["fx.canopy.panes"] = sim.PaneCount;
             state["fx.canopy.materials"] = (material != null ? 1 : 0) + (updateMaterial != null ? 1 : 0);
+            state["fx.canopy.frost"] = frost;
         }
 
         /// <summary>
@@ -63,6 +69,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             sunColor = sun;
             fogColor = fog;
             refract = sceneRefraction;
+        }
+
+        internal void SetColdMoisture(float temperatureC, float deposition, float dt)
+        {
+            float step = Mathf.Clamp(dt, 0f, 0.1f);
+            recentLiquid = Mathf.Max(Mathf.Clamp01(deposition), Mathf.MoveTowards(recentLiquid, 0f, step / 90f));
+            float target = AtmosphericSurfaceMath.ColdTarget(temperatureC, recentLiquid);
+            frost = Mathf.MoveTowards(frost, target, step / (target > frost ? 45f : 90f));
         }
 
         internal void UpdateSim(IReadOnlyList<CanopySurface> surfaces, float rain,
@@ -97,7 +111,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float lightLevel)
         {
             if (camera == null || surfaces == null || surfaces.Count == 0) return false;
-            if (wetness <= 0.001f) { sim.Release(); return false; }
+            if (wetness <= 0.001f && frost <= 0.001f) { sim.Release(); return false; }
             if (material == null)
             {
                 Shader shader = CanopyShaderBundle.GetShader();
@@ -110,6 +124,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             properties.SetColor(SunColorId, sunColor);
             properties.SetColor(FogColorId, fogColor);
             properties.SetFloat(RefractId, refract ? 1f : 0f);
+            properties.SetFloat(FrostId, frost);
             bool drawn = false;
             for (int i = 0; i < surfaces.Count; i++)
             {
@@ -121,11 +136,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     (camera.cullingMask & (1 << renderer.gameObject.layer)) == 0) continue;
                 int key = CanopyDropletSim.KeyFor(renderer.GetInstanceID(), surface.Submesh);
                 RenderTexture state = sim.StateFor(key);
-                if (state == null) continue;
+                if (state == null && frost <= 0.001f) continue;
                 Vector2 salt = sim.SaltFor(key);
-                properties.SetTexture(DropTexId, state);
+                properties.SetTexture(DropTexId, state != null ? (Texture)state : Texture2D.blackTexture);
                 properties.SetVector(SaltId, new Vector4(salt.x, salt.y, 0f, 0f));
-                properties.SetFloat(MapAxisId, MapAxis(surface.Mesh));
+                int axis = MapAxis(surface.Mesh);
+                properties.SetFloat(MapAxisId, axis);
+                Bounds b = surface.Mesh.bounds;
+                properties.SetVector(PaneBoundsId, axis == 0 ? new Vector4(b.min.x, b.min.y, b.max.x, b.max.y) :
+                    axis == 1 ? new Vector4(b.min.z, b.min.y, b.max.z, b.max.y) : new Vector4(b.min.x, b.min.z, b.max.x, b.max.z));
                 Graphics.DrawMesh(surface.Mesh, renderer.localToWorldMatrix, material,
                     renderer.gameObject.layer, camera, surface.Submesh, properties,
                     ShadowCastingMode.Off, false, null, LightProbeUsage.Off);
@@ -157,6 +176,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material = null;
             if (updateMaterial != null) Object.Destroy(updateMaterial);
             updateMaterial = null;
+            recentLiquid = frost = 0f;
         }
 
         internal void ClearWater() => sim.Release();
