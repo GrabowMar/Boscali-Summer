@@ -22,6 +22,8 @@ namespace BoscaliSummer
         private void Awake()
         {
             Logger = base.Logger;
+            // The built-in wing replaces the stand-alone Wing Command plugin; stop it before it loads.
+            BoscaliSummer.Core.Game.ExternalWingGuard.Install(Logger);
             Settings = new ModConfiguration(Config);
 
             // The panels' look lives in stylesheets, not in literals. The embedded sheets are
