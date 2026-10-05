@@ -118,8 +118,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             base.Place(s);
             width = s.W;
             AvLay.Place(card.rectTransform, 0f, 0f, s.W, s.H);
-            AvLay.Place(caption.rectTransform, 8f, 4f, s.W - 16f, 14f);
-            AvLay.Place(scaleWord.rectTransform, s.W - 86f, s.H - 20f, 78f, 14f);
+            AvLay.Place(caption.rectTransform, 8f, 3f, s.W - 16f, 18f);
+            AvLay.Place(scaleWord.rectTransform, s.W - 86f, s.H - 21f, 78f, 18f);
             AvLay.Place(empty.rectTransform, 12f, s.H * 0.5f - 10f, s.W - 24f, 20f);
             if (data != null) Draw();
         }
@@ -181,7 +181,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float barPx = bar / mpp;
             AvStrokes.Line(b, w - 10f - barPx, 22f, w - 10f, 22f, 1.2f, Rg(dim));
             WmcKit.Set(scaleWord, AvNum.Fixed(bar, 0) + " m");
-            scaleWord.rectTransform.anchoredPosition = new Vector2(w - 10f - 78f, -(h - 20f - 8f));
+            scaleWord.rectTransform.anchoredPosition = new Vector2(w - 10f - 78f, -(h - 21f - 8f));
             // Slots.
             int slots = d.Shape.Slots.Length;
             for (int i = 0; i < slots; i++)
@@ -200,7 +200,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 sw.gameObject.SetActive(true);
                 WmcKit.Set(sw, "S" + (i + 1));
                 sw.color = dim;
-                AvLay.Place(sw.rectTransform, Mathf.Min(sx + 15f, w - 30f), Mathf.Max(0f, sy - 20f), 28f, 14f);
+                AvLay.Place(sw.rectTransform, Mathf.Min(sx + 15f, w - 34f), Mathf.Max(0f, sy - 22f), 30f, 18f);
             }
             // Live members: a chevron at the offset from the lead, a dashed line to its slot while it is out of it.
             if (d.HavePos)
@@ -222,14 +222,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     lw.gameObject.SetActive(true);
                     WmcKit.Set(lw, d.Who[m] + (outSlot ? " " + StationBoard.ErrorText(d.ErrorM[m]) : ""));
                     lw.color = outSlot ? caution : ink;
-                    AvLay.Place(lw.rectTransform, Mathf.Clamp(lx + 9f, 0f, w - 112f), Mathf.Clamp(ly + 4f, 0f, h - 14f), 110f, 14f);
+                    AvLay.Place(lw.rectTransform, Mathf.Clamp(lx + 9f, 0f, w - 112f), Mathf.Clamp(ly + 4f, 0f, h - 18f), 110f, 18f);
                 }
             // The leader.
             AvStrokes.Fill(b, cx - 4f, h - cy - 4f, 8f, 8f, Rg(ink));
             leaderWord.gameObject.SetActive(true);
             WmcKit.Set(leaderWord, "YOU");
             leaderWord.color = ink;
-            AvLay.Place(leaderWord.rectTransform, cx + 8f, cy - 18f, 40f, 14f);
+            AvLay.Place(leaderWord.rectTransform, cx + 8f, cy - 20f, 40f, 18f);
             vector.Commit();
         }
 
@@ -462,7 +462,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (shapes[i] == null) return;
             AvQuadBuffer b = glyphs[i].Buffer;
             b.Clear();
-            float w = cells[i].Rect.rect.width, h = cellH - 14f;
+            float w = cells[i].Rect.rect.width, h = cellH - 20f;
             if (w <= 1f) w = 80f;
             Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo), ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             // The glyph sits above the name: shift its box up by the name's height.
@@ -484,8 +484,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 float x = i % columns * (w + gap), y = i / columns * (cellH + gap);
                 AvLay.Place(cells[i].Rect, x, y, w, cellH);
-                AvLay.Place(names[i].rectTransform, 2f, cellH - 16f, w - 4f, 14f);
-                glyphs[i].rectTransform.offsetMin = new Vector2(0f, 14f);
+                AvLay.Place(names[i].rectTransform, 2f, cellH - 19f, w - 4f, 18f);
+                glyphs[i].rectTransform.offsetMin = new Vector2(0f, 18f);
                 glyphs[i].rectTransform.offsetMax = Vector2.zero;
                 if (shapes[i] != null) Draw(i);
             }
@@ -507,7 +507,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// outside the shape's range is the range's end, so it is left off the track.</summary>
     internal sealed class WmcSpacingRow : AvPart
     {
-        private const float RowH = 44f, ButtonW = 40f, TrackY = 6f, TrackH = 20f;
+        private const float RowH = 46f, ButtonW = 40f, TrackY = 6f, TrackH = 20f;
         private readonly AvControl minus, plus;
         private readonly AvFrame track;
         private readonly Image thumb;
@@ -578,7 +578,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 float x = x0 + w * Mathf.Clamp01((metres[i] - min) / (max - min));
                 AvLay.Place(ticks[i].rectTransform, x - 0.5f, TrackY + 6f, 1f, TrackH - 12f);
                 WmcKit.Set(words[i], AvNum.Fixed(metres[i], 0));
-                AvLay.Place(words[i].rectTransform, Mathf.Clamp(x - 20f, x0 - 8f, x1 - 32f), TrackY + TrackH + 2f, 40f, 14f);
+                AvLay.Place(words[i].rectTransform, Mathf.Clamp(x - 20f, x0 - 8f, x1 - 32f), TrackY + TrackH + 1f, 40f, 18f);
             }
             float tx = x0 + w * Mathf.Clamp01((now - min) / (max - min));
             AvLay.Place(thumb.rectTransform, tx - 2f, TrackY - 3f, 4f, TrackH + 6f);

@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcWingTable : AvPart
     {
         public const int MaxMembers = WcSnapshot.MaxMembers, MaxElements = ElementRoster.MaxElements;
-        private const float RowH = 19f, HeadH = 15f, SumH = 22f, Pad = 6f, Gap = 4f, RowGap = 1f;
+        private const float RowH = 19f, HeadH = 18f, SumH = 22f, Pad = 6f, Gap = 4f, RowGap = 1f;
         private const float NumW = 28f, NameW = 82f, TypeW = 44f, FuelW = 52f, AmmoW = 34f, DmgW = 36f;
         private const int KindHead = 0, KindRow = 1;
 

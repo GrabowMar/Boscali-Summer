@@ -296,13 +296,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int inSlot = StationBoard.InSlot(phases, n);
             float rms = StationBoard.Rms(errs, n);
             mInSlot.Set(n > 0 ? AvNum.Fixed(inSlot, 0) : "—", n > 0 ? "/" + AvNum.Fixed(n, 0) : "", n > 0 ? (float)inSlot / n : 0f,
-                n == 0 ? AvState.Inert : inSlot == n ? AvState.Ready : AvState.Caution);
+                n == 0 ? AvState.Inert : inSlot == n ? AvState.Ready : AvState.Info);
             mRms.Set(rms >= 0f ? AvNum.Fixed(rms, 0) : "—", rms >= 0f ? "m" : "", rms >= 0f ? Mathf.Clamp01(rms / 100f) : 0f,
-                rms < 0f ? AvState.Inert : rms <= StationMath.InSlotMetres ? AvState.Ready : AvState.Caution);
+                rms < 0f ? AvState.Inert : rms <= StationMath.InSlotMetres ? AvState.Ready : AvState.Info);
             int pct = StationBoard.Percent(inSlot, n);
             float fraction = host && c.Wing != null ? c.Wing.Metrics.Snapshot(c.Wing.MissionTime).StationFraction : -1f;
             if (fraction >= 0f) pct = Mathf.RoundToInt(fraction * 100f);
-            mStation.Set(n > 0 ? AvNum.Fixed(pct, 0) : "—", n > 0 ? "%" : "", n > 0 ? pct / 100f : 0f, n == 0 ? AvState.Inert : pct >= 75 ? AvState.Ready : AvState.Caution);
+            mStation.Set(n > 0 ? AvNum.Fixed(pct, 0) : "—", n > 0 ? "%" : "", n > 0 ? pct / 100f : 0f, n == 0 ? AvState.Inert : pct >= 75 ? AvState.Ready : AvState.Info);
             float sep = -1f;
             if (d.HavePos)
             {
@@ -316,7 +316,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 sep = StationBoard.MinSeparation(px, pz, n + 1);
             }
             mSep.Set(sep >= 0f ? AvNum.Fixed(sep, 0) : "—", sep >= 0f ? "m" : "", sep >= 0f ? Mathf.Clamp01(sep / 200f) : 0f,
-                sep < 0f ? AvState.Inert : sep < 30f ? AvState.Danger : AvState.Ready);
+                sep < 0f ? AvState.Inert : sep < 30f ? AvState.Info : AvState.Ready);
             memberRows.Show(d);
 
             string stationCaption = d.Shape != null ? d.Shape.Name.ToUpperInvariant() + " · " + AvNum.Fixed(d.Spacing, 0) + " M · "

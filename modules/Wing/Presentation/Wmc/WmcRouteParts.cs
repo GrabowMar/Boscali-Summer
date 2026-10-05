@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             base.Place(s);
             width = s.W;
             AvLay.Place(card.rectTransform, 0f, 0f, s.W, s.H);
-            AvLay.Place(caption.rectTransform, 8f, 4f, s.W - 16f, 14f);
+            AvLay.Place(caption.rectTransform, 8f, 3f, s.W - 16f, 18f);
             AvLay.Place(empty.rectTransform, 12f, s.H * 0.5f - 12f, s.W - 24f, 24f);
             if (data != null) Draw();
         }
@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 TMP_Text n = numbers[i];
                 n.gameObject.SetActive(true);
                 n.color = sel ? select : done ? dim : ink;
-                AvLay.Place(n.rectTransform, Mathf.Clamp(x + 8f, 0f, w - 24f), Mathf.Clamp(h - y - 17f, 0f, h - 14f), 22f, 14f);
+                AvLay.Place(n.rectTransform, Mathf.Clamp(x + 8f, 0f, w - 24f), Mathf.Clamp(h - y - 19f, 0f, h - 18f), 24f, 18f);
             }
             if (d.HaveLead)
             {
@@ -182,8 +182,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// flown marked, flown legs dimmed, the selected point lit; a click selects a point (the steppers then edit it).</summary>
     internal sealed class WmcLegTable : AvPart
     {
-        private const float RowH = 21f, HeadH = 16f, Gap = 1f, Pad = 8f;
-        private const float NumW = 22f, BrgW = 44f, DistW = 52f, AltW = 52f, SpdW = 42f, EtaW = 40f;
+        private const float RowH = 21f, HeadH = 18f, Gap = 1f, Pad = 8f;
+        private const float NumW = 22f, BrgW = 44f, DistW = 64f, AltW = 46f, SpdW = 42f, EtaW = 40f;
 
         private sealed class Row
         {

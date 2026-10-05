@@ -94,9 +94,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Slot c = slots[i];
                 AvLay.Place(c.Frame.rectTransform, x, y, w, CellH);
                 AvLay.Place(c.Rail.rectTransform, x, y, 2f, CellH);
-                AvLay.Place(c.Hint.rectTransform, x + 7f, y + 3f, 30f, 14f);
-                AvLay.Place(c.Name.rectTransform, x + 38f, y + 2f, w - 42f, 17f);
-                AvLay.Place(c.Detail.rectTransform, x + 38f, y + 20f, w - 42f, 16f);
+                AvLay.Place(c.Hint.rectTransform, x + 6f, y + 2f, 34f, 18f);
+                AvLay.Place(c.Name.rectTransform, x + 42f, y + 2f, w - 46f, 18f);
+                AvLay.Place(c.Detail.rectTransform, x + 42f, y + 20f, w - 46f, 18f);
             }
         }
 
@@ -197,7 +197,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>The FINE-TUNE box's frame (mockup .tune): a sunken card the header, the status line and the four rows sit in.</summary>
     internal sealed class WmcTuneBox : AvPart
     {
-        private const float Pad = 6f, HeadH = 24f, StatusH = 16f, RowH = 26f, Gap = 2f;
+        private const float Pad = 6f, HeadH = 24f, StatusH = 18f, RowH = 26f, Gap = 2f;
         private readonly AvFrame frame;
         private readonly TMP_Text title, status;
         public readonly AvControl Reset, Save, Edit;

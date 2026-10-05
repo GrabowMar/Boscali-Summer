@@ -64,11 +64,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 float x = c * (w + Gap), y = r * (KeyH + Gap);
                 AvLay.Place(Cells[k].Rect, x, y, w, KeyH);
                 AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 2f);
-                AvLay.Place(keys[k].rectTransform, 5f, 2f, 16f, 14f);
-                AvLay.Place(marks[k].rectTransform, w - 38f, KeyH - 15f, 34f, 13f);
-                AvLay.Place(leds[k].rectTransform, w - 30f, 4f, 26f, 13f);
-                AvLay.Place(ledText[k].rectTransform, w - 30f, 4f, 26f, 13f);
-                AvLay.Place(whys[k].rectTransform, 5f, KeyH - 15f, w - 44f, 13f);
+                AvLay.Place(keys[k].rectTransform, 5f, 1f, 18f, 18f);
+                AvLay.Place(marks[k].rectTransform, w - 44f, KeyH - 19f, 40f, 18f);
+                AvLay.Place(leds[k].rectTransform, w - 32f, 3f, 28f, 15f);
+                AvLay.Place(ledText[k].rectTransform, w - 32f, 2f, 28f, 18f);
+                AvLay.Place(whys[k].rectTransform, 5f, KeyH - 19f, w - 50f, 18f);
             }
         }
 
