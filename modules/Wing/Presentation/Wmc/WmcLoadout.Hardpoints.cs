@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             entries.Clear();
             popupClear = true;
-            if (current == null || layout == null || selStation < 0 || selStation >= stations)
+            if (current == null || layout == null || airframe == null || selStation < 0 || selStation >= stations)
             {
                 picker.SetHead("STORES", "");
                 picker.SetBody(airframe == null ? "Pick an airframe above." : current == null ? "NO TEMPLATE · NEW starts one for this airframe" : "");

@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
                 {
                     float t = centre == 1 ? 0.5f : j / (float)(centre - 1);
                     j++;
-                    float y = Clear(into, n, 0f, halfH * (-0.55f + 1.35f * t), halfH, minDist);
+                    float y = Clear(into, n, 0f, halfH * (-0.68f + 1.5f * t), halfH, minDist);
                     into[n++] = new Spot { Station = s, X = 0f, Y = y };
                 }
             }

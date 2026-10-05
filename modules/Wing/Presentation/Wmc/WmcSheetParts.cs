@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             : level == "info" ? WmcState.Color("info") : level == "inert" ? Dim : WmcState.Color(level);
 
         /// <summary>A button's width from its label (the kit shrinks a long label, but not below the floor).</summary>
-        public static float ChipW(string label) => Mathf.Max(44f, (label ?? "").Length * 8.2f + 20f);
+        public static float ChipW(string label) => Mathf.Max(44f, (label ?? "").Length * 7.2f + 14f);
 
         public static void PaintRow(AvFrame frame, Image rail, AvState state, string interaction)
         {
@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private const float H = 24f, Pitch = 26f, KeyW = 62f, Gap = 2f;
         private readonly TMP_Text key;
         private readonly AvControl[] choices, actions;
-        private readonly float[] widths, xs;
+        private readonly float[] widths, xs, actionExtra;
         private readonly int[] lines;
         private readonly bool hasKey;
 
@@ -169,7 +169,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 choices[i].gameObject.SetActive(false);
             }
             actions = new AvControl[actionSpecs.Length];
-            for (int i = 0; i < actionSpecs.Length; i++) actions[i] = AvControl.Make(Rect, actionSpecs[i]);
+            actionExtra = new float[actionSpecs.Length];
+            for (int i = 0; i < actionSpecs.Length; i++)
+            {
+                actions[i] = AvControl.Make(Rect, actionSpecs[i]);
+                actionExtra[i] = actionSpecs[i].Icon != AvIcon.None ? 24f : 0f;
+            }
             widths = new float[maxChoices + actionSpecs.Length];
             xs = new float[widths.Length];
             lines = new int[widths.Length];
@@ -204,7 +209,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 AvControl c = i < choices.Length ? choices[i] : actions[i - choices.Length];
                 if (!c.gameObject.activeSelf) continue;
-                widths[n] = Mathf.Min(width - (hasKey ? KeyW : 0f), WmcSheet.ChipW(c.Label));
+                widths[n] = Mathf.Min(width - (hasKey ? KeyW : 0f), WmcSheet.ChipW(c.Label) + (i >= choices.Length ? actionExtra[i - choices.Length] : 0f));
                 n++;
             }
             int used = ChipFlow.Place(widths, n, hasKey ? KeyW : 0f, width, Gap, xs, lines);
@@ -776,7 +781,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcStationBoard : AvPart
     {
         public const int MaxStations = 24, RowsPerPage = 8;
-        private const float BoxSize = 16f, RowMin = 24f, RowGap = 2f, Clear = 24f, MassW = 54f, NumW = 20f;
+        private const float BoxSize = 16f, RowMin = 22f, RowGap = 2f, Clear = 24f, MassW = 54f, NumW = 20f;
 
         // The generic top view (x right, y down), the mockup's outline.
         private static readonly float[] OutlineX = { 0, 7, 11, 14, 96, 100, 16, 15, 46, 46, 12, 8, -8, -12, -46, -46, -15, -16, -100, -96, -14, -11, -7 };
@@ -1102,8 +1107,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// A pager in the head turns the pages of a long list.</summary>
     internal sealed class WmcStorePicker : AvPart
     {
-        public const int PerPage = 14;
-        private const float HeadH = 24f, CellH = 32f, CellGap = 2f;
+        public const int PerPage = 12;
+        private const float HeadH = 24f, CellH = 34f, CellGap = 2f;
 
         private sealed class Cell
         {
@@ -1141,7 +1146,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Fill(c.Frame.rectTransform);
                 c.Rail = AvLay.Solid(c.Root, "Rail", Color.clear);
                 c.Name = WmcSheet.Text(c.Root, "Name", AvTextRole.ProseSmall);
-                c.Verdict = WmcSheet.Text(c.Root, "Verdict", AvTextRole.DataSmall);
+                c.Verdict = WmcSheet.Text(c.Root, "Verdict", AvTextRole.Micro);
                 c.Mass = WmcSheet.Text(c.Root, "Mass", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 AvHit hit = AvHit.On(c.Frame);
                 hit.Hover = h => { c.Hover = h; Paint(c); };
@@ -1265,13 +1270,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? (width - CellGap) * 0.5f : 200f;
             AvLay.Place(c.Rail.rectTransform, 0f, 0f, 2f, CellH);
-            WmcSheet.SetFit(c.Name, c.NameFull, w - 14f);
-            AvLay.Place(c.Name.rectTransform, 8f, 2f, w - 12f, 15f);
             WmcSheet.Set(c.Mass, c.MassFull);
             float mw = c.MassFull != null && c.MassFull.Length > 0 ? AvText.Width(c.Mass) + 4f : 0f;
-            AvLay.Place(c.Mass.rectTransform, w - 6f - mw, 16f, mw, 14f);
-            WmcSheet.SetFit(c.Verdict, c.VerdictFull, w - 20f - mw);
-            AvLay.Place(c.Verdict.rectTransform, 8f, 16f, Mathf.Max(0f, w - 20f - mw), 14f);
+            AvLay.Place(c.Mass.rectTransform, w - 6f - mw, 1f, mw, 18f);
+            WmcSheet.SetFit(c.Name, c.NameFull, w - 20f - mw);
+            AvLay.Place(c.Name.rectTransform, 8f, 1f, Mathf.Max(0f, w - 20f - mw), 18f);
+            WmcSheet.SetFit(c.Verdict, c.VerdictFull, w - 14f);
+            AvLay.Place(c.Verdict.rectTransform, 8f, 18f, Mathf.Max(0f, w - 14f), 15f);
         }
 
         private void Paint(Cell c)
