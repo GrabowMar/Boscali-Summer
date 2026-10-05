@@ -36,8 +36,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool Contains(float x, float z, float speed, float now)
         {
+            // Native Unit.speed is signed (forward component): a parked vehicle settling at -0.004 m/s is as static as one at +0.004,
+            // and a reverser at -5 m/s is a mover. The band is on magnitude.
             if (!Active(now) || !Coordinate(x) || !Coordinate(z) || !SpaceRules.Finite(speed) ||
-                speed < MinimumSpeed || speed > MaximumSpeed) return false;
+                Math.Abs(speed) < MinimumSpeed || Math.Abs(speed) > MaximumSpeed) return false;
             double dx = (double)x - X, dz = (double)z - Z;
             return dx * dx + dz * dz <= (double)Radius * Radius;
         }
