@@ -28,6 +28,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// ballistic-missile and rocket trucks are tried first only when the encyclopedia allows them, so a better-looking launcher wins without ever failing the operation.
         /// </summary>
         internal static readonly string[] LauncherKeys = { "Truck2-TBM", "Truck2-MLRS", "RadarSAM1" };
+        /// <summary>
+        /// M6a FOB points: the first usable vehicle whose prefab carries a vanilla <c>Rearmer</c> (it registers with the faction's rearm missions by itself) and the first whose prefab carries a
+        /// vanilla <c>Refueler</c> (it refuels every friendly aircraft within its range every 5 s, no mission needed). None carrying one: the FOB has no such point.
+        /// </summary>
+        internal static readonly string[] FobSupplyKeys = { "HLT-M", "Truck2-M", "HLT-L", "Truck2-L", "HLT-T", "Truck2-T" };
+        internal static readonly string[] FobFuelKeys = { "HLT-FT", "Truck2-FT", "HLT-FC", "Truck2-FC" };
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
@@ -56,6 +62,45 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             VehicleDefinition launcher = FindFirst(LauncherKeys, null);
             return "launcher=" + (launcher != null ? launcher.jsonKey : "none");
+        }
+
+        /// <summary>The FOB vehicle keys this mission resolved (the first allowed ones with a vanilla Rearmer and a vanilla Refueler), for the log line and the native fixture.</summary>
+        internal static string DescribeFobSupply()
+        {
+            VehicleDefinition rearm = FindFobVehicle(false), fuel = FindFobVehicle(true);
+            return "fobRearm=" + (rearm != null ? rearm.jsonKey : "none") + " fobFuel=" + (fuel != null ? fuel.jsonKey : "none");
+        }
+
+        /// <summary>The first allowed vehicle whose prefab carries a <c>Rearmer</c> (or, with <paramref name="fuel"/>, a <c>Refueler</c>); null when none does.</summary>
+        private static VehicleDefinition FindFobVehicle(bool fuel)
+        {
+            string[] keys = fuel ? FobFuelKeys : FobSupplyKeys;
+            for (int i = 0; i < keys.Length; i++)
+            {
+                VehicleDefinition d = Find(keys[i]);
+                if (d == null) continue;
+                bool carries = fuel ? d.unitPrefab.GetComponentInChildren<Refueler>(true) != null : d.unitPrefab.GetComponentInChildren<Rearmer>(true) != null;
+                if (carries) return d;
+            }
+            return null;
+        }
+
+        /// <summary>One FOB vehicle (a rearm truck, or with <paramref name="fuel"/> a fuel truck) near a held building. False when no allowed vehicle carries the component or no legal spot is found. Not held in place: the vanilla rearm AI drives it to the aircraft it serves.</summary>
+        internal bool TryCreateFobSupply(FactionHQ owner, int ordinal, GlobalPosition near, bool fuel, out Unit supply)
+        {
+            supply = null;
+            VehicleDefinition definition = FindFobVehicle(fuel);
+            if (definition == null) return false;
+            Vector3 origin = near.ToLocalPosition();
+            foreach (float radius in new[] { 40f, 70f, 110f })
+                for (int step = 0; step < 8; step++)
+                {
+                    float angle = step * Mathf.PI / 4f;
+                    Vector3 desired = origin + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * radius;
+                    if (!PlanOne(definition, desired, null, Quaternion.identity, out GlobalPosition planned)) continue;
+                    if (TryCreateGroup(owner, "Fob", ordinal, new[] { definition }, new[] { planned }, Quaternion.identity, null, out supply, false)) return true;
+                }
+            return false;
         }
 
         /// <summary>One launcher near <paramref name="near"/> (a data center): rings of 8 points at 70, 110 and 150 m, the first legal one wins. Held in place like every anchor.</summary>
@@ -150,7 +195,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         private bool TryCreateGroup(FactionHQ owner, string kind, int ordinal, VehicleDefinition[] definitions, GlobalPosition[] positions,
-            Quaternion rotation, Airbase parent, out Unit first)
+            Quaternion rotation, Airbase parent, out Unit first, bool hold = true)
         {
             first = null;
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -172,7 +217,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     group.Add(unit);
                     if (!unit.IsServer || unit.NetworkHQ != owner || unit.disabled || UplinkSpawner.Health(unit) <= 0f)
                         throw new InvalidOperationException("Native cyber group is not operational");
-                    if (unit is GroundVehicle vehicle) vehicle.SetHoldPosition(true);
+                    if (hold && unit is GroundVehicle vehicle) vehicle.SetHoldPosition(true);
                     if (i == 0) first = unit;
                 }
                 groups[first] = group;

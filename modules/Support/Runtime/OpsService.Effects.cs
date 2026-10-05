@@ -56,7 +56,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 case OpKind.ZeroDay: FireZeroDay(f, e.Target); break;
                 case OpKind.Asat: FireAsat(f, e.Target); break;
+                case OpKind.Fob: FireFob(f, e.Target); break;
             }
+        }
+
+        // ---- FOB -------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The FORWARD OPERATING BASE goes live on the held building: 20 minutes (a second FOB renews it), +1 team cap, teams raised there, and a rearm vehicle (vanilla Rearmer) and a fuel vehicle (vanilla Refueler) beside it when
+        /// the encyclopedia allows them. A field spawn point for players is not built (vanilla spawns only at airbases); the page says so. Retaking the building ends it (SofService.TickFob).
+        /// </summary>
+        private void FireFob(FactionOps f, in OpTarget target)
+        {
+            if (sof == null || !sof.StartFob(f.Owner, target.Id, out float until))
+            {
+                Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " FOB could not start: the held building " + target.Id + " is gone.");
+                return;
+            }
+            f.Desk.SetEffectEnd(OpDomain.Sof, until);
         }
 
         // ---- ASAT ------------------------------------------------------------------------------------

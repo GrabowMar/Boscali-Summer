@@ -178,6 +178,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public NodeReveal Reveal { get; } = new NodeReveal();
         public IReadOnlyList<SofTarget> Visible => visible;
         public IReadOnlyList<HeldBuilding> Held => held;
+        /// <summary>M6a FORWARD OPERATING BASE: while on, teams are raised at this point (a held building) instead of the camp, even with the camp down. The runtime sets it.</summary>
+        public bool FobActive { get; set; }
+        public float FobX { get; set; }
+        public float FobZ { get; set; }
         /// <summary>Raised once per event after the desk applied it.</summary>
         public event Action<SofEvent> Happened;
 
@@ -187,6 +191,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         private SofTeam Get(int slot) => slot >= 0 && slot < Teams.Length && Teams[slot].Active ? Teams[slot] : null;
+
+        /// <summary>A held building lasts until this mission second (a FOB keeps its building for the whole 20 minutes). False when the id is not held.</summary>
+        public bool ExtendHeld(int id, float until)
+        {
+            for (int i = 0; i < held.Count; i++)
+            {
+                if (held[i].Id != id) continue;
+                HeldBuilding h = held[i];
+                h.Until = Math.Max(h.Until, until);
+                held[i] = h;
+                return true;
+            }
+            return false;
+        }
 
         public bool TryTarget(int id, out SofTarget target)
         {
@@ -282,8 +300,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public SofResult Raise(ulong op)
         {
             float now = ports.Now;
-            if (Camps.Count == 0) return new SofResult(SofOutcome.NoCamp);
-            if (!Camps.TryBest(out _, out float cx, out float cz, out AnchorHealth health)) return new SofResult(SofOutcome.CampDown);
+            float cx, cz;
+            AnchorHealth health = AnchorHealth.Live;
+            if (FobActive) { cx = FobX; cz = FobZ; }
+            else
+            {
+                if (Camps.Count == 0) return new SofResult(SofOutcome.NoCamp);
+                if (!Camps.TryBest(out _, out cx, out cz, out health)) return new SofResult(SofOutcome.CampDown);
+            }
             if (ActiveCount >= SofRules.TeamCap(ports.Humans, ports.Fob)) return new SofResult(SofOutcome.TeamCap);
             int slot = -1;
             for (int i = 0; i < Teams.Length && slot < 0; i++) if (!Teams[i].Active) slot = i;

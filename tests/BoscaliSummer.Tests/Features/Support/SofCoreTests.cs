@@ -25,6 +25,7 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckLift();
             CheckOracle();
             CheckTap();
+            CheckFob();
             CheckReviewFixes();
         }
 
@@ -186,6 +187,28 @@ namespace BoscaliSummer.Tests.Features.Support
             SofDesk d3 = Desk(slow);
             d3.Camps.Set(0, 0.5f, false, 0f);
             Eq(d3.Raise(Op).Detail, 135, "a damaged camp raises 1.5x slower");
+        }
+
+        // ---- FOB (M6a) -----------------------------------------------------------------------------
+
+        private static void CheckFob()
+        {
+            var p = new Ports();
+            SofDesk d = Desk(p);
+            d.Camps.Set(0, 0f, true, 0f);
+            Eq(d.Raise(Op).Outcome, SofOutcome.CampDown, "no FOB, a down camp raises nothing");
+            d.FobActive = true; d.FobX = 500f; d.FobZ = 700f;
+            SofResult r = d.Raise(Op);
+            Eq(r.Outcome, SofOutcome.Raised, "a FOB raises with the camp down");
+            Eq(d.Teams[r.Slot].X, 500f, "the team starts at the FOB"); Eq(d.Teams[r.Slot].HomeZ, 700f, "and calls it home");
+            Eq(r.Detail, 90, "a FOB deploys at the normal 90 s");
+            p.Fob = true;
+            Eq(d.Raise(Op).Outcome, SofOutcome.Raised, "second team"); Eq(d.Raise(Op).Outcome, SofOutcome.Raised, "the FOB's +1 team cap: three at two humans");
+            Eq(d.Raise(Op).Outcome, SofOutcome.TeamCap, "and no more");
+            d.FobActive = false;
+            var q = new Ports();
+            SofDesk e = Desk(q);
+            Eq(e.Raise(Op).Outcome, SofOutcome.Raised, "without a FOB the camp raises as before"); Eq(e.Teams[0].X, 0f, "at the camp");
         }
 
         // ---- Route ---------------------------------------------------------------------------------

@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public float Now => SupportManager.MissionNow();
             public int Humans => service.manager != null ? service.manager.HumanCount(faction.Owner) : 1;
             public int Owner => faction.Key;
-            public bool Fob => false;
+            public bool Fob => faction.FobUntil > SupportManager.MissionNow();
             public SofOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.SofSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.SofRefund(faction.Owner, op, cr);
             public SofScene Scene(float x, float z) => faction.Obs.Scene(x, z, service.Stared(faction.Owner, x, z));
@@ -91,6 +91,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         partial void TickLift(FactionSof f, float now);
         partial void RecordEvent(FactionSof f, SofEvent e);
         partial void ResetEffects();
+        partial void TickFob(FactionSof f, float now);
 
         internal static SofService Active { get; private set; }
         internal CyberAnchorSpawner Spawner => spawner;
@@ -210,6 +211,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             TickLift(f, now);
             f.Desk.Tick();
             TickEffects(f, now);
+            TickFob(f, now);
         }
 
         private void RefreshTargets(FactionSof f)

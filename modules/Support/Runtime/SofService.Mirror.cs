@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float now = SupportManager.MissionNow();
             SofDesk desk = f.Desk;
             into.Active = true;
-            into.TeamCap = (byte)Math.Min(SofRules.MaxTeams, SofRules.TeamCap(manager.HumanCount(viewer.HQ), false));
+            into.TeamCap = (byte)Math.Min(SofRules.MaxTeams, SofRules.TeamCap(manager.HumanCount(viewer.HQ), f.FobUntil > now));
             foreach (CampSlot slot in f.Slots)
             {
                 if (into.Camps.Count >= SofWire.MaxCamps || !f.Camps.TryPosition(slot.Index, out float x, out float z)) continue;

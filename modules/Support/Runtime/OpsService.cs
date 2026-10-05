@@ -95,9 +95,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private bool Enabled => manager?.Settings != null && manager.Settings.Enabled.Value && manager.Settings.OpsEnabled.Value;
 
-        /// <summary>The vulnerable anchor of an operation stands: the data center for CYBER operations (and, while an ASAT counts down, its launcher).</summary>
+        /// <summary>The vulnerable anchor of an operation stands: the data center for CYBER operations (and, while an ASAT counts down, its launcher), the held building for the FOB.</summary>
         private bool AnchorUp(FactionOps f, OpKind kind, bool executing)
         {
+            // The FOB's anchor is the held building it will be built on: it must still be held (not retaken, not destroyed).
+            if (kind == OpKind.Fob) return sof != null && sof.HeldAlive(f.Owner, f.Desk.Slot(OpDomain.Sof).Target.Id);
             if (cyber == null || !cyber.DataCenterUp(f.Owner)) return false;
             if (kind == OpKind.Asat && executing && f.LauncherSpawned && !LauncherUp(f)) return false;
             return true;
@@ -142,7 +144,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             f.Desk = new OpsDesk(new Ports(this, f));
             f.Desk.Happened += e => OnOp(f, e);
             factions.Add(hq, f);
-            Plugin.Logger?.LogInfo("[Support.Ops] " + hq.name + ": OPERATIONS ready (" + CyberAnchorSpawner.DescribeLauncher() + ").");
+            Plugin.Logger?.LogInfo("[Support.Ops] " + hq.name + ": OPERATIONS ready (" + CyberAnchorSpawner.DescribeLauncher() + ", " + CyberAnchorSpawner.DescribeFobSupply() + ").");
         }
 
         private void OnOp(FactionOps f, OpEvent e)
@@ -225,6 +227,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     target = new OpTarget(id, 0f, 0f, 0);
                     return true;
                 case OpKind.ZeroDay: return cyber != null && cyber.TryNodeTarget(f.Owner, id, out target);
+                case OpKind.Fob: return sof != null && sof.TryHeldTarget(f.Owner, id, out target);
                 default: return false;
             }
         }
