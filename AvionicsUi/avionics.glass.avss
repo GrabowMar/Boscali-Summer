@@ -1,0 +1,22 @@
+/* Theme F · Glass MFD black glass, white ink, magenta route, cyan select. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #000000 fc;
+  surface:         #0C0E12 fa;
+  surface-raised:  #181C22 fa;
+  surface-inert:   #08090C f5;
+  surface-sunken:  #030304 f8;
+  hairline:        #30363F 90;
+  frame:           #6B7480 d0;
+  ink:             #FFFFFF;
+  ink-dim:         #C7CDD6;
+  ink-muted:       #8E96A3;
+  key:             #FF5AD9;
+  select:          #2EE6FF;
+  ready:           #43F07F;
+  caution:         #FFD23F;
+  danger:          #FF4A4A;
+  info:            #9FD8FF;
+  inert:           #323844 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

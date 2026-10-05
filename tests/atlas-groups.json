@@ -90,7 +90,11 @@
       "avionics.portal.avss",
       "avionics.steel.avss",
       "avionics.phosphor.avss",
-      "avionics.ace.avss"
+      "avionics.ace.avss",
+      "avionics.fieldops.avss",
+      "avionics.amber.avss",
+      "avionics.glass.avss",
+      "avionics.nightops.avss"
     ]
   }
 }

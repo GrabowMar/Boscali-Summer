@@ -1,7 +1,7 @@
 namespace NOAvionics
 {
     /// <summary>The one house palette (Portal). Kept as an enum so config and overrides stay keyed by name.</summary>
-    public enum AvThemeId { Portal, Steel, Ace, Phosphor }
+    public enum AvThemeId { Portal, Steel, Ace, Phosphor, FieldOps, Amber, Glass, NightOps }
 
     /// <summary>
     /// Where the v2 sheets live and how a palette is layered over the base sheet. A palette is a
@@ -32,6 +32,10 @@ namespace NOAvionics
                 case AvThemeId.Steel: return "steel";
                 case AvThemeId.Ace: return "ace";
                 case AvThemeId.Phosphor: return "phosphor";
+                case AvThemeId.FieldOps: return "fieldops";
+                case AvThemeId.Amber: return "amber";
+                case AvThemeId.Glass: return "glass";
+                case AvThemeId.NightOps: return "nightops";
                 default: return "portal";
             }
         }

@@ -187,6 +187,10 @@
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.steel.avss" LogicalName="BoscaliSummer.Tests.avionics.steel.avss" />
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.ace.avss" LogicalName="BoscaliSummer.Tests.avionics.ace.avss" />
     <EmbeddedResource Include="..\..\AvionicsUi\avionics.phosphor.avss" LogicalName="BoscaliSummer.Tests.avionics.phosphor.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.fieldops.avss" LogicalName="BoscaliSummer.Tests.avionics.fieldops.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.amber.avss" LogicalName="BoscaliSummer.Tests.avionics.amber.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.glass.avss" LogicalName="BoscaliSummer.Tests.avionics.glass.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.nightops.avss" LogicalName="BoscaliSummer.Tests.avionics.nightops.avss" />
     <EmbeddedResource Include="..\..\AvionicsUi\Assets\avionics-ui.manifest.json" LogicalName="BoscaliSummer.Tests.avionics-ui.manifest.json" Condition="Exists('..\..\AvionicsUi\Assets\avionics-ui.manifest.json')" />
   </ItemGroup>
   <ItemGroup Label="Concurrent weather and immersion tests">

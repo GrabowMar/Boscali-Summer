@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
             DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
                 new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
-                "Panel look. Portal is the only theme; older saved names fall back to it.");
+                "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS). Unknown saved names fall back to Portal.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
                 "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
             AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,
