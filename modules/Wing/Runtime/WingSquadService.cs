@@ -28,6 +28,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public Sprite PilotPortrait(string name, string callsign) => WingSquad.Portrait(name, callsign);
 
+        public Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1) =>
+            WingSquad.PersonnelPortrait(name, callsign, role, faction);
+
         public Aircraft[] SpawnWingAt(Aircraft target, FactionHQ enemyHq, int seed, int tier,
             int count, string callsign, float ingressX, float ingressZ) =>
             WingSquad.SpawnWingAt(target, enemyHq, seed, tier, count, callsign, ingressX, ingressZ);
@@ -49,15 +52,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public int PortraitFaceCount => WingSquad.PortraitFaceCount;
         public int PortraitHairCount => WingSquad.PortraitHairCount;
         public int PortraitUniformCount => WingSquad.PortraitUniformCount;
+        public int PortraitAccessoryCount => WingSquad.PortraitAccessoryCount;
         public int PortraitBackdropCount => WingSquad.PortraitBackdropCount;
         public string PortraitBodyLabel(int body) => WingSquad.PortraitBodyLabel(body);
         public string PortraitUniformLabel(int uniform) => WingSquad.PortraitUniformLabel(uniform);
+        public string PortraitAccessoryLabel(int accessory) => WingSquad.PortraitAccessoryLabel(accessory);
+        public string PortraitBackdropLabel(int backdrop) => WingSquad.PortraitBackdropLabel(backdrop);
         public string PersonaLabel(int persona) => WingSquad.PersonaLabel(persona);
         public string RankNameForXp(int xp) => WingSquad.RankNameForXp(xp);
 
         public Sprite PortraitForSelection(int body, int face, int hair, int uniform,
-            int accessory, int backdrop) =>
-            WingSquad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop);
+            int accessory, int backdrop, bool preview = false) =>
+            WingSquad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop, preview);
 
         public bool TryGetCustomPilot(string callsign, out CustomPilotView record)
         {

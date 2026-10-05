@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Face(int f) => N(f + 1) + "/" + N(PilotPortraitGenerator.FacesPerBody);
 
-        public static string Scene(int s) => N(s + 1) + "/" + N(PilotPortraitGenerator.BackdropCount);
+        public static string Scene(int s) => PilotPortraitGenerator.BackdropLabel(s);
 
         public static string BioCounter(int n) => N(n) + "/" + N(PilotText.BioChars);
 

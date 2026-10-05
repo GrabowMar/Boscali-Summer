@@ -22,9 +22,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     // RECRUIT / DISCHARGE; the SERVICE line. The portrait is art (a data image): it keeps its sprite inside a kit frame.
     internal sealed partial class WmcStudio
     {
-        private static readonly LookLayer[] Layers = { LookLayer.Body, LookLayer.Face, LookLayer.Hair, LookLayer.Suit, LookLayer.Scene };
-        private static readonly string[] LayerKeys = { "BODY", "FACE", "HAIR", "SUIT", "SCENE" };
-        private static readonly string[] LayerIds = { "body", "face", "hair", "suit", "scene" };
+        private static readonly LookLayer[] Layers = { LookLayer.Body, LookLayer.Face, LookLayer.Hair, LookLayer.Suit, LookLayer.Scene, LookLayer.Accessory };
+        private static readonly string[] LayerKeys = { "BODY", "FACE", "HAIR", "SUIT", "SCENE", "GEAR" };
+        private static readonly string[] LayerIds = { "body", "face", "hair", "suit", "scene", "gear" };
         private const float BioH = 72f, StudioKeyW = 84f;
 
         private PickerPart picker;
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvAlert problemAlert;
         private AvControl saveButton, revertButton, cloneButton, deleteButton, recruitButton;
         private string radioText = WmcText.Unknown;
-        private readonly string[] layerText = { WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown };
+        private readonly string[] layerText = { WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown };
         private readonly List<AvControl> tracked = new List<AvControl>(20);
         private readonly List<AvPopupEntry> pickEntries = new List<AvPopupEntry>(16);
         private readonly ConfirmGate deleteGate = new ConfirmGate(), dischargeGate = new ConfirmGate();
@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Track(s.Plus);
             }
             AvControl random = f.Buttons(new AvControl.Spec("RANDOM LOOK", RandomLook, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];
-            random.Help = "A random face, hair, uniform and scene.";
+            random.Help = "A random face, hair, uniform, gear and scene.";
             ids.Add("sq.look.random", random);
             Track(random);
 
@@ -254,6 +254,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             layerText[2] = StudioWords.Hair(sel.Hair);
             layerText[3] = PilotPortraitGenerator.UniformLabel(sel.Uniform);
             layerText[4] = StudioWords.Scene(sel.Backdrop);
+            layerText[5] = PilotPortraitGenerator.AccessoryLabel(sel.Accessory);
             look.RefreshValues();
             radioText = has ? StudioWords.Radio(draft.Persona) : WmcText.Unknown;
             radioStepper.Refresh();
@@ -340,12 +341,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The portrait (art, a sprite in a kit frame) beside its five layer steppers.</summary>
+        /// <summary>The portrait (art, a sprite in a kit frame) beside its layer steppers.</summary>
         private sealed class LookPart : AvPart
         {
-            private const float PortraitW = 96f, PortraitH = 144f, StepPitch = AvGridTokens.Row + 2f;
+            private const float PortraitW = 96f, PortraitH = 120f, StepPitch = AvGridTokens.Row + 2f;
 
-            public readonly AvStepper[] Steppers = new AvStepper[5];
+            public readonly AvStepper[] Steppers = new AvStepper[6];
             private readonly AvFrame frame;
             private readonly Image preview;
 
@@ -353,8 +354,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 Rect = AvLay.Child(parent, "Look");
                 frame = AvFrame.Add(Rect, "PortraitFrame", default(AvChamfer));
-                preview = AvLay.Solid(Rect, "Portrait", Color.white);
+                preview = AvLay.Solid(frame.rectTransform, "Portrait", Color.white);
                 preview.preserveAspect = true;
+                AvLay.Fill(preview.rectTransform, 1f);
                 for (int i = 0; i < Steppers.Length; i++)
                 {
                     int k = i;
@@ -381,7 +383,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 base.Place(s);
                 AvLay.Place(frame.rectTransform, 0f, 0f, PortraitW, PortraitH);
-                AvLay.Place(preview.rectTransform, 1f, 1f, PortraitW - 2f, PortraitH - 2f);
                 float x = PortraitW + AvGridTokens.Gap;
                 for (int i = 0; i < Steppers.Length; i++) Steppers[i].Place(new AvSlot(x, i * StepPitch, s.W - x, AvGridTokens.Row));
             }

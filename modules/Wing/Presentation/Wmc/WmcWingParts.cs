@@ -14,6 +14,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>A state word in a 1 px outline over a faint wash of the state colour (the roster row's and the dossier's status word).
@@ -325,7 +326,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WingDossier : AvPart
     {
         public const float H = 100f;
-        private const float PortraitW = 64f, PortraitH = 88f, TextX = 76f, StampW = 94f;
+        private const float PortraitW = 64f, PortraitH = 80f, TextX = 76f, StampW = 94f;
         private readonly Image rail, portrait, track, fill;
         private readonly AvFrame portraitBox;
         private readonly Image[] ticks = new Image[4];
@@ -339,6 +340,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private bool dim;
         private WingPilot shown;
         private int look = int.MinValue;
+        private int faction = int.MinValue;
         private bool portraitSet;
         private float width = 300f;
 
@@ -349,8 +351,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Rect = AvLay.Child(parent, "Dossier");
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             portraitBox = AvFrame.Add(Rect, "PortraitBox", default(AvChamfer));
-            portrait = AvLay.Solid(Rect, "Portrait", Color.white);
+            portrait = AvLay.Solid(portraitBox.rectTransform, "Portrait", Color.white);
             portrait.preserveAspect = true;
+            AvLay.Fill(portrait.rectTransform, 1f);
             identity = AvText.Make(Rect, "Identity", AvTextRole.Label);
             AvText.Fit(identity, false);
             stamp = new WingBadge(Rect);
@@ -379,10 +382,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void SetPilot(WingPilot pilot)
         {
-            if (portraitSet && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion) return;
+            int currentFaction = pilot != null && pilot.PortraitFaction >= 0 ? pilot.PortraitFaction : PortraitFactions.Local;
+            if (portraitSet && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion && faction == currentFaction) return;
             portraitSet = true;
             shown = pilot;
             look = WingPilotRoster.LookVersion;
+            faction = currentFaction;
             portrait.sprite = PilotPortrait.For(pilot);
             portrait.enabled = portrait.sprite != null;
             portrait.color = pilot != null ? Color.white : Color.white.WithAlpha(0.3f);
@@ -429,7 +434,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             width = s.W;
             AvLay.Place(rail.rectTransform, -10f, 0f, 3f, s.H);
             AvLay.Place(portraitBox.rectTransform, 0f, 4f, PortraitW, PortraitH);
-            AvLay.Place(portrait.rectTransform, 1f, 5f, PortraitW - 2f, PortraitH - 2f);
             float textW = s.W - TextX;
             AvLay.Place(identity.rectTransform, TextX, 2f, textW - StampW - 6f, 18f);
             stamp.Place(s.W - StampW, 2f, StampW, 18f);

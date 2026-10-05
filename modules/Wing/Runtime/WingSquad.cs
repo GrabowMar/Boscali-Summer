@@ -14,6 +14,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Contracts;
 #pragma warning disable IDE0051 // Harmony invokes the explicitly registered survivor hooks.
 
 namespace BoscaliSummer.Modules.Wing.Runtime
@@ -51,14 +52,20 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         /// <summary>Borrow the wing's portrait; callers must never destroy it.</summary>
-        internal static Sprite Portrait(string name, string callsign)
+        internal static Sprite Portrait(string name, string callsign) =>
+            PersonnelPortrait(name, callsign, PortraitRole.Pilot);
+
+        internal static Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1)
         {
             name = Limit(name, 64);
             callsign = Limit(callsign, 32);
-            string key = name + "|" + callsign;
+            if ((int)role < 0 || (int)role > 3) role = PortraitRole.Pilot;
+            faction = faction == 0 || faction == 1 ? faction : -1;
+            string identity = name + "|" + callsign;
+            string key = identity + "|" + (int)role + "|" + faction;
             if (!portraitKeys.Contains(key) && portraitKeys.Count >= 128) return null;
             portraitKeys.Add(key);
-            return PilotPortrait.For(new WingPilot { Name = name, Callsign = callsign });
+            return PilotPortrait.ForIdentity(identity, role, faction);
         }
 
         // ---- Saved-pilot studio records ------------------------------------------------
@@ -73,6 +80,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         internal static int PortraitFaceCount => PilotPortraitGenerator.FacesPerBody;
         internal static int PortraitHairCount => PilotPortraitGenerator.HairCount;
         internal static int PortraitUniformCount => PilotPortraitGenerator.UniformCount;
+        internal static int PortraitAccessoryCount => PilotPortraitGenerator.AccessoryCount;
         internal static int PortraitBackdropCount => PilotPortraitGenerator.BackdropCount;
 
         internal static string PortraitBodyLabel(int body) =>
@@ -80,6 +88,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         internal static string PortraitUniformLabel(int uniform) =>
             PilotPortraitGenerator.UniformLabel(uniform);
+
+        internal static string PortraitAccessoryLabel(int accessory) =>
+            PilotPortraitGenerator.AccessoryLabel(accessory);
+
+        internal static string PortraitBackdropLabel(int backdrop) =>
+            PilotPortraitGenerator.BackdropLabel(backdrop);
 
         internal static string PersonaLabel(int persona) =>
             ((ChatterPersona)Clamp(persona, 0, 3)).ToString();
@@ -90,13 +104,16 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>Borrow a portrait for an explicit appearance selection. Callers must
         /// never destroy it.</summary>
         internal static Sprite PortraitForSelection(int body, int face, int hair, int uniform,
-                                                  int accessory, int backdrop)
+                                                  int accessory, int backdrop, bool preview = false)
         {
+            var selection = new PortraitSelection(
+                body == 1 ? PortraitBody.Female : PortraitBody.Male, face, hair, uniform, accessory, backdrop);
+            if (preview) return PilotPortrait.Preview(selection);
+
             string key = body + "|" + face + "|" + hair + "|" + uniform + "|" + accessory + "|" + backdrop;
             if (!selectionKeys.Contains(key) && selectionKeys.Count >= 128) return null;
             selectionKeys.Add(key);
-            return PilotPortrait.ForSelection(new PortraitSelection(
-                body == 1 ? PortraitBody.Female : PortraitBody.Male, face, hair, uniform, accessory, backdrop));
+            return PilotPortrait.ForSelection(selection);
         }
 
 

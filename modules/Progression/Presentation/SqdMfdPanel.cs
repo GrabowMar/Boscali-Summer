@@ -447,11 +447,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
             // The identity portrait goes through the same cache: Wing Command's companion API
             // is a reflection seam, and a refresh must not re-enter it for an unchanged face.
-            string identityKey = "i|" + name + "|" + callsign;
+            int faction = PortraitFactions.Local;
+            string identityKey = "i|" + name + "|" + callsign + "|" + faction;
             if (profilePortraitKey != identityKey)
             {
                 profilePortraitKey = identityKey;
-                profilePortrait = WingLink.PilotPortrait(name, callsign);
+                profilePortrait = WingLink.PersonnelPortrait(name, callsign, PortraitRole.Pilot, faction);
             }
             return profilePortrait;
         }

@@ -9,10 +9,11 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>A portrait layer the studio steps.</summary>
-    internal enum LookLayer : byte { Body, Face, Hair, Suit, Scene }
+    internal enum LookLayer : byte { Body, Face, Hair, Suit, Scene, Accessory }
 
     /// <summary>The studio's operations on a draft (research squadron-studio §2.4): look layers that wrap both ways (hair 0 is bald), a
     /// random look, the face an un-customised pilot already shows (frozen when saved, so a rename never changes it), a draft compared
@@ -27,6 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case LookLayer.Face: return PilotPortraitGenerator.FacesPerBody;
                 case LookLayer.Hair: return PilotPortraitGenerator.HairCount;
                 case LookLayer.Suit: return PilotPortraitGenerator.UniformCount;
+                case LookLayer.Accessory: return PilotPortraitGenerator.AccessoryCount;
                 default: return PilotPortraitGenerator.BackdropCount;
             }
         }
@@ -39,6 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case LookLayer.Face: return s.Face;
                 case LookLayer.Hair: return s.Hair;
                 case LookLayer.Suit: return s.Uniform;
+                case LookLayer.Accessory: return s.Accessory;
                 default: return s.Backdrop;
             }
         }
@@ -51,17 +54,17 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 layer == LookLayer.Face ? v : s.Face,
                 layer == LookLayer.Hair ? v : s.Hair,
                 layer == LookLayer.Suit ? v : s.Uniform,
-                0,
+                layer == LookLayer.Accessory ? v : s.Accessory,
                 layer == LookLayer.Scene ? v : s.Backdrop));
         }
 
         public static PortraitSelection RandomLook(Func<int, int> next) =>
-            new PortraitSelection((PortraitBody)next(2), next(Count(LookLayer.Face)), next(Count(LookLayer.Hair)), next(Count(LookLayer.Suit)), 0,
+            new PortraitSelection((PortraitBody)next(2), next(Count(LookLayer.Face)), next(Count(LookLayer.Hair)), next(Count(LookLayer.Suit)), next(Count(LookLayer.Accessory)),
                 next(Count(LookLayer.Scene)));
 
         /// <summary>The look to save: the chosen one, else the face the game already showed for this name and callsign.</summary>
-        public static PortraitSelection Frozen(string name, string callsign, PortraitSelection? chosen) =>
-            chosen.HasValue ? PilotPortraitGenerator.Normalize(chosen.Value) : PilotPortraitGenerator.Select(name + "|" + callsign);
+        public static PortraitSelection Frozen(string name, string callsign, PortraitSelection? chosen, int faction = -1) =>
+            chosen.HasValue ? PilotPortraitGenerator.Normalize(chosen.Value) : PilotPortraitGenerator.Select(name + "|" + callsign, PortraitRole.Pilot, faction);
 
         /// <summary>A copy to edit (identity, look and service record).</summary>
         public static CustomPilotRecord DraftOf(CustomPilotRecord r) => r?.Clone();
