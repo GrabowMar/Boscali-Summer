@@ -1,285 +1,187 @@
-using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Command.Domain;
-using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
-using TMPro;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>A client-local, read-only roster for the faction's secondary contracts.</summary>
+    /// <summary>A local tactical briefing over the faction's host-owned task board.</summary>
     internal sealed class MissionContractWindow : MonoBehaviour
     {
-        private const float Width = 860f;
-        private const float Height = 780f;
-        private const int Rows = 6;
-        private const int SortOrder = 30002;
-
-        private readonly List<SecondaryObjectiveView> roster = new List<SecondaryObjectiveView>(16);
+        private const float Width=1180f,Height=700f,FooterHeight=42f;
+        private const int SortOrder=30002;
+        private readonly List<SecondaryObjectiveView> roster=new List<SecondaryObjectiveView>(16);
         private AvWindow window;
-        private AvSegmented filterControl;
-        private AvSection rosterSection;
         private AvList list;
-        private AvSection detailSection;
-        private AvRow detailHeaderRow, detailTargetRow, detailRewardRow, detailStatusRow;
-        private AvHazardBar detailProgressBar;
-        private ContractBrief detailBrief;
-        private int filter, selectedId = -1;
-        private string lastBoardText = "";
+        private AvSection rosterSection;
+        private AvSegmented filterControl;
+        private AvStepper families;
+        private MissionTaskPart tasking;
+        private MissionTaskActions actions;
+        private DeskColumns columns;
+        private int filter,selectedId=-1,familyFilter,renderedId=int.MinValue;
+        private bool boardFresh,keyboardTouched,keyboardWas,pauseWas,ownsInput,closing;
+        private int activeLimit,activeCount;
+        private ISecondaryObjectivesView board;
+        private string lastBoardText="";
         private float nextRefresh;
-        private bool keyboardTouched, keyboardWas, pauseWas;
-        private static int closedFrame = -10;
+        private static int closedFrame=-10;
         private static MissionContractWindow openWindow;
-
-        internal static bool IsOpen { get; private set; }
-        internal static bool BlocksMap => IsOpen || Time.frameCount <= closedFrame + 1;
-
-        internal static void CloseOpen() => openWindow?.Close();
+        internal static bool IsOpen {get;private set;}
+        internal static bool BlocksMap=>IsOpen||Time.frameCount<=closedFrame+1;
+        internal static void CloseOpen()=>openWindow?.Close();
 
         internal static MissionContractWindow Create()
         {
-            var go = new GameObject("BoscaliMissionContractWindow", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-            var view = go.AddComponent<MissionContractWindow>();
-            Canvas canvas = go.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = SortOrder;
-            CanvasScaler scaler = go.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
-            view.Build();
-            return view;
+            var go=new GameObject("BoscaliMissionContractWindow",typeof(RectTransform),typeof(Canvas),typeof(CanvasScaler));
+            var view=go.AddComponent<MissionContractWindow>();
+            var canvas=go.GetComponent<Canvas>();canvas.renderMode=RenderMode.ScreenSpaceOverlay;canvas.sortingOrder=SortOrder;
+            var scaler=go.GetComponent<CanvasScaler>();scaler.uiScaleMode=CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution=new Vector2(1280,720);scaler.screenMatchMode=CanvasScaler.ScreenMatchMode.Expand;
+            view.Build();return view;
         }
-
         internal void Show()
         {
-            if (openWindow != null && openWindow != this) openWindow.Close();
-            openWindow = this;
-            window.Show();
-            if (!IsOpen)
+            if(openWindow!=null&&openWindow!=this)openWindow.Close();
+            openWindow=this;closing=false;renderedId=int.MinValue;window.Show();
+            if(!ownsInput)
             {
-                pauseWas = GameplayUI.AllowPauseKeybind;
-                GameplayUI.AllowPauseKeybind = false;
-                keyboardTouched = Rewired.ReInput.isReady && Rewired.ReInput.controllers != null &&
-                                  Rewired.ReInput.controllers.Keyboard != null;
-                if (keyboardTouched)
-                {
-                    keyboardWas = Rewired.ReInput.controllers.Keyboard.enabled;
-                    Rewired.ReInput.controllers.Keyboard.enabled = false;
-                }
+                pauseWas=GameplayUI.AllowPauseKeybind;GameplayUI.AllowPauseKeybind=false;
+                keyboardTouched=Rewired.ReInput.isReady&&Rewired.ReInput.controllers?.Keyboard!=null;
+                if(keyboardTouched){keyboardWas=Rewired.ReInput.controllers.Keyboard.enabled;Rewired.ReInput.controllers.Keyboard.enabled=false;}
+                ownsInput=true;
             }
-            IsOpen = true;
-            Refresh();
+            IsOpen=true;Refresh();window.Body.Relayout();
         }
-
         internal void Close()
         {
-            if (!IsOpen)
-            {
-                if (openWindow == this) openWindow = null;
-                return;
-            }
-            IsOpen = false;
-            if (openWindow == this) openWindow = null;
-            closedFrame = Time.frameCount;
-            window.Hide();
-            GameplayUI.AllowPauseKeybind = pauseWas;
-            if (keyboardTouched && Rewired.ReInput.isReady && Rewired.ReInput.controllers != null &&
-                Rewired.ReInput.controllers.Keyboard != null)
-                Rewired.ReInput.controllers.Keyboard.enabled = keyboardWas;
-            keyboardTouched = false;
-            Destroy(gameObject);
+            if(closing)return;closing=true;
+            window?.Hide();ReleaseInput();Destroy(gameObject);
         }
-
-        private void OnDestroy() => Close();
-
+        private void ReleaseInput()
+        {
+            if(ownsInput)
+            {
+                GameplayUI.AllowPauseKeybind=pauseWas;
+                if(keyboardTouched&&Rewired.ReInput.isReady&&Rewired.ReInput.controllers?.Keyboard!=null)Rewired.ReInput.controllers.Keyboard.enabled=keyboardWas;
+                ownsInput=keyboardTouched=false;
+            }
+            if(openWindow!=this)return;
+            openWindow=null;IsOpen=false;closedFrame=Time.frameCount;
+        }
+        private void OnDisable()=>Close();
+        private void OnDestroy()=>ReleaseInput();
         private void Update()
         {
-            if (!IsOpen) return;
-            if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
-            if (Time.unscaledTime < nextRefresh) return;
-            nextRefresh = Time.unscaledTime + .5f;
-            Refresh();
+            if(openWindow!=this||!IsOpen)return;
+            if(Input.GetKeyDown(KeyCode.Escape)){if(!actions.CancelConfirmation())Close();return;}
+            if(Time.unscaledTime<nextRefresh)return;nextRefresh=Time.unscaledTime+.5f;Refresh();
         }
-
         private void Build()
         {
-            window = AvWindow.Build(transform, "mission-desk", "SECONDARY / CONTRACT DESK", Width, Height, SortOrder);
-
-            AvFlow body = window.Body;
-            // Keep the fixed window's content viewport available to the flow's scroll layout.
-            body.ViewportHeight = Height - 30f - AvGridTokens.Footer;
-            rosterSection = body.Section(AvIcon.Bookmark, "CONTRACTS", "—");
-            filterControl = body.Add(AvSegmented.Strip(body.Content,
-                new[] { "ALL", "OFFERS", "ACTIVE", "CLOSED" }, () => filter, i => { filter = i; selectedId = -1; Refresh(); }));
-            list = body.Add(new AvList(body.Content, window.Ticker, Rows, BindRow));
-            list.RowClicked = SelectRow;
-
-            detailSection = body.Section(AvIcon.User, "TASK", "—");
-            detailHeaderRow = body.Add(new AvRow(body.Content));
-            detailTargetRow = body.Add(new AvRow(body.Content));
-            detailRewardRow = body.Add(new AvRow(body.Content));
-            detailStatusRow = body.Add(new AvRow(body.Content));
-            detailProgressBar = body.Add(new AvHazardBar(body.Content, "PROGRESS"));
-            detailProgressBar.Help = "How far the selected contract has come, as the host reports it.";
-            body.Section(AvIcon.ListDetails, "HOST BRIEF");
-            detailBrief = body.Add(new ContractBrief(body.Content));
-
-            AvControl closeButton = window.Root.GetComponentInChildren<AvControl>(true);
-            if (closeButton != null) closeButton.Help = "Close the contract desk (Esc).";
-            window.Footer.Set("Accept and cancel from the MIS bezel.");
+            window=AvWindow.Build(transform,"mission-desk","MIS / FACTION TASKING / TACTICAL BRIEF",Width,Height,SortOrder);
+            window.Closed+=Close;window.CloseControl.Help="Close the task desk (Esc).";
+            columns=window.Body.Add(new DeskColumns(window.Body.Content));
+            rosterSection=new AvSection(columns.Rect,AvIcon.ListDetails,"TASK BOARD","HOST REPORT");
+            filterControl=AvSegmented.Strip(columns.Rect,new[]{"ALL","OFFERS","ACTIVE","RESULTS"},()=>filter,i=>{filter=i;actions.CancelConfirmation();Refresh();});
+            families=new AvStepper(columns.Rect,"FAMILY",()=>familyFilter==0?"ALL":MissionTaskPart.Family((ObjectiveFamily)familyFilter),()=>FilterFamily(-1),()=>FilterFamily(1));
+            list=new AvList(columns.Rect,window.Ticker,6,BindRow);list.RowClicked=SelectRow;
+            tasking=new MissionTaskPart(columns.Rect,true);window.Ticker.Register(tasking);tasking.Parent=columns;
+            columns.Set(rosterSection,filterControl,families,list,tasking);
+            actions=new MissionTaskActions(window.Root,Refresh,ViewMap);window.Ticker.Register(actions);
+            window.Footer.Place(new AvSlot(0,Height-FooterHeight,Width,FooterHeight));
+            LayoutActions();
         }
-
-        private void BindRow(int index, AvRow row)
-        {
-            if (index < 0 || index >= roster.Count) { row.Set("—", "", "", AvState.Inert); return; }
-            SecondaryObjectiveView entry = roster[index];
-            AvState state = entry.Id == selectedId ? AvState.Info
-                : entry.IsOffered ? AvState.Caution : entry.IsActive ? AvState.Ready : AvState.Inert;
-            string owner = string.IsNullOrWhiteSpace(entry.AcceptedBy) ? "" : "  ·  " + entry.AcceptedBy;
-            row.Set(MfdSecondaryObjectives.TitleLine(entry.Id, entry.Title),
-                Phase(entry) + "  ·  " + MfdSecondaryObjectives.ChipLabel(entry) + owner, "", state);
-            row.Help = "Inspect this faction contract.";
-        }
-
+        private void FilterFamily(int delta)
+        {familyFilter=(familyFilter+delta+9)%9;actions.CancelConfirmation();Refresh();}
         private void SelectRow(int index)
         {
-            if (index < 0 || index >= roster.Count) return;
-            selectedId = roster[index].Id;
-            Render(lastBoardText);
+            if(index<0||index>=roster.Count)return;
+            selectedId=roster[index].Id;actions.CancelConfirmation();Render(lastBoardText);
         }
-
+        private void BindRow(int index,AvRow row)
+        {
+            if(index<0||index>=roster.Count){row.Set("—","","");return;}
+            var e=roster[index];string phase=e.IsActive?e.Tasking?.NextAction:e.IsOffered?"OFFER":e.IsComplete?"COMPLETE":"CLOSED";
+            row.Set(MissionTaskPart.Clean(e.Title),MissionTaskPart.Family(e.Tasking?.Family??ObjectiveFamily.Unknown)+"\n"+MissionTaskPart.Clean(phase),"",e.Id==selectedId?AvState.Info:e.IsOffered?AvState.Caution:e.IsActive?AvState.Ready:AvState.Inert);
+            row.Help="Inspect file "+e.Id+". Selecting a briefing does not accept it or change the pilot HUD.";
+        }
         private void Refresh()
         {
-            roster.Clear();
-            string boardText;
-            if (ModuleServices.TryGet(out ISecondaryObjectivesView view))
+            roster.Clear();activeCount=activeLimit=0;boardFresh=false;board=null;
+            string status="MISSION DIRECTOR UNAVAILABLE";
+            if(ModuleServices.TryGet(out board))
             {
-                view.Refresh();
-                IReadOnlyList<SecondaryObjectiveView> entries = view.Objectives;
-                if (entries != null)
-                    foreach (SecondaryObjectiveView entry in entries)
-                    {
-                        if (entry == null) continue;
-                        if (filter == 1 && !entry.IsOffered) continue;
-                        if (filter == 2 && !entry.IsActive) continue;
-                        if (filter == 3 && (entry.IsOffered || entry.IsActive)) continue;
-                        roster.Add(entry);
-                    }
-                boardText = string.IsNullOrWhiteSpace(view.Status) ? "WAITING FOR HOST REPORT" : view.Status;
+                board.Refresh();boardFresh=board.IsFresh;activeLimit=board.ActiveLimit;
+                status=string.IsNullOrWhiteSpace(board.Status)?"WAITING FOR HOST REPORT":board.Status;
+                if(board.Objectives!=null)foreach(var e in board.Objectives)
+                {
+                    if(e==null)continue;if(e.IsActive)activeCount++;
+                    if(filter==1&&!e.IsOffered||filter==2&&!e.IsActive||filter==3&&(e.IsActive||e.IsOffered))continue;
+                    if(familyFilter>0&&e.Tasking?.Family!=(ObjectiveFamily)familyFilter)continue;
+                    roster.Add(e);
+                }
             }
-            else boardText = "MISSION DIRECTOR UNAVAILABLE";
-            roster.Sort(CompareContracts);
-            lastBoardText = boardText;
-            Render(boardText);
+            roster.Sort(CompareContracts);lastBoardText=status;Render(status);
         }
-
-        /// <summary>The pure view step: renders the current <see cref="roster"/> without touching
-        /// the host feed, so an offline check can seed the roster directly and render it.</summary>
-        private void Render(string boardText = null)
+        /// <summary>Pure rendering seam also used by the actual production Unity atlas.</summary>
+        private void Render(string boardText=null)
         {
-            int offers = 0, active = 0, closed = 0;
-            for (int i = 0; i < roster.Count; i++)
+            if(!roster.Exists(e=>e.Id==selectedId))
+                selectedId=roster.Exists(e=>e.Id==board?.SelectedForHud)?board.SelectedForHud:roster.Count>0?roster[0].Id:-1;
+            rosterSection.SetCaption(roster.Count+" IN VIEW / "+(boardFresh?"CURRENT":"HOST UNAVAILABLE"));
+            filterControl.Refresh();families.Refresh();list.SetCount(roster.Count);
+            var current=roster.Find(e=>e.Id==selectedId);
+            tasking.Set(current,boardFresh);tasking.SetViewportHeight(550);
+            actions.Set(current,boardFresh,activeLimit<=0||activeCount<activeLimit,board?.SelectedForHud??-1,board?.IsActionPending??false,board?.ActionResult??"");
+            window.Footer.Set(boardFresh?"HOST REPORT / "+(board?.SnapshotAgeSeconds>=0?Mathf.CeilToInt(board.SnapshotAgeSeconds)+"s":"AGE UNKNOWN")+"  ·  "+(boardText??lastBoardText):"Host unavailable. Last briefing may be stale; current guidance and task actions are disabled.",boardFresh?AvState.Info:AvState.Caution);
+            LayoutActions();window.Body.Relayout();
+            if(renderedId!=selectedId)
             {
-                if (roster[i].IsActive) active++;
-                else if (roster[i].IsOffered) offers++;
-                else closed++;
+                // A new file starts at its heading; periodic reports preserve the operator's scroll.
+                var scroll=window.Body.Content.parent.parent.GetComponent<ScrollRect>();
+                scroll.StopMovement();scroll.verticalNormalizedPosition=1f;
+                renderedId=selectedId;
             }
-            rosterSection.SetCaption((boardText ?? "") + "  ·  " + (filter == 0
-                ? active + " ACTIVE / " + offers + (offers == 1 ? " OFFER / " : " OFFERS / ") + closed + " CLOSED"
-                : roster.Count + " IN VIEW"));
-            filterControl.Refresh();
-
-            if (selectedId < 0 || !roster.Exists(entry => entry.Id == selectedId))
-                selectedId = roster.Count > 0 ? roster[0].Id : -1;
-            list.SetCount(roster.Count);
-
-            SecondaryObjectiveView current = null;
-            for (int i = 0; i < roster.Count; i++)
-                if (roster[i].Id == selectedId) { current = roster[i]; break; }
-            ShowDetail(current);
         }
-
-        private void ShowDetail(SecondaryObjectiveView entry)
+        private void LayoutActions()
         {
-            bool has = entry != null;
-            detailSection.SetCaption(has ? "FILE / " + entry.Id : "FILE / —");
-            // Who took the contract rides on the header's second line; it used to be a row of its own.
-            string taker = !has ? "" : !string.IsNullOrWhiteSpace(entry.AcceptedBy) ? entry.AcceptedBy
-                : !entry.IsOffered ? "NOT REPORTED" : "AWAITING ACCEPTANCE";
-            detailHeaderRow.Set(has ? MfdSecondaryObjectives.TitleLine(entry.Id, entry.Title) : "NO CONTRACT SELECTED",
-                has ? Phase(entry) + "  ·  " + taker : "",
-                has ? MfdSecondaryObjectives.ChipLabel(entry) : "—",
-                has ? (entry.IsOffered ? AvState.Caution : entry.IsActive ? AvState.Ready : AvState.Info) : AvState.Inert);
-            detailTargetRow.Set("TARGET", null,
-                has && !string.IsNullOrWhiteSpace(entry.Target)
-                    ? MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(entry.Target)) : "—", AvState.Info);
-            detailRewardRow.Set("REWARD", null, has ? MfdSecondaryObjectives.PayoutLabel(entry) : "—", AvState.Ready);
-            detailStatusRow.Set("HOST STATUS", null,
-                has && !string.IsNullOrWhiteSpace(entry.Status) ? MfdSecondaryObjectives.PlainObjective(entry.Status) : "—", AvState.Info);
-            float progress = has && !float.IsNaN(entry.Progress) && !float.IsInfinity(entry.Progress)
-                ? Mathf.Clamp01(entry.Progress) : 0f;
-            detailProgressBar.Set(progress, has ? TheaterReadout.Percent(progress) : "—",
-                !has ? AvState.Inert : entry.IsActive ? AvState.Ready : AvState.Info);
-            string description = has && !string.IsNullOrWhiteSpace(entry.Description)
-                ? MfdSecondaryObjectives.PlainObjective(entry.Description)
-                : has ? "No additional briefing supplied by the host." : "Select a contract to review its host briefing.";
-            detailBrief.Set(description);
-            detailHeaderRow.Help = description;
+            float actionH=Mathf.Max(64,actions.Measure(Width-28));
+            float bodyH=Height-30-FooterHeight-actionH-12;
+            var body=(RectTransform)window.Body.Content.parent.parent;var scroll=body.GetComponent<ScrollRect>();
+            AvLay.Place(body,0,30,Width,bodyH);AvLay.Place(scroll.viewport,0,0,Width,bodyH);
+            window.Body.ViewportHeight=bodyH;
+            if(scroll.verticalScrollbar!=null){var bar=(RectTransform)scroll.verticalScrollbar.transform;bar.sizeDelta=new Vector2(bar.sizeDelta.x,bodyH-4);}
+            actions.Place(new AvSlot(14,Height-FooterHeight-actionH-6,Width-28,actionH));
         }
-
-        private sealed class ContractBrief : AvPart
+        private void ViewMap()
         {
-            private readonly TMP_Text text;
-
-            public ContractBrief(RectTransform parent)
-            {
-                Rect = AvLay.Child(parent, "HostBrief");
-                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void Set(string value)
-            {
-                if (text.text == value) return;
-                text.text = value;
-                Changed();
-            }
-
-            public override float Measure(float width) => AvText.Height(text, width);
-
-            public override void Place(AvSlot slot)
-            {
-                base.Place(slot);
-                AvLay.Place(text.rectTransform, 0f, 0f, slot.W, slot.H);
-            }
-
-            public override void Restyle() =>
-                text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Close();var map=SceneSingleton<DynamicMap>.i;if(map!=null&&!DynamicMap.mapMaximized)map.Maximize();
         }
-
-        private static int CompareContracts(SecondaryObjectiveView a, SecondaryObjectiveView b)
+        private static int CompareContracts(SecondaryObjectiveView a,SecondaryObjectiveView b)
         {
-            int groupA = a.IsActive ? 0 : a.IsOffered ? 1 : 2;
-            int groupB = b.IsActive ? 0 : b.IsOffered ? 1 : 2;
-            if (groupA != groupB) return groupA.CompareTo(groupB);
-            if (groupA == 2) return b.Id.CompareTo(a.Id);
-            float timeA = float.IsNaN(a.SecondsRemaining) || float.IsInfinity(a.SecondsRemaining)
-                ? float.MaxValue : a.SecondsRemaining;
-            float timeB = float.IsNaN(b.SecondsRemaining) || float.IsInfinity(b.SecondsRemaining)
-                ? float.MaxValue : b.SecondsRemaining;
-            int time = timeA.CompareTo(timeB);
-            return time != 0 ? time : a.Id.CompareTo(b.Id);
+            int x=a.IsActive?0:a.IsOffered?1:2,y=b.IsActive?0:b.IsOffered?1:2;
+            return x!=y?x.CompareTo(y):x==2?b.Id.CompareTo(a.Id):a.Id.CompareTo(b.Id);
         }
-
-        private static string Phase(SecondaryObjectiveView entry) =>
-            entry.IsActive ? "IN FIELD" : entry.IsOffered ? "AWAITING ACCEPTANCE" :
-            entry.IsComplete ? "COMPLETE" : "CLOSED";
+        private sealed class DeskColumns : AvPart
+        {
+            private AvSection heading;private AvSegmented filter;private AvStepper families;private AvList list;private MissionTaskPart task;
+            public DeskColumns(RectTransform parent){Rect=AvLay.Child(parent,"Task board and briefing");}
+            public void Set(AvSection h,AvSegmented f,AvStepper fam,AvList l,MissionTaskPart t)
+            {heading=h;filter=f;families=fam;list=l;task=t;h.Parent=f.Parent=fam.Parent=l.Parent=t.Parent=this;}
+            public override float Measure(float width)=>task==null?0:Mathf.Max(heading.Measure(276)+filter.Measure(276)+families.Measure(276)+list.Measure(276)+36,task.Measure(width-292));
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);float y=0;
+                AvPart[] left={heading,filter,families,list};
+                foreach(var p in left){float h=p.Measure(276);p.Place(new AvSlot(0,y,276,h));y+=h+8;}
+                task.Place(new AvSlot(292,0,s.W-292,task.Measure(s.W-292)));
+            }
+            public override void Restyle(){heading?.Restyle();filter?.Restyle();families?.Restyle();list?.Restyle();task?.Restyle();}
+        }
     }
 }

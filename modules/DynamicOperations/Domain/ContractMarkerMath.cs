@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public readonly float Radius;
         public readonly float Seconds;
         public readonly float Progress;
+        public readonly string NextAction;
+        public readonly string Blocker;
+        public readonly string PhaseTitle;
 
         /// <summary>The host could mark a position for it; a lost contact cannot be drawn.</summary>
         public readonly bool HasMarker;
@@ -33,6 +36,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             Radius = OperationMarkerCopy.Finite(view.Radius) && view.Radius > 0f ? view.Radius : 0f;
             Seconds = OperationMarkerCopy.Finite(view.SecondsRemaining) ? view.SecondsRemaining : 0f;
             Progress = OperationMarkerCopy.Finite(view.Progress) ? view.Progress : 0f;
+            NextAction = view.Tasking?.NextAction ?? string.Empty;
+            Blocker = view.Tasking?.Blocker ?? string.Empty;
+            int phase = view.Tasking?.CurrentPhase ?? -1;
+            PhaseTitle = phase >= 0 ? view.Tasking.Phases[phase].Title : string.Empty;
         }
 
         public static bool TryRead(SecondaryObjectiveView view, out ContractCard card)

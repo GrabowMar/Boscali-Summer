@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
     internal sealed class OperationsNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 3;
+        internal const byte ProtocolVersion = 4;
         private OperationsManager manager;
         private MessageHandler serverHandler, clientHandler;
         private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
@@ -44,6 +44,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
         private uint scene, token;
         private FactionHQ requestedHq;
         private bool pending;
+        private int pendingOperationId;
+        private NetworkClient requestedClient;
+        private INetworkPlayer requestedPeer;
 
         public void Configure(OperationsManager owner)
         {
@@ -54,15 +57,33 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
         public void ResetScene()
         {
             scene++; pending = false; requestedHq = null;
+            pendingOperationId = 0;
+            requestedClient = null; requestedPeer = null;
+            manager?.EndAction(string.Empty);
             nextReply.Clear(); nextAction.Clear(); expired.Clear(); lastQuery = -10f;
         }
 
         private void Update()
         {
             float now = Time.unscaledTime;
+            NetworkClient currentClient = NetworkManagerNuclearOption.i?.Client;
+            bool factionChanged = requestedHq != null &&
+                (!GameManager.GetLocalPlayer<Player>(out Player currentPlayer) || currentPlayer == null || currentPlayer.HQ != requestedHq);
+            bool connectionChanged = requestedClient != null &&
+                (!ReferenceEquals(currentClient, requestedClient) || !requestedClient.Active || !requestedClient.IsConnected ||
+                    !ReferenceEquals(requestedClient.Player, requestedPeer));
+            if (factionChanged || connectionChanged)
+            {
+                bool actionUncertain = pendingOperationId > 0;
+                ResetScene();
+                manager.SetLocalStatus(factionChanged ? "Faction changed; refresh its current tasking." : "Host connection changed; tasking state cleared.");
+                if (actionUncertain) manager.EndAction("Tasking context changed. Prior action result unknown; refresh before trying again.");
+            }
             if (pending && now - lastQuery >= 6f)
             {
                 pending = false;
+                if (pendingOperationId > 0) manager.EndAction("Host link unavailable. Action result unknown; refresh before trying again.");
+                pendingOperationId = 0;
                 manager.SetLocalStatus("Host link unavailable; secondary state cleared.");
             }
             if (now < nextRegistration) return;
@@ -104,7 +125,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 ResetScene(); requestedHq = player.HQ;
                 manager.SetLocalStatus("Waiting for faction objectives.");
             }
-            if (operationId <= 0 && (pending || Time.unscaledTime - lastQuery < 2f))
+            if (!OperationRequestPolicy.Allows(pending, pendingOperationId, operationId, Time.unscaledTime - lastQuery))
             {
                 if (operationId > 0) manager.ReportStatus("Host refresh in progress. Try the contract action again in 2 seconds.");
                 return;
@@ -112,20 +133,28 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             lastQuery = Time.unscaledTime;
             if (GameAccess.IsServer())
             {
+                if (operationId > 0) manager.BeginAction(operationId, cancel);
                 string result = operationId > 0 ? manager.Act(player, operationId, cancel) : null;
                 OperationsSnapshot snapshot = manager.Snapshot(player);
                 if (result != null) snapshot.Status = result;
                 manager.Apply(snapshot);
+                if (result != null) manager.EndAction(result);
                 return;
             }
             NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client == null || !client.Active)
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)
             {
                 manager.SetLocalStatus("Connect to a host with dynamic operations enabled.");
                 return;
             }
             pending = true;
-            if (operationId > 0) manager.ReportStatus(cancel ? "Dismissing contract..." : "Accepting contract...");
+            requestedClient = client; requestedPeer = client.Player;
+            pendingOperationId = operationId;
+            if (operationId > 0)
+            {
+                manager.BeginAction(operationId, cancel);
+                manager.ReportStatus(cancel ? "Dismissing contract..." : "Accepting contract...");
+            }
             client.Send(new OperationsQuery { Protocol = ProtocolVersion, Scene = scene, Token = ++token,
                 OperationId = operationId, Action = operationId <= 0 ? (byte)0 : cancel ? (byte)2 : (byte)1 });
         }
@@ -155,12 +184,17 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
         private void ReceiveSnapshot(INetworkPlayer sender, OperationsSnapshot snapshot)
         {
-            if (GameAccess.IsServer() || !pending || snapshot.Protocol != ProtocolVersion ||
-                snapshot.Scene != scene || snapshot.Token != token ||
-                !GameManager.GetLocalPlayer<Player>(out Player local) || local == null || local.HQ != requestedHq)
-                return;
+            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            bool currentConnection = client != null && ReferenceEquals(client, requestedClient) && client.Active && client.IsConnected &&
+                sender != null && sender.IsAuthenticated && sender.IsConnected &&
+                ReferenceEquals(sender, requestedPeer) && ReferenceEquals(sender, client.Player);
+            bool sameFaction = GameManager.GetLocalPlayer<Player>(out Player local) && local != null && local.HQ == requestedHq;
+            if (!OperationRequestPolicy.Correlated(GameAccess.IsServer(), pending, snapshot.Protocol, ProtocolVersion,
+                snapshot.Scene, scene, snapshot.Token, token, currentConnection, sameFaction)) return;
             pending = false;
             manager.Apply(snapshot);
+            if (pendingOperationId > 0) manager.EndAction(snapshot.Status);
+            pendingOperationId = 0;
         }
 
         private void OnDestroy()
@@ -209,12 +243,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     w.WriteByte(card.IsOffered ? (byte)1 : (byte)0); w.WriteByte(card.IsActive ? (byte)1 : (byte)0); w.WriteByte(card.HasMarker ? (byte)1 : (byte)0);
                     w.WriteSingle(card.X); w.WriteSingle(card.Z); w.WriteSingle(card.Radius);
                     w.WriteString(PilotText(card.AcceptedBy));
+                    WriteTasking(w, card.Tasking);
                 }
             }));
             Bind(typeof(Reader<OperationsSnapshot>), "Read", (Func<NetworkReader, OperationsSnapshot>)(r =>
             {
                 var snapshot = new OperationsSnapshot
                 { Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), Status = Text(r.ReadString()) };
+                if (snapshot.Protocol != ProtocolVersion) throw new InvalidOperationException("Unsupported operations snapshot protocol.");
                 int count = r.ReadByte();
                 if (count > OperationBoard.MaximumCards) throw new InvalidOperationException("Operations snapshot exceeds card limit.");
                 snapshot.Cards = new SecondaryObjectiveView[count];
@@ -229,18 +265,86 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     bool offered = r.ReadByte() == 1, active = r.ReadByte() == 1, marker = r.ReadByte() == 1;
                     float x = r.ReadSingle(), z = r.ReadSingle(), radius = r.ReadSingle();
                     string acceptedBy = PilotText(r.ReadString());
+                    ObjectiveTasking tasking = ReadTasking(r);
                     if (!Operation.Finite(progress) || !Operation.Finite(remaining) || progress < 0f || progress > 1f ||
                         remaining < 0f || remaining > 1200f || money < 0 || money > 100000 || xp < 0 || xp > 10000 ||
                         !Operation.Finite(x) || !Operation.Finite(z) || !Operation.Finite(radius) || radius < 0f || radius > 1500f ||
-                        (offered && active) || (complete && (offered || active)) || (marker && !active))
+                        (offered && active) || (complete && (offered || active)) || (marker && !active) ||
+                        !ValidTasking(tasking, offered, active, complete, marker))
                         throw new InvalidOperationException("Invalid operations snapshot values.");
                     snapshot.Cards[i] = new SecondaryObjectiveView(id, title, description, target, status, reward,
-                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius, acceptedBy);
+                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius, acceptedBy, tasking);
                 }
                 return snapshot;
             }));
             MessagePacker.RegisterMessage<OperationsQuery>();
             MessagePacker.RegisterMessage<OperationsSnapshot>();
+        }
+
+        private static void WriteTasking(NetworkWriter writer, ObjectiveTasking tasking)
+        {
+            writer.WriteByte(tasking == null ? (byte)0 : (byte)1);
+            if (tasking == null) return;
+            writer.WriteByte((byte)tasking.Family); writer.WriteByte((byte)tasking.Asset);
+            writer.WriteByte((byte)tasking.Contact); writer.WriteByte((byte)tasking.Lifecycle);
+            writer.WriteSingle(tasking.ContactAgeSeconds);
+            writer.WriteString(Text(tasking.NextAction)); writer.WriteString(Text(tasking.Blocker)); writer.WriteString(Text(tasking.Effect));
+            writer.WriteString(Text(tasking.AbortConsequence)); writer.WriteByte((byte)tasking.Allegiance);
+            if (tasking.Phases.Length > 3) throw new InvalidOperationException("Operations tasking exceeds phase limit.");
+            writer.WriteByte((byte)tasking.Phases.Length);
+            for (int i = 0; i < tasking.Phases.Length; i++)
+            {
+                ObjectivePhase phase = tasking.Phases[i];
+                writer.WriteByte(phase.Id); writer.WriteString(Text(phase.Title)); writer.WriteString(Text(phase.Condition));
+                writer.WriteByte((byte)phase.Status); writer.WriteSingle(phase.Progress);
+            }
+        }
+
+        private static ObjectiveTasking ReadTasking(NetworkReader reader)
+        {
+            byte present = reader.ReadByte();
+            if (present == 0) return null;
+            if (present != 1) throw new InvalidOperationException("Invalid operations tasking presence.");
+            var family = (ObjectiveFamily)reader.ReadByte(); var asset = (ObjectiveAsset)reader.ReadByte();
+            var contact = (ObjectiveContact)reader.ReadByte(); var lifecycle = (ObjectiveLifecycle)reader.ReadByte();
+            float age = reader.ReadSingle();
+            string action = Text(reader.ReadString()), blocker = Text(reader.ReadString()), effect = Text(reader.ReadString());
+            string abort = Text(reader.ReadString()); var allegiance = (ObjectiveAllegiance)reader.ReadByte();
+            int count = reader.ReadByte();
+            if (count > 3) throw new InvalidOperationException("Operations tasking exceeds phase limit.");
+            var phases = new ObjectivePhase[count];
+            for (int i = 0; i < count; i++)
+                phases[i] = new ObjectivePhase(reader.ReadByte(), Text(reader.ReadString()), Text(reader.ReadString()),
+                    (ObjectivePhaseStatus)reader.ReadByte(), reader.ReadSingle());
+            return new ObjectiveTasking(family, asset, contact, age, action, blocker, effect, phases, lifecycle, abort, allegiance);
+        }
+
+        private static bool ValidTasking(ObjectiveTasking tasking, bool offered, bool active, bool complete, bool marker)
+        {
+            // Legacy offline fixtures may omit tasking; protocol4 host cards always include it.
+            if (tasking == null) return true;
+            if (tasking.Family > ObjectiveFamily.Logistics || tasking.Asset > ObjectiveAsset.Site ||
+                tasking.Contact > ObjectiveContact.Lost || tasking.Lifecycle > ObjectiveLifecycle.Cancelled ||
+                tasking.Allegiance > ObjectiveAllegiance.Neutral ||
+                !Operation.Finite(tasking.ContactAgeSeconds) || tasking.ContactAgeSeconds < -1f || tasking.ContactAgeSeconds > 30f ||
+                tasking.ContactAgeSeconds < 0f && tasking.ContactAgeSeconds != -1f ||
+                tasking.Phases.Length < 1 || tasking.Phases.Length > 3 ||
+                (tasking.Lifecycle == ObjectiveLifecycle.Offered) != offered ||
+                (tasking.Lifecycle == ObjectiveLifecycle.Active) != active ||
+                (tasking.Lifecycle == ObjectiveLifecycle.Completed) != complete ||
+                marker != (tasking.Contact == ObjectiveContact.Fixed || tasking.Contact == ObjectiveContact.Known ||
+                    tasking.Contact == ObjectiveContact.LastKnown)) return false;
+            int current = 0;
+            var ids = new HashSet<byte>();
+            for (int i = 0; i < tasking.Phases.Length; i++)
+            {
+                ObjectivePhase phase = tasking.Phases[i];
+                if (phase == null || !ids.Add(phase.Id) || phase.Status > ObjectivePhaseStatus.Done ||
+                    !Operation.Finite(phase.Progress) || phase.Progress < 0f || phase.Progress > 1f ||
+                    complete && phase.Status != ObjectivePhaseStatus.Done) return false;
+                if (phase.Status == ObjectivePhaseStatus.Current) current++;
+            }
+            return current == (active ? 1 : 0);
         }
 
         private static void Bind(Type holder, string property, object value)

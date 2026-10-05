@@ -49,6 +49,8 @@
     <Compile Include="..\..\Core\Contracts\WreckNotice.cs" Link="Framework\WreckNotice.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationPresentation.cs" Link="Features\DynamicOperations\OperationPresentation.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationRequestPolicy.cs" Link="Features\DynamicOperations\OperationRequestPolicy.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationChains.cs" Link="Features\DynamicOperations\OperationChains.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTempo.cs" Link="Features\DynamicOperations\OperationTempo.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationFailure.cs" Link="Features\DynamicOperations\OperationFailure.cs" />
