@@ -103,13 +103,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 SupportActionId id = CallSheet.Rows[i].Id;
                 C2Row row = Make(new C2Row(caps.Body, rowH, full));
                 row.Place(new AvSlot(1f, 1f + i * (rowH + 2f), width - 4f, rowH));
-                row.Primary.Clicked += () => this.calls?.Press(id);
-                pinActions[i] = () => this.calls?.Pin(id);
-                if (id == SupportActionId.JtacMark)
-                {
-                    row.SetExtra("UNLASE", () => this.calls?.Unlase());
-                    row.Extra.Help = "Clear the lase at the current POD or map aim. Free.";
-                }
+                pinActions[i] = Bind(row, this.calls, id);
                 rows[id] = row;
             }
 
@@ -200,21 +194,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 CallTile t = v.Tiles[i];
                 if (!rows.TryGetValue(t.Id, out C2Row row)) continue;
                 int index = IndexOf(t.Id);
-                bool isPinned = IsPinned(v, t.Id);
-                string tip = C2Cap.RowTip(t);
-                C2Chip chip = C2Cap.ChipKind(t.Reason);
                 bool armed = t.State == CallState.Armed;
                 if (armed) { armedNow = true; armedId = t.Id; }
                 if (t.State != CallState.Locked && t.State != CallState.Offline) open++;
-                row.Set((index + 1).ToString("00"), t.Label, t.Reason,
-                    chip == C2Chip.Discount ? AvState.Ready : chip == C2Chip.Surcharge ? AvState.Danger : AvState.Info,
-                    C2Cap.Sub(t, t.Id == SupportActionId.JtacMark), t.CostText, C2Cap.StateWord(t), StateOf(t.State),
-                    armed ? "EXECUTE" : t.State == CallState.Ready ? "AUTHORIZE" : t.State == CallState.Pending ? "WAIT" : "DENIED",
-                    armed ? AvButtonStyle.Danger : t.State == CallState.Ready ? AvButtonStyle.Primary : AvButtonStyle.Default, t.Enabled);
-                row.Armed = armed;
-                row.SetPin(isPinned, pinActions[index]);
-                row.SetHelp(tip, isPinned ? "Pinned to a favourite slot. Press to pin again." : "Pin to a favourite slot; a favourite fires from its key.");
-                if (row.Primary.Help != tip) row.Primary.Help = tip;
+                PaintRow(row, t, index, IsPinned(v, t.Id), pinActions[index]);
             }
 
             string pinned = "";
@@ -325,13 +308,45 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             return x;
         }
 
-        private static int IndexOf(SupportActionId id)
+        /// <summary>
+        /// Wires one capability row to the controller: the primary button presses the call (arm, then fire), the JTAC row gets UNLASE.
+        /// Shared by the CAP page and the NET / SOF pages so every call row behaves identically. Returns the pin action for the row.
+        /// </summary>
+        internal static Action Bind(C2Row row, CallsController calls, SupportActionId id)
+        {
+            row.Primary.Clicked += () => calls?.Press(id);
+            if (id == SupportActionId.JtacMark)
+            {
+                row.SetExtra("UNLASE", () => calls?.Unlase());
+                row.Extra.Help = "Clear the lase at the current POD or map aim. Free.";
+            }
+            return () => calls?.Pin(id);
+        }
+
+        /// <summary>Paints one capability row from its tile (index is the zero-based position in the call sheet). Shared with the NET / SOF pages.</summary>
+        internal static void PaintRow(C2Row row, CallTile t, int index, bool isPinned, Action pinAction)
+        {
+            string tip = C2Cap.RowTip(t);
+            C2Chip chip = C2Cap.ChipKind(t.Reason);
+            bool armed = t.State == CallState.Armed;
+            row.Set((index + 1).ToString("00"), t.Label, t.Reason,
+                chip == C2Chip.Discount ? AvState.Ready : chip == C2Chip.Surcharge ? AvState.Danger : AvState.Info,
+                C2Cap.Sub(t, t.Id == SupportActionId.JtacMark), t.CostText, C2Cap.StateWord(t), StateOf(t.State),
+                armed ? "EXECUTE" : t.State == CallState.Ready ? "AUTHORIZE" : t.State == CallState.Pending ? "WAIT" : "DENIED",
+                armed ? AvButtonStyle.Danger : t.State == CallState.Ready ? AvButtonStyle.Primary : AvButtonStyle.Default, t.Enabled);
+            row.Armed = armed;
+            row.SetPin(isPinned, pinAction);
+            row.SetHelp(tip, isPinned ? "Pinned to a favourite slot. Press to pin again." : "Pin to a favourite slot; a favourite fires from its key.");
+            if (row.Primary.Help != tip) row.Primary.Help = tip;
+        }
+
+        internal static int IndexOf(SupportActionId id)
         {
             for (int i = 0; i < CallSheet.Rows.Count; i++) if (CallSheet.Rows[i].Id == id) return i;
             return 0;
         }
 
-        private static bool IsPinned(CapView v, SupportActionId id)
+        internal static bool IsPinned(CapView v, SupportActionId id)
         {
             foreach (SupportActionId? f in v.Favourites) if (f.HasValue && f.Value == id) return true;
             return false;

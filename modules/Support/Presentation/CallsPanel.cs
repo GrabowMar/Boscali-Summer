@@ -12,6 +12,7 @@ using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
+using NuclearOption.MissionEditorScripts;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
@@ -23,7 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// The OPS bezel page, drawn as the SATCOM C2 terminal: the shared <see cref="C2Chrome"/> (banner, header, session line, tabs),
     /// one page per tab and the <see cref="C2Footer"/> that also carries the hover help of every row and button.
     /// [1] CAP is the CALL page (<see cref="CapPage"/>); [2] ORBIT hosts the SPACE feed (<see cref="SpaceFeedPanel"/>);
-    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET and [4] SOF are temporary empty pages until their own steps. The panel owns no policy: every figure comes from
+    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET and [4] SOF are honest offline pages that still carry their real CALL rows (<see cref="DomainOfflinePage"/>). Keys 1-5 switch tabs only while the pointer is over the page or the full-screen station is open. The panel owns no policy: every figure comes from
     /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="SpaceFeedController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
@@ -51,6 +52,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private C2Footer footer;
         private CapPage cap;
         private BoardPage boardPage;
+        private DomainOfflinePage netPage, sofPage;
         private C2Tab tab = C2Tab.Cap;
         private int sceneGeneration;
 
@@ -81,6 +83,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             footer = null;
             cap = null;
             boardPage = null;
+            netPage = sofPage = null;
             spacePanel = null;
             tab = C2Tab.Cap;
             sceneGeneration++;
@@ -125,6 +128,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 logger?.LogError("OPS C2 console failed: " + e);
                 return;
             }
+            if (visible && consoleRoot != null) PollTabKeys();
             if (!visible || consoleRoot == null || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
@@ -134,6 +138,33 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 failed = true; // a refresh fault must not throw every frame
                 logger?.LogError("OPS CALLS refresh failed: " + e);
             }
+        }
+
+        // ---- Tab keys ---------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Digit keys 1-5 pick a tab, but only through <see cref="C2Tabs.KeyAllowed"/>: never in flight (the keys belong to the
+        /// weapons), never while typing. The key is only read once that gate is open.
+        /// </summary>
+        private void PollTabKeys()
+        {
+            bool typing = InputFieldChecker.InsideInputField;
+            if (!C2Tabs.KeyAllowed(PointerOverPage(), feed != null && feed.WindowOpen, typing) || GameplayUI.GameIsPaused || !Application.isFocused) return;
+            for (int d = 1; d <= 5; d++)
+            {
+                if (!Input.GetKeyDown(KeyCode.Alpha0 + d) && !Input.GetKeyDown(KeyCode.Keypad0 + d)) continue;
+                C2Tab next = C2Tabs.FromKey(d);
+                if (next != tab) SelectTab(next);
+                return;
+            }
+        }
+
+        private bool PointerOverPage()
+        {
+            if (consoleRoot == null || !consoleRoot.gameObject.activeInHierarchy) return false;
+            Canvas canvas = consoleRoot.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            return RectTransformUtility.RectangleContainsScreenPoint(consoleRoot, Input.mousePosition, cam);
         }
 
         // ---- Installation ----------------------------------------------------------------
@@ -254,8 +285,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvLay.Place(spacePanel.Rect, 0f, 0f, Width, pageH);
             ticker.Register(spacePanel);
             feed?.AttachCompact(spacePanel);
-            BuildPlaceholder(pages[(int)C2Tab.Net - 1], "NET");
-            BuildPlaceholder(pages[(int)C2Tab.Sof - 1], "SOF");
+            netPage = new DomainOfflinePage(pages[(int)C2Tab.Net - 1], Width, pageH, CallFamily.Cyber, calls, p => t.Register(p));
+            sofPage = new DomainOfflinePage(pages[(int)C2Tab.Sof - 1], Width, pageH, CallFamily.Sof, calls, p => t.Register(p));
             boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
             feed?.AttachBoard(boardPage);
 
@@ -264,7 +295,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
 
             CapPage capPage = cap;
-            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); boardPage?.Restyle(); }));
+            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
             back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame);
             chromeKey = footerKey = "";
             SelectTab(C2Tab.Cap);
@@ -282,19 +313,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             ticker.Register(part);
             return part;
-        }
-
-        /// <summary>A temporary empty C2 page: one box that says the page is not online yet.</summary>
-        private void BuildPlaceholder(RectTransform page, string name)
-        {
-            C2Box box = Reg(new C2Box(page, name + " · NOT YET ONLINE"));
-            box.BodyHeight = 48f;
-            box.Place(new AvSlot(0f, 6f, Width, box.Measure(Width)));
-            TMP_Text text = C2Kit.Mono(box.Body, "Words", 10.5f, TextAlignmentOptions.MidlineLeft);
-            text.text = "> page arrives with its own step";
-            C2Kit.Place(text, 8f, 0f, Width - 20f, 46f);
-            text.color = OpsInk.Muted;
-            ticker.Register(new Hook(() => text.color = OpsInk.Muted));
         }
 
         private sealed class Hook : AvPart
@@ -421,6 +439,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (consoleRoot == null) return;
             PaintChrome(tab, v);
             if (tab == C2Tab.Cap) cap.Paint(v);
+            else if (tab == C2Tab.Net) netPage?.Paint(v);
+            else if (tab == C2Tab.Sof) sofPage?.Paint(v);
             PaintFooter(v);
         }
 
@@ -472,7 +492,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 words = boardPage.Words.Length > 0 ? boardPage.Words : "BOARD CLEAR \u00B7 WAITING FOR A POSTED CALL";
                 slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
             }
-            else { slab = "INT"; tone = AvState.Info; words = "THIS PAGE ARRIVES IN A LATER STEP"; }
+            else if (tab == C2Tab.Net || tab == C2Tab.Sof)
+            {
+                // The domain is offline, but its real CALL rows work: a refusal from one of them replaces the standing words.
+                string said = v.Words ?? "";
+                bool refused = C2Cap.StartsNegative(said);
+                slab = refused ? "NEG" : "OFF";
+                tone = refused ? AvState.Danger : AvState.Caution;
+                words = refused ? said : (tab == C2Tab.Net ? netPage : sofPage)?.Words ?? "";
+            }
+            else { slab = "INT"; tone = AvState.Info; words = ""; }
             string key = slab + "|" + (int)tone + "|" + words;
             if (key == footerKey) return;
             footerKey = key;
