@@ -1,7 +1,8 @@
 param(
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
     [string]$EvidenceDir = '',
-    [string]$ModDll = ''
+    [string]$ModDll = '',
+    [string]$SourceSnapshot = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
@@ -14,14 +15,19 @@ New-Item -ItemType Directory -Force -Path "$fixture/Assets/Resources", "$fixture
 $editorVersion = if ($Unity -like '*62f3*') { '2022.3.62f3' } else { '2022.3.62f2' }
 Set-Content -LiteralPath "$fixture/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVersion"
 Set-Content -LiteralPath "$fixture/Packages/manifest.json" -Value '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
-# Compile the unmodified Unity-only production source closure. Do not import the game
-# assembly or its Burst/Input bootstrap. Source hashes identify exactly what was tested.
+# Compile unmodified production source with test-only native type stubs. Do not import
+# the game assembly or its Burst/Input bootstrap. Source hashes identify the closure.
 foreach ($source in @('modules/Immersion/Visuals/CockpitPilotRig.cs', 'modules/Immersion/Domain/PilotPoseMath.cs',
+    'modules/Immersion/Runtime/CockpitPilot.cs', 'Core/Lifecycle/ISceneService.cs',
     'modules/Immersion/Visuals/PilotReflection.cs', 'modules/Immersion/Visuals/PilotShaderBundle.cs',
     'modules/Weather/Visuals/CanopyGlassResolver.cs', 'modules/Weather/Domain/CanopyScoring.cs',
     'modules/Weather/Visuals/CanopyGlassView.cs', 'Core/Contracts/ICanopyGlassView.cs',
     'Core/Contracts/FxBudget.cs', 'Core/Contracts/IClientEffect.cs')) {
     $path = Join-Path $repo $source
+    if ($SourceSnapshot) {
+        $snapshotPath = Join-Path $SourceSnapshot ([IO.Path]::GetFileName($source))
+        if (Test-Path -LiteralPath $snapshotPath) { $path = $snapshotPath }
+    }
     if (-not (Test-Path -LiteralPath $path)) { throw "Required pilot implementation missing: $path" }
     Copy-Item -LiteralPath $path -Destination "$fixture/Assets/Code/" -Force
 }
@@ -39,6 +45,7 @@ $pilotEmbeddedFile = "pilot-$pilotBundleHash.bundle"
 Copy-Item -LiteralPath $bundle -Destination (Join-Path $fixture $pilotEmbeddedFile) -Force
 Set-Content -LiteralPath "$fixture/Assets/csc.rsp" -Value "-resource:$pilotEmbeddedFile,BoscaliSummer.Immersion.pilot.bundle"
 Copy-Item -LiteralPath "$PSScriptRoot/PilotUnityCheck.cs" -Destination "$fixture/Assets/Code/" -Force
+Copy-Item -LiteralPath "$PSScriptRoot/PilotRuntimeFixtureStubs.cs" -Destination "$fixture/Assets/Code/" -Force
 foreach ($shader in 'PilotBody.shader', 'PilotCanopyReflection.shader') {
     Copy-Item -LiteralPath "$repo/modules/Immersion/Assets/Source/$shader" -Destination "$fixture/Assets/Resources/" -Force
 }

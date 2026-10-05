@@ -241,12 +241,17 @@ foreach ((string typeName, string fieldName) in fields)
 (string Type, string Field, string FieldType)[] cameraFields =
 {
     // First-person pilot binding and native control anchors (cached generic-rig access).
+    ("Aircraft", "cockpit", "UnitPart"),
     ("Pilot", "skinnedMeshRenderer", "UnityEngine.SkinnedMeshRenderer"),
     ("Pilot", "animator", "UnityEngine.Animator"),
     ("Cockpit", "joysticks", "Cockpit+Joystick[]"),
     ("Cockpit", "throttles", "Cockpit+Throttle[]"),
     ("Cockpit+Joystick", "transform", "UnityEngine.Transform"),
     ("Cockpit+Throttle", "transform", "UnityEngine.Transform"),
+    ("Cockpit+Joystick", "range", "System.Single"),
+    ("Cockpit+Throttle", "range", "System.Single"),
+    ("Cockpit+Throttle", "rotation", "System.Boolean"),
+    ("Cockpit+Throttle", "motion", "System.Boolean"),
     ("ControlsFilter", "aircraft", "Aircraft"),
     ("ControlsFilter", "aimAssist", "ControlsFilter+AimAssist"),
     ("Hangar", "spawnedObject", "UnityEngine.GameObject"),
@@ -344,6 +349,19 @@ foreach (var seam in cameraFields)
     if (actualType != seam.FieldType)
         throw new InvalidOperationException($"Camera seam {seam.Type}.{seam.Field} changed type: {actualType}");
 }
+
+// Aircraft.cockpit is a physics part. Its Cockpit behaviour may live on an inactive
+// child, so control binding must resolve that component before reflecting its arrays.
+Type nativeCockpitPart = gameAssembly.GetType("UnitPart", true)!;
+Type nativeControlOwner = gameAssembly.GetType("Cockpit", true)!;
+MethodInfo controlOwnerLookup = nativeCockpitPart.GetMethods(AllMembers).FirstOrDefault(method =>
+    method.Name == "GetComponentInChildren" && method.IsGenericMethodDefinition &&
+    method.GetGenericArguments().Length == 1 &&
+    method.GetParameters() is { Length: 1 } parameters && parameters[0].ParameterType == typeof(bool))
+    ?? throw new MissingMethodException("UnitPart.GetComponentInChildren<Cockpit>(bool)");
+if (controlOwnerLookup.MakeGenericMethod(nativeControlOwner).ReturnType != nativeControlOwner)
+    throw new InvalidOperationException("Cockpit component lookup no longer returns the native control owner");
+
 Type nativeAimAssist = gameAssembly.GetType("ControlsFilter+AimAssist", true)!;
 if (nativeAimAssist.GetField("Enabled", AllMembers)?.FieldType != typeof(bool))
     throw new MissingFieldException("ControlsFilter+AimAssist.Enabled");

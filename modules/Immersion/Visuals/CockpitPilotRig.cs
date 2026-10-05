@@ -9,6 +9,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
     {
         private const int MaxNodes = 64;
         internal const float GripReachAllowance = .08f;
+        internal const float GripShoulderAllowance = .05f;
+        internal const float GripRestAllowance = .20f;
         private readonly Transform[] sources = new Transform[MaxNodes];
         private readonly Transform[] copies = new Transform[MaxNodes];
         private readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
@@ -33,7 +35,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Quaternion stickRotation, throttleRotation;
         private int count;
         private float phase, lean, pitchLean, headPitch, headYaw, pedals;
-        private bool bodyVisible, hooked;
+        private float rightArmLength, leftArmLength, stickRestFit, throttleRestFit;
+        private bool bodyVisible, hooked, stickOnRight = true;
         internal SkinnedMeshRenderer Renderer { get; private set; }
         internal SkinnedMeshRenderer BodyRenderer => firstPerson != null ? firstPerson : Renderer;
         internal Transform Head { get; private set; }
@@ -41,10 +44,19 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal int TransformCount => count;
         internal Material Material => material;
         internal Transform Frame => frame;
-        internal bool StickBound => stick != null && rightUpper != null && rightLower != null && rightHand != null;
-        internal bool ThrottleBound => throttle != null && leftUpper != null && leftLower != null && leftHand != null;
-        internal float StickGripError => StickBound ? Vector3.Distance(rightHand.position, stick.TransformPoint(stickGrip)) : -1f;
-        internal float ThrottleGripError => ThrottleBound ? Vector3.Distance(leftHand.position, throttle.TransformPoint(throttleGrip)) : -1f;
+        internal bool StickOnRight => stickOnRight;
+        internal Transform StickHand => stickOnRight ? rightHand : leftHand;
+        internal Transform ThrottleHand => stickOnRight ? leftHand : rightHand;
+        internal Transform StickControl => stick;
+        internal Transform ThrottleControl => throttle;
+        internal Vector3 StickAnchor => stickGrip;
+        internal Vector3 ThrottleAnchor => throttleGrip;
+        internal float StickRestFit => stickRestFit;
+        internal float ThrottleRestFit => throttleRestFit;
+        internal bool StickBound => stick != null && StickHand != null && (stickOnRight ? rightUpper != null && rightLower != null : leftUpper != null && leftLower != null);
+        internal bool ThrottleBound => throttle != null && ThrottleHand != null && (stickOnRight ? leftUpper != null && leftLower != null : rightUpper != null && rightLower != null);
+        internal float StickGripError => StickBound ? Vector3.Distance(StickHand.position, stick.TransformPoint(stickGrip)) : -1f;
+        internal float ThrottleGripError => ThrottleBound ? Vector3.Distance(ThrottleHand.position, throttle.TransformPoint(throttleGrip)) : -1f;
         internal bool Valid
         {
             get
@@ -134,6 +146,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             SetBodyVisible(true);
             root.SetActive(true);
             CopySeatedPose();
+            rightArmLength = ArmLength(rightUpper, rightLower, rightHand);
+            leftArmLength = ArmLength(leftUpper, leftLower, leftHand);
             UpdateHeadMask();
             return true;
         }
@@ -219,12 +233,66 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         internal void SetFrame(Transform value) { if (value != null) frame = value; }
 
+        internal void SetControlHandedness(bool rightHandStick)
+        {
+            if (stickOnRight == rightHandStick) return;
+            stickOnRight = rightHandStick;
+            stick = throttle = null;
+            stickRestFit = throttleRestFit = 0f;
+            CopySeatedPose();
+        }
+
+        internal void FitControlReach(bool joystick, float maximumDistance)
+        {
+            float nativeLength = joystick == stickOnRight ? rightArmLength : leftArmLength;
+            if (!PilotPoseMath.Finite(maximumDistance) || nativeLength <= .001f) return;
+            // Fit the owned sleeve once to the authored full throw. Preserve glove size,
+            // seat/head position and the existing small per-frame reach allowances.
+            float fit = Mathf.Clamp(maximumDistance + .015f - nativeLength - GripReachAllowance - GripShoulderAllowance, 0f, GripRestAllowance);
+            if (joystick) stickRestFit = fit; else throttleRestFit = fit;
+        }
+
+        private static float ArmLength(Transform upper, Transform lower, Transform hand) => upper != null && lower != null && hand != null
+            ? Vector3.Distance(upper.position, lower.position) + Vector3.Distance(lower.position, hand.position) : 0f;
+
+        internal static Vector3 GripPoint(Mesh mesh)
+        {
+            Bounds bounds = mesh.bounds;
+            // Verified native curved cyclic heads; whole-shaft X/Z bounds put the
+            // palm in empty space ahead of the physical hand grip.
+            if (mesh.name == "utilityHelo1_joystick" && mesh.vertexCount == 1467 && Mathf.Abs(bounds.max.y - .8688719f) < .001f)
+                return new Vector3(-.011583f, .768872f, -.138844f);
+            if (mesh.name == "quadVTOL1_joystick" && mesh.vertexCount == 1436 && Mathf.Abs(bounds.max.y - .8252178f) < .001f)
+                return new Vector3(-.015220f, .725218f, -.005443f);
+            if (mesh.name == "sfb_joystick" && mesh.vertexCount == 1439 && Mathf.Abs(bounds.max.y - .8013563f) < .001f)
+                return new Vector3(-.01625866f, .7013563f, -.1366216f);
+            if (mesh.name == "EW1_joystick" && mesh.vertexCount == 1439 && Mathf.Abs(bounds.max.y - .7087711f) < .001f)
+                return new Vector3(-.01666565f, .6087711f, -.1366215f);
+            if (mesh.name == "fastBomber1_joystick" && mesh.vertexCount == 1485 && Mathf.Abs(bounds.max.y - .5689913f) < .001f)
+                return new Vector3(-.01666571f, .4689913f, -.1312654f);
+            if (mesh.name == "sfb_throttle" && mesh.vertexCount == 300 && Mathf.Abs(bounds.max.y - .2599013f) < .001f)
+                return new Vector3(.00003283f, .2099013f, -.2090676f);
+            if (mesh.name == "EW1_throttle" && mesh.vertexCount == 321 && Mathf.Abs(bounds.max.y - .1328866f) < .001f)
+                return new Vector3(0, .08288665f, -.2308236f);
+            if (mesh.name == "fastBomber1_throttle" && mesh.vertexCount == 440 && Mathf.Abs(bounds.max.y - .2641369f) < .001f)
+                return new Vector3(0, .2141369f, -.2165338f);
+            Vector3 point = bounds.center;
+            point.y = Mathf.Lerp(bounds.center.y, bounds.max.y, .8f);
+            return point;
+        }
+
         internal static bool TryFindGrip(Transform lever, Transform hand, Transform shoulder, bool rightHand,
+            out Vector3 localGrip, out Quaternion localRotation, out float wristDistance)
+            => TryFindGrip(lever, hand, shoulder, rightHand, rightHand, out localGrip, out localRotation, out wristDistance);
+
+        internal static bool TryFindGrip(Transform lever, Transform hand, Transform shoulder, bool rightHand, bool joystick,
             out Vector3 localGrip, out Quaternion localRotation, out float wristDistance)
         {
             localGrip = Vector3.zero;
             localRotation = Quaternion.identity;
-            wristDistance = .55f * .55f;
+            // The native lap pose is not a reach limit. Reject by shoulder/arm
+            // geometry below, then use lap distance only to choose among controls.
+            wristDistance = float.PositiveInfinity;
             if (lever == null || hand == null || hand.parent == null || shoulder == null) return false;
             float maxReach = Vector3.Distance(shoulder.position, hand.parent.position) + Vector3.Distance(hand.parent.position, hand.position);
             bool found = false;
@@ -234,15 +302,13 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             {
                 MeshFilter filter = meshes[i];
                 if (filter == null || filter.sharedMesh == null) continue;
-                Bounds bounds = filter.sharedMesh.bounds;
-                Vector3 point = bounds.center;
-                point.y = Mathf.Lerp(bounds.center.y, bounds.max.y, .8f);
+                Vector3 point = GripPoint(filter.sharedMesh);
                 // Native seated hands rest in the lap. Fit the curled glove to the handle
                 // with its thumb up, rather than capturing that unrelated resting orientation.
                 Transform handle = filter.transform;
                 Vector3 palm = handle.TransformPoint(point);
                 Quaternion rotation;
-                if (rightHand) rotation = Quaternion.LookRotation(-handle.right, handle.forward);
+                if (joystick) rotation = Quaternion.LookRotation(rightHand ? -handle.right : handle.right, handle.forward);
                 else
                 {
                     // A collective is gripped along the reach direction, avoiding a right-angle wrist bend.
@@ -250,13 +316,13 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     Vector3 thumb = Vector3.ProjectOnPlane(handle.up, fingers);
                     if (thumb.sqrMagnitude < .000001f) thumb = Vector3.ProjectOnPlane(handle.right, fingers);
                     if (fingers.sqrMagnitude < .000001f || thumb.sqrMagnitude < .000001f) continue;
-                    rotation = Quaternion.LookRotation(Vector3.Cross(thumb.normalized, fingers), fingers);
+                    rotation = Quaternion.LookRotation(rightHand ? Vector3.Cross(fingers, thumb.normalized) : Vector3.Cross(thumb.normalized, fingers), fingers);
                 }
                 // Native glove centre in world metres; imported bones carry scale 100.
                 Vector3 palmOffset = rotation * new Vector3(0, .085f, .02f);
                 Vector3 world = palm - palmOffset;
                 float distance = (world - hand.position).sqrMagnitude;
-                if (distance >= wristDistance || Vector3.Distance(shoulder.position, world) > maxReach + GripReachAllowance) continue;
+                if (distance >= wristDistance || Vector3.Distance(shoulder.position, world) > maxReach + GripRestAllowance + GripReachAllowance + GripShoulderAllowance) continue;
                 localGrip = lever.InverseTransformPoint(world);
                 localRotation = Quaternion.Inverse(lever.rotation) * rotation;
                 wristDistance = distance; found = true;
@@ -272,15 +338,29 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 if (source == null || copy == null) continue;
                 copy.localPosition = source.localPosition; copy.localRotation = source.localRotation; copy.localScale = source.localScale;
             }
+            FitArm(rightUpper, rightLower, rightHand, stickOnRight ? stickRestFit : throttleRestFit);
+            FitArm(leftUpper, leftLower, leftHand, stickOnRight ? throttleRestFit : stickRestFit);
+        }
+
+        private static void FitArm(Transform upper, Transform lower, Transform hand, float extra)
+        {
+            if (extra <= 0f) return;
+            float length = ArmLength(upper, lower, hand);
+            if (length <= .001f) return;
+            float scale = 1f + extra / length;
+            lower.localPosition *= scale;
+            hand.localPosition *= scale;
         }
 
         internal void SetControls(Transform stickTransform, Transform throttleTransform)
         {
             stick = stickTransform; throttle = throttleTransform;
-            if (stick != null && rightHand != null)
-            { stickGrip = stick.InverseTransformPoint(rightHand.position); stickRotation = Quaternion.Inverse(stick.rotation) * rightHand.rotation; }
-            if (throttle != null && leftHand != null)
-            { throttleGrip = throttle.InverseTransformPoint(leftHand.position); throttleRotation = Quaternion.Inverse(throttle.rotation) * leftHand.rotation; }
+            if (stick == null) stickRestFit = 0f;
+            if (throttle == null) throttleRestFit = 0f;
+            if (stick != null && StickHand != null)
+            { stickGrip = stick.InverseTransformPoint(StickHand.position); stickRotation = Quaternion.Inverse(stick.rotation) * StickHand.rotation; }
+            if (throttle != null && ThrottleHand != null)
+            { throttleGrip = throttle.InverseTransformPoint(ThrottleHand.position); throttleRotation = Quaternion.Inverse(throttle.rotation) * ThrottleHand.rotation; }
         }
 
         internal void SetControls(Transform stickTransform, Vector3 stickLocalGrip, Transform throttleTransform, Vector3 throttleLocalGrip)
@@ -293,12 +373,12 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Transform throttleTransform, Vector3 throttleLocalGrip, Quaternion throttleLocalRotation)
         {
             // A delayed second control must not recalibrate a hand already holding a tilted lever.
-            if (!StickBound && stickTransform != null && rightHand != null)
+            if (!StickBound && stickTransform != null && StickHand != null)
             {
                 stick = stickTransform; stickGrip = stickLocalGrip;
                 stickRotation = stickLocalRotation;
             }
-            if (!ThrottleBound && throttleTransform != null && leftHand != null)
+            if (!ThrottleBound && throttleTransform != null && ThrottleHand != null)
             {
                 throttle = throttleTransform; throttleGrip = throttleLocalGrip;
                 throttleRotation = throttleLocalRotation;
@@ -335,8 +415,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             else { lean = pitchLean = pedals = 0f; }
             // Contact follows the native lever after animation, including when optional body motion is off.
-            if (StickBound) SolveArm(rightUpper, rightLower, rightHand, stick.TransformPoint(stickGrip), stick.rotation * stickRotation);
-            if (ThrottleBound) SolveArm(leftUpper, leftLower, leftHand, throttle.TransformPoint(throttleGrip), throttle.rotation * throttleRotation);
+            if (StickBound) SolveArm(stickOnRight ? rightUpper : leftUpper, stickOnRight ? rightLower : leftLower,
+                StickHand, stick.TransformPoint(stickGrip), stick.rotation * stickRotation);
+            if (ThrottleBound) SolveArm(stickOnRight ? leftUpper : rightUpper, stickOnRight ? leftLower : rightLower,
+                ThrottleHand, throttle.TransformPoint(throttleGrip), throttle.rotation * throttleRotation);
             neck.rotation = FrameRotation(Quaternion.Euler(headPitch * .15f, headYaw * .15f, 0)) * neck.rotation;
             Head.rotation = FrameRotation(Quaternion.Euler(headPitch * .85f, headYaw * .85f, 0)) * Head.rotation;
             UpdateHeadMask();
@@ -351,8 +433,18 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             float a = Vector3.Distance(origin, elbow), b = Vector3.Distance(elbow, end);
             Vector3 reach = target - origin;
             float distance = reach.magnitude;
-            if (a <= .001f || b <= .001f || distance <= .001f || distance > a + b + GripReachAllowance ||
+            if (a <= .001f || b <= .001f || distance <= .001f || distance > a + b + GripReachAllowance + GripShoulderAllowance ||
                 distance < Mathf.Abs(a - b) - GripReachAllowance || !PilotPoseMath.Finite(distance)) return;
+            // A short reach of the owned shoulder covers side-stick corners without
+            // moving the seat/head or increasing the existing arm-stretch allowance.
+            // Native pose copying resets this displacement before every update.
+            float shoulderReach = Mathf.Clamp(distance - (a + b + GripReachAllowance) + .001f, 0f, GripShoulderAllowance);
+            if (shoulderReach > 0f)
+            {
+                upper.position += reach.normalized * shoulderReach;
+                origin = upper.position; elbow = lower.position; end = hand.position;
+                reach = target - origin; distance = reach.magnitude;
+            }
             // Distribute any small full-throw fit across both arm segments rather than stretching only the wrist.
             float reachScale = Mathf.Max(1f, distance / (a + b));
             a *= reachScale; b *= reachScale;
@@ -374,7 +466,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             float twist = Mathf.DeltaAngle(0, 2f * Mathf.Atan2(axial, wrist.w) * Mathf.Rad2Deg);
             lower.rotation *= Quaternion.AngleAxis(Mathf.Clamp(twist, -90f, 90f), axis);
             // Keep the owned wrist exactly on its anchor at full throw. The reach guard
-            // bounds the total visual reach adjustment to eight centimetres; native bones remain untouched.
+            // bounds segment extension to eight centimetres; native bones remain untouched.
             hand.position = target;
             hand.rotation = gripRotation;
         }
@@ -439,7 +531,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             bodyMaterial = null; firstPerson = null;
             leftFoot = rightFoot = stick = throttle = null; Renderer = null;
             phase = lean = pitchLean = headPitch = headYaw = pedals = 0f;
-            bodyVisible = false; properties.Clear();
+            bodyVisible = false; stickOnRight = true; properties.Clear();
+            rightArmLength = leftArmLength = stickRestFit = throttleRestFit = 0f;
         }
     }
 }

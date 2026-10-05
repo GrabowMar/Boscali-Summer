@@ -79,6 +79,33 @@ def author(d: dict) -> tuple[dict, dict]:
     keep = ~(hose | helmet)
     body_tris = tris[keep].tolist()
 
+    # Native trainer cameras sit at the head pivot, behind/below the nominal
+    # helmet eye. Lower the raised first-person vest/collar, not the camera or
+    # skeleton. The monotone chest-frame compression keeps the suit closed;
+    # its influence tapers out completely before arm-dominant skin vertices.
+    original_v=v.copy()
+    _,seam_groups=np.unique(np.round(v,10),axis=0,return_inverse=True)
+    arm_fraction=influences[:,4:10].sum(axis=1)
+    seam_arm=np.zeros(seam_groups.max()+1);np.maximum.at(seam_arm,seam_groups,arm_fraction)
+    taper=np.clip((seam_arm[seam_groups]-.15)/.35,0,1)
+    garment=1-taper*taper*(3-2*taper)
+    chest_local=np.c_[v,np.ones(len(v))]@bind[1].T
+    depression=np.maximum(0,chest_local[:,1]-.0018)*.8*garment
+    lowered=depression>1e-12
+    chest_local[lowered,1]-=depression[lowered]
+    v[lowered]=(chest_local[lowered]@np.linalg.inv(bind[1]).T)[:,:3]
+    assert np.array_equal(v[arm_fraction>=.5],original_v[arm_fraction>=.5]),'Arm-dominant geometry moved during vest adaptation.'
+    # Recompute only the changed garment shading; gloves/forearms retain their
+    # reviewed geometry and attributes. Shared seam positions deform together.
+    vectors=np.cross(v[tris[keep,1]]-v[tris[keep,0]],v[tris[keep,2]]-v[tris[keep,0]])
+    garment_normals=np.zeros((seam_groups.max()+1,3))
+    for slot in range(3):np.add.at(garment_normals,seam_groups[tris[keep,slot]],vectors)
+    for i in np.flatnonzero(lowered):
+        shade=garment_normals[seam_groups[i]]
+        if np.linalg.norm(shade)<1e-20:continue
+        n[i]=shade/np.linalg.norm(shade)
+        tangent[i,:3]-=n[i]*np.dot(tangent[i,:3],n[i]);tangent[i,:3]/=np.linalg.norm(tangent[i,:3])
+
     # Geometric adjacency crosses UV seams, but the exported vertices keep them.
     key_map = {}; canonical = []
     for point in v:
@@ -101,8 +128,9 @@ def author(d: dict) -> tuple[dict, dict]:
             key = tuple(sorted((ca, cb))); body_edges[key] += 1
             representatives[(ca, cb)] = (a, b)
 
-    # Cap newly exposed collar/connector boundaries, keeping original garment UVs.
-    # Each cap is recessed and follows the adjoining body's skinning weights.
+    # Close the tiny connectors and line the broad neck opening with recessed
+    # textured cloth. Upright helmet cameras see this surface: neither a flat
+    # constant-colour plate nor an open view into the suit is acceptable.
     boundary = {(a, b): (a, b) for a, b in representatives
                 if body_edges[tuple(sorted((a, b)))] == 1 and original_edges[tuple(sorted((a, b)))] == 2}
     loops = []
@@ -115,6 +143,10 @@ def author(d: dict) -> tuple[dict, dict]:
             if current == path[0]:
                 loops.append(path[:-1]); break
         if current != path[0]: raise ValueError('Removal boundary is open; refusing a broken collar cap.')
+
+    neck_loop = max(loops, key=len)
+    assert len(neck_loop) == 36 and sorted(map(len, loops)) == [5, 8, 36], 'Native neck/connector boundaries changed.'
+    neck_boundary_ids = [representatives[(key,neck_loop[(i+1)%len(neck_loop)])][0] for i,key in enumerate(neck_loop)]
 
     vertices = v.tolist(); normals = n.tolist(); tangents = tangent.tolist(); uvs = uv.tolist()
     bone_weights = influences.tolist()
@@ -253,6 +285,7 @@ def author(d: dict) -> tuple[dict, dict]:
 
     cap_triangles = 0
     cap_winding_dots = []; cap_coverage_errors = []; cap_seams = []
+    lining_vertices = 0; lining_triangles = 0; lining_depths = []
     for loop in loops:
         boundary_ids = [representatives[(key,loop[(i+1)%len(loop)])][0] for i,key in enumerate(loop)]
         points = v[boundary_ids]; center = np.mean(points, axis=0)
@@ -285,6 +318,82 @@ def author(d: dict) -> tuple[dict, dict]:
         relative_error=abs(coverage-abs(signed_area))/abs(signed_area)
         assert relative_error<1e-10,'Cap triangulation does not cover the boundary exactly.'
         cap_coverage_errors.append(relative_error)
+        if loop is neck_loop:
+            # Interior refinement leaves every original garment seam vertex
+            # untouched. A distance-to-border recess produces a continuous
+            # curved lining rather than disconnected recessed ear cones.
+            lo = projected.min(axis=0); span = np.ptp(projected,axis=0)
+            records = [(points[i],projected[i],influences[boundary_ids[i]]) for i in range(len(points))]
+            boundary_edges = {tuple(sorted((i,(i+1)%len(points)))) for i in range(len(points))}
+            mids = {}; refined = []
+            def lining_mid(a,b):
+                edge=tuple(sorted((a,b)))
+                if edge not in mids:
+                    mids[edge]=len(records);records.append(tuple((records[a][i]+records[b][i])*.5 for i in range(3)))
+                return mids[edge]
+            for a,b,c in ears:
+                ab=tuple(sorted((a,b)))not in boundary_edges;bc=tuple(sorted((b,c)))not in boundary_edges;ca=tuple(sorted((c,a)))not in boundary_edges
+                if ab and bc and ca:
+                    x,y,z=lining_mid(a,b),lining_mid(b,c),lining_mid(c,a);refined += [[a,x,z],[x,b,y],[z,y,c],[x,y,z]]
+                elif ab and bc:
+                    x,y=lining_mid(a,b),lining_mid(b,c);refined += [[b,y,x],[a,x,c],[x,y,c]]
+                elif bc and ca:
+                    y,z=lining_mid(b,c),lining_mid(c,a);refined += [[c,z,y],[b,y,a],[y,z,a]]
+                elif ca and ab:
+                    z,x=lining_mid(c,a),lining_mid(a,b);refined += [[a,x,z],[c,z,b],[z,x,b]]
+                elif ab:
+                    x=lining_mid(a,b);refined += [[a,x,c],[x,b,c]]
+                elif bc:
+                    y=lining_mid(b,c);refined += [[b,y,a],[y,c,a]]
+                elif ca:
+                    z=lining_mid(c,a);refined += [[c,z,b],[z,a,b]]
+                else:refined.append([a,b,c])
+            faces=[]
+            for a,b,c in refined:
+                middle=len(records);records.append(tuple((records[a][i]+records[b][i]+records[c][i])/3 for i in range(3)))
+                faces += [[a,b,middle],[b,c,middle],[c,a,middle]]
+            segments=[(projected[i],projected[(i+1)%len(points)]) for i in range(len(points))]
+            def border_distance(point):
+                return min(np.linalg.norm(point-(a+(b-a)*np.clip(np.dot(point-a,b-a)/np.dot(b-a,b-a),0,1))) for a,b in segments)
+            distances=np.array([border_distance(r[1]) for r in records]);distances[:len(points)]=0
+            depths=.00065*np.sin(np.clip(distances/max(distances),0,1)*np.pi*.5)**2
+            lining_depths.extend(depths.tolist())
+            local_points=np.array([r[0]-normal*depth for r,depth in zip(records,depths)])
+            smooth=np.zeros_like(local_points)
+            incident=defaultdict(list)
+            for a,b,c in faces:
+                vector=np.cross(local_points[b]-local_points[a],local_points[c]-local_points[a])
+                dot=float(np.dot(vector,normal)/np.linalg.norm(vector));assert dot>0,'Lining winding opposes its outward normal.'
+                cap_winding_dots.append(dot)
+                for i in (a,b,c):smooth[i]+=vector;incident[i].append(vector/np.linalg.norm(vector))
+            smooth/=np.linalg.norm(smooth,axis=1)[:,None]
+            ids=[]
+            for i,(base,point,influence) in enumerate(records):
+                shade=smooth[i]
+                if i<len(points):
+                    # A cloth lip can crease, while shading stays curved and
+                    # smoothly approaches the original garment at the seam.
+                    shade=shade+n[boundary_ids[i]]*.2;shade/=np.linalg.norm(shade)
+                # Narrow concave cloth facets can otherwise receive a smooth
+                # normal pointing through their back. Preserve as much local
+                # curvature as each incident outward face permits.
+                blend=1.
+                for face_normal in incident[i]:
+                    baseline=float(np.dot(normal,face_normal));margin=min(.001,baseline*.5)
+                    facing=float(np.dot(shade,face_normal))
+                    if facing<margin:blend=min(blend,(baseline-margin)/(baseline-facing))
+                shade=normal+(shade-normal)*max(0,blend*.999999);shade/=np.linalg.norm(shade)
+                assert all(np.dot(shade,face_normal)>0 for face_normal in incident[i]), 'Lining shade normal points through a face.'
+                tx=axis-shade*np.dot(axis,shade);tx/=np.linalg.norm(tx)
+                # Verified ribbed olive sleeve cloth, with no skin/hose texels.
+                coord=np.array([.47,.59])+(point-lo)/span*np.array([.10,.13])
+                ids.append(add(local_points[i],shade,np.r_[tx,1.],coord,influence))
+            cap_seams.extend(zip(ids[:len(points)],boundary_ids))
+            output.extend([[ids[i] for i in face] for face in faces])
+            lining_vertices=len(ids);lining_triangles=len(faces);cap_triangles+=len(faces)
+            lining_coverage=sum(turn(records[a][1],records[b][1],records[c][1]) for a,b,c in faces)
+            assert abs(lining_coverage-abs(signed_area))/abs(signed_area)<1e-10,'Lining refinement changes polygon coverage.'
+            continue
         # A plain olive fabric texel, avoiding stretched skin/corrugated hose.
         coord = np.array([.155,.242]); tx = np.r_[axis,1.]
         ring = [add(v[i],normal,tx,coord,influences[i]) for i in boundary_ids]
@@ -390,11 +499,16 @@ def author(d: dict) -> tuple[dict, dict]:
         vertices=np.asarray(vertices)[used].reshape(-1).tolist(),normals=np.asarray(normals)[used].reshape(-1).tolist(),
         tangents=np.asarray(tangents)[used].reshape(-1).tolist(),uv=np.asarray(uvs)[used].reshape(-1).tolist(),
         triangles=[remap[i] for tri in output for i in tri],boneIndices=final_indices,boneWeights=final_weights,
-        authoring='Native-derived cockpit-only mesh: explicit head/neck/hose removal, recessed collar caps, two localized glove/fingertip rounding passes and fitted smooth cuff rims.',
+        authoring='Native-derived cockpit-only mesh: explicit head/neck/hose removal, recessed curved cloth neck lining and connector caps, two localized glove/fingertip rounding passes and fitted smooth cuff rims.',
         boneOrder=BONES)
     stats=dict(nativeVertices=len(v),nativeTriangles=len(tris),vertices=len(used),triangles=len(output),
         removedHoseTriangles=int(hose.sum()),removedHeadNeckTriangles=int(helmet.sum()),collarCapLoops=len(loops),
         collarCapTriangles=cap_triangles,cuffTriangles=cuff_triangles,handEdgeMidpoints=len(midpoints),terminalFingerEdgeMidpoints=len(second_midpoints),
+        neckLiningVertices=lining_vertices,neckLiningTriangles=lining_triangles,neckLiningSeamEdges=len(neck_loop),
+        maximumNeckLiningRecessMetres=max(lining_depths)*100,neckLiningClothUvRect=[[.47,.59],[.57,.72]],
+        upperGarmentCompressionStartChestMetres=.18,upperGarmentHeightScale=.2,
+        upperGarmentArmTaperWeights=[.15,.5],upperGarmentMaximumDepressionMetres=float(depression[np.unique(tris[keep])].max()*100),
+        upperGarmentChangedNativeVertices=int(lowered[np.unique(tris[keep])].sum()),armDominantGeometryPreserved=True,
         nativeBindposePreserved=bool(np.array_equal(np.asarray(result['bindposes']),np.asarray(d['bindposes']))),
         headNeckInfluencesRemaining=0,gloveRoundingPassLimitMetres=.0045,terminalRoundingPassLimitMetres=.004,
         minimumCapOutwardWindingDot=min(cap_winding_dots),maximumCapCoverageRelativeError=max(cap_coverage_errors),
@@ -411,6 +525,10 @@ def author(d: dict) -> tuple[dict, dict]:
     physical={};physical_ids=[physical.setdefault(tuple(np.round(point,10)),len(physical))for point in final_v]
     physical_faces=Counter(tuple(sorted(physical_ids[i]for i in tri))for tri in final_t)
     assert all(count==1 for count in physical_faces.values()),'Duplicate authored geometry.'
+    physical_edges=Counter(tuple(sorted((physical_ids[a],physical_ids[b]))) for tri in final_t
+                           for a,b in ((tri[0],tri[1]),(tri[1],tri[2]),(tri[2],tri[0])))
+    neck_edges=[physical[tuple(np.round(v[i],10))] for i in neck_boundary_ids]
+    assert all(physical_edges[tuple(sorted((a,b)))]==2 for a,b in zip(neck_edges,neck_edges[1:]+neck_edges[:1])), 'First-person neck lining is not continuously closed.'
     final_i=np.asarray(result['boneIndices']).reshape(-1,4);final_w=np.asarray(result['boneWeights']).reshape(-1,4)
     assert not (final_w*((final_i==2)|(final_i==3))).any(),'Foreground head/neck weights remain.'
     return result,stats

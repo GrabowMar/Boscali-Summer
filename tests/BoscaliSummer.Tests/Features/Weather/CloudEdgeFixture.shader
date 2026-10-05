@@ -19,6 +19,8 @@ Shader "Hidden/Boscali/CloudEdgeFixture"
             float _CloudCheckerOn;
             float _CloudEdgeGap;
             float _CloudEdgeDistance;
+            float _CloudShapePattern;
+            float3 _CloudCameraPos;
             struct Varying { float4 position : SV_POSITION; };
             struct Output { float4 colour : SV_Target0; float4 depth : SV_Target1; };
             Varying vert(uint id : SV_VertexID)
@@ -39,6 +41,20 @@ Shader "Hidden/Boscali/CloudEdgeFixture"
                 float2 uv = pixel * _CloudLowResSize.zw;
                 float3 ray = lerp(lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x),
                     lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x), uv.y);
+                if (_CloudShapePattern > 0.5)
+                {
+                    ray = normalize(ray);
+                    distance = (800.0 - _CloudCameraPos.z) / ray.z;
+                    float2 samplePosition = (_CloudCameraPos + ray * distance).xy;
+                    float a = 0.9 * (1.0 - smoothstep(0.72, 1.0, length((samplePosition - float2(-85, 35)) / float2(68, 34))));
+                    float b = 0.6 * (1.0 - smoothstep(0.72, 1.0, length((samplePosition - float2(60, -40)) / float2(30, 44))));
+                    float alpha = max(a, b);
+                    o.colour = float4(float3(0.75, 0.57, 0.28) * alpha, alpha);
+                    // Match MarchSky's empty-ray far distance. It has no visible cloud point.
+                    if (alpha < 0.002) distance = 220000.0;
+                    ray = lerp(lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x),
+                        lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x), uv.y);
+                }
                 float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.002 ? min(eye, distance / length(ray)) : eye;
                 o.depth = float4(upsampleDepth, distance, 0, 0);
                 return o;

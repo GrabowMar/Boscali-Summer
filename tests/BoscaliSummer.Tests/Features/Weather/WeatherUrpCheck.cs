@@ -49,7 +49,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
             AssetDatabase.CreateAsset(occluder, "Assets/Resources/Occluder.mat");
             var native = new Material(Shader.Find("Unlit/Color"));
             AssetDatabase.CreateAsset(native, "Assets/Resources/NativeColor.mat");
-            foreach (string name in new[] { "FlightCloud", "FlightCloudComposite" })
+            foreach (string name in new[] { "FlightCloud", "FlightCloudComposite", "CloudEdgeFixture" })
             {
                 Shader shader = Resources.Load<Shader>(name);
                 if (shader == null || ShaderUtil.ShaderHasError(shader))
@@ -93,6 +93,8 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         Check(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset, "URP pipeline active");
         QualitySettings.SetQualityLevel(Math.Max(0, QualitySettings.names.Length - 1), false);
         FxBus.SetAdaptiveCap(null);
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-shape-only") >= 0)
+        { TestCloudShapeRegistration(); yield break; }
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-motion-backbuffer") >= 0)
         {
             Application.runInBackground = true;
@@ -108,8 +110,11 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         }
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-matrix-only") >= 0)
         { TestRenderedView(); yield break; }
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-edge-only") >= 0)
+        { TestBudget(); TestCloudSilhouette(); yield break; }
         TestBudget();
         TestCloudSilhouette();
+        TestCloudShapeRegistration();
         IEnumerator motionChecks = TestMotionOcclusion();
         while (motionChecks.MoveNext()) yield return motionChecks.Current;
         IEnumerator materialChecks = TestMaterialOwnership();
@@ -167,7 +172,14 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         march.SetFloat("_WeatherEnvelopeOn", 1f);
         pass = new WeatherCloudPass();
         pass.Bind(main, volume, march, composite, true, true,
-            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection); });
+            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection, march); });
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-real-native-only") >= 0)
+        {
+            pass.Dispose();
+            IEnumerator nativeChecks = TestMovingRealClouds(march, composite, frame, bytes);
+            while (nativeChecks.MoveNext()) yield return nativeChecks.Current;
+            yield break;
+        }
         for (int i = 0; i < 64; i++) { RenderPair(); yield return null; }
         Check(pass.ExecutedFrame == Time.frameCount - 1, "Pass executes in completed rendered frame");
         Check(callbacks >= 62 && callbacks <= 64, "Only bound camera invokes preparation callback across 64 settling frames");
@@ -187,14 +199,14 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         log.AppendLine("Sky sample difference " + skyDifference.ToString("F3"));
 
         pass.Bind(main, volume, march, composite, true, false,
-            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection); });
+            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection, march); });
         for (int i = 0; i < 8; i++) { RenderPair(); yield return null; }
         var halfReference = Capture(mainTarget, "urp-half-reference.png");
         float meanDifference = MeanDelta(withCloud, halfReference);
         Check(meanDifference < .15f, "Settled temporal clouds stay close to full half-resolution reference");
         log.AppendLine("Mean settled temporal/reference RGB difference " + meanDifference.ToString("F4"));
         pass.Bind(main, volume, march, composite, true, true,
-            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection); });
+            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection, march); });
         Quaternion initial = main.transform.rotation;
         for (int i = 0; i < 48; i++)
         {
@@ -221,13 +233,97 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         Check(callbacks == before, "Disposed pass removes rendering callback");
         volume.enabled = true;
         pass.Bind(other, volume, march, composite, true, true,
-            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection); });
+            (camera, view, projection) => { callbacks++; uniforms.ApplyView(camera, camera.transform.position, view, projection, march); });
         for (int i = 0; i < 5; i++) { RenderPair(); yield return null; }
         Check(pass.ExecutedFrame == Time.frameCount - 1 && callbacks == before + 5,
             "Rebinding after teardown recovers only on new camera");
         Capture(otherTarget, "urp-rebound-cloud.png");
         pass.Dispose(); volume.enabled = false;
         Check(FxRtPool.UsedBytes == 0, "Rebind teardown leaves no cloud target ledger entries");
+        IEnumerator movingRealChecks = TestMovingRealClouds(march, composite, frame, bytes);
+        while (movingRealChecks.MoveNext()) yield return movingRealChecks.Current;
+    }
+
+    private IEnumerator TestMovingRealClouds(Material march, Material composite, CloudFrame frame, byte[] noiseBytes)
+    {
+        mainTarget.Release(); otherTarget.Release(); Destroy(mainTarget); Destroy(otherTarget);
+        mainTarget = new RenderTexture(1280, 720, 24) { name = "Temporal real cloud view" };
+        otherTarget = new RenderTexture(1280, 720, 24) { name = "Fresh real cloud view" };
+        mainTarget.Create(); otherTarget.Create();
+        main.targetTexture = mainTarget; main.enabled = true;
+        other.CopyFrom(main); other.targetTexture = otherTarget; other.enabled = true;
+        volume.enabled = true;
+        var referenceVolume = Instantiate(volume.gameObject).GetComponent<Renderer>();
+        var referenceComposite = new Material(composite); referenceVolume.sharedMaterial = referenceComposite;
+        var actualView = new CloudVolumeUniforms(); var referenceView = new CloudVolumeUniforms();
+        var freshPass = new WeatherCloudPass();
+        var mipNoise = new Texture3D(64, 64, 64, TextureFormat.RGBA32, true)
+        { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
+        mipNoise.SetPixelData(noiseBytes, 0); mipNoise.Apply(true, true); march.SetTexture("_CloudNoiseTex", mipNoise);
+        march.SetFloat("_CloudPixelAngle", 2f * Mathf.Tan(frame.FieldOfView * .5f * Mathf.Deg2Rad) / 360f);
+        pass.Bind(main, volume, march, composite, true, true,
+            (camera, view, projection) => actualView.ApplyView(camera, camera.transform.position, view, projection, march));
+        freshPass.Bind(other, referenceVolume, march, referenceComposite, true, false,
+            (camera, view, projection) => referenceView.ApplyView(camera, camera.transform.position, view, projection, march));
+        var actual = new Texture2D(640, 360, TextureFormat.RGBAFloat, false, true);
+        var fresh = new Texture2D(640, 360, TextureFormat.RGBAFloat, false, true);
+        Vector3 initialPosition = frame.CameraPosition; Quaternion initialRotation = Quaternion.LookRotation(frame.CameraForward);
+        float worstRgb = 0, worstAlpha = 0, worstCentroid = 0, worstStoppedVariation = 0, worstFreshStoppedVariation = 0;
+        Color[] previousActual = null, previousFresh = null;
+        for (int step = -32; step < 80; step++)
+        {
+            float phase = step < 0 ? 0 : step < 24 ? step : step < 48 ? 48 - step : 0;
+            main.transform.SetPositionAndRotation(initialPosition + new Vector3(phase * 10f, Mathf.Sin(phase * .08f) * 2f, phase * 3f),
+                Quaternion.Euler(Mathf.Sin(phase * .09f) * 1.2f, phase * .3f, 0) * initialRotation);
+            other.transform.SetPositionAndRotation(main.transform.position, main.transform.rotation);
+            volume.transform.position = main.transform.position; referenceVolume.transform.position = main.transform.position;
+            RenderPair();
+            Check(pass.Width == 640 && pass.Height == 360 && freshPass.Width == pass.Width && freshPass.Height == pass.Height,
+                "Paired real cloud views use equal descriptors within the shared budget " + step);
+            var actualTarget = (RenderTexture)composite.GetTexture("_CloudLowResColour");
+            var freshTarget = (RenderTexture)referenceComposite.GetTexture("_CloudLowResColour");
+            Check(actualTarget != null && freshTarget != null && actualTarget.width == freshTarget.width && actualTarget.height == freshTarget.height,
+                "Each URP pass owns a matching real cloud target " + step);
+            ReadTarget(actualTarget, actual); ReadTarget(freshTarget, fresh);
+            if (step >= 0)
+            {
+                Color[] a = actual.GetPixels(), b = fresh.GetPixels();
+                float aa = 0, ba = 0, rgb = 0, alpha = 0; Vector2 ac = Vector2.zero, bc = Vector2.zero;
+                for (int p = 0; p < a.Length; p++)
+                {
+                    Vector2 pixel = new Vector2(p % actual.width, p / actual.width);
+                    aa += a[p].a; ba += b[p].a; ac += pixel * a[p].a; bc += pixel * b[p].a;
+                    rgb += Delta(a[p], b[p]); alpha += Mathf.Abs(a[p].a - b[p].a);
+                }
+                Check(aa > 100 && ba > 100, "Both paired URP views contain real cloud volume " + step);
+                rgb /= a.Length; alpha /= a.Length; float centroid = (ac / aa - bc / ba).magnitude;
+                worstRgb = Mathf.Max(worstRgb, rgb); worstAlpha = Mathf.Max(worstAlpha, alpha); worstCentroid = Mathf.Max(worstCentroid, centroid);
+                if (step >= 60 && previousActual != null)
+                {
+                    float actualVariation = 0, freshVariation = 0;
+                    for (int p = 0; p < a.Length; p++)
+                    { actualVariation += Delta(a[p], previousActual[p]); freshVariation += Delta(b[p], previousFresh[p]); }
+                    worstStoppedVariation = Mathf.Max(worstStoppedVariation, actualVariation / a.Length);
+                    worstFreshStoppedVariation = Mathf.Max(worstFreshStoppedVariation, freshVariation / a.Length);
+                }
+                previousActual = a; previousFresh = b;
+                log.AppendLine("Real cloud motion " + step + " rgb=" + rgb.ToString("F5") + " alpha=" + alpha.ToString("F5") +
+                    " centroid=" + centroid.ToString("F3") + " mass=" + aa.ToString("F1") + "/" + ba.ToString("F1"));
+                if (step == 0 || step == 23 || step == 25 || step == 47 || step == 49 || step == 79)
+                {
+                    File.WriteAllBytes("real-cloud-temporal-" + step + ".png", actual.EncodeToPNG());
+                    File.WriteAllBytes("real-cloud-fresh-" + step + ".png", fresh.EncodeToPNG());
+                }
+            }
+            yield return null;
+        }
+        log.AppendLine("Real cloud motion worst rgb=" + worstRgb.ToString("F5") + " alpha=" + worstAlpha.ToString("F5") +
+            " centroid=" + worstCentroid.ToString("F3") + " stoppedVariation=" + worstStoppedVariation.ToString("F5") +
+            " freshStoppedVariation=" + worstFreshStoppedVariation.ToString("F5"));
+        pass.Dispose(); freshPass.Dispose(); volume.enabled = false; referenceVolume.enabled = false;
+        Destroy(referenceVolume.gameObject); Destroy(referenceComposite); Destroy(mipNoise); Destroy(actual); Destroy(fresh);
+        Check(FxRtPool.UsedBytes == 0, "Paired real cloud passes release their target budget");
+        Check(worstRgb < .15f, "Moving real cloud volume remains close to a fresh half-resolution URP reference");
     }
 
     private void TestBudget()
@@ -388,6 +484,112 @@ public sealed class WeatherUrpCheck : MonoBehaviour
             "History translation follows the rendered origin when the camera transform stays still");
         Destroy(material);
         Destroy(camera.gameObject); Destroy(parent);
+    }
+
+    private void TestCloudShapeRegistration()
+    {
+        const int width = 384, height = 216;
+        var temporal = new CloudLowRes(); var reference = new CloudLowRes(); var checkerReference = new CloudLowRes();
+        Check(temporal.Ensure(width, height) && reference.Ensure(width, height) && checkerReference.Ensure(width, height),
+            "Cloud-shape targets allocated");
+        var camera = new GameObject("World-anchored cloud pattern").AddComponent<Camera>(); camera.enabled = false;
+        camera.nearClipPlane = 1; camera.farClipPlane = 400000; camera.aspect = (float)width / height;
+        var uniforms = new CloudVolumeUniforms();
+        var temporalMarch = new Material(Resources.Load<Shader>("CloudEdgeFixture"));
+        var referenceMarch = new Material(Resources.Load<Shader>("CloudEdgeFixture"));
+        var checkerMarch = new Material(Resources.Load<Shader>("CloudEdgeFixture"));
+        temporalMarch.SetFloat("_CloudShapePattern", 1); referenceMarch.SetFloat("_CloudShapePattern", 1); checkerMarch.SetFloat("_CloudShapePattern", 1);
+        var temporalComposite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        var referenceComposite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        var checkerComposite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        var depth = new Texture2D(1, 1, TextureFormat.RFloat, false, true);
+        depth.SetPixelData(new[] { 1f / 400000f }, 0); depth.Apply();
+        var actual = new Texture2D(temporal.Width, temporal.Height, TextureFormat.RGBAFloat, false, true);
+        var fresh = new Texture2D(reference.Width, reference.Height, TextureFormat.RGBAFloat, false, true);
+        var checker = new Texture2D(reference.Width, reference.Height, TextureFormat.RGBAFloat, false, true);
+        float worstCentroid = 0, worstAlpha = 0, worstEdge = 0;
+        float worstCheckerCentroid = 0, worstCheckerEdge = 0, worstLag = 0, worstCheckerLag = 0;
+        Vector2 previousCentre = Vector2.zero, stopMin = new Vector2(float.MaxValue, float.MaxValue), stopMax = new Vector2(float.MinValue, float.MinValue);
+        Vector2 checkerStopMin = stopMin, checkerStopMax = stopMax;
+        for (int frame = -24; frame < 80; frame++)
+        {
+            float phase = frame < 0 ? 0 : frame < 24 ? frame : frame < 48 ? 48 - frame : 0;
+            camera.transform.SetPositionAndRotation(new Vector3(phase * 3, Mathf.Sin(phase * .08f) * .5f, phase * .9f),
+                Quaternion.Euler(Mathf.Sin(phase * .09f) * 1.2f, phase * .12f, 0));
+            uniforms.ApplyView(camera, camera.transform.position);
+            Shader.SetGlobalVector("_ZBufferParams", new Vector4(0, 0, 1, 0));
+            Shader.SetGlobalTexture("_CameraDepthTexture", depth);
+            var cmd = new CommandBuffer(); temporal.Record(cmd, temporalMarch, temporalComposite, true);
+            Graphics.ExecuteCommandBuffer(cmd); cmd.Release();
+            cmd = new CommandBuffer(); reference.Record(cmd, referenceMarch, referenceComposite, false);
+            Graphics.ExecuteCommandBuffer(cmd); cmd.Release();
+            checkerReference.InvalidateHistory();
+            cmd = new CommandBuffer(); checkerReference.Record(cmd, checkerMarch, checkerComposite, true);
+            Graphics.ExecuteCommandBuffer(cmd); cmd.Release();
+            ReadTarget((RenderTexture)temporalComposite.GetTexture("_CloudLowResColour"), actual);
+            ReadTarget((RenderTexture)referenceComposite.GetTexture("_CloudLowResColour"), fresh);
+            ReadTarget((RenderTexture)checkerComposite.GetTexture("_CloudLowResColour"), checker);
+            if (frame < 0) continue;
+            Color[] a = actual.GetPixels(), b = fresh.GetPixels(), q = checker.GetPixels();
+            Vector2 ac = Vector2.zero, bc = Vector2.zero, qc = Vector2.zero; float aa = 0, ba = 0, qa = 0, difference = 0;
+            float edgeDifference = 0, checkerEdgeDifference = 0; int edgeCount = 0;
+            for (int y = 0; y < actual.height; y++) for (int x = 0; x < actual.width; x++)
+            {
+                int p = y * actual.width + x; Vector2 pixel = new Vector2(x, y);
+                aa += a[p].a; ba += b[p].a; ac += pixel * a[p].a; bc += pixel * b[p].a;
+                qa += q[p].a; qc += pixel * q[p].a;
+                difference += Mathf.Abs(a[p].a - b[p].a);
+                if (x <= 0 || y <= 0 || x >= actual.width - 1 || y >= actual.height - 1) continue;
+                if (b[p].a < .3f || b[p].a >= .6f) continue;
+                float gradient = new Vector2(b[p + 1].a - b[p - 1].a, b[p + actual.width].a - b[p - actual.width].a).magnitude * .5f;
+                if (gradient < .05f) continue;
+                edgeDifference += Mathf.Abs(a[p].a - b[p].a) / gradient;
+                checkerEdgeDifference += Mathf.Abs(q[p].a - b[p].a) / gradient; edgeCount++;
+            }
+            Check(aa > 10 && ba > 10 && qa > 10 && edgeCount > 4, "Finite world-anchored pattern is visible " + frame);
+            ac /= aa; bc /= ba; qc /= qa;
+            float centroid = (ac - bc).magnitude, checkerCentroid = (qc - bc).magnitude;
+            Vector2 movement = bc - previousCentre;
+            float lag = frame > 0 && movement.sqrMagnitude > .0001f ? Vector2.Dot(bc - ac, movement.normalized) : 0;
+            float checkerLag = frame > 0 && movement.sqrMagnitude > .0001f ? Vector2.Dot(bc - qc, movement.normalized) : 0;
+            previousCentre = bc;
+            if (frame >= 60)
+            {
+                stopMin = Vector2.Min(stopMin, ac); stopMax = Vector2.Max(stopMax, ac);
+                checkerStopMin = Vector2.Min(checkerStopMin, qc); checkerStopMax = Vector2.Max(checkerStopMax, qc);
+            }
+            difference /= a.Length;
+            float edge = edgeDifference / Math.Max(1, edgeCount), checkerEdge = checkerEdgeDifference / Math.Max(1, edgeCount);
+            log.AppendLine("Cloud shape frame " + frame + " centroid=" + centroid.ToString("F4") +
+                " alpha=" + difference.ToString("F5") + " edge=" + edge.ToString("F4") + " checkerCentroid=" + checkerCentroid.ToString("F4") +
+                " lag=" + lag.ToString("F4") + " checkerLag=" + checkerLag.ToString("F4") + " checkerEdge=" + checkerEdge.ToString("F4"));
+            worstCentroid = Mathf.Max(worstCentroid, centroid); worstAlpha = Mathf.Max(worstAlpha, difference);
+            worstEdge = Mathf.Max(worstEdge, edge);
+            worstCheckerCentroid = Mathf.Max(worstCheckerCentroid, checkerCentroid); worstLag = Mathf.Max(worstLag, lag);
+            worstCheckerEdge = Mathf.Max(worstCheckerEdge, checkerEdge); worstCheckerLag = Mathf.Max(worstCheckerLag, checkerLag);
+            if (frame == 0 || frame == 23 || frame == 25 || frame == 47 || frame == 49 || frame == 79)
+            {
+                File.WriteAllBytes("cloud-shape-temporal-" + frame + ".png", actual.EncodeToPNG());
+                File.WriteAllBytes("cloud-shape-fresh-" + frame + ".png", fresh.EncodeToPNG());
+            }
+        }
+        log.AppendLine("Cloud shape worst centroid=" + worstCentroid.ToString("F4") + " alpha=" + worstAlpha.ToString("F5") +
+            " edge=" + worstEdge.ToString("F4") + " checkerCentroid=" + worstCheckerCentroid.ToString("F4") + " lag=" + worstLag.ToString("F4") +
+            " checkerLag=" + worstCheckerLag.ToString("F4") + " checkerEdge=" + worstCheckerEdge.ToString("F4") +
+            " stopJitter=" + (stopMax - stopMin).magnitude.ToString("F4") + " checkerStopJitter=" + (checkerStopMax - checkerStopMin).magnitude.ToString("F4"));
+        temporal.Dispose(); reference.Dispose(); checkerReference.Dispose(); Destroy(camera.gameObject); Destroy(depth); Destroy(actual); Destroy(fresh); Destroy(checker);
+        Destroy(temporalMarch); Destroy(referenceMarch); Destroy(temporalComposite); Destroy(referenceComposite);
+        Destroy(checkerMarch); Destroy(checkerComposite);
+        Check(FxRtPool.UsedBytes == 0, "Cloud-shape fixture releases targets");
+        float stopJitter = (stopMax - stopMin).magnitude, checkerStopJitter = (checkerStopMax - checkerStopMin).magnitude;
+        // The independently rendered fresh checker measures quarter-input quantization.
+        // Require bounded subpixel tracking and no added bias beyond that input floor,
+        // rather than demanding half-resolution detail the quarter march never sampled.
+        Check(worstCentroid < .5f && worstEdge < 1f && worstLag < .25f && stopJitter < .2f,
+            "Temporal cloud shape bounds displacement, directional lag and stopped jitter");
+        Check(worstCentroid <= worstCheckerCentroid + .05f && worstLag <= worstCheckerLag + .02f &&
+            worstEdge <= worstCheckerEdge + .05f && stopJitter <= checkerStopJitter * .5f,
+            "Temporal registration stays within fresh checker uncertainty and reduces stopped jitter");
     }
 
     private void RenderPair()
