@@ -157,7 +157,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly float rowHeight;
         private string measuredState, measuredReason, rowHelp;
         private float stateW, reasonW;
-        private const float PadX = 8f, CtlH = 20f, CallW = 40f, StarW = 24f, UnlaseW = 56f, Gap = 3f;
+        private const float ReasonX = 216f, PadX = 8f, CtlH = 20f, CallW = 40f, StarW = 24f, UnlaseW = 56f, Gap = 3f;
         private readonly AvFrame frame;
         private readonly Image rail;
         private readonly TMP_Text name, tier, cost, reason, state;
@@ -234,12 +234,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
             float right = x - 2f;
             OpsText.Place(name, PadX + 2f, 0f, 100f, h);
             OpsText.Place(tier, 112f, 0f, 54f, h);
-            OpsText.Place(cost, 166f, 0f, 40f, h);
+            OpsText.Place(cost, 172f, 0f, 40f, h); // right-aligned: keeps a few px between STRATEGIC and the price
             // The reason chip is shown only when it fits beside the whole state word; a long word (ARMED — PRESS AGAIN,
             // a lock reason) or a third control wins the room, and the price and reason then go to the row's hover help.
             if (measuredState != state.text) { measuredState = state.text; stateW = Natural(state); }
             if (measuredReason != reason.text) { measuredReason = reason.text; reasonW = Natural(reason); }
-            bool chip = reason.text.Length > 0 && 210f + reasonW + 6f + stateW <= right;
+            bool chip = reason.text.Length > 0 && ReasonX + reasonW + 6f + stateW <= right;
             string tip = reason.text.Length > 0 && !chip ? cost.text + " · " + reason.text : null;
             if (tip != rowHelp)
             {
@@ -248,8 +248,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 AvHelpTip.Attach(frame.gameObject, tip ?? "");
             }
             reason.gameObject.SetActive(chip);
-            if (chip) OpsText.Place(reason, 210f, 0f, reasonW + 2f, h);
-            float sx = chip ? 210f + reasonW + 6f : 210f;
+            if (chip) OpsText.Place(reason, ReasonX, 0f, reasonW + 2f, h);
+            float sx = chip ? ReasonX + reasonW + 6f : ReasonX;
             OpsText.Place(state, sx, 0f, Mathf.Max(20f, right - sx), h);
         }
 

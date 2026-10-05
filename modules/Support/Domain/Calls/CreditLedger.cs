@@ -37,6 +37,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public float Balance(ulong id) => wallets.TryGetValue(id, out Wallet w) ? w.Balance : 0f;
 
+        /// <summary>A real identity wallet that still belongs to <paramref name="faction"/> and is not faction-switch frozen.</summary>
+        public bool IsActive(ulong id, int faction, float now) =>
+            wallets.TryGetValue(id, out Wallet w) && w.Faction == faction && now >= w.FrozenUntil;
+
         public int Faction(ulong id) => wallets.TryGetValue(id, out Wallet w) ? w.Faction : 0;
 
         public float Credit(ulong id, float amount)

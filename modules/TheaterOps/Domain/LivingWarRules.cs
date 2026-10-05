@@ -40,25 +40,34 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         internal const float OfferSeconds = 60f;
         internal const float MinimumOfferGap = 120f;
         internal const float OperationLimitSeconds = 600f;
+        internal const float SnapshotFreshSeconds = 15f;
 
         internal static float Score(WarFrontRead front, TheaterWarPosture posture, out string kind)
         {
             kind = null;
             if (string.IsNullOrEmpty(front.Key) || float.IsNaN(front.X) || float.IsNaN(front.Z) ||
-                float.IsInfinity(front.X) || float.IsInfinity(front.Z)) return float.NegativeInfinity;
+                float.IsInfinity(front.X) || float.IsInfinity(front.Z) ||
+                float.IsNaN(front.Pressure) || float.IsInfinity(front.Pressure) ||
+                front.Pressure < 0f || front.Pressure > 1f ||
+                posture > TheaterWarPosture.Bold) return float.NegativeInfinity;
             int ours = Math.Max(0, front.Friendly);
             int theirs = Math.Max(0, front.Hostile);
+            if (ours == 0) return float.NegativeInfinity;
             if (front.Held && theirs > 0)
             {
                 kind = "DEFEND";
                 return 6f + Math.Min(8, theirs) + front.Pressure * 4f + (front.Objective ? 2f : 0f);
             }
-            if (ours == 0) return float.NegativeInfinity;
-            if (!front.Observed && theirs == 0)
+            if (front.Held) return float.NegativeInfinity;
+            if (!front.Observed)
             {
                 kind = "RECON";
                 return 1f + (front.Objective ? 1f : 0f) + front.Pressure;
             }
+            // Counts are observed local presence, not a combat-power prediction.
+            float minimumRatio = posture == TheaterWarPosture.Cautious ? 1.25f
+                : posture == TheaterWarPosture.Bold ? .75f : 1f;
+            if (ours < theirs * minimumRatio) return float.NegativeInfinity;
             kind = "ASSAULT";
             float appetite = posture == TheaterWarPosture.Bold ? 2f
                 : posture == TheaterWarPosture.Cautious ? -2f : 0f;

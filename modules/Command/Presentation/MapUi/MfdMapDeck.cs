@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (dynamicMap.mapImage != null)
                 {
-                    Image terrainImg = dynamicMap.mapImage.GetComponent<Image>();
+                    Image terrainImg = MfdTerrainRelief.MapImageComponent(dynamicMap.mapImage);
                     if (terrainImg != null)
                     {
                         if (terrainImage != terrainImg)

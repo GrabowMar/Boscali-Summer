@@ -1,13 +1,18 @@
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
-    /// The support net's cockpit line: armed / pending / recent refusal of the CALL flow.
+    /// The support net's cockpit line: armed / pending / recent refusal of the CALL flow, then the SPACE notices: a new TASKED post
+    /// (not your own) and a changed ENEMY INTENT, each a four-second line with one chime. The notices come only from the faction
+    /// mirror (<see cref="SpaceNoticeTracker"/> owns the rate limits); the QUIET setting silences them and nothing else. There is no
+    /// map pin: Support has no map-pin seam, and it must not reach into the map module for one.
     /// </summary>
     internal sealed class SupportHudLine : HudLineWidget
     {
@@ -15,7 +20,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private CallsController calls;
         private SupportManager manager;
-        private string text, detail;
+        private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
+        private string text, detail, noticeText;
+        private float noticeUntil;
         private HudTone tone;
 
         protected override string Owner => WidgetOwner;
@@ -32,6 +39,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         protected override bool WantsLine()
         {
             if (calls == null || manager == null) return false;
+            PollNotices();
             if (calls.Armed.HasValue)
             {
                 SupportActionId id = calls.Armed.Value;
@@ -42,11 +50,29 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (calls.Pending) { text = "CALL PENDING"; detail = ""; tone = HudTone.Info; return true; }
             if (!string.IsNullOrEmpty(calls.LastWords) && calls.LastWords.StartsWith("NEGATIVE")
-                && UnityEngine.Time.unscaledTime - calls.LastWordsAt < 4f)
+                && SupportManager.MissionNow() - calls.LastWordsAt < 4f)
             {
                 text = calls.LastWords; detail = ""; tone = HudTone.Warning; return true;
             }
+            if (noticeText != null && SupportManager.MissionNow() < noticeUntil)
+            {
+                text = noticeText; detail = ""; tone = HudTone.Info; return true;
+            }
             return false;
+        }
+
+        private void PollNotices()
+        {
+            SpaceFeedMirror mirror = manager.SpaceMirror;
+            bool quiet = manager.Settings != null && manager.Settings.QuietNotices.Value;
+            float now = SupportManager.MissionNow();
+            // Mission time restarted (a new scene): a notice from the old clock must not linger.
+            if (noticeText != null && noticeUntil - now > SpaceNoticeTracker.ToastSeconds + 0.5f) noticeText = null;
+            SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
+            if (notice.Kind == SpaceNoticeKind.None) return;
+            noticeText = notice.Text;
+            noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+            AvUiSound.Play(notice.Kind == SpaceNoticeKind.Tasked ? AvUiCue.Confirm : AvUiCue.Navigate);
         }
 
         protected override void Write(IHudLine line) => line.Set(tone, text, detail, 0f);

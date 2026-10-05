@@ -11,11 +11,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
 
         internal static bool TrySlot(FrontlineTracePoint[] points, int[] lengths, int traceCount,
             float targetX, float targetZ, int lane,
-            out float x, out float z, out float tangentX, out float tangentZ)
+            out float x, out float z, out float tangentX, out float tangentZ,
+            float maximumDistance = float.MaxValue)
         {
             x = z = tangentX = tangentZ = 0f;
             if (points == null || lengths == null || traceCount <= 0 ||
-                traceCount > lengths.Length || !Finite(targetX) || !Finite(targetZ) || lane < 0)
+                traceCount > lengths.Length || !Finite(targetX) || !Finite(targetZ) || lane < 0 ||
+                !Finite(maximumDistance) || maximumDistance < 0f)
                 return false;
 
             float best = float.MaxValue;
@@ -47,11 +49,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                 }
                 offset += length;
             }
-            if (best == float.MaxValue) return false;
+            if (best == float.MaxValue || best > maximumDistance * maximumDistance) return false;
             int column = lane == 0 ? 0 : (lane + 1) / 2 * (lane % 2 == 1 ? 1 : -1);
             x += column * LaneSpacing * tangentX;
             z += column * LaneSpacing * tangentZ;
-            return Finite(x) && Finite(z);
+            float targetDx = x - targetX, targetDz = z - targetZ;
+            return Finite(x) && Finite(z) &&
+                targetDx * targetDx + targetDz * targetDz <= maximumDistance * maximumDistance;
         }
 
         internal static bool ShouldAdvance(int ready, int alive, float waitSeconds) =>

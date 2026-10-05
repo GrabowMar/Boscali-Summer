@@ -74,6 +74,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly List<MeshRenderer> controlRenderers = new List<MeshRenderer>(16);
         private static readonly List<MeshRenderer> threatRenderers = new List<MeshRenderer>(16);
         private static readonly Dictionary<GameObject, bool> nativeGrid = new Dictionary<GameObject, bool>();
+        private static readonly HashSet<GameObject> otherLabels = new HashSet<GameObject>();
         private sealed class StemMark { internal Image Line, Foot; }
         private static readonly Dictionary<MapIcon, StemMark> stems = new Dictionary<MapIcon, StemMark>();
         private sealed class AirbaseMark { internal Image Image; }
@@ -88,9 +89,47 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             internal bool Airborne;
             internal Vector3 NativeScale;
         }
-        private static readonly FieldInfo NativeIconPosition =
-            typeof(MapIcon).GetField("globalPosition",
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        private static readonly AccessTools.FieldRef<MapIcon, Vector3> NativeIconPosition =
+            AccessTools.Field(typeof(MapIcon), "globalPosition") == null ? null
+                : AccessTools.FieldRefAccess<MapIcon, Vector3>("globalPosition");
+        // Per-frame GetComponent results, re-resolved only when the source object changes.
+        private static GameObject mapImageSource;
+        private static Image mapImageComponent;
+        private static RectTransform mapImageRect;
+        private static RectTransform canvasSource;
+        private static Canvas canvasOfSource;
+        private static readonly Dictionary<TargetMarker, Canvas> markerCanvases =
+            new Dictionary<TargetMarker, Canvas>(16);
+
+        private static void ResolveMapImage(GameObject go)
+        {
+            if (ReferenceEquals(go, mapImageSource) && mapImageSource != null) return;
+            mapImageSource = go;
+            mapImageComponent = go != null ? go.GetComponent<Image>() : null;
+            mapImageRect = go != null ? go.GetComponent<RectTransform>() : null;
+        }
+
+        internal static Image MapImageComponent(GameObject go)
+        {
+            ResolveMapImage(go);
+            return mapImageComponent;
+        }
+
+        internal static RectTransform MapImageRect(GameObject go)
+        {
+            ResolveMapImage(go);
+            return mapImageRect;
+        }
+
+        private static Canvas ViewportCanvas(RectTransform viewport)
+        {
+            if (!ReferenceEquals(viewport, canvasSource) || canvasOfSource == null)
+            {
+                canvasSource = viewport;
+                canvasOfSource = viewport.GetComponentInParent<Canvas>();
+            }
+            return canvasOfSource;
+        }
         private static readonly Dictionary<MapIcon, IconFix> iconFixes =
             new Dictionary<MapIcon, IconFix>();
         private static readonly List<MapIcon> staleIconFixes = new List<MapIcon>(64);
@@ -196,7 +235,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             RectTransform viewport = owner.mapBackground.rectTransform;
             Rect bounds = viewport.rect;
             if (bounds.width <= 0f || bounds.height <= 0f) return false;
-            Canvas canvas = viewport.GetComponentInParent<Canvas>();
+            Canvas canvas = ViewportCanvas(viewport);
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, screen,
@@ -258,7 +297,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null || map.mapImage == null) return;
-            Image image = map.mapImage.GetComponent<Image>();
+            Image image = MapImageComponent(map.mapImage);
             if (image == null || image.sprite == null)
             {
                 Restore();
@@ -333,7 +372,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (camera == null || map?.mapBackground == null || map.mapImage == null)
                 return false;
             RectTransform viewport = map.mapBackground.rectTransform;
-            RectTransform imageRect = map.mapImage.GetComponent<RectTransform>();
+            RectTransform imageRect = MapImageRect(map.mapImage);
             Rect bounds = viewport.rect;
             if (imageRect == null || bounds.width <= 0f || bounds.height <= 0f ||
                 imageRect.rect.width <= 0f || imageRect.rect.height <= 0f) return false;
@@ -828,7 +867,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 // The native map has already chosen the faction-visible track position.
                 // Its Y value is the observed altitude, not the unit's hidden true position.
-                fix.Altitude = ((Vector3)NativeIconPosition.GetValue(icon)).y / mapDisplayFactor;
+                fix.Altitude = NativeIconPosition(icon).y / mapDisplayFactor;
                 fix.Airborne = true;
             }
             if (icon is UnitMapIcon unitIcon && unitIcon.unit?.definition?.mapOrient == true)
@@ -844,13 +883,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     nativeAngle = headingMark.Native;
                 else headingMark.Native = nativeAngle;
             }
-            PlaceProjectedIcon(icon, fix, owner.mapImage.GetComponent<RectTransform>().rect);
+            PlaceProjectedIcon(icon, fix, MapImageRect(owner.mapImage).rect);
         }
 
         private static void ReprojectCachedIcons()
         {
             if (owner?.mapImage == null) return;
-            RectTransform imageRect = owner.mapImage.GetComponent<RectTransform>();
+            RectTransform imageRect = MapImageRect(owner.mapImage);
             if (imageRect == null) return;
             Rect rect = imageRect.rect;
             staleIconFixes.Clear();
@@ -1002,7 +1041,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!IsDrawing || marker == null || mapDisplayFactor <= 0f ||
                 owner?.mapImage == null) return;
             Vector3 native = marker.localPosition;
-            RectTransform rect = owner.mapImage.GetComponent<RectTransform>();
+            RectTransform rect = MapImageRect(owner.mapImage);
             if (rect == null || !TryProject(native.x / mapDisplayFactor,
                     native.y / mapDisplayFactor, rect.rect, out Vector2 point)) return;
             Vector3 screen = rect.TransformPoint(new Vector3(point.x, point.y));
@@ -1030,7 +1069,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     labels.InitiallyEnabled[i] = text[i] != null && text[i].enabled;
                 markerLabels.Add(marker, labels);
             }
-            Canvas canvas = marker.GetComponentInParent<Canvas>();
+            if (!markerCanvases.TryGetValue(marker, out Canvas canvas) || canvas == null)
+            {
+                if (markerCanvases.Count >= 256) markerCanvases.Clear();
+                canvas = marker.GetComponentInParent<Canvas>();
+                markerCanvases[marker] = canvas;
+            }
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
             Vector2 point = RectTransformUtility.WorldToScreenPoint(uiCamera, marker.transform.position);
@@ -1094,7 +1138,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             position = default;
             if (!IsDrawing || map != owner) return false;
-            RectTransform rect = map.mapImage.GetComponent<RectTransform>();
+            RectTransform rect = MapImageRect(map.mapImage);
             Vector3 local = rect.InverseTransformPoint(Input.mousePosition);
             return TryUnproject(local, rect.rect, out position);
         }
@@ -1152,9 +1196,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < labels.childCount; i++)
             {
                 GameObject child = labels.GetChild(i).gameObject;
-                if (!child.name.StartsWith("mapGrid_", StringComparison.Ordinal) &&
-                    child.name != "MajorParent" && child.name != "MinorParent") continue;
-                if (!nativeGrid.ContainsKey(child)) nativeGrid.Add(child, child.activeSelf);
+                // GameObject.name allocates a string; decide each child once, not every frame.
+                if (!nativeGrid.ContainsKey(child))
+                {
+                    if (otherLabels.Contains(child)) continue;
+                    if (!child.name.StartsWith("mapGrid_", StringComparison.Ordinal) &&
+                        child.name != "MajorParent" && child.name != "MinorParent")
+                    {
+                        otherLabels.Add(child);
+                        continue;
+                    }
+                    nativeGrid.Add(child, child.activeSelf);
+                }
                 if (child.activeSelf) child.SetActive(false);
             }
         }
@@ -1207,7 +1260,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             clusterIndex.Clear();
             hoveredStackCount = 0;
             RectTransform viewport = owner.mapBackground.rectTransform;
-            Canvas canvas = viewport.GetComponentInParent<Canvas>();
+            Canvas canvas = ViewportCanvas(viewport);
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
             int activeClusters = 0;
@@ -1278,7 +1331,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             hoveredStackCount = 0;
             if (clusteredCount <= 0 || owner?.mapBackground == null) return;
             RectTransform viewport = owner.mapBackground.rectTransform;
-            Canvas canvas = viewport.GetComponentInParent<Canvas>();
+            Canvas canvas = ViewportCanvas(viewport);
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
             Vector2 mouse = Input.mousePosition;
@@ -1428,6 +1481,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             foreach (KeyValuePair<GameObject, bool> entry in nativeGrid)
                 if (entry.Key != null) entry.Key.SetActive(entry.Value);
             nativeGrid.Clear();
+            otherLabels.Clear();
             if (controlImage != null)
                 controlImage.enabled = controlWasEnabled &&
                     (Plugin.Settings?.Command?.FrontlinesOverlay?.Value ?? false);
@@ -1477,6 +1531,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Reset()
         {
             Restore();
+            markerCanvases.Clear();
             owner = null;
             source = null;
             sprite = null;
@@ -1508,7 +1563,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapX = mapY = 0f;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (!IsActive || map?.mapImage == null) return false;
-            RectTransform rect = map.mapImage.GetComponent<RectTransform>();
+            RectTransform rect = MfdTerrainRelief.MapImageRect(map.mapImage);
             if (rect == null || !MfdTerrainRelief.TryProject(worldX, worldZ, rect.rect, out Vector2 at))
                 return false;
             mapX = at.x;
