@@ -64,13 +64,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 return count;
             }
         }
+        /// <summary>CYBER BIRD JAM: the host sets the multiplier an enemy intrusion puts on this faction's task cooldowns (1 = none).</summary>
+        public float JamFactor { get; set; } = 1f;
+
         public float CooldownFactor
         {
             get
             {
+                float jam = SpaceRules.Finite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
                 for (int i = 0; i < health.Length; i++)
-                    if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor;
-                return 1f;
+                    if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
+                return jam;
             }
         }
 
