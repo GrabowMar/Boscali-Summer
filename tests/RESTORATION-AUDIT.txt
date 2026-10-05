@@ -1,0 +1,220 @@
+Deleted test restoration audit - 2026-10-03
+Recovery source: f9a2c07e^ (immediately before deletion of the tests tree).
+Production HEAD at start: 27c8983f5a2317fb19a52034a5418b1c4c15fd78
+Original inventory: 177 files. Restored original paths: 168. Retired obsolete paths: 9.
+
+What changed
+- Reviewed every original test, fixture, runner, stub, asmdef and project file against current ownership and APIs.
+- Migrated Features/Framework/Infrastructure paths and namespaces to Modules/Core and AvionicsUi/Pure.
+- Test runner discovers all zero-argument or assertion-callback Run entry points, including internal suites.
+  It reports each suite, continues after failures, counts assertions and returns a failing exit code.
+- Linked both restored projects in BoscaliSummer.sln; included every shipped stylesheet, including Portal.
+- Retired tests for removed OPS systems instead of restoring removed production systems.
+  Added CallsTests, CreditTests, SpaceTests and TheaterGridTests for current behavior.
+- Replaced stale UI/reflection/font assumptions and strengthened runners to reject missing/failing results.
+- Manifest checks use parsed JSON, current runtime font mapping and exact runtime icon glyphs; no deleted tools dependency.
+- Current CALLS render check exposed a missing font glyph in the favourite button. CallsPanel uses AvIcon.Star now.
+- Concurrent weather/immersion additions and production edits were preserved; their source links were merged into the test project.
+
+Validation (latest results and snapshot limitations are recorded below)
+- Integrated pure test run: 119 suites passed, 0 failed, 932186 assertions.
+- Unknown suite filter returns exit code 2 instead of silently succeeding.
+- All 21 PowerShell runners passed AST parsing.
+- AvBundleUnityCheck: PASS. KitGallery: PASS, 3519 text checks.
+- PatchProbe: PASS, protocol-28 credit/request/result/cruise wires, other retained wire contracts and 68 patch classes.
+- Initial main-worktree Release build passed before concurrent source edits.
+- Isolated HEAD plus the one-line CALLS glyph fix: Release build passed, 4 warnings, 0 errors.
+- Final main-worktree build is subject to concurrent Weather/Immersion edits; do not interpret isolated proof as that tree being green.
+- Unity fixtures and benches are offline checks. Live game, multiplayer, input and subjective acceptance are not covered.
+
+How to run
+dotnet build BoscaliSummer.sln -c Release
+dotnet run --project tests/BoscaliSummer.Tests -c Release
+dotnet run --project tests/BoscaliSummer.Tests -c Release -- Support
+dotnet run --project tests/BoscaliSummer.PatchProbe -c Release -- "<Nuclear Option directory>" "<BoscaliSummer.dll>"
+Unity runners are next to their fixtures and accept an editor path via -Unity.
+The pure project uses .NET 8. Concurrent environment-snapshot tests additionally reference the local game UnityEngine.CoreModule.
+
+Detailed feature audit companions
+BoscaliSummer.Tests/Features/Support/TEST-RESTORATION-AUDIT.txt
+BoscaliSummer.Tests/Features/Command/TEST-RESTORATION-AUDIT.txt (includes Progression)
+BoscaliSummer.Tests/Features/OTHER-TEST-RESTORATION-AUDIT.txt (remaining features and framework)
+
+Per-file original inventory (every deleted path accounted for)
+UPDATED, REVIEWED | tests/BoscaliSummer.PatchProbe/BoscaliSummer.PatchProbe.csproj
+UPDATED, REVIEWED | tests/BoscaliSummer.PatchProbe/Program.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Architecture/ModuleBoundaryTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/AvBundleManifestTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/AvBundleUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/AvKitGalleryUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/NOAvionicsKitChecks.asmdef
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/Run-AvBundleUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Avionics/Run-KitGallery.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/BoscaliSummer.Tests.csproj
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/AirSurvival/AirStationPolicyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/AceRadialMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/AutopilotHudCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/AutopilotLandTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/InteractionMenuUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/InteractionMenuUnityStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Autopilot/Run-InteractionMenuUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Campaign/MissionInstallPlanTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/BoscaliStockPreview.asmdef
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/CocUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/CommandTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/FactionResourceTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/FrontlineTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/GridLabelsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MapSymbologyUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MfdMissionLabelsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MfdMissionOverviewTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MfdNewsTickerTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MfdPanelTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MfdSecondaryObjectivesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/MissionDeskUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/OperationsBoardTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/RailUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/ReliefHolesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/ReliefRigTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/ReliefUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/ReliefUnityStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-CocUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-MapSymbologyUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-MissionDeskUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-RailUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-ReliefUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-SettingsUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/Run-StockMfdUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/SettingsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/SettingsUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/SettingsUnityStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/StockMfdUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/StrPanelTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/StrRevampTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/TargetPresetTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Command/ThreatEnvelopeTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Comms/CommsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/ContractMarkerTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/ContractSharesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationDirectorTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationMarkerCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationTitlesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Events/EventDirectorTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Events/EventSelectorTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Events/EventsUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Events/EventsUnityStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Events/Run-EventsUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/CloudDeckTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/CookoffTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/FireScorchTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/ForestIndexTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/GroundSnapTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/HitEscalationTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/FireAndDestruction/ImpactScorchTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/HighCommand/HighCommandTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Hud/HudShellTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Hud/HudTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Hud/ThirdPersonHudLayoutTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Hud/WingviewMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Intel/AirDefenceTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Intel/AttackProfileTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Intel/KnownHostileTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Intel/ObservationTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Intel/RingSetTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Performance/FrameBudgetTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/PlayerSpawnPriority/PlayerSpawnPriorityTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/AceHuntHudCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/BoscaliPresentationPreview.asmdef
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/EmblemTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/PilotStudioTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/PlaneEngineMapTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/PresentationUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/ProgressionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/Run-PresentationUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Progression/SqdPanelTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/QoL/FuelHudCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/QoL/ObservationTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Radio/RadioHudCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Radio/RadioTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Session/SessionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Squad/AceCareerTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Squad/SnapshotRevisionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/BoscaliSupportPreview.asmdef
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/CyberNetworkTests.cs | Retired CYBER network implementation was removed by OPS M0.
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/FiresTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/JtacMarkTests.cs
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/OpsDomainTests.cs | Retired OPS command/resource model was removed by OPS M0; CALLS/CR rules now covered.
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/OpsLayoutTests.cs | Retired OPS layout math and multi-room UI were removed; current CALLS geometry is gated in Unity.
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/OrbitalTests.cs | Platform/grid/crew model removed; surviving OrbitMath and SAR cases retained in SpaceTests.cs.
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/RodBlastUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/Run-RodBlastUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/Run-SupportPanelUnityCheck.ps1
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/SpecOpsBalanceTests.cs | Retired detachment balance model was removed by OPS M0.
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/SpecOpsDetachmentTests.cs | Retired detachment model was removed by OPS M0.
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/SpecOpsLifecycleTests.cs | Retired field lifecycle model was removed by OPS M0.
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/SupportHudCopyTests.cs | Old SupportHudCopy domain removed; current outcome wording covered by CallsTests.cs.
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/SupportPanelUnityCheck.Gate.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/SupportPanelUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Support/SupportTests.cs
+RETIRED | tests/BoscaliSummer.Tests/Features/Support/TeamRulesTests.cs | Retired faction/team OPS authority model removed; current credit ownership and isolation covered.
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/AreaResistanceTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/DirectorDecisionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/DirectorScenarioTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/FrontlineTacticsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/InfluenceTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/LivingWarRulesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/LogisticsTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/NavalTaskTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/OffensiveTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/PriorityTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/StaffLogTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/TheaterOps/TheaterOpsHudCopyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Trenches/Run-TrenchUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Trenches/TrenchGameStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Trenches/TrenchTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Trenches/TrenchUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/GarrisonCompositionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/GarrisonMarkerInfoTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/ParachuteUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/RooftopUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-ParachuteUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-RooftopUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-SoldierFactoryUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/SiegeMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/SoldierFactoryUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/StrongpointHitPolicyTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/TroopDeploymentTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/UrbanRuinMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/UrbanCombat/WarzoneDressingMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/BoscaliWeatherEnv.asmdef
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/CanopyScoringTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/CloudBench.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/CloudBodiesTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/CloudDressingStubs.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/CloudNoiseTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/LightningMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/RainSkyMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/RainVisualMathTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/Run-CloudBench.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/Run-WeatherEnvUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/Run-WeatherUnityCheck.ps1
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherDebugTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherEnvUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherFieldTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherForecastTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherRegimeTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Features/Weather/WeatherUnityCheck.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Framework/FrameworkTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Framework/FxBusTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Framework/FxRegistryTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Framework/WingApiVersionTests.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/Program.cs
+UPDATED, REVIEWED | tests/BoscaliSummer.Tests/TestAssert.cs
+UPDATED, REVIEWED | tests/ingame/fui-kit.json
+UPDATED, REVIEWED | tests/ingame/visuals.json
+UPDATED, REVIEWED | tests/ingame/weather-clouds.json
+UPDATED, REVIEWED | tests/ingame/weather-fair.json
+UPDATED, REVIEWED | tests/ingame/weather-rain.json
+UPDATED, REVIEWED | tests/ingame/weather-warm-front.json
+UPDATED, REVIEWED | tests/ingame/wingview.json

@@ -2,21 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
-
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     internal static class PilotPortrait
     {
-        private static readonly Dictionary<string, Sprite> portraits = new Dictionary<string, Sprite>();
+        private const int MaxCachedPortraits = 256;
+        private static readonly Dictionary<PortraitSelection, Sprite> portraits = new Dictionary<PortraitSelection, Sprite>();
         private static byte[] layers;
         private static bool loadAttempted;
 
@@ -26,12 +20,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public static Sprite ForSelection(PortraitSelection selection)
         {
             selection = PilotPortraitGenerator.Normalize(selection);
-            string key = $"Custom_{(int)selection.Body}_{selection.Face}_{selection.Hair}_{selection.Uniform}_{selection.Backdrop}";
-            if (portraits.TryGetValue(key, out Sprite portrait)) return portrait;
-            if (!LoadLayers()) return null;
+            if (portraits.TryGetValue(selection, out Sprite portrait)) return portrait;
+            // Consumers borrow these sprites. At the ceiling, fail closed instead of evicting an image still displayed.
+            if (portraits.Count >= MaxCachedPortraits || !LoadLayers()) return null;
 
+            string key = $"{(int)selection.Body}_{selection.Face}_{selection.Hair}_{selection.Uniform}_{selection.Accessory}_{selection.Backdrop}";
             portrait = Create(key, PilotPortraitGenerator.Compose(selection, layers));
-            portraits.Add(key, portrait);
+            portraits.Add(selection, portrait);
             return portrait;
         }
 
@@ -43,8 +38,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (!LoadLayers()) return null;
             byte[] pixels = PilotPortraitGenerator.Compose(PilotPortraitGenerator.Normalize(selection), layers);
-            if (previewTexture == null)
+            if (previewTexture == null || previewSprite == null ||
+                previewTexture.width != PilotPortraitGenerator.Width || previewTexture.height != PilotPortraitGenerator.Height)
             {
+                DestroyPreview();
                 previewTexture = new Texture2D(PilotPortraitGenerator.Width, PilotPortraitGenerator.Height, TextureFormat.RGBA32, mipChain: false)
                 {
                     name = "WingCommand_Pilot_Preview", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp,
@@ -67,14 +64,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (pilot != null && pilot.HasCustomPortrait)
                 return ForSelection(pilot.PortraitSelection.Value);
 
-            string identity = pilot == null ? "WingCommand" : pilot.Name + "|" + pilot.Callsign;
-            if (portraits.TryGetValue(identity, out Sprite portrait)) return portrait;
-            if (!LoadLayers()) return null;
-
-            portrait = Create(identity, PilotPortraitGenerator.Compose(identity, layers));
-            portraits.Add(identity, portrait);
-            return portrait;
+            int faction = pilot != null && pilot.PortraitFaction >= 0 ? pilot.PortraitFaction : PortraitFactions.Local;
+            return ForIdentity(pilot == null ? "WingCommand" : pilot.Name + "|" + pilot.Callsign, PortraitRole.Pilot, faction);
         }
+
+        /// <summary>A service role changes clothing/equipment while the identity retains its face, body, hair and scene.</summary>
+        public static Sprite ForIdentity(string identity, PortraitRole role, int faction = -1) =>
+            ForSelection(PilotPortraitGenerator.Select(identity, role, faction));
 
         private static Sprite Create(string key, byte[] pixels)
         {
@@ -112,14 +108,17 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                         throw new InvalidDataException("Invalid portrait atlas dimensions.");
                     // LoadImage can change PNG storage to ARGB32; the compositor needs RGBA.
                     Color32[] pixels = texture.GetPixels32();
-                    layers = new byte[pixels.Length * 4];
+                    if (pixels.Length != PilotPortraitGenerator.AtlasWidth * PilotPortraitGenerator.AtlasHeight)
+                        throw new InvalidDataException("Invalid portrait atlas pixel count.");
+                    var loadedLayers = new byte[pixels.Length * 4];
                     for (int i = 0; i < pixels.Length; i++)
                     {
-                        layers[i * 4] = pixels[i].r;
-                        layers[i * 4 + 1] = pixels[i].g;
-                        layers[i * 4 + 2] = pixels[i].b;
-                        layers[i * 4 + 3] = pixels[i].a;
+                        loadedLayers[i * 4] = pixels[i].r;
+                        loadedLayers[i * 4 + 1] = pixels[i].g;
+                        loadedLayers[i * 4 + 2] = pixels[i].b;
+                        loadedLayers[i * 4 + 3] = pixels[i].a;
                     }
+                    layers = loadedLayers;
                 }
             }
             catch (Exception e)
@@ -128,7 +127,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             finally
             {
-                UnityEngine.Object.Destroy(texture);
+                DestroyObject(texture);
             }
             return layers != null;
         }
@@ -137,16 +136,29 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             foreach (Sprite portrait in portraits.Values)
             {
-                UnityEngine.Object.Destroy(portrait.texture);
-                UnityEngine.Object.Destroy(portrait);
+                if (portrait == null) continue;
+                DestroyObject(portrait.texture);
+                DestroyObject(portrait);
             }
             portraits.Clear();
-            if (previewTexture != null) UnityEngine.Object.Destroy(previewTexture);
-            if (previewSprite != null) UnityEngine.Object.Destroy(previewSprite);
-            previewTexture = null;
-            previewSprite = null;
+            DestroyPreview();
             layers = null;
             loadAttempted = false;
+        }
+
+        private static void DestroyPreview()
+        {
+            DestroyObject(previewTexture);
+            DestroyObject(previewSprite);
+            previewTexture = null;
+            previewSprite = null;
+        }
+
+        private static void DestroyObject(UnityEngine.Object value)
+        {
+            if (value == null) return;
+            if (Application.isPlaying) UnityEngine.Object.Destroy(value);
+            else UnityEngine.Object.DestroyImmediate(value);
         }
     }
 }

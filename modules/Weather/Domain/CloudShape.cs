@@ -76,6 +76,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 WeatherMath.Smoothstep(0.45f, 0.85f, smooth));
         }
 
+        /// <summary>Only a deep local column carries an anvil. A shallow dry cluster under
+        /// a storm shield remains rounded. Mirrored by LocalAnvil in the shader.</summary>
+        public static float LocalAnvil(float depth, float anvil)
+            => WeatherMath.Clamp01(anvil) * WeatherMath.Smoothstep(2400f, 6500f, depth);
+
+        /// <summary>Shallow cumulus rounds over; only a developed anvil pinches its stem.</summary>
+        public static float LocalDome(float dome, float anvil)
+            => WeatherMath.Lerp(Math.Min(1f, dome), dome, WeatherMath.Smoothstep(0.18f, 0.60f, anvil));
+
+        /// <summary>Height within one resolved body; zero for a degenerate/empty interval.</summary>
+        public static float LightingHeight(float y, float bottom, float top)
+            => top > bottom ? WeatherMath.Clamp01((y - bottom) / (top - bottom)) : 0f;
+
         /// <summary>
         /// Density kept at height fraction <paramref name="h"/> (0 base, 1 top).
         /// The height gradient eats the top; an anvil puts a shield back in the top quarter.

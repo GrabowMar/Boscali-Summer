@@ -1,0 +1,96 @@
+{
+  "unity": "C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe",
+  "groups": [
+    {
+      "id": "stock",
+      "title": "Stock MFD MAP TGT FAC HUD MIS",
+      "script": "tests/UI/Render-stock.ps1"
+    },
+    {
+      "id": "settings",
+      "title": "SET pilot and server",
+      "script": "tests/UI/Render-settings.ps1"
+    },
+    {
+      "id": "events",
+      "title": "EVN dispatch decisions archive",
+      "script": "tests/UI/Render-events.ps1"
+    },
+    {
+      "id": "com",
+      "title": "COM talk crew log map",
+      "script": "tests/UI/Render-com.ps1"
+    },
+    {
+      "id": "env",
+      "title": "ENV flight weather",
+      "script": "tests/UI/Render-env.ps1"
+    },
+    {
+      "id": "mission",
+      "title": "Mission contract desk",
+      "script": "tests/UI/Render-mission.ps1"
+    },
+    {
+      "id": "radial",
+      "title": "ACE interaction menu",
+      "script": "tests/UI/Render-radial.ps1"
+    },
+    {
+      "id": "radio",
+      "title": "RAD receiver station broadcast and music",
+      "script": "tests/UI/Render-radio.ps1"
+    },
+    {
+      "id": "hudlog",
+      "title": "HUD status flight cluster LOG Theater Wire",
+      "script": "tests/UI/Render-hudlog.ps1"
+    },
+    {
+      "id": "rail",
+      "title": "Map rail and bezel chrome",
+      "script": "tests/UI/Render-rail.ps1"
+    },
+    {
+      "id": "comenv-overlays",
+      "title": "COM cockpit markers and weather host console",
+      "script": "tests/UI/Render-comenv-overlays.ps1"
+    },
+    {
+      "id": "relief",
+      "title": "Terrain2 relief and native map interactions",
+      "script": "tests/UI/Render-relief.ps1"
+    },
+    {
+      "id": "relief-naval",
+      "title": "Naval relief and native map interactions",
+      "script": "tests/UI/Render-relief-naval.ps1"
+    },
+    {
+      "id": "event-alert",
+      "title": "Expanded and folded dispatch alert",
+      "script": "tests/UI/Render-event-alert.ps1"
+    },
+    {
+      "id": "map-overlays",
+      "title": "Frontline trenches threat heat COM map ink and aircraft history",
+      "script": "tests/UI/Render-map-overlays.ps1"
+    },
+    {
+      "id": "map-chrome",
+      "title": "Tactical backdrop wallpaper and adopted native map footer",
+      "script": "tests/UI/Render-map-chrome.ps1"
+    }
+  ],
+  "styles": {
+    "dir": "AvionicsUi",
+    "subdir": "NOAvionics",
+    "files": [
+      "avionics.fui.avss",
+      "avionics.portal.avss",
+      "avionics.steel.avss",
+      "avionics.phosphor.avss",
+      "avionics.ace.avss"
+    ]
+  }
+}

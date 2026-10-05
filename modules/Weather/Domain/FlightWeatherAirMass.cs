@@ -14,17 +14,24 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             Rain = rain;
             CloudMoisture = moisture;
-            VisualRain = Math.Max(rain, moisture * 0.3f);
-            Atmosphere = Math.Max(rain, moisture * 0.7f);
+            // Condensation wets exposed glass; it is not falling precipitation or global haze.
+            VisualRain = rain;
+            Atmosphere = rain;
         }
 
         internal static FlightWeatherAirMass Evaluate(WeatherPoint point, float altitude,
             bool insideCloud, float? forcedRain)
         {
+            return Evaluate(point, altitude, insideCloud ? 0.5f : 0f, forcedRain);
+        }
+
+        internal static FlightWeatherAirMass Evaluate(WeatherPoint point, float altitude,
+            float cloudDensity, float? forcedRain)
+        {
             float precipitation = forcedRain.HasValue
                 ? Clamp01(forcedRain.Value)
                 : Clamp01(point.RainRate / 20f) * VerticalRain(point, altitude);
-            float moisture = insideCloud ? 0.5f : 0f;
+            float moisture = WeatherMath.Smoothstep(0.025f, 0.65f, Clamp01(cloudDensity));
             return new FlightWeatherAirMass(precipitation, moisture);
         }
 
@@ -34,7 +41,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (altitude >= point.CloudTop) return 0f;
             float t = (altitude - point.CloudBase) /
                 Math.Max(1f, point.CloudTop - point.CloudBase);
-            return 0.7f * (1f - t);
+            return 1f - t * t * (3f - 2f * t);
         }
 
         private static float Clamp01(float value) =>

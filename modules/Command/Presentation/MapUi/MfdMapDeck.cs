@@ -59,6 +59,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Image terrainImage;
         private static bool terrainWasEnabled;
         private static Color terrainColor;
+        private static Image nativeBackground;
+        private static Color nativeBackgroundColor;
 
         private static readonly List<WallpaperFileEntry> discoveredWallpapers = new List<WallpaperFileEntry>();
         private static bool scannedWallpapers;
@@ -167,7 +169,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (dynamicMap.mapImage != null)
                 {
-                    Image terrainImg = dynamicMap.mapImage.GetComponent<Image>();
+                    Image terrainImg = MfdTerrainRelief.MapImageComponent(dynamicMap.mapImage);
                     if (terrainImg != null)
                     {
                         if (terrainImage != terrainImg)
@@ -185,7 +187,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                 }
                 if (dynamicMap.mapBackground != null)
+                {
+                    if (nativeBackground != dynamicMap.mapBackground)
+                    {
+                        if (nativeBackground != null) nativeBackground.color = nativeBackgroundColor;
+                        nativeBackground = dynamicMap.mapBackground;
+                        nativeBackgroundColor = nativeBackground.color;
+                    }
                     dynamicMap.mapBackground.color = Color.white.WithAlpha(0.68f);
+                }
             }
         }
 
@@ -257,6 +267,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 terrainImage.color = terrainColor;
             }
             terrainImage = null;
+            if (nativeBackground != null) nativeBackground.color = nativeBackgroundColor;
+            nativeBackground = null;
         }
 
         /// <summary>Mission-end counterpart to <see cref="Restore"/>.</summary>

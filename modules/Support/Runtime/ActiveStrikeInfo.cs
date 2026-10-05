@@ -13,8 +13,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly SupportActionId ActionId;
         public readonly GlobalPosition Target;
         public readonly float Radius;
-        public readonly float ImpactTime;
-        public readonly float ExpiryTime;
+        public readonly float ImpactTime; // mission seconds
+        public readonly float ExpiryTime; // mission seconds
 
         public ActiveStrikeInfo(
             int requestId, SupportActionId actionId, GlobalPosition target,

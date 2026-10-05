@@ -33,12 +33,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private const int PresetRows = 6;
         private const int MinPresetRows = 1;
         private const int TrackRows = 15;
-        private const int MinTrackRows = 4;
+        private const int MinTrackRows = 1;
         private const int EqBars = 24;
 
-        // Height of everything on a page except its list rows (measured tokens: pad, part heights, gaps).
-        // The list shows as many rows as the page has room for, so a short console pages instead of scrolling.
-        private const float DeckFixedHeight = 241f;
         private const float ListRowHeight = 33f;
 
         // Tooltips are swapped while a control is disabled, so a greyed key always says why.
@@ -505,13 +502,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             for (int i = 0; i < PresetRows; i++) stationRows[i].SetShown(i < shown);
         }
 
-        private static int FitRows(AvFlow page, float fixedHeight, int max, int min)
-        {
-            float viewport = page.ViewportHeight;
-            if (viewport <= 0f) return max;
-            return Mathf.Clamp(Mathf.FloorToInt((viewport - fixedHeight) / ListRowHeight), min, max);
-        }
-
         /// <summary>The level bar, the squelch gate drawn on it, and the two reports.</summary>
         private static void UpdateMeter()
         {
@@ -605,8 +595,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         private static void BuildDeck(AvFlow p)
         {
-            // The equalizer is the part that grows: it takes the height the track list does not need.
-            deckEq = p.Add(new AvEqualizer(p.Content, "NOW PLAYING", 40f), 1f);
+            // The decorative meter yields space to a track on the compact console and grows
+            // into the height that the track list does not need on larger displays.
+            deckEq = p.Add(new AvEqualizer(p.Content, "NOW PLAYING", 8f), 1f);
             deckEq.Help = "Level meter. It is decorative, not an audio analysis: the bars move while the deck is playing and settle when it is paused or stopped.";
             nowRow = p.Add(new AvRow(p.Content));
             nowRow.Help = "The track on the deck and its place in the folder. Click a track in the list below to play it.";
@@ -662,7 +653,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             int trackCount = manager.DeckTrackCount;
             int track = trackCount == 0 ? 0 : manager.DeckTrackIndex + 1;
             bool playing = manager.DeckEngaged;
-            FitTrackRows();
 
             string trackTitle = hasFolders ? manager.DeckCurrentTitle : "NO MUSIC FOUND";
             string position = hasFolders && trackCount > 0
@@ -710,6 +700,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             Gate(folderHeader[0], hasFolders && folder > 0, FolderPreviousTip, hasFolders ? FirstFolderTip : PlayNoTracksTip);
             Gate(folderHeader[1], hasFolders && folder + 1 < folders, FolderNextTip, hasFolders ? LastFolderTip : PlayNoTracksTip);
 
+            // Titles can wrap. Fit after applying the current title instead of reserving a fixed
+            // height, so every track advertised by the pager fits in the compact console.
+            FitTrackRows();
+
             int pages = Math.Max(1, (trackCount + trackShown - 1) / trackShown);
             trackPage = Mathf.Clamp(trackPage, 0, pages - 1);
             trackHeader.SetCaption(RangeText(trackPage, trackShown, trackCount, "NO TRACKS"));
@@ -720,8 +714,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             for (int i = 0; i < TrackRows; i++)
             {
                 AvRow row = trackRows[i];
-                row.SetShown(hasFolders && i < trackShown);
                 int index = trackPage * trackShown + i;
+                row.SetShown(hasFolders && i < trackShown && index < trackCount);
                 if (index >= trackCount)
                 {
                     row.Set(string.Empty, string.Empty, string.Empty, AvState.Inert);
@@ -755,6 +749,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 emptyAlert.Show(AvIcon.AlertTriangle, "NO MUSIC FOUND",
                     "Put OGG or WAV files in BepInEx/plugins/BoscaliSummer/Music, then press the rescan key. " +
                     "The folder key opens it.", AvState.Caution);
+            else if (trackCount == 0)
+                emptyAlert.Show(AvIcon.Music, "EMPTY MUSIC FOLDER",
+                    "Choose another folder with the arrow keys, or add OGG/WAV files and press RESCAN.", AvState.Info);
             else emptyAlert.Hide();
 
             console.Footer.Set(
@@ -767,7 +764,16 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         /// <summary>The track list shows as many rows as the page can hold, so a short console pages instead of scrolling.</summary>
         private static void FitTrackRows()
         {
-            int shown = FitRows(console.Page(TabDeck), DeckFixedHeight, TrackRows, MinTrackRows);
+            AvFlow page = console.Page(TabDeck);
+            float width = page.Inner;
+            float fixedHeight = 2f * AvGridTokens.Pad + 5f * AvGridTokens.Gap +
+                deckEq.Measure(width) + nowRow.Measure(width) + deckBar.Measure(width) +
+                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width);
+            float rowHeight = ListRowHeight;
+            foreach (AvRow row in trackRows)
+                if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
+            int shown = page.ViewportHeight <= 0f ? TrackRows : Mathf.Clamp(
+                Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinTrackRows, TrackRows);
             if (shown == trackShown) return;
             int first = trackPage * trackShown;
             trackShown = shown;
@@ -1070,7 +1076,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
                     TMP_Text label = AvText.Make(tickLayer, "Label", AvTextRole.Micro, RadioBands.Format(band, khz));
                     float labelLeft = Mathf.Clamp(x - 26f, 0f, Mathf.Max(0f, w - 52f));
-                    AvLay.Place(label.rectTransform, labelLeft, rulerTop + 12f, 52f, 14f);
+                    AvLay.Place(label.rectTransform, labelLeft, rulerTop + 12f, 52f, 18f);
                     label.alignment = x <= 26f ? TextAlignmentOptions.MidlineLeft
                         : x >= w - 26f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Center;
                     label.color = AvTheme.Dim;

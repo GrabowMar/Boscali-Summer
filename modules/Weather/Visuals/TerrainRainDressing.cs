@@ -3,13 +3,20 @@ using UnityEngine;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering;
+using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Game;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
     // Map-owned discovery is incremental and finite. Native materials and meshes stay untouched.
     internal sealed class TerrainRainDressing : IClientEffect
     {
-        private struct Surface { public MeshRenderer Renderer; public Mesh Mesh; public int Slot; public uint Indices; }
+        private struct Surface
+        {
+            public MeshRenderer Renderer; public Mesh Mesh; public int Slot; public uint Indices;
+            public float Wet, LastRain, LastTime, NextSample; public bool Initialized;
+        }
+        private readonly WeatherField historyField = new WeatherField();
         private readonly List<Transform> pending = new List<Transform>(1024);
         private readonly List<Surface> surfaces = new List<Surface>(256);
         private readonly List<Material> slots = new List<Material>(16);
@@ -33,6 +40,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int SkyColorId = Shader.PropertyToID("_SkyColor");
         private static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
         private static readonly int RippleTimeId = Shader.PropertyToID("_RippleTime");
+        private static readonly int WetFadeId = Shader.PropertyToID("_WetFade");
         internal int SurfaceCount => surfaces.Count;
 
         public string EffectId => "terrain-rain";
@@ -64,7 +72,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             rippleTime = time;
         }
 
-        internal void Update(Transform mapRoot, Camera camera, float rain, float deltaTime)
+        internal void Update(Transform mapRoot, Camera camera, float rain, float deltaTime,
+            WeatherField field = null, float missionTime = 0f, float? forcedRain = null)
         {
             if (map != mapRoot)
             {
@@ -77,7 +86,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             wetness = Mathf.MoveTowards(wetness, Mathf.Clamp01(rain),
                 Mathf.Max(0f, deltaTime) * (rain > wetness ? 1f / 35f : 1f / 180f));
             Discover();
-            if (wetness < 0.001f || surfaces.Count == 0) return;
+            if (surfaces.Count == 0) return;
             if (material == null)
             {
                 Shader shader = CanopyShaderBundle.GetTerrainShader();
@@ -85,6 +94,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
             GeometryUtility.CalculateFrustumPlanes(camera, planes);
+            float drawRange = AtmosphericSurfaceMath.GroundDrawRange(camera.transform.position.y - Datum.LocalSeaY);
             for (int i = 0; i < 8; i++) { nearest[i] = -1; distances[i] = float.MaxValue; }
             for (int i = 0; i < surfaces.Count; i++)
             {
@@ -94,7 +104,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     (camera.cullingMask & (1 << s.Renderer.gameObject.layer)) == 0) continue;
                 Bounds bounds = s.Renderer.bounds;
                 float distance = bounds.SqrDistance(camera.transform.position);
-                if (distance >= 1200f * 1200f || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
+                if (distance >= drawRange * drawRange || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
                 for (int j = 0; j < 8; j++)
                 {
                     if (distance >= distances[j]) continue;
@@ -103,19 +113,51 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 }
             }
             if (nearest[0] < 0) return;
-            properties.SetFloat(WetnessId, wetness);
-            properties.SetFloat(RainId, Mathf.Clamp01(rain));
             properties.SetVector(SunDirId, new Vector4(sunDirection.x, sunDirection.y, sunDirection.z, 0f));
             properties.SetColor(SunColorId, sunColor);
             properties.SetColor(SkyColorId, skyColor);
             properties.SetFloat(FogDensityId, fogDensity);
             properties.SetFloat(RippleTimeId, rippleTime);
+            properties.SetVector(WetFadeId, new Vector4(drawRange * 0.65f, drawRange, 0f, 0f));
             uint indexBudget = 300000; // At most 100,000 extra triangles on dense maps.
+            int sampleBudget = 2;
+            if (field != null) wetness = 0f;
             for (int i = 0; i < 8 && nearest[i] >= 0; i++)
             {
                 var s = surfaces[nearest[i]];
+                if (field != null && field.IsBuilt)
+                {
+                    if ((!s.Initialized || missionTime >= s.NextSample || missionTime < s.LastTime) && sampleBudget-- > 0)
+                    {
+                        GlobalPosition origin = s.Renderer.transform.GlobalPosition();
+                        Vector3 offset = s.Renderer.bounds.center - s.Renderer.transform.position;
+                        float gx = (float)origin.x + offset.x, gz = (float)origin.z + offset.z;
+                        if (!s.Initialized || missionTime < s.LastTime)
+                        {
+                            s.Wet = 0f;
+                            float start = Mathf.Max(field.Key.Epoch, missionTime - 180f);
+                            for (float time = start; time < missionTime; time += 15f)
+                            {
+                                historyField.Build(field.Key, time, field.HalfX, field.HalfZ, field.HourOfDay);
+                                float oldRain = forcedRain ?? Mathf.Clamp01(historyField.Sample(gx, gz).RainRate / 20f);
+                                s.Wet = AtmosphericSurfaceMath.AdvanceWetness(s.Wet, oldRain, Mathf.Min(15f, missionTime - time));
+                            }
+                            s.Initialized = true;
+                        }
+                        else s.Wet = AtmosphericSurfaceMath.AdvanceWetness(s.Wet, s.LastRain, Mathf.Max(0f, missionTime - s.LastTime));
+                        s.LastRain = forcedRain ?? Mathf.Clamp01(field.Sample(gx, gz).RainRate / 20f);
+                        s.LastTime = missionTime;
+                        s.NextSample = missionTime + 1f + (nearest[i] % 4) * 0.25f;
+                        surfaces[nearest[i]] = s;
+                    }
+                    wetness = Mathf.Max(wetness, s.Wet);
+                }
+                float surfaceWet = field != null ? s.Wet : wetness;
+                if (surfaceWet <= 0.001f) continue;
                 if (s.Indices > indexBudget) continue;
                 indexBudget -= s.Indices;
+                properties.SetFloat(WetnessId, surfaceWet);
+                properties.SetFloat(RainId, field != null ? s.LastRain : Mathf.Clamp01(rain));
                 Graphics.DrawMesh(s.Mesh, s.Renderer.localToWorldMatrix, material,
                     s.Renderer.gameObject.layer, camera, s.Slot, properties,
                     ShadowCastingMode.Off, false, null, LightProbeUsage.Off);

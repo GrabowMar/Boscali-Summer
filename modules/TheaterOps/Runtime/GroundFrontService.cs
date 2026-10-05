@@ -25,7 +25,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal static GroundFrontService Active { get; private set; }
 
         private const int MaximumGroups = 16;
+        private const int MaximumFactions = 8;
         private const int MaximumMembers = MaximumGroups * FrontlineTactics.GroupSize;
+        private const float AssignmentRadius = 12000f;
         private const float UpdateSeconds = 2f;
         private const float TraceSeconds = 5f;
         private const float JoinSeconds = 20f;
@@ -69,6 +71,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal FactionHQ HQ;
             internal string Key;
             internal bool Offensive;
+            internal bool Defending;
             internal bool Sealed;
             internal bool ReportedRally;
             internal int Formed;
@@ -84,6 +87,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             new Dictionary<GroundVehicle, Member>(MaximumMembers);
         private readonly List<Group> groups = new List<Group>(MaximumGroups);
         private readonly Dictionary<FactionHQ, FrontTrace> traces = new Dictionary<FactionHQ, FrontTrace>(8);
+        private readonly List<FactionHQ> factionHqs = new List<FactionHQ>(MaximumFactions);
 
         /// <summary>Chainloader's plugin list is fixed once the game runs; looked up once.</summary>
         private static int rtsInstalled = -1;
@@ -96,6 +100,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
         private int nextScanCell;
+        private int nextScanUnit;
+        private GridSquare[] scanCells;
+        private GridSquare scanCell;
         private float nextUpdate;
         private bool warnedConflict;
 
@@ -123,22 +130,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             members.Clear();
             groups.Clear();
             traces.Clear();
+            factionHqs.Clear();
             territory = null;
             nextGroupId = 1;
             nextScanCell = 0;
+            nextScanUnit = 0;
+            scanCells = null;
+            scanCell = null;
             nextUpdate = 0f;
         }
 
         /// <summary>Called after depot exit, or by the bounded scene-unit scan.</summary>
         internal void Enroll(GroundVehicle vehicle)
         {
-            if (!AutoNavigating(vehicle) ||
-                settings == null || !settings.Enabled.Value ||
-                !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
-                !GameAccess.IsServer() || !vehicle.IsServer ||
-                members.ContainsKey(vehicle) || members.Count >= MaximumMembers ||
-                !HasAuthority)
+            if (!Eligible(vehicle))
                 return;
+            ReconcileGroupShares();
+            if (members.ContainsKey(vehicle) || members.Count >= MaximumMembers) return;
             FactionHQ hq = vehicle.NetworkHQ;
             if (hq == null || hq.faction == null) return;
 
@@ -161,7 +169,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             if (group == null)
             {
-                if (groups.Count >= MaximumGroups) return;
+                if (!CanCreateGroup(hq)) return;
                 if (!TryAssign(hq, nextGroupId, here.x, here.z, out directive, out offensive)) return;
                 group = new Group
                 {
@@ -184,20 +192,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         /// <summary>Patch-side membership test: only enrolled vehicles follow the effort.</summary>
         internal bool IsEnrolled(GroundVehicle vehicle) =>
-            HasAuthority && AutoNavigating(vehicle) && members.ContainsKey(vehicle);
+            Eligible(vehicle) && members.TryGetValue(vehicle, out Member member) &&
+            ReferenceEquals(vehicle.NetworkHQ, member.Group.HQ);
 
         /// <summary>Patch-side lookup; failure leaves the vanilla destination untouched.</summary>
         internal bool TryGetDestination(GroundVehicle vehicle, out GlobalPosition destination)
         {
             destination = default;
-            if (!HasAuthority || !AutoNavigating(vehicle) ||
+            if (!Eligible(vehicle) ||
                 !members.TryGetValue(vehicle, out Member member) ||
-                !member.HasDestination)
+                !member.HasDestination || !ReferenceEquals(vehicle.NetworkHQ, member.Group.HQ))
                 return false;
-            if (LivingFrontService.Active?.Authoritative != true &&
-                (priority == null || vehicle.NetworkHQ?.faction == null ||
-                 !priority.TryGetDirective(vehicle.NetworkHQ.faction.factionName,
-                     out PriorityDirective current) || member.Group.Key != current.Key))
+            Group group = member.Group;
+            GlobalPosition here = vehicle.GlobalPosition();
+            if (!TryAssign(group.HQ, group.Id, here.x, here.z,
+                    out PriorityDirective current, out bool offensive) ||
+                group.Key != current.Key || group.Offensive != offensive ||
+                group.Defending != IsDefending(group.HQ, current.Key, offensive))
                 return false;
             destination = member.Destination;
             return true;
@@ -218,15 +229,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             if (Time.timeSinceLevelLoad < nextUpdate) return;
             nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
-            if (settings == null || !settings.Enabled.Value ||
-                !settings.FrontlineTacticsEnabled.Value || HasRtsCommander() ||
-                !GameAccess.IsServer() ||
-                !HasAuthority)
+            if (!AdapterEnabled)
             {
                 if (groups.Count > 0) ResetForScene();
                 nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
                 return;
             }
+            ReconcileGroupShares();
             ScanInitialUnits();
             if (groups.Count == 0) return;
             if (territory == null) ModuleServices.TryGet(out territory);
@@ -317,41 +326,61 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private void RefreshGroup(Group group, PriorityDirective directive, FrontTrace trace, float now)
         {
-            group.HasFront = trace.Count > 0 && FrontlineTactics.TrySlot(trace.Points, trace.Lengths, trace.Count,
-                directive.X, directive.Z, 0, out group.CenterX, out group.CenterZ,
-                out group.TangentX, out group.TangentZ);
-            if (!group.HasFront) { ClearDestinations(group); return; }
-
             int axis = PincerAxisOf(group);
             if (group.Axis != axis)
             {
                 group.Axis = axis;
                 if (group.ReportedRally) ReportStage(group);
             }
-            group.CenterX += group.Axis * PincerFlankMeters * group.TangentX;
-            group.CenterZ += group.Axis * PincerFlankMeters * group.TangentZ;
+            group.Defending = IsDefending(group.HQ, directive.Key, group.Offensive);
+            if (group.Defending)
+            {
+                // A rear objective is defended at its own position, independent of the front.
+                group.HasFront = true;
+                group.CenterX = directive.X;
+                group.CenterZ = directive.Z;
+                GlobalPosition here = group.Members[0].Vehicle.GlobalPosition();
+                float dx = here.x - directive.X, dz = here.z - directive.Z;
+                float square = dx * dx + dz * dz;
+                float inverse = square > 1f ? 1f / (float)Math.Sqrt(square) : 0f;
+                group.FriendlyX = inverse > 0f ? dx * inverse : 0f;
+                group.FriendlyZ = inverse > 0f ? dz * inverse : 1f;
+                group.TangentX = group.FriendlyZ;
+                group.TangentZ = -group.FriendlyX;
+            }
+            else
+            {
+                group.HasFront = trace.Count > 0 && FrontlineTactics.TrySlot(trace.Points, trace.Lengths, trace.Count,
+                    directive.X, directive.Z, 0, out group.CenterX, out group.CenterZ,
+                    out group.TangentX, out group.TangentZ, AssignmentRadius);
+                if (!group.HasFront) { ClearDestinations(group); return; }
+                group.CenterX += group.Axis * PincerFlankMeters * group.TangentX;
+                group.CenterZ += group.Axis * PincerFlankMeters * group.TangentZ;
+                if (DistanceSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
+                    AssignmentRadius * AssignmentRadius) { ClearDestinations(group); return; }
 
-            float nx = -group.TangentZ, nz = group.TangentX;
-            int factionId = group.HQ.GetInstanceID();
-            float sign = 0f;
-            // Command's control field has kilometre cells; close probes often share one cell.
-            for (int probe = 450; probe <= 3600 && sign == 0f; probe *= 2)
-            {
-                bool left = territory.TryGetHoldStrength(factionId,
-                    group.CenterX + nx * probe, group.CenterZ + nz * probe, out float leftHold);
-                bool right = territory.TryGetHoldStrength(factionId,
-                    group.CenterX - nx * probe, group.CenterZ - nz * probe, out float rightHold);
-                if (left && right && Mathf.Abs(leftHold - rightHold) >= .05f)
-                    sign = leftHold > rightHold ? 1f : -1f;
+                float nx = -group.TangentZ, nz = group.TangentX;
+                int factionId = group.HQ.GetInstanceID();
+                float sign = 0f;
+                // Command's control field has kilometre cells; close probes often share one cell.
+                for (int probe = 450; probe <= 3600 && sign == 0f; probe *= 2)
+                {
+                    bool left = territory.TryGetHoldStrength(factionId,
+                        group.CenterX + nx * probe, group.CenterZ + nz * probe, out float leftHold);
+                    bool right = territory.TryGetHoldStrength(factionId,
+                        group.CenterX - nx * probe, group.CenterZ - nz * probe, out float rightHold);
+                    if (left && right && Mathf.Abs(leftHold - rightHold) >= .05f)
+                        sign = leftHold > rightHold ? 1f : -1f;
+                }
+                if (sign == 0f)
+                {
+                    // An ambiguous or off-map normal must never send a group behind enemy lines.
+                    ClearDestinations(group);
+                    return;
+                }
+                group.FriendlyX = nx * sign;
+                group.FriendlyZ = nz * sign;
             }
-            if (sign == 0f)
-            {
-                // An ambiguous or off-map normal must never send a group behind enemy lines.
-                ClearDestinations(group);
-                return;
-            }
-            group.FriendlyX = nx * sign;
-            group.FriendlyZ = nz * sign;
             if (group.Sealed && !group.ReportedRally)
             {
                 group.ReportedRally = true;
@@ -510,8 +539,16 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
-        private bool HasAuthority => LivingFrontService.Active?.Authoritative == true ||
-            priority?.Authoritative == true;
+        private bool HasAuthority => GameAccess.IsServer() &&
+            (LivingFrontService.Active?.Authoritative == true || priority?.Authoritative == true);
+
+        private bool AdapterEnabled => settings != null && settings.Enabled.Value &&
+            settings.FrontlineTacticsEnabled.Value && !HasRtsCommander() && HasAuthority;
+
+        private bool Eligible(GroundVehicle vehicle) => AdapterEnabled && AutoNavigating(vehicle);
+
+        private static bool IsDefending(FactionHQ hq, string key, bool offensive) =>
+            !offensive && LivingFrontService.Active?.IsDefending(hq, key) == true;
 
         private bool TryAssign(FactionHQ hq, int groupId, float x, float z,
             out PriorityDirective directive, out bool offensive)
@@ -530,27 +567,80 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         }
 
         private static bool AutoNavigating(GroundVehicle vehicle) =>
-            vehicle != null && !vehicle.disabled && !vehicle.GetHoldPosition() &&
+            vehicle != null && vehicle.IsServer && !vehicle.disabled && !vehicle.GetHoldPosition() &&
             vehicle.UnitCommand != null && NavigateObjectives != null &&
             CommandedDestination != null && (bool)NavigateObjectives.GetValue(vehicle) &&
             !(bool)CommandedDestination.GetValue(vehicle);
 
+        private bool CanCreateGroup(FactionHQ hq)
+        {
+            if (groups.Count >= MaximumGroups || !factionHqs.Contains(hq)) return false;
+            int owned = 0;
+            foreach (Group group in groups)
+                if (group.HQ == hq) owned++;
+            return owned < MaximumGroups / Math.Max(1, factionHqs.Count);
+        }
+
+        private void ReconcileGroupShares()
+        {
+            factionHqs.Clear();
+            foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
+            {
+                if (candidate == null || candidate.faction == null ||
+                    string.IsNullOrEmpty(candidate.faction.factionName) || factionHqs.Contains(candidate)) continue;
+                factionHqs.Add(candidate);
+                if (factionHqs.Count >= MaximumFactions) break;
+            }
+            int allowance = MaximumGroups / Math.Max(1, factionHqs.Count);
+            // ponytail: at most 16 groups; the bounded double scan avoids another ownership index.
+            for (int i = groups.Count - 1; i >= 0; i--)
+            {
+                Group group = groups[i];
+                int owned = 0;
+                for (int j = 0; j <= i; j++)
+                    if (ReferenceEquals(groups[j].HQ, group.HQ)) owned++;
+                if (factionHqs.Contains(group.HQ) && owned <= allowance) continue;
+                // Releasing only our membership leaves native commands and navigation intact.
+                foreach (Member member in group.Members) members.Remove(member.Vehicle);
+                groups.RemoveAt(i);
+            }
+        }
+
         private void ScanInitialUnits()
         {
-            if (members.Count >= MaximumMembers || groups.Count >= MaximumGroups) return;
+            if (members.Count >= MaximumMembers) return;
             GridSquare[] cells = BattlefieldGrid.gridLookup;
             if (cells == null || cells.Length == 0) return;
+            if (!ReferenceEquals(scanCells, cells))
+            {
+                scanCells = cells;
+                nextScanCell = nextScanUnit = 0;
+                scanCell = null;
+            }
             int checkedUnits = 0;
             for (int visited = 0; visited < ScanCellsPerUpdate; visited++)
             {
                 if (nextScanCell >= cells.Length) nextScanCell = 0;
-                GridSquare cell = cells[nextScanCell++];
-                if (cell?.units == null) continue;
-                foreach (Unit unit in cell.units)
+                GridSquare cell = cells[nextScanCell];
+                if (!ReferenceEquals(scanCell, cell))
                 {
-                    if (++checkedUnits > ScanUnitsPerUpdate) return;
-                    if (unit is GroundVehicle vehicle) Enroll(vehicle);
+                    scanCell = cell;
+                    nextScanUnit = 0;
                 }
+                if (cell?.units != null)
+                {
+                    while (nextScanUnit < cell.units.Count)
+                    {
+                        if (checkedUnits >= ScanUnitsPerUpdate) return;
+                        Unit unit = cell.units[nextScanUnit++];
+                        checkedUnits++;
+                        if (unit is GroundVehicle vehicle) Enroll(vehicle);
+                    }
+                }
+                nextScanCell++;
+                nextScanUnit = 0;
+                scanCell = null;
+                if (checkedUnits >= ScanUnitsPerUpdate) return;
             }
         }
 

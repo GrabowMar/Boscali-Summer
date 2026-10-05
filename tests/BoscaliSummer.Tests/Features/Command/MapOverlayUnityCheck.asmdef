@@ -1,0 +1,5 @@
+{
+  "name": "BoscaliMapOverlayPreview",
+  "references": ["Unity.TextMeshPro", "Unity.ugui"],
+  "includePlatforms": ["Editor"]
+}

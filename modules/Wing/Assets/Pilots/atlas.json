@@ -1,0 +1,3073 @@
+{
+  "version": 6,
+  "atlas": "layers.png",
+  "resource": "WingCommand.PilotLayers.png",
+  "width": 2048,
+  "height": 5120,
+  "tile_width": 256,
+  "tile_height": 320,
+  "columns": 8,
+  "rows": 16,
+  "tile_order": "top-left, row-major",
+  "rgba_rows": "Unity bottom-up",
+  "source_rect_format": "Pillow left, top, right, bottom; right/bottom exclusive",
+  "hair_isolation": "16px source side gutters, center-scalp-connected alpha, 2px edge retention",
+  "composition": [
+    "backdrop",
+    "uniform-body",
+    "head-and-masked-neck",
+    "hair",
+    "front-collar",
+    "equipment"
+  ],
+  "landmarks": {
+    "frame_ratio": "4:5",
+    "eyes_y": 120,
+    "head_width": 132,
+    "hair_widths": [
+      144,
+      140,
+      144,
+      142,
+      140,
+      138,
+      122,
+      142,
+      142,
+      136,
+      148,
+      142,
+      136,
+      148,
+      142,
+      136
+    ],
+    "body_width_before_crop": [
+      324,
+      316
+    ],
+    "desert_carrier_width_before_crop": [
+      352,
+      354
+    ],
+    "neck_base_mask_width": [
+      76,
+      72
+    ]
+  },
+  "masking": {
+    "neck": "Continuous chin-relative curve starts outside head silhouette and tapers to neck base; no stepped ledges",
+    "clothing": "Inner collar edge pixels extruded into narrow seam gutters; body behind neck, front collar limited to neck ROI; cropped broad shoulders",
+    "hair": "Single hair pass before front collar; caps clip crown by actual underside with nearest-supported edge fallback and two-pixel overlap; helmets suppress hair",
+    "headset": "Bald scalp fits upper band to actual crown; ear pads and microphone remain fixed below row 95",
+    "alpha": "Soft one-pixel matte choke on solid cutouts; thin glasses/headset edges preserved"
+  },
+  "art": {
+    "generator": "OpenAI ImageGen",
+    "date": "2026-10-05",
+    "style": "Ace Combat inspired realistic illustrated adults; original generated artwork",
+    "reference": "User-supplied portrait style reference; no game artwork included",
+    "research": [
+      "https://github.com/rquinio/PortraitBuilder/blob/master/PortraitBuilder/Engine/PortraitRenderer.cs",
+      "https://docs.unity3d.com/2021.3/Documentation/Manual/class-SpriteAtlas.html",
+      "https://nuclearoption.wiki.gg/wiki/Boscali_Defense_Force",
+      "https://nuclearoption.wiki.gg/wiki/Primeva_Armed_Liberation_Alliance"
+    ]
+  },
+  "sources": [
+    {
+      "path": "Source/accessories.helmet-refit.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 1197029,
+      "sha256": "39a9776d7550085600113b65fc780d8e871e1f30660235e9ad60b07fc0cf0177"
+    },
+    {
+      "path": "Source/accessories.headset-final.png",
+      "width": 1240,
+      "height": 1269,
+      "bytes": 606763,
+      "sha256": "958ee9c8522b475410f099d3d2fd238599ca62c77b2cfe3a3d82f414b5ea525a"
+    },
+    {
+      "path": "Source/faces.png",
+      "width": 1024,
+      "height": 1536,
+      "bytes": 2335807,
+      "sha256": "ee000ba46403be392c2470809f275a5a53a00fdc9f80a6ab7293d19494c35fd1"
+    },
+    {
+      "path": "Source/hair.refit.png",
+      "width": 1024,
+      "height": 1536,
+      "bytes": 2122659,
+      "sha256": "2aeea07322936480f6766a6498632a9c258f51c626677c0221a4664ed6747fe8"
+    },
+    {
+      "path": "Source/uniforms.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 2183643,
+      "sha256": "ef3b085c166e1d981d1e3864f7da193e2b626e4d544fdad67263a8a292472b42"
+    },
+    {
+      "path": "Source/accessories.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 1208518,
+      "sha256": "6608a67e7695f2de025f7b92680751b6a664072858fbfa5993166b167f9498d8"
+    },
+    {
+      "path": "Source/backgrounds.png",
+      "width": 1586,
+      "height": 992,
+      "bytes": 1926185,
+      "sha256": "99daa099e3337e6657c55ba1ff7361fedcd5eba47095e6dffd492805b81a1f3f"
+    },
+    {
+      "path": "Source/uniforms.expansion.png",
+      "width": 1086,
+      "height": 1448,
+      "bytes": 2328603,
+      "sha256": "f7bdca29e4b85ca62d7d11580633a6a5c5f6dcc170495e9483ae5ad7448352c5"
+    }
+  ],
+  "tiles": [
+    {
+      "tile": 0,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 0,
+      "source_rect": [
+        0,
+        0,
+        256,
+        386
+      ],
+      "alpha_bounds": [
+        24,
+        34,
+        240,
+        374
+      ],
+      "registered_size": [
+        132,
+        208
+      ],
+      "position": [
+        62,
+        38
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 209,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 223,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 1,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 1,
+      "source_rect": [
+        256,
+        0,
+        512,
+        386
+      ],
+      "alpha_bounds": [
+        17,
+        34,
+        242,
+        373
+      ],
+      "registered_size": [
+        132,
+        199
+      ],
+      "position": [
+        62,
+        44
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 211,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 225,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 2,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 2,
+      "source_rect": [
+        512,
+        0,
+        768,
+        386
+      ],
+      "alpha_bounds": [
+        16,
+        34,
+        238,
+        375
+      ],
+      "registered_size": [
+        132,
+        203
+      ],
+      "position": [
+        62,
+        40
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 216,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 230,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 3,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 3,
+      "source_rect": [
+        768,
+        0,
+        1024,
+        386
+      ],
+      "alpha_bounds": [
+        14,
+        34,
+        236,
+        375
+      ],
+      "registered_size": [
+        132,
+        203
+      ],
+      "position": [
+        62,
+        42
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 213,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 227,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 4,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 4,
+      "source_rect": [
+        0,
+        390,
+        256,
+        755
+      ],
+      "alpha_bounds": [
+        23,
+        8,
+        244,
+        353
+      ],
+      "registered_size": [
+        132,
+        206
+      ],
+      "position": [
+        62,
+        42
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 217,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 231,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 5,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 5,
+      "source_rect": [
+        256,
+        390,
+        512,
+        755
+      ],
+      "alpha_bounds": [
+        18,
+        9,
+        247,
+        353
+      ],
+      "registered_size": [
+        132,
+        198
+      ],
+      "position": [
+        62,
+        45
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 211,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 225,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 6,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 6,
+      "source_rect": [
+        512,
+        390,
+        768,
+        755
+      ],
+      "alpha_bounds": [
+        14,
+        9,
+        241,
+        353
+      ],
+      "registered_size": [
+        132,
+        200
+      ],
+      "position": [
+        62,
+        44
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 214,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 228,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 7,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "male",
+      "selector": 7,
+      "source_rect": [
+        768,
+        390,
+        1024,
+        755
+      ],
+      "alpha_bounds": [
+        11,
+        9,
+        239,
+        353
+      ],
+      "registered_size": [
+        132,
+        199
+      ],
+      "position": [
+        62,
+        44
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 217,
+        "neck_base_y": 246,
+        "neck_width": 76,
+        "neck_sample_y": 231,
+        "neck_sample_width": 75
+      }
+    },
+    {
+      "tile": 8,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 0,
+      "source_rect": [
+        0,
+        756,
+        256,
+        1132
+      ],
+      "alpha_bounds": [
+        22,
+        13,
+        243,
+        357
+      ],
+      "registered_size": [
+        132,
+        205
+      ],
+      "position": [
+        62,
+        38
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 208,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 222,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 9,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 1,
+      "source_rect": [
+        256,
+        756,
+        512,
+        1132
+      ],
+      "alpha_bounds": [
+        22,
+        13,
+        240,
+        358
+      ],
+      "registered_size": [
+        132,
+        209
+      ],
+      "position": [
+        62,
+        38
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 214,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 228,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 10,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 2,
+      "source_rect": [
+        512,
+        756,
+        768,
+        1132
+      ],
+      "alpha_bounds": [
+        14,
+        13,
+        237,
+        360
+      ],
+      "registered_size": [
+        132,
+        205
+      ],
+      "position": [
+        62,
+        39
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 212,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 226,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 11,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 3,
+      "source_rect": [
+        768,
+        756,
+        1024,
+        1132
+      ],
+      "alpha_bounds": [
+        12,
+        14,
+        235,
+        360
+      ],
+      "registered_size": [
+        132,
+        205
+      ],
+      "position": [
+        62,
+        38
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 209,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 223,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 12,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 4,
+      "source_rect": [
+        0,
+        1133,
+        256,
+        1536
+      ],
+      "alpha_bounds": [
+        23,
+        7,
+        241,
+        355
+      ],
+      "registered_size": [
+        132,
+        211
+      ],
+      "position": [
+        62,
+        36
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 207,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 221,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 13,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 5,
+      "source_rect": [
+        256,
+        1133,
+        512,
+        1536
+      ],
+      "alpha_bounds": [
+        16,
+        7,
+        242,
+        356
+      ],
+      "registered_size": [
+        132,
+        204
+      ],
+      "position": [
+        62,
+        39
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 206,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 220,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 14,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 6,
+      "source_rect": [
+        512,
+        1133,
+        768,
+        1536
+      ],
+      "alpha_bounds": [
+        11,
+        9,
+        239,
+        355
+      ],
+      "registered_size": [
+        132,
+        200
+      ],
+      "position": [
+        62,
+        41
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 205,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 219,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 15,
+      "family": "faces",
+      "source": "Source/faces.png",
+      "body": "female",
+      "selector": 7,
+      "source_rect": [
+        768,
+        1133,
+        1024,
+        1536
+      ],
+      "alpha_bounds": [
+        13,
+        8,
+        234,
+        357
+      ],
+      "registered_size": [
+        132,
+        208
+      ],
+      "position": [
+        62,
+        37
+      ],
+      "anatomy": {
+        "eyes_y": 120,
+        "chin_y": 209,
+        "neck_base_y": 246,
+        "neck_width": 72,
+        "neck_sample_y": 223,
+        "neck_sample_width": 71
+      }
+    },
+    {
+      "tile": 16,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 1,
+      "source_rect": [
+        0,
+        0,
+        256,
+        384
+      ],
+      "alpha_bounds": [
+        22,
+        79,
+        242,
+        295
+      ],
+      "registered_size": [
+        144,
+        141
+      ],
+      "position": [
+        56,
+        23
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          174
+        ],
+        "front_anchor_y": 85,
+        "outer_width": 144,
+        "crown_y": 23
+      }
+    },
+    {
+      "tile": 17,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 2,
+      "source_rect": [
+        256,
+        0,
+        512,
+        384
+      ],
+      "alpha_bounds": [
+        23,
+        84,
+        242,
+        293
+      ],
+      "registered_size": [
+        140,
+        134
+      ],
+      "position": [
+        58,
+        24
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          175
+        ],
+        "front_anchor_y": 82,
+        "outer_width": 140,
+        "crown_y": 24
+      }
+    },
+    {
+      "tile": 18,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 3,
+      "source_rect": [
+        512,
+        0,
+        768,
+        384
+      ],
+      "alpha_bounds": [
+        14,
+        80,
+        242,
+        301
+      ],
+      "registered_size": [
+        144,
+        140
+      ],
+      "position": [
+        56,
+        23
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          177
+        ],
+        "front_anchor_y": 84,
+        "outer_width": 144,
+        "crown_y": 23
+      }
+    },
+    {
+      "tile": 19,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 4,
+      "source_rect": [
+        768,
+        0,
+        1024,
+        384
+      ],
+      "alpha_bounds": [
+        14,
+        80,
+        242,
+        301
+      ],
+      "registered_size": [
+        142,
+        138
+      ],
+      "position": [
+        57,
+        24
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          205
+        ],
+        "front_anchor_y": 102,
+        "outer_width": 142,
+        "crown_y": 24
+      }
+    },
+    {
+      "tile": 20,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 5,
+      "source_rect": [
+        0,
+        384,
+        256,
+        768
+      ],
+      "alpha_bounds": [
+        22,
+        52,
+        242,
+        267
+      ],
+      "registered_size": [
+        140,
+        137
+      ],
+      "position": [
+        58,
+        20
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          147
+        ],
+        "front_anchor_y": 80,
+        "outer_width": 140,
+        "crown_y": 20
+      }
+    },
+    {
+      "tile": 21,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 6,
+      "source_rect": [
+        256,
+        384,
+        512,
+        768
+      ],
+      "alpha_bounds": [
+        18,
+        52,
+        242,
+        268
+      ],
+      "registered_size": [
+        138,
+        133
+      ],
+      "position": [
+        59,
+        19
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          147
+        ],
+        "front_anchor_y": 78,
+        "outer_width": 138,
+        "crown_y": 19
+      }
+    },
+    {
+      "tile": 22,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 7,
+      "source_rect": [
+        512,
+        384,
+        768,
+        768
+      ],
+      "alpha_bounds": [
+        19,
+        72,
+        237,
+        266
+      ],
+      "registered_size": [
+        122,
+        109
+      ],
+      "position": [
+        67,
+        38
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          165
+        ],
+        "front_anchor_y": 90,
+        "outer_width": 122,
+        "crown_y": 38
+      }
+    },
+    {
+      "tile": 23,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "male",
+      "selector": 8,
+      "source_rect": [
+        768,
+        384,
+        1024,
+        768
+      ],
+      "alpha_bounds": [
+        14,
+        55,
+        241,
+        268
+      ],
+      "registered_size": [
+        142,
+        133
+      ],
+      "position": [
+        57,
+        24
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          148
+        ],
+        "front_anchor_y": 82,
+        "outer_width": 142,
+        "crown_y": 24
+      }
+    },
+    {
+      "tile": 24,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 1,
+      "source_rect": [
+        0,
+        768,
+        256,
+        1152
+      ],
+      "alpha_bounds": [
+        25,
+        0,
+        242,
+        341
+      ],
+      "registered_size": [
+        142,
+        223
+      ],
+      "position": [
+        57,
+        6
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          122
+        ],
+        "front_anchor_y": 86,
+        "outer_width": 142,
+        "crown_y": 6
+      }
+    },
+    {
+      "tile": 25,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 2,
+      "source_rect": [
+        256,
+        768,
+        512,
+        1152
+      ],
+      "alpha_bounds": [
+        22,
+        39,
+        242,
+        260
+      ],
+      "registered_size": [
+        136,
+        137
+      ],
+      "position": [
+        60,
+        14
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          176
+        ],
+        "front_anchor_y": 99,
+        "outer_width": 136,
+        "crown_y": 14
+      }
+    },
+    {
+      "tile": 26,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 3,
+      "source_rect": [
+        512,
+        768,
+        768,
+        1152
+      ],
+      "alpha_bounds": [
+        14,
+        48,
+        242,
+        323
+      ],
+      "registered_size": [
+        148,
+        179
+      ],
+      "position": [
+        54,
+        32
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          130
+        ],
+        "front_anchor_y": 85,
+        "outer_width": 148,
+        "crown_y": 32
+      }
+    },
+    {
+      "tile": 27,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 4,
+      "source_rect": [
+        768,
+        768,
+        1024,
+        1152
+      ],
+      "alpha_bounds": [
+        17,
+        6,
+        242,
+        365
+      ],
+      "registered_size": [
+        142,
+        227
+      ],
+      "position": [
+        57,
+        7
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          130
+        ],
+        "front_anchor_y": 85,
+        "outer_width": 142,
+        "crown_y": 7
+      }
+    },
+    {
+      "tile": 28,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 5,
+      "source_rect": [
+        0,
+        1152,
+        256,
+        1536
+      ],
+      "alpha_bounds": [
+        20,
+        48,
+        242,
+        254
+      ],
+      "registered_size": [
+        136,
+        126
+      ],
+      "position": [
+        60,
+        27
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          158
+        ],
+        "front_anchor_y": 94,
+        "outer_width": 136,
+        "crown_y": 27
+      }
+    },
+    {
+      "tile": 29,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 6,
+      "source_rect": [
+        256,
+        1152,
+        512,
+        1536
+      ],
+      "alpha_bounds": [
+        14,
+        52,
+        242,
+        312
+      ],
+      "registered_size": [
+        148,
+        169
+      ],
+      "position": [
+        54,
+        34
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          129
+        ],
+        "front_anchor_y": 84,
+        "outer_width": 148,
+        "crown_y": 34
+      }
+    },
+    {
+      "tile": 30,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 7,
+      "source_rect": [
+        512,
+        1152,
+        768,
+        1536
+      ],
+      "alpha_bounds": [
+        14,
+        46,
+        242,
+        303
+      ],
+      "registered_size": [
+        142,
+        160
+      ],
+      "position": [
+        57,
+        33
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          128,
+          130
+        ],
+        "front_anchor_y": 85,
+        "outer_width": 142,
+        "crown_y": 33
+      }
+    },
+    {
+      "tile": 31,
+      "family": "hair",
+      "source": "Source/hair.refit.png",
+      "body": "female",
+      "selector": 8,
+      "source_rect": [
+        768,
+        1152,
+        1024,
+        1536
+      ],
+      "alpha_bounds": [
+        24,
+        53,
+        236,
+        272
+      ],
+      "registered_size": [
+        136,
+        140
+      ],
+      "position": [
+        60,
+        20
+      ],
+      "anatomy": {
+        "source_front_anchor": [
+          168,
+          137
+        ],
+        "front_anchor_y": 74,
+        "outer_width": 136,
+        "crown_y": 20
+      }
+    },
+    {
+      "tile": 32,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 0,
+      "source_rect": [
+        0,
+        0,
+        314,
+        314
+      ],
+      "alpha_bounds": [
+        0,
+        45,
+        314,
+        306
+      ],
+      "registered_size": [
+        324,
+        269
+      ],
+      "position": [
+        -34,
+        210
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 72,
+        "opening_sample_y": 214,
+        "neck_opening_width": 64,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF PILOT"
+    },
+    {
+      "tile": 33,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 1,
+      "source_rect": [
+        314,
+        0,
+        627,
+        314
+      ],
+      "alpha_bounds": [
+        0,
+        40,
+        313,
+        306
+      ],
+      "registered_size": [
+        324,
+        275
+      ],
+      "position": [
+        -34,
+        209
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 64,
+        "opening_sample_y": 213,
+        "neck_opening_width": 60,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF COMMANDER"
+    },
+    {
+      "tile": 34,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 2,
+      "source_rect": [
+        627,
+        0,
+        940,
+        314
+      ],
+      "alpha_bounds": [
+        0,
+        40,
+        313,
+        306
+      ],
+      "registered_size": [
+        324,
+        275
+      ],
+      "position": [
+        -34,
+        213
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 60,
+        "opening_sample_y": 217,
+        "neck_opening_width": 61,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "PALA PILOT"
+    },
+    {
+      "tile": 35,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 3,
+      "source_rect": [
+        940,
+        0,
+        1254,
+        314
+      ],
+      "alpha_bounds": [
+        0,
+        40,
+        314,
+        306
+      ],
+      "registered_size": [
+        324,
+        274
+      ],
+      "position": [
+        -34,
+        214
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 59,
+        "opening_sample_y": 218,
+        "neck_opening_width": 60,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "PALA COMMANDER"
+    },
+    {
+      "tile": 36,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 4,
+      "source_rect": [
+        0,
+        314,
+        314,
+        627
+      ],
+      "alpha_bounds": [
+        0,
+        38,
+        314,
+        304
+      ],
+      "registered_size": [
+        324,
+        274
+      ],
+      "position": [
+        -34,
+        210
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 63,
+        "opening_sample_y": 214,
+        "neck_opening_width": 61,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF SOLDIER"
+    },
+    {
+      "tile": 37,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 5,
+      "source_rect": [
+        314,
+        314,
+        627,
+        627
+      ],
+      "alpha_bounds": [
+        0,
+        26,
+        313,
+        304
+      ],
+      "registered_size": [
+        324,
+        288
+      ],
+      "position": [
+        -34,
+        202
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 61,
+        "opening_sample_y": 206,
+        "neck_opening_width": 61,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF CIVILIAN"
+    },
+    {
+      "tile": 38,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 6,
+      "source_rect": [
+        627,
+        314,
+        940,
+        627
+      ],
+      "alpha_bounds": [
+        0,
+        19,
+        313,
+        304
+      ],
+      "registered_size": [
+        352,
+        321
+      ],
+      "position": [
+        -48,
+        209
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 41,
+        "opening_sample_y": 213,
+        "neck_opening_width": 63,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 216
+      },
+      "label": "PALA SOLDIER"
+    },
+    {
+      "tile": 39,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "male",
+      "selector": 7,
+      "source_rect": [
+        940,
+        314,
+        1254,
+        627
+      ],
+      "alpha_bounds": [
+        0,
+        37,
+        314,
+        304
+      ],
+      "registered_size": [
+        324,
+        276
+      ],
+      "position": [
+        -34,
+        211
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 61,
+        "opening_sample_y": 215,
+        "neck_opening_width": 61,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "PALA CIVILIAN"
+    },
+    {
+      "tile": 40,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 0,
+      "source_rect": [
+        0,
+        627,
+        314,
+        940
+      ],
+      "alpha_bounds": [
+        0,
+        39,
+        314,
+        304
+      ],
+      "registered_size": [
+        316,
+        267
+      ],
+      "position": [
+        -30,
+        213
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 64,
+        "opening_sample_y": 217,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF PILOT"
+    },
+    {
+      "tile": 41,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 1,
+      "source_rect": [
+        314,
+        627,
+        627,
+        940
+      ],
+      "alpha_bounds": [
+        0,
+        38,
+        313,
+        304
+      ],
+      "registered_size": [
+        316,
+        269
+      ],
+      "position": [
+        -30,
+        209
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 63,
+        "opening_sample_y": 213,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "BDF COMMANDER"
+    },
+    {
+      "tile": 42,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 2,
+      "source_rect": [
+        627,
+        627,
+        940,
+        940
+      ],
+      "alpha_bounds": [
+        0,
+        38,
+        313,
+        304
+      ],
+      "registered_size": [
+        316,
+        269
+      ],
+      "position": [
+        -30,
+        213
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 59,
+        "opening_sample_y": 217,
+        "neck_opening_width": 58,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 254
+      },
+      "label": "PALA PILOT"
+    },
+    {
+      "tile": 43,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 3,
+      "source_rect": [
+        940,
+        627,
+        1254,
+        940
+      ],
+      "alpha_bounds": [
+        0,
+        38,
+        314,
+        304
+      ],
+      "registered_size": [
+        316,
+        268
+      ],
+      "position": [
+        -30,
+        214
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 58,
+        "opening_sample_y": 218,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      },
+      "label": "PALA COMMANDER"
+    },
+    {
+      "tile": 44,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 4,
+      "source_rect": [
+        0,
+        940,
+        314,
+        1254
+      ],
+      "alpha_bounds": [
+        0,
+        35,
+        314,
+        300
+      ],
+      "registered_size": [
+        316,
+        267
+      ],
+      "position": [
+        -30,
+        214
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 57,
+        "opening_sample_y": 218,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 252
+      },
+      "label": "BDF SOLDIER"
+    },
+    {
+      "tile": 45,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 5,
+      "source_rect": [
+        314,
+        940,
+        627,
+        1254
+      ],
+      "alpha_bounds": [
+        0,
+        22,
+        313,
+        300
+      ],
+      "registered_size": [
+        316,
+        281
+      ],
+      "position": [
+        -30,
+        203
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 57,
+        "opening_sample_y": 207,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 254
+      },
+      "label": "BDF CIVILIAN"
+    },
+    {
+      "tile": 46,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 6,
+      "source_rect": [
+        627,
+        940,
+        940,
+        1254
+      ],
+      "alpha_bounds": [
+        0,
+        15,
+        313,
+        300
+      ],
+      "registered_size": [
+        354,
+        322
+      ],
+      "position": [
+        -49,
+        207
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 39,
+        "opening_sample_y": 211,
+        "neck_opening_width": 64,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 213
+      },
+      "label": "PALA SOLDIER"
+    },
+    {
+      "tile": 47,
+      "family": "uniforms",
+      "source": "Source/uniforms.png",
+      "body": "female",
+      "selector": 7,
+      "source_rect": [
+        940,
+        940,
+        1254,
+        1254
+      ],
+      "alpha_bounds": [
+        0,
+        37,
+        314,
+        300
+      ],
+      "registered_size": [
+        316,
+        265
+      ],
+      "position": [
+        -30,
+        216
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 57,
+        "opening_sample_y": 220,
+        "neck_opening_width": 57,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 251
+      },
+      "label": "PALA CIVILIAN"
+    },
+    {
+      "tile": 48,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 1,
+      "source_rect": [
+        0,
+        0,
+        314,
+        295
+      ],
+      "alpha_bounds": [
+        31,
+        148,
+        283,
+        216
+      ],
+      "registered_size": [
+        106,
+        29
+      ],
+      "position": [
+        75,
+        102
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 49,
+      "family": "accessories",
+      "source": "Source/accessories.headset-final.png",
+      "selector": 2,
+      "source_rect": [
+        0,
+        0,
+        1240,
+        1269
+      ],
+      "alpha_bounds": [
+        113,
+        135,
+        1127,
+        1024
+      ],
+      "registered_size": [
+        174,
+        153
+      ],
+      "position": [
+        41,
+        29
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 50,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 3,
+      "source_rect": [
+        627,
+        0,
+        940,
+        295
+      ],
+      "alpha_bounds": [
+        29,
+        84,
+        285,
+        244
+      ],
+      "registered_size": [
+        130,
+        81
+      ],
+      "position": [
+        63,
+        18
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 51,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 4,
+      "source_rect": [
+        940,
+        0,
+        1254,
+        295
+      ],
+      "alpha_bounds": [
+        0,
+        78,
+        306,
+        258
+      ],
+      "registered_size": [
+        160,
+        94
+      ],
+      "position": [
+        48,
+        11
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 52,
+      "family": "accessories",
+      "source": "Source/accessories.helmet-refit.png",
+      "selector": 5,
+      "source_rect": [
+        0,
+        300,
+        314,
+        635
+      ],
+      "alpha_bounds": [
+        22,
+        17,
+        304,
+        329
+      ],
+      "registered_size": [
+        174,
+        193
+      ],
+      "position": [
+        41,
+        13
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 53,
+      "family": "accessories",
+      "source": "Source/accessories.helmet-refit.png",
+      "selector": 6,
+      "source_rect": [
+        314,
+        300,
+        627,
+        635
+      ],
+      "alpha_bounds": [
+        20,
+        31,
+        298,
+        288
+      ],
+      "registered_size": [
+        174,
+        161
+      ],
+      "position": [
+        41,
+        18
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 54,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 7,
+      "source_rect": [
+        627,
+        300,
+        940,
+        635
+      ],
+      "alpha_bounds": [
+        8,
+        89,
+        299,
+        252
+      ],
+      "registered_size": [
+        148,
+        83
+      ],
+      "position": [
+        54,
+        12
+      ],
+      "anatomy": {},
+      "faction": "BDF",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 55,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 1,
+      "source_rect": [
+        0,
+        636,
+        314,
+        909
+      ],
+      "alpha_bounds": [
+        31,
+        101,
+        284,
+        193
+      ],
+      "registered_size": [
+        106,
+        39
+      ],
+      "position": [
+        75,
+        102
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 56,
+      "family": "accessories",
+      "source": "Source/accessories.headset-final.png",
+      "selector": 2,
+      "source_rect": [
+        0,
+        0,
+        1240,
+        1269
+      ],
+      "alpha_bounds": [
+        113,
+        135,
+        1127,
+        1024
+      ],
+      "registered_size": [
+        174,
+        153
+      ],
+      "position": [
+        41,
+        29
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": true
+    },
+    {
+      "tile": 57,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 3,
+      "source_rect": [
+        627,
+        636,
+        940,
+        909
+      ],
+      "alpha_bounds": [
+        25,
+        58,
+        284,
+        233
+      ],
+      "registered_size": [
+        130,
+        88
+      ],
+      "position": [
+        63,
+        18
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 58,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 4,
+      "source_rect": [
+        940,
+        636,
+        1254,
+        909
+      ],
+      "alpha_bounds": [
+        0,
+        67,
+        305,
+        244
+      ],
+      "registered_size": [
+        160,
+        93
+      ],
+      "position": [
+        48,
+        11
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 59,
+      "family": "accessories",
+      "source": "Source/accessories.helmet-refit.png",
+      "selector": 5,
+      "source_rect": [
+        0,
+        910,
+        314,
+        1254
+      ],
+      "alpha_bounds": [
+        18,
+        6,
+        306,
+        303
+      ],
+      "registered_size": [
+        174,
+        179
+      ],
+      "position": [
+        41,
+        13
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 60,
+      "family": "accessories",
+      "source": "Source/accessories.helmet-refit.png",
+      "selector": 6,
+      "source_rect": [
+        314,
+        910,
+        627,
+        1254
+      ],
+      "alpha_bounds": [
+        17,
+        23,
+        300,
+        283
+      ],
+      "registered_size": [
+        174,
+        160
+      ],
+      "position": [
+        41,
+        18
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 61,
+      "family": "accessories",
+      "source": "Source/accessories.png",
+      "selector": 7,
+      "source_rect": [
+        627,
+        910,
+        940,
+        1254
+      ],
+      "alpha_bounds": [
+        9,
+        99,
+        305,
+        260
+      ],
+      "registered_size": [
+        148,
+        80
+      ],
+      "position": [
+        54,
+        12
+      ],
+      "anatomy": {},
+      "faction": "PALA",
+      "shared_imported_equipment": false
+    },
+    {
+      "tile": 62,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 0,
+      "source_tile": 32,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 63,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 1,
+      "source_tile": 33,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 64,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 2,
+      "source_tile": 34,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 65,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 3,
+      "source_tile": 35,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 66,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 4,
+      "source_tile": 36,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 67,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 5,
+      "source_tile": 37,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 68,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 6,
+      "source_tile": 38,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 69,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 7,
+      "source_tile": 39,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 70,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 0,
+      "source_tile": 40,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 71,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 1,
+      "source_tile": 41,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 72,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 2,
+      "source_tile": 42,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 73,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 3,
+      "source_tile": 43,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 74,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 4,
+      "source_tile": 44,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 75,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 5,
+      "source_tile": 45,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 76,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 6,
+      "source_tile": 46,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 77,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 7,
+      "source_tile": 47,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 78,
+      "family": "backgrounds",
+      "selector": 0,
+      "label": "STUDIO SLATE",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        0,
+        0,
+        396,
+        496
+      ]
+    },
+    {
+      "tile": 79,
+      "family": "backgrounds",
+      "selector": 1,
+      "label": "HANGAR",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        396,
+        0,
+        793,
+        496
+      ]
+    },
+    {
+      "tile": 80,
+      "family": "backgrounds",
+      "selector": 2,
+      "label": "FLIGHT DECK",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        793,
+        0,
+        1190,
+        496
+      ]
+    },
+    {
+      "tile": 81,
+      "family": "backgrounds",
+      "selector": 3,
+      "label": "DESERT RAMP",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        1190,
+        0,
+        1586,
+        496
+      ]
+    },
+    {
+      "tile": 82,
+      "family": "backgrounds",
+      "selector": 4,
+      "label": "OPERATIONS ROOM",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        0,
+        496,
+        396,
+        992
+      ]
+    },
+    {
+      "tile": 83,
+      "family": "backgrounds",
+      "selector": 5,
+      "label": "COASTAL CITY",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        396,
+        496,
+        793,
+        992
+      ]
+    },
+    {
+      "tile": 84,
+      "family": "backgrounds",
+      "selector": 6,
+      "label": "WOODLAND",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        793,
+        496,
+        1190,
+        992
+      ]
+    },
+    {
+      "tile": 85,
+      "family": "backgrounds",
+      "selector": 7,
+      "label": "NIGHT AIRFIELD",
+      "source": "Source/backgrounds.png",
+      "source_rect": [
+        1190,
+        496,
+        1586,
+        992
+      ]
+    },
+    {
+      "tile": 86,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 8,
+      "label": "BDF LIGHT FLIGHT",
+      "source_rect": [
+        0,
+        0,
+        362,
+        362
+      ],
+      "alpha_bounds": [
+        11,
+        37,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        300
+      ],
+      "position": [
+        -34,
+        184
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 95,
+        "opening_sample_y": 188,
+        "neck_opening_width": 59,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 87,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 9,
+      "label": "BDF HEAVY FLIGHT",
+      "source_rect": [
+        362,
+        0,
+        724,
+        362
+      ],
+      "alpha_bounds": [
+        0,
+        27,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        300
+      ],
+      "position": [
+        -34,
+        175
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 95,
+        "opening_sample_y": 179,
+        "neck_opening_width": 47,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 88,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 10,
+      "label": "PALA DESERT FLIGHT",
+      "source_rect": [
+        724,
+        0,
+        1086,
+        362
+      ],
+      "alpha_bounds": [
+        0,
+        29,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        298
+      ],
+      "position": [
+        -34,
+        167
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 106,
+        "opening_sample_y": 171,
+        "neck_opening_width": 69,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 89,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 11,
+      "label": "PALA HIGH-ALT FLIGHT",
+      "source_rect": [
+        0,
+        362,
+        362,
+        724
+      ],
+      "alpha_bounds": [
+        9,
+        22,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        312
+      ],
+      "position": [
+        -34,
+        184
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 77,
+        "opening_sample_y": 188,
+        "neck_opening_width": 1,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 254
+      }
+    },
+    {
+      "tile": 90,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 12,
+      "label": "BDF FIELD COMMAND",
+      "source_rect": [
+        362,
+        362,
+        724,
+        724
+      ],
+      "alpha_bounds": [
+        0,
+        31,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        296
+      ],
+      "position": [
+        -34,
+        185
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 90,
+        "opening_sample_y": 189,
+        "neck_opening_width": 68,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 91,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "male",
+      "selector": 13,
+      "label": "PALA FIELD COMMAND",
+      "source_rect": [
+        724,
+        362,
+        1086,
+        724
+      ],
+      "alpha_bounds": [
+        0,
+        27,
+        362,
+        362
+      ],
+      "registered_size": [
+        324,
+        300
+      ],
+      "position": [
+        -34,
+        194
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 74,
+        "opening_sample_y": 198,
+        "neck_opening_width": 54,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 92,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 8,
+      "label": "BDF LIGHT FLIGHT",
+      "source_rect": [
+        0,
+        724,
+        362,
+        1086
+      ],
+      "alpha_bounds": [
+        13,
+        44,
+        362,
+        353
+      ],
+      "registered_size": [
+        316,
+        280
+      ],
+      "position": [
+        -30,
+        187
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 100,
+        "opening_sample_y": 191,
+        "neck_opening_width": 58,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 93,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 9,
+      "label": "BDF HEAVY FLIGHT",
+      "source_rect": [
+        362,
+        724,
+        724,
+        1086
+      ],
+      "alpha_bounds": [
+        0,
+        34,
+        362,
+        353
+      ],
+      "registered_size": [
+        316,
+        278
+      ],
+      "position": [
+        -30,
+        180
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 98,
+        "opening_sample_y": 184,
+        "neck_opening_width": 44,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 252
+      }
+    },
+    {
+      "tile": 94,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 10,
+      "label": "PALA DESERT FLIGHT",
+      "source_rect": [
+        724,
+        724,
+        1086,
+        1086
+      ],
+      "alpha_bounds": [
+        0,
+        35,
+        362,
+        353
+      ],
+      "registered_size": [
+        316,
+        278
+      ],
+      "position": [
+        -30,
+        169
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 112,
+        "opening_sample_y": 173,
+        "neck_opening_width": 65,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 95,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 11,
+      "label": "PALA HIGH-ALT FLIGHT",
+      "source_rect": [
+        0,
+        1086,
+        362,
+        1448
+      ],
+      "alpha_bounds": [
+        12,
+        12,
+        362,
+        352
+      ],
+      "registered_size": [
+        316,
+        307
+      ],
+      "position": [
+        -30,
+        184
+      ],
+      "anatomy": {
+        "neck_seat_y": 234,
+        "source_front_neck_y": 67,
+        "opening_sample_y": 188,
+        "neck_opening_width": 33,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 96,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 12,
+      "label": "BDF FIELD COMMAND",
+      "source_rect": [
+        362,
+        1086,
+        724,
+        1448
+      ],
+      "alpha_bounds": [
+        0,
+        20,
+        362,
+        352
+      ],
+      "registered_size": [
+        316,
+        290
+      ],
+      "position": [
+        -30,
+        186
+      ],
+      "anatomy": {
+        "neck_seat_y": 238,
+        "source_front_neck_y": 79,
+        "opening_sample_y": 190,
+        "neck_opening_width": 55,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 252
+      }
+    },
+    {
+      "tile": 97,
+      "family": "uniforms",
+      "source": "Source/uniforms.expansion.png",
+      "body": "female",
+      "selector": 13,
+      "label": "PALA FIELD COMMAND",
+      "source_rect": [
+        724,
+        1086,
+        1086,
+        1448
+      ],
+      "alpha_bounds": [
+        0,
+        18,
+        362,
+        352
+      ],
+      "registered_size": [
+        316,
+        292
+      ],
+      "position": [
+        -30,
+        183
+      ],
+      "anatomy": {
+        "neck_seat_y": 236,
+        "source_front_neck_y": 79,
+        "opening_sample_y": 187,
+        "neck_opening_width": 52,
+        "shoulder_sample_y": 268,
+        "shoulder_width": 256
+      }
+    },
+    {
+      "tile": 98,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 8,
+      "source_tile": 86,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 99,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 9,
+      "source_tile": 87,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 100,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 10,
+      "source_tile": 88,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 101,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 11,
+      "source_tile": 89,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 102,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 12,
+      "source_tile": 90,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 103,
+      "family": "front_collar",
+      "body": "male",
+      "selector": 13,
+      "source_tile": 91,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 104,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 8,
+      "source_tile": 92,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 105,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 9,
+      "source_tile": 93,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 106,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 10,
+      "source_tile": 94,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    },
+    {
+      "tile": 107,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 11,
+      "source_tile": 95,
+      "anatomy": {
+        "neck_seat_y": 234
+      }
+    },
+    {
+      "tile": 108,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 12,
+      "source_tile": 96,
+      "anatomy": {
+        "neck_seat_y": 238
+      }
+    },
+    {
+      "tile": 109,
+      "family": "front_collar",
+      "body": "female",
+      "selector": 13,
+      "source_tile": 97,
+      "anatomy": {
+        "neck_seat_y": 236
+      }
+    }
+  ],
+  "atlas_bytes": 5113463,
+  "atlas_sha256": "8789db539f16298b46650c0a949d0e7d6f01f4a4872c30e8e8949503400d3674"
+}

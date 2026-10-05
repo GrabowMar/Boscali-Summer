@@ -8,8 +8,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>The reduced-resolution cloud march: a URP pass on the main camera that fills the
     /// half-size sky (<see cref="CloudLowRes"/>) before transparents. The camera-following cube
     /// then composites it at the volume's render queue, so water, clouds and vanilla smoke keep
-    /// their order. Enqueued only for the camera it was bound to; if it stops executing, the
-    /// dressing falls back to the full-resolution march.</summary>
+    /// their order. Enqueued only for the camera it was bound to; if it stops executing,
+    /// Balanced quality restores native clouds.</summary>
     internal sealed class WeatherCloudPass : ScriptableRenderPass, IDisposable
     {
         private readonly CloudLowRes targets = new CloudLowRes();
@@ -23,6 +23,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>Frame of the last execution on the bound camera.</summary>
         internal int ExecutedFrame { get; private set; } = -1;
         internal int Height => targets.Height;
+        internal int Width => targets.Width;
+        internal long TargetBytes => targets.TargetBytes;
 
         internal WeatherCloudPass()
         {
@@ -37,6 +39,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal void Bind(Camera target, Renderer volumeRenderer, Material marchMaterial, Material compositeMaterial,
             bool halfResolution, bool temporalUpdate, Action<Camera> onRender)
         {
+            if (camera != target || temporal != temporalUpdate || reduced != halfResolution)
+            {
+                targets.Dispose();
+                ExecutedFrame = -1;
+            }
             camera = target;
             volume = volumeRenderer;
             march = marchMaterial;
@@ -67,7 +74,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             if (march == null || composite == null || renderingData.cameraData.camera != camera) return;
             RenderTextureDescriptor screen = renderingData.cameraData.cameraTargetDescriptor;
-            if (!targets.Ensure(screen.width, screen.height)) return;
+            if (!targets.Ensure(screen.width, screen.height)) { ExecutedFrame = -1; return; }
             // A frame without the pass leaves stale history behind.
             if (ExecutedFrame != Time.frameCount - 1) targets.InvalidateHistory();
 

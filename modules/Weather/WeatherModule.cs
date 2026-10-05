@@ -29,7 +29,9 @@ namespace BoscaliSummer.Modules.Weather
             WeatherNet network = context.AddComponent<WeatherNet>();
             WeatherManager manager = context.AddSceneService<WeatherManager>(64);
             manager.Configure(context.Settings.Weather, network, context.Logger);
+            context.AddService<IFlightEnvironmentView>(manager);
             manager.RegisterClientEffects(context);
+            context.AddService<IWeatherView>(manager);
             network.Configure(manager);
 
             WeatherMfdPanel panel = context.AddSceneService<WeatherMfdPanel>(65);
@@ -49,8 +51,11 @@ namespace BoscaliSummer.Modules.Weather
                 "Applies now; no mission or game restart.",
                 context.Settings.Weather.TerrainRainEnabled);
             context.AddClientSetting("RAIN AUDIO", "RAIN SOUND",
-                "Rain rush and canopy patter through the game's effects volume. Client-local; applies now.",
+                "Rain, canopy impact and distance-delayed thunder through the game's effects volume. Applies now.",
                 context.Settings.Weather.RainAudioEnabled);
+            context.AddClientSetting("SKY", "REDUCED FLASHES",
+                "Suppress visible lightning and storm flashes; independently enabled storm audio remains available.",
+                context.Settings.Weather.ReducedFlashes);
             context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
                 "Volumetric clouds for the current weather state: fronts, cumulus and storm towers. " +
                 "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",

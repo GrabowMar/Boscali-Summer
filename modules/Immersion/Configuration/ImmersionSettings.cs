@@ -13,6 +13,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<float> HeadMotionStrength { get; }
         public ConfigEntry<bool> ExtraShakeEnabled { get; }
         public ConfigEntry<float> ShakeStrength { get; }
+        public ConfigEntry<bool> ComfortMotionEnabled { get; }
         public ConfigEntry<bool> SunGlareEnabled { get; }
         public ConfigEntry<bool> MfdGlowEnabled { get; }
         public ConfigEntry<bool> AirframeAudioEnabled { get; }
@@ -35,14 +36,17 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
 
             HeadMotionStrength = config.Bind(section, "HeadMotionStrength", 1f,
                 new ConfigDescription("Strength of head inertia under G-forces.",
-                    new AcceptableValueRange<float>(0.2f, 2f)));
+                    new AcceptableValueRange<float>(0f, 2f)));
 
             ExtraShakeEnabled = config.Bind(section, "ExtraShakeEnabled", true,
                 "Cockpit view: dynamic vibrations for gunfire recoil, touchdowns, and runway roll.");
 
             ShakeStrength = config.Bind(section, "ShakeStrength", 1f,
                 new ConfigDescription("Strength of the extra camera vibrations.",
-                    new AcceptableValueRange<float>(0.2f, 2f)));
+                    new AcceptableValueRange<float>(0f, 2f)));
+
+            ComfortMotionEnabled = config.Bind(section, "ComfortMotionEnabled", false,
+                "Reduce all added cockpit rotation to 25% and remove idle head breathing. Native camera motion is unchanged.");
 
             SunGlareEnabled = config.Bind(section, "SunGlareEnabled", true,
                 "Data-driven lens flare when looking towards the sun, occluded by terrain, buildings, and clouds.");
@@ -54,7 +58,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.");
 
             SurfaceImmersionEnabled = config.Bind(section, "SurfaceImmersionEnabled", true,
-                "Cockpit view: dynamic canopy and airframe surface effects (rain wetness, high-altitude frost, scorch, dirt).");
+                "Cockpit view: subtle damage darkening on verified opaque cockpit material slots. Weather owns glass rain and cold moisture.");
 
             GForceAudioEnabled = config.Bind(section, "GForceAudioEnabled", true,
                 "Cockpit view: dynamic auditory narrowing and helmet audio low-pass filtering under high G-forces.");

@@ -17,6 +17,26 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         private const float HeadOmega = 22f; // rad/s natural frequency (~3.5 Hz)
         private const float HeadDamping = 0.85f; // critically-ish damped; quick settle
 
+        public static (float pitch, float yaw, float roll) ComposeMotion(float pitch, float yaw,
+            float roll, float strength, bool comfort)
+        {
+            if (strength <= 0f || float.IsNaN(strength) || float.IsInfinity(strength)) return (0f, 0f, 0f);
+            float ceiling = Math.Min(strength, 2f);
+            float scale = comfort ? 0.25f : 1f;
+            return (FiniteClamp(pitch, 2f * ceiling) * scale,
+                FiniteClamp(yaw, 1.2f * ceiling) * scale, FiniteClamp(roll, 2f * ceiling) * scale);
+        }
+
+        private static float FiniteClamp(float value, float limit) =>
+            float.IsNaN(value) || float.IsInfinity(value) ? 0f : Clamp(value, -limit, limit);
+
+        public static float ExposureAudioCutoff(float positive, float negative)
+        {
+            if (float.IsNaN(positive) || float.IsNaN(negative)) return 22000f;
+            float exposure = Clamp(Math.Max(positive, negative * 0.85f), 0f, 1f);
+            return 22000f * (float)Math.Pow(1200f / 22000f, exposure);
+        }
+
         /// <summary>
         /// Cockpit head target rotation in degrees (pitch, yaw, roll) from local specific force in G
         /// and body angular rates in deg/s.
@@ -282,7 +302,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         {
             if (!cockpit) return 22000f;
 
-            const float baseCutoff = 20000f;
+            const float baseCutoff = 22000f;
 
             if (forceY > 4f)
             {

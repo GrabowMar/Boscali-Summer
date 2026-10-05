@@ -14,6 +14,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Kit v2 drawing primitives for the WMC's Rect/top-left, y-down-negative layout convention (phase A: the tab
@@ -291,13 +292,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private Image image;
         private WingPilot shown;
         private int look = int.MinValue;
+        private int faction = int.MinValue;
         private bool set;
 
         public static WmcPortrait Build(RectTransform p, Rect r)
         {
-            WmcDraw.Panel(p, r, AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert));
+            AvFrame frame = WmcDraw.Panel(p, r, AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert));
             WmcDraw.Outline(p, r, AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            RectTransform go = WmcDraw.Container(p, "Portrait", new Rect(r.x + 1f, r.y - 1f, r.width - 2f, r.height - 2f));
+            RectTransform go = AvLay.Child(frame.rectTransform, "Portrait");
+            AvLay.Fill(go, 1f);
             var img = go.gameObject.AddComponent<Image>();
             img.color = Color.white;
             var w = new WmcPortrait { image = img };
@@ -309,10 +312,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The pilot's face; with nobody, the generic one faded (a pilot drafted at launch).</summary>
         public void Set(WingPilot pilot)
         {
-            if (set && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion) return;
+            int currentFaction = pilot != null && pilot.PortraitFaction >= 0 ? pilot.PortraitFaction : PortraitFactions.Local;
+            if (set && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion && faction == currentFaction) return;
             set = true;
             shown = pilot;
             look = WingPilotRoster.LookVersion;
+            faction = currentFaction;
             image.sprite = PilotPortrait.For(pilot);
             image.enabled = image.sprite != null;
             image.color = pilot != null ? Color.white : Color.white.WithAlpha(0.3f);

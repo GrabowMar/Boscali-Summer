@@ -47,7 +47,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         JtacMark = 28,
         JtacUnlase = 29,
         Prsm = 30,
-        Cruise = 31
+        Cruise = 31,
+        /// <summary>SAT CAMERA: the OPTICAL bird opens a camera reveal window. Appended after the highest id (31); never reuse retired ids.</summary>
+        SatCamera = 32
     }
 
     internal enum SupportResult : byte
@@ -179,7 +181,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         BreachRefused = 96,
 
         /// <summary>Retired with the old OPS; never reuse.</summary>
-        SpecOpsRefused = 128
+        SpecOpsRefused = 128,
+        UplinkDown = 129,
+        BirdNotReady = 130,
+        /// <summary>A friendly player aircraft is inside the scaled standoff of the impact point.</summary>
+        FriendlyNear = 131,
+        /// <summary>The OPTICAL bird has no night picture (the game has no thermal path); RADAR still works.</summary>
+        OpticalNight = 132,
+        /// <summary>No sky state is available to size or refuse the optical window.</summary>
+        SkyUnknown = 133
     }
 
     /// <summary>
@@ -229,6 +239,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float remaining = cooldown - (now - state.LastAccepted);
             return remaining > 0f ? remaining : 0f;
         }
+
+        /// <summary>Starts the player's request cooldown without remembering any request id (TASKED fires use their own receipts).</summary>
+        public void StartCooldown(ulong playerId, float now) => Get(playerId).LastAccepted = now;
 
         public void Accept(ulong playerId, int requestId, float now, bool startCooldown = true)
         {

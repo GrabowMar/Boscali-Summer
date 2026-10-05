@@ -25,9 +25,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     // player takes a draft's persona (VoicePacks plays a flying member's call), so a sample would be made up.
     internal sealed partial class WmcStudio
     {
-        private static readonly LookLayer[] Layers = { LookLayer.Body, LookLayer.Face, LookLayer.Hair, LookLayer.Suit, LookLayer.Scene };
-        private static readonly string[] LayerKeys = { "BODY", "FACE", "HAIR", "SUIT", "SCENE" };
-        private static readonly string[] LayerIds = { "body", "face", "hair", "suit", "scene" };
+        private static readonly LookLayer[] Layers = { LookLayer.Body, LookLayer.Face, LookLayer.Hair, LookLayer.Suit, LookLayer.Scene, LookLayer.Accessory };
+        private static readonly string[] LayerKeys = { "BODY", "FACE", "HAIR", "SUIT", "SCENE", "GEAR" };
+        private static readonly string[] LayerIds = { "body", "face", "hair", "suit", "scene", "gear" };
         private const float BioH = 72f, StudioKeyW = 84f;
 
         private PickerPart picker;
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvAlert problemAlert;
         private AvControl saveButton, revertButton, cloneButton, deleteButton, recruitButton;
         private string radioText = WmcText.Unknown;
-        private readonly string[] layerText = { WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown };
+        private readonly string[] layerText = { WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown, WmcText.Unknown };
         private readonly List<AvControl> tracked = new List<AvControl>(20);
         private readonly List<AvPopupEntry> pickEntries = new List<AvPopupEntry>(16);
         private readonly ConfirmGate deleteGate = new ConfirmGate(), dischargeGate = new ConfirmGate();
@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Track(s.Plus);
             }
             AvControl random = f.Buttons(new AvControl.Spec("RANDOM LOOK", RandomLook, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];
-            random.Help = "A random face, hair, uniform and scene.";
+            random.Help = "A random face, hair, uniform, gear and scene.";
             ids.Add("sq.look.random", random);
             Track(random);
 
@@ -261,6 +261,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             layerText[2] = StudioWords.Hair(sel.Hair);
             layerText[3] = PilotPortraitGenerator.UniformLabel(sel.Uniform);
             layerText[4] = StudioWords.Scene(sel.Backdrop);
+            layerText[5] = PilotPortraitGenerator.AccessoryLabel(sel.Accessory);
             look.RefreshValues();
             radioText = has ? StudioWords.Radio(draft.Persona) : WmcText.Unknown;
             radioStepper.Refresh();
@@ -375,12 +376,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The five layer steppers in two columns (the ID card above shows the portrait they change).</summary>
+        /// <summary>The six layer steppers in two columns (the ID card above shows the portrait they change).</summary>
         private sealed class LookPart : AvPart
         {
             private const float StepPitch = AvGridTokens.Row + 2f;
 
-            public readonly AvStepper[] Steppers = new AvStepper[5];
+            public readonly AvStepper[] Steppers = new AvStepper[6];
 
             public LookPart(RectTransform parent, string[] values, Action<LookLayer, int> step)
             {

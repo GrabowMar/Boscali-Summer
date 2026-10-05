@@ -43,6 +43,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private CommsInkGraphic ink;
         private CommsPulseGraphic pulse;
         private readonly List<CommsMapTag> tags = new List<CommsMapTag>(MaxTags);
+        private readonly List<Rect> glyphBounds = new List<Rect>(CommsBoard.MaxPerAudience);
+        private readonly Rect[] captionBounds = new Rect[MaxTags];
         private int usedTags;
 
         private int lastRevision = -1;
@@ -67,6 +69,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             pulse = null;
             map = null;
             tags.Clear();
+            glyphBounds.Clear();
             usedTags = 0;
             lastRevision = lastBoardRevision = -1;
             lastZoom = -1f;
@@ -236,7 +239,62 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     CommsMesh.Tone(CommsTone.Caution), new Vector2(0f, 14f), 13f, bold: true);
             }
 
+            PlaceTags(state, factor);
             for (int i = usedTags; i < tags.Count; i++) tags[i].SetVisible(false);
+        }
+
+        // Only caption plates move. Reserve every visible COM glyph before placing the
+        // newest-first caption pool; older calls must not land under a newer caption.
+        private void PlaceTags(CommsClientState state, float factor)
+        {
+            Canvas canvas = root.GetComponentInParent<Canvas>();
+            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            RectTransform viewport = map.mapBackground != null ? map.mapBackground.rectTransform : map.mapImage.transform.parent as RectTransform;
+            if (viewport == null) return;
+            Rect screen = CommsMapTag.ScreenRect(viewport, camera);
+            screen.xMin += 6f; screen.xMax -= 6f; screen.yMin += 6f; screen.yMax -= 6f;
+            glyphBounds.Clear();
+            foreach (CommsItem item in state.Board.Items)
+            {
+                if (item.Kind == CommsItemKind.Stroke || state.IsMuted(item.Author)) continue;
+                Vector2 at = RectTransformUtility.WorldToScreenPoint(camera,
+                    root.transform.TransformPoint(CommsProjection.At(item.X, item.Z, factor)));
+                if (screen.Contains(at)) glyphBounds.Add(new Rect(at.x - 14f, at.y - 14f, 28f, 28f));
+            }
+            for (int i = 0; i < usedTags; i++)
+            {
+                Vector2 at = tags[i].AnchorScreen(camera);
+                if (screen.Contains(at)) glyphBounds.Add(new Rect(at.x - 14f, at.y - 14f, 28f, 28f));
+            }
+            int placed = 0;
+            for (int i = 0; i < usedTags; i++)
+            {
+                CommsMapTag tag = tags[i];
+                Rect initial = tag.ScreenBounds(camera);
+                Vector2 half = initial.size * .5f;
+                bool found = false;
+                if (screen.Contains(tag.AnchorScreen(camera)) && initial.width <= screen.width && initial.height <= screen.height)
+                    for (int step = 0; step < MaxTags * 3; step++)
+                    {
+                        int row = step / 3;
+                        row = row == 0 ? 0 : (row + 1) / 2 * (row % 2 == 1 ? 1 : -1);
+                        int column = step % 3 == 0 ? 0 : step % 3 == 1 ? 1 : -1;
+                        Vector2 at = initial.center + new Vector2(column * (initial.width + 8f), row * (initial.height + 6f));
+                        at.x = Mathf.Clamp(at.x, screen.xMin + half.x, screen.xMax - half.x);
+                        at.y = Mathf.Clamp(at.y, screen.yMin + half.y, screen.yMax - half.y);
+                        Rect box = new Rect(at - half, initial.size);
+                        Rect padded = new Rect(box.x - 3f, box.y - 3f, box.width + 6f, box.height + 6f);
+                        bool clear = true;
+                        for (int n = 0; n < glyphBounds.Count && clear; n++) if (padded.Overlaps(glyphBounds[n])) clear = false;
+                        for (int n = 0; n < placed && clear; n++) if (padded.Overlaps(captionBounds[n])) clear = false;
+                        if (!clear) continue;
+                        tag.Place(at, camera);
+                        captionBounds[placed++] = box;
+                        found = true;
+                        break;
+                    }
+                tag.SetVisible(found);
+            }
         }
 
         private void Tag(Vector2 at, float inverse, string text, Color colour, Vector2 offset, float size, bool bold)
@@ -257,7 +315,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private readonly RectTransform root;
         private readonly AvFrame plate;
         private readonly TMP_Text label;
+        private readonly Image leader;
+        private Vector2 anchor;
         private string text;
+        private readonly Vector3[] corners = new Vector3[4];
 
         public CommsMapTag(RectTransform parent)
         {
@@ -267,6 +328,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             root.anchorMin = root.anchorMax = new Vector2(0.5f, 0.5f);
             root.pivot = new Vector2(0.5f, 0.5f);
             root.sizeDelta = new Vector2(Width, Height);
+
+            leader = AvLay.Solid(parent, "Caption leader", Color.clear);
+            leader.raycastTarget = false;
+            leader.rectTransform.anchorMin = leader.rectTransform.anchorMax = leader.rectTransform.pivot = new Vector2(.5f, .5f);
+            leader.rectTransform.SetAsFirstSibling();
+            leader.enabled = false;
 
             plate = AvFrame.Add(root, "Plate", AvChamfer.All(0f));
             plate.Stroke = 1f;
@@ -292,6 +359,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         public void Show(Vector2 at, float inverse, string value, Color colour, Vector2 offset, float size, bool bold)
         {
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
+            anchor = at;
+            leader.enabled = false;
             root.localScale = new Vector3(inverse, inverse, 1f);
             root.anchoredPosition = at + offset * inverse;
             if (text != value)
@@ -315,6 +384,51 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         public void SetVisible(bool visible)
         {
             if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible);
+            if (!visible) leader.enabled = false;
+        }
+
+        public Vector2 AnchorScreen(Camera camera) => RectTransformUtility.WorldToScreenPoint(camera, root.parent.TransformPoint(anchor));
+        public Rect ScreenBounds(Camera camera)
+        {
+            plate.rectTransform.GetWorldCorners(corners);
+            Vector2 min = RectTransformUtility.WorldToScreenPoint(camera, corners[0]);
+            Vector2 max = min;
+            for (int i = 1; i < corners.Length; i++)
+            {
+                Vector2 at = RectTransformUtility.WorldToScreenPoint(camera, corners[i]);
+                min = Vector2.Min(min, at); max = Vector2.Max(max, at);
+            }
+            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
+        }
+
+        internal static Rect ScreenRect(RectTransform rect, Camera camera)
+        {
+            Vector2 min = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.min));
+            Vector2 max = RectTransformUtility.WorldToScreenPoint(camera, rect.TransformPoint(rect.rect.max));
+            return Rect.MinMaxRect(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y), Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y));
+        }
+
+        public void Place(Vector2 center, Camera camera)
+        {
+            if (!RectTransformUtility.ScreenPointToWorldPointInRectangle(root, center, camera, out Vector3 at)) return;
+            root.position = at;
+            RectTransform parent = (RectTransform)root.parent;
+            Rect box = ScreenBounds(camera);
+            Vector2 start = AnchorScreen(camera);
+            Vector2 end = new Vector2(Mathf.Clamp(start.x, box.xMin, box.xMax), Mathf.Clamp(start.y, box.yMin, box.yMax));
+            Vector2 line = end - start;
+            leader.enabled = line.sqrMagnitude > 400f;
+            if (!leader.enabled) return;
+            start += line.normalized * 14f;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, start, camera, out Vector2 localStart);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, end, camera, out Vector2 localEnd);
+            Vector2 localLine = localEnd - localStart;
+            Vector2 origin = RectTransformUtility.WorldToScreenPoint(camera, parent.TransformPoint(Vector2.zero));
+            float pixelScale = Vector2.Distance(origin, RectTransformUtility.WorldToScreenPoint(camera, parent.TransformPoint(Vector2.up)));
+            leader.rectTransform.anchoredPosition = (localStart + localEnd) * .5f;
+            leader.rectTransform.sizeDelta = new Vector2(localLine.magnitude, 1f / Mathf.Max(.0001f, pixelScale));
+            leader.rectTransform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(localLine.y, localLine.x) * Mathf.Rad2Deg);
+            Color ink = label.color; ink.a *= .6f; leader.color = ink;
         }
     }
 

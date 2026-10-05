@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.Rendering;
+using BoscaliSummer.Core.Fx;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
@@ -28,6 +29,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly RenderTargetIdentifier[] targets = new RenderTargetIdentifier[2];
         private RenderTexture quarterColour, quarterData, historyA, historyB, halfData;
         private bool writeA;
+        private int requestedWidth, requestedHeight;
+        private float requestedScale;
+        private bool allocationRefused;
+        private long refusedPoolBytes;
+        private float retryAt;
+        internal long TargetBytes => (long)Width * Height * 24L +
+            (long)((Width + 1) / 2) * ((Height + 1) / 2) * 16L;
 
         internal int Width { get; private set; }
         internal int Height { get; private set; }
@@ -36,19 +44,36 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal bool Ensure(int fullWidth, int fullHeight)
         {
-            int w = Math.Max(2, (fullWidth + 1) / 2), h = Math.Max(2, (fullHeight + 1) / 2);
-            if (historyA != null && Width == w && Height == h && historyA.IsCreated() && historyB.IsCreated() &&
+            float quality = Mathf.Clamp(FxBus.Scales.RenderTargets, 0.25f, 1f);
+            bool sameRequest = requestedWidth == fullWidth && requestedHeight == fullHeight && requestedScale == quality;
+            if (historyA != null && sameRequest && historyA.IsCreated() && historyB.IsCreated() &&
                 halfData.IsCreated() && quarterColour.IsCreated() && quarterData.IsCreated()) return true;
+            // A refused set would otherwise allocate/free fifteen targets every rendered frame.
+            // Pool changes recover immediately; an unchanged refusal retries twice per second.
+            if (allocationRefused && sameRequest && refusedPoolBytes == FxRtPool.UsedBytes && Time.unscaledTime < retryAt)
+                return false;
             Release();
-            Width = w;
-            Height = h;
-            historyA = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds A");
-            historyB = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds B");
-            halfData = Target(w, h, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Depth");
-            quarterColour = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds Quarter");
-            quarterData = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Quarter Depth");
-            HistoryValid = false;
-            return historyA.Create() && historyB.Create() && halfData.Create() && quarterColour.Create() && quarterData.Create();
+            requestedWidth = fullWidth; requestedHeight = fullHeight; requestedScale = quality;
+            float scale = Math.Min(1f, Math.Min(1920f / Math.Max(1, fullWidth), 1080f / Math.Max(1, fullHeight))) * quality;
+            for (int attempt = 0; attempt < 3; attempt++, scale *= 0.7f)
+            {
+                int w = Math.Max(2, (int)Math.Ceiling(fullWidth * scale / 2f));
+                int h = Math.Max(2, (int)Math.Ceiling(fullHeight * scale / 2f));
+                Width = w; Height = h;
+                historyA = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds A");
+                historyB = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds B");
+                halfData = Target(w, h, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Depth");
+                quarterColour = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds Quarter");
+                quarterData = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Quarter Depth");
+                HistoryValid = false;
+                if (TargetBytes <= 16L * 1024 * 1024 && Acquire(historyA) && Acquire(historyB) && Acquire(halfData) &&
+                    Acquire(quarterColour) && Acquire(quarterData))
+                { allocationRefused = false; return true; }
+                Release();
+            }
+            allocationRefused = true; refusedPoolBytes = FxRtPool.UsedBytes;
+            retryAt = Time.unscaledTime + 0.5f;
+            return false;
         }
 
         /// <summary>Records the march (and the resolve) into <paramref name="cmd"/> and points the
@@ -93,6 +118,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal void InvalidateHistory() => HistoryValid = false;
 
+        private static bool Acquire(RenderTexture target) => target.Create() && FxRtPool.Own(target);
+
         private static RenderTexture Target(int w, int h, RenderTextureFormat format, FilterMode filter, string name) =>
             new RenderTexture(w, h, 0, format, RenderTextureReadWrite.Linear)
             { name = name, filterMode = filter, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
@@ -107,11 +134,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static void Free(ref RenderTexture texture)
         {
             if (texture == null) return;
+            FxRtPool.Disown(texture);
             texture.Release();
             UnityEngine.Object.Destroy(texture);
             texture = null;
         }
 
-        public void Dispose() => Release();
+        public void Dispose() { Release(); allocationRefused = false; retryAt = 0f; }
     }
 }

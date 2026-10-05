@@ -13,6 +13,7 @@ Shader "Boscali/TerrainRain"
         _SkyColor ("Sky Sheen Color", Color) = (0,0,0,0)
         _FogDensity ("Fog Density", Float) = 0
         _RippleTime ("Ripple Time", Float) = 0
+        _WetFade ("Damp Tone Fade Metres", Vector) = (1170,1800,0,0)
     }
     SubShader
     {
@@ -31,7 +32,7 @@ Shader "Boscali/TerrainRain"
             #include "UnityCG.cginc"
 
             float _Wetness, _Rain, _FogDensity, _RippleTime;
-            float4 _SunDir, _SunColor, _SkyColor;
+            float4 _SunDir, _SunColor, _SkyColor, _WetFade;
 
             struct Varyings
             {
@@ -74,16 +75,21 @@ Shader "Boscali/TerrainRain"
                 float3 toCam = _WorldSpaceCameraPos - i.world;
                 float dist = length(toCam);
                 float3 V = toCam / max(dist, 0.001);
-                float fade = 1 - smoothstep(700, 1200, dist);
-                float wet = saturate(_Wetness) * fade;
+                float fade = 1 - smoothstep(_WetFade.x, _WetFade.y, dist);
+                float fogAtt = exp2(-dist * dist * _FogDensity * _FogDensity * 1.4427);
+                float wet = saturate(_Wetness) * fade * fogAtt;
 
                 // Organic damp mottling and flat-ground puddles, in tile-local metres.
                 float2 p = i.local;
                 float mottle = 0.55 + 0.45 * (vnoise(p * 0.02) * 0.6 + vnoise(p * 0.07 + 5.3) * 0.4);
+                // At height-limit views metre-scale texture becomes subpixel. Retain the
+                // broad damp tone while converging to its mean instead of scintillating.
+                float footprint = max(length(ddx(i.world.xz)), length(ddy(i.world.xz)));
+                mottle = lerp(mottle, 0.775, smoothstep(2, 12, footprint));
                 float slope = smoothstep(0.2, 0.85, N.y);
                 float flat = smoothstep(0.93, 0.995, N.y);
                 float puddle = smoothstep(0.60, 0.70, vnoise(p * 0.045 + 13.7)) * flat *
-                    smoothstep(0.35, 0.8, _Wetness);
+                    smoothstep(0.35, 0.8, _Wetness) * (1 - smoothstep(2, 12, footprint));
                 float dark = 0.15 * mottle * slope + 0.07 * puddle;
                 float keep = 1 - dark * wet;
 
@@ -103,11 +109,11 @@ Shader "Boscali/TerrainRain"
                 float3 L = normalize(_SunDir.xyz + float3(0, 0.0001, 0));
                 float3 H = normalize(L + V);
                 float ndh = saturate(dot(Np, H));
-                float spec = pow(ndh, 96) * 1.2 * puddle + pow(ndh, 18) * 0.10 * slope * mottle;
+                float closeSheen = 1 - smoothstep(250, 1800, dist);
+                float spec = (pow(ndh, 96) * 1.2 * puddle + pow(ndh, 18) * 0.10 * slope * mottle) * closeSheen;
                 float fres = pow(1 - saturate(dot(Np, V)), 4);
-                float sheen = fres * (0.35 * puddle + 0.06 * slope);
-                float fogAtt = exp2(-dist * dist * _FogDensity * _FogDensity * 1.4427);
-                float3 add = (_SunColor.rgb * spec + _SkyColor.rgb * sheen) * wet * fogAtt;
+                float sheen = fres * (0.35 * puddle + 0.06 * slope) * closeSheen;
+                float3 add = (_SunColor.rgb * spec + _SkyColor.rgb * sheen) * wet;
                 return half4(add, keep);
             }
             ENDHLSL

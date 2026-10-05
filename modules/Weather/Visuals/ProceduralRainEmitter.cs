@@ -87,6 +87,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             main.scalingMode = ParticleSystemScalingMode.Hierarchy;
             main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.04f);
             main.startColor = new Color(0.72f, 0.80f, 0.92f, 0.30f);
+            // Camera-relative motion changes for every live drop during an orbit or turn,
+            // rather than only for newly emitted drops. Native simulation owns the update.
+            var velocity = ps.velocityOverLifetime;
+            velocity.enabled = true;
+            velocity.space = ParticleSystemSimulationSpace.World;
 
             // Emission box shape: upstream plane
             var shape = ps.shape;
@@ -142,19 +147,22 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             previousCameraPosition = position;
             positioned = true;
 
-            if (rainIntensity <= 0.02f)
-            {
-                if (ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
-                return;
-            }
-
-            if (!ps.isPlaying) ps.Play();
-
             // Calculate apparent relative wind velocity: V_rel = (V_wind - 9j) - V_aircraft
             Vector3 rainWorldVelocity = worldWind - (Vector3.up * RainTerminalVelocity);
             Vector3 apparentVelocity = rainWorldVelocity - aircraftVelocity;
             float apparentSpeed = apparentVelocity.magnitude;
             ApparentSpeedNow = apparentSpeed;
+            var velocity = ps.velocityOverLifetime;
+            velocity.x = apparentVelocity.x;
+            velocity.y = apparentVelocity.y;
+            velocity.z = apparentVelocity.z;
+            // Drops already in flight retain correct camera motion while a shower ends.
+            if (rainIntensity <= 0.02f)
+            {
+                if (ps.isPlaying) ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                return;
+            }
+            if (!ps.isPlaying) ps.Play();
             // Hovering in matching wind collapses V_rel; fall straight down instead of
             // feeding LookRotation a degenerate vector.
             Vector3 streamDir = apparentSpeed > 0.5f ? apparentVelocity / apparentSpeed : Vector3.down;
@@ -164,14 +172,20 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float leadDistance = boxLength * 0.45f;
 
             // Bias the bounded volume toward the view without changing upstream travel distance.
-            Vector3 viewBias = Vector3.ProjectOnPlane(targetCamera.transform.forward, streamDir) * 4f;
+            Vector3 viewBias = Vector3.ProjectOnPlane(targetCamera.transform.forward, streamDir) * 7f;
             transform.position = targetCamera.transform.position - (streamDir * leadDistance) + viewBias;
-            transform.rotation = Quaternion.LookRotation(streamDir);
-            psRenderer.velocityScale = Mathf.Min(1f / 120f, 0.85f / Mathf.Max(1f, apparentSpeed));
+            Vector3 planeUp = Vector3.ProjectOnPlane(targetCamera.transform.up, streamDir);
+            if (planeUp.sqrMagnitude < 0.001f)
+                planeUp = Vector3.ProjectOnPlane(targetCamera.transform.forward, streamDir);
+            transform.rotation = Quaternion.LookRotation(streamDir, planeUp);
+            RainVisualMath.ViewCoverage(targetCamera.fieldOfView, targetCamera.aspect, out float width, out float height);
+            var shape = ps.shape;
+            shape.scale = new Vector3(width, height, 0.2f);
+            psRenderer.velocityScale = Mathf.Min(1f / 120f, 0.85f / Mathf.Max(1f, apparentSpeed + 1.2f));
 
             // Speed and lifetime matching to keep active particle count bounded
             var main = ps.main;
-            main.startSpeed = apparentSpeed;
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0f, 1.2f);
             float lifetime = boxLength / Mathf.Max(6f, apparentSpeed);
             main.startLifetime = lifetime;
 

@@ -1,0 +1,198 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>BoscaliSummer.Tests</AssemblyName>
+    <RootNamespace>BoscaliSummer.Tests</RootNamespace>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
+    <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\Contracts\PortraitRole.cs" Link="Framework\PortraitRole.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Personnel\PilotPortraitGenerator.cs" Link="Features\Wing\PilotPortraitGenerator.cs" />
+    <Compile Include="..\..\modules\Weather\Domain\*.cs" LinkBase="Features\Weather" />
+    <Compile Include="..\..\modules\Weather\Audio\EnvironmentAudioMath.cs" Link="Features\Weather\EnvironmentAudioMath.cs" />
+    <Compile Include="..\..\modules\Immersion\Audio\CanopyWindMath.cs" Link="Features\Immersion\CanopyWindMath.cs" />
+    <Compile Include="..\..\modules\Support\Domain\Calls\*.cs" LinkBase="Features\Support\Calls" />
+    <Compile Include="..\..\modules\Support\Domain\Space\*.cs" LinkBase="Features\Support\Space" />
+    <Compile Include="..\..\Core\Contracts\FxBudget.cs" Link="Framework\FxBudget.cs" />
+    <Compile Include="..\..\Core\Contracts\IWeatherView.cs" Link="Framework\IWeatherView.cs" />
+    <Compile Include="..\..\Core\Contracts\IClientEffect.cs" Link="Framework\IClientEffect.cs" />
+    <Compile Include="..\..\Core\Fx\FxRegistry.cs" Link="Framework\FxRegistry.cs" />
+    <Compile Include="..\..\Core\Fx\FxQualityMapper.cs" Link="Framework\FxQualityMapper.cs" />
+    <Compile Include="..\..\modules\Performance\Domain\FrameBudgetPolicy.cs" Link="Features\Performance\FrameBudgetPolicy.cs" />
+    <Compile Include="..\..\modules\Session\Domain\HostValueLedger.cs" Link="Features\Session\HostValueLedger.cs" />
+    <Compile Include="..\..\modules\Progression\Domain\PlaneEngineMap.cs" Link="Features\Progression\PlaneEngineMap.cs" />
+    <Compile Include="..\..\modules\PlayerSpawnPriority\SpawnPriorityPolicy.cs" Link="Features\PlayerSpawnPriority\SpawnPriorityPolicy.cs" />
+    <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />
+    <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\LandingEnergy.cs" Link="Features\Autopilot\LandingEnergy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\CarrierPattern.cs" Link="Features\Autopilot\CarrierPattern.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMath.cs" Link="Features\Autopilot\AceRadialMath.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialAction.cs" Link="Features\Autopilot\AceRadialAction.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialStyle.cs" Link="Features\Autopilot\AceRadialStyle.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMenuTree.cs" Link="Features\Autopilot\AceRadialMenuTree.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\StrongpointHitPolicy.cs" Link="Features\UrbanCombat\StrongpointHitPolicy.cs" />
+    <Compile Include="..\..\modules\Radio\Domain\CombatInterceptNet.cs" Link="Features\Radio\CombatInterceptNet.cs" />
+    <Compile Include="..\..\Core\Contracts\WreckNotice.cs" Link="Framework\WreckNotice.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationChains.cs" Link="Features\DynamicOperations\OperationChains.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTempo.cs" Link="Features\DynamicOperations\OperationTempo.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationFailure.cs" Link="Features\DynamicOperations\OperationFailure.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ContractShares.cs" Link="Features\DynamicOperations\ContractShares.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationMarkerCopy.cs" Link="Features\DynamicOperations\OperationMarkerCopy.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ContractSelection.cs" Link="Features\DynamicOperations\ContractSelection.cs" />
+    <Compile Include="..\..\modules\Campaign\Domain\MissionInstallPlan.cs" Link="Features\Campaign\MissionInstallPlan.cs" />
+    <Compile Include="..\..\Core\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
+    <Compile Include="..\..\Core\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
+    <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
+    <Compile Include="..\..\Core\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
+    <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\TargetPresetModel.cs" Link="Features\Command\TargetPresetModel.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdRailCatalog.cs" Link="Features\Command\MfdRailCatalog.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogTone.cs" Link="Features\Command\MfdLogTone.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdSecondaryObjectives.cs" Link="Features\Command\MfdSecondaryObjectives.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionOverview.cs" Link="Features\Command\MfdMissionOverview.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdMissionLabels.cs" Link="Features\Command\MfdMissionLabels.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdLogSpace.cs" Link="Features\Command\MfdLogSpace.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\GridLabelsMath.cs" Link="Features\Command\GridLabelsMath.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\VanillaMfdPanelCatalog.cs" Link="Features\Command\VanillaMfdPanelCatalog.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdNewsFeed.cs" Link="Features\Command\MfdNewsFeed.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
+    <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Domain\CloudDeckPolicy.cs" Link="Features\FireAndDestruction\CloudDeckPolicy.cs" />
+    <Compile Include="..\..\modules\FireAndDestruction\Runtime\ForestIndex.cs" Link="Features\FireAndDestruction\ForestIndex.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioLibrary.cs" Link="Features\Radio\RadioLibrary.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\HuntMusicGate.cs" Link="Features\Radio\HuntMusicGate.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioFrequencies.cs" Link="Features\Radio\RadioFrequencies.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioPropagation.cs" Link="Features\Radio\RadioPropagation.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioSpectrum.cs" Link="Features\Radio\RadioSpectrum.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\VanillaMusicHold.cs" Link="Features\Radio\VanillaMusicHold.cs" />
+    <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
+    <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
+    <Compile Include="..\..\modules\Squad\Domain\SnapshotRevision.cs" Link="Features\Squad\SnapshotRevision.cs" />
+    <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
+    <Compile Include="..\..\Core\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
+    <Compile Include="..\..\Core\Contracts\IProgressionView.cs" Link="Framework\IProgressionView.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
+    <Compile Include="..\..\modules\Progression\Presentation\SkillBoardLayout.cs" Link="Features\Progression\SkillBoardLayout.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\AceSkillCatalog.cs" Link="Features\Progression\AceSkillCatalog.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\EmblemDesign.cs" Link="Features\Progression\EmblemDesign.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\PilotDraft.cs" Link="Features\Progression\PilotDraft.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\StrikeBallistics.cs" Link="Features\Support\StrikeBallistics.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\IntelGate.cs" Link="Features\Support\IntelGate.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\WindowMath.cs" Link="Features\Support\WindowMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\SiegeMath.cs" Link="Features\UrbanCombat\SiegeMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonComposition.cs" Link="Features\UrbanCombat\GarrisonComposition.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\UrbanRuinMath.cs" Link="Features\UrbanCombat\UrbanRuinMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Visuals\WarzoneDressingMath.cs" Link="Features\UrbanCombat\WarzoneDressingMath.cs" />
+    <Compile Include="..\..\modules\Trenches\Domain\TrenchTraceMath.cs" Link="Features\Trenches\TrenchTraceMath.cs" />
+    <Compile Include="..\..\modules\Trenches\Domain\TrenchWire.cs" Link="Features\Trenches\TrenchWire.cs" />
+    <Compile Include="..\..\Core\Modules\ModuleMetadata.cs" Link="Framework\FeatureMetadata.cs" />
+    <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
+    <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
+    <Compile Include="..\..\modules\Command\Domain\CommandRosterOrder.cs" Link="Features\Command\CommandRosterOrder.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TacticalTheaterState.cs" Link="Features\Command\TacticalTheaterState.cs" />
+    <Compile Include="..\..\modules\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
+    <Compile Include="..\..\modules\Command\Runtime\SectorClusterTree.cs" Link="Features\Command\SectorClusterTree.cs" />
+    <Compile Include="..\..\modules\Command\Runtime\SectorContour.cs" Link="Features\Command\SectorContour.cs" />
+    <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
+    <Compile Include="..\..\modules\Command\Domain\OperationsBoardFit.cs" Link="Features\Command\OperationsBoardFit.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOperationsBoard.cs" Link="Features\Command\StrOperationsBoard.cs" />
+    <Compile Include="..\..\modules\Command\Domain\RoomPlotModel.cs" Link="Features\Command\RoomPlotModel.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandMarkerPolicy.cs" Link="Features\HighCommand\CommandMarkerPolicy.cs" />
+    <Compile Include="..\..\Core\Contracts\CommanderLogLine.cs" Link="Framework\CommanderLogLine.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommanderGenerator.cs" Link="Features\HighCommand\CommanderGenerator.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandSlot.cs" Link="Features\HighCommand\CommandSlot.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandSnapshotRules.cs" Link="Features\HighCommand\CommandSnapshotRules.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTier.cs" Link="Features\HighCommand\CommandTier.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTraits.cs" Link="Features\HighCommand\CommandTraits.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\CommandTree.cs" Link="Features\HighCommand\CommandTree.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\PriorityDirective.cs" Link="Features\TheaterOps\PriorityDirective.cs" />
+    <Compile Include="..\..\Core\Contracts\ITheaterWarView.cs" Link="Framework\ITheaterWarView.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\LivingWarRules.cs" Link="Features\TheaterOps\LivingWarRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\NavalTask.cs" Link="Features\TheaterOps\NavalTask.cs" />
+    <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\ReinforcementGate.cs" Link="Features\TheaterOps\ReinforcementGate.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\OffensivePlan.cs" Link="Features\TheaterOps\OffensivePlan.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\InfluenceState.cs" Link="Features\TheaterOps\InfluenceState.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\DirectorDecision.cs" Link="Features\TheaterOps\Domain\DirectorDecision.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\AreaResistance.cs" Link="Features\TheaterOps\Domain\AreaResistance.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\DirectorWords.cs" Link="Features\TheaterOps\DirectorWords.cs" />
+    <Compile Include="..\..\Core\Contracts\ITheaterOperationsView.cs" Link="Framework\ITheaterOperationsView.cs" />
+    <Compile Include="..\..\Core\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
+    <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
+    <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventCatalog.cs" Link="Features\Events\EventCatalog.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventSelector.cs" Link="Features\Events\EventSelector.cs" />
+    <Compile Include="..\..\modules\Events\Domain\EventDirector.cs" Link="Features\Events\EventDirector.cs" />
+    <Compile Include="..\..\Core\Contracts\HudLayout.cs" Link="Framework\HudLayout.cs" />
+    <Compile Include="..\..\Core\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
+    <Compile Include="..\..\Core\Contracts\IHudBoard.cs" Link="Framework\IHudBoard.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudFeedStore.cs" Link="Features\Hud\HudFeedStore.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudNoticeQueue.cs" Link="Features\Hud\HudNoticeQueue.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
+    <Compile Include="..\..\modules\QoL\Domain\FuelHudCopy.cs" Link="Features\QoL\FuelHudCopy.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\ChannelFilter.cs" Link="Features\Hud\ChannelFilter.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\WingviewMath.cs" Link="Features\Hud\WingviewMath.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
+    <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
+    <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\TheaterOpsHudCopy.cs" Link="Features\TheaterOps\TheaterOpsHudCopy.cs" />
+    <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
+    <Compile Include="..\..\modules\Weather\Visuals\CloudBodies.cs" Link="Features\Weather\CloudBodies.cs" />
+    <Compile Include="..\..\modules\Weather\Visuals\CloudMaps.cs" Link="Features\Weather\CloudMaps.cs" />
+    <Compile Include="..\..\Core\Game\MfdSlots.cs" Link="Infrastructure\MfdSlots.cs" />
+    <Compile Include="..\..\Core\Game\WingApiVersions.cs" Link="Infrastructure\WingApiVersions.cs" />
+    <Compile Include="..\..\modules\Comms\Domain\*.cs" LinkBase="Features\Comms" />
+    <Compile Include="..\..\modules\Comms\Presentation\CommsGlyphs.cs" Link="Features\Comms\CommsGlyphs.cs" />
+    <Compile Include="..\..\AvionicsUi\Pure\*.cs" LinkBase="Avionics" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The shipped stylesheet is parsed here: a typo in it only warns at runtime. -->
+
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.fui.avss" LogicalName="BoscaliSummer.Tests.avionics.fui.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.portal.avss" LogicalName="BoscaliSummer.Tests.avionics.portal.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.steel.avss" LogicalName="BoscaliSummer.Tests.avionics.steel.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.ace.avss" LogicalName="BoscaliSummer.Tests.avionics.ace.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\avionics.phosphor.avss" LogicalName="BoscaliSummer.Tests.avionics.phosphor.avss" />
+    <EmbeddedResource Include="..\..\AvionicsUi\Assets\avionics-ui.manifest.json" LogicalName="BoscaliSummer.Tests.avionics-ui.manifest.json" Condition="Exists('..\..\AvionicsUi\Assets\avionics-ui.manifest.json')" />
+  </ItemGroup>
+  <ItemGroup Label="Concurrent weather and immersion tests">
+    <Compile Include="..\*Tests.cs" />
+    <Compile Include="..\..\modules\Immersion\Domain\*.cs" LinkBase="Features\Immersion" />
+    <Compile Include="..\..\Core\Contracts\IFlightEnvironmentView.cs" Link="Core\IFlightEnvironmentView.cs" Condition="Exists('..\..\Core\Contracts\IFlightEnvironmentView.cs')" />
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

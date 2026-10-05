@@ -94,8 +94,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             Rect = AvLay.Child(parent, "Header " + titleText);
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
-            title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
-            AvText.Fit(title, false);
+            title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText, TextAlignmentOptions.MidlineLeft, true);
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
             cap = AvLay.Solid(Rect, "Cap", Color.clear);
@@ -109,6 +108,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             if (title.text == (text ?? string.Empty)) return;
             title.text = text ?? string.Empty;
             Arrange();
+            Changed();
         }
 
         public void SetCaption(string text)
@@ -116,9 +116,21 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             if (caption.text == (text ?? string.Empty)) return;
             caption.text = text ?? string.Empty;
             Arrange();
+            Changed();
         }
 
-        public override float Measure(float width) => 28f;
+        private float TitleWidth(float width)
+        {
+            float strip = buttons.Length == 0 ? 0f : buttons.Length * (ButtonW + ButtonGap) - ButtonGap;
+            float left = width - strip;
+            float captionW = Mathf.Min(AvText.Width(caption) + 2f, Mathf.Max(0f, left - 90f));
+            return Mathf.Max(30f, left - (buttons.Length == 0 ? 0f : 8f) - captionW - 30f);
+        }
+
+        private bool TitleRow(float width) => AvText.Width(title) > TitleWidth(width);
+        private float TitleHeight(float width) => Mathf.Max(22f, AvText.Height(title, width - 22f));
+
+        public override float Measure(float width) => TitleRow(width) ? TitleHeight(width) + 28f : 28f;
 
         public override void Place(AvSlot s)
         {
@@ -134,13 +146,15 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             float w = placedW;
             float strip = buttons.Length == 0 ? 0f : buttons.Length * (ButtonW + ButtonGap) - ButtonGap;
             float left = w - strip;
+            bool titleRow = TitleRow(w);
+            float keyY = titleRow ? TitleHeight(w) : 0f;
             for (int i = 0; i < buttons.Length; i++)
-                AvLay.Place(buttons[i].Rect, left + i * (ButtonW + ButtonGap), 1f, ButtonW, 25f);
+                AvLay.Place(buttons[i].Rect, left + i * (ButtonW + ButtonGap), keyY + 1f, ButtonW, 25f);
             float captionW = Mathf.Min(AvText.Width(caption) + 2f, Mathf.Max(0f, left - 90f));
             float captionX = left - (buttons.Length == 0 ? 0f : 8f) - captionW;
             AvLay.Place(icon.rectTransform, 0f, 5f, 16f, 16f);
-            AvLay.Place(title.rectTransform, 22f, 0f, Mathf.Max(30f, captionX - 30f), 26f);
-            AvLay.Place(caption.rectTransform, captionX, 0f, captionW, 26f);
+            AvLay.Place(title.rectTransform, 22f, 0f, titleRow ? w - 22f : TitleWidth(w), titleRow ? keyY : 26f);
+            AvLay.Place(caption.rectTransform, captionX, keyY, captionW, 26f);
             AvLay.Place(rule.rectTransform, 0f, placedH - 1f, w, 1f);
             AvLay.Place(cap.rectTransform, 0f, placedH - 3f, 28f, 3f);
         }
@@ -158,7 +172,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
     /// <summary>
     /// The receiver's head line: frequency and band mode on the left; station, programme, the track on
-    /// air and a status slab on the right. It is one 50 px block instead of a readout, a row and a chip.
+    /// air and a status slab on the right. The compact block grows when station names or programme text wrap.
     /// </summary>
     internal sealed class RadioTunePart : AvPart
     {
@@ -176,12 +190,12 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             value = AvText.Make(Rect, "Value", AvTextRole.Display);
             unit = AvText.Make(Rect, "Unit", AvTextRole.Label);
             mode = AvText.Make(Rect, "Mode", AvTextRole.Micro);
-            station = AvText.Make(Rect, "Station", AvTextRole.Head);
+            station = AvText.Make(Rect, "Station", AvTextRole.Head, string.Empty, TextAlignmentOptions.MidlineLeft, true);
             programme = AvText.Make(Rect, "Programme", AvTextRole.ProseSmall);
             track = AvText.Make(Rect, "Track", AvTextRole.Micro);
             slabBack = AvLay.Solid(Rect, "SlabBack", Color.clear);
             slabText = AvText.Make(Rect, "Slab", AvTextRole.Micro, string.Empty, TextAlignmentOptions.Center);
-            AvText.Fit(station, false);
+            AvText.Fit(value, false); // VHF's three decimals must stay clear of the MHz unit.
             programme.enableWordWrapping = true;
             AvText.Fit(track, false);
             AvText.Fit(mode, false);
@@ -197,17 +211,24 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             if (value.text != (frequency ?? string.Empty)) { value.text = frequency ?? string.Empty; moved = true; }
             if (unit.text != (unitText ?? string.Empty)) unit.text = unitText ?? string.Empty;
             if (mode.text != (modeText ?? string.Empty)) mode.text = modeText ?? string.Empty;
-            if (station.text != (stationText ?? string.Empty)) station.text = stationText ?? string.Empty;
+            if (station.text != (stationText ?? string.Empty)) { station.text = stationText ?? string.Empty; moved = true; Changed(); }
             if (programme.text != (programmeText ?? string.Empty)) { programme.text = programmeText ?? string.Empty; moved = true; Changed(); }
             if (track.text != (trackText ?? string.Empty)) track.text = trackText ?? string.Empty;
             string word = AvStates.Glyph(state) + (statusWord ?? string.Empty);
-            if (slabText.text != word) { slabText.text = word; moved = true; }
+            if (slabText.text != word) { slabText.text = word; moved = true; Changed(); }
             if (state != slabState) { slabState = state; RestyleSlab(); }
             if (moved && placedW > 0f) Arrange(placedW);
         }
 
+        private float SlabWidth(float rightWidth) => Mathf.Min(rightWidth * 0.5f, AvText.Width(slabText) + 14f);
+        private float StationHeight(float width)
+        {
+            float rightWidth = Mathf.Max(1f, width - LeftW - 8f);
+            return Mathf.Max(19f, AvText.Height(station, Mathf.Max(1f, rightWidth - SlabWidth(rightWidth) - 8f)));
+        }
+
         public override float Measure(float width) => Mathf.Max(50f,
-            22f + AvText.Height(programme, Mathf.Max(1f, width - LeftW - 8f)) + 15f);
+            StationHeight(width) + 3f + AvText.Height(programme, Mathf.Max(1f, width - LeftW - 8f)) + 15f);
 
         public override void Place(AvSlot s)
         {
@@ -225,13 +246,13 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             AvLay.Place(mode.rectTransform, 0f, 33f, LeftW, 16f);
 
             float x0 = LeftW + 8f, rw = Mathf.Max(0f, w - x0);
-            float sw = Mathf.Min(rw * 0.5f, AvText.Width(slabText) + 14f);
+            float sw = SlabWidth(rw), stationH = StationHeight(w);
             AvLay.Place(slabBack.rectTransform, w - sw, 1f, sw, 17f);
             AvLay.Place(slabText.rectTransform, w - sw, 1f, sw, 17f);
-            AvLay.Place(station.rectTransform, x0, 0f, Mathf.Max(0f, rw - sw - 8f), 19f);
+            AvLay.Place(station.rectTransform, x0, 0f, Mathf.Max(0f, rw - sw - 8f), stationH);
             float programmeH = AvText.Height(programme, rw);
-            AvLay.Place(programme.rectTransform, x0, 20f, rw, programmeH);
-            AvLay.Place(track.rectTransform, x0, 22f + programmeH, rw, 15f);
+            AvLay.Place(programme.rectTransform, x0, stationH + 1f, rw, programmeH);
+            AvLay.Place(track.rectTransform, x0, stationH + 3f + programmeH, rw, 15f);
         }
 
         public override void Restyle()

@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private AvControl studioPagerPrev;
         private AvControl studioPagerNext;
         private AvTextBlock studioMessageText;
-        private AvStepper studioBody, studioFace, studioHair, studioSuit, studioBack, studioStyle;
+        private AvStepper studioBody, studioFace, studioHair, studioSuit, studioBack, studioStyle, studioGear;
         private AvStepper studioShape, studioCharge, studioPalette, studioArt;
         private AvPortrait studioPortrait;
         private AvPortrait studioEmblem;
@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioPagerPrev = null;
             studioPagerNext = null;
             studioMessageText = null;
-            studioBody = studioFace = studioHair = studioSuit = studioBack = studioStyle = null;
+            studioBody = studioFace = studioHair = studioSuit = studioBack = studioStyle = studioGear = null;
             studioShape = studioCharge = studioPalette = studioArt = null;
             studioPortrait = null;
             studioEmblem = null;
@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 new AvControl.Spec("NAME", RandomizeName, AvButtonStyle.Quiet, AvIcon.Refresh));
             rolls.Controls[0].Help = "Roll a new random callsign.";
             rolls.Controls[1].Help = "Roll a new random name.";
-            studioPortrait.Help = "The portrait Wing Command will draw for this pilot. Change it with the six steppers below.";
+            studioPortrait.Help = "The portrait Wing Command will draw for this pilot. Change its layers with the steppers below.";
             p.Row(studioPortrait, who);
 
             studioBody = new AvStepper(p.Content, "BODY", () => WingLink.PortraitBodyLabel(studioDraft.Body),
@@ -165,15 +165,19 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioSuit = new AvStepper(p.Content, "SUIT", () => WingLink.PortraitUniformLabel(studioDraft.Uniform),
                 () => CycleDraft(d => d.CycleUniform(-1, UniformCount())), () => CycleDraft(d => d.CycleUniform(1, UniformCount())));
             studioBack = new AvStepper(p.Content, "BACK",
-                () => "BACK " + AvNum.Thousands(studioDraft.Backdrop + 1) + "/" + AvNum.Thousands(BackdropCount()),
+                () => WingLink.PortraitBackdropLabel(studioDraft.Backdrop),
                 () => CycleDraft(d => d.CycleBackdrop(-1, BackdropCount())), () => CycleDraft(d => d.CycleBackdrop(1, BackdropCount())));
             studioStyle = new AvStepper(p.Content, "STYLE", () => WingLink.PersonaLabel(studioDraft.Persona).ToUpperInvariant(),
                 () => CycleDraft(d => d.CyclePersona(-1)), () => CycleDraft(d => d.CyclePersona(1)));
+            studioGear = new AvStepper(p.Content, "GEAR", () => WingLink.PortraitAccessoryLabel(studioDraft.Accessory),
+                () => CycleDraft(d => d.CycleAccessory(-1, AccessoryCount())), () => CycleDraft(d => d.CycleAccessory(1, AccessoryCount())));
             StepperHelp(studioBody, "body type"); StepperHelp(studioFace, "face"); StepperHelp(studioHair, "hair");
             StepperHelp(studioSuit, "flight suit"); StepperHelp(studioBack, "portrait backdrop"); StepperHelp(studioStyle, "radio style");
+            StepperHelp(studioGear, "headgear or accessory");
             p.Row(studioBody, studioFace);
             p.Row(studioHair, studioSuit);
-            p.Row(studioBack, studioStyle);
+            p.Row(studioBack, studioGear);
+            p.Add(studioStyle);
 
             studioBioField = p.Add(new AvField(p.Content, "Service background…", PilotDraft.MaxBackground,
                 value => { studioDraft.Background = value; studioDraft.Normalize(); }));
@@ -308,28 +312,29 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void RefreshStudioEditor()
         {
             studioDraft.Normalize();
+            int faction = PortraitFactions.Local;
 
             string editorKey = studioDraft.Body + "|" + studioDraft.Face + "|" + studioDraft.Hair + "|" +
                 studioDraft.Uniform + "|" + studioDraft.Backdrop + "|" + studioDraft.Accessory + "|" +
                 (studioDraft.HasPortrait ? 1 : 0) + "|" + studioDraft.Persona + "|" +
-                studioDraft.Name + "|" + studioDraft.Callsign;
+                studioDraft.Name + "|" + studioDraft.Callsign + "|" + faction;
             if (!string.Equals(editorKey, studioEditorKey, StringComparison.Ordinal))
             {
                 studioEditorKey = editorKey;
                 studioBody.Refresh(); studioFace.Refresh(); studioHair.Refresh();
-                studioSuit.Refresh(); studioBack.Refresh(); studioStyle.Refresh();
+                studioSuit.Refresh(); studioBack.Refresh(); studioStyle.Refresh(); studioGear.Refresh();
 
                 string portraitKey = studioDraft.HasPortrait
                     ? "p|" + studioDraft.Body + "|" + studioDraft.Face + "|" + studioDraft.Hair + "|" +
                       studioDraft.Uniform + "|" + studioDraft.Accessory + "|" + studioDraft.Backdrop
-                    : "i|" + studioDraft.Name + "|" + studioDraft.Callsign;
+                    : "i|" + studioDraft.Name + "|" + studioDraft.Callsign + "|" + faction;
                 if (!string.Equals(portraitKey, studioPortraitKey, StringComparison.Ordinal))
                 {
                     studioPortraitKey = portraitKey;
                     studioPortraitSprite = studioDraft.HasPortrait
                         ? WingLink.PilotPortraitForSelection(studioDraft.Body, studioDraft.Face, studioDraft.Hair,
-                            studioDraft.Uniform, studioDraft.Accessory, studioDraft.Backdrop)
-                        : WingLink.PilotPortrait(studioDraft.Name, studioDraft.Callsign);
+                            studioDraft.Uniform, studioDraft.Accessory, studioDraft.Backdrop, preview: true)
+                        : WingLink.PersonnelPortrait(studioDraft.Name, studioDraft.Callsign, PortraitRole.Pilot, faction);
                 }
                 studioPortrait.Set(studioPortraitSprite);
             }
@@ -590,7 +595,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioDraft.Hair = UnityEngine.Random.Range(0, Math.Max(1, HairCount()));
             studioDraft.Uniform = UnityEngine.Random.Range(0, Math.Max(1, UniformCount()));
             studioDraft.Backdrop = UnityEngine.Random.Range(0, Math.Max(1, BackdropCount()));
-            studioDraft.Accessory = 0;
+            studioDraft.Accessory = UnityEngine.Random.Range(0, Math.Max(1, AccessoryCount()));
             studioPortraitKey = null;
             nextRefresh = 0f;
         }
@@ -708,6 +713,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private static int FaceCount() => Math.Max(1, WingLink.PortraitFaceCount);
         private static int HairCount() => Math.Max(1, WingLink.PortraitHairCount);
         private static int UniformCount() => Math.Max(1, WingLink.PortraitUniformCount);
+        private static int AccessoryCount() => Math.Max(1, WingLink.PortraitAccessoryCount);
         private static int BackdropCount() => Math.Max(1, WingLink.PortraitBackdropCount);
 
         private static int NextSeed() =>

@@ -13,9 +13,12 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
-    /// The OPS bezel page: one CALLS console. Favourites on top, then LIGHT / HEAVY / STRATEGIC tiles, each showing its
-    /// price, one reason and one state word. The panel owns no policy: every figure comes from <see cref="SupportManager"/>
-    /// and every press goes through <see cref="CallsController"/>.
+    /// The OPS bezel page: one console with a CALLS view and a SPACE view behind a tab switch (not another bezel slot).
+    /// CALLS: favourites on top, then eleven fixed one-line rows, each showing its price, one reason and one state word.
+    /// SPACE: the operator feed (<see cref="SpaceFeedPanel"/>). The balance rides in the title and the next unlock in the
+    /// banner, which frees the metric strip so eleven rows fit the 596 px page with no scrolling. The panel owns no policy:
+    /// every figure comes from <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or
+    /// <see cref="SpaceFeedController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
     {
@@ -29,12 +32,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private SupportManager manager;
         private CallsController calls;
+        private SpaceFeedController feed;
+        private SpaceFeedPanel spacePanel;
         private ManualLogSource logger;
+        private string titleShown = "";
 
         private MFDScreen screen;
         private GameObject screenRoot;
         private AvConsole shell;
-        private AvMetric[] metrics;
         private BriefCard banner;
 
         private float nextAttempt;
@@ -42,10 +47,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private bool failed;
         private float lineHeight = CallLine.Height;
 
-        public void Configure(SupportManager supportManager, CallsController callsController)
+        public void Configure(SupportManager supportManager, CallsController callsController, SpaceFeedController feedController = null)
         {
             manager = supportManager;
             calls = callsController;
+            feed = feedController;
             logger = ((ISupportHost)supportManager).Logger;
         }
 
@@ -56,7 +62,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             screenRoot = null;
             screen = null;
             shell = null;
-            metrics = null;
+            spacePanel = null;
+            titleShown = "";
+            feed?.SetCompactVisible(false);
             banner = null;
             rows.Clear();
             favourites = new AvControl[0];
@@ -83,9 +91,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            if (!visible || Time.unscaledTime < nextRefresh) return;
+            feed?.SetCompactVisible(visible && shell != null && shell.CurrentPage == SpacePage);
+            if (!visible || shell == null || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
+            if (shell.CurrentPage != CallsPage)
+            {
+                // The balance rides in the title of both pages: a TASKED claim charged on SPACE must show without a visit to CALLS.
+                string credit = (int)manager.LocalCredit + " CR";
+                if (credit != titleShown) ShowTitle(credit);
+                return;
+            }
             try { Refresh(); }
             catch (Exception e)
             {
@@ -186,15 +202,45 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>Builds the whole page into <paramref name="root"/> without an MFD (offline render harness).</summary>
         internal void BuildForHarness(RectTransform root, float height) => BuildConsole(root, height);
 
+        private const int CallsPage = 0, SpacePage = 1;
+
+        /// <summary>
+        /// The fixed row height that fills a CALLS page of this body height. Page arithmetic (AvFlow): 16 of padding, the banner (34),
+        /// the FAVOURITES section (23), one favourites row (28), then <paramref name="rowCount"/> rows, with 5 between every line;
+        /// 14 is kept free for a banner that wraps to a second line. 11 rows give 25 px at the 596 page and 52 (the cap) at 896.
+        /// </summary>
+        internal static float LineHeightFor(float bodyHeight, int rowCount)
+        {
+            float fixedPart = OpsPage.FlowInset + 34f + 23f + 28f + (rowCount + 2) * AvGridTokens.Gap + 14f;
+            return Mathf.Clamp(Mathf.Floor((bodyHeight - fixedPart) / Mathf.Max(1, rowCount)), CallLine.Height, 52f);
+        }
+
         private void BuildConsole(RectTransform rootRect, float height)
         {
             rows.Clear();
-            // 24 px at the 596 px page; a taller (896 px) page spreads the ten rows instead of leaving an empty band.
-            lineHeight = Mathf.Clamp(CallLine.Height + (height - PanelHeight) * 0.085f, CallLine.Height, 52f);
-            shell = AvConsole.Build(rootRect, "OPS", "CALLS", 1, Width, height);
-            metrics = shell.Metrics("CREDIT", "NEXT");
-            BuildPage(shell.Page(0));
+            shell = AvConsole.Build(rootRect, "OPS", "CALLS", 2, Width, height);
+            shell.Tabs((AvIcon.Bolt, "CALLS"), (AvIcon.Satellite, "SPACE"));
+            float body = OpsPage.BodyHeight(height, tabs: true);
+            lineHeight = LineHeightFor(body, CallSheet.Rows.Count);
+            BuildPage(shell.Page(CallsPage));
+            spacePanel = new SpaceFeedPanel(shell.Page(SpacePage).Content, feed, OpsPage.BoardWidth, body - OpsPage.FlowInset, false);
+            shell.Page(SpacePage).Add(spacePanel);
+            feed?.AttachCompact(spacePanel);
+            shell.PageChanged += _ => ShowTitle(titleShown);
             shell.Finish();
+        }
+
+        /// <summary>The page the harness (and tests) show: 0 CALLS, 1 SPACE.</summary>
+        internal void ShowPage(int page) => shell?.SetPage(page);
+
+        internal SpaceFeedPanel SpacePanel => spacePanel;
+
+        private void ShowTitle(string credit)
+        {
+            titleShown = credit ?? "";
+            if (shell == null) return;
+            string page = shell.CurrentPage == SpacePage ? "SPACE" : "CALLS";
+            shell.SetTitle(titleShown.Length > 0 ? page + " · " + titleShown : page);
         }
 
         private static Image FindHighlight(Button button)
@@ -230,7 +276,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 SupportActionId id = row.Id;
                 CallLine line = page.Add(new CallLine(page.Content, lineHeight));
                 line.AddControl(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary), "Arm this CALL; press again to fire.");
-                line.AddControl(new AvControl.Spec("★", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
+                line.AddControl(new AvControl.Spec("", () => calls?.Pin(id), AvButtonStyle.Quiet, AvIcon.Star), "Pin to a favourite slot.");
                 if (id == SupportActionId.JtacMark)
                     line.AddControl(new AvControl.Spec("UNLASE", () => calls?.Unlase(), AvButtonStyle.Quiet),
                         "Clear the lase at the current POD or map aim. Free.");
@@ -272,12 +318,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             if (shell == null) return;
             words = words ?? "";
-            if (metrics != null && metrics.Length > 1)
-            {
-                metrics[0].Set(balanceText ?? "", "", 0f, AvState.Ready);
-                bool all = string.IsNullOrEmpty(nextUnlock);
-                metrics[1].Set(all ? "ALL UNLOCKED" : nextUnlock, "", 0f, all ? AvState.Ready : AvState.Info);
-            }
+            if ((balanceText ?? "") != titleShown) ShowTitle(balanceText);
 
             bool armed = false;
             foreach (CallTile t in view)
@@ -291,7 +332,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             for (int i = 0; i < favourites.Length; i++) PaintFavourite(i, view);
 
             banner.Set(armed ? "▲ CALL ARMED" : pending ? "CALL PENDING" : "HOTLINE",
-                words.Length == 0 ? "HOTLINE OPEN · PRESS A CALL TO ARM" : words,
+                words.Length == 0 ? "HOTLINE OPEN · PRESS A CALL TO ARM" + (string.IsNullOrEmpty(nextUnlock) ? "" : " · NEXT: " + nextUnlock) : words,
                 armed ? AvState.Caution : pending ? AvState.Info
                     : words.StartsWith("NEGATIVE", StringComparison.Ordinal) ? AvState.Danger : AvState.Ready);
             banner.ShowControl(armed);
@@ -317,7 +358,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 }
             }
             button.Label = (slot + 1) + " · EMPTY";
-            if (button.Help == null || !button.Help.StartsWith("Empty")) button.Help = "Empty slot: press ★ on a call to pin it here.";
+            if (button.Help == null || !button.Help.StartsWith("Empty")) button.Help = "Empty slot: press PIN on a call to pin it here.";
             button.Interactable = false;
             button.Armed = false;
         }

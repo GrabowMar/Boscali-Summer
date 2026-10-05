@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
@@ -20,8 +21,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Recon, "RADAR SCAN",
-                "Core survey radar reveals stationary ground contacts. An imager doubles the scene; fresh recon assists fire-control tracking.",
-                SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction()));
+                "RADAR bird reveals stationary ground contacts through a live uplink.",
+                SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction(),
+                SpaceBirdRequirement.Radar, BirdTask.Scan, SpaceRevealWindow.BirdBusySeconds));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.ElintSweep, "ELINT SWEEP",
@@ -30,8 +32,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.MtiSweep, "MTI SWEEP",
-                "Core radar tracks moving ground contacts; an imager doubles the scene. Stationary targets blend into the ground return.",
-                SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction()));
+                "RADAR bird reveals moving ground contacts through a live uplink.",
+                SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction(),
+                SpaceBirdRequirement.Radar, BirdTask.Mti, SpaceRevealWindow.BirdBusySeconds));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.SatCamera, "SAT CAMERA",
+                "OPTICAL bird images the mark in daylight and reveals ground units in its window through a live uplink.",
+                SupportCapabilities.Recon, settings.SatCameraEnabled, new SatelliteCameraAction(),
+                SpaceBirdRequirement.Optical, BirdTask.Camera, SpaceRevealWindow.BirdBusySeconds));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(
@@ -40,19 +49,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     SupportCapabilities.Fortify, settings.FortifyEnabled, new FortifyAction(fortifications)));
 
             actions.Add(new SupportActionDefinition(
-                SupportActionId.Artillery, "ROD FROM GOD",
-                "One rod per online magazine, bounded by ammunition. Gyros halve scatter; a banked STRIKE package tightens it up to 40% further.",
-                SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction()));
+                SupportActionId.Artillery, "ORBITAL ROD",
+                "KINETIC bird releases one physical rod through a live uplink.",
+                SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction(),
+                SpaceBirdRequirement.Kinetic, BirdTask.Rod, 14f, true));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Prsm, "PRSM STRIKE",
                 "One offboard ballistic missile onto the mark. Needs fresh HQ intel at the target.",
-                SupportCapabilities.Artillery, settings.PrsmEnabled, new PrsmAction()));
+                SupportCapabilities.Artillery, settings.PrsmEnabled, new PrsmAction(), SpaceBirdRequirement.OpticalOrRadar));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Cruise, "CRUISE SALVO",
                 "Bounded salvo of offboard cruise missiles onto the mark, counted against the faction live cap.",
-                SupportCapabilities.Artillery, settings.CruiseEnabled, new CruiseAction()));
+                SupportCapabilities.Artillery, settings.CruiseEnabled, new CruiseAction(), SpaceBirdRequirement.OpticalOrRadar));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",

@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 moon = new LightState(level.moon, level.MoonURPLightData);
                 ResetPixels();
             }
-            Light light = Visible(level.sun) ? level.sun : Visible(level.moon) ? level.moon : null;
+            Light light = WeatherLighting.Source(level);
             // No light up (vanilla kills the sun under overcast): hold the last projection
             // rather than restoring the native cookie and flashing the ground bright.
             if (light == null) return;
@@ -153,10 +153,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // SetCookie normalizes the sun's roll. Match that basis before computing the
             // offset. URP uses (inverseLightPosition.xy - offset) / size + 0.5, so the offset
             // is the cookie centre in light space.
+            sun.BeforeWrite(true);
+            moon.BeforeWrite(false);
             level.sun.transform.rotation = Quaternion.LookRotation(level.sun.transform.forward, Vector3.up);
             Vector3 centreLocal = new GlobalPosition((float)centreX, 0f, (float)centreZ).ToLocalPosition();
             Vector3 anchor = light.transform.InverseTransformPoint(centreLocal);
             level.SetCookie(texture, Span, new Vector2(anchor.x, anchor.y));
+            sun.Wrote(true);
+            moon.Wrote(false);
             attached = true;
         }
 
@@ -165,8 +169,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (owner == null && !attached && key == null) return;
             Interlocked.Increment(ref revision);
             Interlocked.Exchange(ref ready, null);
-            sun.Restore(texture);
-            moon.Restore(texture);
+            sun.Restore();
+            moon.Restore();
             sun = default;
             moon = default;
             owner = null;
@@ -218,7 +222,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     var pixels = new byte[Size * Size];
                     const int samples = 14;
                     float baseY = snapshot.Params.CloudBase + shift;
-                    float lower = Math.Max(0f, baseY - 300f), upper = 12000f + Math.Max(0f, shift);
+                    float lower = Math.Max(0f, baseY - 800f), upper = 12000f + Math.Max(0f, shift);
                     float dy = (upper - lower) / samples;
                     float rayStep = dy / Math.Max(0.06f, -direction.y);
                     for (int y = 0; y < Size; y++)
@@ -263,29 +267,50 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             });
         }
 
-        private static bool Visible(Light light) => light.isActiveAndEnabled && light.intensity > 0f;
         private static byte LerpByte(byte a, byte b, float t) => (byte)Mathf.RoundToInt(Mathf.Lerp(a, b, t));
 
-        private readonly struct LightState
+        private struct LightState
         {
             private readonly Light light;
             private readonly UniversalAdditionalLightData data;
-            private readonly Texture cookie;
-            private readonly Vector2 size, offset;
+            private Texture cookie, writtenCookie;
+            private Vector2 size, offset, writtenSize, writtenOffset;
+            private Quaternion rotation, writtenRotation;
+            private bool written, wroteRotation;
             internal LightState(Light light, UniversalAdditionalLightData data)
             {
+                this = default;
                 this.light = light; this.data = data; cookie = light.cookie;
                 size = data.lightCookieSize; offset = data.lightCookieOffset;
+                rotation = light.transform.rotation;
             }
-            internal void Restore(Texture ownedCookie)
+            internal void BeforeWrite(bool rotate)
             {
                 if (light == null || data == null) return;
-                // SetCookie also clears the inactive light's cookie. Restore both members
-                // only while they still have values that our ownership can have written.
-                if (light.cookie != ownedCookie && light.cookie != null) return;
-                light.cookie = cookie;
-                data.lightCookieSize = size;
-                data.lightCookieOffset = offset;
+                // Native sky updates and other mods may replace individual values while active.
+                // Rebase those originals before taking ownership again.
+                if (!written || light.cookie != writtenCookie) cookie = light.cookie;
+                if (!written || !data.lightCookieSize.Equals(writtenSize)) size = data.lightCookieSize;
+                if (!written || !data.lightCookieOffset.Equals(writtenOffset)) offset = data.lightCookieOffset;
+                if (rotate && (!wroteRotation || !light.transform.rotation.Equals(writtenRotation)))
+                    rotation = light.transform.rotation;
+            }
+            internal void Wrote(bool rotate)
+            {
+                if (light == null || data == null) return;
+                writtenCookie = light.cookie; writtenSize = data.lightCookieSize;
+                writtenOffset = data.lightCookieOffset; written = true;
+                if (rotate) { writtenRotation = light.transform.rotation; wroteRotation = true; }
+            }
+            internal void Restore()
+            {
+                if (light == null || data == null) return;
+                if (written && light.cookie == writtenCookie) light.cookie = cookie;
+                if (written && data.lightCookieSize.Equals(writtenSize)) data.lightCookieSize = size;
+                if (written && data.lightCookieOffset.Equals(writtenOffset)) data.lightCookieOffset = offset;
+                if (wroteRotation && light.transform.rotation.Equals(writtenRotation))
+                    light.transform.rotation = rotation;
+                written = wroteRotation = false;
             }
         }
 

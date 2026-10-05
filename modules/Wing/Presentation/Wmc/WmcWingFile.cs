@@ -7,6 +7,7 @@ using UnityEngine.UI;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>A status stamp: the state word in a double outline over a wash, rotated a few degrees like a rubber stamp (the kit has no
@@ -156,6 +157,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly FileFace face = new FileFace();
         private WingPilot shown;
         private int look = int.MinValue;
+        private int faction = int.MinValue;
         private bool portraitSet;
         private float width = 300f;
 
@@ -205,10 +207,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void SetPilot(WingPilot pilot)
         {
-            if (portraitSet && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion) return;
+            int currentFaction = pilot != null && pilot.PortraitFaction >= 0 ? pilot.PortraitFaction : PortraitFactions.Local;
+            if (portraitSet && ReferenceEquals(pilot, shown) && look == WingPilotRoster.LookVersion && faction == currentFaction) return;
             portraitSet = true;
             shown = pilot;
             look = WingPilotRoster.LookVersion;
+            faction = currentFaction;
             portrait.sprite = PilotPortrait.For(pilot);
             portrait.enabled = portrait.sprite != null;
             portrait.color = pilot != null ? Color.white : Color.white.WithAlpha(0.3f);

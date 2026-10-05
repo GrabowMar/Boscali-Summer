@@ -6,6 +6,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
 using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
@@ -26,7 +27,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// action; this class owns only authority, economy, bounded concurrency and the client's
     /// view of its own request.
     /// </summary>
-        internal sealed class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
+        internal sealed partial class SupportManager : MonoBehaviour, ISceneService, ISupportHost, ICameraTargetService,
             IGroundForceReadiness, ITheaterStrikePicture
         {
         private const int MaximumStrikeJobs = 2;
@@ -37,7 +38,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private const float ClickSlopPixels = 8f;
 
         /// <summary>How long a client waits for a reply before reporting the host silent.</summary>
-        private const float ReplyTimeout = 5f;
+        private const float ReplyTimeout = CallRequestTracker.TimeoutSeconds;
 
         /// <summary>Concurrent strike jobs per faction, per <see cref="SupportPool"/>.</summary>
         private readonly Dictionary<FactionHQ, int[]> strikeJobs = new Dictionary<FactionHQ, int[]>();
@@ -60,6 +61,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private IPlayerPerks perks;
         private SupportNet network;
         private CreditService credits;
+        private SpaceService space;
+        private int sceneGeneration = 1;
         private float nextCreditTick;
         private float lastCreditTick;
         private ManualLogSource logger;
@@ -94,7 +97,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 float.IsInfinity(x) || float.IsInfinity(z) || float.IsInfinity(vicinity) ||
                 vicinity < 0f)
                 return false;
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             float soonest = float.MaxValue;
             for (int i = 0; i < activeStrikes.Count; i++)
             {
@@ -130,6 +133,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public GlobalPosition RadarScanTarget { get; private set; }
         public int RadarScanContacts { get; private set; }
 
+        /// <summary>Latest accepted SAT CAMERA of the local player: where the optical bird last looked.</summary>
+        public int CameraSerial { get; private set; }
+        public GlobalPosition CameraTarget { get; private set; }
+
         /// <summary>Display the same owned-zone footprint that FORTIFY executes.</summary>
         public void ResolveMapArea(SupportActionId action, ref GlobalPosition target, ref float radius)
         {
@@ -161,6 +168,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportActionId.MtiSweep:
                 case SupportActionId.Recon:
                     return settings != null ? settings.SarSceneRadius.Value : 1000f;
+                case SupportActionId.SatCamera:
+                    return settings != null ? settings.OpticalSceneRadius.Value : 1000f;
                 case SupportActionId.ElintSweep:
                     return settings != null ? settings.ElintRadius.Value : 8000f;
                 case SupportActionId.FlareMissile:
@@ -193,7 +202,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void RegisterActiveStrike(
             int requestId, SupportActionId action, GlobalPosition target, float radius, float etaSeconds, string name, float duration)
         {
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             float impact = now + etaSeconds;
             float linger = duration;
             float expiry = impact + linger;
@@ -218,7 +227,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void RegisterInboundStrike(string strikeName, float etaSeconds)
         {
             inboundStrikeName = strikeName;
-            inboundStrikeImpactTime = Time.timeSinceLevelLoad + etaSeconds;
+            inboundStrikeImpactTime = MissionNow() + etaSeconds;
             inboundStrikeConfirmedUntil = 0f;
         }
 
@@ -226,7 +235,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             get
             {
-                float now = Time.timeSinceLevelLoad;
+                float now = MissionNow();
                 if (inboundStrikeImpactTime > 0f)
                 {
                     if (now < inboundStrikeImpactTime)
@@ -256,6 +265,39 @@ namespace BoscaliSummer.Modules.Support.Runtime
         SupportSettings ISupportHost.Settings => settings;
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
+        int ISupportHost.SceneGeneration => sceneGeneration;
+        bool ISupportHost.TryGetSpaceState(FactionHQ owner, out SpaceState state) => TryGetSpaceState(owner, out state);
+
+        internal void AttachSpace(SpaceService service)
+        {
+            space = service;
+            spaceNet = new SpaceNetHost(this, service, network);
+        }
+        int ISupportHost.OpenSpaceWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
+            float minimumSpeed, float maximumSpeed) => space?.OpenWindow(owner, point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
+        int ISupportHost.OpenOpticalWindow(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal)
+        {
+            refusal = SupportResult.SpawnFailed;
+            return space != null ? space.OpenOptical(owner, point, baseRadius, out refusal) : -1;
+        }
+        internal SpaceObservations SpaceObservationsFor(FactionHQ owner) => space?.ObservationsFor(owner);
+        internal MarkVerdict ConfirmSpaceMark(Player player, int id)
+        {
+            if (!GameAccess.IsServer() || player == null || player.HQ == null) return MarkVerdict.NoContact;
+            bool recent = credits != null && credits.Activity.IsActive(PlayerIdentity.Of(player), false, MissionNow());
+            return space?.ObservationsFor(player.HQ)?.Mark(PlayerIdentity.Of(player), id, recent) ?? MarkVerdict.NoContact;
+        }
+        internal bool TryGetSpaceState(FactionHQ owner, out SpaceState state)
+        {
+            state = null;
+            return space != null && space.TryGetState(owner, out state);
+        }
+        /// <summary>Display read of the host's SPACE state (quotes, panels, sky): the 1 Hz world state, no native re-sample.</summary>
+        internal bool TryGetSpaceStateCoarse(FactionHQ owner, out SpaceState state)
+        {
+            state = null;
+            return space != null && space.TryGetStateCoarse(owner, out state);
+        }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -285,8 +327,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void ResetForScene()
         {
+            sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
+            Clock.Reset();
+            space?.ResetForScene();
+            ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
+            RodGuard.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
             Visuals.SupportParticles.Reset();
             inboundStrikeName = null;
@@ -326,22 +373,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportMapMode.GestureArmed = false;
         }
 
+        /// <summary>Non-kill earnings (capture, recon, jamming, support). Kills arrive through <see cref="CreditFromKill"/>.</summary>
         internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
         {
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
             EarnKind kind = KindOf(type);
-            if (kind == EarnKind.None) return;
+            if (kind == EarnKind.None || kind == EarnKind.Kill) return;
+            float earned = EarningRules.FromReward(kind, rewardAllocation, false, false) * settings.EarnKnob.Value;
+            credits.Earn(player, earned, MissionNow());
+        }
+
+        /// <summary>
+        /// One call per contributor from vanilla <c>ReportKillAction</c>; <paramref name="damageShare"/> is that
+        /// contributor's share of the damage, so every contributor is paid their share of the target value.
+        /// </summary>
+        internal void CreditFromKill(Player player, Unit target, float damageShare)
+        {
+            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
+                target == null) return;
             float now = MissionNow();
             ulong id = PlayerIdentity.Of(player);
-            bool repeat = kind == EarnKind.Kill && target != null &&
-                credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
-            bool assisted = false;
-            if (kind == EarnKind.Kill && target != null)
-            {
-                GlobalPosition at = target.GlobalPosition();
-                assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
-            }
-            credits.Earn(player, EarningRules.FromReward(kind, rewardAllocation, repeat, assisted) * settings.EarnKnob.Value, now);
+            bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
+            GlobalPosition at = target.GlobalPosition();
+            bool assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
+            float unitValue = target.definition != null ? target.definition.value : 0f;
+            float earned = EarningRules.FromKill(unitValue, damageShare, repeat, assisted) * settings.EarnKnob.Value;
+            credits.Earn(player, earned, now);
+            if (Plugin.Settings?.Diagnostics.VerboseLogging.Value == true)
+                logger.LogInfo("[Support.Credit] target=" + (target.definition?.unitName ?? "unknown") +
+                    " value=" + unitValue + " share=" + damageShare + " CR=" + earned +
+                    " repeat=" + repeat + " assisted=" + assisted + " earnScale=" + settings.EarnKnob.Value);
         }
 
         private static EarnKind KindOf(FactionHQ.RewardType type)
@@ -361,13 +422,65 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        private static float MissionNow() =>
-            NetworkSceneSingleton<MissionManager>.i != null
-                ? NetworkSceneSingleton<MissionManager>.i.MissionTime
-                : Time.timeSinceLevelLoad;
+        private static readonly MissionClock Clock = new MissionClock();
+        private static float nextClockWarning;
+
+        /// <summary>
+        /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a multiplayer
+        /// peer (host included) whose MissionManager is missing or has not started (multiplayerStartTime unset, so the raw
+        /// value is lobby time) keeps the last good value; the result is finite, never decreases within a scene, and
+        /// re-baselines if a transient ever latched high.
+        /// </summary>
+        internal static float MissionNow()
+        {
+            float raw = 0f;
+            bool valid = false;
+            try
+            {
+                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+                if (GameManager.gameState != GameState.Multiplayer)
+                { raw = mission != null ? mission.MissionTime : Time.timeSinceLevelLoad; valid = true; }
+                else if (mission != null && mission.multiplayerStartTime > 0d)
+                { raw = mission.MissionTime; valid = true; }
+            }
+            catch (Exception e)
+            {
+                valid = false;
+                if (Time.unscaledTime >= nextClockWarning)
+                {
+                    nextClockWarning = Time.unscaledTime + 30f;
+                    Plugin.Logger?.LogWarning("[Support] Mission clock read failed; holding the last good time: " + e.Message);
+                }
+            }
+            return Clock.Read(raw, valid, Time.frameCount);
+        }
+
+        private static bool ActivityScene =>
+            GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer;
+
+        internal void RecordAircraftInput(Aircraft aircraft, ActivityControls controls)
+        {
+            if (!ActivityScene || credits == null || GameplayUI.GameIsPaused || !Application.isFocused || aircraft == null ||
+                !GameManager.GetLocalPlayer<Player>(out Player player) || !ReferenceEquals(player, aircraft.Player)) return;
+            if (credits.RecordAircraftInput(aircraft, controls, MissionNow()) && !GameAccess.IsServer()) network?.SendActivityPulse();
+        }
+
+        private void RecordLocalInput()
+        {
+            if (credits == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
+            if (GameAccess.IsServer()) credits.RecordInput(player, MissionNow());
+            else network?.SendActivityPulse();
+        }
+
+        internal void ReceiveActivityPulse(Player player)
+        {
+            if (ActivityScene && GameAccess.IsServer()) credits?.RecordPulse(player, MissionNow(), Time.unscaledTime);
+        }
 
         private void Update()
         {
+            UpdateSpaceMirror();
+            if (ActivityScene && !GameplayUI.GameIsPaused && Application.isFocused && Input.anyKeyDown) RecordLocalInput();
             if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
             {
                 float missionNow = MissionNow();
@@ -377,7 +490,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             // Prune expired active strikes
-            float now = Time.timeSinceLevelLoad;
+            float now = MissionNow();
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
             {
                 if (!activeStrikes[i].IsActive(now))
@@ -403,12 +516,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool anyArmed = ArmedAction.HasValue || localPick != null;
             SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
-            if (pendingWaypoint != -1 && Time.unscaledTime > pendingWaypointUntil)
+            // Transport timeouts run on wall time: a frozen or paused MP mission clock must not hold a request pending forever.
+            float wall = Time.unscaledTime;
+            if (pendingWaypoint != -1 && wall > pendingWaypointUntil)
             {
                 pendingWaypoint = -1;
                 Status = "No response from host.";
             }
-            if (pending && Time.unscaledTime - pendingSince > ReplyTimeout)
+            if (pending && wall - pendingSince > ReplyTimeout)
             {
                 pending = false;
                 Status = "No response from host.";
@@ -517,7 +632,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         public float LocalCooldownRemaining =>
-            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - Time.unscaledTime);
+            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - MissionNow());
 
         /// <summary>
         /// The cooldown this peer would show: the host's configured seconds scaled by the
@@ -676,46 +791,46 @@ namespace BoscaliSummer.Modules.Support.Runtime
             LastRequestOffline = false;
             if (pending)
             {
-                Status = "REQUEST PENDING - wait for host acknowledgement.";
+                Status = CallWords.Refusal(CallRefusal.Busy);
                 return 0;
             }
 
             SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
             if (def == null || !def.Enabled)
             {
-                Status = "Action unavailable.";
+                Status = CallWords.Refusal(CallRefusal.Unavailable);
                 return 0;
             }
 
             float cost = Cost(def);
             if (cost <= 0f && action != SupportActionId.JtacUnlase) // UNLASE is free by design
             {
-                Status = "Action unavailable on this map.";
+                Status = SupportWords.Refusal(SupportResult.CapabilityUnavailable);
                 return 0;
             }
 
             if (!IsAuthorised(def))
             {
-                Status = "Action not authorised.";
+                Status = CallWords.Refusal(CallRefusal.Unavailable);
                 return 0;
             }
 
             bool free = action == SupportActionId.JtacUnlase; // no cooldown, no freeze, no charge
             if (!free && LocalCooldownRemaining > 0.5f)
             {
-                Status = "Support network cooling down.";
+                Status = CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(LocalCooldownRemaining));
                 return 0;
             }
 
             if (!free && !BypassRequirements && LocalFrozenSeconds > 0)
             {
-                Status = "Wallet frozen after a faction switch (" + LocalFrozenSeconds + " s).";
+                Status = CallWords.Refusal(CallRefusal.Frozen, seconds: LocalFrozenSeconds);
                 return 0;
             }
 
             if (!BypassRequirements && LocalCredit + 0.001f < cost)
             {
-                Status = "Low credit (" + cost.ToString("0") + " CR required).";
+                Status = CallWords.Refusal(CallRefusal.LowCredit, need: Mathf.CeilToInt(cost));
                 return 0;
             }
 
@@ -752,10 +867,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Unlocked((SupportActionId)r.Action, out string unlock);
                     return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
                 case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
-                case SupportResult.InvalidTarget: return CallWords.Refusal(CallRefusal.FriendliesClose);
+                case SupportResult.InvalidTarget: return SupportWords.Refusal(SupportResult.InvalidTarget);
                 case SupportResult.RateLimited:
                 case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
-                default: return "NEGATIVE: " + Explain((SupportResult)r.Result).ToUpperInvariant();
+                default: return SupportWords.Refusal((SupportResult)r.Result);
             }
         }
 
@@ -769,10 +884,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
             if (result == SupportResult.Accepted)
             {
-                localCooldownUntil = DisableCooldowns ? 0f : Time.unscaledTime + message.CooldownSeconds;
+                if ((SupportActionId)message.Action != SupportActionId.JtacUnlase)
+                    localCooldownUntil = DisableCooldowns ? 0f : MissionNow() + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
-                     action.Id == SupportActionId.MtiSweep);
+                     action.Id == SupportActionId.MtiSweep || action.Id == SupportActionId.SatCamera);
                 Status = sweep
                     ? name + " complete: " + Mathf.Max(0, message.Contacts) + " contact(s)."
                     : name + " accepted.";
@@ -787,6 +903,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Status = name + " accepted: imaging, " + RadarScanContacts +
                         (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
                 }
+                if (action != null && action.Id == SupportActionId.SatCamera && Finite(message.X) && Finite(message.Z))
+                {
+                    CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
+                    CameraSerial++;
+                    Status = name + " accepted: imaging, " + Mathf.Max(0, message.Contacts) + " contact(s) revealed.";
+                }
                 float eta = action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) ? message.Duration :
                             action != null && action.Id == SupportActionId.Artillery ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
@@ -800,33 +922,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             else
             {
-                Status = name + " denied: " + Explain(result) + ".";
+                Status = Explain(result);
             }
         }
 
-        internal static string Explain(SupportResult result)
-        {
-            switch (result)
-            {
-                case SupportResult.OutOfCoverage: return "outside coverage";
-                case SupportResult.Disabled: return "action disabled";
-                case SupportResult.NotUnlocked: return "not authorised";
-                case SupportResult.InvalidTarget: return "unusable target";
-                case SupportResult.NoMarkTarget: return "no unit at the mark - re-mark on a contact";
-                case SupportResult.StaleIntel: return "stale intel at the grid - task RADAR SCAN first";
-                case SupportResult.OutOfRange: return "target out of range";
-                case SupportResult.NotAirborne: return "you must be in an aircraft";
-                case SupportResult.InsufficientAllocation: return "not enough allocation";
-                case SupportResult.NoStock: return "none left";
-                case SupportResult.Cooldown: return "cooling down";
-                case SupportResult.Busy: return "too many jobs in flight";
-                case SupportResult.Duplicate: return "already handled";
-                case SupportResult.CapabilityUnavailable: return "unavailable on this map";
-                case SupportResult.SpawnFailed: return "could not be delivered";
-                case SupportResult.RateLimited: return "too many requests";
-                default: return "unavailable";
-            }
-        }
+        internal static string Explain(SupportResult result) => SupportWords.Refusal(result);
 
         // ---- Server ----------------------------------------------------------------------
 
@@ -841,31 +941,54 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (action == null) return SupportResult.CapabilityUnavailable;
 
             ulong playerId = PlayerIdentity.Of(player);
-            float now = Time.unscaledTime;
+            float now = MissionNow();
             bool bypass = BypassRequirements;
+            int scene = sceneGeneration;
 
             if (ledger.WasAccepted(playerId, request.RequestId)) return SupportResult.Duplicate;
-            if (!DisableCooldowns && ledger.IsRateLimited(playerId, now, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
+            // Transport abuse limits keep wall time; gameplay cooldowns use mission time.
+            if (!DisableCooldowns && ledger.IsRateLimited(playerId, Time.unscaledTime, RequestsPerSecond, 1f)) return SupportResult.RateLimited;
             if (!action.Enabled) return SupportResult.Disabled;
             if (!bypass && !HostAuthorised(player, action)) return SupportResult.NotUnlocked;
+            SpaceState spaceState = null;
+            if (action.RequiredBird != SpaceBirdRequirement.None)
+            {
+                if (!TryGetSpaceState(player.HQ, out spaceState)) return SupportResult.CapabilityUnavailable;
+                if (spaceState.LiveUplinkCount == 0) return SupportResult.UplinkDown;
+                if (!HasRequiredBird(spaceState, action.RequiredBird)) return SupportResult.CapabilityUnavailable;
+                if (action.SpaceTask.HasValue && !spaceState.CanStart(action.SpaceTask.Value, now)) return SupportResult.BirdNotReady;
+            }
             // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
             bool free = action.Id == SupportActionId.JtacUnlase;
             if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
                 return SupportResult.Cooldown;
 
-            var context = new SupportContext(
-                player, new GlobalPosition(request.X, request.Y, request.Z), request.RequestId, this);
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
-            float missionNow = MissionNow();
+            float missionNow = now;
             if (!free)
             {
                 ObjectiveCount census = credits.Census(player.HQ);
                 if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
                     return SupportResult.NotUnlocked;
-                if (!bypass && !credits.TrySpend(player, cost, missionNow)) return SupportResult.InsufficientAllocation;
             }
+
+            SpaceActionTransaction transaction = null;
+            if (action.SpaceTask.HasValue)
+            {
+                if (spaceState == null || !spaceState.TryReserve(action.SpaceTask.Value, now, out SpaceTaskReservation receipt))
+                    return SupportResult.BirdNotReady;
+                transaction = new SpaceActionTransaction(space, player.HQ, spaceState, receipt, action.TaskSeconds);
+            }
+            if (!bypass && !free && !credits.TrySpend(player, cost, missionNow))
+            {
+                transaction?.Cancel();
+                return SupportResult.InsufficientAllocation;
+            }
+            var context = new SupportContext(player, new GlobalPosition(request.X, request.Y, request.Z),
+                request.RequestId, this, transaction);
+            if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
 
             SupportResult result;
             try { result = action.Action.Execute(context); }
@@ -874,8 +997,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 logger.LogError(e);
                 result = SupportResult.SpawnFailed;
             }
+            if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
+            if (transaction?.PhysicalLaunch == true) result = SupportResult.Accepted;
+            if (result == SupportResult.Accepted && transaction != null &&
+                (action.RequiresPhysicalLaunch ? !transaction.PhysicalLaunch : !transaction.Commit()))
+                result = SupportResult.SpawnFailed;
             if (result != SupportResult.Accepted)
             {
+                transaction?.Cancel();
                 if (!bypass && !free) credits.Refund(player, cost, missionNow);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
@@ -883,6 +1012,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
+            // An accepted scan or camera tasking is a human working SPACE: OVERLORD steps back. Replays, refusals,
+            // rods and every other CALL are not.
+            if (WatchOfficerPolicy.CountsAsHumanWork(action.Id))
+            {
+                try { space?.NoteHumanSpaceVerb(player); }
+                catch (Exception e) { logger.LogError(e); }
+            }
+            credits?.RecordInput(player, missionNow);
             try
             {
                 credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,
@@ -895,6 +1032,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return SupportResult.Accepted;
         }
 
+        private static bool HasRequiredBird(SpaceState state, SpaceBirdRequirement requirement) => requirement switch
+        {
+            SpaceBirdRequirement.Optical => state.HasBird(BirdKind.Optical),
+            SpaceBirdRequirement.Radar => state.HasBird(BirdKind.Radar),
+            SpaceBirdRequirement.Kinetic => state.HasBird(BirdKind.Kinetic),
+            SpaceBirdRequirement.OpticalOrRadar => state.HasBird(BirdKind.Optical) || state.HasBird(BirdKind.Radar),
+            _ => requirement == SpaceBirdRequirement.None
+        };
+
         private bool HostAuthorised(Player player, SupportActionDefinition action) =>
             perks.Grants(PlayerIdentity.Of(player), action.Capability);
 
@@ -903,7 +1049,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Seconds left on this player's host cooldown; what a Cooldown refusal tells the client.</summary>
         internal float ServerCooldownRemaining(Player player) =>
             player == null || DisableCooldowns ? 0f
-                : ledger.CooldownRemaining(PlayerIdentity.Of(player), Time.unscaledTime, CooldownFor(player));
+                : ledger.CooldownRemaining(PlayerIdentity.Of(player), MissionNow(), CooldownFor(player));
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -916,8 +1062,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
                 return new CallQuote(0, "");
             ObjectiveCount census = credits.Census(player.HQ);
+            // The host reads its own SPACE state; a client reads the faction mirror, so both quote the same +40 % when degraded.
+            bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
+                TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
             var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
-                false, null, false,
+                degraded, "UPLINK DOWN", false,
                 // Clients quote with the factor the host sent, so the panel matches what the host charges.
                 GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
                 GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,
@@ -931,7 +1080,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (owner == null) return fallbackJobs;
             if (strikeJobs.TryGetValue(owner, out int[] jobs)) return jobs;
-            if (strikeJobs.Count >= MaximumFactionPools) strikeJobs.Clear();
+            if (strikeJobs.Count >= MaximumFactionPools) return null;
             jobs = new int[2];
             strikeJobs.Add(owner, jobs);
             return jobs;
@@ -941,14 +1090,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             int[] jobs = JobsFor(owner);
             int index = (int)pool;
-            if (index < 0 || index >= jobs.Length || jobs[index] >= MaximumStrikeJobs) return false;
+            if (jobs == null || index < 0 || index >= jobs.Length || jobs[index] >= MaximumStrikeJobs) return false;
             jobs[index]++;
             return true;
         }
 
         void ISupportHost.Release(FactionHQ owner, SupportPool pool)
         {
-            int[] jobs = JobsFor(owner);
+            // Cleanup must never recreate a pool after ResetForScene.
+            if (owner == null || !strikeJobs.TryGetValue(owner, out int[] jobs)) return;
             int index = (int)pool;
             if (index >= 0 && index < jobs.Length && jobs[index] > 0) jobs[index]--;
         }
@@ -1022,7 +1172,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
             if (clear) Tasking.ClearLegs(strike);
-            else Tasking.QueueLeg(strike, leg, Time.timeSinceLevelLoad, settings.MaximumRange.Value);
+            else Tasking.QueueLeg(strike, leg, MissionNow(), settings.MaximumRange.Value);
         }
 
         private void BroadcastLegs(CruiseTasking.Strike strike, SupportResult result)
@@ -1079,7 +1229,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 pendingWaypoint = -1;
                 SupportResult result = (SupportResult)message.Result;
                 Status = result == SupportResult.Accepted ? "Waypoint accepted." :
-                    "Waypoint denied: " + Explain(result) + ".";
+                    Explain(result);
             }
             ActiveStrikeInfo? known = null;
             for (int i = 0; i < activeStrikes.Count; i++)

@@ -1,6 +1,7 @@
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Performance.Domain;
 using BoscaliSummer.Modules.Performance.Configuration;
+using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
@@ -29,13 +30,19 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             appliedReduction = false;
             wasEnabled = false;
             FxBus.SetAdaptiveCap(null);
+            AdaptiveBudgetReport.Reduced = false;
         }
 
-        private void OnDestroy() => FxBus.SetAdaptiveCap(null);
+        private void OnDestroy()
+        {
+            FxBus.SetAdaptiveCap(null);
+            AdaptiveBudgetReport.Enabled = AdaptiveBudgetReport.Reduced = false;
+        }
 
         private void Update()
         {
             bool enabled = settings != null && settings.Enabled.Value;
+            AdaptiveBudgetReport.Enabled = enabled;
             if (!enabled)
             {
                 if (wasEnabled)
@@ -43,6 +50,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     wasEnabled = false;
                     appliedReduction = false;
                     FxBus.SetAdaptiveCap(null);
+                    AdaptiveBudgetReport.Reduced = false;
                     policy.Reset();
                 }
                 return;
@@ -58,6 +66,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             policy.Observe(Time.unscaledDeltaTime, active);
             if (appliedReduction == policy.Reduced) return;
             appliedReduction = policy.Reduced;
+            AdaptiveBudgetReport.Reduced = appliedReduction;
+            AdaptiveBudgetReport.LastAverageMs = policy.LastAverageMs;
             FxBus.SetAdaptiveCap(appliedReduction ? FxQuality.Low : (FxQuality?)null);
             logger?.LogInfo("Performance: Boscali cosmetic budget " +
                 (appliedReduction ? "reduced" : "restored") +

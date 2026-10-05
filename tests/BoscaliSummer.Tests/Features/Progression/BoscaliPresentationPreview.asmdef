@@ -1,0 +1,5 @@
+{
+  "name": "BoscaliPresentationPreview",
+  "references": ["Unity.TextMeshPro", "Unity.ugui"],
+  "includePlatforms": ["Editor"]
+}

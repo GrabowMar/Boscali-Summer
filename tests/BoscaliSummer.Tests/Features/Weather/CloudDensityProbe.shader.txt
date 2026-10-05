@@ -1,0 +1,77 @@
+// Fixture-only wrapper. The runner inserts the production shared HLSL verbatim here.
+// This file is not a product shader or a shipping debug pass.
+Shader "Hidden/Boscali/CloudDensityProbe"
+{
+    SubShader
+    {
+        HLSLINCLUDE
+        /*__WEATHER_DENSITY_INCLUDE__*/
+        ENDHLSL
+        Pass
+        {
+            Blend Off
+            ZWrite Off
+            ZTest Always
+            Cull Off
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex vert_img
+            #pragma fragment Probe
+            sampler2D _DensityProbePositions;
+            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode;
+            float _ProbeRayMode, _ProbeRaySceneDistance;
+            float3 _ProbeRayOrigin, _ProbeRayDirection;
+            float3 _ProbeRainOrigin, _ProbeRainRay;
+            float4 _ProbeRainCloud, _ProbeRainSettings;
+            float4 ProbeRain(v2f_img i)
+            {
+                float distance = _ProbeRainSettings.w;
+                RainCurtainLayers rain = MarchRainCurtain(_ProbeRainOrigin, _ProbeRainRay,
+                    _ProbeRainSettings.x, _ProbeRainSettings.y, _ProbeRainSettings.z, distance);
+                float4 composite = CompositeRainCurtain(_ProbeRainCloud, distance, rain);
+                // Same rain layers against an opaque cloud. The final case places
+                // all rain behind that cloud; composition must retain its colour/depth.
+                float4 opaque = float4(0.1, 0.2, 0.3, 1.0);
+                float opaqueDistance = 1000.0;
+                float4 occluded = CompositeRainCurtain(opaque, opaqueDistance, rain);
+                float4 difference = abs(occluded - opaque);
+                float maxDifference = max(max(difference.r, difference.g), max(difference.b, difference.a));
+                return i.uv.y < 0.5 ? composite : float4(distance,
+                    rain.front.opacity + rain.back.opacity, maxDifference, opaqueDistance);
+            }
+            float4 Probe(v2f_img i) : SV_Target
+            {
+                if (_ProbeAirMode > 0.5)
+                {
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    return float4(AirTransmittance(p.x, p.y, p.z), 0, 0, 0);
+                }
+                if (_ProbeSlabMode > 0.5)
+                {
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    float d = Slab(p, _MidCover, smoothstep(0.4, 1.0, _MidSheet),
+                        2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.0, float2(1, 1)) * 0.42;
+                    return float4(d, 0, 0, 0);
+                }
+                if (_ProbeRayMode > 0.5)
+                {
+                    float distance;
+                    float4 sky = MarchSky(_ProbeRayOrigin, normalize(_ProbeRayDirection),
+                        _ProbeRaySceneDistance, float2(2, 2), distance);
+                    return i.uv.y < 0.5 ? sky : float4(distance, 0, 0, 0);
+                }
+                if (_ProbeRainMode > 0.5) return ProbeRain(i);
+                float4 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0));
+                gFoot = p.w;
+                gVert = 0.0;
+                gHeroMask = (1u << (uint)clamp(_HeroCount, 0.0, 5.0)) - 1u;
+                float direct = Density(p.xyz, 0.0);
+                float height = gLocalLightingHeight;
+                float culled = DensityOrEmpty(p.xyz, 0.0);
+                return float4(direct, height, culled, gLocalLightingHeight);
+            }
+            ENDHLSL
+        }
+    }
+    Fallback Off
+}

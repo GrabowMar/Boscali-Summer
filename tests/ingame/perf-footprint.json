@@ -1,0 +1,140 @@
+{
+  "name": "perf-footprint",
+  "mods": [
+    "wingcommand",
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "player"
+      ],
+      "hz": 1
+    },
+    {
+      "op": "spawn",
+      "id": "ai1",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          2000,
+          2000
+        ]
+      },
+      "altitude": 2500,
+      "speed": 200,
+      "heading": 90
+    },
+    {
+      "op": "spawn",
+      "id": "ai2",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -2000,
+          2000
+        ]
+      },
+      "altitude": 2600,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "spawn",
+      "id": "ai3",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          2000,
+          -2000
+        ]
+      },
+      "altitude": 2700,
+      "speed": 200,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "level": 20
+        },
+        {
+          "turn": {
+            "heading": 90,
+            "bank": 25
+          }
+        },
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "ai1",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "ai2",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "ai3",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 190
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "player"
+      ]
+    }
+  ],
+  "_note": "Footprint A/B: run this, and while it flies run 'nomod bridge footprint --seconds 60' (needs the footprint-telemetry bridge)."
+}

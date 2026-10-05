@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float offset = i == 0 ? firstOffset
                     : firstOffset - WeatherMath.HashRange(layout, id, 36, 0, 45000f, 70000f);
                 // The first band lies on the frontal boundary, so the deck ends where the front is.
-                if (i == 0 && split.Amount > 0f)
+                if (i == 0 && split.MeanderWavelength > 0f)
                 {
                     nx = split.NormalX;
                     nz = split.NormalZ;
@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     MeanderWavelength = WeatherMath.HashRange(layout, id, 34, 0, 42000f, 85000f),
                     MeanderPhase = WeatherMath.HashRange(layout, id, 35, 0, -3.14f, 3.14f),
                 };
-                if (i == 0 && split.Amount > 0f)
+                if (i == 0 && split.MeanderWavelength > 0f)
                 {
                     state.MeanderAmplitude = split.MeanderAmplitude;
                     state.MeanderWavelength = split.MeanderWavelength;

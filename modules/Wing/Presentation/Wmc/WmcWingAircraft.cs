@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>What the aircraft card shows: plain words and fractions (NaN is unknown), plus the parts for the damage map.</summary>
@@ -310,6 +311,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly TMP_Text callsign, sub;
         private WingPilot shown;
         private int look = int.MinValue;
+        private int faction = int.MinValue;
         private bool set;
 
         public readonly AvControl Dossier;
@@ -335,11 +337,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void SetPilot(WingPilot p, string callsignText, string subText)
         {
-            if (!set || !ReferenceEquals(p, shown) || look != WingPilotRoster.LookVersion)
+            int currentFaction = p != null && p.PortraitFaction >= 0 ? p.PortraitFaction : PortraitFactions.Local;
+            if (!set || !ReferenceEquals(p, shown) || look != WingPilotRoster.LookVersion || faction != currentFaction)
             {
                 set = true;
                 shown = p;
                 look = WingPilotRoster.LookVersion;
+                faction = currentFaction;
                 portrait.sprite = p != null ? PilotPortrait.For(p) : null;
                 portrait.enabled = portrait.sprite != null;
             }

@@ -21,7 +21,9 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.SupportMissileDetonatePatch),
             typeof(Patches.SupportMissileAuthorityPatch),
             typeof(Patches.SupportMissileDescentPatch),
-            typeof(Patches.CreditRewardPatch)
+            typeof(Patches.CreditRewardPatch),
+            typeof(Patches.CreditKillPatch),
+            typeof(Patches.ActivityInputPatch)
         };
 
         public void Install(ModuleContext context)
@@ -30,6 +32,7 @@ namespace BoscaliSummer.Modules.Support
             context.Services.TryGet(out IZoneFortificationService fortifications);
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
+            SpaceService space = context.AddSceneService<SpaceService>(51);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
@@ -39,6 +42,8 @@ namespace BoscaliSummer.Modules.Support
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
+            space.Configure(manager);
+            manager.AttachSpace(space);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);
@@ -47,8 +52,10 @@ namespace BoscaliSummer.Modules.Support
             calls.Configure(manager, context.Settings.Support, observations);
             manager.AttachCalls(calls);
             hudLine.Configure(manager, calls);
+            SpaceFeedController feed = context.AddSceneService<SpaceFeedController>(57);
+            feed.Configure(manager, calls, context.Settings.Support, context.Logger);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
-            panel.Configure(manager, calls);
+            panel.Configure(manager, calls, feed);
             satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));

@@ -9,17 +9,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
     /// The live operation as a compact hero card: kind and phase word on the first line, the operation's name
-    /// with the phase tracker under it, and the committed ground / air / naval groups as three small counters
-    /// on the right. The phase is the only progress the staff reports, so that is what the strip shows and
-    /// nothing is invented; the staff's own summary sentence rides on hover.
+    /// with the phase tracker under it, assigned ground groups and nearby air/naval assets as counters.
+    /// The phase and aim are the staff's verified readout, without an invented progress percentage.
     /// </summary>
     internal sealed class StrOpCard : AvPart
     {
-        private const float Pad = 12f, Top = 8f, ForceW = 44f, ForceGap = 4f, RowA = 18f;
+        private const float Pad = 12f, Top = 8f, ForceW = 68f, ForceGap = 4f, RowA = 18f;
         private static readonly string[] Phases = { "FORMING", "ADVANCING", "IN CONTACT" };
         private readonly AvFrame frame;
         private readonly Image rail;
-        private readonly TMP_Text kind, label;
+        private readonly TMP_Text kind, label, summary;
         private readonly RectTransform phaseBox;
         private readonly AvFrame phaseFrame;
         private readonly TMP_Text phaseText;
@@ -51,13 +50,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Fit(phaseText, false);
             AvLay.Fill(phaseText.rectTransform, 1f);
             label = AvText.Make(Rect, "Label", AvTextRole.Headline, "", TextAlignmentOptions.TopLeft, true);
+            summary = AvText.Make(Rect, "Aim", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             strip = new StrStageStrip(Rect, Phases, AvTextRole.Micro);
-            string[] names = { "GND", "AIR", "NAV" };
+            string[] names = { "GND GROUPS\nASSIGNED", "AIRCRAFT\nNEARBY", "SHIPS\nNEARBY" };
             string[] tips =
             {
                 "Ground groups committed to this operation.",
-                "Air groups committed to this operation.",
-                "Naval groups committed to this operation.",
+                "Nearby friendly aircraft; staff has not assigned them to this operation.",
+                "Nearby friendly ships; staff has not assigned them to this operation.",
             };
             for (int i = 0; i < forces.Length; i++)
             {
@@ -95,9 +95,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Set(string kindText, string name, string phase, string summaryText, int ground, int air, int naval)
         {
-            bool changed = StrPaint.Put(kind, kindText);
+            bool changed = StrPaint.Put(kind, "ACT · " + kindText);
             changed |= StrPaint.Put(label, name);
-            // The staff's summary sentence lives on hover; the card body stays name, phase and force counts.
+            changed |= StrPaint.Put(summary, string.IsNullOrEmpty(summaryText) ? "AIM UNAVAILABLE" : summaryText);
             AvHelpTip.Attach(frame.gameObject, string.IsNullOrEmpty(summaryText)
                 ? "Live operation. The phase strip shows how far it has come."
                 : summaryText + " The phase strip shows how far the operation has come.");
@@ -115,10 +115,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private static float LeftW(float width) =>
             Mathf.Max(60f, width - 2f * Pad - (3f * ForceW + 2f * ForceGap) - 10f);
 
-        private float LabelH(float width) => Mathf.Max(36f, AvText.Height(label, LeftW(width)));
+        private float LabelH(float width) => Mathf.Max(48f, AvText.Height(label, LeftW(width)));
 
         public override float Measure(float width) =>
-            Top + RowA + 3f + LabelH(width) + 4f + StrStageStrip.Height + 8f;
+            Top + RowA + 3f + LabelH(width) + 4f + StrStageStrip.Height + 6f + AvText.Height(summary, Mathf.Max(20f, width - 2f * Pad)) + 8f;
 
         public override void Place(AvSlot s)
         {
@@ -131,13 +131,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             float y = Top + RowA + 3f;
             AvLay.Place(label.rectTransform, Pad, y, lw, lh);
             strip.Place(new AvSlot(Pad, y + lh + 4f, lw, StrStageStrip.Height));
+            float sy = y + lh + 4f + StrStageStrip.Height + 6f;
+            AvLay.Place(summary.rectTransform, Pad, sy, w, AvText.Height(summary, w));
             float boxH = lh + 4f + StrStageStrip.Height, x0 = s.W - Pad - (3f * ForceW + 2f * ForceGap);
             for (int i = 0; i < forces.Length; i++)
             {
                 AvLay.Place(forces[i].Box, x0 + i * (ForceW + ForceGap), y, ForceW, boxH);
                 AvLay.Place(forces[i].Symbol.rectTransform, (ForceW - 20f) * 0.5f, 0f, 20f, 20f);
                 AvLay.Place(forces[i].Number.rectTransform, 2f, 18f, ForceW - 4f, 27f);
-                AvLay.Place(forces[i].Name.rectTransform, 2f, boxH - 17f, ForceW - 4f, 15f);
+                AvLay.Place(forces[i].Name.rectTransform, 2f, boxH - 30f, ForceW - 4f, 30f);
             }
         }
 
@@ -150,6 +152,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             rail.color = c;
             kind.color = StrPaint.Key;
             label.color = StrPaint.Ink;
+            summary.color = StrPaint.Dim;
             phaseFrame.Paint(c.WithAlpha(0.2f), c.WithAlpha(0.8f));
             phaseText.color = StrPaint.Ink;
             strip.Restyle();
@@ -165,22 +168,21 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>
-    /// Staff proposals as two-line cards: kind, front name and countdown on the first line, the forces and
-    /// the risk on the second. Clicking a card picks it (the host validates); a card the reader cannot pick is
-    /// a plain readout. The staff's brief rides on hover.
+    /// Staff proposals name their aim, nearby observed forces, risk and deadline on the card.
+    /// Clicking sends the painted identity for host validation; unavailable commands remain readouts.
     /// </summary>
     internal sealed class StrProposalDeck : AvPart
     {
-        private const float PadX = 10f, ChevW = 20f, CdW = 44f, RowA = 20f, RowB = 20f, Top = 6f, Gap = 4f;
+        private const float PadX = 10f, ChevW = 20f, RowA = 18f, Top = 7f, Gap = 6f;
         private readonly Card[] cards;
-        private readonly Action<int> onPick;
+        private readonly Action<int, int> onPick;
 
         private sealed class Card
         {
             public RectTransform Root;
             public AvFrame Frame;
             public Image Rail;
-            public TMP_Text Kind, Countdown, Label, Forces, Chevron;
+            public TMP_Text Kind, Countdown, Label, Brief, Forces, Chevron;
             public RectTransform RiskBox;
             public AvFrame RiskFrame;
             public TMP_Text Risk;
@@ -188,9 +190,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             public AvHit Hit;
             public AvState RiskState;
             public bool Hover, Live;
+            public int Id, Revision;
         }
 
-        public StrProposalDeck(RectTransform parent, int slots, Action<int> pick)
+        public StrProposalDeck(RectTransform parent, int slots, Action<int, int> pick)
         {
             Rect = AvLay.Child(parent, "ProposalDeck");
             onPick = pick;
@@ -205,7 +208,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 c.Kind = StrPaint.Fit(c.Root, "Kind", AvTextRole.Micro);
                 c.Countdown = StrPaint.Fit(c.Root, "Countdown", AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight);
                 c.Label = AvText.Make(c.Root, "Label", AvTextRole.Head, "", TextAlignmentOptions.MidlineLeft, true);
-                c.Forces = StrPaint.Fit(c.Root, "Forces", AvTextRole.Micro);
+                c.Brief = AvText.Make(c.Root, "Aim", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+                c.Forces = AvText.Make(c.Root, "EligibleForces", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                 c.Chevron = AvIcons.Make(c.Root, AvIcon.ChevronRight, 18f, Color.white);
                 c.RiskBox = AvLay.Child(c.Root, "RiskChip");
                 c.RiskFrame = AvFrame.Add(c.RiskBox, "Frame", AvChamfer.Diagonal(4f));
@@ -215,7 +219,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 AvLay.Fill(c.Risk.rectTransform, 1f);
                 c.Hit = AvHit.On(c.Frame);
                 c.Hit.Hover = h => { c.Hover = h; Style(slot); };
-                c.Hit.Click = e => { if (c.Live) onPick?.Invoke(slot); };
+                // Identity belongs to the painted card. A later snapshot may reorder its slot before refresh.
+                c.Hit.Click = e => { if (c.Live && e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) onPick?.Invoke(c.Id, c.Revision); };
                 c.Tip = AvHelpTip.Attach(c.Frame.gameObject, null);
                 c.Root.gameObject.SetActive(false);
                 cards[i] = c;
@@ -228,7 +233,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         public static AvState RiskStateOf(string risk)
         {
             string r = (risk ?? "").ToUpperInvariant();
-            return r.Contains("HIGH") ? AvState.Danger : r.Contains("MED") ? AvState.Caution : AvState.Ready;
+            if (r.Contains("HIGH")) return AvState.Danger;
+            if (r.Contains("MED") || r.Contains("MODERATE")) return AvState.Caution;
+            return r.Contains("LOW") ? AvState.Ready : AvState.Inert;
         }
 
         public void Hide(int i)
@@ -238,38 +245,38 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public void Set(int i, string kind, string label, string brief, string forces, string risk,
+        public void Set(int i, int id, int revision, string kind, string label, string brief, string forces, string risk,
             int seconds, bool pickable, string help)
         {
             Card c = cards[i];
             bool wasOn = c.Root.gameObject.activeSelf;
             c.Root.gameObject.SetActive(true);
             bool changed = !wasOn;
-            changed |= StrPaint.Put(c.Kind, kind);
+            c.Id = id;
+            c.Revision = revision;
+            changed |= StrPaint.Put(c.Kind, "O" + (i + 1) + " · " + kind + (i == 0 ? " · AUTO DEFAULT" : ""));
             changed |= StrPaint.Put(c.Label, label);
-            StrPaint.Put(c.Forces, forces);
-            StrPaint.Put(c.Countdown, seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
+            changed |= StrPaint.Put(c.Brief, "AIM · " + (string.IsNullOrEmpty(brief) ? "UNAVAILABLE" : brief));
+            changed |= StrPaint.Put(c.Forces, "NEARBY · " + (string.IsNullOrEmpty(forces) ? "UNKNOWN" : forces));
+            changed |= StrPaint.Put(c.Countdown, seconds < 0 ? "—" : seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
             AvState rs = RiskStateOf(risk);
             string riskWord = AvStates.Glyph(rs) + "RISK " + (risk ?? "");
-            StrPaint.Put(c.Risk, riskWord);
+            changed |= StrPaint.Put(c.Risk, riskWord);
             c.RiskState = rs;
             if (c.Live != pickable) { c.Live = pickable; changed = true; }
             c.Hit.Interactable = pickable;
             c.Tip.Text = (string.IsNullOrEmpty(brief) ? "" : brief + " ") +
-                         "Forces: " + (forces ?? "") + ". The offer lapses when the countdown ends. " + help;
+                         "Nearby observed forces: " + (forces ?? "") + ". These units are not assigned to this proposal. Staff selects the default when the timer ends; host revalidates it. " + help;
             Style(i);
             if (changed) Changed();
         }
 
         private static float TextW(float width, Card c) => Mathf.Max(20f, width - 2f * PadX - (c.Live ? ChevW : 0f));
 
-        private static float KindW(Card c) => Mathf.Min(84f, AvText.Width(c.Kind) + 4f);
-
-        private static float LabelW(float width, Card c) => Mathf.Max(20f, TextW(width, c) - KindW(c) - 6f - CdW - 6f);
-
-        private static float RowAHeight(Card c, float width) => Mathf.Max(RowA, AvText.Height(c.Label, LabelW(width, c)));
-
-        private static float CardH(Card c, float width) => Top + RowAHeight(c, width) + 3f + RowB + Top;
+        private static float LabelW(float width, Card c) => Mathf.Max(20f, TextW(width, c) - AvText.Width(c.Risk) - 30f);
+        private static float LabelH(Card c, float width) => Mathf.Max(20f, AvText.Height(c.Label, LabelW(width, c)));
+        private static float CardH(Card c, float width) => Top + RowA + 3f + LabelH(c, width) + 4f +
+            AvText.Height(c.Brief, TextW(width, c)) + 3f + AvText.Height(c.Forces, TextW(width, c)) + Top;
 
         public override float Measure(float width)
         {
@@ -287,16 +294,17 @@ namespace BoscaliSummer.Modules.Command.Presentation
             {
                 Card c = cards[i];
                 if (!c.Root.gameObject.activeSelf) continue;
-                float h = CardH(c, s.W), w = TextW(s.W, c), ra = RowAHeight(c, s.W), kw = KindW(c);
+                float h = CardH(c, s.W), w = TextW(s.W, c), lh = LabelH(c, s.W);
                 AvLay.Place(c.Root, 0f, y, s.W, h);
                 AvLay.Place(c.Rail.rectTransform, 0f, 0f, 3f, h);
-                AvLay.Place(c.Kind.rectTransform, PadX, Top, kw, RowA);
-                AvLay.Place(c.Label.rectTransform, PadX + kw + 6f, Top, LabelW(s.W, c), ra);
-                AvLay.Place(c.Countdown.rectTransform, PadX + w - CdW, Top, CdW, RowA);
-                float fy = Top + ra + 3f;
-                float riskW = Mathf.Min(w * 0.5f, AvText.Width(c.Risk) + 22f);
-                AvLay.Place(c.Forces.rectTransform, PadX, fy, Mathf.Max(20f, w - riskW - 8f), RowB);
-                AvLay.Place(c.RiskBox, PadX + w - riskW, fy, riskW, RowB);
+                AvLay.Place(c.Kind.rectTransform, PadX, Top, w - 46f, RowA);
+                AvLay.Place(c.Countdown.rectTransform, PadX + w - 40f, Top, 40f, RowA);
+                float y1 = Top + RowA + 3f, riskW = AvText.Width(c.Risk) + 22f;
+                AvLay.Place(c.Label.rectTransform, PadX, y1, LabelW(s.W, c), lh);
+                AvLay.Place(c.RiskBox, PadX + w - riskW, y1, riskW, 20f);
+                float by = y1 + lh + 4f, bh = AvText.Height(c.Brief, w);
+                AvLay.Place(c.Brief.rectTransform, PadX, by, w, bh);
+                AvLay.Place(c.Forces.rectTransform, PadX, by + bh + 3f, w, AvText.Height(c.Forces, w));
                 c.Chevron.gameObject.SetActive(c.Live);
                 AvLay.Place(c.Chevron.rectTransform, s.W - PadX - ChevW + 4f, (h - 22f) * 0.5f, ChevW, 22f);
                 y += h + Gap;
@@ -314,6 +322,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             c.Countdown.color = StrPaint.Ink;
             c.Label.color = StrPaint.Ink;
             c.Forces.color = StrPaint.Dim;
+            c.Brief.color = StrPaint.Dim;
             c.Chevron.color = lit ? select : StrPaint.Dim;
             c.RiskFrame.Paint(risk.WithAlpha(0.18f), risk.WithAlpha(0.75f));
             c.Risk.color = StrPaint.Ink;

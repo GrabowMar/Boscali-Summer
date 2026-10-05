@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Images a scene and reveals stationary ground contacts. Spawns nothing.")
                 .Toggle(2, settings.FortifyEnabled, "ZONE FORTIFICATION",
                     "Reinforce a friendly controlled zone. Refused, and nothing charged, when defenders cannot be placed.")
-                .Toggle(3, settings.ArtilleryEnabled, "ROD FROM GOD",
+                .Toggle(3, settings.ArtilleryEnabled, "ORBITAL ROD",
                     "Orbital kinetic strike: one high-velocity projectile onto the mark.")
                 .Toggle(4, settings.EmpEnabled, "EMP SHOCK",
                     "High-altitude airburst: the prompt pulse upsets electronics, the geomagnetic phase jams radars across a wide area.")
@@ -36,6 +36,10 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     5f, v => v.ToString("0") + " s")
                 .Toggle(13, settings.MtiEnabled, "MTI SWEEP",
                     "Tracks moving enemy ground contacts near the mark. Shares the radar scan recharge.")
+                .Toggle(16, settings.SatCameraEnabled, "SAT CAMERA",
+                    "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
+                .Toggle(17, settings.WatchOfficerEnabled, "WATCH OFFICER",
+                    "OVERLORD staffs SPACE while no human is working it: it scans for contacts and posts TASKED calls from revealed ones.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")
