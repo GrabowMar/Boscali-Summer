@@ -23,6 +23,11 @@ namespace BoscaliSummer.Tests.Features.Progression
             TestAssert.That(draft.Hair == 6, "hair cycling must wrap backwards");
             draft.CycleUniform(1, 4);
             TestAssert.That(draft.Uniform == 1, "uniform cycling moved out of order");
+            draft.Uniform = 13;
+            draft.CycleUniform(1, 14);
+            TestAssert.That(draft.Uniform == 0, "the appended uniform choices must wrap forward");
+            draft.CycleUniform(-1, 14);
+            TestAssert.That(draft.Uniform == 13, "the appended uniform choices must wrap backward");
             draft.CycleBackdrop(1, 4);
             TestAssert.That(draft.Backdrop == 1, "backdrop cycling moved out of order");
             draft.CyclePersona(3);

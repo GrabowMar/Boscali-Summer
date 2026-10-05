@@ -104,6 +104,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private readonly RaycastHit[] shelterHits = new RaycastHit[8];
         private float nextShelterCheck;
         private float rainExposure = 1f;
+        private float heightAboveGround;
         private float lastVisualIntensity;
         private bool sheltered;
         private FlightEnvironmentSnapshot environmentSnapshot;
@@ -202,6 +203,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             canopyDrawnFrames = 0;
             nextShelterCheck = 0f;
             rainExposure = 1f;
+            heightAboveGround = 0f;
             sheltered = false;
             transitionProgress = 1f;
             lastForecastSampleTime = -999f;
@@ -524,6 +526,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             viewDewpoint = Mathf.Min(viewTemperature, airPoint.Dewpoint - Mathf.Max(0f, (float)cloudPosition.y) * 0.002f);
             rainIntensity = airMass.Rain;
             rainIntensity = Mathf.Clamp01(rainIntensity * RainVisualMath.GustFactor(missionTime, missionSeed));
+            float incomingRain = rainIntensity;
             cloudMoisture = Mathf.MoveTowards(cloudMoisture,
                 airMass.CloudMoisture, Time.deltaTime * 0.65f);
             float visualIntensity = RainVisualsEnabled ? rainIntensity : 0f;
@@ -550,8 +553,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             Vector3 airVel = localAircraft != null && localAircraft.rb != null ? localAircraft.rb.velocity : Vector3.zero;
             float ias = localAircraft != null ? localAircraft.speed : airVel.magnitude;
 
-            // A short, bounded roof probe silences rain under hangars. Ownship canopy is
-            // deliberately ignored: it receives patter instead of sheltering itself.
+            // Shelter and ground distance share a four-Hz check. Ownship canopy receives
+            // patter; an actual roof leaves a quiet, muffled bed of outside weather.
             if (Time.unscaledTime >= nextShelterCheck)
             {
                 nextShelterCheck = Time.unscaledTime + 0.25f;
@@ -559,6 +562,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     80f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
                 sheltered = HasShelter(shelterHits, hits, localAircraft != null ? localAircraft.transform : null,
                     cockpitRoot);
+                heightAboveGround = Mathf.Max(0f, currentCam.transform.position.y - Datum.LocalSeaY);
+                if (Physics.Raycast(currentCam.transform.position, Vector3.down, out RaycastHit groundHit,
+                    8000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                    heightAboveGround = Mathf.Min(heightAboveGround, groundHit.distance);
             }
             rainExposure = Mathf.MoveTowards(rainExposure, sheltered ? 0f : 1f, Time.deltaTime * 2f);
             rainIntensity *= rainExposure;
@@ -583,7 +590,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             bool wantSystems = visualIntensity > 0.02f || canopyWetness > 0.001f ||
                 (RainVisualsEnabled && settings.CanopyRainEnabled.Value && glassMoisture > 0.001f) ||
-                (settings.RainAudioEnabled.Value && rainIntensity > 0.02f);
+                (settings.RainAudioEnabled.Value && incomingRain > 0.02f);
             if (rainRoot == null && !wantSystems) return;
             if (rainRoot == null) EnsureRainSystems();
 
@@ -613,8 +620,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     settings != null ? settings.RainDensity.Value : 1f, 1f, lightLevel);
             }
             // Impact sound follows incoming water, independently of optional glass rendering.
-            rainSound?.UpdateAudio(rainIntensity, 0f, rainIntensity, isCockpit,
-                settings.RainAudioEnabled.Value);
+            rainSound?.UpdateAudio(incomingRain, 0f, rainIntensity, isCockpit,
+                settings.RainAudioEnabled.Value && !underwaterView, cameras.followingUnit is Aircraft ? ias : 0f,
+                heightAboveGround, rainExposure);
             // The sim remains current outside cockpit view, but submits at most 30 blits/s per pane.
             float speedNorm = Mathf.Clamp01(ias / 250f);
             if (!shaderRequested || canopyWetness <= 0.001f) canopyShader.ClearWater();
@@ -671,6 +679,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "cloudHeight", currentCloudHeight },
                 { "forcedRain", forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1f },
                 { "rainExposure", rainExposure },
+                { "heightAboveGround", heightAboveGround },
                 { "rainSystems", rainRoot != null ? 1 : 0 },
                 { "streakAlive", rainEmitter != null ? rainEmitter.AliveParticles : -1 },
                 { "streakPlaying", rainEmitter != null && rainEmitter.Playing ? 1 : 0 },
@@ -738,6 +747,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "rainAudioPlaying", rainSound != null && rainSound.IsPlaying ? 1 : 0 },
                 { "rainRushVolume", rainSound != null ? rainSound.RushVolume : 0f },
                 { "rainPatterVolume", rainSound != null ? rainSound.PatterVolume : 0f },
+                { "rainExteriorCutoff", rainSound != null ? rainSound.ExteriorCutoff : 22000f },
+                { "rainCanopyCutoff", rainSound != null ? rainSound.CanopyCutoff : 22000f },
                 { "terrainSurfaces", terrainRain.SurfaceCount },
                 { "terrainWetness", terrainRain.Wetness },
             };

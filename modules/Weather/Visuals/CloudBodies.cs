@@ -368,9 +368,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             float h = (y - y0) / Math.Max(1f, y1 - y0);
             if (h <= 0f || h >= 1f) return 0f;
-            float patch = Sample(x / 23000f + 0.61f, z / 23000f + 0.61f, 0.33f, 0);
-            float px = x + (Sample(x / 31000f + 0.27f, z / 31000f + 0.27f, 0.71f, 0) - 0.5f) * scale * 1.6f;
-            float pz = z + (Sample(x / 31000f + 0.27f, z / 31000f + 0.27f, 0.71f, 1) - 0.5f) * scale * 1.6f;
+            // The visible slab's mesoscale patch and warp share this RG sample.
+            // CPU occupation retains the vertical dome; the shader integrates its
+            // depth as 0.77 and filters these bytes to its screen footprint.
+            float lowR = Sample(x / 27000f + 0.27f, z / 27000f + 0.27f, 0.71f, 0);
+            float lowG = Sample(x / 27000f + 0.27f, z / 27000f + 0.27f, 0.71f, 1);
+            float patch = lowG;
+            float px = x + (lowR - 0.5f) * scale * 1.6f;
+            float pz = z + (lowG - 0.5f) * scale * 1.6f;
             float along = px * windX + pz * windZ, across = -px * windZ + pz * windX;
             float span = scale * stretch;
             float s1 = Sample(along / span, across / scale, y / (scale * 0.6f) + 0.17f, 0);
@@ -381,6 +386,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float c1 = Sample(px / cs + 0.41f, pz / cs + 0.41f, y / (cs * 0.8f), 0);
             float c2 = Sample(pz / (cs * 2.37f) + 0.13f, -px / (cs * 2.37f) + 0.13f, y / (cs * 1.9f) + 0.77f, 0);
             float cells = c1 * 0.62f + c2 * 0.38f;
+            float street = 0.55f + 0.45f * (float)Math.Sin(across / (scale * 0.85f) * 2f * Math.PI + (px - x) / scale * 2f);
+            cells *= WeatherMath.Lerp(1f, street, 0.8f);
             float raw = WeatherMath.Lerp(streak, cells, ripple);
             float body = WeatherMath.Clamp01(0.5f + (raw - 0.52f) * 3.16f);
             body = WeatherMath.Lerp(body, 0.7f + 0.3f * body, sheet);

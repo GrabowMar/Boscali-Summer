@@ -43,6 +43,8 @@ $player = Start-Process "$fixture/Player/WeatherCloudDensityCheck.exe" -Argument
 if (-not $player.WaitForExit(180000)) { $player.Kill(); throw "Density fixture timeout: $fixture/player.log" }
 $result = Get-Content "$fixture/result.txt" -Raw
 Write-Output $result
-if ($player.ExitCode -ne 0 -or $result -match '(?m)^FAIL ' -or $result -notmatch 'PASS density' -or $result -notmatch 'PASS rain optics 8') {
+if ($player.ExitCode -ne 0 -or $result -match '(?m)^FAIL ' -or $result -notmatch 'PASS density' -or
+    $result -notmatch 'PASS rain optics 8' -or $result -notmatch 'PASS ray composition 10' -or
+    $result -notmatch 'PASS slab footprint 18' -or $result -notmatch 'PASS air optics 12') {
     throw "Density fixture failed: $fixture/player.log"
 }

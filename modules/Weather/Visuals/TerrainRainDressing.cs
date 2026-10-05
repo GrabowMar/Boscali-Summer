@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int SkyColorId = Shader.PropertyToID("_SkyColor");
         private static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
         private static readonly int RippleTimeId = Shader.PropertyToID("_RippleTime");
+        private static readonly int WetFadeId = Shader.PropertyToID("_WetFade");
         internal int SurfaceCount => surfaces.Count;
 
         public string EffectId => "terrain-rain";
@@ -93,6 +94,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
             GeometryUtility.CalculateFrustumPlanes(camera, planes);
+            float drawRange = AtmosphericSurfaceMath.GroundDrawRange(camera.transform.position.y - Datum.LocalSeaY);
             for (int i = 0; i < 8; i++) { nearest[i] = -1; distances[i] = float.MaxValue; }
             for (int i = 0; i < surfaces.Count; i++)
             {
@@ -102,7 +104,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     (camera.cullingMask & (1 << s.Renderer.gameObject.layer)) == 0) continue;
                 Bounds bounds = s.Renderer.bounds;
                 float distance = bounds.SqrDistance(camera.transform.position);
-                if (distance >= 1200f * 1200f || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
+                if (distance >= drawRange * drawRange || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
                 for (int j = 0; j < 8; j++)
                 {
                     if (distance >= distances[j]) continue;
@@ -116,6 +118,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             properties.SetColor(SkyColorId, skyColor);
             properties.SetFloat(FogDensityId, fogDensity);
             properties.SetFloat(RippleTimeId, rippleTime);
+            properties.SetVector(WetFadeId, new Vector4(drawRange * 0.65f, drawRange, 0f, 0f));
             uint indexBudget = 300000; // At most 100,000 extra triangles on dense maps.
             int sampleBudget = 2;
             if (field != null) wetness = 0f;

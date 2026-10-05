@@ -309,7 +309,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 windAudio.TryRoute();
                 float wetMask = environmentValid ? Mathf.Clamp01(environment.Precipitation01 + environment.Condensation01) : 0f;
                 windAudio.Tick(airspeed, environmentValid ? environment.GustMps : 0f,
-                    true, settings.WindAudioEnabled.Value, dt, wetMask);
+                    true, settings.WindAudioEnabled.Value, dt, wetMask, altitude);
             }
             if (pilotStrainAudio != null)
             {
@@ -397,6 +397,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionCameraId"] = boundCamera != null ? boundCamera.GetInstanceID() : 0;
             state["immersionSources"] = (airframeAudio != null ? 1 : 0) + (windAudio != null ? 1 : 0) + (pilotStrainAudio != null ? 1 : 0);
             state["immersionWindPlaying"] = windAudio != null && windAudio.IsPlaying;
+            state["immersionWindVolume"] = windAudio != null ? windAudio.Volume : 0f;
             state["immersionCreakPlaying"] = airframeAudio != null && airframeAudio.IsPlaying;
             state["immersionStrainPlaying"] = pilotStrainAudio != null && pilotStrainAudio.IsPlaying;
 

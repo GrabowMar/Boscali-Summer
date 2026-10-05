@@ -306,6 +306,25 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             .GetField("properties", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(terrain);
         Check(terrainProperties.GetFloat("_Rain") == 0f && terrainProperties.GetFloat("_Wetness") > 0f,
             "Impact rings stop when rain stops, while ground remains damp");
+        ground.transform.localScale = new Vector3(4000f, 1f, 4000f);
+        camera.transform.position = new Vector3(0f, 18000f, 0f);
+        camera.orthographic = false;
+        camera.fieldOfView = 70f;
+        camera.farClipPlane = 40000f;
+        camera.Render(); // Update native visibility after the fixture's changed pose.
+        Color32[] highDryGround = Capture(camera, texture, "terrain-high-dry.png");
+        terrain.Update(terrainMap.transform, camera, 0f, 0f);
+        Check(terrainProperties.GetVector("_WetFade").y == 26000f,
+            "High view uses the bounded distant damp-tone range");
+        Color32[] highWetGround = Capture(camera, texture, "terrain-high-wet.png");
+        Check(highWetGround[center].r < highDryGround[center].r - 3 &&
+            highWetGround[center].r > highDryGround[center].r * .85f,
+            "Broad damp tone survives the height-limit view without a dark mirror: " +
+            highDryGround[center].r + " -> " + highWetGround[center].r);
+        ground.transform.localScale = Vector3.one;
+        camera.transform.position = new Vector3(0f, 3f, 0f);
+        camera.orthographic = true;
+        camera.Render();
         terrain.Reset(); terrain.Reset();
         Check(terrain.SurfaceCount == 0 && terrain.Wetness == 0f && ground.GetComponent<MeshRenderer>().sharedMaterial == terrainMaterial,
             "Terrain reset preserves original material and releases cached surfaces");
@@ -336,6 +355,20 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             "Rain retains contrast against bright sky instead of additive washout");
         Check(streakMaterial.GetVector("_CameraFadeParams").y > 0f && streakMaterial.IsKeywordEnabled("_FADING_ON"),
             "Runtime rain material uploads the camera fade coefficients");
+        Check(ps.velocityOverLifetime.enabled && ps.velocityOverLifetime.space == ParticleSystemSimulationSpace.World &&
+            Math.Abs(ps.velocityOverLifetime.z.constant + 250f) < .001f,
+            "Existing particles receive the current common camera-relative velocity");
+        float rainAspect = camera.aspect;
+        camera.aspect = 16f / 9f;
+        camera.fieldOfView = 100f;
+        streaks.UpdateRain(Vector3.zero, Vector3.zero, 1f, camera);
+        Check(ps.shape.scale.x > 20f && ps.shape.scale.y > 18f && ps.main.maxParticles == 2500,
+            "Wide ground/exterior cameras spread the bounded rain stream across their view");
+        Check(Math.Abs(ps.velocityOverLifetime.z.constant) < .001f &&
+            Math.Abs(ps.velocityOverLifetime.y.constant + 9f) < .001f,
+            "Orbit/hover rain removes obsolete fast-flight velocity from all live drops");
+        camera.aspect = rainAspect;
+        camera.fieldOfView = 70f;
         Color dayStreak = ps.main.startColor.color;
         streaks.UpdateRain(Vector3.zero, Vector3.zero, 1f, camera, lightLevel: 0.04f);
         Color nightStreak = ps.main.startColor.color;
@@ -345,6 +378,49 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             "Night rain retains the authored 22 percent visibility floor without changing particle coverage");
         streaks.UpdateRain(Vector3.zero, Vector3.zero, 0f, camera);
         Check(!ps.isEmitting, "Dry weather stops rain emission");
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var fixedVelocity = ps.velocityOverLifetime;
+        fixedVelocity.x = -20f; fixedVelocity.y = -9f; fixedVelocity.z = 0f;
+        ps.Emit(new ParticleSystem.EmitParams { position = Vector3.zero, velocity = Vector3.zero,
+            startLifetime = 10f, startSize = .03f, startColor = Color.white }, 1);
+        ps.Simulate(.1f, false, false, false);
+        var probeDrops = new ParticleSystem.Particle[4];
+        Check(ps.GetParticles(probeDrops) == 1, "Single live native drop for exterior-turn regression");
+        Vector3 beforeTurn = probeDrops[0].position;
+        fixedVelocity.x = 0f; fixedVelocity.z = -20f;
+        ps.Simulate(.1f, false, false, false);
+        Check(ps.GetParticles(probeDrops) == 1 && Math.Abs(probeDrops[0].position.x - beforeTurn.x) < .01f &&
+            probeDrops[0].position.z < beforeTurn.z - 1.9f,
+            "A surviving native rain drop follows changed relative motion without a per-particle CPU update");
+        // Move the real camera and let production UpdateRain translate its custom frame.
+        // With no horizontal wind, the same drop must stay at the same world X/Z. This
+        // fails if camera travel is omitted, subtracted twice, or retained after a turn.
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        var probeEmission = ps.emission;
+        probeEmission.enabled = false;
+        ps.Play();
+        ps.Emit(new ParticleSystem.EmitParams { position = Vector3.zero, velocity = Vector3.zero,
+            startLifetime = 10f, startSize = .03f, startColor = Color.white }, 1);
+        Check(ps.GetParticles(probeDrops) == 1, "Moving-camera probe starts with one surviving drop");
+        Vector3 originalWorldDrop = ps.main.customSimulationSpace.TransformPoint(probeDrops[0].position);
+        float motionStep = Time.deltaTime;
+        Check(motionStep > 0f && motionStep < .5f, "Moving-camera probe uses the actual finite frame duration");
+        camera.transform.position += Vector3.right * (20f * motionStep);
+        streaks.UpdateRain(Vector3.zero, Vector3.zero, 1f, camera);
+        ps.Simulate(motionStep, false, false, false);
+        Check(ps.GetParticles(probeDrops) == 1, "Camera translation preserves the original drop");
+        Vector3 translatedWorldDrop = ps.main.customSimulationSpace.TransformPoint(probeDrops[0].position);
+        Check(Math.Abs(translatedWorldDrop.x - originalWorldDrop.x) < .005f &&
+            Math.Abs(translatedWorldDrop.z - originalWorldDrop.z) < .005f,
+            "Native camera translation is compensated exactly once by the custom rain frame");
+        camera.transform.position += Vector3.forward * (20f * motionStep);
+        streaks.UpdateRain(Vector3.zero, Vector3.zero, 1f, camera);
+        ps.Simulate(motionStep, false, false, false);
+        Check(ps.GetParticles(probeDrops) == 1, "Camera turn preserves the original drop");
+        Vector3 turnedWorldDrop = ps.main.customSimulationSpace.TransformPoint(probeDrops[0].position);
+        Check(Math.Abs(turnedWorldDrop.x - originalWorldDrop.x) < .005f &&
+            Math.Abs(turnedWorldDrop.z - originalWorldDrop.z) < .005f,
+            "A moving native camera turn does not double-count travel or retain the old relative velocity");
 
         // Read the actual GPU sprite: production discards its CPU copy after upload.
         var sprite = RainStreakMaterial.CreateTexture();

@@ -41,6 +41,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return 0.18f * i + 0.20f * i * i;
         }
 
+        /// <summary>Bounded coverage for wider orbit/ground cameras; the particle cap is unchanged.</summary>
+        public static void ViewCoverage(float fieldOfView, float aspect, out float width, out float height)
+        {
+            float fov = Math.Max(20f, Math.Min(110f, fieldOfView));
+            float ratio = Math.Max(0.6f, Math.Min(2.4f, aspect));
+            float span = 16f * (float)Math.Tan(fov * Math.PI / 360.0);
+            height = Math.Max(14f, Math.Min(20f, span));
+            width = Math.Max(18f, Math.Min(26f, span * ratio));
+        }
+
         /// <summary>
         /// Deterministic gust multiplier in [0.75, 1.25] from slow beating harmonics,
         /// so squalls breathe instead of spraying uniformly.

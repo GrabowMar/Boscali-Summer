@@ -18,7 +18,9 @@ Shader "Hidden/Boscali/CloudDensityProbe"
             #pragma vertex vert_img
             #pragma fragment Probe
             sampler2D _DensityProbePositions;
-            float _ProbeRainMode;
+            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode;
+            float _ProbeRayMode, _ProbeRaySceneDistance;
+            float3 _ProbeRayOrigin, _ProbeRayDirection;
             float3 _ProbeRainOrigin, _ProbeRainRay;
             float4 _ProbeRainCloud, _ProbeRainSettings;
             float4 ProbeRain(v2f_img i)
@@ -39,6 +41,25 @@ Shader "Hidden/Boscali/CloudDensityProbe"
             }
             float4 Probe(v2f_img i) : SV_Target
             {
+                if (_ProbeAirMode > 0.5)
+                {
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    return float4(AirTransmittance(p.x, p.y, p.z), 0, 0, 0);
+                }
+                if (_ProbeSlabMode > 0.5)
+                {
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    float d = Slab(p, _MidCover, smoothstep(0.4, 1.0, _MidSheet),
+                        2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.0, float2(1, 1)) * 0.42;
+                    return float4(d, 0, 0, 0);
+                }
+                if (_ProbeRayMode > 0.5)
+                {
+                    float distance;
+                    float4 sky = MarchSky(_ProbeRayOrigin, normalize(_ProbeRayDirection),
+                        _ProbeRaySceneDistance, float2(2, 2), distance);
+                    return i.uv.y < 0.5 ? sky : float4(distance, 0, 0, 0);
+                }
                 if (_ProbeRainMode > 0.5) return ProbeRain(i);
                 float4 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0));
                 gFoot = p.w;

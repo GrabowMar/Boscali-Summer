@@ -155,6 +155,22 @@ public static class PortraitUnityCheck
         int faces = (int)Generator.GetField("FacesPerBody", All).GetRawConstantValue();
         int hairs = (int)Generator.GetField("HairCount", All).GetRawConstantValue();
         int uniforms = (int)Generator.GetField("UniformCount", All).GetRawConstantValue();
+        for (int body = 0; body < 2; body++)
+        {
+            Color32[] previousUniform = null;
+            for (int uniform = 0; uniform < uniforms; uniform++)
+            {
+                Sprite updated = (Sprite)Invoke(Portrait, "Preview", Selection(body, 0, 1, uniform, 0));
+                Check(ReferenceEquals(preview, updated) && ReferenceEquals(previewTexture, updated.texture),
+                    "every body/outfit preview reuses its sprite and texture");
+                Color32[] pixels = updated.texture.GetPixels32();
+                if (previousUniform != null) Check(!SamePixels(previousUniform, pixels),
+                    "each registered body/outfit redraws distinct clothing");
+                previousUniform = pixels;
+            }
+        }
+        Check(CacheCount == beforePreview && KeyCount(squad, "selectionKeys") == beforeSelectionKeys,
+            "all fourteen outfit previews avoid borrowed-cache and saved-selection growth");
         // Exercise more looks than the saved-selection ceiling through the SQD preview service.
         for (int look = 0; look < 160; look++)
         {

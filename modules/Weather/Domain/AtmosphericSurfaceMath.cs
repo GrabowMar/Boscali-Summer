@@ -14,5 +14,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         internal static float ColdTarget(float temperatureC, float recentLiquid)
             => WeatherMath.Smoothstep(0f, 10f, -temperatureC) * WeatherMath.Clamp01(recentLiquid) * 0.35f;
+
+        // Broad damp tone survives high views; close puddle detail has its own shader LOD.
+        internal static float GroundDrawRange(float cameraAltitude)
+            => Math.Min(26000f, 1800f + 2f * Math.Max(0f, cameraAltitude));
     }
 }

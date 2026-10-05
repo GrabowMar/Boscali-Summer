@@ -38,7 +38,7 @@ internal static class Program
                 visible |= alpha > 16;
                 anyAlpha |= alpha != 0;
             }
-            Check(tile < 86 ? visible : !anyAlpha, "Real atlas tile " + tile + " violates the 86 used/10 reserved layout.");
+            Check(tile < 110 ? visible : !anyAlpha, "Real atlas tile " + tile + " violates the 110 used/18 reserved layout.");
             if (tile >= 78 && tile <= 85)
                 for (int y = 0; y < PilotPortraitGenerator.Height; y++)
                 for (int x = 0; x < PilotPortraitGenerator.Width; x++)
@@ -55,6 +55,7 @@ internal static class Program
             Check(eyesY == 120 && mouthY == 170, "Manifest face anchors disagree with the compositor fit contract.");
             Registration(manifest.RootElement, atlas);
         }
+        HeadsetFit(atlas);
 
         outputDirectory = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(outputDirectory);
@@ -112,8 +113,23 @@ internal static class Program
 
         for (int body = 0; body < 2; body++)
         for (int face = 0; face < PilotPortraitGenerator.FacesPerBody; face++)
+        for (int hair = 0; hair < PilotPortraitGenerator.HairCount; hair++)
+            Write("headset-fit", body * 72 + face * 9 + hair, new PortraitSelection((PortraitBody)body, face, hair, 0, 2, 0));
+
+        for (int body = 0; body < 2; body++)
+        for (int uniform = 8; uniform < PilotPortraitGenerator.UniformCount; uniform++)
+        for (int gear = 0; gear < 2; gear++)
+            Write("uniform-variety", (body * 6 + uniform - 8) * 2 + gear,
+                new PortraitSelection((PortraitBody)body, uniform - 8, uniform - 7, uniform, gear == 0 ? 5 : 2, (uniform - 8) % 8));
+
+        for (int body = 0; body < 2; body++)
+        for (int face = 0; face < PilotPortraitGenerator.FacesPerBody; face++)
         for (int uniform = 0; uniform < PilotPortraitGenerator.UniformCount; uniform++)
-            Write("fit", body * 64 + face * 8 + uniform, new PortraitSelection((PortraitBody)body, face, 0, uniform, 0, 0));
+        {
+            int index = uniform < 8 ? body * 64 + face * 8 + uniform :
+                128 + (body * 8 + face) * (PilotPortraitGenerator.UniformCount - 8) + uniform - 8;
+            Write("fit", index, new PortraitSelection((PortraitBody)body, face, 0, uniform, 0, 0));
+        }
 
         for (int backdrop = 0; backdrop < PilotPortraitGenerator.BackdropCount; backdrop++)
             Write("backgrounds", backdrop, new PortraitSelection(PortraitBody.Male, 0, 1, 0, 0, backdrop));
@@ -201,24 +217,101 @@ internal static class Program
             width = PilotPortraitGenerator.Width, height = PilotPortraitGenerator.Height,
             format = "bottom-up RGBA", cases,
         }, new JsonSerializerOptions { WriteIndented = true }));
-        Console.WriteLine("Real atlas passed: 86 nonempty/10 reserved tiles, " +
+        Console.WriteLine("Real atlas passed: 110 nonempty/18 reserved tiles, " +
                           (manifestPath == null ? "" : "neckline coverage, neck contours and shoulder fit, ") +
-                          "facial ROI invariance, landmarks and equipment pixels; " +
+                          "facial ROI invariance, headset eyes/ears/crown fit, landmarks and equipment pixels; " +
                           cases.Count + " portraits written to " + outputDirectory);
+    }
+
+    private static void HeadsetFit(byte[] atlas)
+    {
+        int Alpha(int tile, int x, int topY) => atlas[AtlasOffset(tile, x, PilotPortraitGenerator.Height - 1 - topY) + 3];
+        foreach (int tile in new[] { 49, 56 })
+        {
+            for (int y = 113; y <= 126; y++)
+            foreach (int eye in new[] { 88, 146 })
+            for (int x = eye; x <= eye + 21; x++)
+                Check(Alpha(tile, x, y) < 16, "Headset padding occludes an eye: tile " + tile + ", pixel " + x + "," + y);
+            int left = 128, right = 128;
+            while (left > 0 && Alpha(tile, left, 120) < 128) left--;
+            while (right < 255 && Alpha(tile, right, 120) < 128) right++;
+            Check(left <= 80 && right >= 176, "Headset inner ear pads crowd the face: tile " + tile + ", gap " + (right - left - 1));
+            foreach (int ear in new[] { 48, 174 })
+            {
+                int nearOpaque = 0;
+                for (int x = ear; x <= ear + 34; x++) if (Alpha(tile, x, 136) >= 230) nearOpaque++;
+                Check(nearOpaque >= 10, "Headset cup misses the registered ear row: tile " + tile);
+            }
+            // The isolated capsule region excludes the ear cup and must sit beside the mouth, not the jaw.
+            int micPixels = 0, micAlpha = 0, micWeightedY = 0;
+            for (int y = 150; y <= 210; y++)
+            for (int x = 146; x <= 169; x++)
+            {
+                int alpha = Alpha(tile, x, y);
+                if (alpha < 128) continue;
+                micPixels++;
+                micAlpha += alpha;
+                micWeightedY += y * alpha;
+            }
+            Check(micPixels >= 64, "Headset microphone capsule is missing: tile " + tile);
+            double micY = micWeightedY / (double)micAlpha;
+            Check(micY >= 168 && micY <= 182,
+                  "Headset microphone misses mouth height: tile " + tile + ", capsule centroid " + micY);
+            int bandBottom = -1;
+            for (int y = 0; y < 80; y++)
+            for (int x = 123; x <= 133; x++) if (Alpha(tile, x, y) >= 128) bandBottom = Math.Max(bandBottom, y);
+            for (int face = 0; face < 16; face++)
+            {
+                int crown = PilotPortraitGenerator.Height;
+                for (int y = 0; y < 80; y++)
+                for (int x = 123; x <= 133; x++) if (Alpha(face, x, y) >= 230) crown = Math.Min(crown, y);
+                Check(bandBottom >= 0 && Math.Abs(bandBottom - crown) <= 6,
+                      "Headset band floats above or sinks into a bald crown: tile " + tile + ", face " + face +
+                      ", band underside " + bandBottom + ", scalp " + crown);
+                var selection = new PortraitSelection((PortraitBody)(face / 8), face % 8, 0, tile == 49 ? 0 : 2, 2, 0);
+                byte[] fitted = PilotPortraitGenerator.Compose(selection, atlas);
+                byte[] bare = PilotPortraitGenerator.Compose(new PortraitSelection(selection.Body, selection.Face, 0, selection.Uniform, 0, 0), atlas);
+                int visibleBottom = -1;
+                for (int y = 0; y < 80; y++)
+                for (int x = 123; x <= 133; x++)
+                {
+                    int p = ((PilotPortraitGenerator.Height - 1 - y) * PilotPortraitGenerator.Width + x) * 4;
+                    for (int c = 0; c < 3; c++)
+                        if (Math.Abs(fitted[p + c] - bare[p + c]) >= 16) visibleBottom = Math.Max(visibleBottom, y);
+                }
+                Check(Math.Abs(visibleBottom - crown) <= 1,
+                      "Composed headset leaves a bald scalp gap: tile " + tile + ", face " + face +
+                      ", visible underside " + visibleBottom + ", scalp " + crown);
+                // Ear pads and microphone below the join must retain their original source positions and single blend.
+                for (int y = 95; y < PilotPortraitGenerator.Height; y++)
+                for (int x = 0; x < PilotPortraitGenerator.Width; x++)
+                {
+                    int source = AtlasOffset(tile, x, PilotPortraitGenerator.Height - 1 - y);
+                    int p = ((PilotPortraitGenerator.Height - 1 - y) * PilotPortraitGenerator.Width + x) * 4;
+                    int alpha = atlas[source + 3];
+                    for (int c = 0; c < 3; c++)
+                        Check(fitted[p + c] == (atlas[source + c] * alpha + bare[p + c] * (255 - alpha) + 127) / 255,
+                              "Bald headset fit moved its ear pads/microphone or blended equipment twice.");
+                }
+            }
+        }
     }
 
     private static void IdentityAndRoles()
     {
-        int[,] expectedUniforms = { { 0, 2 }, { 1, 3 }, { 4, 6 }, { 5, 7 } };
+        int[][] allowedUniforms = { new[] { 0, 8, 9 }, new[] { 2, 10, 11 }, new[] { 1, 12 }, new[] { 3, 13 },
+                                  new[] { 4 }, new[] { 6 }, new[] { 5 }, new[] { 7 } };
         int[][] allowedEquipment = { new[] { 0, 1, 2, 5 }, new[] { 0, 1, 4, 7 }, new[] { 0, 2, 3, 6 }, new[] { 0, 1, 2, 3 } };
         var facesSeen = new bool[2, PilotPortraitGenerator.FacesPerBody];
+        var uniformsSeen = new bool[PilotPortraitGenerator.UniformCount];
         var equipmentSeen = new bool[4, PilotPortraitGenerator.AccessoryCount];
         for (int i = 0; i < 256; i++)
         {
             string identity = "PERSON|" + i;
             PortraitSelection original = PilotPortraitGenerator.Select(identity);
             Check(original == PilotPortraitGenerator.Select(identity), "Identity selection changed between calls.");
-            Check(original.Uniform == 0 || original.Uniform == 2, "Automatic pilots selected another role's uniform.");
+            Check(Array.IndexOf(allowedUniforms[0], original.Uniform) >= 0 || Array.IndexOf(allowedUniforms[1], original.Uniform) >= 0,
+                  "Automatic pilots selected another role's uniform.");
             facesSeen[(int)original.Body, original.Face] = true;
             for (int role = 0; role < 4; role++)
             for (int faction = 0; faction < 2; faction++)
@@ -226,7 +319,8 @@ internal static class Program
                 PortraitSelection service = PilotPortraitGenerator.Select(identity, (PortraitRole)role, faction);
                 Check(service.Body == original.Body && service.Face == original.Face && service.Hair == original.Hair &&
                       service.Backdrop == original.Backdrop, "Role/faction changed identity traits.");
-                Check(service.Uniform == expectedUniforms[role, faction], "Role/faction mapped to the wrong uniform.");
+                Check(Array.IndexOf(allowedUniforms[role * 2 + faction], service.Uniform) >= 0, "Role/faction mapped to the wrong uniform.");
+                uniformsSeen[service.Uniform] = true;
                 Check(Array.IndexOf(allowedEquipment[role], service.Accessory) >= 0, "Automatic role selected incompatible equipment.");
                 Check(service.Accessory == PilotPortraitGenerator.Select(identity, (PortraitRole)role, 1 - faction).Accessory,
                       "Faction changed the equipment selector.");
@@ -236,6 +330,7 @@ internal static class Program
             Check(PilotPortraitGenerator.Select(identity, PortraitRole.Pilot, 999) == original, "Unknown faction must use identity faction.");
         }
         foreach (bool seen in facesSeen) Check(seen, "A body-specific face is excluded from automatic portraits.");
+        foreach (bool seen in uniformsSeen) Check(seen, "A role-compatible uniform is excluded from automatic portraits.");
         for (int role = 0; role < 4; role++)
         foreach (int accessory in allowedEquipment[role]) Check(equipmentSeen[role, accessory], "A compatible equipment choice is excluded.");
         Check(PilotPortraitGenerator.Select(null) == PilotPortraitGenerator.Select("WingCommand"), "Null identity fallback changed.");
@@ -254,7 +349,7 @@ internal static class Program
             var key = (bodyName == "female" ? 1 : 0, tile.GetProperty("selector").GetInt32());
             (family == "faces" ? faces : outfits).Add(key, tile);
         }
-        Check(faces.Count == 16 && outfits.Count == 16, "Manifest is missing anatomical face/outfit records.");
+        Check(faces.Count == 16 && outfits.Count == 2 * PilotPortraitGenerator.UniformCount, "Manifest is missing anatomical face/outfit records.");
         for (int body = 0; body < 2; body++)
         for (int face = 0; face < PilotPortraitGenerator.FacesPerBody; face++)
         for (int uniform = 0; uniform < PilotPortraitGenerator.UniformCount; uniform++)
@@ -265,6 +360,7 @@ internal static class Program
             int seat = outfit.GetProperty("neck_seat_y").GetInt32();
             int opening = outfit.GetProperty("neck_opening_width").GetInt32();
             int openingY = outfit.GetProperty("opening_sample_y").GetInt32();
+            ResolvedPortraitParts parts = PilotPortraitGenerator.Resolve(new PortraitSelection((PortraitBody)body, face, 0, uniform, 0, 0));
             Check(head.GetProperty("eyes_y").GetInt32() == 120 && seat - chin >= 12 && seat - chin <= 38,
                   "Head/collar registration gives an implausible exposed-neck length.");
             Check(head.GetProperty("neck_base_y").GetInt32() >= seat && outfit.GetProperty("shoulder_width").GetInt32() >= 210,
@@ -300,13 +396,13 @@ internal static class Program
             {
                 int row = PilotPortraitGenerator.Height - 1 - topY;
                 int left = 128, right = 128;
-                while (left > 0 && atlas[AtlasOffset(32 + body * 8 + uniform, left, row) + 3] < 128) left--;
-                while (right < 255 && atlas[AtlasOffset(32 + body * 8 + uniform, right, row) + 3] < 128) right++;
+                while (left > 0 && atlas[AtlasOffset(parts.UniformTile, left, row) + 3] < 128) left--;
+                while (right < 255 && atlas[AtlasOffset(parts.UniformTile, right, row) + 3] < 128) right++;
                 for (int x = left + 1; x < right; x++)
                 {
                     int faceAlpha = atlas[AtlasOffset(body * 8 + face, x, row) + 3];
-                    int bodyAlpha = atlas[AtlasOffset(32 + body * 8 + uniform, x, row) + 3];
-                    int collarAlpha = atlas[AtlasOffset(62 + body * 8 + uniform, x, row) + 3];
+                    int bodyAlpha = atlas[AtlasOffset(parts.UniformTile, x, row) + 3];
+                    int collarAlpha = atlas[AtlasOffset(parts.FrontCollarTile, x, row) + 3];
                     int coverage = bodyAlpha + (faceAlpha * (255 - bodyAlpha) + 127) / 255;
                     coverage += (collarAlpha * (255 - coverage) + 127) / 255;
                     Check(coverage >= 230, "Same-row neckline aperture exposes background: body " + body + ", face " + face +
@@ -319,8 +415,8 @@ internal static class Program
             {
                 int y = PilotPortraitGenerator.Height - 1 - topY;
                 int headAlpha = atlas[AtlasOffset(body * 8 + face, x, y) + 3];
-                int bodyAlpha = atlas[AtlasOffset(32 + body * 8 + uniform, x, y) + 3];
-                int collarAlpha = atlas[AtlasOffset(62 + body * 8 + uniform, x, y) + 3];
+                int bodyAlpha = atlas[AtlasOffset(parts.UniformTile, x, y) + 3];
+                int collarAlpha = atlas[AtlasOffset(parts.FrontCollarTile, x, y) + 3];
                 int coverage = bodyAlpha + (headAlpha * (255 - bodyAlpha) + 127) / 255;
                 coverage += (collarAlpha * (255 - coverage) + 127) / 255;
                 Check(coverage >= 230, "Registered head/collar seam has an open central gap: body " + body + ", face " + face +
@@ -342,17 +438,19 @@ internal static class Program
             ResolvedPortraitParts parts = PilotPortraitGenerator.Resolve(selection);
             Check(parts.FaceTile == body * 8 + face, "Face atlas address changed.");
             Check(parts.HairTile == (hair == 0 || accessory == 5 || accessory == 6 ? -1 : 16 + body * 8 + hair - 1), "Hair atlas address changed.");
-            Check(parts.UniformTile == 32 + body * 8 + uniform && parts.UniformTile < PilotPortraitGenerator.AtlasTileCount,
+            int outfitTile = uniform < 8 ? 32 + body * 8 + uniform : 86 + body * 6 + uniform - 8;
+            int collarTile = uniform < 8 ? 62 + body * 8 + uniform : 98 + body * 6 + uniform - 8;
+            Check(parts.UniformTile == outfitTile && parts.UniformTile < PilotPortraitGenerator.AtlasTileCount,
                   "Uniform atlas address left the atlas.");
-            Check(parts.FrontCollarTile == 62 + body * 8 + uniform && parts.BackdropTile == 81,
+            Check(parts.FrontCollarTile == collarTile && parts.BackdropTile == 81,
                   "Front collar or saved backdrop atlas address changed.");
-            bool pala = uniform == 2 || uniform == 3 || uniform == 6 || uniform == 7;
+            bool pala = uniform == 2 || uniform == 3 || uniform == 6 || uniform == 7 || uniform == 10 || uniform == 11 || uniform == 13;
             Check(parts.AccessoryTile == (accessory == 0 ? -1 : (pala ? 55 : 48) + accessory - 1), "Faction equipment address changed.");
         }
         PortraitSelection legacy = PilotPortraitGenerator.FromLegacySelection(4, 11, 17, 2);
         Check(legacy == new PortraitSelection(PortraitBody.Female, 1, 2, 1, 0, 2), "Legacy resolved selectors stopped migrating.");
         PortraitSelection bounded = PilotPortraitGenerator.Normalize(new PortraitSelection((PortraitBody)99, 99, 99, 99, 99, 99));
-        Check(bounded == new PortraitSelection(PortraitBody.Male, 7, 8, 7, 7, 7), "Out-of-range selectors escaped normalization.");
+        Check(bounded == new PortraitSelection(PortraitBody.Male, 7, 8, 13, 7, 7), "Out-of-range selectors escaped normalization.");
         Check(PilotPortraitGenerator.DefaultSelection.Accessory == 0 && PilotPortraitGenerator.AccessoryLabel(7) == "BERET",
               "Default equipment or public studio labels changed.");
         for (int backdrop = 0; backdrop < PilotPortraitGenerator.BackdropCount; backdrop++)
@@ -402,6 +500,8 @@ internal static class Program
         Put(atlas, 48, 24, frontY, 90, 80, 70, 255);
         byte[] glasses = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 1, 0), atlas);
         Pixel(glasses, 24, frontY, 90, 80, 70);
+        byte[] emptyCap = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 4, 0), atlas);
+        Pixel(emptyCap, 26, crownY, 5, 7, 9);
         Put(atlas, 50, 25, frontY, 10, 20, 30, 255);
         byte[] cap = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
         Pixel(cap, 24, frontY, 13, 44, 85);
@@ -423,11 +523,34 @@ internal static class Program
         Put(atlas, 16, 41, leftTemple, 5, 7, 9, 255);
         Put(atlas, 16, 41, rightTemple, 5, 7, 9, 255);
         Put(atlas, 16, 40, overlap, 5, 7, 9, 255);
+        Put(atlas, 16, 39, overlap, 5, 7, 9, 255);
+        Put(atlas, 16, 42, leftTemple, 5, 7, 9, 255);
         byte[] tilted = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
         Pixel(tilted, 40, leftTemple, 5, 7, 9);
         Pixel(tilted, 41, leftTemple, 0, 0, 0);
         Pixel(tilted, 41, rightTemple, 5, 7, 9);
         Pixel(tilted, 40, overlap, 8, 14, 20);
+        Pixel(tilted, 39, overlap, 5, 7, 9);
+        Pixel(tilted, 42, leftTemple, 0, 0, 0);
+        // Fit a bald scalp down and up, using partial alpha so a duplicated equipment pass fails.
+        int lowCrown = PilotPortraitGenerator.Height - 1 - 48;
+        int highCrown = PilotPortraitGenerator.Height - 1 - 39;
+        int band = PilotPortraitGenerator.Height - 1 - 43;
+        int ear = PilotPortraitGenerator.Height - 1 - 136;
+        Put(atlas, 0, 128, lowCrown, 200, 160, 120, 255);
+        Put(atlas, 8, 128, highCrown, 200, 160, 120, 255);
+        Put(atlas, 49, 128, band, 20, 40, 60, 128);
+        Put(atlas, 56, 128, band, 20, 40, 60, 128);
+        Put(atlas, 49, 72, ear, 9, 8, 7, 255);
+        byte[] bald = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 0, 0, 2, 0), atlas);
+        Pixel(bald, 128, lowCrown, 110, 100, 90);
+        Pixel(bald, 72, ear, 9, 8, 7);
+        byte[] high = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Female, 0, 0, 2, 2, 0), atlas);
+        Pixel(high, 128, highCrown, 110, 100, 90);
+        Pixel(high, 128, PilotPortraitGenerator.Height - 1, 0, 0, 0);
+        byte[] haired = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 2, 0), atlas);
+        Pixel(haired, 128, band, 10, 20, 30);
+        Pixel(haired, 72, ear, 9, 8, 7);
         try
         {
             PilotPortraitGenerator.Compose(PilotPortraitGenerator.DefaultSelection, new byte[4]);

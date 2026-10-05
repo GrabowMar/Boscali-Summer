@@ -33,6 +33,11 @@ if ($SqdUi) {
     $oldMessageVisibility = 'Call(Get(panel, "studioMessageText"), "SetShown", true);'
     if (-not $fixture.Contains($oldMessageVisibility)) { throw 'Studio message seed adapter changed.' }
     $fixture = $fixture.Replace($oldMessageVisibility, '// The message starts visible; its content is seeded below.')
+    # Exercise the longest new clothing label in the compact production stepper.
+    $studioSeed = 'SeedStudio(panel, portrait, crest);'
+    if (-not $fixture.Contains($studioSeed)) { throw 'Studio outfit label seed changed.' }
+    $fixture = $fixture.Replace($studioSeed, $studioSeed + "`r`n        " +
+        '((TMP_Text)Get(Get(panel, "studioSuit"), "value")).text = "PALA HIGH-ALT FLIGHT";')
     if ($PortraitPanelsOnly) {
         # Build all production pages, but render only the portrait consumers.
         # Leave the broader fixture's score/skill failures in its own run.

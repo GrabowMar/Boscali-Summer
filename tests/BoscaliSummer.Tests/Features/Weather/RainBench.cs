@@ -67,12 +67,15 @@ public sealed class RainBench : MonoBehaviour
             material.SetColor("_Color", new Color(0.08f + x % 3 * 0.035f, 0.11f + x % 3 * 0.035f, 0.13f + x % 3 * 0.035f));
             block.GetComponent<Renderer>().sharedMaterial = material;
         }
-        string[] names = { "light-hover", "heavy-hover", "heavy-crosswind", "heavy-flight-forward", "heavy-flight-side", "heavy-night" };
+        string[] names = { "light-hover", "heavy-hover", "heavy-crosswind", "heavy-flight-forward", "heavy-flight-side",
+            "heavy-night", "heavy-hover-wide", "heavy-flight-rear" };
+        var invisible = new System.Collections.Generic.List<string>();
         for (int scene = 0; scene < names.Length; scene++)
         {
             string name = names[scene];
             camera.transform.position = Vector3.zero;
-            camera.transform.rotation = Quaternion.Euler(0f, scene == 4 ? 70f : 0f, 0f);
+            camera.fieldOfView = scene == 6 ? 100f : 70f;
+            camera.transform.rotation = Quaternion.Euler(0f, scene == 7 ? 180f : scene == 4 ? 70f : 0f, 0f);
             float light = scene == 5 ? 0.08f : 0.7f;
             camera.backgroundColor = scene == 5 ? new Color(0.012f, 0.018f, 0.028f) : new Color(0.34f, 0.38f, 0.43f);
             var emitter = new GameObject("Rain").AddComponent<ProceduralRainEmitter>();
@@ -82,7 +85,7 @@ public sealed class RainBench : MonoBehaviour
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             ps.useAutoRandomSeed = false;
             ps.randomSeed = 47291;
-            Vector3 velocity = scene == 3 || scene == 4 ? Vector3.forward * 220f : Vector3.zero;
+            Vector3 velocity = scene == 3 || scene == 4 || scene == 7 ? Vector3.forward * 220f : Vector3.zero;
             Vector3 wind = scene == 2 ? new Vector3(14f, 0f, 0f) : Vector3.zero;
             // Configure apparent velocity once, then move its custom frame with the camera.
             // Production obtains travel/Time.deltaTime; this synchronous fixture supplies exact 60 Hz motion.
@@ -91,7 +94,7 @@ public sealed class RainBench : MonoBehaviour
             Vector3 upstream = emitter.transform.position;
             var renderer = ps.GetComponent<ParticleSystemRenderer>();
             renderer.enabled = false;
-            Capture(camera, target, readback, name + "-dry.png");
+            Capture(camera, target, readback, name + "-dry-start.png");
             renderer.enabled = true;
             Directory.CreateDirectory(name);
             for (int f = 0; f < 240; f++)
@@ -99,11 +102,26 @@ public sealed class RainBench : MonoBehaviour
                 camera.transform.position += velocity / 60f;
                 frame.position = camera.transform.position;
                 emitter.transform.position = camera.transform.position + upstream;
+                // Production UpdateRain refreshes this explicit world-space culling box.
+                // The synchronous fixture must do the same when it hand-translates the rig.
+                renderer.bounds = new Bounds(camera.transform.position, Vector3.one * 120f);
                 ps.Simulate(1f / 60f, true, false, true);
                 if (f >= 180 && f % 3 == 0)
                     Capture(camera, target, readback, name + "/" + f.ToString("D4") + ".png");
             }
             Capture(camera, target, readback, name + ".png");
+            Color32[] wetPixels = readback.GetPixels32();
+            renderer.enabled = false;
+            Capture(camera, target, readback, name + "-dry.png");
+            Color32[] dryPixels = readback.GetPixels32();
+            renderer.enabled = true;
+            int changed = 0;
+            for (int i = 0; i < wetPixels.Length; i++)
+                if (Math.Max(Math.Abs(wetPixels[i].r - dryPixels[i].r),
+                    Math.Max(Math.Abs(wetPixels[i].g - dryPixels[i].g), Math.Abs(wetPixels[i].b - dryPixels[i].b))) >= 2)
+                    changed++;
+            log.AppendLine(name + ": rain-visible-pixels=" + changed + " (same-pose dry comparison, RGB delta >= 2)");
+            if (changed < 256) invisible.Add(name + " (" + changed + " changed pixels)");
             var watch = Stopwatch.StartNew();
             for (int f = 0; f < 60; f++) camera.Render();
             Sync(target, readback);
@@ -115,8 +133,10 @@ public sealed class RainBench : MonoBehaviour
             log.AppendLine(FormattableString.Invariant($"{name}: alive={ps.particleCount}, limit={ps.main.maxParticles}, material={renderer.sharedMaterial.shader.name}, wet={wetMs:F3} ms, dry={watch.Elapsed.TotalMilliseconds / 60:F3} ms"));
             if (ps.main.maxParticles > 2500 || ps.particleCount > ps.main.maxParticles)
                 throw new Exception("Rain exceeded the production particle ceiling");
+            File.WriteAllText("rain-coverage.txt", log.ToString());
             UnityEngine.Object.DestroyImmediate(emitter.gameObject);
         }
+        if (invisible.Count > 0) throw new Exception("Rain visibility regression: " + string.Join(", ", invisible));
         File.WriteAllText("result.txt", "PASS\n" + log);
     }
 

@@ -28,6 +28,7 @@ public sealed class CloudBench : MonoBehaviour
     private sealed class Scene
     {
         public string Name;
+        public uint Seed = 90210u;
         public WeatherRegimeType State;
         public byte Sets;
         public bool Anchor;
@@ -212,11 +213,19 @@ public sealed class CloudBench : MonoBehaviour
         scenes.Add(new Scene { Name = "console-eye-wall", Preset = WeatherScenario.HurricaneEye,
             Camera = new Vector3(0, 4500, 0), Pitch = 0 });
 
+        // Explicit opt-in: the all-map matrix must not lengthen the existing focused bench.
+        // Nine sites cover center, edges and corners; high views reveal layout/composition
+        // problems hidden by cloud-out and horizon portraits. The outward storm views also
+        // exercise map/horizon continuation. Height is a render-fixture pose, not a claim
+        // that the native aircraft can sustain flight at this altitude.
+        if (Array.Exists(filters, filter => filter == "map" || filter.Contains("map-")))
+            AddMapViews(scenes);
+
         var uniforms = new CloudVolumeUniforms();
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
-            var key = new WeatherKey(90210u, 0f, false, (byte)s.State, 5f, 60f, s.Sets, s.Salt, s.Anchor, 0f, 25000f, s.Turn);
+            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, 5f, 60f, s.Sets, s.Salt, s.Anchor, 0f, 25000f, s.Turn);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
@@ -431,6 +440,36 @@ public sealed class CloudBench : MonoBehaviour
             UnityEngine.Object.Destroy(near); UnityEngine.Object.Destroy(nearProfiles);
             UnityEngine.Object.Destroy(far); UnityEngine.Object.Destroy(farProfiles); UnityEngine.Object.Destroy(envelope);
         }
+    }
+
+    private static void AddMapViews(List<Scene> scenes)
+    {
+        string[] sites = { "southwest", "south", "southeast", "west", "center", "east", "northwest", "north", "northeast" };
+        foreach (WeatherRegimeType state in new[] { WeatherRegimeType.Scattered, WeatherRegimeType.RainSquall, WeatherRegimeType.Storm })
+        for (int z = -1; z <= 1; z++)
+        for (int x = -1; x <= 1; x++)
+        {
+            string site = sites[(z + 1) * 3 + x + 1];
+            string prefix = "map-" + state.ToString().ToLowerInvariant() + "-" + site;
+            float yaw = x == 0 && z == 0 ? 30f : Mathf.Atan2(-x, -z) * Mathf.Rad2Deg;
+            float cameraX = x * HalfExtent, cameraZ = z * HalfExtent;
+            scenes.Add(new Scene { Name = prefix + "-ground", State = state,
+                Camera = new Vector3(cameraX, 600f, cameraZ), Yaw = yaw, Pitch = 5f });
+            scenes.Add(new Scene { Name = prefix + "-ceiling", State = state,
+                Camera = new Vector3(cameraX, 17000f, cameraZ), Yaw = yaw, Pitch = x == 0 && z == 0 ? -65f : -35f });
+            if (state == WeatherRegimeType.Storm && (x != 0 || z != 0))
+                scenes.Add(new Scene { Name = prefix + "-outward-ceiling", State = state,
+                    Camera = new Vector3(cameraX, 17000f, cameraZ), Yaw = yaw + 180f, Pitch = -5f });
+        }
+        // An independently seeded opposite-corner hero view exercises the fixed far cutoff.
+        scenes.Add(new Scene { Name = "map-hero-range-seed-6", Seed = 6u, State = WeatherRegimeType.Storm,
+            Camera = new Vector3(-HalfExtent, 17000f, -HalfExtent), Pitch = -3f, LookAtHero = 2 });
+        scenes.Add(new Scene { Name = "map-storm-center-mid-layer", State = WeatherRegimeType.Storm,
+            Camera = new Vector3(0f, 6000f, 0f), Yaw = 30f, Pitch = -20f });
+        scenes.Add(new Scene { Name = "map-storm-center-high35km", State = WeatherRegimeType.Storm,
+            Camera = new Vector3(0f, 35000f, 0f), Yaw = 30f, Pitch = -65f });
+        scenes.Add(new Scene { Name = "map-storm-center-high45km", State = WeatherRegimeType.Storm,
+            Camera = new Vector3(0f, 45000f, 0f), Yaw = 30f, Pitch = -65f });
     }
 
     private static void Sync(RenderTexture target, Texture2D readback)

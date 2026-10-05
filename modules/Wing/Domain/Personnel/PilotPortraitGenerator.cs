@@ -82,14 +82,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public const int Width = 256;
         public const int Height = 320;
         public const int AtlasColumns = 8;
-        public const int AtlasRows = 12;
+        public const int AtlasRows = 16;
         public const int AtlasWidth = Width * AtlasColumns;
         public const int AtlasHeight = Height * AtlasRows;
         public const int AtlasTileCount = AtlasColumns * AtlasRows;
 
         public const int FacesPerBody = 8;
         public const int HairCount = 9;       // 0 is bald, 1-8 are hair layers.
-        public const int UniformCount = 8;
+        public const int UniformCount = 14;
         public const int AccessoryCount = 8;  // 0 is none, 1-7 are faction-specific equipment layers.
         public const int BackdropCount = 8;
 
@@ -103,6 +103,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private const int PalaAccessoryStart = 55;
         private const int FrontCollarStart = 62;
         private const int BackdropStart = 78;
+        private const int OriginalUniformCount = 8;
+        private const int AdditionalUniformStart = 86;
+        private const int AdditionalFrontCollarStart = 98;
 
         public static PortraitSelection DefaultSelection =>
             new PortraitSelection(PortraitBody.Male, 0, 0, 0, 0, 0);
@@ -168,9 +171,20 @@ namespace BoscaliSummer.Modules.Wing.Domain
             int face = (female ? FemaleFaceStart : MaleFaceStart) + selection.Face;
             int hair = selection.Hair == 0 || selection.Accessory == 5 || selection.Accessory == 6
                 ? -1 : (female ? FemaleHairStart : MaleHairStart) + selection.Hair - 1;
-            int uniform = (female ? FemaleUniformStart : MaleUniformStart) + selection.Uniform;
-            int frontCollar = FrontCollarStart + (female ? 8 : 0) + selection.Uniform;
-            bool pala = selection.Uniform == 2 || selection.Uniform == 3 || selection.Uniform == 6 || selection.Uniform == 7;
+            int uniform, frontCollar;
+            if (selection.Uniform < OriginalUniformCount)
+            {
+                uniform = (female ? FemaleUniformStart : MaleUniformStart) + selection.Uniform;
+                frontCollar = FrontCollarStart + (female ? OriginalUniformCount : 0) + selection.Uniform;
+            }
+            else
+            {
+                int variant = (female ? UniformCount - OriginalUniformCount : 0) + selection.Uniform - OriginalUniformCount;
+                uniform = AdditionalUniformStart + variant;
+                frontCollar = AdditionalFrontCollarStart + variant;
+            }
+            bool pala = selection.Uniform == 2 || selection.Uniform == 3 || selection.Uniform == 6 || selection.Uniform == 7 ||
+                selection.Uniform == 10 || selection.Uniform == 11 || selection.Uniform == 13;
             int accessory = selection.Accessory == 0 ? -1 :
                 (pala ? PalaAccessoryStart : BdfAccessoryStart) + selection.Accessory - 1;
             return new ResolvedPortraitParts(face, hair, uniform, frontCollar, accessory, BackdropStart + selection.Backdrop);
@@ -189,6 +203,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case 5: return "BDF CIVILIAN";
                 case 6: return "PALA SOLDIER";
                 case 7: return "PALA CIVILIAN";
+                case 8: return "BDF LIGHT FLIGHT";
+                case 9: return "BDF HEAVY FLIGHT";
+                case 10: return "PALA DESERT FLIGHT";
+                case 11: return "PALA HIGH-ALT FLIGHT";
+                case 12: return "BDF FIELD COMMAND";
+                case 13: return "PALA FIELD COMMAND";
                 default: return "BDF PILOT";
             }
         }
@@ -238,7 +258,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             int backdrop = random.Next(BackdropCount);
             int identityFaction = random.Next(2);
             int service = faction == 0 || faction == 1 ? faction : identityFaction;
-            return new PortraitSelection(body, face, hair, UniformFor(role, service), AccessoryFor(role, random.Next(4)), backdrop);
+            // Clothing gets its own draw so adding outfits never rerolls anatomy, scenes or equipment.
+            int variation = new Random(unchecked((int)(hash ^ 0x6D2B79F5u))).Next(role == PortraitRole.Commander ? 2 : 3);
+            return new PortraitSelection(body, face, hair, UniformFor(role, service, variation), AccessoryFor(role, random.Next(4)), backdrop);
         }
 
         private static int AccessoryFor(PortraitRole role, int choice)
@@ -252,14 +274,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        private static int UniformFor(PortraitRole role, int faction)
+        private static int UniformFor(PortraitRole role, int faction, int variation)
         {
             switch (role)
             {
-                case PortraitRole.Commander: return faction == 1 ? 3 : 1;
+                case PortraitRole.Commander: return variation == 0 ? (faction == 1 ? 3 : 1) : (faction == 1 ? 13 : 12);
                 case PortraitRole.Soldier: return faction == 1 ? 6 : 4;
                 case PortraitRole.Civilian: return faction == 1 ? 7 : 5;
-                default: return faction == 1 ? 2 : 0;
+                default: return variation == 0 ? (faction == 1 ? 2 : 0) : (faction == 1 ? 9 : 7) + variation;
             }
         }
 
@@ -280,13 +302,39 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 ? CapUnderside(atlas, parts.AccessoryTile) : null;
             if (parts.HairTile >= 0) Layer(pixels, atlas, parts.HairTile, hairTop);
             Layer(pixels, atlas, parts.FrontCollarTile);
-            if (parts.AccessoryTile >= 0) Layer(pixels, atlas, parts.AccessoryTile);
+            if (parts.AccessoryTile >= 0)
+            {
+                int[] headsetRows = selection.Accessory == 2 && parts.HairTile < 0
+                    ? HeadsetBandRows(atlas, parts.FaceTile, parts.AccessoryTile) : null;
+                Layer(pixels, atlas, parts.AccessoryTile, sourceTopRows: headsetRows);
+            }
 
             // Art shares its lighting and palette; preserving source colors keeps eyes and skin readable in thumbnails.
             return pixels;
         }
 
         private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(max, value));
+
+        private static int[] HeadsetBandRows(byte[] atlas, int faceTile, int equipmentTile)
+        {
+            int Alpha(int tile, int x, int top) => atlas[((AtlasHeight - (tile / AtlasColumns + 1) * Height + Height - 1 - top) *
+                AtlasWidth + tile % AtlasColumns * Width + x) * 4 + 3];
+            int crown = Height, bandBottom = -1;
+            for (int top = 0; top < 80; top++)
+            for (int x = 123; x <= 133; x++)
+            {
+                if (Alpha(faceTile, x, top) >= 230) crown = Math.Min(crown, top);
+                if (Alpha(equipmentTile, x, top) >= 128) bandBottom = Math.Max(bandBottom, top);
+            }
+            if (crown >= 80 || bandBottom < 0 || crown == bandBottom) return null;
+            const int join = 95;
+            var rows = new int[Height];
+            for (int top = 0; top < Height; top++)
+                rows[top] = top >= join ? top : Clamp((int)Math.Round(join + (top - join) *
+                    (join - bandBottom) / (double)(join - crown)), 0, Height - 1);
+            rows[0] = 0;
+            return rows;
+        }
 
         private static int[] CapUnderside(byte[] atlas, int tile)
         {
@@ -298,22 +346,38 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 int underside = -1;
                 for (int top = 0; top < Height; top++)
                     if (atlas[((bottom + Height - 1 - top) * AtlasWidth + left + x) * 4 + 3] >= 230) underside = top;
-                minimumTop[x] = underside < 0 ? 92 : Math.Max(0, underside - 2);
+                minimumTop[x] = underside < 0 ? -1 : Math.Max(0, underside - 2);
+            }
+            // Empty edge columns follow the nearest actual brim, including a tilted cap's lower side.
+            int[] supported = (int[])minimumTop.Clone();
+            for (int x = 0; x < Width; x++)
+            {
+                if (supported[x] >= 0) continue;
+                minimumTop[x] = 0; // An empty equipment layer must leave hair visible.
+                for (int distance = 1; distance < Width; distance++)
+                {
+                    int nearest = x - distance >= 0 && supported[x - distance] >= 0 ? x - distance :
+                        x + distance < Width && supported[x + distance] >= 0 ? x + distance : -1;
+                    if (nearest < 0) continue;
+                    minimumTop[x] = supported[nearest];
+                    break;
+                }
             }
             return minimumTop;
         }
 
-        private static void Layer(byte[] pixels, byte[] atlas, int tile, int[] minimumTop = null)
+        private static void Layer(byte[] pixels, byte[] atlas, int tile, int[] minimumTop = null, int[] sourceTopRows = null)
         {
             if (tile < 0 || tile >= AtlasTileCount) return;
             int left = tile % AtlasColumns * Width;
             int bottom = AtlasHeight - (tile / AtlasColumns + 1) * Height;
             for (int y = 0; y < Height; y++)
             {
+                int sourceY = sourceTopRows == null ? y : Height - 1 - sourceTopRows[Height - 1 - y];
                 for (int x = 0; x < Width; x++)
                 {
                     if (minimumTop != null && Height - 1 - y < minimumTop[x]) continue;
-                    int source = ((bottom + y) * AtlasWidth + left + x) * 4;
+                    int source = ((bottom + sourceY) * AtlasWidth + left + x) * 4;
                     int target = (y * Width + x) * 4;
                     int alpha = atlas[source + 3];
                     // Empty pixels are skipped; only edges need alpha blending.

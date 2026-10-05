@@ -65,6 +65,7 @@ Shader "Boscali/FlightCloud"
         static float gVert = 0.0;
         // Set-pieces this ray passes near; the rest are never evaluated along it.
         static uint gHeroMask = 0u;
+        static bool gHeroOnly = false;
         // Dominant density body's own normalized height. Capture after the primary sample;
         // subsequent shadow-density samples overwrite it. Empty samples always reset it.
         static float gLocalLightingHeight = 0.0;
@@ -438,6 +439,7 @@ Shader "Boscali/FlightCloud"
             float puffLod = max(coarse, LodFor(gFoot, max(1200.0, _PuffScale * 4.0)));
             float hero = gHeroMask != 0u ? Heroes(g, max(lod, 1.0)) : 0.0;
             float heroHeight = gLocalLightingHeight;
+            if (gHeroOnly) return hero;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
             float3 n1 = float3((g.xz - _CloudWindOffset) / 24000.0, 0.37);
             float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / 1250.0, g.y / 1250.0);
@@ -604,14 +606,21 @@ Shader "Boscali/FlightCloud"
             return Density(world, coarse);
         }
 
+        float AverageAirDensity(float cameraHeight, float sampleHeight, float scaleHeight)
+        {
+            float h0 = max(0.0, cameraHeight) / scaleHeight;
+            float h1 = max(0.0, sampleHeight) / scaleHeight;
+            float delta = h1 - h0;
+            return abs(delta) < 0.01 ? exp(-0.5 * (h0 + h1)) : (exp(-h0) - exp(-h1)) / delta;
+        }
+
         float AirTransmittance(float distanceToSample, float cameraHeight, float sampleHeight)
         {
-            // Integral of an exponential aerosol layer along the viewing ray.
-            float h0 = max(0.0, cameraHeight) / 2200.0;
-            float h1 = max(0.0, sampleHeight) / 2200.0;
-            float delta = h1 - h0;
-            float average = abs(delta) < 0.01 ? exp(-h0) : (exp(-h0) - exp(-h1)) / delta;
-            float extinction = 0.000008 + max(0.0, _CloudAirExtinction - 0.000008) * average;
+            // Molecular haze thins too: a constant floor obscured storm silhouettes even
+            // above the aerosol layer. Integrate both profiles along the same view chord.
+            float molecular = AverageAirDensity(cameraHeight, sampleHeight, 8000.0);
+            float aerosol = AverageAirDensity(cameraHeight, sampleHeight, 2200.0);
+            float extinction = 0.000008 * molecular + max(0.0, _CloudAirExtinction - 0.000008) * aerosol;
             return exp(-distanceToSample * extinction);
         }
 
@@ -672,18 +681,60 @@ Shader "Boscali/FlightCloud"
             return CoverMask(body, c) * 0.77;
         }
 
-        // Marches one slab along its chord of the view ray and returns premultiplied colour
-        // (rgb) and transmittance (a). Each sample stands for the whole depth of the layer
+        struct SlabLayer
+        {
+            float3 colour;
+            float opacity;
+            float weightedDistance;
+        };
+
+        struct SlabLayers
+        {
+            SlabLayer front;
+            SlabLayer back;
+        };
+
+        void AddSlabSample(inout SlabLayer layer, float optical, float3 light, float distance)
+        {
+            float contribution = (1.0 - layer.opacity) * (1.0 - exp(-optical));
+            layer.colour += contribution * light;
+            layer.opacity += contribution;
+            layer.weightedDistance += contribution * distance;
+        }
+
+        void FinishSlab(inout SlabLayer layer, float3 ro, float3 ray)
+        {
+            if (layer.opacity <= 0.0) return;
+            float depth = layer.weightedDistance / layer.opacity;
+            float fade = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, depth);
+            float air = AirTransmittance(depth, ro.y, ro.y + ray.y * depth);
+            layer.colour = lerp(_CloudFogColor * layer.opacity, layer.colour, air) * fade;
+            layer.opacity *= fade;
+            layer.weightedDistance *= fade;
+        }
+
+        void AppendSlab(inout SlabLayer nearLayer, SlabLayer farLayer)
+        {
+            float transmit = 1.0 - nearLayer.opacity;
+            nearLayer.colour += transmit * farLayer.colour;
+            nearLayer.weightedDistance += transmit * farLayer.weightedDistance;
+            nearLayer.opacity += transmit * farLayer.opacity;
+        }
+
+        // March one chord, split around the opaque cloud's representative distance.
+        // Camera altitude alone cannot order a nearby storm against an oblique layer.
+        // Each sample stands for the whole depth of the layer
         // over its stretch of chord, so grazing rays never slice it into bands; long chords
         // get more samples and blur the pattern to their step instead of aliasing.
-        float4 MarchSlab(float3 ro, float3 ray, float limit, float y0, float y1, float cover,
+        SlabLayers MarchSlab(float3 ro, float3 ray, float limit, float splitDistance, float y0, float y1, float cover,
             float sheet, float scale, float stretch, float ripple, float strength, float phase, float jitter,
             float2 splitMul)
         {
-            if (cover <= 0.005 || abs(ray.y) < 0.0005) return float4(0, 0, 0, 1);
+            SlabLayers result = (SlabLayers)0;
+            if (cover <= 0.005 || abs(ray.y) < 0.0005) return result;
             float ta = (y0 - ro.y) / ray.y, tb = (y1 - ro.y) / ray.y;
             float t0 = max(0.0, min(ta, tb)), t1 = min(max(ta, tb), limit);
-            if (t1 <= t0) return float4(0, 0, 0, 1);
+            if (t1 <= t0) return result;
             float span = t1 - t0;
             // A steep chord through a thin layer is one sample (a 2D texture, in effect);
             // grazing chords get up to ten.
@@ -693,8 +744,6 @@ Shader "Boscali/FlightCloud"
             float patternFoot = stepLength * 0.5 * slant;
             float yMid = (y0 + y1) * 0.5;
             float toSun = (y1 - y0) * 0.5 / max(0.12, _CloudSunDirection.y);
-            float3 colour = 0.0;
-            float transmittance = 1.0;
             [loop]
             for (int n = 0; n < 10; n++)
             {
@@ -709,17 +758,19 @@ Shader "Boscali/FlightCloud"
                 float direct = exp(-d * toSun * 0.003);
                 float3 light = _CloudAmbientColor * 0.8 * 0.8 +
                     _CloudSunColor * (direct * phase * 0.6 + 0.22);
-                float absorb = exp(-d * stepLength * 0.003);
-                colour += transmittance * (1.0 - absorb) * light;
-                transmittance *= absorb;
+                float segmentStart = t0 + n * stepLength;
+                float frontLength = clamp(splitDistance - segmentStart, 0.0, stepLength);
+                float backLength = stepLength - frontLength;
+                if (frontLength > 0.0)
+                    AddSlabSample(result.front, d * frontLength * 0.003, light,
+                        segmentStart + frontLength * jitter);
+                if (backLength > 0.0)
+                    AddSlabSample(result.back, d * backLength * 0.003, light,
+                        segmentStart + frontLength + backLength * jitter);
             }
-            float mid = t0 + span * 0.5;
-            float fadeOut = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, mid);
-            colour *= fadeOut;
-            transmittance = lerp(1.0, transmittance, fadeOut);
-            float air = AirTransmittance(mid, ro.y, ro.y + ray.y * mid);
-            colour = lerp(_CloudFogColor * (1.0 - transmittance), colour, air);
-            return float4(colour, transmittance);
+            FinishSlab(result.front, ro, ray);
+            FinishSlab(result.back, ro, ray);
+            return result;
         }
 
         float Phase(float cosine, float g)
@@ -927,7 +978,7 @@ Shader "Boscali/FlightCloud"
         {
             float3 ro = origin + _CloudWorldOffset;
             float2 bounds = _CloudAltitudeBounds;
-            float sceneLimit = min(sceneDistance, CLOUD_FAR_LIMIT);
+            float sceneLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
             float start, finish;
             gHeroMask = 0u;
             if (_HeroCount > 0.0)
@@ -942,6 +993,10 @@ Shader "Boscali/FlightCloud"
             }
             RayBox(ro, ray, bounds, start, finish);
             finish = min(finish, sceneLimit);
+            // Ordinary weather retains its fixed budget/range. A visible set-piece gets
+            // its own bounded interval beyond it, even from the opposite map corner.
+            float2 heroSpan = gHeroMask != 0u ? HeroInterval(ro, ray) : float2(1e9, -1e9);
+            finish = min(finish, max(CLOUD_FAR_LIMIT, heroSpan.y));
 
             float transmittance = 1.0;
             float3 colour = 0.0;
@@ -981,7 +1036,6 @@ Shader "Boscali/FlightCloud"
             float h0 = finish, h1 = finish;
             if (gHeroMask != 0u && finish > 20000.0)
             {
-                float2 heroSpan = HeroInterval(ro, ray);
                 h0 = clamp(max(heroSpan.x, 20000.0), start, finish);
                 h1 = clamp(heroSpan.y, start, finish);
                 if (h1 <= h0) { h0 = finish; h1 = finish; }
@@ -989,7 +1043,9 @@ Shader "Boscali/FlightCloud"
             float b1 = min(cutNear, h0), b3 = max(cutNear, h1);
             float b2 = cutNear <= h0 ? h0 : cutNear <= h1 ? cutNear : h1;
             float nearTotal = max(1.0, cutNear - start - max(0.0, min(h1, cutNear) - min(h0, cutNear)));
-            float farTotal = max(1.0, finish - cutNear - max(0.0, max(h1, cutNear) - max(h0, cutNear)));
+            float ordinaryFinish = min(finish, CLOUD_FAR_LIMIT);
+            float farTotal = max(1.0, ordinaryFinish - cutNear -
+                max(0.0, min(h1, ordinaryFinish) - max(h0, cutNear)));
             [loop]
             for (int segment = 0; segment < 4; segment++)
             {
@@ -999,6 +1055,11 @@ Shader "Boscali/FlightCloud"
                 float mid = 0.5 * (s0 + s1);
                 bool hero = mid > h0 && mid < h1;
                 bool farSeg = !hero && mid > CLOUD_NEAR_LIMIT;
+                if (!hero)
+                {
+                    s1 = min(s1, CLOUD_FAR_LIMIT);
+                    if (s1 <= s0 + 1.0) continue;
+                }
                 float farPass = farSeg ? 1.0 : 0.0;
                 float span = s1 - s0;
                 float steps;
@@ -1026,6 +1087,7 @@ Shader "Boscali/FlightCloud"
                     float stepLength = hero ? fine : span * (b * b - a * a);
                     float t = hero ? tHero : s0 + span * lerp(a * a, b * b, jitter);
                     float3 world = origin + ray * t;
+                    gHeroOnly = t > CLOUD_FAR_LIMIT;
                     gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
                     gVert = farSeg ? 0.5 * abs(ray.y) * stepLength : 0.0;
                     float d = DensityOrEmpty(world, farSeg ? 1.2 : hero ? 1.0 : 0.0);
@@ -1119,6 +1181,7 @@ Shader "Boscali/FlightCloud"
                 }
             }
             gVert = 0.0;
+            gHeroOnly = false;
             float opacity = 1.0 - transmittance;
             cloudDistance = opacity > 0.01 ? weightedDistance / opacity : CLOUD_FAR_LIMIT;
             float air = AirTransmittance(cloudDistance, ro.y, ro.y + ray.y * cloudDistance);
@@ -1160,48 +1223,57 @@ Shader "Boscali/FlightCloud"
                     : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
                 float hAir = AirTransmittance(horizonT, ro.y, _HorizonDeck);
                 float3 hColour = lerp(_CloudFogColor * hOpacity, hLight * hOpacity, hAir);
-                colour += (1.0 - opacity) * hColour;
-                opacity += (1.0 - opacity) * hOpacity;
+                float oldOpacity = opacity;
+                float oldDistance = cloudDistance;
+                if (horizonT < cloudDistance)
+                {
+                    colour = hColour + (1.0 - hOpacity) * colour;
+                    opacity = hOpacity + (1.0 - hOpacity) * opacity;
+                    if (opacity > 0.002)
+                        cloudDistance = (hOpacity * horizonT + (1.0 - hOpacity) * oldOpacity * oldDistance) / opacity;
+                }
+                else
+                {
+                    float contribution = (1.0 - opacity) * hOpacity;
+                    colour += (1.0 - opacity) * hColour;
+                    opacity += contribution;
+                    if (opacity > 0.002)
+                        cloudDistance = (oldOpacity * oldDistance + contribution * horizonT) / opacity;
+                }
             }
 
-            // Middle (3.3-5.5 km) and high (8.6-9.5 km) layers and the fog bank. A layer the
-            // camera is above lies in front of the low cloud; one it is below lies behind it
-            // and is skipped when the low cloud is already opaque. The fog bank (0-330 m) is
-            // under every cloud base, so it is behind them unless the camera is in it.
+            // Non-overlapping height bands have a known order along a rising/falling ray.
+            // Split each chord at cloud depth, then compose its front and back portions in
+            // that order. Reuse each density sample; no second slab march is needed.
             float slabLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
-            float transmit = 1.0 - opacity;
+            if (opacity > 0.996) slabLimit = min(slabLimit, cloudDistance);
             float midBase = lerp(4200.0, 3300.0, _MidSheet);
             float midTop = midBase + lerp(400.0, 1700.0, _MidSheet);
             float highBase = 8600.0;
             float highTop = highBase + lerp(500.0, 900.0, _HighVeil);
-            if (ro.y < 330.0 || transmit > 0.004)
-            {
-                float4 fogLayer = MarchSlab(ro, ray, slabLimit, -30.0, 330.0, _FogBank,
-                    0.85, 3200.0, 1.6, 0.0, 0.55, phase, jitter, float2(1.0, 1.0));
-                if (ro.y < 330.0) { colour = fogLayer.rgb + fogLayer.a * colour; }
-                else { colour += transmit * fogLayer.rgb; }
-                transmit *= fogLayer.a;
-            }
-            if (ro.y > midTop || transmit > 0.004)
-            {
-                float4 midLayer = MarchSlab(ro, ray, slabLimit, midBase, midTop, _MidCover,
-                    smoothstep(0.4, 1.0, _MidSheet), 2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.42, phase, jitter,
-                    float2(1.0 - 0.75 * _SplitB.x, 1.0));
-                if (ro.y > midTop) { colour = midLayer.rgb + midLayer.a * colour; }
-                else { colour += transmit * midLayer.rgb; }
-                transmit *= midLayer.a;
-            }
-            if (ro.y > highTop || transmit > 0.004)
-            {
-                float4 highLayer = MarchSlab(ro, ray, slabLimit, highBase, highTop, _HighCover,
-                    smoothstep(0.6, 1.0, _HighVeil), 5000.0, lerp(7.0, 1.0, _HighVeil),
-                    4.0 * _HighVeil * (1.0 - _HighVeil), 0.12, phase, jitter,
-                    float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x));
-                if (ro.y > highTop) { colour = highLayer.rgb + highLayer.a * colour; }
-                else { colour += transmit * highLayer.rgb; }
-                transmit *= highLayer.a;
-            }
-            return float4(colour, 1.0 - transmit);
+            SlabLayers fog = MarchSlab(ro, ray, slabLimit, cloudDistance, -30.0, 330.0, _FogBank,
+                0.85, 3200.0, 1.6, 0.0, 0.55, phase, jitter, float2(1.0, 1.0));
+            SlabLayers middle = MarchSlab(ro, ray, slabLimit, cloudDistance, midBase, midTop, _MidCover,
+                smoothstep(0.4, 1.0, _MidSheet), 2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.42, phase, jitter,
+                float2(1.0 - 0.75 * _SplitB.x, 1.0));
+            SlabLayers high = MarchSlab(ro, ray, slabLimit, cloudDistance, highBase, highTop, _HighCover,
+                smoothstep(0.6, 1.0, _HighVeil), 5000.0, lerp(7.0, 1.0, _HighVeil),
+                4.0 * _HighVeil * (1.0 - _HighVeil), 0.12, phase, jitter,
+                float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x));
+            SlabLayer front = fog.front;
+            SlabLayer back = fog.back;
+            if (ray.y < 0.0) { front = high.front; back = high.back; }
+            AppendSlab(front, middle.front);
+            AppendSlab(back, middle.back);
+            if (ray.y >= 0.0) { AppendSlab(front, high.front); AppendSlab(back, high.back); }
+            else { AppendSlab(front, fog.front); AppendSlab(back, fog.back); }
+            float frontTransmit = 1.0 - front.opacity;
+            float cloudTransmit = 1.0 - opacity;
+            float totalOpacity = front.opacity + frontTransmit * (opacity + cloudTransmit * back.opacity);
+            if (totalOpacity > 0.002)
+                cloudDistance = (front.weightedDistance + frontTransmit *
+                    (opacity * cloudDistance + cloudTransmit * back.weightedDistance)) / totalOpacity;
+            return float4(front.colour + frontTransmit * (colour + cloudTransmit * back.colour), totalOpacity);
         }
 
         // Metres along the view ray to the scene; sky pixels (far plane) lie beyond the horizon.

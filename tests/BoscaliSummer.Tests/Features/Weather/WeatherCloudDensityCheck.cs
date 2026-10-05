@@ -122,6 +122,11 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
                 maps.FarProfiles, CloudMaps.NearSize, maps.Envelope, points.ToArray(), 0f, Vector3.zero, false);
         }
         RainOptics();
+        var geometryFailures = new List<string>();
+        foreach (Action check in new Action[] { RayComposition, SlabFootprint, AirOptics })
+            try { check(); }
+            catch (Exception error) { geometryFailures.Add(error.Message); log.AppendLine("FAIL " + error.Message); }
+        if (geometryFailures.Count > 0) throw new Exception(string.Join("; ", geometryFailures));
         log.AppendLine("PASS density " + samples + " actual GPU probes; CSV preserves every density/height/envelope result");
         log.AppendLine("Limits: exact comparisons cover ordinary near/overlap bodies at gFoot=0/gVert=0; far-only erosion and CPU hero envelopes are recorded diagnostics. No image/performance acceptance or high-slab parity claim.");
     }
@@ -220,6 +225,285 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             if (rt != null) { rt.Release(); Destroy(rt); }
             foreach (UnityEngine.Object value in owned) Destroy(value);
         }
+    }
+
+    private void RayComposition()
+    {
+        var owned = new List<UnityEngine.Object>();
+        RenderTexture rt = null;
+        RenderTexture previous = RenderTexture.active;
+        try
+        {
+            var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
+            material.SetFloat("_ProbeRayMode", 1f);
+            material.SetVector("_CloudWorldOffset", Vector4.zero);
+            material.SetVector("_CloudAltitudeBounds", new Vector4(0f, 16000f, 0f, 0f));
+            material.SetVector("_CloudHeroBounds", new Vector4(300f, 16500f, 0f, 0f));
+            material.SetVector("_CloudEye", Vector4.zero);
+            material.SetVector("_SplitA", new Vector4(1f, 0f, 0f, 0f));
+            material.SetVector("_SplitB", new Vector4(0f, 0f, 80000f, 0f));
+            material.SetVector("_CloudWindDir", new Vector2(1f, 0f));
+            material.SetFloat("_CloudHeightShift", 0f);
+            material.SetFloat("_WeatherEnvelopeOn", 0f);
+            material.SetFloat("_CloudCheckerOn", 0f);
+            material.SetFloat("_CloudSteps", 112f); material.SetFloat("_CloudFarSteps", 40f);
+            material.SetFloat("_CloudPixelAngle", .0005f);
+            material.SetFloat("_CloudAirExtinction", .000008f);
+            material.SetVector("_CloudSunDirection", Vector3.up);
+            material.SetColor("_CloudSunColor", Color.black);
+            material.SetColor("_CloudAmbientColor", Color.white);
+            material.SetColor("_CloudGroundColor", Color.black);
+            material.SetColor("_CloudFogColor", Color.black);
+            material.SetFloat("_CloudFlash", 0f); material.SetFloat("_CloudRainVisuals", 0f);
+            material.SetFloat("_FogBank", 0f); material.SetFloat("_HighCover", 0f);
+            material.SetFloat("_HorizonCover", 0f); material.SetFloat("_MidSheet", 1f);
+            CloudVolumeUniforms.ApplySpans(material, 105000f, 315000f);
+            byte[] solid = new byte[4 * 4 * 4 * 4]; Array.Fill(solid, (byte)255);
+            for (int i = 1; i < solid.Length; i += 4) solid[i] = 128;
+            var noise = new Texture3D(4, 4, 4, TextureFormat.RGBA32, false)
+            { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
+            owned.Add(noise); noise.SetPixelData(solid, 0); noise.Apply(false, true);
+            material.SetTexture("_CloudNoiseTex", noise);
+            Texture2D empty = FloatMap(new[] { Color.clear }, 1, owned);
+            foreach (string id in new[] { "_WeatherMapTex", "_WeatherProfileTex", "_WeatherFarMapTex", "_WeatherFarProfileTex" })
+                material.SetTexture(id, empty);
+            rt = new RenderTexture(1, 2, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            Require(rt.Create(), "Bounded ray-composition target created");
+            var readback = new Texture2D(1, 2, TextureFormat.RGBAFloat, false, true); owned.Add(readback);
+            var csv = new StringBuilder("case,r,g,b,a,depth\n");
+            int probes = 0;
+            var failures = new List<string>();
+            void Check(bool valid, string description) { if (!valid) failures.Add(description); }
+            void Hero(bool present, float z, bool supercell)
+            {
+                var a = new Vector4[5]; var b = new Vector4[5];
+                a[0] = new Vector4(0f, z, 0f, supercell ? 1f : 0f);
+                b[0] = supercell ? new Vector4(6000f, 14000f, 1f, 18000f)
+                    : new Vector4(45000f, 12500f, 1f, 18000f);
+                material.SetVectorArray("_HeroA", a); material.SetVectorArray("_HeroB", b);
+                material.SetFloat("_HeroCount", present ? 1f : 0f);
+            }
+            Color[] Probe(string name, Vector3 origin, Vector3 direction, float sceneDistance, float middle)
+            {
+                material.SetVector("_ProbeRayOrigin", origin);
+                material.SetVector("_ProbeRayDirection", direction);
+                material.SetFloat("_ProbeRaySceneDistance", sceneDistance);
+                material.SetFloat("_MidCover", middle);
+                Graphics.Blit(null, rt, material, 0);
+                RenderTexture.active = rt; readback.ReadPixels(new Rect(0, 0, 1, 2), 0, 0); readback.Apply();
+                Color[] result = readback.GetPixels(); probes++;
+                if (result[0].r >= 1000f && result[1].r < 1f) Array.Reverse(result);
+                Color c = result[0];
+                csv.AppendLine(string.Join(",", name, F(c.r), F(c.g), F(c.b), F(c.a), F(result[1].r)));
+                File.WriteAllText("ray-composition-probes.csv", csv.ToString());
+                Require(Finite(c) && Finite(result[1]) && c.a >= 0f && c.a <= 1f &&
+                    c.r >= 0f && c.g >= 0f && c.b >= 0f, name + " has finite, bounded opacity and nonnegative radiance");
+                return result;
+            }
+            Vector3 oblique = new Vector3(0f, -.1f, 1f), above = new Vector3(0f, 8000f, 0f);
+            Hero(true, 10000f, false);
+            Color[] close = Probe("near-opaque-hero", above, oblique, 400000f, 0f);
+            Color[] behind = Probe("middle-behind-near-hero", above, oblique, 400000f, 1f);
+            Check(close[0].a > .94f && close[1].r < 25000f,
+                "Near hero is opaque and precedes the 30-47 km middle-layer chord");
+            float rgbDelta = Mathf.Max(Mathf.Abs(close[0].r - behind[0].r), Mathf.Abs(close[0].g - behind[0].g),
+                Mathf.Abs(close[0].b - behind[0].b));
+            Check(rgbDelta <= (1f - close[0].a) * .8f + .002f,
+                "A middle layer behind an opaque storm cannot repaint its visible colour");
+            Check(behind[0].a >= close[0].a - .000001f && behind[0].a - close[0].a <= 1f - close[0].a + .000001f,
+                "The remaining visible middle layer adds only the cloud's remaining transmittance to opacity");
+            Hero(false, 0f, false);
+            Color[] middle = Probe("unobstructed-middle-layer", above, oblique, 400000f, 1f);
+            Check(middle[0].a > .8f && middle[0].r > .4f,
+                "The same middle layer is visibly present without the intervening storm");
+            Hero(true, 50000f, false);
+            Color[] far = Probe("hero-behind-middle-off", above, oblique, 400000f, 0f);
+            Color[] front = Probe("middle-in-front-of-far-hero", above, oblique, 400000f, 1f);
+            Check(far[0].a > .9f && far[1].r > 47000f && ColourDelta(far[0], front[0]) > .05f,
+                "A middle layer encountered before a more distant storm contributes to the view");
+            Hero(true, 260000f, true);
+            Vector3 high = new Vector3(0f, 17000f, 0f), toward = new Vector3(0f, -11000f, 260000f);
+            Color[] distant = Probe("hero-beyond-ordinary-220km", high, toward, 400000f, 0f);
+            Check(distant[0].a > .1f && distant[1].r > 220000f && distant[1].r < 400000f,
+                "Independent distant hero renders beyond the ordinary map march limit");
+            Color[] occluded = Probe("far-hero-behind-opaque-scene", high, toward, 100000f, 0f);
+            Color[] misses = Probe("ray-misses-every-hero", high, Vector3.right, 400000f, 0f);
+            Check(ColourDelta(occluded[0], Color.clear) <= .000001f && ColourDelta(misses[0], Color.clear) <= .000001f,
+                "Opaque terrain and rays missing the hero remain exact empty identities");
+            // A near bounding circle crosses the ray, but its actual tilted tower/anvil
+            // do not. Its union with the far hero creates a long empty interval that
+            // exhausted the old 96-iteration adaptive walk before the distant body.
+            var sparseA = new Vector4[5]; var sparseB = new Vector4[5];
+            sparseA[0] = new Vector4(45000f, 20000f, 0f, 1f);
+            sparseB[0] = new Vector4(6000f, 14000f, 1f, 18000f);
+            sparseA[1] = new Vector4(0f, 260000f, 0f, 1f);
+            sparseB[1] = new Vector4(6000f, 14000f, 1f, 18000f);
+            material.SetVectorArray("_HeroA", sparseA); material.SetVectorArray("_HeroB", sparseB);
+            material.SetFloat("_HeroCount", 1f);
+            Color[] emptyCircle = Probe("near-circle-actual-body-miss", high, toward, 400000f, 0f);
+            Check(ColourDelta(emptyCircle[0], Color.clear) <= .000001f,
+                "The near circle is a genuine culling false positive with no cloud on the ray");
+            material.SetFloat("_HeroCount", 2f);
+            Color[] sparse = Probe("sparse-two-hero-union", high, toward, 400000f, 0f);
+            Check(sparse[0].a >= distant[0].a * .5f && sparse[0].a > .1f &&
+                sparse[1].r > 220000f && sparse[1].r < 400000f,
+                "A sparse two-hero bounding union still visits its distant visible body within the fixed walk budget");
+            if (failures.Count > 0) throw new Exception("Ray composition expectations: " + string.Join("; ", failures));
+            log.AppendLine("PASS ray composition " + probes + " actual GPU oblique-layer/range/opaque-depth probes");
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            if (rt != null) { rt.Release(); Destroy(rt); }
+            foreach (UnityEngine.Object value in owned) Destroy(value);
+        }
+    }
+
+    private void SlabFootprint()
+    {
+        var owned = new List<UnityEngine.Object>();
+        RenderTexture rt = null;
+        RenderTexture previous = RenderTexture.active;
+        try
+        {
+            var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
+            material.SetFloat("_ProbeSlabMode", 1f);
+            material.SetVector("_CloudEye", Vector4.zero); material.SetVector("_SplitB", Vector4.zero);
+            material.SetVector("_CloudWindDir", new Vector2(0f, 1f));
+            // Constant channel values isolate footprint equations from mip filtering.
+            // CPU has an altitude dome; the rendered slab uses its depth average, 0.77.
+            byte[] bytes = new byte[4 * 4 * 4 * 4];
+            for (int i = 0; i < bytes.Length; i += 4)
+            { bytes[i] = 200; bytes[i + 1] = 90; bytes[i + 2] = 255; bytes[i + 3] = 255; }
+            var noise = new Texture3D(4, 4, 4, TextureFormat.RGBA32, false)
+            { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
+            owned.Add(noise); noise.SetPixelData(bytes, 0); noise.Apply(false, true);
+            material.SetTexture("_CloudNoiseTex", noise);
+            const int count = 9;
+            var positions = new Texture2D(count, 1, TextureFormat.RGBAFloat, false, true)
+            { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp }; owned.Add(positions);
+            material.SetTexture("_DensityProbePositions", positions);
+            rt = new RenderTexture(count, 1, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            Require(rt.Create(), "Bounded middle-footprint target created");
+            var readback = new Texture2D(count, 1, TextureFormat.RGBAFloat, false, true); owned.Add(readback);
+            var csv = new StringBuilder("sheet,x,y,z,cpuDepthAverage,gpu,delta\n");
+            int probes = 0, positive = 0;
+            foreach (float sheet in new[] { 0f, 1f })
+            {
+                var sky = new StateParams { MidCover = .6f, MidSheet = sheet };
+                var cpu = new CloudBodies(bytes, 4, sky);
+                material.SetFloat("_MidCover", sky.MidCover); material.SetFloat("_MidSheet", sky.MidSheet);
+                float height = Mathf.Lerp(4200f, 3300f, sheet) + Mathf.Lerp(400f, 1700f, sheet) * .5f;
+                var inputs = new Color[count]; int at = 0;
+                for (int z = -12000; z <= 12000; z += 12000)
+                for (int x = -12000; x <= 12000; x += 12000) inputs[at++] = new Color(x, height, z, 0f);
+                positions.SetPixels(inputs); positions.Apply();
+                Graphics.Blit(null, rt, material, 0);
+                RenderTexture.active = rt; readback.ReadPixels(new Rect(0, 0, count, 1), 0, 0); readback.Apply();
+                Color[] output = readback.GetPixels();
+                string failure = null;
+                for (int i = 0; i < count; i++)
+                {
+                    Color p = inputs[i]; float expected = cpu.MidLayer(p.r, p.g, p.b) * .77f;
+                    float delta = Mathf.Abs(expected - output[i].r); probes++;
+                    if (output[i].r > .01f) positive++;
+                    csv.AppendLine(string.Join(",", F(sheet), F(p.r), F(p.g), F(p.b), F(expected), F(output[i].r), F(delta)));
+                    if (!Finite(output[i]) || delta > .001f)
+                        failure = failure ?? "Middle-layer footprint mismatch at " + i + ": CPU=" + F(expected) + " GPU=" + F(output[i].r);
+                }
+                File.WriteAllText("slab-footprint-probes.csv", csv.ToString());
+                if (failure != null) throw new Exception(failure);
+            }
+            Require(positive > 0, "Footprint probes include positive cloud, rather than only empty agreement");
+            log.AppendLine("PASS slab footprint " + probes + " actual GPU patch/warp/street probes; constant channels isolate footprint from mip/vertical integration");
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            if (rt != null) { rt.Release(); Destroy(rt); }
+            foreach (UnityEngine.Object value in owned) Destroy(value);
+        }
+    }
+
+    private void AirOptics()
+    {
+        var owned = new List<UnityEngine.Object>();
+        RenderTexture rt = null;
+        RenderTexture previous = RenderTexture.active;
+        try
+        {
+            string[] names = { "zero-distance", "horizontal-sea", "horizontal-17km", "horizontal-35km",
+                "upward-chord", "downward-chord", "near-horizontal-below-threshold", "near-horizontal-above-threshold",
+                "nearly-equal-heights", "below-sea-clamped", "long-sea-baseline", "horizontal-45km" };
+            var inputs = new[] { new Color(0f, 17000f, 35000f, 0f), new Color(100000f, 0f, 0f, 0f),
+                new Color(100000f, 17000f, 17000f, 0f), new Color(100000f, 35000f, 35000f, 0f),
+                new Color(100000f, 0f, 17000f, 0f), new Color(100000f, 17000f, 0f, 0f),
+                new Color(100000f, 1000f, 1021.99f, 0f), new Color(100000f, 1000f, 1022.01f, 0f),
+                new Color(100000f, 1000f, 1000.001f, 0f), new Color(100000f, -200f, -40f, 0f),
+                new Color(400000f, 0f, 0f, 0f), new Color(100000f, 45000f, 45000f, 0f) };
+            var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
+            material.SetFloat("_ProbeAirMode", 1f); material.SetFloat("_CloudAirExtinction", .00004f);
+            var positions = new Texture2D(inputs.Length, 1, TextureFormat.RGBAFloat, false, true)
+            { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp }; owned.Add(positions);
+            positions.SetPixels(inputs); positions.Apply(false, true);
+            material.SetTexture("_DensityProbePositions", positions);
+            rt = new RenderTexture(inputs.Length, 1, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            Require(rt.Create(), "Bounded aerial-perspective target created");
+            var readback = new Texture2D(inputs.Length, 1, TextureFormat.RGBAFloat, false, true); owned.Add(readback);
+            Graphics.Blit(null, rt, material, 0);
+            RenderTexture.active = rt; readback.ReadPixels(new Rect(0, 0, inputs.Length, 1), 0, 0); readback.Apply();
+            Color[] gpu = readback.GetPixels();
+            var csv = new StringBuilder("case,distance,cameraHeight,sampleHeight,reference,gpu,delta\n");
+            string failure = null;
+            for (int i = 0; i < inputs.Length; i++)
+            {
+                Color p = inputs[i];
+                double reference = IntegratedAir(p.r, p.g, p.b, .00004f);
+                double delta = Math.Abs(reference - gpu[i].r);
+                csv.AppendLine(string.Join(",", names[i], F(p.r), F(p.g), F(p.b),
+                    reference.ToString("R", CultureInfo.InvariantCulture), F(gpu[i].r), delta.ToString("R", CultureInfo.InvariantCulture)));
+                if (!Finite(gpu[i]) || gpu[i].r < 0f || gpu[i].r > 1f || delta > .00002)
+                    failure = failure ?? names[i] + " aerial perspective mismatch " + delta;
+            }
+            File.WriteAllText("air-optics-probes.csv", csv.ToString());
+            if (failure != null) throw new Exception(failure);
+            Require(gpu[0].r == 1f, "Zero-length air chord is exact identity");
+            Require(gpu[1].r < gpu[2].r && gpu[2].r < gpu[3].r && gpu[3].r < gpu[11].r,
+                "Both density profiles thin with altitude rather than retaining a molecular fog floor");
+            Require(Math.Abs(gpu[4].r - gpu[5].r) < .000002f,
+                "Reciprocal rising/falling chords have the same optical attenuation");
+            Require(Math.Abs(gpu[6].r - gpu[7].r) < .00002f && gpu[8].r > 0f,
+                "The midpoint limit stays continuous across nearly horizontal profile chords");
+            Require(Math.Abs(gpu[1].r - gpu[9].r) < .000001f &&
+                Math.Abs(gpu[1].r - Math.Exp(-100000f * .00004f)) < .000001f,
+                "Below-sea endpoints clamp finitely and the horizontal ground/sea baseline remains unchanged");
+            log.AppendLine("PASS air optics " + inputs.Length + " actual GPU identity/height/reciprocity/continuity probes against independent double-precision integration");
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            if (rt != null) { rt.Release(); Destroy(rt); }
+            foreach (UnityEngine.Object value in owned) Destroy(value);
+        }
+    }
+
+    private static double IntegratedAir(double distance, double cameraHeight, double sampleHeight, double seaExtinction)
+    {
+        // Independent Simpson integration of density along the chord, not the shader's
+        // analytic exp-difference formula. Inputs below sea clamp before the chord,
+        // matching the renderer's endpoint convention. This verifies its scalar model,
+        // not the physical accuracy of a spectral/multiple-scattering atmosphere.
+        const int intervals = 4096;
+        double h0 = Math.Max(0d, cameraHeight), h1 = Math.Max(0d, sampleHeight);
+        double integral = 0d;
+        for (int i = 0; i <= intervals; i++)
+        {
+            double height = h0 + (h1 - h0) * i / intervals;
+            double density = .000008d * Math.Exp(-height / 8000d) +
+                Math.Max(0d, seaExtinction - .000008d) * Math.Exp(-height / 2200d);
+            integral += density * (i == 0 || i == intervals ? 1d : (i & 1) == 0 ? 2d : 4d);
+        }
+        return Math.Exp(-distance * integral / (3d * intervals));
     }
 
     private Color[] Group(string name, WeatherField field, byte[] noiseBytes, int noiseSize,

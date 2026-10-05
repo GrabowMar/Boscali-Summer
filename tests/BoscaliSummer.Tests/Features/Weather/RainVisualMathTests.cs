@@ -58,6 +58,26 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(RainVisualMath.ClampRateToBudget(100f, 1f, 1000) == 100f, "Under-budget rate passes through");
             TestAssert.That(RainVisualMath.ClampRateToBudget(5000f, 0f, 1000) == 5000f, "Degenerate lifetime skips clamp");
 
+            RainVisualMath.ViewCoverage(70f, 16f / 9f, out float normalWidth, out float normalHeight);
+            RainVisualMath.ViewCoverage(100f, 16f / 9f, out float orbitWidth, out float orbitHeight);
+            TestAssert.That(orbitWidth > normalWidth && orbitHeight > normalHeight,
+                "Wide exterior views cover more of the visible rain volume");
+            RainVisualMath.ViewCoverage(200f, 5f, out float extremeWidth, out float extremeHeight);
+            TestAssert.That(extremeWidth <= 26f && extremeHeight <= 20f && normalWidth >= 18f && normalHeight >= 14f,
+                "Rain coverage never expands without bound or shrinks below the cockpit baseline");
+            RainVisualMath.ViewCoverage(100f, 1f, out float squareWidth, out float squareHeight);
+            TestAssert.That(Math.Abs(squareWidth - squareHeight) < .0001f && squareWidth < orbitWidth,
+                "Square wide-angle views retain square coverage rather than assuming a widescreen aspect");
+            RainVisualMath.ViewCoverage(100f, .6f, out float tallWidth, out float tallHeight);
+            TestAssert.That(tallWidth == 18f && tallHeight > tallWidth,
+                "Tall camera coverage keeps its positive width floor without losing vertical rain");
+            TestAssert.That(AtmosphericSurfaceMath.GroundDrawRange(18000f) > 18000f &&
+                AtmosphericSurfaceMath.GroundDrawRange(50000f) == 26000f,
+                "Height-limit ground remains in damp-tone range with a finite maximum");
+            TestAssert.That(AtmosphericSurfaceMath.GroundDrawRange(-100f) == 1800f &&
+                AtmosphericSurfaceMath.GroundDrawRange(1500f) > AtmosphericSurfaceMath.GroundDrawRange(0f),
+                "Ground tone range expands with altitude without negative-sea-level collapse");
+
         }
     }
 }
