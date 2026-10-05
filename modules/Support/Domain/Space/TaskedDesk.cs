@@ -615,7 +615,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private TaskedResult Remember(in Key key, TaskedOutcome outcome, int callId, int charged, int detail)
         {
             var result = new TaskedResult(outcome, callId, key.Request, charged, detail);
-            if (MakeRoom()) Store(key, result, false);
+            // Only a SEND that really posted is kept (a re-sent request must not post twice). A refusal consumed nothing and the host's
+            // per-player replay cache already replays the exact answer, so it never takes a slot in this shared 256-slot table,
+            // where one player's refused spam could otherwise evict another player's finished receipts.
+            if (outcome == TaskedOutcome.Posted && MakeRoom()) Store(key, result, false);
             return result;
         }
 

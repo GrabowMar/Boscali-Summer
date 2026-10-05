@@ -44,6 +44,7 @@ namespace BoscaliSummer.Core.Config
             s.Support.ReconEnabled, s.Support.FortifyEnabled, s.Support.ArtilleryEnabled,
             s.Support.EmpEnabled, s.Support.ElintEnabled, s.Support.MtiEnabled,
             s.Support.FlareBarrageEnabled, s.Support.SarSceneRadius,
+            s.Support.SatCameraEnabled, s.Support.OpticalSceneRadius,
             s.Support.ElintRadius, s.Support.EmpRadius, s.Support.FlareBarrageRadius, s.Support.FlareBarrageCount,
             s.Support.FlareBarrageDuration, s.Support.MaximumRange, s.Support.RequestCooldown,
             s.Support.PriceKnob, s.Support.EarnKnob,

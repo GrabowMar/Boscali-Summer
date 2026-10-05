@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Mesh mesh;
         private readonly bool[] has = new bool[SpaceRules.BirdCount];
         private bool present;
-        private float nextState;
+        private float nextState, failedUntil;
         private Material hullMaterial;
         private Material panelMaterial;
 
@@ -52,6 +52,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             mesh = null;
             present = false;
             nextState = 0f;
+            failedUntil = 0f;
             if (hullMaterial != null) Destroy(hullMaterial);
             if (panelMaterial != null) Destroy(panelMaterial);
             hullMaterial = null;
@@ -61,6 +62,18 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void OnDestroy() => ResetForScene();
 
         private void LateUpdate()
+        {
+            if (Time.unscaledTime < failedUntil) return;
+            try { Frame(); }
+            catch (System.Exception e)
+            {
+                failedUntil = Time.unscaledTime + 2f; // latch: log once per fault, then back off instead of faulting every frame
+                Plugin.Logger?.LogError("[Support.Space] Satellite sky failed: " + e);
+                Hide();
+            }
+        }
+
+        private void Frame()
         {
             if (support == null || Application.isBatchMode || support.Settings == null ||
                 !support.Settings.Enabled.Value)

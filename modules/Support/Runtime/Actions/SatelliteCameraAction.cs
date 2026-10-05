@@ -6,8 +6,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// <summary>
     /// SAT CAMERA: the OPTICAL bird looks at the aim. The host reads the sky there, refuses at night or with no sky state (RADAR
     /// stays usable), otherwise opens an OPTICAL reveal window sized by cloud and rain. What the camera shows is the world as it
-    /// is; what it reveals (and what can be MARKed) is only what that window admits. Not yet a catalogue row: the SAT CAMERA CALL,
-    /// its action id and its CALLS/feed control arrive with the feed UI, which registers this action.
+    /// is; what it reveals (and what can be MARKed) is only what that window admits. Registered in <see cref="SupportCatalog"/> as
+    /// SAT CAMERA (<see cref="SupportActionId.SatCamera"/>, id 32); its CALLS row and feed control drive it.
     /// </summary>
     internal sealed class SatelliteCameraAction : ISupportAction
     {

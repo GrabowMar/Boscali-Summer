@@ -144,6 +144,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             ExpireRequests(now);
 
             bool wanted = compactVisible || WindowOpen;
+            leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
             {
@@ -156,17 +157,24 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             float wall = Time.unscaledTime;
             if (wall < failedUntil) return; // a refresh fault holds the feed off for a moment, however often the panel re-shows it
-            if (!dirty && wall < nextRefresh) { sar?.Tick(now); return; }
+            if (!dirty && wall < nextRefresh)
+            {
+                try { sar?.Tick(now); }
+                catch (Exception e) { FailFeed(e, wall); }
+                return;
+            }
             nextRefresh = wall + (WindowOpen ? RefreshFull : RefreshCompact);
             dirty = false;
             try { Refresh(now); }
-            catch (Exception e)
-            {
-                failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
-                logger?.LogError("SPACE feed refresh failed: " + e);
-                compactVisible = false;
-                CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
-            }
+            catch (Exception e) { FailFeed(e, wall); }
+        }
+
+        private void FailFeed(Exception e, float wall)
+        {
+            failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
+            logger?.LogError("SPACE feed refresh failed: " + e);
+            compactVisible = false;
+            CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
         }
 
         /// <summary>A faction change clears the old mirror and draft before anything repaints.</summary>

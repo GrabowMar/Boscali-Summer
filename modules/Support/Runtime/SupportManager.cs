@@ -292,6 +292,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             state = null;
             return space != null && space.TryGetState(owner, out state);
         }
+        /// <summary>Display read of the host's SPACE state (quotes, panels, sky): the 1 Hz world state, no native re-sample.</summary>
+        internal bool TryGetSpaceStateCoarse(FactionHQ owner, out SpaceState state)
+        {
+            state = null;
+            return space != null && space.TryGetStateCoarse(owner, out state);
+        }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
@@ -510,12 +516,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool anyArmed = ArmedAction.HasValue || localPick != null;
             SupportMapMode.GestureArmed = anyArmed && mapGesture.Armed;
             mapGesture.Advance(Time.frameCount);
-            if (pendingWaypoint != -1 && now > pendingWaypointUntil)
+            // Transport timeouts run on wall time: a frozen or paused MP mission clock must not hold a request pending forever.
+            float wall = Time.unscaledTime;
+            if (pendingWaypoint != -1 && wall > pendingWaypointUntil)
             {
                 pendingWaypoint = -1;
                 Status = "No response from host.";
             }
-            if (pending && now - pendingSince > ReplyTimeout)
+            if (pending && wall - pendingSince > ReplyTimeout)
             {
                 pending = false;
                 Status = "No response from host.";
@@ -827,7 +835,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             pending = true;
-            pendingSince = MissionNow();
+            pendingSince = Time.unscaledTime;
             pendingAction = action;
             Status = "Request sent to grid " + Mathf.RoundToInt(target.x) + " / " + Mathf.RoundToInt(target.z) + ".";
             int id = ++nextRequestId;
@@ -1149,7 +1157,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
             pendingWaypoint = requestId;
-            pendingWaypointUntil = MissionNow() + ReplyTimeout;
+            pendingWaypointUntil = Time.unscaledTime + ReplyTimeout;
             network.SendWaypoint(requestId, point, clear);
         }
 
