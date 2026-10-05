@@ -114,11 +114,15 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(SofRules.Odds(100f, 9, false, false, false), 10, "a bad spot clamps at 10");
             Eq(SofRules.Odds(0f, 0, false, false, true), 85, "+15 when CYBER holds a node within 12 km");
             Eq(SofRules.Odds(float.NaN, 0, false, false, false), 20, "an unreadable exposure reads as 100 %");
-            Near(SofRules.ExposureDelta(2, false, false, false, 1f), 1f, "two enemies add 1 %/s (0.5 each)");
-            Near(SofRules.ExposureDelta(1, true, false, false, 1f), 0.625f, "a bird's stare x1.25");
-            Near(SofRules.ExposureDelta(1, false, true, false, 1f), 0.75f, "PUSH +50 %");
-            Near(SofRules.ExposureDelta(0, false, false, false, 2f), -1f, "nothing near falls 0.5 %/s");
-            Near(SofRules.ExposureDelta(0, false, false, true, 1f), -1f, "HOLD falls twice as fast");
+            Near(SofRules.ExposureDelta(2, false, false, false, 1f), 0.25f, "two enemies add 1 %/s (0.5 each) against 0.75 %/s of recovery");
+            Near(SofRules.ExposureDelta(1, true, false, false, 1f), -0.125f, "a bird's stare x1.25 on one defender");
+            Near(SofRules.ExposureDelta(3, true, false, false, 1f), 1.125f, "three defenders under a bird: 1.875 - 0.75");
+            Near(SofRules.ExposureDelta(1, false, true, false, 1f), 0f, "PUSH +50 % on one defender is a stand-off");
+            Near(SofRules.ExposureDelta(2, false, true, false, 1f), 0.75f, "PUSH +50 % on two");
+            Near(SofRules.ExposureDelta(1, false, false, false, 1f), -0.25f, "one defender: net recovery 0.25 %/s");
+            Near(SofRules.ExposureDelta(0, false, false, false, 2f), -1.5f, "nothing near falls 0.75 %/s");
+            Near(SofRules.ExposureDelta(0, false, false, true, 1f), -1.5f, "HOLD falls twice as fast");
+            Eq(SofRules.ExposureRadius, 1000f, "exposure counts enemies within 1 km"); Eq(SofRules.CoverRadius, 2000f, "the COVER kill radius stays 2 km");
             Near(SofRules.SpeedMetresPerSecond * 3.6f, 35f, "35 km/h");
             Eq(SofRules.TeamCap(2, false), 2, "two teams"); Eq(SofRules.TeamCap(5, false), 3, "three at 5 humans"); Eq(SofRules.TeamCap(5, true), 4, "FOB adds one");
             Eq(SofRules.Callsign(0), "A-1", "callsign A"); Eq(SofRules.Callsign(3), "D-1", "callsign D");
@@ -252,7 +256,7 @@ namespace BoscaliSummer.Tests.Features.Support
             p.SceneAt = (x, z) => x > 200f ? new SofScene(0, 3, 4, 1, false) : default;
             Advance(d, p, 30f);
             TestAssert.That(t.Exposure > 0f && t.Exposure < 100f, "exposure rises near the enemy (" + t.Exposure + ")");
-            Advance(d, p, 60f);
+            Advance(d, p, 90f);
             Eq(t.State, TeamState.Pinned, "pinned at 100 %"); Near(t.Exposure, 100f, "full exposure");
             TestAssert.That(p.Log.Contains("cover0"), "the pin posts a COVER request");
             float x0 = t.X; Advance(d, p, 5f);
@@ -294,9 +298,16 @@ namespace BoscaliSummer.Tests.Features.Support
             r.SceneAt = (x, z) => new SofScene(0, 1, 1, 0, false);
             Advance(g, r, 60f);
             Near(w.Exposure, 0f, "the target alone adds no exposure");
-            r.SceneAt = (x, z) => new SofScene(0, 2, 2, 0, false);
+            r.SceneAt = (x, z) => new SofScene(0, 4, 4, 0, false);
             Advance(g, r, 10f);
-            TestAssert.That(w.Exposure > 3f && w.Exposure < 7f, "one more enemy adds 0.5 %/s (" + w.Exposure + ")");
+            TestAssert.That(w.Exposure > 6f && w.Exposure < 9f, "three escorts add 1.5 %/s against 0.75 %/s of recovery (" + w.Exposure + ")");
+            // The exemption holds on the way home: the old target adds nothing after EXFIL either.
+            g.Divert(Op, 0, 0f, 0f);
+            Eq(w.Mission, MissionKind.None, "the mission is over");
+            r.SceneAt = (x, z) => new SofScene(0, 2, 2, 0, false); // the old target plus one escort
+            float before = w.Exposure;
+            Advance(g, r, 10f);
+            TestAssert.That(w.Exposure < before, "after the order the former target still adds nothing: one escort falls " + before + " -> " + w.Exposure);
         }
 
         // ---- Missions ---------------------------------------------------------------------------------

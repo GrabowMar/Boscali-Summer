@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < enemies.Count; i++)
             {
                 float d = SofRules.Distance(enemies[i].X, enemies[i].Z, x, z);
-                if (d > 2000f) continue;
+                if (d > SofRules.ExposureRadius) continue;
                 w2000++;
                 if (d <= 1000f) { w1000++; if (enemies[i].Armored) armored++; }
                 if (d <= 300f) w300++;

@@ -262,7 +262,7 @@ namespace BoscaliSummer.Tests.Features.Support
             for (int i = 0; i < 400 && !cool.Acts.Exists(a => a.Code == WatchCode.SofPush) && !cool.Acts.Exists(a => a.Code == WatchCode.SofHold); i++) cool.Tick(1f);
             SofTeam mine = cool.Mine();
             TestAssert.That(mine != null && mine.State == TeamState.Moving, "the team is on its way");
-            mine.Exposure = 64f; // enemies that were near have gone: the exposure is high but flat
+            mine.Exposure = 88f; // enemies that were near have gone: the exposure is high but flat
             cool.Tick(40f);
             Eq(cool.Acts.Exists(a => a.Code == WatchCode.SofHold && a.B >= 50), true, "a flat 50 %+ exposure with nobody near: HOLD");
             cool.Tick(60f);

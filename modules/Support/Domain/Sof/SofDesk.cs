@@ -490,9 +490,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             SofScene scene = ports.Scene(t.X, t.Z);
             bool moving = t.State == TeamState.Moving || t.State == TeamState.Returning;
             int exposers = scene.Within2000;
-            // The mission target's own unit never adds exposure (fun over realism: an unaided team must be able to reach a lightly defended target).
-            if (t.Mission != MissionKind.None && exposers > 0 && (t.TargetKind == TargetKind.Ground || t.TargetKind == TargetKind.Anchor)
-                && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
+            // The mission target's own unit never adds exposure, on the approach, on site and on the way home (fun over realism: an unaided team must be able to reach
+            // a lightly defended target and get out). The target key stays on the team after EXFIL; once the unit is dead it is no longer counted by the host anyway.
+            if (t.TargetKey != 0 && exposers > 0 && (t.TargetKind == TargetKind.Ground || t.TargetKind == TargetKind.Anchor)
+                && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius && ports.TargetAlive(t.TargetKind, t.TargetSub, t.TargetKey)) exposers--;
             t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt)));
             t.Odds = SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
@@ -657,7 +658,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             for (int i = 0; i < Teams.Length; i++)
             {
                 SofTeam t = Teams[i];
-                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.ExposureRadius) continue;
+                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.CoverRadius) continue;
                 t.Exposure = Math.Max(0f, t.Exposure - SofRules.CoverKillRelief);
                 t.PinDeadline = Math.Max(t.PinDeadline, now + SofRules.CoverExtendSeconds);
                 n++;
@@ -673,7 +674,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             for (int i = 0; i < Teams.Length; i++)
             {
                 SofTeam t = Teams[i];
-                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.ExposureRadius) continue;
+                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.CoverRadius) continue;
                 if (t.CoverKillers.Count < 8) t.CoverKillers.Add(pilot);
                 n++;
             }

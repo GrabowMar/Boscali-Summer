@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         public const int RaiseCost = 60, MaxTeams = 4, HeldCap = 4;
         public const float RaiseSeconds = 90f, SpeedMetresPerSecond = 35000f / 3600f, PushSpeedFactor = 1.5f, PushExposureFactor = 1.5f;
-        public const float ExposureRadius = 2000f, ExposurePerEnemyPerSecond = 0.5f, BirdStareFactor = 1.25f, ExposureDecayPerSecond = 0.5f, HoldDecayFactor = 2f;
+        public const float ExposureRadius = 1000f, CoverRadius = 2000f, ExposurePerEnemyPerSecond = 0.5f, BirdStareFactor = 1.25f, ExposureDecayPerSecond = 0.75f, HoldDecayFactor = 2f;
         public const float PinExposure = 100f, UnpinExposure = 60f, PinnedLostSeconds = 120f, CoverExtendSeconds = 60f, CoverKillRelief = 25f, LostExposure = 90f;
         public const float WoundedSeconds = 60f, LaseMaxSeconds = 300f, MaxAdvanceSeconds = 5f, ArrivalMetres = 40f;
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
@@ -98,14 +98,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return (int)Math.Max(MinOdds, Math.Min(MaxOdds, Math.Round(v)));
         }
 
-        /// <summary>Change of exposure over <paramref name="dt"/> seconds (positive rises). Enemies within 2 km add 0.5 %/s each (the mission target's own unit is never counted) (x1.25 under a bird, x1.5 pushed); nothing near falls 0.5 %/s (x2 held).</summary>
+        /// <summary>Change of exposure over <paramref name="dt"/> seconds (positive rises). Enemies within 1 km add 0.5 %/s each (the mission target's own unit is never counted) (x1.25 under a bird, x1.5 pushed); against the 0.5 %/s a team always recovers (x2 held), so nothing near falls 0.5 %/s.</summary>
         public static float ExposureDelta(int enemies, bool stare, bool pushed, bool held, float dt)
         {
             if (dt <= 0f || float.IsNaN(dt)) return 0f;
             if (enemies > 0)
             {
                 float rate = Math.Min(60, enemies) * ExposurePerEnemyPerSecond * (stare ? BirdStareFactor : 1f) * (pushed ? PushExposureFactor : 1f);
-                return rate * dt;
+                return (rate - ExposureDecayPerSecond * (held ? HoldDecayFactor : 1f)) * dt; // a team always recovers: one unpushed defender is a stand-off, two are a slow climb
             }
             return -ExposureDecayPerSecond * (held ? HoldDecayFactor : 1f) * dt;
         }

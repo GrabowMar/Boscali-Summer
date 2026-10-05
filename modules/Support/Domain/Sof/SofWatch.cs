@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float ThinkSeconds = 2f, MinSabotageOdds = 55f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
             TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 1900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
             UrgentFloor = 15f, ApproachMeters = 2600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
-        public const float ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 2000f, ArmourRadiusMeters = 1000f;
+        public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, CommitHoldSeconds = 90f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 2000f, ArmourRadiusMeters = 1000f;
         public const int MaxBackoffs = 32, MaxRecon = 4, MaxRevealedNear = 3;
         private const ulong Me = SpaceContacts.WatchOfficerId;
 
@@ -175,6 +175,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             bool away = BaseDistance(desk, team) > StrandedMeters;
             if (team.Ammo + 0.01f < SofDesk.AmmoPerMission)
                 return away ? Exfil(team, WatchCode.SofExfilDone, (int)Math.Round(team.Ammo)) : SofWatchPlan.Idle(SofWatchWhy.Waiting);
+            // A hot team does not start a new mission: out in the field it goes home to cool off, at the camp it waits until the exposure has fallen.
+            if (team.Exposure > ReadyMaxExposure) return away ? Exfil(team, WatchCode.SofExfilDone, (int)Math.Round(team.Ammo)) : SofWatchPlan.Idle(SofWatchWhy.Waiting);
             SofWatchPlan pick = Choose(desk, world, team, now);
             if (pick.Action != SofWatchAction.None) return WithSlot(pick, team.Slot);
             return away ? Exfil(team, WatchCode.SofExfilDone, (int)Math.Round(team.Ammo)) : SofWatchPlan.Idle(SofWatchWhy.NoWork);
@@ -271,9 +273,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             bool moving = team.State == TeamState.Moving || team.State == TeamState.OnSite;
             bool approaching = team.State == TeamState.Moving && team.HasDest && SofRules.Distance(team.X, team.Z, team.DestX, team.DestZ) <= ApproachMeters;
             pacer.SetUrgent(WatchDomain.Sof, aiFaction && moving && (approaching || (team.Exposure >= UrgentFloor && rising && team.Exposure + rate * (ThinkSeconds + 1f + WatchPacer.AiGap(0)) >= ProjectedExfil)));
-            if (team.State != TeamState.Returning && ((team.Exposure >= ExfilAt && rising) || (team.Exposure >= ProjectedFloor && projected >= ProjectedExfil)))
+            // A team that can still reach its target, hold there and end under the ceiling at the exposure rate it is climbing now is not withdrawn at 40 %: a lightly defended target is reachable.
+            // The projected-95 % safety below still withdraws it whenever the pin is about to land inside one pacing wait.
+            bool committed = Committed(team, rate, now);
+            if (team.State != TeamState.Returning && ((team.Exposure >= ExfilAt && rising && !committed) || (team.Exposure >= ProjectedFloor && projected >= ProjectedExfil)))
                 return Exfil(team, WatchCode.SofExfil, exposure);
             if (team.HoldOn && team.Exposure <= ResumeBelow) return Verb(team, TeamVerb.Hold, WatchCode.SofResume, exposure);
+            // Inside a defended circle a push costs more exposure per metre than walking (x1.5 rate for x1.5 speed against a fixed recovery): slow down while climbing, and recover on site.
+            if (team.PushOn && rising && committed) return Verb(team, TeamVerb.Push, WatchCode.SofResume, exposure);
+            if (team.State == TeamState.OnSite && !team.HoldOn && rising && committed && team.Exposure >= OnSiteHoldAt) return Verb(team, TeamVerb.Hold, WatchCode.SofHold, exposure);
             // A climbing exposure is about to be a withdrawal: the slot is kept for that rather than spent on slowing down.
             if (team.PushOn && !rising && team.Exposure >= PushStopAbove) return Verb(team, TeamVerb.Push, WatchCode.SofResume, exposure);
             // HOLD only lets exposure fall (twice as fast) when nothing is near: a rising exposure means enemies are in range and standing still would only pin the team, so that case withdrew above.
@@ -282,6 +290,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if ((team.State == TeamState.Moving || team.State == TeamState.Returning) && !team.PushOn && !team.HoldOn && team.Exposure <= PushBelow && far)
                 return Verb(team, TeamVerb.Push, WatchCode.SofPush, exposure);
             return SofWatchPlan.Idle(SofWatchWhy.Waiting);
+        }
+
+        private static bool Committed(SofTeam team, float rate, float now)
+        {
+            if (team.Mission == MissionKind.None || (team.State != TeamState.Moving && team.State != TeamState.OnSite)) return false;
+            float eta = team.State == TeamState.Moving && team.HasDest
+                ? SofRules.Distance(team.X, team.Z, team.DestX, team.DestZ) / (SofRules.SpeedMetresPerSecond * (team.PushOn ? SofRules.PushSpeedFactor : 1f)) : 0f;
+            // On site OVERLORD HOLDs (twice the recovery), so the exposure that matters is the one the team brings to the target, plus a margin for the reaction time.
+            return team.Exposure + Math.Max(0f, rate) * eta + CommitMargin <= CommitCeiling;
         }
 
         private static SofWatchPlan Verb(SofTeam team, TeamVerb verb, WatchCode code, int exposure) =>
