@@ -81,29 +81,25 @@ def author(d: dict) -> tuple[dict, dict]:
 
     # Native trainer cameras sit at the head pivot, behind/below the nominal
     # helmet eye. Lower the raised first-person vest/collar, not the camera or
-    # skeleton. The monotone chest-frame compression keeps the suit closed;
-    # its influence tapers out completely before arm-dominant skin vertices.
-    original_v=v.copy()
-    _,seam_groups=np.unique(np.round(v,10),axis=0,return_inverse=True)
-    arm_fraction=influences[:,4:10].sum(axis=1)
-    seam_arm=np.zeros(seam_groups.max()+1);np.maximum.at(seam_arm,seam_groups,arm_fraction)
-    taper=np.clip((seam_arm[seam_groups]-.15)/.35,0,1)
-    garment=1-taper*taper*(3-2*taper)
+    # skeleton. A single monotone chest-height mapping keeps the suit closed
+    # and cannot fold the shoulder transition. All native distal forearm/hand
+    # vertices are below the compression start and remain unchanged.
+    original_v=v.copy();original_n=n.copy()
+    forearm_hand=influences[:,[5,6,8,9]].sum(axis=1)
     chest_local=np.c_[v,np.ones(len(v))]@bind[1].T
-    depression=np.maximum(0,chest_local[:,1]-.0018)*.8*garment
+    assert chest_local[forearm_hand>=.5,1].max()<.0018,'Native hand/forearm vertices enter the garment compression region.'
+    depression=np.maximum(0,chest_local[:,1]-.0018)*.8
     lowered=depression>1e-12
     chest_local[lowered,1]-=depression[lowered]
     v[lowered]=(chest_local[lowered]@np.linalg.inv(bind[1]).T)[:,:3]
-    assert np.array_equal(v[arm_fraction>=.5],original_v[arm_fraction>=.5]),'Arm-dominant geometry moved during vest adaptation.'
-    # Recompute only the changed garment shading; gloves/forearms retain their
-    # reviewed geometry and attributes. Shared seam positions deform together.
-    vectors=np.cross(v[tris[keep,1]]-v[tris[keep,0]],v[tris[keep,2]]-v[tris[keep,0]])
-    garment_normals=np.zeros((seam_groups.max()+1,3))
-    for slot in range(3):np.add.at(garment_normals,seam_groups[tris[keep,slot]],vectors)
+    assert np.array_equal(v[forearm_hand>=.5],original_v[forearm_hand>=.5]),'Hand/forearm geometry moved during vest adaptation.'
+    # Apply the ordinary inverse-transpose normal and tangent transforms to
+    # that height compression, preserving every native smoothing/UV split.
     for i in np.flatnonzero(lowered):
-        shade=garment_normals[seam_groups[i]]
-        if np.linalg.norm(shade)<1e-20:continue
-        n[i]=shade/np.linalg.norm(shade)
+        shade=bind[1,:3,:3]@n[i];shade[1]*=5
+        n[i]=np.linalg.inv(bind[1,:3,:3])@shade;n[i]/=np.linalg.norm(n[i])
+        direction=bind[1,:3,:3]@tangent[i,:3];direction[1]*=.2
+        tangent[i,:3]=np.linalg.inv(bind[1,:3,:3])@direction
         tangent[i,:3]-=n[i]*np.dot(tangent[i,:3],n[i]);tangent[i,:3]/=np.linalg.norm(tangent[i,:3])
 
     # Geometric adjacency crosses UV seams, but the exported vertices keep them.
@@ -477,6 +473,23 @@ def author(d: dict) -> tuple[dict, dict]:
                     assert dot>.5,'Cuff triangle winding opposes its outward normal.'
                     cuff_winding_dots.append(dot);output.append(face);cuff_triangles+=1
 
+    # Split only newly inward garment shading corners. Native smoothing may
+    # span a rear cloth crease; a local hard normal preserves that crease
+    # without altering any neighbouring face, position or skin influence.
+    garment_hard_normal_faces=0
+    for face in output:
+        if max(face)>=len(v) or not lowered[face].any():continue
+        old_face=np.cross(original_v[face[1]]-original_v[face[0]],original_v[face[2]]-original_v[face[0]])
+        current_face=np.cross(np.asarray(vertices[face[1]])-vertices[face[0]],np.asarray(vertices[face[2]])-vertices[face[0]])
+        current_face/=np.linalg.norm(current_face)
+        old_facing=np.dot(old_face,original_n[face].mean(axis=0))
+        facing=np.dot(current_face,np.asarray(normals)[face].mean(axis=0))
+        if old_facing<=0 or facing>=0:continue
+        for slot,index in enumerate(face):
+            tx=np.asarray(tangents[index]).copy();tx[:3]-=current_face*np.dot(tx[:3],current_face);tx[:3]/=np.linalg.norm(tx[:3])
+            face[slot]=add(vertices[index],current_face,tx,uvs[index],bone_weights[index])
+        garment_hard_normal_faces+=1
+
     # Drop unused helmet vertices and normalize every authored four-bone influence.
     used=sorted(set(i for tri in output for i in tri));remap={old:new for new,old in enumerate(used)}
     final_weights=[];final_indices=[]
@@ -507,8 +520,10 @@ def author(d: dict) -> tuple[dict, dict]:
         neckLiningVertices=lining_vertices,neckLiningTriangles=lining_triangles,neckLiningSeamEdges=len(neck_loop),
         maximumNeckLiningRecessMetres=max(lining_depths)*100,neckLiningClothUvRect=[[.47,.59],[.57,.72]],
         upperGarmentCompressionStartChestMetres=.18,upperGarmentHeightScale=.2,
-        upperGarmentArmTaperWeights=[.15,.5],upperGarmentMaximumDepressionMetres=float(depression[np.unique(tris[keep])].max()*100),
-        upperGarmentChangedNativeVertices=int(lowered[np.unique(tris[keep])].sum()),armDominantGeometryPreserved=True,
+        upperGarmentCompressionProfile='Monotone chest height, no skin-weight-dependent taper',
+        upperGarmentMaximumDepressionMetres=float(depression[np.unique(tris[keep])].max()*100),
+        upperGarmentChangedNativeVertices=int(lowered[np.unique(tris[keep])].sum()),handForearmGeometryPreserved=True,
+        upperGarmentHardNormalFaces=garment_hard_normal_faces,
         nativeBindposePreserved=bool(np.array_equal(np.asarray(result['bindposes']),np.asarray(d['bindposes']))),
         headNeckInfluencesRemaining=0,gloveRoundingPassLimitMetres=.0045,terminalRoundingPassLimitMetres=.004,
         minimumCapOutwardWindingDot=min(cap_winding_dots),maximumCapCoverageRelativeError=max(cap_coverage_errors),
