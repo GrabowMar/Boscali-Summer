@@ -108,6 +108,10 @@ namespace BoscaliSummer.Core.Contracts
     internal interface ITheaterWarView
     {
         bool Available { get; }
+        bool HasSnapshot { get; }
+        float SnapshotAgeSeconds { get; }
+        bool CommandPending { get; }
+        string CommandStatus { get; }
         bool CanCommand { get; }
         TheaterWarPosture Posture { get; }
         IReadOnlyList<TheaterFrontView> Fronts { get; }
