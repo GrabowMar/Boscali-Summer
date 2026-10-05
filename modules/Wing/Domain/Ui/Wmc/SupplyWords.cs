@@ -68,6 +68,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return WmcText.Cut(string.IsNullOrEmpty(templateName) ? "TEMPLATE" : templateName.ToUpperInvariant(), FitChars);
         }
 
+        public const string EditLabel = "EDIT ›";
+
         public static string FitButton(string fitWord) => "FIT · " + fitWord + " ›";
 
         public static string FitDetail(string fit, bool templates)
@@ -76,6 +78,40 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (fit != null) return "A template saved on LOADOUT for this airframe.";
             return "AUTO: the game arms it for the mission, as it arms its own AI." + (templates ? "" : " Templates are made on LOADOUT.");
         }
+
+        /// <summary>FUEL's four steps, as the chips list them (the order SUPPLY has always cycled through).</summary>
+        public static readonly int[] FuelSteps = { 25, 50, 75, 100 };
+
+        public static string FuelChip(int percent) => N(percent) + (percent == 100 ? " %" : "");
+
+        public static int FuelIndex(int percent)
+        {
+            for (int i = 0; i < FuelSteps.Length; i++)
+                if (FuelSteps[i] == percent) return i;
+            return FuelSteps.Length - 1;
+        }
+
+        /// <summary>The airframe list's caption: how many are listed and which page ("6 LISTED · PAGE 1 / 2").</summary>
+        public static string AirframeCaption(int listed, int page, int pages) =>
+            listed <= 0 ? "NONE LISTED" : N(listed) + " LISTED" + (pages > 1 ? " · PAGE " + N(page + 1) + " / " + N(pages) : "");
+
+        /// <summary>The pilot step's caption: where the next pilot sits in the free roster.</summary>
+        public static string PilotCaption(int index, int free) => free <= 0 ? "A NEW PILOT IS DRAFTED" : "NEXT FROM ROSTER · " + N(index + 1) + " / " + N(free);
+
+        public static string Crew(int members, int pending, int max) => "CREW " + N(members + pending) + "/" + N(max);
+
+        /// <summary>The dispatch card's next-call line: price, funds after it, crew, and what stock is left.</summary>
+        public static string NextCall(bool sandbox, float price, float funds, int members, int pending, int max, int stock)
+        {
+            string s = sandbox ? "NEXT CALL FREE · SANDBOX" : "NEXT CALL " + Credits.Price(price) + " · FUNDS AFTER " + Credits.Text(funds - price);
+            s += " · " + Crew(members, pending, max);
+            return sandbox ? s : s + (stock > 0 ? " · STOCK " + N(stock) : " · NONE LEFT");
+        }
+
+        public static string FieldDistance(float km) => N((int)Math.Round(km)) + " KM";
+
+        /// <summary>An INBOUND strip's progress, 0..1: queued, spawning, taxiing, departing, then joining.</summary>
+        public static float InboundProgress(InboundPhase p) => 0.1f + 0.2f * (int)p;
 
         public static string Requisition(float price) => "REQUISITION · " + Credits.Price(price);
 

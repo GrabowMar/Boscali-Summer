@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     // LOADOUT for Dev/Automation.Wmc (F14: picks without an id of their own get arguments) and its report.
     internal sealed partial class WmcLoadout
     {
+        /// <summary>The store picker is kept open under the stations, so it never covers its row (the 0.9 popup's check, now always true).</summary>
         private bool popupClear;
 
         /// <summary>Selects an editable airframe by jsonKey, unit name or code and shows its page.</summary>
@@ -27,7 +28,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AircraftDefinition d = airframes[i];
                 if (!(Same(d.jsonKey, name) || Same(d.unitName, name) || Same(d.code, name))) continue;
                 airframe = d;
-                tilePage = Pages.Of(i, tiles.PerPage);
                 hpResetPending = true;
                 Resolve();
                 return true;
@@ -159,19 +159,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 && !Rewired.ReInput.controllers.Keyboard.enabled ? 1 : 0;
             into["lo_supply_fit"] = current != null && WingRequisition.FitOf(airframe) == current.Id ? 1 : 0;
             into["lo_popup_clear"] = popupClear ? 1 : 0;
-        }
-
-        /// <summary>The popup just opened sits clear of its row and inside the visible body (the scenario's check): both are read in
-        /// the page content's own space (top edge negative, y down), the body being what the console's scroll shows of it.</summary>
-        private void NotePopup(Rect area, RectTransform row)
-        {
-            Rect r = WmcKit.RectIn(flow.Content, row);
-            var viewport = flow.Content.parent as RectTransform;
-            float view = viewport != null ? viewport.rect.height : flow.Content.rect.height;
-            float top = -Mathf.Max(0f, flow.Content.anchoredPosition.y);
-            bool clearOfRow = area.y <= r.y - r.height + 0.5f || area.y - area.height >= r.y - 0.5f;
-            bool inBody = area.y <= top + 0.5f && area.y - area.height >= top - view - 0.5f;
-            popupClear = clearOfRow && inBody;
         }
     }
 }
