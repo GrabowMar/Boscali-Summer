@@ -23,7 +23,11 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.SupportMissileDescentPatch),
             typeof(Patches.CreditRewardPatch),
             typeof(Patches.CreditKillPatch),
-            typeof(Patches.ActivityInputPatch)
+            typeof(Patches.ActivityInputPatch),
+            typeof(Patches.CyberLaunchMountPatch),
+            typeof(Patches.CyberLaunchFirePatch),
+            typeof(Patches.CyberDetectScopePatch),
+            typeof(Patches.CyberShareBlockPatch)
         };
 
         public void Install(ModuleContext context)

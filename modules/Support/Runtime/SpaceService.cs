@@ -199,7 +199,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 refusal = verdict == OpticalVerdict.NightUnavailable ? SupportResult.OpticalNight : SupportResult.SkyUnknown;
                 return -1;
             }
-            int admitted = OpenWindow(owner, point, SpaceFeedRules.OpticalRadius(baseRadius, sky), BirdKind.Optical, 0f, float.MaxValue);
+            // CYBER BIRD JAM halves the footprint of a jammed faction's camera.
+            float jam = CyberService.Active != null ? CyberService.Active.BirdOpticalFactor(owner) : 1f;
+            int admitted = OpenWindow(owner, point, SpaceFeedRules.OpticalRadius(baseRadius, sky) * jam, BirdKind.Optical, 0f, float.MaxValue);
             if (admitted < 0) refusal = SupportResult.SpawnFailed;
             return admitted;
         }
@@ -416,6 +418,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (now < nextTick) return;
             nextTick = now + 1f;
             spawner.RetryCleanup();
+            // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
+            foreach (var pair in factions) pair.Value.State.JamFactor = CyberService.Active != null ? CyberService.Active.BirdCooldownFactor(pair.Key) : 1f;
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs == null) return;
             foreach (FactionHQ hq in hqs)
