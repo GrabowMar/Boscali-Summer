@@ -33,13 +33,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (plans.Running)
             {
-                WingToast.Show("The plan is running: edit it on BEHAVIOUR › PLAN");
+                WingToast.Show("The plan is running: edit it on BEHAVIOUR › SORTIE");
                 return;
             }
             Waypoint at = Waypoint.At(point.x, point.z);
             at.Altitude = c.Draft.Altitude;
             at.Speed = c.Draft.Speed;
-            var step = new PlanStep { Kind = kind, Points = new[] { at }, Radius = radius };
+            // Review fix: a drag-sized radius outside the guard's range made the queued plan fail at RUN; 0 keeps the order's default.
+            float r = (kind == PlanKind.Cap || kind == PlanKind.Sweep) && radius > 0f ? AreaGuard.Clamp(radius) : 0f;
+            var step = new PlanStep { Kind = kind, Points = new[] { at }, Radius = r };
             // An orbit or an area never arrives: it ends on a timer (PlanRules), five minutes unless the plan's editor says otherwise.
             if (kind == PlanKind.Orbit || kind == PlanKind.Cap || kind == PlanKind.Sweep)
             {

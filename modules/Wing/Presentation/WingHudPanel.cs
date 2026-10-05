@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// (at once when the ladder moves) and hides when there is neither a wing nor an engaged autopilot.</summary>
     internal sealed class WingHudPanel : IWingService
     {
-        private const float Width = 250f, LineHeight = 17f, Pad = 8f, ChipHeight = 16f;
+        private const float Width = 250f, MaxWidth = 440f, LineHeight = 17f, Pad = 8f, ChipHeight = 16f;
 
         public string Name => "HUD";
 
@@ -206,11 +206,36 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
+        /// <summary>The strip is as wide as its longest shown line, <see cref="Width"/> to <see cref="MaxWidth"/> (440 px; review fix: a full
+        /// shape name, the AP line or a member row with bingo and a binding overflowed the fixed 250 px).</summary>
         private void Size(float height)
         {
-            background.rectTransform.sizeDelta = new Vector2(Width, height);
+            float need = 0f;
+            Fit(title, ref need);
+            Fit(autopilot, ref need);
+            for (int i = 0; i < rows.Length; i++) Fit(rows[i], ref need);
+            for (int i = 0; i < ladder.Length; i++) Fit(ladder[i], ref need);
+            float w = Mathf.Clamp(need + Pad + 8f, Width, MaxWidth);
+            float inner = w - Pad - 6f;
+            Inner(title, inner);
+            Inner(autopilot, inner);
+            for (int i = 0; i < rows.Length; i++) Inner(rows[i], inner);
+            for (int i = 0; i < ladder.Length; i++) Inner(ladder[i], inner);
+            background.rectTransform.sizeDelta = new Vector2(w, height);
             rail.rectTransform.sizeDelta = new Vector2(2f, height);
-            root.sizeDelta = new Vector2(Width, height);
+            root.sizeDelta = new Vector2(w, height);
+        }
+
+        private static void Fit(TMP_Text t, ref float need)
+        {
+            if (t != null && t.gameObject.activeSelf && !string.IsNullOrEmpty(t.text)) need = Mathf.Max(need, t.preferredWidth);
+        }
+
+        private static void Inner(TMP_Text t, float width)
+        {
+            if (t == null) return;
+            RectTransform r = t.rectTransform;
+            if (!Mathf.Approximately(r.sizeDelta.x, width)) r.sizeDelta = new Vector2(width, r.sizeDelta.y);
         }
 
         private void Reset()

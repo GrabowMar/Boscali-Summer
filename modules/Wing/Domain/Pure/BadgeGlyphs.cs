@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         /// <summary>"B4" or "B4 R", "B4 RFD": the badge, then the letters; the badge alone when there are none.</summary>
         public static string Label(string badge, char stance, bool lowFuel, bool damaged, bool sar)
         {
-            string letters = (stance != '\0' ? stance.ToString() : "") + (lowFuel ? Fuel : "") + (damaged ? Damage : "") + (sar ? Rescue : "");
+            string letters = (stance != '\0' && stance != ' ' ? stance.ToString() : "") + (lowFuel ? Fuel : "") + (damaged ? Damage : "") + (sar ? Rescue : "");
             return letters.Length == 0 ? badge : (badge ?? "") + " " + letters;
         }
 

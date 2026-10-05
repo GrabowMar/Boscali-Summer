@@ -62,6 +62,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextSpacing { get; }
+        public ConfigEntry<KeyboardShortcut> KeyBuddyAttack { get; }
+        public ConfigEntry<KeyboardShortcut> KeyNextField { get; }
+        public ConfigEntry<KeyboardShortcut> KeyMoveAhead { get; }
         public ConfigEntry<KeyboardShortcut> KeyDismiss { get; }
         public ConfigEntry<KeyboardShortcut> KeyWmc { get; }
         public ConfigEntry<KeyboardShortcut> KeyApLevel { get; }
@@ -217,6 +220,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
             KeyNextShape = Key(c, "NextShape", "Next formation shape in the family.", 48);
             KeyNextSpacing = Key(c, "NextSpacing", "Next spacing preset (Close, Standard, Open, Spread).", 47);
             KeyDismiss = Key(c, "Dismiss", "Release every wingman to the game's AI.", 46);
+            KeyBuddyAttack = Key(c, "BuddyAttack", "The wing attacks your locked target with you.", 46);
+            KeyNextField = Key(c, "NextField", "Next airfield for landings and launches.", 46);
+            KeyMoveAhead = Key(c, "MoveAhead", "The wing moves 10 km ahead of you, then orbits.", 46);
             KeyWmc = Key(c, "Wmc", "Open the WMC on the map: maximizes the map and shows the WMC screen (planning is on the main map).", 45);
             KeyApLevel = Key(c, "AutopilotLevel", "Autopilot: wings level.", 45);
             KeyApHeading = Key(c, "AutopilotHeading", "Autopilot: hold the current heading.", 44);

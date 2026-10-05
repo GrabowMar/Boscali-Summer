@@ -20,6 +20,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The wing key is held now (the HUD shows the ladder in place of the strip).</summary>
         public static bool Held { get; private set; }
 
+        /// <summary>The hotkeys went off while the key was held (review fix): nothing stays shown.</summary>
+        public static void Release() => Held = false;
+
         public static void Tick(WingConfig s, bool typing)
         {
             bool held = !typing && (KeyHeld(s) || HotasHeld(s));

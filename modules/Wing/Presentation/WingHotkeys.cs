@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             WingRadialMenu.Reset();
             WingCallLadder.Close();
+            WingChordInput.Release();
         }
 
         public void FixedTick(float dt)
@@ -53,6 +54,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (Down(s.KeyNextShape)) WingCommands.NextShape();
             if (Down(s.KeyNextSpacing)) WingCommands.CycleSpacing();
             if (Down(s.KeyDismiss)) WingCommands.Dismiss();
+            // The radial's former leaves with no other way in (review fix: the slim slice dropped them).
+            if (Down(s.KeyBuddyAttack)) WingCommands.BuddyAttack();
+            if (Down(s.KeyNextField)) WingCommands.NextField();
+            if (Down(s.KeyMoveAhead)) WingCommands.MoveAhead();
             if (Down(s.KeyWmc)) WmcPanel.Instance?.Open();
             if (Down(s.KeyApLevel)) WingCommands.Autopilot(ApCommand.Level);
             if (Down(s.KeyApHeading)) WingCommands.Autopilot(ApCommand.Heading);

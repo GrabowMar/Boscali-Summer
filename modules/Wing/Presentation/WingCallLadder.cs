@@ -39,6 +39,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly WingScope[] whoScope = new WingScope[MaxWho];
         private static readonly string[] whoLabel = new string[MaxWho];
         private static int whoCount;
+        /// <summary>WHO as picked (review fix): Send re-finds it by label, so a wingman lost meanwhile aborts instead of the order
+        /// silently going to the whole wing or to the aircraft that shifted into its index.</summary>
+        private static string pickedWho;
         private static readonly WhereChoice[] where = new WhereChoice[MaxWhere];
         private static int whereCount;
         private static readonly ConfirmGate dismissGate = new ConfirmGate();
@@ -51,6 +54,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (!Open && State.Step == LadderStep.Who && State.Who < 0) return;
             Open = false;
+            pickedWho = null;
             State.Reset();
             Version++;
         }
@@ -70,6 +74,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             LadderStep before = State.Step;
             int total = Total(before);
             LadderKind k = State.Press(digit, total, PerPage(before, total), NeedsWhere);
+            if (before == LadderStep.Who && State.Step != LadderStep.Who && State.Who >= 0 && State.Who < whoCount)
+                pickedWho = whoLabel[State.Who];
             switch (k)
             {
                 case LadderKind.Close:
@@ -111,8 +117,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             GridCell cell = CellAt(cellIndex);
             if (cell.Input != GridInput.Now)
             {
-                if (!Ready(out _)) return;
+                if (!Ready(out string why))
+                {
+                    WingToast.Show(why);
+                    return;
+                }
                 Open = true;
+                pickedWho = null;
                 State.OpenAt(cellIndex, PerDoPage);
                 BuildWhere(cell);
                 Version++;
@@ -216,7 +227,20 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static void Send()
         {
             BuildWho();
-            int who = State.Who >= 0 && State.Who < whoCount ? State.Who : 0;
+            int who = 0;
+            if (pickedWho != null)
+            {
+                who = -1;
+                for (int i = 0; i < whoCount; i++)
+                    if (whoLabel[i] == pickedWho) { who = i; break; }
+                if (who < 0)
+                {
+                    WingToast.Show(pickedWho + " is no longer in the wing: order not sent");
+                    State.Reset();
+                    pickedWho = null;
+                    return;
+                }
+            }
             WingScope scope = whoScope[who];
             GridCell cell = CellAt(State.Do);
             if (!Ready(out string why))
@@ -235,6 +259,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (cell.Input == GridInput.Now) RunNow(cell, scope);
             else if (State.Where >= 0 && State.Where < whereCount) RunWhere(cell, scope, where[State.Where]);
             State.Reset();
+            pickedWho = null;
         }
 
         private static void RunWhere(GridCell cell, WingScope scope, WhereChoice at)
