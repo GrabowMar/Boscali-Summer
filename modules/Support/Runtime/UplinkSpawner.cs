@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private int serial;
 
         internal int OwnedCount => owned.Count;
+        internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
 
         internal bool TryPlan(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions,
             out Quaternion rotation)
