@@ -6,5 +6,6 @@ namespace BoscaliSummer.Core.Diagnostics
         public static bool Enabled;
         public static bool Reduced;
         public static float LastAverageMs;
+        public static float LastFps;
     }
 }

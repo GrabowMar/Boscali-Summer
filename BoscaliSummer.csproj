@@ -154,6 +154,12 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Cockpit pilot shader bundle">
+    <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
+      <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Superevent posters">
     <EmbeddedResource Include="modules\Events\Assets\event_atlas.png">
       <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>

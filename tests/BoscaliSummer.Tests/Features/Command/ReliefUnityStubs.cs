@@ -3,16 +3,6 @@ using UnityEngine;
 
 namespace BepInEx { public static class Paths { public static string ConfigPath { get; set; } = System.IO.Path.GetTempPath(); } }
 
-namespace HarmonyLib
-{
-    public sealed class HarmonyPatch : System.Attribute
-    {
-        public HarmonyPatch(System.Type type, string method) { }
-    }
-    public sealed class HarmonyPrefix : System.Attribute { }
-    public sealed class HarmonyPostfix : System.Attribute { }
-}
-
 namespace NuclearOption.UIStyleSystem
 {
     public static class ThemeManager { public static Theme Active => throw new System.InvalidOperationException(); }
@@ -46,10 +36,30 @@ namespace BoscaliSummer.Core.Services
 }
 namespace BoscaliSummer.Core.Modules { }
 namespace BoscaliSummer.Core.Ui { }
+namespace BoscaliSummer.Core.Lifecycle { internal interface ISceneService { void ResetForScene(); } }
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
-    internal static class MfdRailPatch { internal static bool IsApplied => true; }
+    internal static class MfdRailPatch
+    {
+        internal static bool IsApplied => true;
+        internal static Vector2 AppliedCanvasSize;
+        internal static System.Action BeforeSnapshot;
+        internal static void OnStructureChanged(DynamicMap map) => BeforeSnapshot?.Invoke();
+        internal static void Reconcile() => BeforeSnapshot?.Invoke();
+        internal static void Reset() { }
+    }
+    internal static class MapMfdLookup { internal static object Resolve(Canvas canvas) => canvas; internal static void Reset() { } }
+    internal static class MapUiAccess
+    {
+        internal static System.Collections.Generic.List<MFDScreen> GetLeftScreens(object mfd) => null;
+        internal static System.Collections.Generic.List<MFDScreen> GetRightScreens(object mfd) => null;
+    }
+    internal static class MfdLayout { internal static Vector2 CanvasSize(Canvas canvas) => ((RectTransform)canvas.transform).rect.size; }
+    internal static class VanillaMfdRebuild { internal static void Tick() { } }
+    internal static class MfdLogPanel { internal static void Tick() { } }
+    internal static class MfdMapFooter { internal static void Tick() { } }
+    internal static class MfdNewsTicker { internal static void Tick() { } internal static void Reset() { } }
     internal static class ReliefNavigator
     {
         internal static void Tick(BoscaliSummer.Modules.Command.Domain.ReliefRig rig) { }
@@ -79,6 +89,7 @@ public sealed class DynamicMap : MonoBehaviour
     public static bool mapMaximized = true;
     public GameObject mapImage;
     public GameObject iconLayer;
+    public GameObject viewIndicator;
     public UnityEngine.UI.Image mapBackground;
     public Transform mapScaleCenter;
     public Transform mapScaleProxy;
@@ -123,6 +134,7 @@ public sealed class DynamicMap : MonoBehaviour
 }
 
 public sealed class GridLabels : MonoBehaviour { }
+public sealed class CameraStateManager : MonoBehaviour { }
 
 public sealed class MapSettings : MonoBehaviour { public Vector2 MapSize = new Vector2(81920f, 81920f); }
 public class MapIcon : MonoBehaviour
@@ -187,6 +199,7 @@ public struct GlobalPosition
 }
 public static class GlobalPositionExtensions
 {
+    public static GlobalPosition GlobalPosition(this Transform transform) => transform.position.ToGlobalPosition();
     public static GlobalPosition ToGlobalPosition(this Vector3 point) =>
         new GlobalPosition(point.x, point.y, point.z);
 }

@@ -1407,8 +1407,11 @@ Shader "Boscali/FlightCloud"
                 LowOut o;
                 float cloudDistance;
                 o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, texel, cloudDistance);
-                // Scene eye depth for the upsample; cloud distance for reprojection.
-                o.depth = float4(eyeDepth, cloudDistance, 0.0, 0.0);
+                // Quarter data retains scene depth for resolve. The direct half-size
+                // output needs only the nearest relevant depth for the final upsample.
+                float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.002 ?
+                    min(eyeDepth, cloudDistance / viewLength) : eyeDepth;
+                o.depth = float4(upsampleDepth, cloudDistance, 0.0, 0.0);
                 return o;
             }
             ENDHLSL

@@ -23,6 +23,9 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> GVignetteEnabled { get; }
         public ConfigEntry<bool> MachBuffetEnabled { get; }
         public ConfigEntry<bool> PilotStrainAudioEnabled { get; }
+        public ConfigEntry<bool> PilotBodyEnabled { get; }
+        public ConfigEntry<bool> PilotControlMotionEnabled { get; }
+        public ConfigEntry<bool> PilotReflectionEnabled { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -74,6 +77,12 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
 
             PilotStrainAudioEnabled = config.Bind(section, "PilotStrainAudioEnabled", true,
                 "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.");
+            PilotBodyEnabled = config.Bind(section, "PilotBodyEnabled", true,
+                "Show the native pilot's flight suit, arms and legs in first person. Local presentation only.");
+            PilotControlMotionEnabled = config.Bind(section, "PilotControlMotionEnabled", true,
+                "Enable rudder foot movement, restrained breathing and G-load bracing. Hand attachment stays active; Comfort Motion reduces body motion.");
+            PilotReflectionEnabled = config.Bind(section, "PilotReflectionEnabled", true,
+                "Faint pilot and helmet reflection on verified windscreen glass. Pilot-only 128/256 pixel capture capped at 10 Hz; works independently of body visibility.");
         }
     }
 }

@@ -29,6 +29,9 @@ namespace BoscaliSummer.Modules.Immersion
             immersion.Configure(context.Settings.Immersion, context.Logger);
             context.AddClientEffect(immersion);
             context.AddService<IImmersionSettings>(immersion);
+            CockpitPilot pilot = context.AddSceneService<CockpitPilot>(48);
+            pilot.Configure(context.Settings.Immersion, context.Logger);
+            context.AddClientEffect(pilot);
 
             context.AddClientSetting("IMMERSION", "IMMERSION MASTER",
                 "Master switch for all client-side cockpit immersion features.",
@@ -69,6 +72,14 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "PILOT STRAIN",
                 "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.",
                 context.Settings.Immersion.PilotStrainAudioEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT BODY",
+                "First-person flight suit, arms and legs using the native pilot model.", context.Settings.Immersion.PilotBodyEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT CONTROL MOTION",
+                "Hands follow reachable stick/throttle/collective controls; rudder feet, breathing and G-load bracing. Comfort Motion applies.",
+                context.Settings.Immersion.PilotControlMotionEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT REFLECTION",
+                "Faint pilot and helmet reflection on the windscreen; small pilot-only capture at most ten times per second.",
+                context.Settings.Immersion.PilotReflectionEnabled);
         }
     }
 }

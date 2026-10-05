@@ -126,6 +126,17 @@ public static class PortraitUnityCheck
             Check(ReferenceEquals(preview, updated) && ReferenceEquals(previewTexture, updated.texture),
                 "studio changes reuse one sprite and texture");
         }
+        byte[] loadedLayers = (byte[])Portrait.GetField("layers", All).GetValue(null);
+        byte[] finished = (byte[])Generator.GetMethod("Compose", All, null,
+            new[] { SelectionType, typeof(byte[]) }, null).Invoke(null, new object[] { selection, loadedLayers });
+        var finishedPixels = new Color32[finished.Length / 4];
+        for (int i = 0; i < finishedPixels.Length; i++)
+            finishedPixels[i] = new Color32(finished[i * 4], finished[i * 4 + 1], finished[i * 4 + 2], finished[i * 4 + 3]);
+        Sprite saved = (Sprite)Invoke(Portrait, "ForSelection", selection);
+        Check(SamePixels(finishedPixels, Read(saved.texture, width, height)),
+            "saved portrait uploads the public compositor's finished pixels exactly once");
+        Check(SamePixels(finishedPixels, previewTexture.GetPixels32()),
+            "reused studio preview uploads the same finished pixels as the saved portrait");
         Check(CacheCount == beforePreview, "preview changes do not grow borrowed portrait cache");
         Color32[] previousGear = null;
         for (int accessory = 0; accessory < accessories; accessory++)

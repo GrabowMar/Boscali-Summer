@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Config;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
@@ -27,6 +28,7 @@ using BoscaliSummer.Modules.Progression;
 using BoscaliSummer.Modules.QoL;
 using BoscaliSummer.Modules.Radio;
 using BoscaliSummer.Modules.Session;
+using BoscaliSummer.Modules.Wing;
 using BoscaliSummer.Modules.Squad;
 using BoscaliSummer.Modules.Support;
 using BoscaliSummer.Modules.TheaterOps;
@@ -73,6 +75,9 @@ namespace BoscaliSummer.Core
             runtimeRoot.hideFlags = HideFlags.HideAndDontSave;
             UnityEngine.Object.DontDestroyOnLoad(runtimeRoot);
             sceneLifecycle = runtimeRoot.AddComponent<SceneLifecycle>();
+            // Pilot reflection needs native glass even when dynamic Weather is disabled.
+            if (!Application.isBatchMode)
+                services.Add<ICanopyGlassView>(new BoscaliSummer.Modules.Weather.Visuals.CanopyGlassView());
             ModuleServices.Active = services;
         }
 
@@ -95,8 +100,8 @@ namespace BoscaliSummer.Core
 
         /// <summary>
         /// The startup roster. Registration order is display order on the SET pages. Modules
-        /// missing here are compiled but never installed (Campaign, Visuals and
-        /// the in-tree Wing copy); add a gated line here to bring one back.
+        /// missing here are compiled but never installed (Campaign and Visuals);
+        /// add a gated line here to bring one back.
         /// </summary>
         private static IModule[] Compose(ModConfiguration settings)
         {
@@ -123,6 +128,8 @@ namespace BoscaliSummer.Core
                 modules.Add(new QoLModule());
             if (settings.Autopilot.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new AutopilotModule());
+            // Wing publishes IWingSquad, which Squad and the WMC page resolve.
+            modules.Add(new WingModule());
             if (settings.Progression.Enabled.Value)
             {
                 modules.Add(new SquadModule());

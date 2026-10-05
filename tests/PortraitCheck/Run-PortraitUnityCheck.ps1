@@ -78,7 +78,10 @@ if ($SqdUi) {
     $uiResult = Get-Content -LiteralPath (Join-Path $ProjectDir 'result.txt') -Raw
     if ($uiResult -notmatch '\APASS:') { throw 'SQD render did not pass with actual production portraits.' }
     Copy-Item -LiteralPath (Join-Path $ProjectDir 'result.txt') -Destination (Join-Path $OutputDir 'sqd-result.txt') -Force
-    Get-ChildItem -LiteralPath $ProjectDir -File -Filter '*.png' | Where-Object { $_.Name -like 'sqd-*' -or $_.Name -like 'ace-hunt-*' } |
+    Get-ChildItem -LiteralPath $ProjectDir -File -Filter '*.png' | Where-Object {
+        ($_.Name -like 'sqd-*' -or $_.Name -like 'ace-hunt-*') -and
+        (-not $PortraitPanelsOnly -or $_.Name -match '^sqd-(pilot|wings|studio)(-|empty-)')
+    } |
         Copy-Item -Destination $OutputDir -Force
     Write-Output $uiResult.Trim()
 }

@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
     /// <summary>
     /// Cockpit aerodynamic slipstream and canopy wind rush sound.
     /// Uses a procedurally synthesized pink-noise loop pre-baked on a worker thread.
-    /// Modulates volume and pitch according to airspeed and angle of attack.
+    /// Modulates volume, timbre and stereo balance with airspeed, rough air and lateral airflow.
     /// Integrates with FxVoiceBus to adhere to loop voice limits.
     /// </summary>
     internal sealed class CanopyWindAudio : MonoBehaviour
@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private bool isLoopActive;
         internal bool IsPlaying => windSource != null && windSource.isPlaying;
         internal float Volume => windSource != null ? windSource.volume : 0f;
+        internal float Pan => windSource != null ? windSource.panStereo : 0f;
 
         public void Initialize()
         {
@@ -63,7 +64,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         }
 
         public void Tick(float airspeedMps, float gustMps, bool cockpitView, bool enabled, float dt,
-            float moisture = 0f, float altitudeM = 0f)
+            float moisture = 0f, float altitudeM = 0f, float slip01 = 0f, float turbulence01 = 0f)
         {
             if (!enabled || !cockpitView || airspeedMps < 40f ||
                 (moisture > 0.08f && FxBus.Scales.Voices < 0.75f))
@@ -75,11 +76,12 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             if (!clipsReady && !TryCreateClip()) return;
             if (!routed) return;
 
-            var (targetVolume, targetPitch) = CanopyWindMath.Target(airspeedMps, gustMps,
-                Isa.Density(altitudeM) / Isa.SeaLevelDensity, moisture, Time.unscaledTime);
+            var (targetVolume, targetPitch, targetPan, targetCutoff) = CanopyWindMath.Target(airspeedMps, gustMps,
+                Isa.Density(altitudeM) / Isa.SeaLevelDensity, moisture, Time.unscaledTime, slip01, turbulence01);
             dt = Mathf.Clamp(dt, 0f, 0.05f);
             windFilter.cutoffFrequency = Mathf.MoveTowards(windFilter.cutoffFrequency,
-                1800f + targetPitch * 1200f, dt * 3000f);
+                targetCutoff, dt * 3000f);
+            windSource.panStereo = Mathf.MoveTowards(windSource.panStereo, targetPan, dt * 0.5f);
 
             if (targetVolume > 0.01f)
             {
@@ -123,6 +125,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             {
                 windSource.Stop();
                 windSource.volume = 0f;
+                windSource.panStereo = 0f;
             }
         }
 

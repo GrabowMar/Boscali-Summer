@@ -91,9 +91,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
         private readonly float[] heroShown = new float[Superstructures.MaxCount];
         private readonly Vector2[] heroSite = new Vector2[Superstructures.MaxCount];
-        private readonly Vector3[] corners = new Vector3[4];
         private float fogShown;
         private Matrix4x4 previousRotation = Matrix4x4.identity;
+        private Matrix4x4 previousProjection;
+        private Camera previousCamera;
+        private RenderTexture previousTarget;
+        private Rect previousRect;
         private Vector3 previousPosition;
         private Quaternion previousQuat = Quaternion.identity;
         private float previousFov;
@@ -112,6 +115,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             fogShown = 0f;
             previousFlash = 0f;
             hasPrevious = false;
+            previousCamera = null;
+            previousTarget = null;
             checkerFrame = 0;
             jitterPhase = 0f;
         }
@@ -232,31 +237,50 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <paramref name="globalPosition"/> is the camera in the map frame (unaffected by
         /// floating-origin shifts). Returns false when last frame's view cannot be reused
         /// (first frame, a cut, a zoom).</summary>
-        internal bool ApplyView(Camera camera, Vector3 globalPosition)
+        internal bool ApplyView(Camera camera, Vector3 globalPosition, Material material = null)
+            => ApplyView(camera, globalPosition, camera.worldToCameraMatrix, camera.projectionMatrix, material);
+
+        internal bool ApplyView(Camera camera, Vector3 globalPosition, Matrix4x4 view,
+            Matrix4x4 projection, Material material = null)
         {
-            camera.CalculateFrustumCorners(new Rect(0f, 0f, 1f, 1f), 1f, Camera.MonoOrStereoscopicEye.Mono, corners);
-            // CalculateFrustumCorners: bottom-left, top-left, top-right, bottom-right (view space).
+            // Reconstruct the view URP actually rendered. TransformVector includes parent
+            // scale, which Unity's camera matrix ignores, and misses overridden views.
+            Matrix4x4 inverseView = view.inverse, inverseProjection = projection.inverse;
             Transform t = camera.transform;
-            Vector3 bl = t.TransformVector(corners[0]), tl = t.TransformVector(corners[1]);
-            Vector3 tr = t.TransformVector(corners[2]), br = t.TransformVector(corners[3]);
             var m = new Matrix4x4();
-            m.SetRow(0, bl);
-            m.SetRow(1, br);
-            m.SetRow(2, tl);
-            m.SetRow(3, tr);
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 corner = inverseProjection.MultiplyPoint(new Vector3((i & 1) == 0 ? -1f : 1f,
+                    i < 2 ? -1f : 1f, -1f));
+                m.SetRow(i, inverseView.MultiplyVector(corner / -corner.z));
+            }
+            Vector3 origin = inverseView.GetColumn(3);
+            Vector3 forward = inverseView.MultiplyVector(Vector3.back).normalized;
+            Quaternion rotation = Quaternion.LookRotation(forward, inverseView.GetColumn(1));
+            Vector3 worldOffset = globalPosition - t.position;
+            Vector3 renderedGlobalPosition = origin + worldOffset;
             Shader.SetGlobalMatrix(FrustumId, m);
-            Shader.SetGlobalVector(CameraPosId, t.position);
+            Shader.SetGlobalVector(CameraPosId, origin);
+            if (material != null)
+            {
+                material.SetVector(OffsetId, worldOffset);
+                material.SetVector(ForwardId, forward);
+            }
 
             // Last frame's rotation and projection (OpenGL convention: uv v up, like the
             // targets), applied to points relative to last frame's camera.
-            Vector3 delta = globalPosition - previousPosition;
+            Vector3 delta = renderedGlobalPosition - previousPosition;
             // Rays reproject exactly under rotation. Preserve accumulation on ordinary pans;
             // the previous 0.5-degree threshold discarded it and exposed a quarter-size grid.
-            float rotAngle = hasPrevious ? Quaternion.Angle(t.rotation, previousQuat) : 180f;
+            float rotAngle = hasPrevious ? Quaternion.Angle(rotation, previousQuat) : 180f;
             float rotMotion = hasPrevious ? Mathf.Clamp01(rotAngle * 0.15f) : 1f;
-            bool reusable = hasPrevious && delta.sqrMagnitude < 2000f * 2000f &&
+            bool sameProjection = true;
+            for (int i = 0; i < 16; i++)
+                if (Mathf.Abs(projection[i] - previousProjection[i]) > 0.0001f) { sameProjection = false; break; }
+            bool reusable = hasPrevious && previousCamera == camera && previousTarget == camera.targetTexture &&
+                previousRect == camera.pixelRect && sameProjection && delta.sqrMagnitude < 2000f * 2000f &&
                 Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f && rotAngle < 45f;
-            Shader.SetGlobalMatrix(PrevMatrixId, camera.projectionMatrix * previousRotation);
+            Shader.SetGlobalMatrix(PrevMatrixId, previousProjection * previousRotation);
             Shader.SetGlobalVector(CamDeltaId, new Vector4(delta.x, delta.y, delta.z, rotMotion));
             Vector2 offset = CheckerOrder[checkerFrame & 3];
             // The march dither cycles each frame (golden-ratio steps never line up with the
@@ -264,10 +288,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
             Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, jitterPhase, reusable ? 1f : 0f));
             checkerFrame++;
-            previousRotation = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.Rotate(Quaternion.Inverse(t.rotation));
-            previousPosition = globalPosition;
-            previousQuat = t.rotation;
+            previousRotation = view;
+            previousRotation.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
+            previousPosition = renderedGlobalPosition;
+            previousQuat = rotation;
             previousFov = camera.fieldOfView;
+            previousProjection = projection;
+            previousCamera = camera;
+            previousTarget = camera.targetTexture;
+            previousRect = camera.pixelRect;
             hasPrevious = true;
             return reusable;
         }

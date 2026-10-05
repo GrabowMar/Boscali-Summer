@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// and the resolve reprojects the other three from last frame along the cloud's own
     /// distance, clamped to the fresh neighbours so nothing ghosts. Off, the whole half-size
     /// target is marched every frame. Either way the composite then upsamples the half-size
-    /// colour against the half-size scene depth.</summary>
+    /// colour against the half-size visible cloud or scene depth.</summary>
     internal sealed class CloudLowRes : IDisposable
     {
         private const int MarchPass = 2;
@@ -23,11 +23,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int QuarterColourId = Shader.PropertyToID("_CloudQuarterColour");
         private static readonly int QuarterDataId = Shader.PropertyToID("_CloudQuarterData");
         private static readonly int HistoryId = Shader.PropertyToID("_CloudHistoryTex");
+        private static readonly int HistoryDepthId = Shader.PropertyToID("_CloudHistoryDepth");
         private static readonly int HistoryValidId = Shader.PropertyToID("_CloudHistoryValid");
         private static readonly int CheckerOnId = Shader.PropertyToID("_CloudCheckerOn");
 
         private readonly RenderTargetIdentifier[] targets = new RenderTargetIdentifier[2];
-        private RenderTexture quarterColour, quarterData, historyA, historyB, halfData;
+        private RenderTexture quarterColour, quarterData, historyA, historyB, depthA, depthB;
         private bool writeA;
         private int requestedWidth, requestedHeight;
         private float requestedScale;
@@ -47,7 +48,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float quality = Mathf.Clamp(FxBus.Scales.RenderTargets, 0.25f, 1f);
             bool sameRequest = requestedWidth == fullWidth && requestedHeight == fullHeight && requestedScale == quality;
             if (historyA != null && sameRequest && historyA.IsCreated() && historyB.IsCreated() &&
-                halfData.IsCreated() && quarterColour.IsCreated() && quarterData.IsCreated()) return true;
+                depthA.IsCreated() && depthB.IsCreated() && quarterColour.IsCreated() && quarterData.IsCreated()) return true;
             // A refused set would otherwise allocate/free fifteen targets every rendered frame.
             // Pool changes recover immediately; an unchanged refusal retries twice per second.
             if (allocationRefused && sameRequest && refusedPoolBytes == FxRtPool.UsedBytes && Time.unscaledTime < retryAt)
@@ -62,11 +63,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Width = w; Height = h;
                 historyA = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds A");
                 historyB = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds B");
-                halfData = Target(w, h, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Depth");
+                // Only the nearest relevant depth survives resolve. Two RFloat histories cost the same
+                // as the old single RGFloat target and allow disocclusion rejection.
+                depthA = Target(w, h, RenderTextureFormat.RFloat, FilterMode.Point, "Boscali Clouds Depth A");
+                depthB = Target(w, h, RenderTextureFormat.RFloat, FilterMode.Point, "Boscali Clouds Depth B");
                 quarterColour = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds Quarter");
                 quarterData = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Quarter Depth");
                 HistoryValid = false;
-                if (TargetBytes <= 16L * 1024 * 1024 && Acquire(historyA) && Acquire(historyB) && Acquire(halfData) &&
+                if (TargetBytes <= 16L * 1024 * 1024 && Acquire(historyA) && Acquire(historyB) && Acquire(depthA) && Acquire(depthB) &&
                     Acquire(quarterColour) && Acquire(quarterData))
                 { allocationRefused = false; return true; }
                 Release();
@@ -81,6 +85,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal void Record(CommandBuffer cmd, Material march, Material composite, bool temporal)
         {
             RenderTexture write = writeA ? historyA : historyB, read = writeA ? historyB : historyA;
+            RenderTexture writeDepth = writeA ? depthA : depthB, readDepth = writeA ? depthB : depthA;
             var half = new Vector4(Width, Height, 1f / Width, 1f / Height);
             var quarter = new Vector4(quarterColour.width, quarterColour.height, 1f / quarterColour.width, 1f / quarterColour.height);
             march.SetVector(SizeId, half);
@@ -97,8 +102,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 composite.SetTexture(QuarterColourId, quarterColour);
                 composite.SetTexture(QuarterDataId, quarterData);
                 composite.SetTexture(HistoryId, read);
+                composite.SetTexture(HistoryDepthId, readDepth);
                 targets[0] = write;
-                targets[1] = halfData;
+                targets[1] = writeDepth;
                 cmd.SetRenderTarget(targets, targets[0]);
                 cmd.DrawProcedural(Matrix4x4.identity, composite, ResolvePass, MeshTopology.Triangles, 3);
                 HistoryValid = true;
@@ -106,13 +112,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             else
             {
                 targets[0] = write;
-                targets[1] = halfData;
+                targets[1] = writeDepth;
                 cmd.SetRenderTarget(targets, targets[0]);
                 cmd.DrawProcedural(Matrix4x4.identity, march, MarchPass, MeshTopology.Triangles, 3);
                 HistoryValid = false;
             }
             composite.SetTexture(ColourId, write);
-            composite.SetTexture(DepthId, halfData);
+            composite.SetTexture(DepthId, writeDepth);
             writeA = !writeA;
         }
 
@@ -126,7 +132,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private void Release()
         {
-            Free(ref quarterColour); Free(ref quarterData); Free(ref historyA); Free(ref historyB); Free(ref halfData);
+            Free(ref quarterColour); Free(ref quarterData); Free(ref historyA); Free(ref historyB); Free(ref depthA); Free(ref depthB);
             Width = Height = 0;
             HistoryValid = false;
         }

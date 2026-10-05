@@ -112,7 +112,12 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CameraCockpitState", "UpdateState"),
     ("CameraCockpitState", "LeaveState"),
     ("Gun", "SpawnBullet"),
-    ("CameraOrbitState", "UpdateState")
+    ("CameraOrbitState", "UpdateState"),
+    ("FlightHud", "GetHUDCenter"),
+    ("CombatHUD", "UpdateHitMarkers"),
+    ("HUDUnitMarker", "UpdatePosition"),
+    ("HUDUnitMarker", "JammingDistortion"),
+    ("HUDTurretCrosshair", "Refresh")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -233,6 +238,13 @@ foreach ((string typeName, string fieldName) in fields)
 // Typed seams used by the external HUD and camera patches, including Harmony field injection.
 (string Type, string Field, string FieldType)[] cameraFields =
 {
+    // First-person pilot binding and native control anchors (cached generic-rig access).
+    ("Pilot", "skinnedMeshRenderer", "UnityEngine.SkinnedMeshRenderer"),
+    ("Pilot", "animator", "UnityEngine.Animator"),
+    ("Cockpit", "joysticks", "Cockpit+Joystick[]"),
+    ("Cockpit", "throttles", "Cockpit+Throttle[]"),
+    ("Cockpit+Joystick", "transform", "UnityEngine.Transform"),
+    ("Cockpit+Throttle", "transform", "UnityEngine.Transform"),
     ("ControlsFilter", "aircraft", "Aircraft"),
     ("ControlsFilter", "aimAssist", "ControlsFilter+AimAssist"),
     ("Hangar", "spawnedObject", "UnityEngine.GameObject"),
@@ -263,9 +275,51 @@ foreach ((string typeName, string fieldName) in fields)
     ("CameraOrbitState", "viewDistAdjust", "System.Single"),
     ("CameraOrbitState", "lookAtTargetLerp", "System.Single"),
 
-    // Third-person HUD: FlightHud.HUDCenter re-projection/levelling (ThirdPersonHudCenter) and
+    // Third-person HUD: final-camera marker projection (ThirdPersonHudCenter) and
     // native flight-number hiding (NativeFlightNumberHider), all reflected via AccessTools.Field.
-    ("FlightHud", "HUDCenter", "UnityEngine.Transform"),
+    ("CombatHUD", "markers", "System.Collections.Generic.List`1<HUDUnitMarker>"),
+    ("CombatHUD", "jamAccumulation", "System.Single"),
+    ("CombatHUD", "weaponState", "HUDWeaponState"),
+    ("HUDUnitMarker", "image", "UnityEngine.UI.Image"),
+    ("CombatHUD", "objectiveOverlay", "ObjectiveOverlayManager"),
+    ("CombatHUD", "targetInfo", "TMPro.TextMeshProUGUI"),
+    ("CombatHUD", "targetText", "TMPro.TextMeshProUGUI"),
+    ("CombatHUD", "targetArrowTail", "UnityEngine.Transform"),
+    ("AllyInfo", "hoveredAllyInfo", "TMPro.TextMeshProUGUI"),
+    ("AllyInfo", "hoveredAllyMarker", "HUDUnitMarker"),
+    ("AirbaseOverlay", "nearestAirbase", "Airbase"),
+    ("AirbaseOverlay", "runwayUsage", "System.Nullable`1<Airbase+Runway+RunwayUsage>"),
+    ("AirbaseOverlay", "landing", "System.Boolean"),
+    ("AirbaseOverlay", "taxiingToRunway", "System.Boolean"),
+    ("AirbaseOverlay", "reachedRunway", "System.Boolean"),
+    ("AirbaseOverlay", "airbaseMarker", "UnityEngine.UI.Image"),
+    ("AirbaseOverlay", "airbaseLabel", "TMPro.TextMeshProUGUI"),
+    ("AirbaseOverlay", "glideslope", "UnityEngine.UI.Image"),
+    ("AirbaseOverlay", "glideslopeAimPoint", "UnityEngine.UI.Image"),
+    ("ObjectiveOverlayManager", "aircraft", "Aircraft"),
+    ("ObjectiveOverlayManager", "overlays", "System.Collections.Generic.List`1<ObjectiveOverlay>"),
+    ("ObjectiveOverlayManager", "resultCache", "System.Collections.Generic.List`1<MissionPosition+PositionResult>"),
+    ("ObjectiveOverlay", "TextNoOverlap", "TextNoOverlap"),
+    ("TextNoOverlap", "Text", "TMPro.TextMeshProUGUI"),
+    ("TextNoOverlap", "TargetPosition", "UnityEngine.Vector2"),
+    ("TextNoOverlap", "PreviousPosition", "UnityEngine.Vector2"),
+    ("TextNoOverlap", "NudgeOffset", "UnityEngine.Vector2"),
+    ("TextNoOverlap", "AutomaticlalySetPosition", "System.Boolean"),
+    // Render-only weapon cues reuse the native solver's cached world points.
+    ("HUDBoresightState", "gunDirectionRelative", "UnityEngine.Vector3"),
+    ("HUDBoresightState", "boresight", "UnityEngine.UI.Image"),
+    ("HUDBoresightState", "projectedPosition", "UnityEngine.UI.Image"),
+    ("HUDBoresightState", "targetPosition", "UnityEngine.UI.Image"),
+    ("HUDBoresightState", "line", "UnityEngine.UI.Image"),
+    ("HUDBoresightState", "controlsFilter", "ControlsFilter"),
+    ("ControlsFilter+AimAssist", "accurateAimpoint", "System.Nullable`1<GlobalPosition>"),
+    ("HUDTurretState", "crosshairs", "HUDTurretCrosshair[]"),
+    ("HUDBombingState", "ccipImpactPointSmoothed", "UnityEngine.Vector3"),
+    ("HUDBombingState", "ccipPipper", "UnityEngine.UI.Image"),
+    ("HUDBombingState", "ccipFallTime", "TMPro.TextMeshProUGUI"),
+    ("HUDBombingState", "ccipLine", "UnityEngine.UI.Image"),
+    ("HUDBombingState", "alignmentBar", "UnityEngine.UI.Image"),
+    ("HUDBombingState", "averageTargetPosition", "GlobalPosition"),
     ("FlightHud", "compass", "UnityEngine.UI.RawImage"),
     ("FlightHud", "pitchCompassCenter", "UnityEngine.GameObject"),
     ("SpeedGauge", "airspeedDisplay", "TMPro.TextMeshProUGUI"),
@@ -291,6 +345,37 @@ foreach (var seam in cameraFields)
 Type nativeAimAssist = gameAssembly.GetType("ControlsFilter+AimAssist", true)!;
 if (nativeAimAssist.GetField("Enabled", AllMembers)?.FieldType != typeof(bool))
     throw new MissingFieldException("ControlsFilter+AimAssist.Enabled");
+
+// Cached render-only delegate: a private signature change must fail before shipping.
+MethodInfo hitMarkerRefresh = gameAssembly.GetType("CombatHUD", true)!
+    .GetMethod("UpdateHitMarkers", AllMembers, null, Type.EmptyTypes, null)
+    ?? throw new MissingMethodException("CombatHUD.UpdateHitMarkers()");
+if (hitMarkerRefresh.ReturnType != typeof(void))
+    throw new InvalidOperationException("CombatHUD.UpdateHitMarkers no longer returns void");
+
+MethodInfo targetCaptionRefresh = gameAssembly.GetType("CombatHUD", true)!
+    .GetMethod("ShowTargetInfo", AllMembers, null, Type.EmptyTypes, null)
+    ?? throw new MissingMethodException("CombatHUD.ShowTargetInfo()");
+if (targetCaptionRefresh.ReturnType != typeof(bool))
+    throw new InvalidOperationException("CombatHUD.ShowTargetInfo no longer returns bool");
+
+Type objectiveResult = gameAssembly.GetType("MissionPosition+PositionResult", true)!;
+MethodInfo objectiveProjection = gameAssembly.GetType("ObjectiveOverlay", true)!
+    .GetMethod("UpdateOverlay", AllMembers, null, new[] { objectiveResult }, null)
+    ?? throw new MissingMethodException("ObjectiveOverlay.UpdateOverlay(MissionPosition.PositionResult)");
+if (objectiveProjection.ReturnType != typeof(void))
+    throw new InvalidOperationException("ObjectiveOverlay.UpdateOverlay no longer returns void");
+
+Type airbaseOverlay = gameAssembly.GetType("AirbaseOverlay", true)!;
+Type nativeRunway = gameAssembly.GetType("Airbase+Runway", true)!;
+Type nativeRunwayUsage = gameAssembly.GetType("Airbase+Runway+RunwayUsage", true)!;
+MethodInfo runwayProjection = airbaseOverlay.GetMethod("DrawRunwayBorders", AllMembers, null,
+    new[] { nativeRunway }, null) ?? throw new MissingMethodException("AirbaseOverlay.DrawRunwayBorders");
+MethodInfo glideslopeProjection = airbaseOverlay.GetMethod("DrawGlideslope", AllMembers, null,
+    new[] { gameAssembly.GetType("Aircraft", true)!, nativeRunwayUsage }, null)
+    ?? throw new MissingMethodException("AirbaseOverlay.DrawGlideslope");
+if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnType != typeof(bool))
+    throw new InvalidOperationException("AirbaseOverlay render-only delegate signatures changed");
 
 // Harmony binds patch parameters by name, so a rename in a game update throws at patch
 // time rather than degrading. Neither probe checked these names before.
@@ -505,6 +590,24 @@ string[] resources = pluginAssembly.GetManifestResourceNames();
 foreach (string resource in radioResources)
     if (!resources.Contains(resource, StringComparer.Ordinal))
         throw new MissingManifestResourceException("Plugin radio asset missing: " + resource);
+
+using (Stream weatherResource = pluginAssembly.GetManifestResourceStream("BoscaliSummer.Weather.weatherrain.bundle")
+    ?? throw new MissingManifestResourceException("Plugin weather shader bundle missing"))
+{
+    if (weatherResource.Length <= 0 || weatherResource.Length > 4 * 1024 * 1024)
+        throw new InvalidDataException("Plugin weather shader bundle exceeds its bounded loader contract");
+    string weatherHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(weatherResource));
+    Console.WriteLine($"  Embedded weather shader bundle: {weatherResource.Length} bytes; SHA256 {weatherHash}");
+}
+
+using (Stream pilotResource = pluginAssembly.GetManifestResourceStream("BoscaliSummer.Immersion.pilot.bundle")
+    ?? throw new MissingManifestResourceException("Plugin cockpit pilot bundle missing"))
+{
+    if (pilotResource.Length <= 0 || pilotResource.Length > 4 * 1024 * 1024)
+        throw new InvalidDataException("Plugin cockpit pilot bundle exceeds its bounded loader contract");
+    string pilotHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pilotResource));
+    Console.WriteLine($"  Embedded cockpit pilot bundle: {pilotResource.Length} bytes; SHA256 {pilotHash}");
+}
 
 // Campaign is outside the startup roster and its payload is not currently embedded.
 

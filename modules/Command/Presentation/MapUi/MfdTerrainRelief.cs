@@ -9,6 +9,8 @@ using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.Sprites;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -133,6 +135,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly Dictionary<MapIcon, IconFix> iconFixes =
             new Dictionary<MapIcon, IconFix>();
         private static readonly List<MapIcon> staleIconFixes = new List<MapIcon>(64);
+        private static readonly Dictionary<Transform, Vector3> markerFixes =
+            new Dictionary<Transform, Vector3>(256);
+        private static readonly List<Transform> staleMarkers = new List<Transform>(16);
+        private static readonly List<TargetMarker> staleSelectedMarkers = new List<TargetMarker>(16);
         private sealed class ClusterMark
         {
             internal readonly List<Image> Members = new List<Image>(8);
@@ -185,8 +191,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static int viewRevision;
         private static int hoveredStackCount;
         private static Vector3 lastCameraPosition;
+        private static Quaternion lastCameraRotation;
         private static float lastCameraSize;
         private static float lastCameraAspect;
+        private static Matrix4x4 lastImageTransform, lastViewportTransform;
+        private static readonly UniversalRenderPipeline.SingleCameraRequest renderRequest =
+            new UniversalRenderPipeline.SingleCameraRequest();
         private static float ModelSpanX => ModelWidth * source.MapSize.x / 81920f;
         private static float ModelSpanZ => ModelWidth * source.MapSize.y / 81920f;
 
@@ -208,8 +218,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             rig.Unproject(.5f, .5f, 0f, out float x, out float z);
             rig.OrbitAbout(yawDelta, pitchDelta, x, 0f, z);
-            PlaceCamera();
-            viewRevision++;
             nextRender = 0f;
         }
 
@@ -250,7 +258,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             ground = default;
             if (!ready || camera == null || sceneRoot == null) return false;
-            PlaceCamera();
             Ray ray = camera.ViewportPointToRay(new Vector3(vx, vy, 0f));
             float nearest = float.MaxValue;
             bool found = false;
@@ -309,7 +316,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (unavailable) return;
 
             if (!ready && !LoadHeightfield()) return;
-            if (sceneRoot == null && !BuildScene()) return;
+            bool opening = sceneRoot == null;
+            if (opening && !BuildScene()) return;
             if (view == null || view.transform.parent != map.mapBackground.transform)
             {
                 if (view != null) Object.Destroy(view.gameObject);
@@ -346,25 +354,83 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             bool cameraMoved = UpdateViewportCamera(map);
             HideNativeGrid();
-            MfdMapOrbitControls.Tick(map);
             CaptureFieldLayers();
-            if (cameraMoved || Time.unscaledTime >= nextIconRefresh)
-            {
-                ReprojectCachedIcons();
-                nextIconRefresh = Time.unscaledTime + .2f;
-            }
-            DeclutterIcons();
-            UpdateAircraftTrails();
-            // First movement responds immediately; continuous movement is capped at 30 Hz.
+            // The camera also drives projection and click rays. On throttled frames keep
+            // its last rendered pose, so symbols and clicks still match the displayed terrain.
             bool renderNow = Time.unscaledTime >= nextRender || (cameraMoved && !cameraWasMoving);
             cameraWasMoving = cameraMoved;
-            if (!renderNow) return;
-            nextRender = Time.unscaledTime + (cameraMoved ? MovingRenderInterval : RenderInterval);
+            if (renderNow)
+            {
+                if (!RenderTerrain())
+                {
+                    Restore();
+                    Unavailable("Render pipeline cannot render the terrain; using the native map.");
+                    return;
+                }
+                nextRender = Time.unscaledTime + (cameraMoved ? MovingRenderInterval : RenderInterval);
+                if (cameraMoved) viewRevision++;
+                lastCameraPosition = camera.transform.localPosition;
+                lastCameraRotation = camera.transform.localRotation;
+                lastCameraSize = camera.orthographicSize;
+                lastCameraAspect = camera.aspect;
+            }
+            else
+            {
+                camera.transform.localPosition = lastCameraPosition;
+                camera.transform.localRotation = lastCameraRotation;
+                camera.orthographicSize = lastCameraSize;
+                camera.aspect = lastCameraAspect;
+            }
+            Matrix4x4 imageTransform = map.mapImage.transform.localToWorldMatrix;
+            Matrix4x4 viewportTransform = map.mapBackground.transform.localToWorldMatrix;
+            bool hierarchyMoved = imageTransform != lastImageTransform || viewportTransform != lastViewportTransform;
+            if (hierarchyMoved) viewRevision++;
+            // Native UpdateIcons refreshes only a fifth of the roster per frame. Seed
+            // every existing faction-known glyph once when switching to the relief view.
+            if (opening && map.mapIcons != null)
+                foreach (MapIcon icon in map.mapIcons) ProjectIcon(icon, map.mapDisplayFactor);
+            if (renderNow || hierarchyMoved || Time.unscaledTime >= nextIconRefresh)
+            {
+                ReprojectCachedIcons();
+                ReprojectCachedMarkers();
+                nextIconRefresh = Time.unscaledTime + .2f;
+            }
+            lastImageTransform = imageTransform;
+            lastViewportTransform = viewportTransform;
+            ProjectCameraIndicator();
+            RefreshSelectedMarkers();
+            DeclutterIcons();
+            UpdateAircraftTrails();
+            MfdMapOrbitControls.Tick(map);
+        }
+
+        private static bool RenderTerrain()
+        {
+            if (texture == null || camera == null) return false;
+            renderRequest.destination = texture;
+            bool srp = GraphicsSettings.currentRenderPipeline != null;
             // The scene's exponential fog would wash out a relief a kilometre from its camera.
             bool fog = RenderSettings.fog;
+            RenderTexture active = RenderTexture.active;
             RenderSettings.fog = false;
-            try { camera.Render(); }
-            finally { RenderSettings.fog = fog; }
+            try
+            {
+                if (srp && !RenderPipeline.SupportsRenderRequest(camera, renderRequest)) return false;
+                if (!texture.IsCreated() && !texture.Create()) return false;
+                if (srp) RenderPipeline.SubmitRenderRequest(camera, renderRequest);
+                else camera.Render();
+                return true;
+            }
+            catch (Exception error)
+            {
+                Plugin.Logger.LogWarning("[MAP] Terrain render failed: " + error.Message);
+                return false;
+            }
+            finally
+            {
+                RenderSettings.fog = fog;
+                RenderTexture.active = active;
+            }
         }
 
         private static bool UpdateViewportCamera(DynamicMap map)
@@ -405,7 +471,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 view.texture = texture;
                 nextRender = 0f;
             }
+            else if (!texture.IsCreated()) nextRender = 0f;
             camera.aspect = aspect;
+            if (Mathf.Abs(aspect - lastCameraAspect) > .001f) nextRender = 0f;
 
             // The relief owns its view: zoom 1 fits the whole sheet including high terrain,
             // and the navigator moves the rig in model space. Ocean beyond the sheet is the
@@ -416,17 +484,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rig.Aspect = aspect;
             ReliefNavigator.Tick(rig);
             PlaceCamera();
-            bool changed = (camera.transform.position - lastCameraPosition).sqrMagnitude > .01f ||
-                Mathf.Abs(camera.orthographicSize - lastCameraSize) > .01f ||
-                Mathf.Abs(camera.aspect - lastCameraAspect) > .001f;
-            if (changed)
-            {
-                lastCameraPosition = camera.transform.position;
-                lastCameraSize = camera.orthographicSize;
-                lastCameraAspect = camera.aspect;
-                viewRevision++;
-                nextRender = Mathf.Min(nextRender, Time.unscaledTime + 1f / 30f);
-            }
+            // FloatingOrigin shifts every root in the active scene. Compare/restore the
+            // pose relative to the terrain root, so that shift cannot separate camera and mesh.
+            bool changed = camera.transform.localPosition != lastCameraPosition ||
+                camera.transform.localRotation != lastCameraRotation ||
+                camera.orthographicSize != lastCameraSize || camera.aspect != lastCameraAspect;
             return changed;
         }
 
@@ -618,6 +680,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             camera.farClipPlane = 10000f;
             camera.allowHDR = false;
             camera.allowMSAA = false;
+            UniversalAdditionalCameraData data = camera.GetUniversalAdditionalCameraData();
+            data.renderType = CameraRenderType.Base;
+            data.renderPostProcessing = false;
+            data.renderShadows = false;
+            data.requiresColorTexture = false;
+            data.requiresDepthTexture = false;
+            data.antialiasing = AntialiasingMode.None;
+            data.volumeLayerMask = 0;
             return true;
         }
 
@@ -1041,12 +1111,73 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!IsDrawing || marker == null || mapDisplayFactor <= 0f ||
                 owner?.mapImage == null) return;
             Vector3 native = marker.localPosition;
+            Vector3 fix = new Vector3(native.x / mapDisplayFactor, native.y / mapDisplayFactor, native.z);
+            if (markerFixes.ContainsKey(marker) || markerFixes.Count < 256) markerFixes[marker] = fix;
+            PlaceProjectedMarker(marker, fix);
+        }
+
+        private static void PlaceProjectedMarker(Transform marker, Vector3 fix)
+        {
             RectTransform rect = MapImageRect(owner.mapImage);
-            if (rect == null || !TryProject(native.x / mapDisplayFactor,
-                    native.y / mapDisplayFactor, rect.rect, out Vector2 point)) return;
+            if (rect == null || !TryProject(fix.x, fix.y, rect.rect, out Vector2 point)) return;
             Vector3 screen = rect.TransformPoint(new Vector3(point.x, point.y));
             Vector3 local = marker.parent.InverseTransformPoint(screen);
-            marker.localPosition = new Vector3(local.x, local.y, native.z);
+            marker.localPosition = new Vector3(local.x, local.y, fix.z);
+        }
+
+        private static void ReprojectCachedMarkers()
+        {
+            staleMarkers.Clear();
+            foreach (KeyValuePair<Transform, Vector3> entry in markerFixes)
+            {
+                if (entry.Key == null) staleMarkers.Add(entry.Key);
+                else PlaceProjectedMarker(entry.Key, entry.Value);
+            }
+            foreach (Transform marker in staleMarkers) markerFixes.Remove(marker);
+        }
+
+        private static void RefreshSelectedMarkers()
+        {
+            // TargetMarker.Update runs before this frame's relief movement and native
+            // icons refresh in batches. Follow the final projected icon in LateUpdate.
+            labelFrame = -1;
+            staleSelectedMarkers.Clear();
+            foreach (KeyValuePair<TargetMarker, MarkerLabels> entry in markerLabels)
+            {
+                if (entry.Key == null) staleSelectedMarkers.Add(entry.Key);
+                else FollowIcon(entry.Key);
+            }
+            foreach (TargetMarker marker in staleSelectedMarkers)
+            {
+                markerLabels.Remove(marker);
+                markerCanvases.Remove(marker);
+            }
+        }
+
+        private static void ProjectCameraIndicator()
+        {
+            Transform marker = owner?.viewIndicator != null ? owner.viewIndicator.transform : null;
+            CameraStateManager main = SceneSingleton<CameraStateManager>.i;
+            if (marker == null || main == null) return;
+            RectTransform image = MapImageRect(owner.mapImage);
+            if (image == null) return;
+            // DynamicMap writes this in Update, before camera switches and origin shifts.
+            // Sample only the local view's final pose, then use the displayed terrain pose.
+            GlobalPosition position = main.transform.GlobalPosition();
+            marker.localPosition = new Vector3(position.x * owner.mapDisplayFactor,
+                position.z * owner.mapDisplayFactor, marker.localPosition.z);
+            ProjectMarker(marker, owner.mapDisplayFactor);
+            float heading = main.transform.eulerAngles.y * Mathf.Deg2Rad;
+            Rect rect = image.rect;
+            if (TryProject(position.x, position.z, rect, out Vector2 point) &&
+                TryProject(position.x + Mathf.Sin(heading) * 1000f,
+                    position.z + Mathf.Cos(heading) * 1000f, rect, out Vector2 ahead))
+            {
+                Vector2 direction = ahead - point;
+                if (direction.sqrMagnitude > .01f)
+                    marker.rotation = image.rotation * Quaternion.Euler(0f, 0f,
+                        Mathf.Atan2(-direction.x, direction.y) * Mathf.Rad2Deg);
+            }
         }
 
         internal static void FollowIcon(TargetMarker marker)
@@ -1138,9 +1269,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             position = default;
             if (!IsDrawing || map != owner) return false;
-            RectTransform rect = MapImageRect(map.mapImage);
-            Vector3 local = rect.InverseTransformPoint(Input.mousePosition);
-            return TryUnproject(local, rect.rect, out position);
+            if (!ViewportPoint(Input.mousePosition, out float u, out float v) ||
+                !TryGround(u, v, out Vector3 point)) return false;
+            position = new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
+                point.z / ModelSpanZ * source.MapSize.y);
+            return true;
         }
 
         internal static bool TryUnproject(Vector2 local, Rect rect, out GlobalPosition position)
@@ -1444,7 +1577,31 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static void Restore()
         {
+            if (view != null) view.enabled = false;
             MfdMapOrbitControls.Restore();
+            // Do not leave relief coordinates behind while native icons return in batches.
+            if (owner != null)
+            {
+                foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
+                {
+                    if (entry.Key == null || entry.Key.iconImage == null) continue;
+                    Transform symbol = entry.Key.iconImage.transform;
+                    IconFix fix = entry.Value;
+                    symbol.localPosition = new Vector3(fix.X * owner.mapDisplayFactor,
+                        fix.Z * owner.mapDisplayFactor, fix.Depth);
+                    symbol.localScale = fix.NativeScale;
+                    if (entry.Key is UnitMapIcon unit && headings.TryGetValue(unit, out HeadingMark heading))
+                        symbol.eulerAngles = new Vector3(0f, 0f, heading.Native);
+                }
+                foreach (KeyValuePair<Transform, Vector3> entry in markerFixes)
+                    if (entry.Key != null)
+                        entry.Key.localPosition = new Vector3(entry.Value.x * owner.mapDisplayFactor,
+                            entry.Value.y * owner.mapDisplayFactor, entry.Value.z);
+                CameraStateManager main = SceneSingleton<CameraStateManager>.i;
+                if (owner.viewIndicator != null && owner.mapImage != null && main != null)
+                    owner.viewIndicator.transform.eulerAngles = new Vector3(0f, 0f,
+                        owner.mapImage.transform.eulerAngles.z - main.transform.eulerAngles.y);
+            }
             foreach (KeyValuePair<TargetMarker, MarkerLabels> entry in markerLabels)
                 for (int i = 0; i < entry.Value.Text.Length; i++)
                     if (entry.Value.Text[i] != null)
@@ -1454,6 +1611,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             labelFrame = -1;
             foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
             hiddenIcons.Clear();
+            foreach (MapIcon icon in iconFixes.Keys)
+                if (icon is UnitMapIcon unit) MapSymbology.Apply(unit, false);
             selectedForClusters.Clear();
             foreach (CountMark mark in counts) if (mark.Root != null) Object.Destroy(mark.Root.gameObject);
             counts.Clear();
@@ -1466,6 +1625,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             headings.Clear();
             iconFixes.Clear();
             staleIconFixes.Clear();
+            markerFixes.Clear();
+            staleMarkers.Clear();
+            staleSelectedMarkers.Clear();
             hoveredStackCount = 0;
             foreach (StemMark mark in stems.Values)
             {
@@ -1519,13 +1681,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             groundMaterial = controlMaterial = seaControlMaterial = threatMaterial = gridMaterial = waterMaterial = null;
             if (texture != null) { texture.Release(); Object.Destroy(texture); }
             texture = null;
+            renderRequest.destination = null;
             camera = null;
             nextRender = 0f;
             cameraWasMoving = false;
             nextIconRefresh = 0f;
             ReliefNavigator.Release();
             lastCameraPosition = Vector3.zero;
+            lastCameraRotation = Quaternion.identity;
             lastCameraSize = lastCameraAspect = 0f;
+            lastImageTransform = lastViewportTransform = default;
         }
 
         internal static void Reset()

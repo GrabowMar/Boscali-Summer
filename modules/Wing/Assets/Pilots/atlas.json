@@ -11,7 +11,7 @@
   "tile_order": "top-left, row-major",
   "rgba_rows": "Unity bottom-up",
   "source_rect_format": "Pillow left, top, right, bottom; right/bottom exclusive",
-  "hair_isolation": "16px source side gutters, center-scalp-connected alpha, 2px edge retention",
+  "hair_isolation": "16px horizontal crop padding, original cell scalp-connected alpha, 2px edge retention; natural temple/sideburn silhouette retained",
   "composition": [
     "backdrop",
     "uniform-body",
@@ -702,22 +702,22 @@
       "source_rect": [
         0,
         0,
-        256,
+        272,
         384
       ],
       "alpha_bounds": [
         22,
         79,
-        242,
+        259,
         295
       ],
       "registered_size": [
         144,
-        141
+        131
       ],
       "position": [
         56,
-        23
+        27
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -726,7 +726,7 @@
         ],
         "front_anchor_y": 85,
         "outer_width": 144,
-        "crown_y": 23
+        "crown_y": 27
       }
     },
     {
@@ -736,24 +736,24 @@
       "body": "male",
       "selector": 2,
       "source_rect": [
-        256,
+        240,
         0,
-        512,
+        528,
         384
       ],
       "alpha_bounds": [
-        23,
+        39,
         84,
-        242,
+        262,
         293
       ],
       "registered_size": [
         140,
-        134
+        131
       ],
       "position": [
         58,
-        24
+        25
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -762,7 +762,7 @@
         ],
         "front_anchor_y": 82,
         "outer_width": 140,
-        "crown_y": 24
+        "crown_y": 25
       }
     },
     {
@@ -772,24 +772,24 @@
       "body": "male",
       "selector": 3,
       "source_rect": [
-        512,
+        496,
         0,
-        768,
+        784,
         384
       ],
       "alpha_bounds": [
-        14,
+        25,
         80,
-        242,
+        258,
         301
       ],
       "registered_size": [
         144,
-        140
+        137
       ],
       "position": [
         56,
-        23
+        24
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -798,7 +798,7 @@
         ],
         "front_anchor_y": 84,
         "outer_width": 144,
-        "crown_y": 23
+        "crown_y": 24
       }
     },
     {
@@ -808,24 +808,24 @@
       "body": "male",
       "selector": 4,
       "source_rect": [
-        768,
+        752,
         0,
         1024,
         384
       ],
       "alpha_bounds": [
-        14,
+        23,
         80,
-        242,
+        258,
         301
       ],
       "registered_size": [
         142,
-        138
+        134
       ],
       "position": [
         57,
-        24
+        26
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -834,7 +834,7 @@
         ],
         "front_anchor_y": 102,
         "outer_width": 142,
-        "crown_y": 24
+        "crown_y": 26
       }
     },
     {
@@ -846,22 +846,22 @@
       "source_rect": [
         0,
         384,
-        256,
+        272,
         768
       ],
       "alpha_bounds": [
         22,
         52,
-        242,
+        256,
         267
       ],
       "registered_size": [
         140,
-        137
+        129
       ],
       "position": [
         58,
-        20
+        23
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -870,7 +870,7 @@
         ],
         "front_anchor_y": 80,
         "outer_width": 140,
-        "crown_y": 20
+        "crown_y": 23
       }
     },
     {
@@ -880,24 +880,24 @@
       "body": "male",
       "selector": 6,
       "source_rect": [
-        256,
+        240,
         384,
-        512,
+        528,
         768
       ],
       "alpha_bounds": [
-        18,
+        34,
         52,
-        242,
+        270,
         268
       ],
       "registered_size": [
         138,
-        133
+        126
       ],
       "position": [
         59,
-        19
+        22
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -906,7 +906,7 @@
         ],
         "front_anchor_y": 78,
         "outer_width": 138,
-        "crown_y": 19
+        "crown_y": 22
       }
     },
     {
@@ -916,15 +916,15 @@
       "body": "male",
       "selector": 7,
       "source_rect": [
-        512,
+        496,
         384,
-        768,
+        784,
         768
       ],
       "alpha_bounds": [
-        19,
+        35,
         72,
-        237,
+        253,
         266
       ],
       "registered_size": [
@@ -952,24 +952,24 @@
       "body": "male",
       "selector": 8,
       "source_rect": [
-        768,
+        752,
         384,
         1024,
         768
       ],
       "alpha_bounds": [
-        14,
+        23,
         55,
-        241,
+        257,
         268
       ],
       "registered_size": [
         142,
-        133
+        129
       ],
       "position": [
         57,
-        24
+        26
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -978,7 +978,7 @@
         ],
         "front_anchor_y": 82,
         "outer_width": 142,
-        "crown_y": 24
+        "crown_y": 26
       }
     },
     {
@@ -990,22 +990,22 @@
       "source_rect": [
         0,
         768,
-        256,
+        272,
         1152
       ],
       "alpha_bounds": [
         25,
         0,
-        242,
+        244,
         341
       ],
       "registered_size": [
         142,
-        223
+        221
       ],
       "position": [
         57,
-        6
+        7
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -1014,7 +1014,7 @@
         ],
         "front_anchor_y": 86,
         "outer_width": 142,
-        "crown_y": 6
+        "crown_y": 7
       }
     },
     {
@@ -1024,15 +1024,15 @@
       "body": "female",
       "selector": 2,
       "source_rect": [
-        256,
+        240,
         768,
-        512,
+        528,
         1152
       ],
       "alpha_bounds": [
-        22,
+        38,
         39,
-        242,
+        258,
         260
       ],
       "registered_size": [
@@ -1060,24 +1060,24 @@
       "body": "female",
       "selector": 3,
       "source_rect": [
-        512,
+        496,
         768,
-        768,
+        784,
         1152
       ],
       "alpha_bounds": [
-        14,
+        9,
         48,
-        242,
+        276,
         323
       ],
       "registered_size": [
         148,
-        179
+        152
       ],
       "position": [
         54,
-        32
+        40
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -1086,7 +1086,7 @@
         ],
         "front_anchor_y": 85,
         "outer_width": 148,
-        "crown_y": 32
+        "crown_y": 40
       }
     },
     {
@@ -1096,24 +1096,24 @@
       "body": "female",
       "selector": 4,
       "source_rect": [
-        768,
+        752,
         768,
         1024,
         1152
       ],
       "alpha_bounds": [
-        17,
+        33,
         6,
-        242,
+        265,
         365
       ],
       "registered_size": [
         142,
-        227
+        220
       ],
       "position": [
         57,
-        7
+        9
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -1122,7 +1122,7 @@
         ],
         "front_anchor_y": 85,
         "outer_width": 142,
-        "crown_y": 7
+        "crown_y": 9
       }
     },
     {
@@ -1134,18 +1134,18 @@
       "source_rect": [
         0,
         1152,
-        256,
+        272,
         1536
       ],
       "alpha_bounds": [
         20,
         48,
-        242,
+        244,
         254
       ],
       "registered_size": [
         136,
-        126
+        125
       ],
       "position": [
         60,
@@ -1168,24 +1168,24 @@
       "body": "female",
       "selector": 6,
       "source_rect": [
-        256,
+        240,
         1152,
-        512,
+        528,
         1536
       ],
       "alpha_bounds": [
-        14,
+        18,
         52,
-        242,
+        262,
         312
       ],
       "registered_size": [
         148,
-        169
+        158
       ],
       "position": [
         54,
-        34
+        37
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -1194,7 +1194,7 @@
         ],
         "front_anchor_y": 84,
         "outer_width": 148,
-        "crown_y": 34
+        "crown_y": 37
       }
     },
     {
@@ -1204,24 +1204,24 @@
       "body": "female",
       "selector": 7,
       "source_rect": [
-        512,
+        496,
         1152,
-        768,
+        784,
         1536
       ],
       "alpha_bounds": [
-        14,
+        7,
         46,
-        242,
+        278,
         303
       ],
       "registered_size": [
         142,
-        160
+        135
       ],
       "position": [
         57,
-        33
+        41
       ],
       "anatomy": {
         "source_front_anchor": [
@@ -1230,7 +1230,7 @@
         ],
         "front_anchor_y": 85,
         "outer_width": 142,
-        "crown_y": 33
+        "crown_y": 41
       }
     },
     {
@@ -1240,15 +1240,15 @@
       "body": "female",
       "selector": 8,
       "source_rect": [
-        768,
+        752,
         1152,
         1024,
         1536
       ],
       "alpha_bounds": [
-        24,
+        40,
         53,
-        236,
+        252,
         272
       ],
       "registered_size": [
@@ -3068,6 +3068,6 @@
       }
     }
   ],
-  "atlas_bytes": 5113463,
-  "atlas_sha256": "8789db539f16298b46650c0a949d0e7d6f01f4a4872c30e8e8949503400d3674"
+  "atlas_bytes": 5084977,
+  "atlas_sha256": "54d1ccdec6dfc5ca9aea8af6baaefafca12ef472544a07fcbc967b7f644cfaed"
 }

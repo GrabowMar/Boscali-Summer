@@ -2,10 +2,17 @@ Shader "Boscali/FlightCloudComposite"
 {
     // Draws the reduced-resolution cloud target over the scene at the volume's render queue,
     // so water, cloud and vanilla smoke keep their order. A joint bilateral upsample: each
-    // pixel blends the nine nearest cloud texels, weighted by how closely the scene depth
-    // each one marched against matches this pixel's own, so terrain and aircraft edges get
-    // no cloud halo and no gap.
-    Properties { }
+    // pixel blends the nine nearest cloud texels against the nearest relevant depth, so
+    // opaque foreground stays clear and terrain behind visible cloud cannot cut holes in it.
+    Properties
+    {
+        [HideInInspector] _CloudLowResColour ("Cloud colour", 2D) = "black" { }
+        [HideInInspector] _CloudLowResDepth ("Cloud depth", 2D) = "black" { }
+        [HideInInspector] _CloudQuarterColour ("Fresh colour", 2D) = "black" { }
+        [HideInInspector] _CloudQuarterData ("Fresh depth", 2D) = "black" { }
+        [HideInInspector] _CloudHistoryTex ("History colour", 2D) = "black" { }
+        [HideInInspector] _CloudHistoryDepth ("History depth", 2D) = "black" { }
+    }
     SubShader
     {
         Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent-10" "RenderType"="Transparent" }
@@ -63,9 +70,14 @@ Shader "Boscali/FlightCloudComposite"
                         float2 offset = texel - p;
                         float spatial = exp(-dot(offset, offset) * 1.1);
                         float texelDepth = tex2Dlod(_CloudLowResDepth, float4(tuv, 0, 0)).r;
-                        // Relative depth difference: 2 % counts as the same surface at any range.
-                        float w = spatial / (0.02 + abs(texelDepth - depth) / max(depth, 1.0));
-                        c += tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0)) * w;
+                        float4 sample = tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0));
+                        // Visible clouds only need both opaque surfaces behind the cloud.
+                        // Empty foreground samples retain their scene depth and must still
+                        // be rejected completely, or they dilute the sky into a pale outline.
+                        float pixelDepth = sample.a > 0.002 ? min(depth, texelDepth) : depth;
+                        float difference = abs(texelDepth - pixelDepth) / max(1.0, min(texelDepth, pixelDepth));
+                        float w = difference < 0.1 ? spatial / (0.02 + difference) : 0.0;
+                        c += sample * w;
                         total += w;
                     }
                 }
@@ -102,6 +114,7 @@ Shader "Boscali/FlightCloudComposite"
             sampler2D _CloudQuarterColour;
             sampler2D _CloudQuarterData;
             sampler2D _CloudHistoryTex;
+            sampler2D _CloudHistoryDepth;
             float4 _CloudLowResSize, _CloudQuarterSize;
             float4x4 _CloudFrustum, _CloudPrevMatrix;
             float4 _CloudCamDelta;
@@ -124,46 +137,106 @@ Shader "Boscali/FlightCloudComposite"
                 return o;
             }
 
+            float3 ViewRay(float2 uv)
+            {
+                return lerp(lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x),
+                    lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x), uv.y);
+            }
+
+            ResolveOut Resolved(float4 colour, float sceneDepth, float cloudEye)
+            {
+                ResolveOut o;
+                o.colour = colour;
+                // Same RFloat budget: the nearest relevant depth, raw scene depth for
+                // empty rays and visible cloud depth for rays with cloud in front.
+                o.depth = float4(colour.a > 0.002 ? min(sceneDepth, cloudEye) : sceneDepth, 0, 0, 0);
+                return o;
+            }
+
             ResolveOut resolveFrag(rv2f i)
             {
                 float2 texel = floor(i.pos.xy);
                 float2 uv = (texel + 0.5) * _CloudLowResSize.zw;
                 float2 block = floor(texel * 0.5);
                 float2 quv = (block + 0.5) * _CloudQuarterSize.zw;
-                ResolveOut o;
-                o.depth = float4(LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r), 0, 0, 0);
+                float sceneDepth = LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r);
+                float3 view = ViewRay(uv);
+                float viewLength = length(view);
 
                 bool fresh = all(texel - block * 2.0 == _CloudChecker.xy);
                 float4 freshVal = tex2Dlod(_CloudQuarterColour, float4(quv, 0, 0));
-                float4 upsampled = tex2Dlod(_CloudQuarterColour, float4(uv, 0, 0));
-                // No history (first frame, a cut, a zoom): fresh texels are sharp, the rest
-                // fall back to the upsampled march. Sharpness returns over the next frames.
-                if (_CloudHistoryValid < 0.5 || _CloudChecker.w < 0.5) { o.colour = fresh ? freshVal : upsampled; return o; }
-
-                // This texel's ray, out to the cloud distance its fresh neighbour measured,
-                // seen from last frame's camera.
-                float3 bottom = lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x);
-                float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
-                float3 ray = normalize(lerp(bottom, top, uv.y));
-                float distance = tex2Dlod(_CloudQuarterData, float4(quv, 0, 0)).g;
-                float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta.xyz, 1.0));
-                float2 previous = clip.xy / clip.w * 0.5 + 0.5;
-                if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) { o.colour = fresh ? freshVal : upsampled; return o; }
-                float4 history = tex2Dlod(_CloudHistoryTex, float4(previous, 0, 0));
-
-                // Neighbourhood clamp against the fresh texels around this one.
-                float4 low = 1e5, high = -1e5;
+                float2 freshData = tex2Dlod(_CloudQuarterData, float4(quv, 0, 0)).rg;
+                // A checker sample may hit the aircraft while this half-resolution pixel
+                // sees sky. Reconstruct only from fresh samples on the same side of depth.
+                float4 upsampled = 0.0, low = 1e5, high = -1e5;
+                float total = 0.0, distanceSum = 0.0;
                 [unroll]
                 for (int y = -1; y <= 1; y++)
                 {
                     [unroll]
                     for (int x = -1; x <= 1; x++)
                     {
-                        float4 n = tex2Dlod(_CloudQuarterColour, float4(quv + float2(x, y) * _CloudQuarterSize.zw, 0, 0));
+                        float2 sampleBlock = block + float2(x, y);
+                        float2 sampleUv = (sampleBlock + 0.5) * _CloudQuarterSize.zw;
+                        float2 data = tex2Dlod(_CloudQuarterData, float4(sampleUv, 0, 0)).rg;
+                        float4 n = tex2Dlod(_CloudQuarterColour, float4(sampleUv, 0, 0));
+                        float2 marchUv = (sampleBlock * 2.0 + _CloudChecker.xy + 0.5) * _CloudLowResSize.zw;
+                        float cloudEye = n.a > 0.002 ? data.g / length(ViewRay(marchUv)) : 1e20;
+                        float sampleDepth = min(data.r, cloudEye), pixelDepth = min(sceneDepth, cloudEye);
+                        float difference = abs(sampleDepth - pixelDepth) / max(1.0, min(sampleDepth, pixelDepth));
+                        if (difference >= 0.1) continue;
+                        float2 offset = sampleBlock * 2.0 + _CloudChecker.xy - texel;
+                        float w = exp(-dot(offset, offset) * 0.275) / (0.02 + difference);
+                        upsampled += n * w;
+                        distanceSum += data.g * w;
+                        total += w;
                         low = min(low, n);
                         high = max(high, n);
                     }
                 }
+                upsampled /= max(1e-5, total);
+                if (total <= 1e-5) return Resolved(0.0, sceneDepth, sceneDepth);
+                float distance = distanceSum / total;
+                if (fresh) { upsampled = freshVal; distance = freshData.g; }
+                float cloudDepth = distance / viewLength;
+                // No history (first frame, a cut, a zoom): fresh texels are sharp, the rest
+                // fall back to the upsampled march. Sharpness returns over the next frames.
+                if (_CloudHistoryValid < 0.5 || _CloudChecker.w < 0.5) return Resolved(upsampled, sceneDepth, cloudDepth);
+
+                // This texel's ray, out to the cloud distance its fresh neighbour measured,
+                // seen from last frame's camera.
+                float3 ray = view / viewLength;
+                float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta.xyz, 1.0));
+                float2 previous = clip.xy / clip.w * 0.5 + 0.5;
+                if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) return Resolved(upsampled, sceneDepth, cloudDepth);
+                // Bilinear history must also reject foreground neighbours; testing only one
+                // depth texel would still let its empty colour bleed through interpolation.
+                float2 historyPixel = previous * _CloudLowResSize.xy - 0.5;
+                float2 historyBase = floor(historyPixel), fraction = frac(historyPixel);
+                float4 history = 0.0;
+                float historyWeight = 0.0;
+                [unroll]
+                for (int y = 0; y <= 1; y++)
+                {
+                    [unroll]
+                    for (int x = 0; x <= 1; x++)
+                    {
+                        float2 huv = (historyBase + float2(x, y) + 0.5) * _CloudLowResSize.zw;
+                        float depth = tex2Dlod(_CloudHistoryDepth, float4(huv, 0, 0)).r;
+                        // clip.w is this cloud point's previous eye depth. A changed
+                        // terrain distance behind it cannot invalidate the visible cloud.
+                        float pointDepth = upsampled.a > 0.002 ? clip.w : sceneDepth;
+                        depth = min(depth, pointDepth);
+                        float difference = abs(depth - pointDepth) / max(1.0, min(depth, pointDepth));
+                        float w = (x == 0 ? 1.0 - fraction.x : fraction.x) *
+                            (y == 0 ? 1.0 - fraction.y : fraction.y);
+                        if (difference >= 0.1) continue;
+                        history += tex2Dlod(_CloudHistoryTex, float4(huv, 0, 0)) * w;
+                        historyWeight += w;
+                    }
+                }
+                if (historyWeight <= 1e-5) return Resolved(upsampled, sceneDepth, cloudDepth);
+                history /= historyWeight;
                 float4 carried = clamp(history, low, high);
                 // A single representative depth cannot reproject all the material in a
                 // nearby volume. Reduce history when translation is large relative to it.
@@ -171,12 +244,11 @@ Shader "Boscali/FlightCloudComposite"
                 float motion = max(saturate(length(_CloudCamDelta.xyz) / max(4.0, distance * 0.08)), _CloudCamDelta.w);
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
-                if (!fresh) { o.colour = lerp(carried, upsampled, motion); return o; }
+                if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames; dense texels track the
                 // fresh march faster to keep their detail crisp.
-                o.colour = lerp(carried, freshVal, max(0.10 + 0.40 * freshVal.a, motion));
-                return o;
+                return Resolved(lerp(carried, freshVal, max(0.10 + 0.40 * freshVal.a, motion)), sceneDepth, cloudDepth);
             }
             ENDHLSL
         }
