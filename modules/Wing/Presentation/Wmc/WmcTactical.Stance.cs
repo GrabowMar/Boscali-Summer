@@ -131,9 +131,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             stanceKey = int.MinValue;
         }
 
-        /// <summary>EDIT ›: BEHAVIOUR is where stances are written. (Opening its editor on the matched stance is the BEHAVIOUR page's to
-        /// offer; this switches to the tab.)</summary>
-        private void EditStance() => WmcPanel.Instance?.Show(WmcTabs.Behaviour);
+        /// <summary>EDIT ›: BEHAVIOUR › STANCES, its editor opened on the scope's matched (or closest) stance.</summary>
+        private void EditStance()
+        {
+            WmcPanel panel = WmcPanel.Instance;
+            if (panel == null) return;
+            panel.Show(WmcTabs.Behaviour);
+            WmcPlan plan = panel.Plan;
+            if (plan == null) return;
+            plan.ShowSub(WmcPlan.SubStances);
+            Stance s = stanceSlot >= 0 ? WmcStanceActions.Book.Slot(stanceSlot) : null;
+            if (s != null) plan.Options.EditStance(s.Id);
+        }
 
         private void RefreshStance(WmcContext c)
         {

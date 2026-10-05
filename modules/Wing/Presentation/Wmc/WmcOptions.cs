@@ -474,6 +474,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow.RequestRelayout();
         }
 
+        /// <summary>Opens the editor on stance <paramref name="id"/> (ORDERS' EDIT ›): stance mode, that stance selected.</summary>
+        public void EditStance(string id)
+        {
+            if (Book.Find(id) == null) return;
+            selId = id;
+            if (live) PickMode(0);
+            listKey = long.MinValue;
+            saysShown = null;
+            if (last != null) Refresh(last);
+        }
+
         private void SelectStance(int i)
         {
             if (i < 0 || i >= Book.All.Count) return;
