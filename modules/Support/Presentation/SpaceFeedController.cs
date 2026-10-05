@@ -6,6 +6,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -550,12 +551,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
             int points = post.Points != null ? post.Points.Length : 0;
             string label = TaskedKinds.Label(post.Action);
-            bool cyber = post.Domain == TaskedDomain.Cyber;
+            bool cyber = post.Domain != TaskedDomain.Space; // a CYBER package or a SOF post: no target count, no bird
+            bool sof = post.Domain == TaskedDomain.Sof;
             string longTitle = label + " · " + points + " TARGET" + (points == 1 ? "" : "S") + (post.Payoff > 0 ? " · PAYOFF " + post.Payoff + " CR" : "");
             BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
             int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
             // The source is who posted it: OVERLORD (the watch officer), an OPERATOR by name, or your own call.
-            string sub = (cyber ? "NET" : source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
+            string sub = (sof ? "SOF" : cyber ? "NET" : source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
                 (post.WatchOfficer ? "OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
                 (left / 60) + ":" + (left % 60).ToString("00");
             var card = new FeedCardView
@@ -564,6 +566,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Sub = sub, Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true, Button = "CLAIM", Slab = TaskedKinds.Slab(post.Domain)
             };
             if (cyber) card.Title = label;
+            if (sof) { card.Title = SofPosts.Title(post.Action, TeamMarkOf(post)); longTitle = card.Title + " · " + SofPosts.Payoff(post.Action); }
             string detail;
             if (status == PostStatus.Stale) { card.State = "STALE"; detail = "STALE · NO LONGER OPEN"; card.Tone = AvState.Inert; card.Enabled = false; card.Price = ""; card.Button = "CLOSED"; }
             else if (calls != null && calls.TaskedPending && calls.ClaimingPost == post.CallId)
@@ -583,6 +586,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             else { card.State = SpaceFeedRules.PostWord(status); detail = SpaceFeedRules.PostWord(status) + " · CLAIM TO ARM, EXECUTE TO FIRE"; card.Tone = AvState.Ready; }
             card.Detail = longTitle + " · " + sub + " · " + detail;
             return card;
+        }
+
+        /// <summary>The mark id a SOF post carries is its team slot + 1; the client finds the team by the post's one fixed point (the team's position when it was posted).</summary>
+        private int TeamMarkOf(in FeedPost post)
+        {
+            SofStateData s = manager.SofMirror.State;
+            if (post.Points == null || post.Points.Length == 0 || !manager.SofMirror.Known) return 0;
+            int best = 0; float near = 600f;
+            foreach (SofTeamRow t in s.Teams)
+            {
+                float d = SofRules.Distance(t.X, t.Z, post.Points[0].X, post.Points[0].Z);
+                float lase = SofRules.Distance(t.TargetX, t.TargetZ, post.Points[0].X, post.Points[0].Z);
+                if (Mathf.Min(d, lase) < near) { near = Mathf.Min(d, lase); best = t.Slot + 1; }
+            }
+            return best;
         }
 
         private static string GateWord(SpaceFeedState state)

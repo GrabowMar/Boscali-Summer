@@ -1,6 +1,7 @@
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportManager manager;
         private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
         private readonly CyberNoticeTracker cyberNotices = new CyberNoticeTracker();
+        private readonly SofNoticeTracker sofNotices = new SofNoticeTracker();
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
@@ -83,6 +85,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 noticeKind = cyber == CyberNoticeKind.Traced ? C2HudKind.CyberTraced : C2HudKind.CyberHeld;
                 noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
                 AvUiSound.Play(cyber == CyberNoticeKind.Traced ? AvUiCue.Caution : AvUiCue.Confirm);
+            }
+            SofNoticeKind sofKind = sofNotices.Observe(manager.SofMirror.Known, manager.SofMirror.State, now, quiet);
+            if (sofKind != SofNoticeKind.None)
+            {
+                noticeText = sofKind == SofNoticeKind.Pinned ? "TEAM PINNED · NEEDS COVER" : sofKind == SofNoticeKind.Lost ? "TEAM LOST" : "MISSION COMPLETE";
+                noticeKind = sofKind == SofNoticeKind.Pinned ? C2HudKind.SofPinned : sofKind == SofNoticeKind.Lost ? C2HudKind.SofLost : C2HudKind.SofDone;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(sofKind == SofNoticeKind.Success ? AvUiCue.Confirm : AvUiCue.Caution);
             }
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;

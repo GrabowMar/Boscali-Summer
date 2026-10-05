@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using NuclearOption.Networking;
@@ -24,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private CallsController calls;
         private object faction;
         private bool creditPrimed, spacePrimed;
-        private int cyberSeq = -1;
+        private int cyberSeq = -1, sofSeq = -1;
         private float lastCredit, pendingDelta, nextCredit, nextTick, nextThreatLine, lastDeltaAt;
         private int lastDelta;
         private byte lastLive, lastTotal;
@@ -63,7 +64,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             console.Clear();
             notices.Reset();
             creditPrimed = spacePrimed = false;
-            cyberSeq = -1;
+            cyberSeq = -1; sofSeq = -1;
             pendingDelta = 0f;
             nextCredit = nextTick = 0f;
             lastThreat = "";
@@ -99,6 +100,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             Credit(wall);
             Space();
             Cyber(wall);
+            Sof(wall);
             if (watching) Threat(wall);
         }
 
@@ -155,6 +157,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 console.Add("CYBER · " + CyberNetWords.EventLine(e, SupportManager.MissionNow()) + (e.Own ? "" : " · TEAM"), bad ? C2Tone.Warn : C2Tone.Info, wall);
             }
             cyberSeq = Mathf.Max(cyberSeq, newest);
+        }
+
+        /// <summary>One console line per new SOF event of the faction (real team events only); the first sight of a mirror is silent.</summary>
+        private void Sof(float wall)
+        {
+            SofMirror mirror = manager.SofMirror;
+            if (!mirror.Known) { sofSeq = -1; return; }
+            int newest = 0;
+            foreach (SofEventRow e in mirror.State.Events) newest = Mathf.Max(newest, e.Seq);
+            if (sofSeq < 0) { sofSeq = newest; return; }
+            foreach (SofEventRow e in mirror.State.Events)
+            {
+                if (e.Seq <= sofSeq) continue;
+                bool bad = e.Kind == SofEventKind.Lost || e.Kind == SofEventKind.Pinned || e.Kind == SofEventKind.Failed || e.Kind == SofEventKind.Retaken;
+                console.Add("SOF · " + SofPageWords.EventLine(e), bad ? C2Tone.Warn : C2Tone.Info, wall);
+            }
+            sofSeq = Mathf.Max(sofSeq, newest);
         }
 
         private void Threat(float wall)

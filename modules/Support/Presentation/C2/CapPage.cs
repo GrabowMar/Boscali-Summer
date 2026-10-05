@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using TMPro;
@@ -37,6 +38,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>The faction's CYBER state as the mirror last heard it (null state or <see cref="CyberKnown"/> false: nothing heard yet).</summary>
         public CyberStateData Cyber;
         public bool CyberKnown;
+        /// <summary>The faction's SOF state as the mirror last heard it (null state or <see cref="SofKnown"/> false: nothing heard yet).</summary>
+        public SofStateData Sof;
+        public bool SofKnown;
     }
 
     /// <summary>
@@ -311,7 +315,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             CallTile armedTile = default;
             foreach (CallTile t in v.Tiles) if (t.State == CallState.Armed) { armedTile = t; break; }
-            string aimSrc = v.Aim == AimSource.Pod ? "POD" : v.Aim == AimSource.Map ? "MAP" : "NONE";
+            string aimSrc = v.Aim == AimSource.Pod ? "POD" : v.Aim == AimSource.Map ? "MAP" : v.Aim == AimSource.Team ? "TEAM" : "NONE";
             string target = v.AimGrid.Length > 0 ? v.AimGrid : v.Aim == AimSource.Pod ? "POD" : "R-CLICK MAP";
             int pinnedCount = 0;
             foreach (SupportActionId? f in v.Favourites) if (f.HasValue) pinnedCount++;

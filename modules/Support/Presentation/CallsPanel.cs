@@ -9,6 +9,7 @@ using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -25,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// The OPS bezel page, drawn as the SATCOM C2 terminal: the shared <see cref="C2Chrome"/> (banner, header, session line, tabs),
     /// one page per tab and the <see cref="C2Footer"/> that also carries the hover help of every row and button.
     /// [1] CAP is the CALL page (<see cref="CapPage"/>); [2] ORBIT hosts the SPACE feed (<see cref="SpaceFeedPanel"/>);
-    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET and [4] SOF are honest offline pages that still carry their real CALL rows (<see cref="DomainOfflinePage"/>). Keys 1-5 switch tabs only while the pointer is over the page or the full-screen station is open. The panel owns no policy: every figure comes from
+    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET (<see cref="CyberNetPage"/>) and [4] SOF (<see cref="SofPage"/>) are the faction-mirror pages; each falls back to honest NO LINK words. Keys 1-5 switch tabs only while the pointer is over the page or the full-screen station is open. The panel owns no policy: every figure comes from
     /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="SpaceFeedController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
@@ -54,7 +55,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private CapPage cap;
         private BoardPage boardPage;
         private CyberNetPage netPage;
-        private DomainOfflinePage sofPage;
+        private SofPage sofPage;
         private C2Tab tab = C2Tab.Cap;
         private int sceneGeneration;
 
@@ -314,7 +315,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feed?.AttachCompact(spacePanel);
             netPage = new CyberNetPage(pages[(int)C2Tab.Net - 1], Width, pageH, calls, p => t.Register(p),
                 id => manager?.CyberHop(id), id => manager?.CyberBurn(id), id => manager?.CyberDrop(id));
-            sofPage = new DomainOfflinePage(pages[(int)C2Tab.Sof - 1], Width, pageH, CallFamily.Sof, calls, p => t.Register(p));
+            sofPage = new SofPage(pages[(int)C2Tab.Sof - 1], Width, pageH, calls, p => t.Register(p), new SofPageActions
+            {
+                Raise = () => manager?.SofRaise(),
+                Order = (slot, verb) => manager?.SofOrder(slot, verb),
+                Divert = (slot, x, z) => manager?.SofDivert(slot, x, z),
+                Mission = (slot, kind, id, x, z) => manager?.SofMission(slot, kind, id, x, z),
+                Pick = (label, onPick) => manager != null && manager.ArmLocalPick(label, point => onPick((float)point.x, (float)point.z))
+            });
             boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
             feed?.AttachBoard(boardPage);
 
@@ -355,6 +363,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             tab = next;
             manager?.SetCyberWanted(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
+            manager?.SetSofWanted(next == C2Tab.Sof); // likewise the SOF page for the SOF mirror
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i] != null) pages[i].gameObject.SetActive(i == (int)next - 1);
             chromeKey = footerKey = "";
@@ -417,6 +426,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.LastDelta = c2.LastDelta;
             view.Cyber = manager.CyberMirror.State;
             view.CyberKnown = manager.CyberMirror.Known;
+            view.Sof = manager.SofMirror.State;
+            view.SofKnown = manager.SofMirror.Known;
             FillChrome(view);
         }
 
@@ -487,7 +498,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintChrome(C2Tab t, CapView v)
         {
             string key = string.Concat((int)t, "|", v.Faction, "|", v.Alert, "|", v.Credit, "|", v.Callsign, "|", v.Session, "|", v.KeyRot, "|",
-                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1);
+                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1, "|", v.SofKnown && v.Sof != null ? v.Sof.Seq : -1);
             if (key == chromeKey) return;
             chromeKey = key;
 
@@ -496,7 +507,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             chrome.SetBanner(C2Words.Banner(v.Faction, area), alert ? AvState.Danger : AvState.Caution);
             string title, sub;
             if (t == C2Tab.Net) { title = "NETWORK OPERATIONS"; sub = CyberNetWords.Sub(v.CyberKnown ? v.Cyber : null); }
-            else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = "NO TEAMS RAISED"; }
+            else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = SofPageWords.Sub(v.SofKnown ? v.Sof : null); }
             else if (t == C2Tab.Board) { title = "TASKED BOARD"; sub = "LIVE POSTS · " + v.BoardCount; }
             else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SENSOR, TRACK FILE, TASKED"; }
             else { title = "ORBITAL SUPPORT"; sub = "CAP · " + C2Cap.CallsReady(v.Tiles) + " CALLS READY"; }
