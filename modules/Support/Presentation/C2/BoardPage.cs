@@ -3,6 +3,7 @@ using BoscaliSummer.Modules.Support.Domain.C2;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.C2
 {
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// </summary>
     internal sealed class BoardPage
     {
-        private const float Gap = 6f, RowH = 46f, NoticeBody = 44f;
+        private const float Gap = 6f, MinRowH = 46f, MaxRowH = 58f, NoticeBody = 44f;
         private static readonly string[] HowTo =
         {
             "> " + C2Board.Empty,
@@ -27,6 +28,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly float width;
         private readonly bool full;
         private readonly int rowCount;
+        private readonly float rowH;
         private readonly Action<int> press;
         private readonly Action toggleQuiet;
         private readonly Action<AvPart> register;
@@ -35,6 +37,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly C2Row[] rows;
         private readonly int[] ids;
         private readonly TMP_Text[] howTo = new TMP_Text[4];
+        private readonly Image[] ghost;
+        private readonly TMP_Text[] ghostText;
         private readonly TMP_Text quietWord, quietSub;
         private readonly AvControl quietButton;
         private bool quietShown, quietKnown, emptyShown;
@@ -49,14 +53,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             rowCount = full ? C2Board.Rows896 : C2Board.Rows596;
             rows = new C2Row[rowCount];
             ids = new int[rowCount];
+            ghost = new Image[rowCount];
+            ghostText = new TMP_Text[rowCount];
 
             float gap = full ? Gap : 4f;
-            float boardBody = rowCount * (RowH + 2f) + 2f;
-            float boardH = C2Box.HeaderH + boardBody;
             float noticeH = full ? C2Box.HeaderH + NoticeBody : 0f;
-            float fixedH = gap + boardH + gap + (full ? noticeH + gap : 0f);
-            float spare = height - fixedH - C2ConsoleView.HeightFor(2);
-            int lines = Mathf.Clamp(2 + Mathf.FloorToInt(spare / C2ConsoleView.LineH), 2, full ? 12 : 10);
+            // Budget: gap, console (at least 2 lines), gap, posts box, gap, [notices box, gap]. The rows grow first (up to MaxRowH);
+            // what is left goes to the console, and the notices box is anchored to the bottom of the page, so no void is left under it.
+            float chrome = gap + gap + gap + (full ? noticeH + gap : 0f) + C2Box.HeaderH + 2f;
+            float minConsole = C2ConsoleView.HeightFor(full ? 6 : 2);
+            rowH = Mathf.Clamp(Mathf.Floor((height - chrome - minConsole) / rowCount) - 2f, MinRowH, full ? MaxRowH : MinRowH);
+            float boardBody = rowCount * (rowH + 2f) + 2f;
+            float boardH = C2Box.HeaderH + boardBody;
+            float spare = height - chrome - boardBody - minConsole;
+            int lines = Mathf.Clamp((full ? 6 : 2) + Mathf.FloorToInt(spare / C2ConsoleView.LineH), 2, full ? 14 : 10);
             float consoleH = C2ConsoleView.HeightFor(lines);
 
             console = Make(new C2ConsoleView(parent, lines));
@@ -71,15 +81,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             for (int i = 0; i < rowCount; i++)
             {
                 int slot = i;
-                rows[i] = Make(new C2Row(board.Body, RowH, true));
-                rows[i].Place(new AvSlot(1f, 1f + i * (RowH + 2f), width - 4f, RowH));
+                rows[i] = Make(new C2Row(board.Body, rowH, true));
+                rows[i].Place(new AvSlot(1f, 1f + i * (rowH + 2f), width - 4f, rowH));
                 rows[i].Primary.Clicked += () => this.press?.Invoke(ids[slot]);
                 rows[i].Rect.gameObject.SetActive(false);
+                // An empty slot is drawn as a ghost row, so the box is always full and never leaves an empty band under the posts.
+                ghost[i] = AvLay.Solid(board.Body, "Ghost" + i, Color.clear);
+                ghost[i].raycastTarget = false;
+                AvLay.Place(ghost[i].rectTransform, 1f, 1f + i * (rowH + 2f), width - 4f, rowH);
+                ghostText[i] = C2Kit.Mono(board.Body, "GhostText" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
+                C2Kit.Place(ghostText[i], 14f, 1f + i * (rowH + 2f), width - 28f, rowH);
+                OpsText.Set(ghostText[i], "SLOT " + (i + 1).ToString("00") + " · OPEN");
+                ghost[i].gameObject.SetActive(false);
+                ghostText[i].gameObject.SetActive(false);
             }
             for (int i = 0; i < howTo.Length; i++)
             {
                 howTo[i] = C2Kit.Mono(board.Body, "HowTo" + i, 10.5f, TextAlignmentOptions.MidlineLeft);
-                C2Kit.Place(howTo[i], 10f, 6f + i * 18f, width - 24f, 16f);
+                C2Kit.Place(howTo[i], 10f, Mathf.Floor((boardBody - howTo.Length * 20f) * 0.5f) + i * 20f, width - 24f, 18f);
                 howTo[i].gameObject.SetActive(false);
             }
 
@@ -88,7 +107,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 notices = Make(new C2Box(parent, "NOTICES"));
                 notices.BodyHeight = NoticeBody;
                 notices.SetMeta("TASKED + INTENT ONLY");
-                notices.Place(new AvSlot(0f, y, width, noticeH));
+                notices.Place(new AvSlot(0f, height - gap - noticeH, width, noticeH));
                 quietWord = C2Kit.Mono(notices.Body, "QuietWord", 12f, TextAlignmentOptions.MidlineLeft, true, 1f);
                 quietSub = C2Kit.Mono(notices.Body, "QuietSub", 10f, TextAlignmentOptions.MidlineLeft);
                 C2Kit.Place(quietWord, 8f, 3f, width - 130f, 18f);
@@ -121,6 +140,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 FeedCardView c = i < shown ? v.Cards[i] : default;
                 bool on = c.Present;
                 if (rows[i].Rect.gameObject.activeSelf != on) rows[i].Rect.gameObject.SetActive(on);
+                bool slot = !on && shown > 0;
+                if (ghost[i].gameObject.activeSelf != slot) { ghost[i].gameObject.SetActive(slot); ghostText[i].gameObject.SetActive(slot); }
                 if (!on) continue;
                 ids[i] = c.PostId;
                 rows[i].Armed = c.Armed;
@@ -167,6 +188,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void RestyleEmpty()
         {
             for (int i = 0; i < howTo.Length; i++) if (howTo[i] != null) howTo[i].color = i == 0 ? OpsInk.Dim : OpsInk.Muted;
+            if (ghost != null)
+                for (int i = 0; i < ghost.Length; i++)
+                {
+                    if (ghost[i] != null) ghost[i].color = OpsInk.Inert;
+                    if (ghostText[i] != null) ghostText[i].color = OpsInk.Dim;
+                }
         }
 
         public void Restyle()

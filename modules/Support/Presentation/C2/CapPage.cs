@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 : 4f + boxChrome + 4f + StripH + 4f + 26f + 4f + 4f;
             int consoleLines = full ? 4 : 2;
             float spare = height - fixedH - C2ConsoleView.HeightFor(consoleLines) - n * 2f;
-            float rowH = Mathf.Clamp(Mathf.Floor(spare / n), full ? 30f : 24f, full ? 48f : 30f);
+            float rowH = Mathf.Clamp(Mathf.Floor(spare / n), full ? 30f : 24f, full ? 46f : 30f);
             spare -= rowH * n;
             consoleLines = Mathf.Min(7, consoleLines + Mathf.Max(0, Mathf.FloorToInt(spare / C2ConsoleView.LineH)));
             float consoleH = C2ConsoleView.HeightFor(consoleLines);
@@ -122,6 +122,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                     C2Kit.Place(cellKey[i], CellX(i), 2f, CellW(i) - 4f, 12f);
                     C2Kit.Place(cellValue[i], CellX(i), 14f, CellW(i) - 4f, 18f);
                 }
+                // FRIENDLY says HOST: the host checks friendly proximity when the CALL fires; the full words ride the hover tip.
+                Image friendlyHit = AvLay.Solid(buttonsParent, "FriendlyTip", Color.clear);
+                AvLay.Place(friendlyHit.rectTransform, CellX(2), 2f, CellW(2), CellH);
+                AvHelpTip.Attach(friendlyHit.gameObject, "FRIENDLY: the host checks for friendly units near the aim when the CALL fires.");
                 buttonsX = 6f;
                 buttonsY = favY = 2f + CellH + 4f;
                 favH = ButtonH;
@@ -265,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 {
                     execBox.SetTitle("EXECUTE ORDER · " + armedTile.Label);
                     execBox.SetMeta("READBACK " + C2Words.AuthCode((int)armedTile.Id, 'R')); // cosmetic
-                    Cells(("TGT", target), ("AIM SRC", aimSrc), ("FRIENDLY", "HOST CHECK"), ("COST", armedTile.CostText));
+                    Cells(("TGT", target), ("AIM SRC", aimSrc), ("FRIENDLY", "HOST"), ("COST", armedTile.CostText));
                 }
                 else
                 {

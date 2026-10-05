@@ -19,7 +19,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly AvLineGraphic[] orbits = new AvLineGraphic[3];
         private readonly Image[] markers = new Image[3];
         private readonly AvState[] tones = { AvState.Inert, AvState.Inert, AvState.Inert };
-        private readonly float width, height;
+        // cosmetic: the drawing is designed for 70 px and scales to whatever height the layout gives it.
+        private const float DesignHeight = 70f;
+        private readonly float width, height, k;
 
         public OrbitArt(RectTransform parent, float width, float height)
         {
@@ -29,15 +31,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(Rect, 0f, 0f, width, height);
             limb = Line("Limb");
             for (int i = 0; i < orbits.Length; i++) orbits[i] = Line("Orbit" + i);
-            Draw(limb, 0.72f, 14f, 8f);
-            for (int i = 0; i < orbits.Length; i++) Draw(orbits[i], Radius(i), Rise(i), 8f);
+            k = height / DesignHeight;
+            Draw(limb, 0.72f, 14f * k, 8f * k);
+            for (int i = 0; i < orbits.Length; i++) Draw(orbits[i], Radius(i), Rise(i) * k, 8f * k);
             for (int i = 0; i < markers.Length; i++)
             {
                 markers[i] = AvLay.Solid(Rect, "Bird" + i, Color.clear);
                 markers[i].raycastTarget = false;
                 float phi = MarkerAngle[i] * Mathf.Deg2Rad;
                 float x = width * 0.5f + width * Radius(i) * Mathf.Cos(phi);
-                float y = 8f + Rise(i) * Mathf.Sin(phi);
+                float y = 8f * k + Rise(i) * k * Mathf.Sin(phi);
                 AvLay.Place(markers[i].rectTransform, x - MarkerSize * 0.5f, height - y - MarkerSize * 0.5f, MarkerSize, MarkerSize);
             }
             Restyle();

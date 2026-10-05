@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// </summary>
     internal sealed class C2Row : AvPart
     {
-        private const float PadX = 6f, RailW = 3f, PinW = 22f, IndexW = 22f, PrimaryW = 78f, ExtraW = 52f, StateW = 64f, PriceW = 52f, Gap = 4f, CtlH = 22f;
+        private const float PadX = 6f, RailW = 3f, PinW = 22f, IndexW = 22f, PrimaryW = 78f, ExtraW = 52f, StateW = 64f, PriceW = 52f, Gap = 4f, CtlH = 22f, ExtraH = 18f;
         private readonly float rowHeight;
         private readonly bool subLine;
         private readonly AvFrame frame, chipFrame;
@@ -137,10 +137,26 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(frame.rectTransform, 0f, 0f, w, h);
             AvLay.Place(rail.rectTransform, 0f, 0f, RailW, h);
 
-            // Right cluster, right to left.
+            // Right cluster, right to left. The extra button (UNLASE) is docked to the primary: stacked under it in a tall row (every
+            // row keeps its price and state columns), or directly to its left in a short one.
             float x = w - PadX;
             x -= PrimaryW;
-            AvLay.Place(Primary.Rect, x, (h - CtlH) * 0.5f, PrimaryW, CtlH);
+            bool stack = extraShown && h >= 44f;
+            if (stack)
+            {
+                float top = (h - (CtlH + 3f + ExtraH)) * 0.5f;
+                AvLay.Place(Primary.Rect, x, top, PrimaryW, CtlH);
+                AvLay.Place(Extra.Rect, x, top + CtlH + 3f, PrimaryW, ExtraH);
+            }
+            else
+            {
+                AvLay.Place(Primary.Rect, x, (h - CtlH) * 0.5f, PrimaryW, CtlH);
+                if (extraShown)
+                {
+                    x -= Gap + ExtraW;
+                    AvLay.Place(Extra.Rect, x, (h - CtlH) * 0.5f, ExtraW, CtlH);
+                }
+            }
             x -= Gap;
             x -= StateW;
             OpsText.Set(stateText, C2Kit.FitTo(stateText, stateRaw, StateW));
@@ -149,16 +165,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             OpsText.Set(priceText, C2Kit.FitTo(priceText, priceRaw, PriceW));
             C2Kit.Place(priceText, x, 0f, PriceW, h);
             float right = x - 6f;
-            // The extra button sits left of the price so every row keeps its price and state in the same columns.
-            // With a sub-line and room (a tall row) the extra button rides the top half, so the sub-line may run underneath it.
-            bool lift = subLine && h >= 43f;
-            float subRight = right;
-            if (extraShown)
-            {
-                right -= ExtraW;
-                AvLay.Place(Extra.Rect, right, lift ? 3f : (h - CtlH) * 0.5f, ExtraW, CtlH);
-                right -= 4f;
-            }
 
             // Left cluster.
             float left = RailW + 5f;
@@ -172,7 +178,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             left += IndexW + 8f;
 
             float area = Mathf.Max(20f, right - left);
-            float nameY = subLine ? 2f : 0f, nameH = subLine ? 16f : h;
+            // With a sub-line the name and the sub-line form one 32 px block centred in the row, so a tall row never airs them apart.
+            float nameY = subLine ? Mathf.Floor((h - 32f) * 0.5f) : 0f, nameH = subLine ? 16f : h;
             string name = nameRaw;
             float nameW = C2Kit.Width(nameText, name);
             float chipW = chipRaw.Length > 0 ? C2Kit.Width(chipText, chipRaw) + 10f : 0f;
@@ -194,9 +201,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             subText.gameObject.SetActive(subLine && subRaw.Length > 0);
             if (subLine)
             {
-                float subArea = Mathf.Max(20f, (lift ? subRight : right) - left);
+                float subArea = Mathf.Max(20f, right - left);
                 OpsText.Set(subText, C2Kit.FitTo(subText, subRaw, subArea));
-                C2Kit.Place(subText, left, h - 17f, subArea, 14f);
+                C2Kit.Place(subText, left, nameY + 18f, subArea, 14f);
             }
         }
 
