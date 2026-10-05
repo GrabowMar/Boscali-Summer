@@ -57,9 +57,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     internal sealed class SofWatchBrain
     {
         public const float ThinkSeconds = 2f, MinSabotageOdds = 55f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
-            TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 1900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
-            UrgentFloor = 15f, ApproachMeters = 2600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
-        public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, CommitHoldSeconds = 90f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 2000f, ArmourRadiusMeters = 1000f;
+            TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
+            UrgentFloor = 15f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
+        public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 1000f, ArmourRadiusMeters = 1000f;
         public const int MaxBackoffs = 32, MaxRecon = 4, MaxRevealedNear = 3;
         private const ulong Me = SpaceContacts.WatchOfficerId;
 
@@ -119,7 +119,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             SofTeam team = Mine(desk);
             if (team != null && team.State == TeamState.Lost) restUntil = Math.Max(restUntil, now + LostRestSeconds);
             pacer.SetUrgent(WatchDomain.Sof, false); // refreshed below only while a team is in danger: a stale reservation would hold CYBER off the shared limiter
-            if (!idle.Idle(humans, now)) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
+            // A human working SOF suspends everything except the one thing that cannot wait: a team in the field still gets its exfil when the exposure says so.
+            bool suspended = !idle.Idle(humans, now);
+            if (suspended && (team == null || (team.State != TeamState.Moving && team.State != TeamState.OnSite))) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
             if (team == null || team.State == TeamState.Lost) return RaisePlan(desk, world, humans, now);
             if (team.Slot != lastSlot) { lastSlot = team.Slot; lastExposure = -1f; }
             float prior = lastExposure, priorAt = lastExposureAt;
@@ -129,7 +131,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case TeamState.Moving:
                 case TeamState.Returning:
                 case TeamState.OnSite:
-                    return SteerPlan(desk, team, prior, priorAt, pacer, aiFaction, now);
+                    return SteerPlan(desk, team, prior, priorAt, pacer, aiFaction, now, suspended);
                 case TeamState.Ready:
                     return ReadyPlan(desk, world, team, now);
                 default:
@@ -228,7 +230,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 return new SofWatchPlan(SofWatchAction.Mission, SofWatchWhy.None, team.Slot, MissionKind.Lase, g.Id, TeamVerb.Cancel, g.X, g.Z, WatchCode.SofLase, team.Slot, km);
             if (world.AllowRecon)
             {
-                // RECON takes a point, not a unit: the team stops 1.9 km short of the contact, inside the 2 km reveal radius and just inside the exposure circle, instead of walking onto it.
+                // RECON takes a point, not a unit: the team stops 900 m short of the contact (inside the 1 km exposure circle but well inside the 2 km reveal radius), instead of walking onto it.
                 float px = g.X, pz = g.Z, d = SofRules.Distance(team.X, team.Z, g.X, g.Z);
                 if (d > ReconStandOffMeters) { float k = (d - ReconStandOffMeters) / d; px = team.X + (g.X - team.X) * k; pz = team.Z + (g.Z - team.Z) * k; }
                 if (!ReconRecent(px, pz, now))
@@ -261,23 +263,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         // ---- Steering --------------------------------------------------------------------------
 
-        private SofWatchPlan SteerPlan(SofDesk desk, SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now)
+        private SofWatchPlan SteerPlan(SofDesk desk, SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now, bool safetyOnly)
         {
             bool rising = prior >= 0f && team.Exposure > prior + RisingEpsilon;
             int exposure = (int)Math.Round(team.Exposure);
             // Where the exposure will stand by the time OVERLORD may act again: its climb so far, over the think cadence plus the pacer's wait (30 s shared for an AI faction).
             float rate = prior >= 0f && now > priorAt ? (team.Exposure - prior) / (now - priorAt) : 0f;
             float projected = team.Exposure + Math.Max(0f, rate) * (ThinkSeconds + 1f + pacer.WaitSeconds(WatchDomain.Sof, aiFaction, now));
-            // A team that would be pinned inside one full AI gap needs the shared limiter now, and so does one on its last 2.6 km to a target (the exposure circle starts 2 km out and can climb
+            // A team that would be pinned inside one full AI gap needs the shared limiter now, and so does one on its last 1.6 km to a target (the exposure circle starts 1 km out and can climb
             // several points a second): CYBER may not take the limiter from under it.
             bool moving = team.State == TeamState.Moving || team.State == TeamState.OnSite;
             bool approaching = team.State == TeamState.Moving && team.HasDest && SofRules.Distance(team.X, team.Z, team.DestX, team.DestZ) <= ApproachMeters;
-            pacer.SetUrgent(WatchDomain.Sof, aiFaction && moving && (approaching || (team.Exposure >= UrgentFloor && rising && team.Exposure + rate * (ThinkSeconds + 1f + WatchPacer.AiGap(0)) >= ProjectedExfil)));
+            pacer.SetUrgent(WatchDomain.Sof, aiFaction && moving && (approaching || (team.Exposure >= UrgentFloor && rising && team.Exposure + rate * (ThinkSeconds + 1f + WatchPacer.AiGap()) >= ProjectedExfil)));
             // A team that can still reach its target, hold there and end under the ceiling at the exposure rate it is climbing now is not withdrawn at 40 %: a lightly defended target is reachable.
             // The projected-95 % safety below still withdraws it whenever the pin is about to land inside one pacing wait.
             bool committed = Committed(team, rate, now);
             if (team.State != TeamState.Returning && ((team.Exposure >= ExfilAt && rising && !committed) || (team.Exposure >= ProjectedFloor && projected >= ProjectedExfil)))
                 return Exfil(team, WatchCode.SofExfil, exposure);
+            if (safetyOnly) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
             if (team.HoldOn && team.Exposure <= ResumeBelow) return Verb(team, TeamVerb.Hold, WatchCode.SofResume, exposure);
             // Inside a defended circle a push costs more exposure per metre than walking (x1.5 rate for x1.5 speed against a fixed recovery): slow down while climbing, and recover on site.
             if (team.PushOn && rising && committed) return Verb(team, TeamVerb.Push, WatchCode.SofResume, exposure);

@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportSettingsView s = SettingsView();
             if (!s.Enabled)
             {
-                if (runs.Count > 0) ResetForScene();
+                if (runs.Count > 0) { foreach (var pair in runs) Release(pair.Value); ResetForScene(); }
                 return;
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
@@ -118,7 +118,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             FactionHQ owner = run.Owner;
             int humans = manager.HumanCount(owner);
             bool ai = humans == 0;
-            if (!(ai ? s.Ai : s.Watch)) { run.Pacer.SetUrgent(WatchDomain.Cyber, false); run.Pacer.SetUrgent(WatchDomain.Sof, false); return; }
+            if (!(ai ? s.Ai : s.Watch))
+            {
+                run.Pacer.SetUrgent(WatchDomain.Cyber, false); run.Pacer.SetUrgent(WatchDomain.Sof, false);
+                run.LastSeed = now;
+                Release(run); // WATCH OFFICER or AI FACTIONS switched off mid-mission: what OVERLORD holds goes, once per transition
+                return;
+            }
+            run.Released = false;
+            if (!ai) run.LastSeed = now; // a faction with humans earns no seed, and one that loses its humans starts counting from then
             if (ai && now >= run.NextSeed)
             {
                 float dt = Mathf.Clamp(now - run.LastSeed, 0f, 60f);
@@ -147,6 +155,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        /// <summary>
+        /// OVERLORD stops: its intrusion is dropped and every team it raised is ordered home, so nothing keeps running (and tracing, and walking into fire) with nobody at the controls.
+        /// Once per transition (the flag clears when the faction is staffed again); a refused order (a pinned team) is simply left to the desk's own rules.
+        /// </summary>
+        private void Release(FactionWatch run)
+        {
+            if (run.Released) return;
+            run.Released = true;
+            const ulong me = SpaceContacts.WatchOfficerId;
+            FactionHQ owner = run.Owner;
+            if (cyber != null && cyber.TryDesk(owner, out CyberDesk cyberDesk) && cyberDesk.Network.Of(me) != null) cyberDesk.Drop(me, 0);
+            if (sof != null && sof.TryDesk(owner, out SofDesk sofDesk))
+            {
+                for (int i = 0; i < sofDesk.Teams.Length; i++)
+                {
+                    SofTeam t = sofDesk.Teams[i];
+                    if (t != null && t.Active && t.Raiser == me && t.State != TeamState.Lost) sofDesk.Order(me, t.Slot, TeamVerb.Exfil);
+                }
+            }
+        }
+
         private static void Note(FactionWatch run, WatchDomain domain, WatchCode code, int a, int b, string reason)
         {
             run.Log.Add(domain, code, a, b);
@@ -158,6 +187,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (runs.TryGetValue(owner, out FactionWatch run)) return run;
             if (runs.Count >= MaximumFactions) return null;
             run = new FactionWatch(this, owner);
+            run.LastSeed = SupportManager.MissionNow(); // a run created mid-mission seeds from now, never from time zero
             runs.Add(owner, run);
             return run;
         }
@@ -177,6 +207,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public readonly OpsHost OpsHost;
             public readonly List<Vector2> Pilots = new List<Vector2>(MaximumPilots);
             public float NextSeed, LastSeed, PilotsAt;
+            public bool Released;
 
             public FactionWatch(OverlordService service, FactionHQ owner)
             {
@@ -189,7 +220,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public void Reset()
             {
                 Pacer.Reset(); Cyber.Reset(); Sof.Reset(); Ai.Reset(); Log.Clear(); Pilots.Clear();
-                NextSeed = LastSeed = PilotsAt = 0f;
+                NextSeed = LastSeed = PilotsAt = 0f; Released = false;
             }
         }
 

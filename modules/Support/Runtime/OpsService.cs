@@ -254,7 +254,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
             into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Log.Clear();
-            if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f)) return false;
+            if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f))
+            {
+                if (viewer != null && viewer.HQ != null) manager.CopyOverlordLog(viewer.HQ, into.Log); // OVERLORD still talks to its own console when OPERATIONS is off
+                return false;
+            }
             float now = SupportManager.MissionNow();
             ulong id = PlayerIdentity.Of(viewer);
             into.Active = true;

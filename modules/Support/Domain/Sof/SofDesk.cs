@@ -123,6 +123,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public TargetKind TargetKind;
         public AnchorSub TargetSub;
         public uint TargetKey;
+        /// <summary>The enemy unit that never adds exposure to this team (its last unit mission target): set at the order, kept resolving whatever the fog says, cleared at home, on loss or when the unit is truly dead.</summary>
+        public uint ExemptKey;
         public float TargetX, TargetZ;
         public bool Exploit, LaseActive;
         public int Odds;
@@ -269,7 +271,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             into.Clear();
             for (int i = 0; i < Teams.Length; i++)
+            {
                 if (Teams[i].Active && Teams[i].Mission != MissionKind.None && Teams[i].Mission != MissionKind.Recon && Teams[i].TargetKey != 0) into.Add(Teams[i].TargetKey);
+                if (Teams[i].Active && Teams[i].ExemptKey != 0) into.Add(Teams[i].ExemptKey); // the exposure exemption outlives the mission (EXFIL) and must not lapse with the fog
+            }
             for (int i = 0; i < held.Count; i++) into.Add(held[i].Key);
         }
 
@@ -351,6 +356,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (paid != SofOutcome.None) return new SofResult(paid, slot, 0, detail);
             t.MissionCost = cost; t.MissionPayer = op;
             t.Mission = kind; t.TargetId = id; t.TargetKind = tk; t.TargetSub = sub; t.TargetKey = key; t.TargetX = tx; t.TargetZ = tz; t.Exploit = exploit;
+            t.ExemptKey = kind != MissionKind.Recon && (tk == TargetKind.Ground || tk == TargetKind.Anchor) ? key : 0;
             t.DestX = tx; t.DestZ = tz; t.HasDest = true; t.HoldOn = false; t.PushOn = false;
             t.Insert = t.Carried ? Insertion.Helicopter : Insertion.Ground;
             t.State = TeamState.Moving; t.LiftWaiting = false;
@@ -492,8 +498,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             int exposers = scene.Within2000;
             // The mission target's own unit never adds exposure, on the approach, on site and on the way home (fun over realism: an unaided team must be able to reach
             // a lightly defended target and get out). The target key stays on the team after EXFIL; once the unit is dead it is no longer counted by the host anyway.
-            if (t.TargetKey != 0 && exposers > 0 && (t.TargetKind == TargetKind.Ground || t.TargetKind == TargetKind.Anchor)
-                && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius && ports.TargetAlive(t.TargetKind, t.TargetSub, t.TargetKey)) exposers--;
+            if (t.ExemptKey != 0)
+            {
+                if (!ports.TargetAlive(t.TargetKind, t.TargetSub, t.ExemptKey)) t.ExemptKey = 0; // truly dead (the host keeps the key resolving whatever the fog says)
+                else if (exposers > 0 && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
+            }
             t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt)));
             t.Odds = SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
@@ -539,6 +548,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             {
                 if (t.Wounded) { t.State = TeamState.Recovering; t.RecoverUntil = now + SofRules.WoundedSeconds; }
                 else t.State = TeamState.Ready;
+                t.ExemptKey = 0;
                 Queue(SofEventKind.Home, t);
                 return;
             }
@@ -619,7 +629,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         private void Lose(SofTeam t, float now)
         {
-            ClearMission(t);
+            ClearMission(t); t.ExemptKey = 0;
             t.State = TeamState.Lost; t.LostAt = now; t.Carried = false; t.LiftWaiting = false; t.HasDest = false; t.CarrierId = 0;
             Queue(SofEventKind.Lost, t);
         }

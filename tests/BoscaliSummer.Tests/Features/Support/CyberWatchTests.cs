@@ -299,7 +299,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(rig.ActionTimes.Count >= 4, "OVERLORD kept working (" + rig.ActionTimes.Count + " actions)");
             for (int i = 1; i < rig.ActionTimes.Count; i++) TestAssert.That(rig.ActionTimes[i] - rig.ActionTimes[i - 1] >= 10f, "at most one action per 10 s: gap " + (rig.ActionTimes[i] - rig.ActionTimes[i - 1]));
             Eq(rig.Traced(), false, "never traced in 15 minutes");
-            TestAssert.That(WatchPacer.AiGap(0) == 30f && Math.Abs(WatchPacer.AiGap(4) - 48f) < 0.01f, "the AI gap is 30 s and scales for a campaign: 30 s x (1 + 0.15 x players)");
+            TestAssert.That(WatchPacer.AiGap() == 30f, "the AI gap is 30 s");
         }
     }
 }

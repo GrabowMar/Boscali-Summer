@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             C2Board.Empty,
             "An operator with MARKs presses TRANSMIT on the ORBIT page.",
-            "OVERLORD posts from revealed contacts when no one works SPACE.",
+            "OVERLORD posts from revealed contacts, and CYBER / SOF help, when no one works them.",
             "CLAIM arms a post, EXECUTE fires it: the first claim wins."
         };
 

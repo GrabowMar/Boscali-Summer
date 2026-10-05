@@ -69,7 +69,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(!ai.CanAct(WatchDomain.Sof, true, 129f) && ai.CanAct(WatchDomain.Sof, true, 130f), "an AI faction shares 30 s across both domains");
             Near(WatchPacer.Gap(true), 30f, "AI gap");
             Near(WatchPacer.Gap(false), 10f, "domain gap");
-            Near(WatchPacer.AiGap(8), 66f, "campaign: 30 s x (1 + 0.15 x 8)");
             TestAssert.That(!ai.CanAct(WatchDomain.Ops, true, 500f), "the operation desk is not a domain of the action limiter");
 
             // Urgency: while one domain cannot wait, the other may not take an AI faction's shared limiter; two urgent domains do not block each other; a faction with humans is unaffected.

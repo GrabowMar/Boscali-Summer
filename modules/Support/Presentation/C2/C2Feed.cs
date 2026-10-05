@@ -182,16 +182,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void Ops(float wall)
         {
             OpsMirror mirror = manager.OpsMirror;
-            if (!mirror.Known || !mirror.State.Active) { opsSeq = opsPingSeq = watchSeq = -1; return; }
+            if (!mirror.Known) { opsSeq = opsPingSeq = watchSeq = -1; return; }
             int newest = 0, newestPing = 0, newestWatch = 0;
             foreach (OpsEventRow e in mirror.State.Events) newest = Mathf.Max(newest, e.Seq);
             foreach (OpsPingRow p in mirror.State.Pings) newestPing = Mathf.Max(newestPing, p.Seq);
             foreach (WatchLogRow l in mirror.State.Log) newestWatch = Mathf.Max(newestWatch, l.Seq);
-            if (opsSeq < 0) { opsSeq = newest; opsPingSeq = newestPing; watchSeq = newestWatch; return; }
             // WATCH OFFICER OVERLORD's own actions, each with the reason it gave (the faction's own console only: the enemy learns of them through traces, pings and real sensing).
-            foreach (WatchLogRow l in mirror.State.Log)
-                if (l.Seq > watchSeq) console.Add(WatchWords.Domain(l.Domain) + " · " + WatchWords.Line(l), C2Tone.Info, wall);
-            watchSeq = Mathf.Max(watchSeq, newestWatch);
+            // They ride the state even when OPERATIONS is off. The first sight is silent; a log that restarted (its newest row is older than what was printed: a scene reset on the host)
+            // catches up by printing what is there.
+            if (watchSeq < 0) watchSeq = newestWatch;
+            else
+            {
+                if (newestWatch < watchSeq) watchSeq = 0;
+                foreach (WatchLogRow l in mirror.State.Log)
+                    if (l.Seq > watchSeq) console.Add(WatchWords.Domain(l.Domain) + " · " + WatchWords.Line(l), C2Tone.Info, wall);
+                watchSeq = Mathf.Max(watchSeq, newestWatch);
+            }
+            if (!mirror.State.Active) { opsSeq = opsPingSeq = -1; return; }
+            if (opsSeq < 0) { opsSeq = newest; opsPingSeq = newestPing; return; }
             foreach (OpsEventRow e in mirror.State.Events)
             {
                 if (e.Seq <= opsSeq) continue;

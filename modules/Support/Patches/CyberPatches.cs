@@ -45,19 +45,25 @@ namespace BoscaliSummer.Modules.Support.Patches
     [HarmonyPatch(typeof(TargetDetector), nameof(TargetDetector.DetectTarget))]
     internal static class CyberDetectScopePatch
     {
-        /// <summary>Remembers the previous scope in <paramref name="__state"/> (detections can nest) and opens this detector's scope; a no-op off the host or without CYBER.</summary>
+        /// <summary>
+        /// Opens this detector's scope and remembers the previous one in <paramref name="__state"/> (detections can nest). Off the host, or with no CYBER faction, it returns before touching the
+        /// thread-static at all (this runs for every detection of every unit): nothing is opened.
+        /// </summary>
         private static void Prefix(TargetDetector __instance, out Unit __state)
         {
+            __state = null;
+            if (!GameAccess.IsServer()) return;
+            CyberService active = CyberService.Active;
+            if (active == null || !active.HasFactions) return;
             __state = CyberShareContext.Detecting;
-            if (!GameAccess.IsServer() || CyberService.Active == null) return;
             try { CyberShareContext.Detecting = __instance != null ? __instance.GetAttachedUnit() : null; }
             catch (Exception e) { CyberShareContext.Detecting = __state; PatchGuard.Report("Support.CyberDetectScope", e); }
         }
 
-        /// <summary>Always restores the previous scope, including when vanilla throws, and never swallows the exception.</summary>
+        /// <summary>Restores the previous scope, including when vanilla throws, and never swallows the exception; a no-op on clients and without a CYBER faction (nothing was opened there).</summary>
         private static Exception Finalizer(Exception __exception, Unit __state)
         {
-            CyberShareContext.Detecting = __state;
+            if (GameAccess.IsServer() && (CyberService.Active != null && CyberService.Active.HasFactions)) CyberShareContext.Detecting = __state; // clients and a CYBER-less host never touch the thread-static
             return __exception;
         }
     }

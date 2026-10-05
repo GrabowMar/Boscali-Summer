@@ -308,6 +308,14 @@ namespace BoscaliSummer.Tests.Features.Support
             float before = w.Exposure;
             Advance(g, r, 10f);
             TestAssert.That(w.Exposure < before, "after the order the former target still adds nothing: one escort falls " + before + " -> " + w.Exposure);
+            var keep = new HashSet<uint>();
+            g.CollectKeep(keep);
+            TestAssert.That(keep.Contains(21u), "the exempt unit stays in the keep set after the mission ends, so the fog cannot lapse the exemption");
+            r.Alive = false; // truly dead
+            Advance(g, r, 2f);
+            Eq(w.ExemptKey, 0u, "a dead unit releases the exemption");
+            g.CollectKeep(keep);
+            TestAssert.That(!keep.Contains(21u), "and the keep set");
         }
 
         // ---- Missions ---------------------------------------------------------------------------------

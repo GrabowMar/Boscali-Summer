@@ -124,6 +124,8 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// fog, cost, odds and the roll), the faction-only SofStateMessage, and the SOF TASKED post kinds (COVER TEAM, LASE TARGET).
         /// Protocol 35 adds OPERATIONS: four SpaceCommand kinds (OpFund, OpPlan, OpCancel, OpSync; a domain and a tier, a kind and an opaque target id, never a price or a faction) and the
         /// OpsStateMessage (own bars and satellites, enemy pings only, ASAT flights for everyone).
+        /// Protocol 36 adds WATCH OFFICER OVERLORD for CYBER and SOF and the AI factions: no new message or command, one field on the OpsStateMessage, the faction's last three OVERLORD
+        /// actions (a sequence, a domain, a reason code and two argument bytes each, rebuilt into words on the client), which also rides a state with OPERATIONS off.
         /// </summary>
         internal const byte ProtocolVersion = 36;
 

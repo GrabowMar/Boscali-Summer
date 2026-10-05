@@ -121,7 +121,13 @@ namespace BoscaliSummer.Tests.Features.Support
 
             var idle = new OpsStateData { Protocol = P, Active = false, Seq = 2, Now = 10f };
             OpsStateData ri = OpsWire.ReadState(new BufR(Sta(idle)), P);
-            TestAssert.That(ri.Protocol == P && !ri.Active && ri.Rows.Count == 0, "an inactive state is a header only");
+            TestAssert.That(ri.Protocol == P && !ri.Active && ri.Rows.Count == 0 && ri.Log.Count == 0, "an inactive state is a header and an empty log");
+            idle.Log.Add(new WatchLogRow { Seq = 7, Domain = WatchDomain.Sof, Code = WatchCode.SofExfil, A = 1, B = 44 });
+            byte[] idleBytes = Sta(idle);
+            OpsStateData rl = OpsWire.ReadState(new BufR(idleBytes), P);
+            TestAssert.That(rl.Protocol == P && !rl.Active && rl.Log.Count == 1 && rl.Log[0].Seq == 7 && rl.Log[0].B == 44, "OVERLORD's log rides an inactive (OPERATIONS off) state");
+            for (int n = 1; n < idleBytes.Length; n++)
+                TestAssert.That(OpsWire.ReadState(new BufR(idleBytes, n), P).Protocol == 0, "a truncated inactive state is inert at " + n);
             TestAssert.That(OpsWire.ReadState(new BufR(bytes), 34).Protocol == P && OpsWire.ReadState(new BufR(bytes), 34).Rows.Count == 0, "a foreign protocol is the byte alone");
             for (int n = 0; n < bytes.Length; n++)
                 TestAssert.That(OpsWire.ReadState(new BufR(bytes, n), P).Protocol == 0 || n < 1, "truncation at " + n + " is inert");

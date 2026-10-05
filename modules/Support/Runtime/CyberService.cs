@@ -118,6 +118,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>True once this faction has at least one standing EW truck.</summary>
+        /// <summary>True once any faction has a CYBER desk (the cheap gate of the detection scope patch).</summary>
+        internal bool HasFactions => factions.Count > 0;
+
         internal bool HasCyber(FactionHQ owner) => owner != null && factions.ContainsKey(owner);
 
         // ---- Host tick -----------------------------------------------------------------------------

@@ -146,10 +146,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             // How long a trace can run before OVERLORD may act again: the think cadence, plus the pacer's wait now; a hop planned now arrives later, so it assumes the worst wait the pacer can impose (the shared 30 s of an AI faction).
             float margin = ThinkSeconds + 1f;
             float window = margin + pacer.WaitSeconds(WatchDomain.Cyber, aiFaction, now);
-            float planned = margin + (aiFaction ? WatchPacer.AiGap(0) : 0f);
+            float planned = margin + (aiFaction ? WatchPacer.AiGap() : 0f);
             CyberIntrusion mine = desk.Network.Of(Me);
             // An AI faction shares one limiter between both domains: while this intrusion could be traced inside one full AI gap, SOF may not take the limiter (and a SOF team in danger gets it first).
-            pacer.SetUrgent(WatchDomain.Cyber, aiFaction && mine != null && Projected(mine, factor, now, margin + WatchPacer.AiGap(0)) >= SafeTrace);
+            pacer.SetUrgent(WatchDomain.Cyber, aiFaction && mine != null && Projected(mine, factor, now, margin + WatchPacer.AiGap()) >= SafeTrace);
             if (mine != null)
             {
                 CollectHeld(desk, mine);

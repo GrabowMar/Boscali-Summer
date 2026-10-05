@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// The reserved identity WATCH OFFICER OVERLORD marks and posts under. It can never equal a real player identity
         /// (a Steam id, or bit 63 plus a 32-bit index), so no human can post or claim as OVERLORD.
         /// </summary>
-        public const ulong WatchOfficerId = ulong.MaxValue;
+        public const ulong WatchOfficerId = ulong.MaxValue; // keep equal to Core PlayerIdentity.Reserved, which refuses it for every player
         public const float RevealSeconds = 20f, MovingMarkSeconds = 180f, StaticMarkSeconds = 480f, AttemptWindowSeconds = 60f;
         private const float MaximumCoordinate = 10000000f;
 

@@ -117,7 +117,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             w.WriteByte((byte)((s.Active ? FlagActive : 0) | (s.CyberOps ? FlagCyber : 0) | (s.SofOps ? FlagSof : 0)));
             SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
             SpaceWire.WriteFloat(w, s.Now);
-            if (!s.Active) return;
+            if (!s.Active) { WriteLog(w, s); return; } // OVERLORD's log still reaches the faction console when OPERATIONS is off
             w.WriteByte(s.BirdsDown);
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
             int n = Math.Min(s.Rows.Count, MaxRows);
@@ -161,7 +161,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 SpaceWire.WriteExpiry(w, f.EndsAt, s.Now);
                 w.WriteByte(f.Seconds);
             }
-            n = Math.Min(s.Log.Count, MaxLog);
+            WriteLog(w, s);
+        }
+
+        private static void WriteLog(ISpaceWriter w, OpsStateData s)
+        {
+            int n = Math.Min(s.Log.Count, MaxLog);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
             {
@@ -172,6 +177,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             }
         }
 
+        private static bool ReadLog(ISpaceReader r, OpsStateData s)
+        {
+            if (!r.TryReadByte(out byte n) || n > MaxLog || r.Remaining < n * MinLogBytes) return false;
+            for (int i = 0; i < n; i++)
+            {
+                if (!SpaceWire.ReadInt(r, out int lseq) || lseq <= 0 || !r.TryReadByte(out byte bits) || (bits & 3) > (int)WatchDomain.Ops ||
+                    (bits >> 2) < (int)WatchCode.CyberHop || (bits >> 2) > (int)WatchCode.OpFund || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b)) return false;
+                s.Log.Add(new WatchLogRow { Seq = lseq, Domain = (WatchDomain)(bits & 3), Code = (WatchCode)(bits >> 2), A = a, B = b });
+            }
+            return true;
+        }
+
         public static OpsStateData ReadState(ISpaceReader r, byte protocol)
         {
             if (!r.TryReadByte(out byte version)) return Bad();
@@ -180,7 +197,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (!r.TryReadByte(out byte flags) || (flags & ~(FlagActive | FlagCyber | FlagSof)) != 0 || !SpaceWire.ReadInt(r, out int seq) ||
                 !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
             s.Active = (flags & FlagActive) != 0; s.CyberOps = (flags & FlagCyber) != 0; s.SofOps = (flags & FlagSof) != 0; s.Seq = seq; s.Now = now;
-            if (!s.Active) return s;
+            if (!s.Active) return ReadLog(r, s) ? s : Bad();
             if (!r.TryReadByte(out s.BirdsDown) || (s.BirdsDown & ~7) != 0) return Bad();
             for (int i = 0; i < s.BirdPercent.Length; i++) if (!r.TryReadByte(out s.BirdPercent[i]) || s.BirdPercent[i] > 100) return Bad();
             if (!r.TryReadByte(out byte n) || n > MaxRows || r.Remaining < n * MinRowBytes) return Bad();
@@ -217,14 +234,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                     !SpaceWire.ReadExpiry(r, now, out float ends) || !r.TryReadByte(out byte seconds)) return Bad();
                 s.Flights.Add(new OpsFlightRow { Id = id, X = x, Z = z, EndsAt = ends <= now ? 0f : ends, Seconds = seconds });
             }
-            if (!r.TryReadByte(out n) || n > MaxLog || r.Remaining < n * MinLogBytes) return Bad();
-            for (int i = 0; i < n; i++)
-            {
-                if (!SpaceWire.ReadInt(r, out int lseq) || lseq <= 0 || !r.TryReadByte(out byte bits) || (bits & 3) > (int)WatchDomain.Ops ||
-                    (bits >> 2) < (int)WatchCode.CyberHop || (bits >> 2) > (int)WatchCode.OpFund || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b)) return Bad();
-                s.Log.Add(new WatchLogRow { Seq = lseq, Domain = (WatchDomain)(bits & 3), Code = (WatchCode)(bits >> 2), A = a, B = b });
-            }
-            return s;
+            return ReadLog(r, s) ? s : Bad();
         }
 
         private static OpsStateData Bad() => new OpsStateData();

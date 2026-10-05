@@ -124,25 +124,25 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
 
     /// <summary>
     /// The rate bounds of OVERLORD for one faction. A faction with humans is bounded per domain (one action every 10 s in CYBER and one in SOF); a faction with no humans runs
-    /// both domains through one limiter (one domain action every 30 s, campaign: 30 s x (1 + 0.15 x players)) and its operation funding is one tap or plan every 60 s.
+    /// both domains through one limiter (one domain action every 30 s) and its operation funding is one tap or plan every 60 s.
     /// </summary>
     internal sealed class WatchPacer
     {
-        public const float DomainGapSeconds = 10f, AiGapSeconds = 30f, FundGapSeconds = 60f, CampaignPlayerFactor = 0.15f;
+        public const float DomainGapSeconds = 10f, AiGapSeconds = 30f, FundGapSeconds = 60f;
         private readonly float[] last = { float.NegativeInfinity, float.NegativeInfinity };
         private float lastAi = float.NegativeInfinity, lastFund = float.NegativeInfinity;
         private readonly bool[] urgent = new bool[2];
 
-        public static float AiGap(int campaignPlayers) => AiGapSeconds * (1f + CampaignPlayerFactor * Math.Max(0, campaignPlayers));
+        public static float AiGap() => AiGapSeconds;
 
         /// <summary>The gap that applies to this faction right now (what a projection must assume the next action waits for).</summary>
-        public static float Gap(bool aiFaction, int campaignPlayers = 0) => aiFaction ? AiGap(campaignPlayers) : DomainGapSeconds;
+        public static float Gap(bool aiFaction) => aiFaction ? AiGapSeconds : DomainGapSeconds;
 
-        public bool CanAct(WatchDomain domain, bool aiFaction, float now, int campaignPlayers = 0)
+        public bool CanAct(WatchDomain domain, bool aiFaction, float now)
         {
             if (!SpaceRules.MissionTime(now) || (int)domain > 1) return false;
             if (aiFaction && urgent[1 - (int)domain] && !urgent[(int)domain]) return false; // the shared limiter is kept free for the other domain's action that cannot wait
-            return aiFaction ? now - lastAi >= AiGap(campaignPlayers) : now - last[(int)domain] >= DomainGapSeconds;
+            return aiFaction ? now - lastAi >= AiGapSeconds : now - last[(int)domain] >= DomainGapSeconds;
         }
 
         /// <summary>
@@ -158,11 +158,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         /// <summary>Seconds until this faction may act again in the domain (0 when it may act now): what a trace projection must assume OVERLORD waits before it can drop.</summary>
-        public float WaitSeconds(WatchDomain domain, bool aiFaction, float now, int campaignPlayers = 0)
+        public float WaitSeconds(WatchDomain domain, bool aiFaction, float now)
         {
             if (!SpaceRules.MissionTime(now) || (int)domain > 1) return 0f;
             float since = now - (aiFaction ? lastAi : last[(int)domain]);
-            return Math.Max(0f, (aiFaction ? AiGap(campaignPlayers) : DomainGapSeconds) - since);
+            return Math.Max(0f, (aiFaction ? AiGapSeconds : DomainGapSeconds) - since);
         }
 
         public bool CanFund(float now) => SpaceRules.MissionTime(now) && now - lastFund >= FundGapSeconds;

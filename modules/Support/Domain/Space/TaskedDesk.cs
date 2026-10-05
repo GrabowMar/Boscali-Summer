@@ -332,6 +332,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 if (retired || nodeId <= 0 || !SpaceRules.MissionTime(now) || !TaskedKinds.IsHostPost(action)) return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
                 if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
                 int humans = profile.Observe(ports.Humans, now);
+                // A team in trouble outranks a team doing its job: a COVER request may take the place of OVERLORD's own LASE post (never the other way round, never a human's post).
+                if (action == SupportActionId.SofCover && board.CountWatchOfficer(now, TaskedKinds.DomainOf(action)) >= MaxWatchPostsPerDomain) WithdrawOwnLase(now);
                 if (board.CountWatchOfficer(now, TaskedKinds.DomainOf(action)) >= MaxWatchPostsPerDomain || board.Count + 1 > TaskedBoard.CapacityFor(humans) - WatchReserveSlots)
                     return new TaskedResult(TaskedOutcome.NotPosted, 0, 0);
                 int id = nextCallId + 1;
@@ -346,6 +348,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 Warn("PostWatchOfficerPackage threw: " + e.Message);
                 return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
             }
+        }
+
+        private void WithdrawOwnLase(float now)
+        {
+            var info = new List<TaskedPostInfo>(TaskedBoard.MaxCalls);
+            board.Snapshot(now, info);
+            for (int i = 0; i < info.Count; i++)
+                if (info[i].Call.WatchOfficer && info[i].Call.Action == SupportActionId.SofLase && !info[i].Held) { board.Withdraw(info[i].Call.Id); return; }
         }
 
         /// <summary>Withdraws the open post of <paramref name="action"/> whose one point has mark id <paramref name="markId"/> (a SOF team post that no longer applies). False when none was open.</summary>

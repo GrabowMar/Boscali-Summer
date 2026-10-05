@@ -185,7 +185,7 @@ namespace BoscaliSummer.Tests.Features.Support
             recon.Tick(200f);
             SofWatchPlan scout = recon.Acts.Find(p => p.Action == SofWatchAction.Mission);
             Eq(scout.Mission, MissionKind.Recon, "a low-value contact near the front is a RECON");
-            TestAssert.That(Math.Abs(SofRules.Distance(scout.X, scout.Z, 2000f, 0f) - 1900f) < 1f, "from 1.9 km short of it, not on top of it (point " + scout.X + "," + scout.Z + ")");
+            TestAssert.That(Math.Abs(SofRules.Distance(scout.X, scout.Z, 2000f, 0f) - 900f) < 1f, "from 900 m short of it, not on top of it (point " + scout.X + "," + scout.Z + ")");
             TestAssert.That(scout.Reason.StartsWith("RECON — A-1 FROM STAND-OFF", StringComparison.Ordinal), scout.Reason);
             var noRecon = new Rig();
             noRecon.World.HumanCount = 0; noRecon.Ai = true; noRecon.World.Recon = false;
@@ -251,6 +251,17 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(rig.Acts.Exists(p => p.Code == WatchCode.SofHold), false, "it never holds still inside a fight");
             Eq(rig.Count(SofEventKind.Pinned), 0, "and the team was not pinned");
             TestAssert.That(rig.Acts.TrueForAll(a => a.Reason.Length > 0), "every action carries a reason string");
+
+            // A human working SOF suspends OVERLORD, but never its safety: a team in the field is still withdrawn by exposure.
+            var sus = new Rig();
+            sus.World.HumanCount = 1; sus.World.Recon = false;
+            sus.World.Ground[501] = (18f, WatchKind.AirDefence);
+            sus.Show(Ground(501, 3000f, 0f));
+            sus.Ports.SceneAt = (x, z) => x > 1500f ? (sus.Mine() != null && sus.Mine().Mission == MissionKind.None ? new SofScene(0, 2, 2, 0, false) : new SofScene(0, 3, 3, 0, false)) : default;
+            sus.Tick(160f);
+            for (int i = 0; i < 40; i++) { sus.Brain.RecordHuman(sus.Ports.Clock); sus.Tick(10f); }
+            Eq(sus.Acts.Exists(a => a.Code == WatchCode.SofExfil), true, "a suspended OVERLORD still withdraws a team whose exposure is climbing");
+            Eq(sus.Acts.Exists(a => a.Code == WatchCode.SofPush && a.Reason.Length > 0 && sus.Acts.IndexOf(a) > sus.Acts.FindIndex(b => b.Code == WatchCode.SofExfil)), false, "and starts nothing else while suspended");
 
             // A hot team that is not climbing (the enemy left): HOLD lets the exposure fall twice as fast, then RESUME.
             var cool = new Rig();

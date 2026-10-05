@@ -29,8 +29,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             f.Desk.Refresh(f.Observed);
         }
 
-        /// <summary>The mod's own spawned anchors are not generic RADAR / SAM nodes: they become UPLINK and DATA CENTER nodes (or nothing).</summary>
-        private bool IsAnchor(Unit unit) => spawner.Owns(unit) || (space != null && space.Spawner.Owns(unit));
+        /// <summary>The mod's own spawned anchors are not generic RADAR / SAM nodes: they become UPLINK and DATA CENTER nodes (or nothing). The SOF camp and FOB vehicles are the mod's too, never a node.</summary>
+        private bool IsAnchor(Unit unit) => spawner.Owns(unit) || (space != null && space.Spawner.Owns(unit)) || (manager != null && manager.Sof != null && manager.Sof.IsCampUnit(unit));
 
         private void CollectEnemyAnchors(FactionHQ viewer)
         {
