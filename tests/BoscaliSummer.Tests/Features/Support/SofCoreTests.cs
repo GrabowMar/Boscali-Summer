@@ -114,9 +114,9 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(SofRules.Odds(100f, 9, false, false, false), 10, "a bad spot clamps at 10");
             Eq(SofRules.Odds(0f, 0, false, false, true), 85, "+15 when CYBER holds a node within 12 km");
             Eq(SofRules.Odds(float.NaN, 0, false, false, false), 20, "an unreadable exposure reads as 100 %");
-            Near(SofRules.ExposureDelta(2, false, false, false, 1f), 2f, "two enemies add 2 %/s");
-            Near(SofRules.ExposureDelta(1, true, false, false, 1f), 1.25f, "a bird's stare x1.25");
-            Near(SofRules.ExposureDelta(1, false, true, false, 1f), 1.5f, "PUSH +50 %");
+            Near(SofRules.ExposureDelta(2, false, false, false, 1f), 1f, "two enemies add 1 %/s (0.5 each)");
+            Near(SofRules.ExposureDelta(1, true, false, false, 1f), 0.625f, "a bird's stare x1.25");
+            Near(SofRules.ExposureDelta(1, false, true, false, 1f), 0.75f, "PUSH +50 %");
             Near(SofRules.ExposureDelta(0, false, false, false, 2f), -1f, "nothing near falls 0.5 %/s");
             Near(SofRules.ExposureDelta(0, false, false, true, 1f), -1f, "HOLD falls twice as fast");
             Near(SofRules.SpeedMetresPerSecond * 3.6f, 35f, "35 km/h");
@@ -252,7 +252,7 @@ namespace BoscaliSummer.Tests.Features.Support
             p.SceneAt = (x, z) => x > 200f ? new SofScene(0, 3, 4, 1, false) : default;
             Advance(d, p, 30f);
             TestAssert.That(t.Exposure > 0f && t.Exposure < 100f, "exposure rises near the enemy (" + t.Exposure + ")");
-            Advance(d, p, 40f);
+            Advance(d, p, 60f);
             Eq(t.State, TeamState.Pinned, "pinned at 100 %"); Near(t.Exposure, 100f, "full exposure");
             TestAssert.That(p.Log.Contains("cover0"), "the pin posts a COVER request");
             float x0 = t.X; Advance(d, p, 5f);
@@ -276,7 +276,7 @@ namespace BoscaliSummer.Tests.Features.Support
             SofTeam u = ReadyTeam(e, q);
             e.Divert(Op, 0, 20000f, 0f);
             q.SceneAt = (x, z) => new SofScene(0, 9, 60, 0, false);
-            Advance(e, q, 3f);
+            Advance(e, q, 4f);
             Eq(u.State, TeamState.Pinned, "pinned fast");
             Advance(e, q, 110f);
             Eq(u.State, TeamState.Pinned, "not yet lost");
@@ -284,6 +284,19 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(u.State, TeamState.Lost, "120 s pinned without cover loses the team");
             Advance(e, q, 31f);
             Eq(e.Teams[0].Active, false, "the slot frees after the lost marker");
+
+            // The mission target's own unit never adds exposure: a lone defender is free, a second one costs 0.5 %/s.
+            var r = new Ports();
+            SofDesk g = Desk(r);
+            SofTeam w = ReadyTeam(g, r);
+            Show(g, Seed(TargetKind.Ground, AnchorSub.Uplink, 21, 900f, 0f));
+            Eq(g.Send(Op, 0, MissionKind.Lase, g.Visible[0].Id, 0f, 0f).Outcome, SofOutcome.Sent, "lase sent");
+            r.SceneAt = (x, z) => new SofScene(0, 1, 1, 0, false);
+            Advance(g, r, 60f);
+            Near(w.Exposure, 0f, "the target alone adds no exposure");
+            r.SceneAt = (x, z) => new SofScene(0, 2, 2, 0, false);
+            Advance(g, r, 10f);
+            TestAssert.That(w.Exposure > 3f && w.Exposure < 7f, "one more enemy adds 0.5 %/s (" + w.Exposure + ")");
         }
 
         // ---- Missions ---------------------------------------------------------------------------------

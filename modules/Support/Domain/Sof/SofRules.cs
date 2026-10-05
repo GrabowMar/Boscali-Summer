@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         public const int RaiseCost = 60, MaxTeams = 4, HeldCap = 4;
         public const float RaiseSeconds = 90f, SpeedMetresPerSecond = 35000f / 3600f, PushSpeedFactor = 1.5f, PushExposureFactor = 1.5f;
-        public const float ExposureRadius = 2000f, ExposurePerEnemyPerSecond = 1f, BirdStareFactor = 1.25f, ExposureDecayPerSecond = 0.5f, HoldDecayFactor = 2f;
+        public const float ExposureRadius = 2000f, ExposurePerEnemyPerSecond = 0.5f, BirdStareFactor = 1.25f, ExposureDecayPerSecond = 0.5f, HoldDecayFactor = 2f;
         public const float PinExposure = 100f, UnpinExposure = 60f, PinnedLostSeconds = 120f, CoverExtendSeconds = 60f, CoverKillRelief = 25f, LostExposure = 90f;
         public const float WoundedSeconds = 60f, LaseMaxSeconds = 300f, MaxAdvanceSeconds = 5f, ArrivalMetres = 40f;
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return (int)Math.Max(MinOdds, Math.Min(MaxOdds, Math.Round(v)));
         }
 
-        /// <summary>Change of exposure over <paramref name="dt"/> seconds (positive rises). Enemies within 2 km add 1 %/s each (x1.25 under a bird, x1.5 pushed); nothing near falls 0.5 %/s (x2 held).</summary>
+        /// <summary>Change of exposure over <paramref name="dt"/> seconds (positive rises). Enemies within 2 km add 0.5 %/s each (the mission target's own unit is never counted) (x1.25 under a bird, x1.5 pushed); nothing near falls 0.5 %/s (x2 held).</summary>
         public static float ExposureDelta(int enemies, bool stare, bool pushed, bool held, float dt)
         {
             if (dt <= 0f || float.IsNaN(dt)) return 0f;

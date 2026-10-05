@@ -487,7 +487,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t.State == TeamState.Ready && NearBase(t.X, t.Z)) t.Ammo = Math.Min(100f, t.Ammo + AmmoRefillPerSecond * dt);
             SofScene scene = ports.Scene(t.X, t.Z);
             bool moving = t.State == TeamState.Moving || t.State == TeamState.Returning;
-            t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(scene.Within2000, scene.Stared, t.PushOn && moving, t.HoldOn, dt)));
+            int exposers = scene.Within2000;
+            // The mission target's own unit never adds exposure (fun over realism: an unaided team must be able to reach a lightly defended target).
+            if (t.Mission != MissionKind.None && exposers > 0 && (t.TargetKind == TargetKind.Ground || t.TargetKind == TargetKind.Anchor)
+                && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
+            t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt)));
             t.Odds = SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
             if (t.Exposure >= SofRules.PinExposure && (moving || t.State == TeamState.OnSite))
