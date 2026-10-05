@@ -69,7 +69,7 @@ namespace BoscaliSummer.Tests.Features.Support
             // A SOF command carries exactly two ints; anything else is inert.
             TestAssert.That(SpaceWire.ReadCommand(new BufR(Cmd(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 1 }))), P).Protocol == 0, "one id is malformed");
             TestAssert.That(SpaceWire.ReadCommand(new BufR(Cmd(new SpaceCommand(P, SpaceCommandKind.SofDivert, 5, 0, new[] { 1, 2, 3 }))), P).Protocol == 0, "three ids are malformed");
-            TestAssert.That(SpaceWire.ReadCommand(new BufR(new byte[] { P, 16, 1 }), P).Protocol == 0, "kind 16 is out of range");
+            TestAssert.That(SpaceWire.ReadCommand(new BufR(new byte[] { P, 20, 1 }), P).Protocol == 0, "kind 20 is out of range");
             TestAssert.That(SpaceWire.ReadCommand(new BufR(raise), 33).Protocol == P && SpaceWire.ReadCommand(new BufR(raise), 33).Kind == SpaceCommandKind.None, "a foreign protocol decodes to the byte alone");
             byte[] cut = Cmd(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 321 }));
             for (int n = 0; n < cut.Length; n++) TestAssert.That(SpaceWire.ReadCommand(new BufR(cut, n), P).Protocol == 0 || n < 2, "truncation at " + n + " is inert");

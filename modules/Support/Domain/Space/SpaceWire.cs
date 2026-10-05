@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 
@@ -17,7 +18,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>CYBER verbs (protocol 33). Target = an opaque node id (0 = the whole intrusion for a drop). CyberSync asks for a fresh CYBER state.</summary>
         CyberHop = 7, CyberBurn = 8, CyberDrop = 9, CyberSync = 10,
         /// <summary>SOF verbs (protocol 34). SofRaise carries nothing; SofOrder Target = team slot | verb << 2; SofMission Ids = { slot | kind << 2, target id or packed point }; SofDivert Ids = { slot, packed point }. SofSync asks for a fresh SOF state.</summary>
-        SofRaise = 11, SofOrder = 12, SofMission = 13, SofDivert = 14, SofSync = 15
+        SofRaise = 11, SofOrder = 12, SofMission = 13, SofDivert = 14, SofSync = 15,
+        /// <summary>OPERATIONS verbs (protocol 35). OpFund Target = domain | tier &lt;&lt; 1 (tier 0 = 25 CR, 1 = 50 CR); OpPlan Ids = { kind, target } (a bird 0..2, a SAM C2 node id or a held building id); OpCancel Target = domain. OpSync asks for a fresh OPERATIONS state.</summary>
+        OpFund = 16, OpPlan = 17, OpCancel = 18, OpSync = 19
     }
 
     /// <summary>What the feed may say about a contact before its MARK verdict. Never the truth: see <see cref="SpaceProbable"/>.</summary>
@@ -49,7 +52,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Protocol = protocol; Kind = kind; RequestId = requestId; Target = target; Ids = ids;
         }
 
-        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.ClaimTasked || IsCyberVerb || IsSofVerb;
+        public bool Mutating => Kind == SpaceCommandKind.Mark || Kind == SpaceCommandKind.SendTasked || Kind == SpaceCommandKind.ClaimTasked || IsCyberVerb || IsSofVerb || IsOpsVerb;
+
+        public bool IsOpsVerb => Kind >= SpaceCommandKind.OpFund && Kind <= SpaceCommandKind.OpCancel;
 
         public bool IsSofVerb => Kind >= SpaceCommandKind.SofRaise && Kind <= SpaceCommandKind.SofDivert;
 
@@ -246,11 +251,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
                 case SpaceCommandKind.SofOrder:
+                case SpaceCommandKind.OpFund:
+                case SpaceCommandKind.OpCancel:
                     WriteVar(w, (uint)Math.Max(0, c.Target));
                     break;
                 case SpaceCommandKind.SendTasked:
                 case SpaceCommandKind.SofMission:
                 case SpaceCommandKind.SofDivert:
+                case SpaceCommandKind.OpPlan:
                     int count = Math.Min(c.Ids?.Length ?? 0, SpaceCommand.MaxIds);
                     w.WriteByte((byte)count);
                     for (int i = 0; i < count; i++) WriteVar(w, (uint)Math.Max(0, c.Ids[i]));
@@ -263,7 +271,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!r.TryReadByte(out byte version)) return default;
             if (version != protocol) return new SpaceCommand(version, SpaceCommandKind.None, 0);
-            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.SofSync ||
+            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.OpSync ||
                 !ReadInt(r, out int request)) return default;
             var kind = (SpaceCommandKind)kindByte;
             switch (kind)
@@ -274,12 +282,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
                 case SpaceCommandKind.SofOrder:
+                case SpaceCommandKind.OpFund:
+                case SpaceCommandKind.OpCancel:
                     return ReadInt(r, out int target) ? new SpaceCommand(version, kind, request, target) : default;
                 case SpaceCommandKind.SendTasked:
                 case SpaceCommandKind.SofMission:
                 case SpaceCommandKind.SofDivert:
+                case SpaceCommandKind.OpPlan:
                     if (!r.TryReadByte(out byte count) || count == 0 || count > SpaceCommand.MaxIds || r.Remaining < count) return default;
-                    if (kind != SpaceCommandKind.SendTasked && count != 2) return default; // a SOF command carries exactly two ints
+                    if (kind != SpaceCommandKind.SendTasked && count != 2) return default; // a SOF or OPERATIONS command carries exactly two ints
                     var ids = new int[count];
                     for (int i = 0; i < count; i++) if (!ReadInt(r, out ids[i])) return default;
                     return new SpaceCommand(version, kind, request, 0, ids);
@@ -309,11 +320,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (version != protocol) return new SpaceReply(version, SpaceCommandKind.None, 0, 0);
             if (!r.TryReadByte(out byte kindByte) || (kindByte != (byte)SpaceCommandKind.Mark && kindByte != (byte)SpaceCommandKind.SendTasked &&
                 kindByte != (byte)SpaceCommandKind.ClaimTasked && (kindByte < (byte)SpaceCommandKind.CyberHop || kindByte > (byte)SpaceCommandKind.CyberDrop) &&
-                (kindByte < (byte)SpaceCommandKind.SofRaise || kindByte > (byte)SpaceCommandKind.SofDivert)) || !ReadInt(r, out int request) ||
+                (kindByte < (byte)SpaceCommandKind.SofRaise || kindByte > (byte)SpaceCommandKind.SofDivert) &&
+                (kindByte < (byte)SpaceCommandKind.OpFund || kindByte > (byte)SpaceCommandKind.OpCancel)) || !ReadInt(r, out int request) ||
                 !r.TryReadByte(out byte outcome) || !r.TryReadByte(out byte replay) || replay > 1 ||
                 !ReadInt(r, out int call) || !ReadInt(r, out int charged) || !ReadInt(r, out int detail) ||
                 !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return default;
             int max = kindByte == (byte)SpaceCommandKind.Mark ? (int)MarkVerdict.Capacity :
+                kindByte >= (byte)SpaceCommandKind.OpFund ? (int)OpsWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.SofRaise ? (int)SofOutcomeWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.CyberHop ? (int)CyberWords.MaxOutcome : (int)TaskedOutcome.MarkExpired;
             if (outcome > max) return default; // an unknown verdict is never guessed at
