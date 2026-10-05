@@ -129,6 +129,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             spaceMirror.ResetLink();
             cyberMirror.ResetLink();
+            sofMirror.ResetLink();
             ResetSpaceMirror();
         }
 
@@ -137,6 +138,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             // Faction and scene resets keep the mirror's generation floor: an in-flight full of the old faction stays refused.
             spaceMirror.Reset();
             cyberMirror.Reset();
+            sofMirror.Reset();
             inProcessReplies.Clear();
             spaceFeedWanted = false;
             mirrorFaction = 0;
@@ -152,12 +154,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (key != mirrorFaction)
                 {
                     // Faction change: the old faction's rows must never outlive the switch.
-                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); }
+                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); }
                     mirrorFaction = key;
                 }
             }
             if (network == null) return;
             UpdateCyberMirror();
+            UpdateSofMirror();
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {
