@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\modules\Wing\Domain\Personnel\PilotPortraitGenerator.cs" Link="PilotPortraitGenerator.cs" />
+    <Compile Include="..\..\Core\Contracts\PortraitRole.cs" Link="PortraitRole.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,25 @@
+{
+  "name": "wingview",
+  "mods": ["wingcommand", "boscalisummer"],
+  "timeout_s": 180,
+  "ops": [
+    {"op": "seat", "id": "player", "altitude": 1500, "speed": 180, "heading": 0, "view": "orbit"},
+    {"op": "record", "ids": ["player"], "hz": 5},
+    {"op": "wait", "seconds": 3},
+    {"op": "capture", "name": "level"},
+    {"op": "fly", "id": "player", "program": [{"turn": {"heading": 90, "bank": 45}}]},
+    {"op": "wait", "seconds": 15},
+    {"op": "capture", "name": "turn"},
+    {"op": "fly", "id": "player", "program": [{"climb": {"gamma": 8, "to": 2500}}]},
+    {"op": "wait", "seconds": 20},
+    {"op": "capture", "name": "climb"},
+    {"op": "seat", "id": "player", "view": "cockpit"},
+    {"op": "wait", "seconds": 2},
+    {"op": "capture", "name": "cockpit"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "alive", "ids": ["player"]}
+  ]
+}
