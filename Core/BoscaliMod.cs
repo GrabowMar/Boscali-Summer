@@ -20,6 +20,7 @@ using BoscaliSummer.Modules.FireAndDestruction;
 using BoscaliSummer.Modules.HighCommand;
 using BoscaliSummer.Modules.Hud;
 using BoscaliSummer.Modules.Intel;
+using BoscaliSummer.Modules.Immersion;
 using BoscaliSummer.Modules.Performance;
 using BoscaliSummer.Modules.PlayerSpawnPriority;
 using BoscaliSummer.Modules.Progression;
@@ -94,7 +95,7 @@ namespace BoscaliSummer.Core
 
         /// <summary>
         /// The startup roster. Registration order is display order on the SET pages. Modules
-        /// missing here are compiled but never installed (Campaign, Immersion, Visuals and
+        /// missing here are compiled but never installed (Campaign, Visuals and
         /// the in-tree Wing copy); add a gated line here to bring one back.
         /// </summary>
         private static IModule[] Compose(ModConfiguration settings)
@@ -113,7 +114,11 @@ namespace BoscaliSummer.Core
             };
             // The inexpensive monitor is always installed so SET can switch it live.
             if (!Application.isBatchMode)
+            {
                 modules.Add(new PerformanceModule());
+                // Keep the client service available so SET can enable the master live.
+                modules.Add(new ImmersionModule());
+            }
             if (settings.QoL.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new QoLModule());
             if (settings.Autopilot.Enabled.Value && !Application.isBatchMode)

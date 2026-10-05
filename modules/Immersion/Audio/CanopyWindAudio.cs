@@ -22,9 +22,11 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private AudioClip windClip;
         private float[] bakeBuffer;
         private volatile int bakeState; // 0 pending, 1 ready, 2 failed
+        private volatile bool released;
         private bool clipsReady;
         private bool routed;
         private bool isLoopActive;
+        internal bool IsPlaying => windSource != null && windSource.isPlaying;
 
         public void Initialize()
         {
@@ -39,7 +41,9 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             {
                 try
                 {
-                    bakeBuffer = BuildWindNoise(LoopSeconds, SampleRate);
+                    float[] samples = BuildWindNoise(LoopSeconds, SampleRate);
+                    if (released) return;
+                    bakeBuffer = samples;
                     bakeState = 1;
                 }
                 catch (System.Exception)
@@ -49,17 +53,21 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             });
         }
 
-        public void Tick(float airspeedMps, float gLoad, bool cockpitView, bool enabled, float dt)
+        public void Tick(float airspeedMps, float gustMps, bool cockpitView, bool enabled, float dt, float moisture = 0f)
         {
-            if (!enabled || !cockpitView || airspeedMps < 40f)
+            if (!enabled || !cockpitView || airspeedMps < 40f ||
+                (moisture > 0.08f && FxBus.Scales.Voices < 0.75f))
             {
                 Silence();
                 return;
             }
 
             if (!clipsReady && !TryCreateClip()) return;
+            if (!routed) return;
 
-            var (targetVolume, targetPitch) = ImmersionMath.WindRush(airspeedMps, gLoad, 1f);
+            var (targetVolume, targetPitch) = ImmersionMath.WindRush(airspeedMps, gustMps / 10f, 1f);
+            // Rain patter gets headroom rather than stacking another constant loud noise bed.
+            targetVolume *= 0.35f * (1f - Mathf.Clamp01(moisture) * 0.65f);
 
             if (targetVolume > 0.01f)
             {
@@ -71,7 +79,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
                 if (isLoopActive)
                 {
-                    windSource.volume = Mathf.MoveTowards(windSource.volume, targetVolume * 0.7f, 2.5f * dt);
+                    windSource.volume = Mathf.MoveTowards(windSource.volume, targetVolume, 0.7f * dt);
                     windSource.pitch = Mathf.MoveTowards(windSource.pitch, targetPitch, 1.5f * dt);
                 }
             }
@@ -98,11 +106,22 @@ namespace BoscaliSummer.Modules.Immersion.Audio
                 FxVoiceBus.EndLoop(VoiceId);
                 isLoopActive = false;
             }
-            if (windSource != null && windSource.isPlaying)
+            routed = false;
+            if (windSource != null)
             {
                 windSource.Stop();
                 windSource.volume = 0f;
             }
+        }
+
+        public void Release()
+        {
+            released = true;
+            Silence();
+            if (windSource != null) { Destroy(windSource); windSource = null; }
+            if (windClip != null) { Destroy(windClip); windClip = null; }
+            bakeBuffer = null;
+            clipsReady = false;
         }
 
         private bool TryCreateClip()
@@ -150,8 +169,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
         private void OnDestroy()
         {
-            Silence();
-            if (windClip != null) Destroy(windClip);
+            Release();
         }
     }
 }

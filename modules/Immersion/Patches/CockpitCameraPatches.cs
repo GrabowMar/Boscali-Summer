@@ -5,8 +5,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Immersion.Patches
 {
     /// <summary>
-    /// Writes rotational head inertia to cameraPivot during cockpit view, and resets to identity
-    /// upon leaving cockpit state.
+    /// Composes the mod's owned rotational offset on the cockpit pivot and removes that
+    /// write on leaving. Native free look, head tracking and translation remain untouched.
     /// </summary>
     [HarmonyPatch(typeof(CameraCockpitState), "UpdateState")]
     internal static class CockpitHeadRotationPatch
@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Immersion.Patches
         {
             ImmersionManager manager = ImmersionManager.Live;
             if (manager == null || cam == null || cam.currentState != cam.cockpitState) return;
-            cam.cameraPivot.localRotation = manager.HeadOffset;
+            manager.ApplyCameraOffset(cam);
         }
     }
 
@@ -24,17 +24,13 @@ namespace BoscaliSummer.Modules.Immersion.Patches
     {
         private static void Prefix(CameraStateManager cam)
         {
-            if (cam != null && cam.cameraPivot != null)
-            {
-                cam.cameraPivot.localRotation = Quaternion.identity;
-            }
-            ImmersionManager.Live?.Head.Reset();
+            ImmersionManager.Live?.RemoveCameraOffset();
         }
     }
 
     /// <summary>
     /// Recoil shake on gunfire.
-    /// Exits in one nanosecond for all foreign aircraft bullets, and when outside cockpit view.
+    /// A static cockpit flag and reference comparison skip foreign gunfire immediately.
     /// </summary>
     [HarmonyPatch(typeof(Gun), "SpawnBullet")]
     internal static class GunShotShakePatch

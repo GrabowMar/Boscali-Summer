@@ -1,4 +1,5 @@
 using BoscaliSummer.Modules.Immersion.Domain;
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
@@ -15,6 +16,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         private Rigidbody tracked;
         private Vector3 lastVelocity;
+        private Vector3 lastGlobalPosition;
         private bool primed;
         private Vector3 force = Vector3.up;
         private Vector3 rateDeg;
@@ -22,6 +24,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         private Vector3 debugForce;
         private float debugUntil = -1f;
+        public bool Discontinuity { get; private set; }
 
         public Quaternion Offset { get; private set; } = Quaternion.identity;
         public Vector3 ForceG => force;
@@ -35,32 +38,51 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public void Measure(Aircraft aircraft, float dt)
         {
+            Discontinuity = false;
             Rigidbody rb = aircraft != null ? aircraft.CockpitRB() : null;
             if (rb == null || dt <= 0f)
             {
                 tracked = null;
                 primed = false;
+                force = Vector3.up;
+                rateDeg = Vector3.zero;
                 return;
             }
             if (rb != tracked)
             {
                 tracked = rb;
                 primed = false;
+                force = Vector3.up;
+                rateDeg = Vector3.zero;
             }
 
             Vector3 velocity = rb.velocity;
+            GlobalPosition global = rb.transform.GlobalPosition();
+            Vector3 position = new Vector3(global.x, global.y, global.z);
             if (!primed)
             {
                 lastVelocity = velocity;
+                lastGlobalPosition = position;
                 primed = true;
                 return;
             }
+            bool relocated = (position - (lastGlobalPosition + lastVelocity * dt)).sqrMagnitude > 250f * 250f;
+            lastGlobalPosition = position;
             Vector3 accel = (velocity - lastVelocity) / dt;
             lastVelocity = velocity;
 
             Transform frame = rb.transform;
             Vector3 specific = frame.InverseTransformDirection(accel - Physics.gravity) / 9.81f;
-            if (specific.magnitude > MaxForceG) return;
+            if (relocated || specific.magnitude > 100f || float.IsNaN(specific.sqrMagnitude))
+            {
+                force = Vector3.up;
+                rateDeg = Vector3.zero;
+                pitch = pitchVel = yaw = yawVel = roll = rollVel = 0f;
+                Offset = Quaternion.identity;
+                Discontinuity = true;
+                return;
+            }
+            specific = Vector3.ClampMagnitude(specific, MaxForceG);
             Vector3 rates = frame.InverseTransformDirection(rb.angularVelocity) * Mathf.Rad2Deg;
 
             float k = Mathf.Clamp01(dt / FilterSeconds);
@@ -68,15 +90,19 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             rateDeg = Vector3.Lerp(rateDeg, rates, k);
         }
 
-        public void Step(float dt, float strength, bool active)
+        public void Step(float dt, float strength, bool active, float pilotStrain = 0f, bool comfort = false)
         {
             float tp = 0f, ty = 0f, tr = 0f;
             if (active)
             {
                 Vector3 f = Time.unscaledTime < debugUntil ? debugForce : force;
                 (tp, ty, tr) = ImmersionMath.HeadTarget(f.x, f.y, f.z, -rateDeg.z, rateDeg.y, strength);
-                float breathRate = 13f + Mathf.Min(9f, Mathf.Abs(f.y - 1f) * 4f);
-                tp += ImmersionMath.BreathingOffset(Time.unscaledTime, breathRate, 0.12f) * strength;
+                // Final event + weather composition is clamped by the manager.
+                tp *= 0.28f;
+                ty *= 0.28f;
+                tr *= 0.28f;
+                if (!comfort)
+                    tp += ImmersionMath.BreathingOffset(Time.time, 13f + pilotStrain * 9f, 0.06f) * strength;
             }
             (pitch, pitchVel) = ImmersionMath.SpringStep(pitch, pitchVel, tp, dt);
             (yaw, yawVel) = ImmersionMath.SpringStep(yaw, yawVel, ty, dt);
@@ -87,11 +113,15 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public void Reset()
         {
             tracked = null;
+            lastGlobalPosition = Vector3.zero;
             primed = false;
             force = Vector3.up;
             rateDeg = Vector3.zero;
             pitch = pitchVel = yaw = yawVel = roll = rollVel = 0f;
             Offset = Quaternion.identity;
+            Discontinuity = false;
+            debugUntil = -1f;
+            debugForce = Vector3.zero;
         }
     }
 }

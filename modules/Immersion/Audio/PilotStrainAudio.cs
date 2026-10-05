@@ -20,10 +20,12 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private AudioClip strainClip;
         private float[] bakeBuffer;
         private volatile int bakeState; // 0 pending, 1 ready, 2 failed
+        private volatile bool released;
         private bool clipsReady;
         private bool routed;
         private float nextStrainTime;
         private readonly System.Random rng = new System.Random(4041);
+        internal bool IsPlaying => audioSource != null && audioSource.isPlaying;
 
         public void Initialize()
         {
@@ -38,7 +40,9 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             {
                 try
                 {
-                    bakeBuffer = BuildStrainBreath(BreathSeconds, SampleRate);
+                    float[] samples = BuildStrainBreath(BreathSeconds, SampleRate);
+                    if (released) return;
+                    bakeBuffer = samples;
                     bakeState = 1;
                 }
                 catch (System.Exception)
@@ -48,27 +52,27 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             });
         }
 
-        public void Tick(Vector3 forceG, bool cockpitView, bool enabled, float dt)
+        public void Tick(float exposure, bool cockpitView, bool enabled, float dt)
         {
-            if (!enabled || !cockpitView || forceG.y < 4.5f)
+            if (!enabled || !cockpitView || exposure < 0.12f)
             {
-                nextStrainTime = 0f;
+                Silence();
                 return;
             }
 
             if (!clipsReady && !TryCreateClip()) return;
+            if (!routed || dt <= 0f || audioSource.isPlaying) return;
 
-            float interval = ImmersionMath.PilotStrainInterval(forceG.y);
+            float interval = 3.2f - Mathf.Clamp01(exposure);
             if (interval <= 0f) return;
 
-            if (Time.unscaledTime >= nextStrainTime)
+            if (Time.time >= nextStrainTime)
             {
-                nextStrainTime = Time.unscaledTime + interval + (float)rng.NextDouble() * 0.4f;
-
-                if (FxVoiceBus.TryOneShot(0.85f))
+                nextStrainTime = Time.time + interval + (float)rng.NextDouble() * 0.4f;
+                audioSource.pitch = 0.9f + (float)rng.NextDouble() * 0.2f;
+                if (FxVoiceBus.TryOneShot(strainClip.length / audioSource.pitch))
                 {
-                    audioSource.pitch = 0.9f + (float)rng.NextDouble() * 0.2f;
-                    float vol = Mathf.Clamp01(0.4f + (forceG.y - 4.5f) * 0.12f);
+                    float vol = Mathf.Clamp01(0.25f + exposure * 0.45f);
                     audioSource.PlayOneShot(strainClip, vol);
                 }
             }
@@ -87,10 +91,21 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         public void Silence()
         {
             nextStrainTime = 0f;
+            routed = false;
             if (audioSource != null && audioSource.isPlaying)
             {
                 audioSource.Stop();
             }
+        }
+
+        public void Release()
+        {
+            released = true;
+            Silence();
+            if (audioSource != null) { Destroy(audioSource); audioSource = null; }
+            if (strainClip != null) { Destroy(strainClip); strainClip = null; }
+            bakeBuffer = null;
+            clipsReady = false;
         }
 
         private bool TryCreateClip()
@@ -131,8 +146,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
         private void OnDestroy()
         {
-            Silence();
-            if (strainClip != null) Destroy(strainClip);
+            Release();
         }
     }
 }

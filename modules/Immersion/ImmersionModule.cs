@@ -36,6 +36,9 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "HEAD MOTION",
                 "Cockpit view: rotational head inertia under G-load, roll lead, yaw lead, and breathing motion.",
                 context.Settings.Immersion.HeadMotionEnabled);
+            context.AddClientSetting("IMMERSION", "COMFORT MOTION",
+                "Reduce all added cockpit rotation to 25% and remove idle breathing.",
+                context.Settings.Immersion.ComfortMotionEnabled);
             context.AddClientSetting("IMMERSION", "EXTRA SHAKE",
                 "Cockpit view: dynamic vibrations for gunfire recoil, touchdowns, and runway roll.",
                 context.Settings.Immersion.ExtraShakeEnabled);
@@ -52,7 +55,7 @@ namespace BoscaliSummer.Modules.Immersion
                 "Cockpit view: physiological G-force visual effects (tunnel vision greyout under high G, redout under negative G).",
                 context.Settings.Immersion.GVignetteEnabled);
             context.AddClientSetting("IMMERSION", "SURFACE IMMERSION",
-                "Cockpit view: dynamic canopy and airframe surface effects (rain wetness, high-altitude frost, scorch, dirt).",
+                "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
                 context.Settings.Immersion.SurfaceImmersionEnabled);
             context.AddClientSetting("IMMERSION", "AIRFRAME CREAKS",
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.",

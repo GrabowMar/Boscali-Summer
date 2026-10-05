@@ -27,18 +27,20 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private float visibility;
         private float target;
         private float nextCheck;
+        private Camera flightCamera;
 
         /// <summary>Automation: multiplier on the flare intensity.</summary>
         public float Gain { get; set; } = 1f;
 
-        public float Intensity => flare != null && flare.isActiveAndEnabled ? flare.intensity : 0f;
+        public float Intensity => flare != null ? flare.intensity : 0f;
 
-        public void Tick(LevelInfo level, Camera camera, bool on, float dt)
+        public void Tick(LevelInfo level, Camera camera, bool on, float dt, float transmission = 1f)
         {
             Light current = level != null ? level.sun : null;
             if (current != sun) Release();
             sun = current;
-            bool sunUp = sun != null && sun.gameObject.activeInHierarchy;
+            flightCamera = camera;
+            bool sunUp = sun != null && sun.isActiveAndEnabled && sun.intensity > 0f;
             if (!on || !sunUp || camera == null)
             {
                 if (flare != null && flare.enabled) flare.enabled = false;
@@ -81,11 +83,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 nextCheck = Time.unscaledTime + CheckInterval;
                 float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
                 bool blocked = Physics.Raycast(eye, toSun, RayLength, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
-                float cloudOcclusion = level != null ? level.GetCloudOcclusion(eye) : 0f;
-                target = ImmersionMath.SunVisibility(elevation, cloudOcclusion, blocked);
+                target = ImmersionMath.SunVisibility(elevation, 0f, blocked);
             }
 
-            visibility = Mathf.MoveTowards(visibility, target, 4f * dt);
+            visibility = Mathf.MoveTowards(visibility, target * Mathf.Clamp01(transmission), 1.5f * dt);
             flare.intensity = visibility * Gain;
         }
 
@@ -103,6 +104,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private void PlaceForCamera(ScriptableRenderContext context, Camera camera)
         {
             if (proxy == null || sun == null || camera == null) return;
+            if (flare != null) flare.enabled = camera == flightCamera && visibility > 0.001f;
+            if (camera != flightCamera) return;
             int mask = camera.cullingMask;
             if (mask == 0) return;
             if ((mask & (1 << proxy.layer)) == 0)
@@ -123,7 +126,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             flare = null;
             proxy = null;
             sun = null;
+            flightCamera = null;
             visibility = target = 0f;
+        }
+
+        internal static void ReleaseData()
+        {
+            if (data != null) Object.Destroy(data);
+            data = null;
         }
 
         /// <summary>

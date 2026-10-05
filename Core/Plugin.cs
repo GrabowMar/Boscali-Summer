@@ -7,7 +7,7 @@ using NOAvionics;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-    [BepInDependency("com.marci.wingcommand", "0.9.2.6")]
+    // Avionics is compiled in; consumers already handle an unavailable optional Wing service.
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";

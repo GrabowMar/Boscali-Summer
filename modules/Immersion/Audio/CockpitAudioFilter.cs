@@ -1,101 +1,97 @@
-using BoscaliSummer.Modules.Immersion.Domain;
 using UnityEngine;
+using BoscaliSummer.Modules.Immersion.Domain;
 
 namespace BoscaliSummer.Modules.Immersion.Audio
 {
-    /// <summary>
-    /// Dynamic cockpit audio filter simulating pilot auditory narrowing (tunnel hearing) under
-    /// high G-forces and redout pressure.
-    /// Attaches an AudioLowPassFilter to the active AudioListener.
-    /// When outside the cockpit or during normal 1G flight, the filter is automatically disabled
-    /// so the Unity audio engine incurs zero DSP processing overhead.
-    /// </summary>
     internal sealed class CockpitAudioFilter
     {
-        private const float MinCutoffHz = 600f;
-        private const float MaxCutoffHz = 22000f;
-        private const float ThresholdDisableHz = 21000f;
-        private const float SlewRateHz = 16000f;
-
         private AudioListener boundListener;
+        private Camera boundCamera;
         private AudioLowPassFilter filter;
-        private float currentCutoff = MaxCutoffHz;
-
-        /// <summary>Current filter cutoff frequency in Hz (diagnostics readout).</summary>
+        private bool created;
+        private bool wrote;
+        private bool priorEnabled;
+        private float priorCutoff;
+        private float writtenCutoff;
+        private float nextSearch;
+        private float currentCutoff = 22000f;
         public float CutoffFrequency => currentCutoff;
+        public bool IsFilteringActive => wrote && filter != null && filter.enabled;
 
-        /// <summary>Whether the DSP filter is currently actively processing audio.</summary>
-        public bool IsFilteringActive => filter != null && filter.enabled;
-
-        public void Tick(Camera mainCamera, Vector3 forceG, bool cockpitView, bool enabled, float dt)
+        public void Tick(Camera camera, float positive, float negative, bool cockpit, bool enabled, float dt)
         {
-            if (!enabled || !cockpitView || mainCamera == null)
+            if (camera != boundCamera || (filter != null && boundListener == null) ||
+                (boundListener != null && !boundListener.isActiveAndEnabled)) Release();
+            if (!enabled || !cockpit || camera == null || (positive <= 0.001f && negative <= 0.001f))
             {
-                if (filter != null && filter.enabled)
-                {
-                    filter.enabled = false;
-                    currentCutoff = MaxCutoffHz;
-                }
+                Restore();
+                currentCutoff = 22000f;
                 return;
             }
-
-            EnsureFilter(mainCamera);
+            float target = ImmersionMath.ExposureAudioCutoff(positive, negative);
+            currentCutoff = Mathf.MoveTowards(currentCutoff, target, 12000f * dt);
+            if (currentCutoff >= 21000f) { Restore(); return; }
+            EnsureFilter(camera);
             if (filter == null) return;
-
-            float targetCutoff = ImmersionMath.GAudioCutoffFrequency(forceG.y, cockpitView);
-            targetCutoff = Mathf.Clamp(targetCutoff, MinCutoffHz, MaxCutoffHz);
-
-            // Smooth transition to prevent audio popping
-            currentCutoff = Mathf.MoveTowards(currentCutoff, targetCutoff, SlewRateHz * dt);
-
-            if (currentCutoff >= ThresholdDisableHz)
+            if (!wrote)
             {
-                if (filter.enabled)
-                {
-                    filter.enabled = false;
-                }
+                priorEnabled = filter.enabled;
+                priorCutoff = filter.cutoffFrequency;
             }
             else
             {
-                if (!filter.enabled)
-                {
-                    filter.enabled = true;
-                    filter.lowpassResonanceQ = 1.0f;
-                }
-                filter.cutoffFrequency = currentCutoff;
+                // Rebase each borrowed property separately. A foreign cutoff write must
+                // not adopt our enabled=true write as the native enabled baseline.
+                if (!filter.enabled) priorEnabled = false;
+                if (Mathf.Abs(filter.cutoffFrequency - writtenCutoff) > 0.5f)
+                    priorCutoff = filter.cutoffFrequency;
             }
+            writtenCutoff = priorEnabled ? Mathf.Min(priorCutoff, currentCutoff) : currentCutoff;
+            filter.cutoffFrequency = writtenCutoff;
+            filter.enabled = true;
+            wrote = true;
+        }
+
+        private void Restore()
+        {
+            if (wrote && filter != null)
+            {
+                if (Mathf.Abs(filter.cutoffFrequency - writtenCutoff) <= 0.5f)
+                    filter.cutoffFrequency = priorCutoff;
+                if (filter.enabled) filter.enabled = priorEnabled;
+            }
+            wrote = false;
         }
 
         public void Release()
         {
-            if (filter != null)
-            {
-                filter.enabled = false;
-                Object.Destroy(filter);
-                filter = null;
-            }
+            Restore();
+            if (created && filter != null) Object.Destroy(filter);
+            filter = null;
             boundListener = null;
-            currentCutoff = MaxCutoffHz;
+            boundCamera = null;
+            created = false;
+            currentCutoff = 22000f;
+            nextSearch = 0f;
         }
 
         private void EnsureFilter(Camera camera)
         {
-            if (filter != null && boundListener != null && boundListener.gameObject != null) return;
-
-            AudioListener listener = camera.GetComponent<AudioListener>()
-                ?? camera.GetComponentInChildren<AudioListener>()
-                ?? Object.FindObjectOfType<AudioListener>();
-
-            if (listener == null) return;
-
-            boundListener = listener;
-            filter = listener.GetComponent<AudioLowPassFilter>()
-                ?? listener.gameObject.AddComponent<AudioLowPassFilter>();
-
-            filter.enabled = false;
-            filter.cutoffFrequency = MaxCutoffHz;
-            filter.lowpassResonanceQ = 1.0f;
-            currentCutoff = MaxCutoffHz;
+            if (filter != null && boundListener != null) return;
+            if (Time.unscaledTime < nextSearch) return;
+            nextSearch = Time.unscaledTime + 1f;
+            boundCamera = camera;
+            boundListener = camera.GetComponent<AudioListener>() ?? camera.GetComponentInChildren<AudioListener>()
+                ?? camera.GetComponentInParent<AudioListener>();
+            if (boundListener == null) return;
+            filter = boundListener.GetComponent<AudioLowPassFilter>();
+            created = filter == null;
+            if (created)
+            {
+                filter = boundListener.gameObject.AddComponent<AudioLowPassFilter>();
+                filter.enabled = false;
+                filter.cutoffFrequency = 22000f;
+            }
         }
     }
 }

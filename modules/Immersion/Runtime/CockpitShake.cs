@@ -3,75 +3,48 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
 {
-    /// <summary>
-    /// Cockpit camera vibrations fed into CameraStateManager.ShakeCamera:
-    /// - Pilot's own gunfire recoil
-    /// - Touchdown thump proportional to sink rate
-    /// - High-speed runway roll rumble
-    /// - Transonic aerodynamic Mach buffeting & sound barrier crossing jolt
-    /// </summary>
+    // Mod-owned rotational envelopes. Native positional shake remains untouched.
     internal sealed class CockpitShake
     {
+        private readonly MotionEnvelope events = new MotionEnvelope();
         private Aircraft subscribed;
         private float lastVerticalSpeed;
-        private float lastMach = -1f;
-        private float strength = 1f;
+        private float strength;
         private bool active;
-
+        private bool primed;
+        public Vector3 AnglesDeg { get; private set; }
         public int Shots { get; private set; }
         public int Touchdowns { get; private set; }
 
-        public void Tick(CameraStateManager cameras, Aircraft aircraft, bool on, bool machBuffetOn, float shakeStrength, float dt)
+        public void Tick(Aircraft aircraft, bool cockpit, bool extra, bool machOn,
+            float shakeStrength, float mach, float turbulence, float gust, float dt)
         {
-            active = on;
-            strength = shakeStrength;
             if (aircraft != subscribed) Follow(aircraft);
-            if (!on || aircraft == null || aircraft.rb == null) return;
-
+            active = cockpit && extra && aircraft != null;
+            strength = shakeStrength;
+            if (!cockpit || aircraft == null || aircraft.rb == null) { Release(); return; }
             lastVerticalSpeed = aircraft.rb.velocity.y;
+            primed = true;
+            if (!extra) { events.ClearExtra(); }
+            if (machOn && strength > 0f) events.SonicCrossing(mach, Time.time);
+            else events.ResetMach();
+            events.Step(dt);
 
-            // Runway roll rumble
-            if (aircraft.radarAlt <= 0.3f)
-            {
-                (float low, float high) = ImmersionMath.GroundRumble(aircraft.speed, strength);
-                if (low > 0f || high > 0f)
-                {
-                    cameras.ShakeCamera(low * 5f * dt, high * 4f * dt);
-                }
-            }
-
-            // Transonic aerodynamic buffeting
-            if (machBuffetOn && aircraft.radarAlt > 5f)
-            {
-                float alt = aircraft.transform.position.y;
-                float mach = ImmersionMath.MachNumber(aircraft.speed, alt);
-                float buffet = ImmersionMath.MachBuffet(mach, strength);
-                if (buffet > 0f)
-                {
-                    cameras.ShakeCamera(0f, buffet * 4f * dt);
-                }
-
-                // Sound barrier transition bump
-                if (lastMach > 0f)
-                {
-                    if ((lastMach < 1.0f && mach >= 1.0f) || (lastMach > 1.0f && mach <= 1.0f))
-                    {
-                        cameras.ShakeCamera(0.06f * strength, 0.12f * strength);
-                    }
-                }
-                lastMach = mach;
-            }
-            else
-            {
-                lastMach = -1f;
-            }
+            float time = Time.time;
+            float runway = extra && aircraft.radarAlt <= 0.3f ? Mathf.Clamp01((aircraft.speed - 2f) / 70f) * 0.14f : 0f;
+            float transonic = machOn ? ImmersionMath.MachBuffet(mach, 1f) * 0.5f : 0f;
+            float weather = extra ? Mathf.Clamp01(turbulence) * Mathf.Clamp01(gust / 20f) * 0.2f : 0f;
+            float buzz = runway + transonic + weather;
+            AnglesDeg = new Vector3(
+                -events.Recoil * 0.32f - events.Landing * 0.55f + Mathf.Sin(time * 31f) * buzz,
+                Mathf.Sin(time * 23f) * buzz * 0.4f,
+                Mathf.Sin(time * 41f) * (buzz + events.Recoil * 0.11f) + events.Sonic * 0.35f) * strength;
         }
 
-        public void OnShot(Gun gun, CameraStateManager cameras)
+        public void OnShot(Gun gun)
         {
-            if (!active || gun == null || gun.info == null || cameras == null) return;
-            (float low, float high) = ImmersionMath.ShotShake(gun.info.massPerRound * gun.info.muzzleVelocity, strength);
-            cameras.ShakeCamera(low, high);
+            if (!active || strength <= 0f || gun == null || gun.info == null) return;
+            events.AddGun(gun.info.massPerRound * gun.info.muzzleVelocity, 1f);
             Shots++;
         }
 
@@ -80,22 +53,19 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (subscribed != null) subscribed.OnTouchdown -= OnTouchdown;
             subscribed = aircraft;
             if (subscribed != null) subscribed.OnTouchdown += OnTouchdown;
-            lastMach = -1f;
+            events.Reset();
+            primed = false;
+            lastVerticalSpeed = aircraft != null && aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
         }
 
         private void OnTouchdown()
         {
-            if (!active) return;
-            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
-            if (cameras == null) return;
-            cameras.ShakeCamera(ImmersionMath.TouchdownShake(Mathf.Min(0f, lastVerticalSpeed), strength), 0.2f * strength);
+            if (!active || !primed || strength <= 0f) return;
+            events.AddLanding(Mathf.Min(0f, lastVerticalSpeed), 1f);
             Touchdowns++;
         }
 
-        public void Release()
-        {
-            Follow(null);
-            lastMach = -1f;
-        }
+        public void ResetMeasurements() { events.Reset(); primed = false; AnglesDeg = Vector3.zero; }
+        public void Release() { Follow(null); active = false; AnglesDeg = Vector3.zero; }
     }
 }

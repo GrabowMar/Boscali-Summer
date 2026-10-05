@@ -33,10 +33,15 @@ namespace BoscaliSummer.Core.Contracts
         public static int ColourBits(string formatName)
         {
             if (string.IsNullOrEmpty(formatName)) return 32;
-            if (formatName.IndexOf("R8", StringComparison.Ordinal) >= 0) return 8;
-            if (formatName.IndexOf("Half", StringComparison.Ordinal) >= 0) return 64;
-            if (formatName.IndexOf("Float", StringComparison.Ordinal) >= 0) return 128;
-            return 32;
+            switch (formatName)
+            {
+                case "R8": return 8;
+                case "RHalf": case "R16": case "ARGB4444": case "ARGB1555": case "RGB565": return 16;
+                case "RGHalf": case "RFloat": case "RInt": return 32;
+                case "ARGBHalf": case "RGFloat": case "RGInt": return 64;
+                case "ARGBFloat": case "ARGBInt": return 128;
+                default: return 32;
+            }
         }
     }
 }
