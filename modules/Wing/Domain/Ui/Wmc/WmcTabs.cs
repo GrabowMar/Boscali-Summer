@@ -41,7 +41,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (string.IsNullOrEmpty(name)) return -1;
             if (Is(name, "SQUADRON") || Is(name, "INSPECT")) return Wing;
             if (Is(name, "FORM") || Is(name, "FORMATION") || Is(name, "ROUTE") || Is(name, "ORDERS")) return Tactical;
-            if (Is(name, "PLAN") || Is(name, "TUNING") || Is(name, "OPTIONS")) return Behaviour;
+            if (Is(name, "PLAN") || Is(name, "TUNING") || Is(name, "OPTIONS") || Is(name, "STANCES") || Is(name, "SORTIE") || Is(name, "RECORD")) return Behaviour;
+            if (Is(name, "ROSTER") || Is(name, "AIRCRAFT") || Is(name, "STUDIO")) return Wing;
             for (int i = 0; i < Labels.Length; i++)
                 if (string.Equals(name, Labels[i], StringComparison.OrdinalIgnoreCase)) return i;
             return -1;
