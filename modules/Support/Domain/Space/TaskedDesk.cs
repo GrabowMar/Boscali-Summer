@@ -317,6 +317,37 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
+        public const int MaxWatchPostsPerDomain = 1, WatchReserveSlots = 2;
+
+        /// <summary>
+        /// WATCH OFFICER OVERLORD's CYBER BURN package or SOF team post: the same one-point host post a human operator makes, labelled WATCH OFFICER, with no effort tokens (it earns nothing), at
+        /// most <see cref="MaxWatchPostsPerDomain"/> live per domain and never into the last <see cref="WatchReserveSlots"/> board slots (they stay for humans). A pilot who fires it pays the tier fee
+        /// and the whole fee goes to HQ FUND. Posted / NotPosted (no room, the domain's post is still up, or a duplicate) / Unavailable (not a host post).
+        /// </summary>
+        public TaskedResult PostWatchOfficerPackage(SupportActionId action, int nodeId, float x, float z)
+        {
+            try
+            {
+                float now = ports.Now;
+                if (retired || nodeId <= 0 || !SpaceRules.MissionTime(now) || !TaskedKinds.IsHostPost(action)) return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
+                if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
+                int humans = profile.Observe(ports.Humans, now);
+                if (board.CountWatchOfficer(now, TaskedKinds.DomainOf(action)) >= MaxWatchPostsPerDomain || board.Count + 1 > TaskedBoard.CapacityFor(humans) - WatchReserveSlots)
+                    return new TaskedResult(TaskedOutcome.NotPosted, 0, 0);
+                int id = nextCallId + 1;
+                var marks = new[] { new SpaceMark(nodeId, x, z, false, now + TaskedBoard.CallSeconds, BirdKind.Radar) };
+                var call = new TaskedCall(id, action, SpaceContacts.WatchOfficerId, true, humans, now, marks, Array.Empty<EffortShare>());
+                if (!board.TryPost(call, now)) return new TaskedResult(TaskedOutcome.NotPosted, 0, 0);
+                nextCallId = id;
+                return new TaskedResult(TaskedOutcome.Posted, id, 0);
+            }
+            catch (Exception e)
+            {
+                Warn("PostWatchOfficerPackage threw: " + e.Message);
+                return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
+            }
+        }
+
         /// <summary>Withdraws the open post of <paramref name="action"/> whose one point has mark id <paramref name="markId"/> (a SOF team post that no longer applies). False when none was open.</summary>
         public bool WithdrawPost(SupportActionId action, int markId)
         {

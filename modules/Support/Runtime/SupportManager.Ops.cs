@@ -33,6 +33,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null) return OpOutcome.Unavailable;
             float now = MissionNow();
             int key = credits.FactionKey(owner);
+            // An AI faction's OVERLORD has no wallet: its FUND taps come out of the treasury (HQ FUND), the same sink a member's CR is.
+            if (op == SpaceContacts.WatchOfficerId)
+            {
+                if (!credits.Fund.TrySpend(key, cr)) { detail = cr; return OpOutcome.LowCredit; }
+                return OpOutcome.None;
+            }
             if (!credits.Tasked.IsActive(op, key, now))
             {
                 float frozen = credits.Tasked.FrozenRemaining(op, now);
@@ -57,6 +63,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void OpsRefund(FactionHQ owner, ulong op, int cr)
         {
             if (cr <= 0 || BypassRequirements || credits == null) return;
+            if (op == SpaceContacts.WatchOfficerId) { credits.Fund.Add(credits.FactionKey(owner), cr); return; } // back into the treasury it came from
             credits.Tasked.Refund(op, cr);
         }
 

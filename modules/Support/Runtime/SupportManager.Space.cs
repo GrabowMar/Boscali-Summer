@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>A pilot's callsign for the CLAIMED BY words: printable ASCII, bounded, empty when unknown.</summary>
         internal string PlayerLabel(FactionHQ owner, ulong id)
         {
+            if (id == SpaceContacts.WatchOfficerId) return "OVERLORD";
             Player player = FindPlayer(owner, id);
             if (player == null) return "";
             try { return SpaceWire.Clean(player.GetDisplayName(PlayerNameContext.ChatOrLeaderboard), SpaceReply.MaxClaimant); }

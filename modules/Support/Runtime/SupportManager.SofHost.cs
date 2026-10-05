@@ -37,7 +37,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal bool PostSofPost(FactionHQ owner, SupportActionId action, int slot, float x, float z, ulong maker)
         {
             if (space == null || !space.TryGetDesk(owner, out TaskedDesk desk) || maker == 0) return false;
-            return desk.PostPackage(maker, action, slot + 1, x, z, 1f).Outcome == TaskedOutcome.Posted;
+            TaskedResult r = maker == SpaceContacts.WatchOfficerId ? desk.PostWatchOfficerPackage(action, slot + 1, x, z) : desk.PostPackage(maker, action, slot + 1, x, z, 1f);
+            return r.Outcome == TaskedOutcome.Posted;
         }
 
         internal void WithdrawSofPost(FactionHQ owner, SupportActionId action, int slot)

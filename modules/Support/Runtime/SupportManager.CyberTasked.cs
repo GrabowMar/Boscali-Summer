@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>A small operator assist (an enemy killed while its node is held), through the capped contributor path.</summary>
         internal void CyberAssist(FactionHQ owner, ulong op, float amount)
         {
-            if (credits == null || settings == null) return;
+            if (credits == null || settings == null || op == SpaceContacts.WatchOfficerId) return; // OVERLORD earns nothing
             ContributorCreditReceipt r = credits.Tasked.EarnContributor(op, credits.FactionKey(owner), amount * settings.EarnKnob.Value, MissionNow());
             if (r.Unapplied > 0f) credits.Tasked.AddHq(credits.FactionKey(owner), r.Unapplied);
         }

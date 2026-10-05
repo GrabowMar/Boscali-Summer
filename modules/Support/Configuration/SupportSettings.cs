@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> SofEnabled { get; }
         public ConfigEntry<bool> OpsEnabled { get; }
+        public ConfigEntry<bool> AiFactionsEnabled { get; }
         public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
@@ -94,7 +95,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
 
             WatchOfficerEnabled = config.Bind("Support", "WatchOfficer", true,
                 "WATCH OFFICER OVERLORD: when no human is working SPACE it scans for contacts and posts TASKED calls from the contacts " +
-                "the faction has revealed (never an unrevealed one). Host-authoritative: on a server, only the host's value applies.");
+                "the faction has revealed (never an unrevealed one); in CYBER it hops, burns and drops intrusions and in SOF it raises one team and sends it on missions, on revealed targets only. " +
+                "Host-authoritative: on a server, only the host's value applies.");
             CyberEnabled = config.Bind("Support", "Cyber", true,
                 "CYBER / EW: EW trucks and data centers spawn at rear airbases, and operators intrude into revealed enemy nodes (hold, burn, drop). " +
                 "Host-authoritative: on a server, only the host's value applies.");
@@ -104,6 +106,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
             OpsEnabled = config.Bind("Support", "Operations", true,
                 "OPERATIONS: faction projects funded by any member (DECRYPT SATELLITE TRACK, ZERO-DAY: SAM NET FAIL, FORWARD OPERATING BASE). " +
                 "Needs CYBER or SOF. Host-authoritative: on a server, only the host's value applies.");
+            AiFactionsEnabled = config.Bind("Support", "AiFactions", true,
+                "AI-controlled factions (no humans) work CYBER and SOF through the same host paths as an operator (one domain action every 30 s, no recon) and, while they lead and their " +
+                "treasury is over 500 CR, plan and fund operations (one tap a minute). They never target what they have not revealed. Host-authoritative: on a server, only the host's value applies.");
             QuietNotices = config.Bind("Support", "QuietNotices", false,
                 "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
                 "RWR, missile, terrain) are never silenced.");

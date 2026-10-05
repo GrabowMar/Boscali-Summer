@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             detail = 0;
             if (cr <= 0 || BypassRequirements) return CyberOutcome.None;
+            // WATCH OFFICER OVERLORD has no wallet, exactly like SPACE's: its starts, its upkeep and its raises are free, bounded by the pacing and the caps instead of by CR.
+            if (op == SpaceContacts.WatchOfficerId) return CyberOutcome.None;
             if (credits == null) return CyberOutcome.Unavailable;
             float now = MissionNow();
             int key = credits.FactionKey(owner);
@@ -39,7 +41,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal void CyberRefund(FactionHQ owner, ulong op, int cr)
         {
-            if (cr <= 0 || BypassRequirements || credits == null) return;
+            if (cr <= 0 || BypassRequirements || credits == null || op == SpaceContacts.WatchOfficerId) return; // OVERLORD paid nothing, so nothing comes back
             // The refund comes out of HQ FUND (where the start cost went): if the fund no longer holds it, nothing is minted.
             if (!credits.Fund.TrySpend(credits.FactionKey(owner), cr)) { Plugin.Logger?.LogWarning("[Support.Cyber] Refund of " + cr + " CR skipped: HQ FUND is short."); return; }
             credits.Tasked.Refund(op, cr);
@@ -56,7 +58,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal CyberOutcome PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
         {
             if (space == null || !space.TryGetDesk(owner, out TaskedDesk desk)) return CyberOutcome.NoBoard;
-            TaskedResult r = desk.PostPackage(op, def.Action, node.Id, node.X, node.Z, effort);
+            // OVERLORD's package is labelled WATCH OFFICER and carries no effort: its own desk path, never a human maker id.
+            TaskedResult r = op == SpaceContacts.WatchOfficerId ? desk.PostWatchOfficerPackage(def.Action, node.Id, node.X, node.Z)
+                : desk.PostPackage(op, def.Action, node.Id, node.X, node.Z, effort);
             if (r.Outcome == TaskedOutcome.Posted) return CyberOutcome.None;
             if (r.Outcome == TaskedOutcome.NotPosted)
                 // Every board holds at least six posts, so a refusal on a smaller board means the same package is already posted on that node.

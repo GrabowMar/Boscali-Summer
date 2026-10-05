@@ -65,7 +65,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public readonly SofEventKind Kind;
         public readonly int Slot;
         public readonly MissionKind Mission;
-        public SofEvent(SofEventKind kind, int slot, MissionKind mission) { Kind = kind; Slot = slot; Mission = mission; }
+        /// <summary>Who sent the mission the event belongs to (0 for an event with none): OVERLORD's work is told apart from a human's.</summary>
+        public readonly ulong Operator;
+        public SofEvent(SofEventKind kind, int slot, MissionKind mission, ulong op = 0) { Kind = kind; Slot = slot; Mission = mission; Operator = op; }
     }
 
     /// <summary>What the enemy looks like around one point, as the host sees it (counts only; the client never gets this).</summary>
@@ -739,7 +741,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         private void Queue(SofEventKind kind, SofTeam t, MissionKind? mission = null)
         {
-            if (pending.Count < MaxEventsPending) pending.Add(new SofEvent(kind, t.Slot, mission ?? t.Mission));
+            if (pending.Count < MaxEventsPending) pending.Add(new SofEvent(kind, t.Slot, mission ?? t.Mission, t.MissionPayer));
         }
 
         private void Pump()

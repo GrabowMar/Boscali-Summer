@@ -167,6 +167,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return n;
         }
 
+        /// <summary>Live OVERLORD posts of one domain: SPACE, CYBER and SOF each keep their own allowance, so one domain's posts never use up another's.</summary>
+        public int CountWatchOfficer(float now, TaskedDomain domain)
+        {
+            SyncContacts();
+            int n = 0;
+            foreach (Entry entry in calls.Values) if (entry.Call.WatchOfficer && entry.Call.Domain == domain && entry.Call.Valid(now)) n++;
+            return n;
+        }
+
         public static int CapacityFor(int humanProfile) => !TaskedFees.ValidProfile(humanProfile) ? 0 :
             humanProfile <= 4 ? 6 : humanProfile <= 16 ? 6 + humanProfile / 4 : MaxCalls;
 

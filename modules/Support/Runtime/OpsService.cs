@@ -175,7 +175,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void OnCyber(FactionHQ owner, CyberEvent e, int victimKey)
         {
             if (!factions.TryGetValue(owner, out FactionOps f)) return;
-            if (e.Kind == CyberEventKind.NodeHeld) f.Desk.Work(OpDomain.Cyber, OpsRules.HopWork);
+            // OVERLORD's hops feed an AI faction's own operation only: with humans in the faction their operation is theirs (core 7a: no credit for AI-staff-only work).
+            bool staffWork = e.Operator == SpaceContacts.WatchOfficerId && manager.HumanCount(owner) > 0;
+            if (e.Kind == CyberEventKind.NodeHeld && !staffWork) f.Desk.Work(OpDomain.Cyber, OpsRules.HopWork);
             if (victimKey == 0) return;
             foreach (var pair in factions)
                 if (pair.Value.Key == victimKey && pair.Key != owner) pair.Value.Desk.CounterTrace(OpDomain.Cyber);
@@ -185,6 +187,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void OnSof(FactionHQ owner, SofEvent e)
         {
             if (e.Kind != SofEventKind.Success || !factions.TryGetValue(owner, out FactionOps f)) return;
+            if (e.Operator == SpaceContacts.WatchOfficerId && manager.HumanCount(owner) > 0) return; // OVERLORD's work never advances a human faction's operation
             f.Desk.Work(OpDomain.Sof, OpsRules.SofWork);
         }
 
