@@ -13,7 +13,7 @@ Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" 
 Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
 Get-ChildItem -LiteralPath "$repo/AvionicsUi", "$repo/AvionicsUi/Pure" -Filter '*.cs' | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath "$repo/AvionicsUi/Fui" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.fui.avss", "$repo/AvionicsUi/avionics.steel.avss", "$repo/AvionicsUi/avionics.ace.avss", "$repo/AvionicsUi/avionics.phosphor.avss" -Destination "$PreviewDirectory/NOAvionics/"
+Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.fui.avss", "$repo/AvionicsUi/avionics.steel.avss", "$repo/AvionicsUi/avionics.ace.avss", "$repo/AvionicsUi/avionics.phosphor.avss", "$repo/AvionicsUi/avionics.fieldops.avss", "$repo/AvionicsUi/avionics.amber.avss", "$repo/AvionicsUi/avionics.glass.avss", "$repo/AvionicsUi/avionics.nightops.avss" -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/"
 Copy-Item -LiteralPath "$repo/modules/Events/Assets/event_atlas.png" -Destination "$PreviewDirectory/BepInEx/plugins/BoscaliSummer/Events/"
 # The module's own presentation (no alert / plane HUD / tone), its pure domain, settings and the two shared files it reads.

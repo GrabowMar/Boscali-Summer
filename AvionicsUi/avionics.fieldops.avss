@@ -1,0 +1,22 @@
+/* Theme D · Field Ops olive drab, cream paper ink, brass keys. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #11130B fb;
+  surface:         #1D2113 fa;
+  surface-raised:  #2A2F1B fa;
+  surface-inert:   #171A0F f5;
+  surface-sunken:  #0D0F08 f8;
+  hairline:        #4E5634 c7;
+  frame:           #8C8A5A e6;
+  ink:             #EDE6CC;
+  ink-dim:         #D3CCAE;
+  ink-muted:       #B5B092;
+  key:             #D8BE6A;
+  select:          #E89A3C;
+  ready:           #A6C964;
+  caution:         #F0B84A;
+  danger:          #FF6B57;
+  info:            #C9C59A;
+  inert:           #4A4E35 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

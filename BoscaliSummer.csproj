@@ -107,6 +107,10 @@
     <EmbeddedResource Include="AvionicsUi\avionics.steel.avss"><LogicalName>NOAvionics.avionics.steel.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.ace.avss"><LogicalName>NOAvionics.avionics.ace.avss</LogicalName></EmbeddedResource>
     <EmbeddedResource Include="AvionicsUi\avionics.phosphor.avss"><LogicalName>NOAvionics.avionics.phosphor.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.fieldops.avss"><LogicalName>NOAvionics.avionics.fieldops.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.amber.avss"><LogicalName>NOAvionics.avionics.amber.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.glass.avss"><LogicalName>NOAvionics.avionics.glass.avss</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="AvionicsUi\avionics.nightops.avss"><LogicalName>NOAvionics.avionics.nightops.avss</LogicalName></EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Avionics UI bundle">
