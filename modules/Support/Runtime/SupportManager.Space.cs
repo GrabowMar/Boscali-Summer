@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal bool HasSpaceBird(FactionHQ owner, BirdKind bird)
         {
             if (owner == null) return false;
-            if (GameAccess.IsServer()) return TryGetSpaceState(owner, out SpaceState state) && state.HasBird(bird);
+            if (GameAccess.IsServer()) return TryGetSpaceStateCoarse(owner, out SpaceState state) && state.HasBird(bird);
             return spaceMirror.Known && spaceMirror.State.Active && GameManager.GetLocalPlayer<Player>(out Player local) &&
                 local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount;
         }
@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (owner == null) return false;
             if (GameAccess.IsServer())
             {
-                if (!TryGetSpaceState(owner, out SpaceState state)) return false;
+                if (!TryGetSpaceStateCoarse(owner, out SpaceState state)) return false;
                 family = state.Family(MissionNow());
                 return true;
             }

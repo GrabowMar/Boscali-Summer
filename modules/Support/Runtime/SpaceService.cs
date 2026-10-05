@@ -13,14 +13,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// <summary>Host-owned constellation grounded in actual, killable native sites.</summary>
     internal sealed class SpaceService : MonoBehaviour, ISceneService
     {
-        private const int MaximumFactions = 8, MaximumBases = 16;
+        private const int MaximumFactions = 8, MaximumBases = 16, MaximumScanUnits = 4096;
         private sealed class FactionSpace
         {
             public SpaceState State;
             public Unit[] Links;
             public float[] Baseline;
             public IReadOnlyList<Unit> View;
-            public bool Field;
             public SpaceObservations Observations;
             public TaskedDesk Tasked;
             /// <summary>Callsigns of the humans whose posts this faction shows, so a poll does not look every one up again.</summary>
@@ -70,15 +69,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
             factions.Clear();
             nextAttempt.Clear();
             nextTick = 0f;
+            scanCapLogged = false;
             spawner.ResetForScene();
         }
         private void OnDestroy() => ResetForScene();
 
+        /// <summary>Authoritative read for host decisions: re-samples the natives first, so a gate sees native loss immediately.</summary>
         public bool TryGetState(FactionHQ owner, out SpaceState state)
         {
             state = null;
             if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
-            if (!coarse) Refresh(owner, faction, SupportManager.MissionNow()); // Final host gates observe native loss immediately.
+            if (!coarse) Refresh(owner, faction, SupportManager.MissionNow());
+            state = faction.State;
+            return true;
+        }
+
+        /// <summary>
+        /// Display read (quotes, panels, the sky): the 1 Hz world state the host tick keeps current, never a re-sample. Safe to call
+        /// every frame; a native loss shows within about a second.
+        /// </summary>
+        public bool TryGetStateCoarse(FactionHQ owner, out SpaceState state)
+        {
+            state = null;
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
             state = faction.State;
             return true;
         }
@@ -411,7 +424,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     FactionHQ resolvedFor = hq;
                     SubscribeTasked(resolvedFor, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(resolvedFor, player, request, result));
                     Plugin.Logger?.LogInfo("[Support.Space] " + hq.name + ": " + faction.Links.Length +
-                        " native uplink(s), OPTICAL / RADAR / KINETIC ready" + (faction.Field ? " [FIELD site]" : "."));
+                        " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
                 }
                 break; // Expensive initial world sampling is limited to one faction per mission second.
             }
@@ -428,9 +441,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        private bool scanCapLogged;
+        private void NoteScanCap(int count)
+        {
+            if (scanCapLogged) return;
+            scanCapLogged = true; // reset with the scene's service state
+            Plugin.Logger?.LogWarning("[Support.Space] Uplink site search saw " + count + " units; only the first " + MaximumScanUnits + " are considered.");
+        }
+
         private bool TryEstablish(FactionHQ owner, out FactionSpace faction)
         {
             faction = null;
+            if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) NoteScanCap(UnitRegistry.allUnits.Count);
             var legal = new List<Candidate>(UplinkPlacement.MaxCandidates);
             Vector2 span = TheaterFrame.Resolve();
             if (FactionRegistry.airbaseLookup != null)
@@ -463,12 +485,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
             }
             if (links.Count == 0) BorrowAfloat(owner, span.magnitude, links);
-            bool fromOrigin = false;
             if (links.Count == 0 && UnitRegistry.allUnits != null)
             {
                 // Native stored spawn origins are only candidates; terrain/mission/ownership rules still apply.
                 int origins = 0;
-                for (int i = 0; i < UnitRegistry.allUnits.Count && i < 4096 && origins < 16; i++)
+                for (int i = 0; i < UnitRegistry.allUnits.Count && i < MaximumScanUnits && origins < 16; i++)
                 {
                     Unit unit = UnitRegistry.allUnits[i];
                     if (unit == null || unit.disabled || unit.NetworkHQ != owner) continue;
@@ -477,7 +498,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (unit is Aircraft) origin.y = Datum.LocalSeaY + 100f;
                     if (!GroundPlacement.DryGround(origin, out _) || !TryAround(owner, origin, null, span.magnitude, out Candidate field)) continue;
                     Create(owner, field, links);
-                    if (links.Count > 0) { fromOrigin = true; break; }
+                    if (links.Count > 0) break;
                 }
             }
             if (links.Count == 0) return false;
@@ -485,7 +506,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
-                View = Array.AsReadOnly(array), Field = fromOrigin, Observations = new SpaceObservations(owner) };
+                View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             return true;
         }
@@ -555,7 +576,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (units == null) return;
             // Carrier first, then escort. Borrow the actual armed unit, following native movement/death/ownership.
             for (int pass = 0; pass < 2 && links.Count < 2; pass++)
-                for (int i = 0; i < units.Count && i < 4096 && links.Count < 2; i++)
+                for (int i = 0; i < units.Count && i < MaximumScanUnits && links.Count < 2; i++)
                 {
                     if (!(units[i] is Ship ship) || ship.disabled || ship.NetworkHQ != owner || links.Contains(ship) ||
                         (ship.GetAirbase() != null) != (pass == 0) || UplinkSpawner.Down(ship, owner)) continue;

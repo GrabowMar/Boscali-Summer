@@ -47,7 +47,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 !SpaceRevealWindow.TryCreate(source, center.x, center.z, radius, now, SpaceRevealWindow.ObservationSeconds,
                     minimumSpeed, maximumSpeed, out SpaceRevealWindow window)) return -1;
             var units = UnitRegistry.allUnits;
-            if (units == null || units.Count > MaximumNativeUnits) return -1;
+            if (units == null) return -1;
+            if (units.Count > MaximumNativeUnits) { NoteCap(units.Count); return -1; }
             // The RADAR bird stays busy for BirdBusySeconds (SupportCatalog), so one window per bird never
             // overwrites a live scan/MTI footprint.
             windows[(int)source] = window;
@@ -92,7 +93,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < expired.Count; i++) RemoveIndex(expired[i]);
             expired.Clear();
             // Native late-join batches can insert without either event. Attach handlers without fabricating a sighting.
-            if (owner.trackingDatabase == null || owner.trackingDatabase.Count > MaximumNativeUnits) return;
+            if (owner.trackingDatabase == null) return;
+            if (owner.trackingDatabase.Count > MaximumNativeUnits) { NoteCap(owner.trackingDatabase.Count); return; }
             foreach (var pair in owner.trackingDatabase)
             {
                 if (!indexed.TryGetValue(pair.Key, out Entry entry)) continue;
@@ -137,20 +139,53 @@ namespace BoscaliSummer.Modules.Support.Runtime
             indexed.Clear(); ids.Clear(); types.Clear(); expired.Clear(); Contacts.Clear();
         }
 
+        // These three are subscribed to vanilla FactionHQ events: nothing may throw back into the native delegate.
         private void Discover(PersistentID id)
         {
-            if (disposed || owner.trackingDatabase == null || !owner.trackingDatabase.TryGetValue(id, out TrackingInfo track) ||
-                track == null || !track.TryGetUnit(out Unit unit)) return;
-            ObserveKnown(unit, track);
+            try
+            {
+                if (disposed || owner.trackingDatabase == null || !owner.trackingDatabase.TryGetValue(id, out TrackingInfo track) ||
+                    track == null || !track.TryGetUnit(out Unit unit)) return;
+                ObserveKnown(unit, track);
+            }
+            catch (Exception e) { Warn("Discover", e); }
         }
 
         private void Forget(PersistentID id)
         {
-            if (!indexed.TryGetValue(id, out Entry entry)) return;
-            Contacts.Forget(entry.Id); Detach(entry);
+            try
+            {
+                if (!indexed.TryGetValue(id, out Entry entry)) return;
+                Contacts.Forget(entry.Id); Detach(entry);
+            }
+            catch (Exception e) { Warn("Forget", e); }
         }
 
-        private void RemoveOwn(Unit unit) { if (unit != null) Forget(unit.persistentID); }
+        private void RemoveOwn(Unit unit)
+        {
+            try { if (unit != null) Forget(unit.persistentID); }
+            catch (Exception e) { Warn("Remove", e); }
+        }
+
+        private float warnUntil;
+        private bool capLogged;
+
+        /// <summary>One warning per 5 s of real time, so a faulting native event cannot flood the log.</summary>
+        private void Warn(string where, Exception e)
+        {
+            float now = Time.unscaledTime;
+            if (now < warnUntil) return;
+            warnUntil = now + 5f;
+            Plugin.Logger?.LogWarning("[Support.Space] Observation " + where + " failed: " + e.Message);
+        }
+
+        private void NoteCap(int count)
+        {
+            if (capLogged) return;
+            capLogged = true;
+            Plugin.Logger?.LogWarning("[Support.Space] Native unit cap (" + MaximumNativeUnits + ") reached with " + count +
+                " units; sensor admission is paused for this scene.");
+        }
 
         private void Spotted(Entry entry)
         {
