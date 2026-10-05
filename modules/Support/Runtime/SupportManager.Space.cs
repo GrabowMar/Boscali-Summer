@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (owner == null) return false;
             if (GameAccess.IsServer()) return TryGetSpaceStateCoarse(owner, out SpaceState state) && state.HasBird(bird);
             return spaceMirror.Known && spaceMirror.State.Active && GameManager.GetLocalPlayer<Player>(out Player local) &&
-                local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount;
+                local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount && opsMirror.BirdUp(bird);
         }
 
         /// <summary>
@@ -130,6 +130,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             spaceMirror.ResetLink();
             cyberMirror.ResetLink();
             sofMirror.ResetLink();
+            opsMirror.ResetLink();
             ResetSpaceMirror();
         }
 
@@ -139,6 +140,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             spaceMirror.Reset();
             cyberMirror.Reset();
             sofMirror.Reset();
+            opsMirror.Reset();
             inProcessReplies.Clear();
             spaceFeedWanted = false;
             mirrorFaction = 0;
@@ -154,13 +156,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (key != mirrorFaction)
                 {
                     // Faction change: the old faction's rows must never outlive the switch.
-                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); }
+                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); }
                     mirrorFaction = key;
                 }
             }
             if (network == null) return;
             UpdateCyberMirror();
             UpdateSofMirror();
+            UpdateOpsMirror();
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {

@@ -332,6 +332,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             space?.ResetForScene();
             cyber?.ResetForScene();
             sof?.ResetForScene();
+            ops?.ResetForScene();
             ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();

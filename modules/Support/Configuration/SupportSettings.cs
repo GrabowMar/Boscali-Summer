@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> WatchOfficerEnabled { get; }
         public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> SofEnabled { get; }
+        public ConfigEntry<bool> OpsEnabled { get; }
         public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
@@ -100,6 +101,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
             SofEnabled = config.Bind("Support", "Sof", true,
                 "SOF / JTAC: a camp spawns near a rear airbase, and operators raise abstract teams that recon, lase, sabotage, seize and tap on revealed enemy targets. " +
                 "Host-authoritative: on a server, only the host's value applies.");
+            OpsEnabled = config.Bind("Support", "Operations", true,
+                "OPERATIONS: faction projects funded by any member (DECRYPT SATELLITE TRACK, ZERO-DAY: SAM NET FAIL, FORWARD OPERATING BASE). " +
+                "Needs CYBER or SOF. Host-authoritative: on a server, only the host's value applies.");
             QuietNotices = config.Bind("Support", "QuietNotices", false,
                 "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
                 "RWR, missile, terrain) are never silenced.");

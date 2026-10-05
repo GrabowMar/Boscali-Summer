@@ -241,6 +241,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             RecordEvent(f, e);
             if (e.Kind == SofEventKind.Unpinned || e.Kind == SofEventKind.Lost) manager.WithdrawSofPost(f.Owner, SupportActionId.SofCover, e.Slot);
             if (e.Kind == SofEventKind.Lost) manager.WithdrawSofPost(f.Owner, SupportActionId.SofLase, e.Slot);
+            try { Observed?.Invoke(f.Owner, e); }
+            catch (Exception ex) { Plugin.Logger?.LogWarning("[Support.Sof] An observer failed: " + ex.Message); }
             Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " " + SofPageWords.EventLine(new SofEventRow { Kind = e.Kind, Slot = (byte)e.Slot, Mission = e.Mission }) + ".");
         }
 

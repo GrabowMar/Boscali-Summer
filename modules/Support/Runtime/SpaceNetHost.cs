@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
@@ -17,7 +18,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// message. Replies and state go only to members of the faction that owns the data, and every faction member hears the
     /// small headline (family, uplinks, live MARKs) so client prices and the sky match the host without opening the feed.
     /// </summary>
-    internal sealed class SpaceNetHost : ISpaceCommandPorts, ICyberCommandPorts, ISofCommandPorts
+    internal sealed class SpaceNetHost : ISpaceCommandPorts, ICyberCommandPorts, ISofCommandPorts, IOpsCommandPorts
     {
         private const float PollWallSeconds = .25f;
 
@@ -31,6 +32,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly CyberStateData cyberScratch = new CyberStateData();
         private readonly SofSubscriptions sofSubs = new SofSubscriptions();
         private readonly SofStateData sofScratch = new SofStateData();
+        private readonly OpsSubscriptions opsSubs = new OpsSubscriptions();
+        private readonly OpsStateData opsScratch = new OpsStateData();
         private int cyberRound;
         private readonly HashSet<ulong> rosterIds = new HashSet<ulong>();
         private readonly List<SpaceContact> reveals = new List<SpaceContact>(SpaceContacts.MaxReveals);
@@ -44,7 +47,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public SpaceNetHost(SupportManager manager, SpaceService space, SupportNet net)
         {
             this.manager = manager; this.space = space; this.net = net;
-            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this, this, this);
+            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this, this, this, this);
             subs = new SpaceSubscriptions(SupportNet.ProtocolVersion);
             Salt = NewSalt();
         }
@@ -69,6 +72,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             subs.Clear();
             cyberSubs.Clear();
             sofSubs.Clear();
+            opsSubs.Clear();
             nextPoll = 0f;
             Salt = NewSalt();
         }
@@ -110,6 +114,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     case SpaceCommandKind.SofSync:
                         // A client that lost its SOF mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
                         if (commands.Admit(id, wall)) sofSubs.Resync(id);
+                        break;
+                    case SpaceCommandKind.OpSync:
+                        // A client that lost its OPERATIONS mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
+                        if (commands.Admit(id, wall)) opsSubs.Resync(id);
                         break;
                     default:
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
@@ -155,11 +163,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 // GetPlayers hands out a shared list that nested calls refill: poll a private copy.
                 roster.Clear();
                 for (int i = 0; i < players.Count && roster.Count < roster.Capacity; i++) roster.Add(players[i]);
-                for (int i = 0; i < roster.Count; i++) { Poll(roster[i], now, wall); PollCyber(roster[i], now, wall); PollSof(roster[i], now, wall); }
+                for (int i = 0; i < roster.Count; i++) { Poll(roster[i], now, wall); PollCyber(roster[i], now, wall); PollSof(roster[i], now, wall); PollOps(roster[i], now, wall); }
             }
             subs.EndRound();
             cyberSubs.Prune(rosterIds);
             sofSubs.Prune(rosterIds);
+            opsSubs.Prune(rosterIds);
         }
 
         /// <summary>The faction's CYBER state to one member: change-only, one message per two seconds at most, always the full state.</summary>
@@ -207,6 +216,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     nextWarning = Time.unscaledTime + 10f;
                     Plugin.Logger?.LogWarning("[Support.Sof] Mirror send failed: " + e.Message);
+                }
+            }
+        }
+
+        /// <summary>The viewer's OPERATIONS view to one member: change-only, one message per two seconds at most, always the full state.</summary>
+        private void PollOps(Player player, float now, float wall)
+        {
+            if (player == null || player.HQ == null || manager.Ops == null) return;
+            ulong id = PlayerIdentity.Of(player);
+            if (id == PlayerIdentity.None) return;
+            rosterIds.Add(id);
+            try
+            {
+                opsScratch.Protocol = SupportNet.ProtocolVersion;
+                manager.Ops.FillState(player, opsScratch);
+                OpsStateData send = opsSubs.Next(id, manager.FactionKeyOf(player.HQ), opsScratch, now, wall);
+                if (send != null) net.SendOpsState(player, send);
+            }
+            catch (Exception e)
+            {
+                if (Time.unscaledTime >= nextWarning)
+                {
+                    nextWarning = Time.unscaledTime + 10f;
+                    Plugin.Logger?.LogWarning("[Support.Ops] Mirror send failed: " + e.Message);
                 }
             }
         }
@@ -294,6 +327,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public SofResult Sof(ulong player, in SpaceCommand command) =>
             Is(player) ? manager.RunSofVerb(current, command) : new SofResult(SofOutcome.Unavailable);
+
+        // ---- IOpsCommandPorts -----------------------------------------------------------------------
+
+        public OpResult Ops(ulong player, in SpaceCommand command) =>
+            Is(player) ? manager.RunOpsVerb(current, command) : new OpResult(OpOutcome.Unavailable);
 
         private bool Is(ulong player) => current != null && PlayerIdentity.Of(current) == player;
     }

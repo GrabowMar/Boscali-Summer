@@ -44,6 +44,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "EW trucks and data centers, node intrusion (hop, hold, burn, drop) and the CYBER BURN packages on the TASKED board.")
                 .Toggle(19, settings.SofEnabled, "SOF / JTAC",
                     "A camp, abstract teams (raise, route, push, hold, divert, exfil), the five odds-resolved missions, held buildings and the helicopter lift.")
+                .Toggle(20, settings.OpsEnabled, "OPERATIONS",
+                    "Faction projects: DECRYPT SATELLITE TRACK (an ASAT strike), ZERO-DAY SAM NET FAIL and the FORWARD OPERATING BASE. Funded by any member; needs CYBER or SOF.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

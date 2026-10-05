@@ -172,6 +172,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             RecordEvent(f, e);
             RevealTraced(f, e);
+            try { Observed?.Invoke(f.Owner, e, VictimOf(f, e)); }
+            catch (Exception ex) { Plugin.Logger?.LogWarning("[Support.Cyber] An observer failed: " + ex.Message); }
         }
 
         private static void Measure(FactionCyber f, AnchorSlot slot, float now)
