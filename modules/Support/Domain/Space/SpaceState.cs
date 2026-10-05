@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -31,6 +32,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly bool[] down;
         private readonly BirdSlot[] birds = new BirdSlot[SpaceRules.BirdCount];
         private readonly float[] cooldownUntil = new float[SpaceRules.TaskCount];
+        private readonly bool[] dead = new bool[SpaceRules.BirdCount];
+        private readonly float[] buildEndsAt = new float[SpaceRules.BirdCount];
+        private readonly RebuildBar[] bars = { new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal) };
         private float allDownAt = float.PositiveInfinity;
         private int nextToken;
         private bool retired;
@@ -64,17 +68,70 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 return count;
             }
         }
+        /// <summary>CYBER BIRD JAM: the host sets the multiplier an enemy intrusion puts on this faction's task cooldowns (1 = none).</summary>
+        public float JamFactor { get; set; } = 1f;
+
         public float CooldownFactor
         {
             get
             {
+                float jam = SpaceRules.Finite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
                 for (int i = 0; i < health.Length; i++)
-                    if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor;
-                return 1f;
+                    if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
+                return jam;
             }
         }
 
-        public bool HasBird(BirdKind bird) => (byte)bird < SpaceRules.BirdCount;
+        /// <summary>The bird is up: it exists and an ASAT strike has not killed it (a dead bird is back after its rebuild bar and build time).</summary>
+        public bool HasBird(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && !dead[(byte)bird];
+
+        public bool BirdDown(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && dead[(byte)bird];
+
+        /// <summary>Bit i set while bird i (OPTICAL, RADAR, KINETIC) is dead.</summary>
+        public byte DownMask
+        {
+            get { byte m = 0; for (int i = 0; i < dead.Length; i++) if (dead[i]) m |= (byte)(1 << i); return m; }
+        }
+
+        /// <summary>The restore bar of a dead bird (auto-funded by the host from HQ FUND, like an anchor).</summary>
+        public RebuildBar BirdBar(BirdKind bird) => bars[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
+
+        /// <summary>0..100: how far a dead bird's rebuild has come (the bar first, then the build clock). 0 for a living bird.</summary>
+        public int RebuildPercent(BirdKind bird, float now)
+        {
+            if (!BirdDown(bird)) return 0;
+            int i = (byte)bird;
+            if (buildEndsAt[i] > 0f) return 50 + (int)Math.Max(0f, Math.Min(50f, 50f * (1f - (buildEndsAt[i] - now) / SpaceRules.BirdBuildSeconds)));
+            return (int)Math.Min(49f, Math.Floor(bars[i].Fraction * 50f));
+        }
+
+        /// <summary>An ASAT strike hit this bird. Its tasks stop (an in-flight reservation is voided) until the rebuild bar and the build finish. False when it was already dead.</summary>
+        public bool KillBird(BirdKind bird, float now)
+        {
+            if ((byte)bird >= SpaceRules.BirdCount || dead[(byte)bird] || !SpaceRules.MissionTime(now)) return false;
+            int i = (byte)bird;
+            dead[i] = true; buildEndsAt[i] = 0f; bars[i].Reset();
+            birds[i] = default;
+            return true;
+        }
+
+        /// <summary>Starts the build once a dead bird's bar is full and finishes it after 6 minutes. Returns the mask of birds restored by this call.</summary>
+        public byte TickBirds(float now)
+        {
+            byte restored = 0;
+            if (!SpaceRules.MissionTime(now)) return restored;
+            for (int i = 0; i < dead.Length; i++)
+            {
+                if (!dead[i]) continue;
+                if (buildEndsAt[i] <= 0f && bars[i].Complete) buildEndsAt[i] = now + SpaceRules.BirdBuildSeconds;
+                if (buildEndsAt[i] > 0f && now >= buildEndsAt[i])
+                {
+                    dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset();
+                    restored |= (byte)(1 << i);
+                }
+            }
+            return restored;
+        }
         public bool UplinkDown(int index) => index < 0 || index >= down.Length || down[index];
         public float UplinkHealthFraction(int index) => index < 0 || index >= health.Length ? 0f : health[index];
 
@@ -102,7 +159,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool CanStart(BirdTask task, float now)
         {
             if (retired || !SpaceRules.MissionTime(now) || LiveUplinkCount == 0 ||
-                !SpaceRules.TryBird(task, out BirdKind bird)) return false;
+                !SpaceRules.TryBird(task, out BirdKind bird) || dead[(int)bird]) return false;
             BirdSlot slot = birds[(int)bird];
             return slot.Token == 0 && now >= slot.BusyUntil && now >= cooldownUntil[(int)task];
         }
@@ -113,7 +170,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// </summary>
         public float ReadyIn(BirdTask task, float now)
         {
-            if (retired || !SpaceRules.MissionTime(now) || LiveUplinkCount == 0 || !SpaceRules.TryBird(task, out BirdKind bird))
+            if (retired || !SpaceRules.MissionTime(now) || LiveUplinkCount == 0 || !SpaceRules.TryBird(task, out BirdKind bird) || dead[(int)bird])
                 return float.PositiveInfinity;
             BirdSlot slot = birds[(int)bird];
             float wait = Math.Max(cooldownUntil[(int)task] - now, slot.BusyUntil - now);

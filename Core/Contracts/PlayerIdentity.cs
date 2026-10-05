@@ -15,9 +15,15 @@ namespace BoscaliSummer.Core.Contracts
     {
         public const ulong None = 0UL;
 
+        /// <summary>
+        /// The id Support reserves for WATCH OFFICER OVERLORD (<c>SpaceContacts.WatchOfficerId</c>, the same value: the Domain code is engine-free and cannot reference Core). No player may
+        /// carry it, so a SteamID that equals it falls back to the index form.
+        /// </summary>
+        public const ulong Reserved = ulong.MaxValue;
+
         public static ulong Of(Player player) =>
             player == null ? None :
-            player.SteamID != 0UL ? player.SteamID :
+            player.SteamID != 0UL && player.SteamID != Reserved ? player.SteamID :
             0x8000000000000000UL | (uint)System.Math.Max(0, player.PlayerIndex);
     }
 }

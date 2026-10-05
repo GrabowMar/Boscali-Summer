@@ -330,6 +330,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
             Clock.Reset();
             space?.ResetForScene();
+            cyber?.ResetForScene();
+            sof?.ResetForScene();
+            ops?.ResetForScene();
+            Visuals.OpsFlightVisuals.Reset();
             ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
@@ -392,6 +396,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
                 target == null) return;
             float now = MissionNow();
+            sof?.NoteKillBy(player, target); // a pilot's kill near a pinned SOF team (the only thing a COVER claim pays for)
+            // The held-node kill assist now rides CyberUnitKilledPatch (Unit.ReportKilled), which also sees AI and indirect kills.
             ulong id = PlayerIdentity.Of(player);
             bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
             GlobalPosition at = target.GlobalPosition();
@@ -1066,7 +1072,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
                 TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
             var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
-                degraded, "UPLINK DOWN", false,
+                degraded, "UPLINK DOWN", row.Family == CallFamily.Cyber && CyberExploit(player.HQ),
                 // Clients quote with the factor the host sent, so the panel matches what the host charges.
                 GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
                 GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,

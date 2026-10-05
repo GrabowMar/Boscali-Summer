@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 inputs.Linked = state.LiveUplinkCount > 0;
                 inputs.BoardCount = desk.Board.Count;
                 inputs.BoardCapacity = desk.Capacity;
-                inputs.OverlordPosts = desk.Board.CountWatchOfficer(now);
+                inputs.OverlordPosts = desk.Board.CountWatchOfficer(now, TaskedDomain.Space);
                 inputs.LiveMarks = contacts.MarkCount;
                 inputs.RodReadyIn = Ready(state, SupportActionId.Artillery, BirdTask.Rod, now);
                 inputs.RadarReadyIn = Ready(state, SupportActionId.Recon, BirdTask.Scan, now);

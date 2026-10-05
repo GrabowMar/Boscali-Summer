@@ -49,7 +49,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         Prsm = 30,
         Cruise = 31,
         /// <summary>SAT CAMERA: the OPTICAL bird opens a camera reveal window. Appended after the highest id (31); never reuse retired ids.</summary>
-        SatCamera = 32
+        SatCamera = 32,
+        /// <summary>CYBER BURN packages (TASKED board only; never CALL rows). Appended after the highest id (32).</summary>
+        CyberJamRadar = 33,
+        CyberSamNetDown = 34,
+        CyberSpoofIff = 35,
+        CyberBirdJam = 36,
+        CyberBlackout = 37,
+        /// <summary>SOF team posts (TASKED board only; never CALL rows). Appended after the highest id (37).</summary>
+        SofCover = 38,
+        SofLase = 39
     }
 
     internal enum SupportResult : byte

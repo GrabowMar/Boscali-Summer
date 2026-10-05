@@ -1,6 +1,9 @@
 using System;
 using System.Reflection;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Game;
@@ -91,6 +94,18 @@ namespace BoscaliSummer.Modules.Support.Networking
     [NetworkMessage]
     internal struct SpaceStateMessage { public SpaceStateData Data; }
 
+    /// <summary>Host to members of one faction only: that faction's whole CYBER state (anchors, visible nodes, intrusions, recent events). Always a full snapshot.</summary>
+    [NetworkMessage]
+    internal struct CyberStateMessage { public CyberStateData Data; }
+
+    /// <summary>Host to members of one faction only: that faction's whole SOF state (camps, teams, revealed targets, held buildings, revealed enemy team positions, recent events). Always a full snapshot.</summary>
+    [NetworkMessage]
+    internal struct SofStateMessage { public SofStateData Data; }
+
+    /// <summary>Host to every member: the viewer's own faction's OPERATIONS (bars, countdowns, satellites), the pings of enemy operations, and any ASAT in flight. Always a full snapshot.</summary>
+    [NetworkMessage]
+    internal struct OpsStateMessage { public OpsStateData Data; }
+
     internal sealed class SupportNet : MonoBehaviour
     {
 
@@ -103,8 +118,16 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// Protocol 32 widens the SPACE headline (always sent, even with the feed closed) by the newest live TASKED post (id, action,
         /// target count, OVERLORD or OPERATOR, the poster's callsign), the RADAR scan-ready deadline and the ENEMY INTENT line, and gives
         /// each post row its poster's callsign. Notices are derived on the client from that mirror: there is no new message.
+        /// Protocol 33 adds the CYBER domain: four SpaceCommand kinds (CyberHop, CyberBurn, CyberDrop, CyberSync; ids only, the host derives faction, reach,
+        /// fog and cost), the faction-only CyberStateMessage, and a 2-bit Domain on every TASKED post row (checked against the post's action).
+        /// Protocol 34 adds the SOF domain: five SpaceCommand kinds (SofRaise, SofOrder, SofMission, SofDivert, SofSync; ids and packed 40 m cells only, the host derives faction,
+        /// fog, cost, odds and the roll), the faction-only SofStateMessage, and the SOF TASKED post kinds (COVER TEAM, LASE TARGET).
+        /// Protocol 35 adds OPERATIONS: four SpaceCommand kinds (OpFund, OpPlan, OpCancel, OpSync; a domain and a tier, a kind and an opaque target id, never a price or a faction) and the
+        /// OpsStateMessage (own bars and satellites, enemy pings only, ASAT flights for everyone).
+        /// Protocol 36 adds WATCH OFFICER OVERLORD for CYBER and SOF and the AI factions: no new message or command, one field on the OpsStateMessage, the faction's last three OVERLORD
+        /// actions (a sequence, a domain, a reason code and two argument bytes each, rebuilt into words on the client), which also rides a state with OPERATIONS off.
         /// </summary>
-        internal const byte ProtocolVersion = 32;
+        internal const byte ProtocolVersion = 36;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -149,6 +172,9 @@ namespace BoscaliSummer.Modules.Support.Networking
                 clientHandler?.UnregisterHandler<CruiseLegsMessage>();
                 clientHandler?.UnregisterHandler<SpaceReplyMessage>();
                 clientHandler?.UnregisterHandler<SpaceStateMessage>();
+                clientHandler?.UnregisterHandler<CyberStateMessage>();
+                clientHandler?.UnregisterHandler<SofStateMessage>();
+                clientHandler?.UnregisterHandler<OpsStateMessage>();
                 clientHandler = network.Client.MessageHandler;
                 manager?.OnSpaceLinked(); // a fresh link: nothing from an earlier session may be shown
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
@@ -156,6 +182,9 @@ namespace BoscaliSummer.Modules.Support.Networking
                 clientHandler.RegisterHandler<CruiseLegsMessage>(ReceiveCruiseLegs, false);
                 clientHandler.RegisterHandler<SpaceReplyMessage>(ReceiveSpaceReply, false);
                 clientHandler.RegisterHandler<SpaceStateMessage>(ReceiveSpaceState, false);
+                clientHandler.RegisterHandler<CyberStateMessage>(ReceiveCyberState, false);
+                clientHandler.RegisterHandler<SofStateMessage>(ReceiveSofState, false);
+                clientHandler.RegisterHandler<OpsStateMessage>(ReceiveOpsState, false);
             }
         }
 
@@ -167,6 +196,9 @@ namespace BoscaliSummer.Modules.Support.Networking
             serverHandler?.UnregisterHandler<SpaceCommandMessage>();
             clientHandler?.UnregisterHandler<SpaceReplyMessage>();
             clientHandler?.UnregisterHandler<SpaceStateMessage>();
+            clientHandler?.UnregisterHandler<CyberStateMessage>();
+            clientHandler?.UnregisterHandler<SofStateMessage>();
+            clientHandler?.UnregisterHandler<OpsStateMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
             clientHandler?.UnregisterHandler<CreditStateMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
@@ -331,6 +363,57 @@ namespace BoscaliSummer.Modules.Support.Networking
                 return;
             }
             player.Owner?.Send(new SpaceStateMessage { Data = data });
+        }
+
+        /// <summary>Server to one faction member. The caller selects members by their faction; nothing is broadcast.</summary>
+        internal void SendCyberState(Player player, CyberStateData data)
+        {
+            if (player == null || data == null) return;
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveCyberState(data); // the mirror copies what it keeps
+                return;
+            }
+            player.Owner?.Send(new CyberStateMessage { Data = data });
+        }
+
+        /// <summary>Server to one faction member. The caller selects members by their faction; nothing is broadcast.</summary>
+        internal void SendSofState(Player player, SofStateData data)
+        {
+            if (player == null || data == null) return;
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveSofState(data); // the mirror copies what it keeps
+                return;
+            }
+            player.Owner?.Send(new SofStateMessage { Data = data });
+        }
+
+        /// <summary>Server to one member. The caller builds the view per member (own faction's rows, the enemies' pings, everyone's flights); nothing is broadcast.</summary>
+        internal void SendOpsState(Player player, OpsStateData data)
+        {
+            if (player == null || data == null) return;
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
+            {
+                manager.ReceiveOpsState(data); // the mirror copies what it keeps
+                return;
+            }
+            player.Owner?.Send(new OpsStateMessage { Data = data });
+        }
+
+        private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage message)
+        {
+            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveOpsState(message.Data);
+        }
+
+        private void ReceiveSofState(INetworkPlayer _, SofStateMessage message)
+        {
+            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveSofState(message.Data);
+        }
+
+        private void ReceiveCyberState(INetworkPlayer _, CyberStateMessage message)
+        {
+            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveCyberState(message.Data);
         }
 
         private void ReceiveSpaceCommand(INetworkPlayer sender, SpaceCommandMessage message)
@@ -584,6 +667,45 @@ namespace BoscaliSummer.Modules.Support.Networking
                 catch (Exception) { return default; }
                 finally { WireIn.R = null; }
             });
+            SetWriter<CyberStateMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { CyberWire.WriteState(WireOut, v.Data ?? new CyberStateData { Protocol = ProtocolVersion }); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<CyberStateMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new CyberStateMessage { Data = CyberWire.ReadState(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
+            SetWriter<SofStateMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { SofWire.WriteState(WireOut, v.Data ?? new SofStateData { Protocol = ProtocolVersion }); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<SofStateMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new SofStateMessage { Data = SofWire.ReadState(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
+            SetWriter<OpsStateMessage>((w, v) =>
+            {
+                WireOut.W = w;
+                try { OpsWire.WriteState(WireOut, v.Data ?? new OpsStateData { Protocol = ProtocolVersion }); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<OpsStateMessage>(r =>
+            {
+                WireIn.R = r;
+                try { return new OpsStateMessage { Data = OpsWire.ReadState(WireIn, ProtocolVersion) }; }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
             MessagePacker.RegisterMessage<CreditStateMessage>();
@@ -593,6 +715,9 @@ namespace BoscaliSummer.Modules.Support.Networking
             MessagePacker.RegisterMessage<SpaceCommandMessage>();
             MessagePacker.RegisterMessage<SpaceReplyMessage>();
             MessagePacker.RegisterMessage<SpaceStateMessage>();
+            MessagePacker.RegisterMessage<CyberStateMessage>();
+            MessagePacker.RegisterMessage<SofStateMessage>();
+            MessagePacker.RegisterMessage<OpsStateMessage>();
         }
 
         // Mirage reads and writes go through these two adapters so the SPACE codec stays engine-free and testable.

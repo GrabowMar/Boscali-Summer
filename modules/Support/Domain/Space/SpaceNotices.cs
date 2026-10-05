@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public static string Tasked(SupportActionId action, int targets, bool watchOfficer, string maker)
         {
-            string label = CallSheet.TryGet(action, out CallRow row) ? row.Label : "TASKED";
+            string label = TaskedKinds.Label(action);
             int n = Math.Max(1, targets);
             string source = watchOfficer ? "OVERLORD" : string.IsNullOrEmpty(maker) ? "OPERATOR" : "OPERATOR " + maker;
             return "TASKED: " + label + " · " + n + (n == 1 ? " TARGET" : " TARGETS") + " · " + source;

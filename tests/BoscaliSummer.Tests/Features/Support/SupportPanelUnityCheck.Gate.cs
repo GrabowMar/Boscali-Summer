@@ -6,15 +6,14 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>The current CALLS geometry/readability gate; model facts are checked in the other partial.</summary>
+/// <summary>The current C2 CAP geometry/readability gate; model facts are checked in the other partial.</summary>
 public static partial class SupportPanelUnityCheck
 {
-    private static void GateConsole(AvConsole con, string where)
+    private static void GateConsole(RectTransform root, string where)
     {
-        float gutterLeft = AvTokens.PanelWidth - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
         Color ground = AvStyleHost.FuiColor("ground", Color.black);
-        var placed = new List<KeyValuePair<TMP_Text, Rect>>(160);
-        foreach (TMP_Text t in con.Root.GetComponentsInChildren<TMP_Text>(false))
+        var placed = new List<KeyValuePair<TMP_Text, Rect>>(260);
+        foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(false))
         {
             if (!t.isActiveAndEnabled || t.text.Length == 0 || !CanvasOn(t)) continue;
             gatedTexts++;
@@ -30,15 +29,8 @@ public static partial class SupportPanelUnityCheck
                 if (b.size.y > r.height + 1.5f)
                     Fail(where + ": overflows height (" + b.size.y.ToString("0") + " > " + r.height.ToString("0") + ") '" + t.text + "'");
                 if (t.fontSize < AvTokens.FontMicro - 0.01f)
-                    Fail(where + ": below the CALLS 10 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
+                    Fail(where + ": below the 10 px floor (" + t.fontSize.ToString("0.0") + ") '" + t.text + "'");
                 if (t.isTextTruncated) Fail(where + ": text must be complete: " + t.text);
-            }
-            var corners = new Vector3[4];
-            t.rectTransform.GetWorldCorners(corners);
-            if (t.GetComponentInParent<ScrollRect>() != null)
-            {
-                float right = con.Root.InverseTransformPoint(corners[2]).x;
-                if (right > gutterLeft) Fail(where + ": enters the gutter (" + right.ToString("0") + ") '" + t.text + "'");
             }
             if (!icon && t.color.a > 0.5f)
             {
@@ -46,12 +38,16 @@ public static partial class SupportPanelUnityCheck
                 float contrast = Rgba.Contrast(t.color.ToRgba().WithAlpha(1f).Over(back.ToRgba()), back.ToRgba());
                 if (contrast < 4.5f) Fail(where + ": contrast " + contrast.ToString("0.00") + " for '" + t.text + "' (" + t.name + ")");
             }
-            if (!icon && t.GetComponentInParent<ScrollRect>() != null)
+            if (!icon)
             {
-                // Glyph ink bounds (page texts only: the chrome above the page is the kit gallery's to gate) in console space: two texts whose ink overlaps have collided.
-                Vector3 lo = con.Root.InverseTransformPoint(t.rectTransform.TransformPoint(b.min));
-                Vector3 hi = con.Root.InverseTransformPoint(t.rectTransform.TransformPoint(b.max));
-                placed.Add(new KeyValuePair<TMP_Text, Rect>(t, Rect.MinMaxRect(Mathf.Min(lo.x, hi.x), Mathf.Min(lo.y, hi.y), Mathf.Max(lo.x, hi.x), Mathf.Max(lo.y, hi.y))));
+                // Glyph ink bounds in console space: two texts whose ink overlaps have collided.
+                Vector3 lo = root.InverseTransformPoint(t.rectTransform.TransformPoint(b.min));
+                Vector3 hi = root.InverseTransformPoint(t.rectTransform.TransformPoint(b.max));
+                Rect ink = Rect.MinMaxRect(Mathf.Min(lo.x, hi.x), Mathf.Min(lo.y, hi.y), Mathf.Max(lo.x, hi.x), Mathf.Max(lo.y, hi.y));
+                assertions++;
+                if (ink.xMin < root.rect.xMin - 1f || ink.xMax > root.rect.xMax + 1f || ink.yMin < root.rect.yMin - 1f)
+                    Fail(where + ": text outside the page '" + t.text + "'");
+                placed.Add(new KeyValuePair<TMP_Text, Rect>(t, ink));
             }
         }
         for (int i = 0; i < placed.Count; i++)
@@ -63,15 +59,6 @@ public static partial class SupportPanelUnityCheck
                 if (w > 1f && h > 1.5f)
                     Fail(where + ": texts overlap: '" + placed[i].Key.text + "' (" + placed[i].Key.name + ") and '" + placed[j].Key.text + "' (" + placed[j].Key.name + ")");
             }
-        foreach (AvControl tab in con.Root.GetComponentsInChildren<AvControl>(true))
-            if (tab.transform.parent != null && tab.transform.parent.name == "Tabs" && tab.transform.Find("Label") != null
-                && tab.GetComponentsInChildren<TMP_Text>(true).Length < 2)
-                Fail(where + ": tab without icon " + tab.name);
-        foreach (Transform s in con.Root.GetComponentsInChildren<Transform>(true))
-            if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
-                Fail(where + ": section without icon " + s.name);
-        // Parts of one flow never overlap each other (shown parts only).
-        NoPartOverlap(con.Page(0).Content, where);
     }
 
     private static bool CanvasOn(Component c)
@@ -82,21 +69,6 @@ public static partial class SupportPanelUnityCheck
             if (canvas != null && !canvas.enabled) return false;
         }
         return true;
-    }
-
-    private static void NoPartOverlap(RectTransform content, string where)
-    {
-        var rects = new List<RectTransform>();
-        foreach (Transform child in content)
-            if (child.gameObject.activeSelf && child is RectTransform rt && rt.rect.height > 0.5f) rects.Add(rt);
-        for (int i = 0; i < rects.Count; i++)
-            for (int j = i + 1; j < rects.Count; j++)
-            {
-                Rect a = InSpace(content, rects[i]), b = InSpace(content, rects[j]);
-                float w = Mathf.Min(a.xMax, b.xMax) - Mathf.Max(a.xMin, b.xMin), h = Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin);
-                assertions++;
-                if (w > 1f && h > 1f) Fail(where + ": parts overlap: " + rects[i].name + " and " + rects[j].name);
-            }
     }
 
     private static Rect InSpace(RectTransform space, RectTransform rt)
@@ -118,6 +90,21 @@ public static partial class SupportPanelUnityCheck
                 if (f != null && f.enabled && f.Fill && f.FillColor.a > 0.35f && child != t.transform)
                 {
                     Rgba o = f.FillColor.ToRgba().Over(ground.ToRgba());
+                    return new Color(o.R, o.G, o.B);
+                }
+            }
+            // A solid slab (banner, state slab) is a sibling Image behind the label, not an ancestor: it counts when it covers the label's centre.
+            for (int ci = x.childCount - 1; ci >= 0; ci--) // later siblings draw on top
+            {
+                Transform child = x.GetChild(ci);
+                var slab = child.GetComponent<Image>();
+                if (slab == null || !slab.enabled || slab.color.a <= 0.35f || child == t.transform || !child.gameObject.activeInHierarchy) continue;
+                var corners = new Vector3[4];
+                ((RectTransform)child).GetWorldCorners(corners);
+                Vector3 centre = t.rectTransform.TransformPoint(t.rectTransform.rect.center);
+                if (centre.x >= corners[0].x && centre.x <= corners[2].x && centre.y >= corners[0].y && centre.y <= corners[2].y && (corners[2].x - corners[0].x) > 12f)
+                {
+                    Rgba o = slab.color.ToRgba().Over(ground.ToRgba());
                     return new Color(o.R, o.G, o.B);
                 }
             }

@@ -35,16 +35,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         public void Clear() => Armed = null;
     }
 
-    internal enum AimSource : byte { None, Pod, Map }
+    internal enum AimSource : byte { None, Pod, Map, Team }
 
-    /// <summary>Own designation / targeting-pod point first, then the last map pick.</summary>
+    /// <summary>Own designation / targeting-pod point first, then the last map pick, then a SOF team that is lasing a target (AIM: TEAM).</summary>
     internal static class Aim
     {
         public static AimSource Pick(bool hasPod, bool hasMap) =>
             hasPod ? AimSource.Pod : hasMap ? AimSource.Map : AimSource.None;
 
+        public static AimSource Pick(bool hasPod, bool hasMap, bool hasTeam) =>
+            hasPod ? AimSource.Pod : hasMap ? AimSource.Map : hasTeam ? AimSource.Team : AimSource.None;
+
         public static string Label(AimSource source) =>
-            source == AimSource.Pod ? "AIM: POD" : source == AimSource.Map ? "AIM: MAP" : "AIM: NONE";
+            source == AimSource.Pod ? "AIM: POD" : source == AimSource.Map ? "AIM: MAP" : source == AimSource.Team ? "AIM: TEAM" : "AIM: NONE";
     }
 
     /// <summary>Client side of the request state machine: PENDING → CONFIRMED | REFUSED, refused after 3 s silence.</summary>

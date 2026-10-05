@@ -4,6 +4,9 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BepInEx.Configuration;
@@ -42,6 +45,28 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public AimSource AimNow { get; private set; }
         public string LastWords { get; private set; } = "";
         public bool Pending => request.Pending;
+
+        /// <summary>Raised with every line of words the controller says (arm, refusal, receipt): the C2 console mirrors them.</summary>
+        internal event System.Action<string> Spoke;
+
+        /// <summary>The point the armed CALL would fire at now: the own designation first, else the pick of this arm. False when neither exists.</summary>
+        public bool TryAimPoint(out GlobalPosition point)
+        {
+            if (TryPod(out point)) return true;
+            if (mapAim.HasValue) { point = mapAim.Value; return true; }
+            if (TryTeamAim(out point)) return true;
+            point = default;
+            return false;
+        }
+
+        /// <summary>AIM: TEAM (spec 2.4): the target a SOF team of this faction is lasing right now, from the faction mirror. Last in line after the pod and the map pick.</summary>
+        private bool TryTeamAim(out GlobalPosition point)
+        {
+            point = default;
+            if (manager == null || !manager.SofMirror.TryLase(out _, out float x, out float z)) return false;
+            point = new GlobalPosition(x, 0f, z);
+            return true;
+        }
 
         public void Configure(SupportManager manager, SupportSettings settings, IObservationSource observations)
         {
@@ -113,6 +138,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (TryPod(out GlobalPosition pod)) { Fire(id, pod, now); return; }
             if (mapAim.HasValue) { Fire(id, mapAim.Value, now); return; }
+            if (TryTeamAim(out GlobalPosition team)) { Fire(id, team, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
 
@@ -181,7 +207,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 case PostStatus.Stale: Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution); return false;
                 case PostStatus.Launching: Say(TaskedWords.Of(TaskedOutcome.ClaimedByOther), AvUiCue.Caution); return false;
             }
-            if (state.Gate != TaskedOutcome.None)
+            if (state.Gate != TaskedOutcome.None && post.Domain == TaskedDomain.Space) // the headline gate is the rod's: a CYBER package or a SOF post has no bird
             {
                 int detail = SpaceMirror.GateIsDeadline(state.Gate) ? Mathf.Max(1, state.GateDetail - Mathf.FloorToInt(now)) : state.GateDetail;
                 Say(TaskedWords.Of(state.Gate, detail), AvUiCue.Caution);
@@ -236,6 +262,27 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void OnSpaceReply(SpaceReply reply)
         {
+            if (reply.Kind >= SpaceCommandKind.CyberHop && reply.Kind <= SpaceCommandKind.CyberDrop)
+            {
+                // A CYBER verdict (HOP / BURN / DROP): its words reach the console and the NET footer; a refusal also cautions.
+                CyberResult verdict = new CyberResult(reply.CyberVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind >= SpaceCommandKind.SofRaise && reply.Kind <= SpaceCommandKind.SofDivert)
+            {
+                // A SOF verdict (RAISE / ORDER / MISSION / DIVERT): its words reach the console and the SOF footer; a refusal also cautions.
+                var verdict = new SofResult(reply.SofVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind >= SpaceCommandKind.OpFund && reply.Kind <= SpaceCommandKind.OpCancel)
+            {
+                // An OPERATIONS verdict (FUND / PLAN / CANCEL): its words reach the console and the NET and SOF footers; a refusal also cautions.
+                var verdict = new OpResult((OpOutcome)reply.Outcome, (OpKind)Mathf.Clamp(reply.CallId, 0, (int)OpKind.Fob), reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
             if (reply.Kind != SpaceCommandKind.ClaimTasked || reply.RequestId != claimRequest || claimRequest == 0) return;
             bool launching = TryFindPost(claimPost, out FeedPost post) && post.Launching;
             TaskedReceiptState state = TaskedReceipts.State(reply.Tasked, launching);
@@ -298,7 +345,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 claimRequest = claimPost = 0;
                 Say("NEGATIVE: NO ANSWER — CHECK THE BOARD BEFORE PRESSING AGAIN", AvUiCue.Caution);
             }
-            AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue);
+            AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue, TryTeamAim(out _));
 
             if (GameplayUI.GameIsPaused || InputFieldChecker.InsideInputField || !Application.isFocused) return;
             Poll(settings.CallKey1, 0);
@@ -342,6 +389,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             LastWords = words ?? "";
             LastWordsAt = SupportManager.MissionNow();
             AvUiSound.Play(cue);
+            Spoke?.Invoke(LastWords);
         }
 
         private static string Label(SupportActionId id) => CallSheet.TryGet(id, out CallRow row) ? row.Label : id.ToString();

@@ -1,4 +1,8 @@
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
@@ -21,9 +25,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private CallsController calls;
         private SupportManager manager;
         private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
+        private readonly CyberNoticeTracker cyberNotices = new CyberNoticeTracker();
+        private readonly SofNoticeTracker sofNotices = new SofNoticeTracker();
+        private readonly OpsNoticeTracker opsNotices = new OpsNoticeTracker();
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
+        private C2HudKind noticeKind;
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "support";
@@ -56,7 +64,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (noticeText != null && SupportManager.MissionNow() < noticeUntil)
             {
-                text = noticeText; detail = ""; tone = HudTone.Info; return true;
+                // The 14 px C2 strip word rides the line's detail row; the words stay the notice's own.
+                text = noticeText; detail = C2Words.HudStrip(noticeKind);
+                C2Tone strip = C2Words.HudStripTone(noticeKind);
+                tone = strip == C2Tone.Danger ? HudTone.Warning : strip == C2Tone.Warn ? HudTone.Caution : HudTone.Info;
+                return true;
             }
             return false;
         }
@@ -68,9 +80,36 @@ namespace BoscaliSummer.Modules.Support.Presentation
             float now = SupportManager.MissionNow();
             // Mission time restarted (a new scene): a notice from the old clock must not linger.
             if (noticeText != null && noticeUntil - now > SpaceNoticeTracker.ToastSeconds + 0.5f) noticeText = null;
+            CyberNoticeKind cyber = cyberNotices.Observe(manager.CyberMirror.Known, manager.CyberMirror.State, now, quiet);
+            if (cyber != CyberNoticeKind.None)
+            {
+                noticeText = cyber == CyberNoticeKind.Traced ? "INTRUSION TRACED · EW TRUCK REVEALED" : "NODE HELD · HOLD EFFECT RUNNING";
+                noticeKind = cyber == CyberNoticeKind.Traced ? C2HudKind.CyberTraced : C2HudKind.CyberHeld;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(cyber == CyberNoticeKind.Traced ? AvUiCue.Caution : AvUiCue.Confirm);
+            }
+            SofNoticeKind sofKind = sofNotices.Observe(manager.SofMirror.Known, manager.SofMirror.State, now, quiet);
+            if (sofKind != SofNoticeKind.None)
+            {
+                noticeText = sofKind == SofNoticeKind.Pinned ? "TEAM PINNED · NEEDS COVER" : sofKind == SofNoticeKind.Lost ? "TEAM LOST" : "MISSION COMPLETE";
+                noticeKind = sofKind == SofNoticeKind.Pinned ? C2HudKind.SofPinned : sofKind == SofNoticeKind.Lost ? C2HudKind.SofLost : C2HudKind.SofDone;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(sofKind == SofNoticeKind.Success ? AvUiCue.Confirm : AvUiCue.Caution);
+            }
+            OpsNotice opsNotice = opsNotices.Observe(manager.OpsMirror.Known, manager.OpsMirror.State, now, quiet);
+            if (opsNotice.Kind != OpsNoticeKind.None)
+            {
+                // Own EXECUTE / BROKEN / EXECUTED, or an enemy ping: the words are the notice, the 14 px strip says it is an OPERATION.
+                noticeText = opsNotice.Text;
+                noticeKind = opsNotice.Kind == OpsNoticeKind.Execute ? C2HudKind.OpsExecute : opsNotice.Kind == OpsNoticeKind.Broken ? C2HudKind.OpsBroken :
+                    opsNotice.Kind == OpsNoticeKind.Done ? C2HudKind.OpsDone : C2HudKind.OpsPing;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(opsNotice.Kind == OpsNoticeKind.Done ? AvUiCue.Confirm : AvUiCue.Caution);
+            }
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;
             noticeText = notice.Text;
+            noticeKind = notice.Kind == SpaceNoticeKind.Tasked ? C2HudKind.Tasked : C2HudKind.Intent;
             noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
             AvUiSound.Play(notice.Kind == SpaceNoticeKind.Tasked ? AvUiCue.Confirm : AvUiCue.Navigate);
         }

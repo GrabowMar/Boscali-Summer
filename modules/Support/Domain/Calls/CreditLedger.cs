@@ -112,6 +112,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public float Balance(int faction) => funds.TryGetValue(faction, out float v) ? v : 0f;
 
+        /// <summary>Takes <paramref name="amount"/> from the faction fund. False (nothing taken) when the fund is short.</summary>
+        public bool TrySpend(int faction, float amount)
+        {
+            if (float.IsNaN(amount) || float.IsInfinity(amount) || amount <= 0f) return false;
+            if (!funds.TryGetValue(faction, out float now) || now + 0.001f < amount) return false;
+            funds[faction] = Math.Max(0f, now - amount);
+            return true;
+        }
+
         public void Clear() => funds.Clear();
     }
 }

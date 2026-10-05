@@ -12,12 +12,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal sealed class UplinkSpawner
     {
         private const int MaximumOwned = 64;
-        private static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
+        internal static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private int serial;
 
         internal int OwnedCount => owned.Count;
+        internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
 
         internal bool TryPlan(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions,
             out Quaternion rotation)

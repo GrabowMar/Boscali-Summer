@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>A pilot's callsign for the CLAIMED BY words: printable ASCII, bounded, empty when unknown.</summary>
         internal string PlayerLabel(FactionHQ owner, ulong id)
         {
+            if (id == SpaceContacts.WatchOfficerId) return "OVERLORD";
             Player player = FindPlayer(owner, id);
             if (player == null) return "";
             try { return SpaceWire.Clean(player.GetDisplayName(PlayerNameContext.ChatOrLeaderboard), SpaceReply.MaxClaimant); }
@@ -75,7 +76,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (owner == null) return false;
             if (GameAccess.IsServer()) return TryGetSpaceStateCoarse(owner, out SpaceState state) && state.HasBird(bird);
             return spaceMirror.Known && spaceMirror.State.Active && GameManager.GetLocalPlayer<Player>(out Player local) &&
-                local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount;
+                local != null && ReferenceEquals(local.HQ, owner) && (byte)bird < SpaceRules.BirdCount && opsMirror.BirdUp(bird);
         }
 
         /// <summary>
@@ -128,6 +129,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void OnSpaceLinked()
         {
             spaceMirror.ResetLink();
+            cyberMirror.ResetLink();
+            sofMirror.ResetLink();
+            opsMirror.ResetLink();
             ResetSpaceMirror();
         }
 
@@ -135,6 +139,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             // Faction and scene resets keep the mirror's generation floor: an in-flight full of the old faction stays refused.
             spaceMirror.Reset();
+            cyberMirror.Reset();
+            sofMirror.Reset();
+            opsMirror.Reset();
             inProcessReplies.Clear();
             spaceFeedWanted = false;
             mirrorFaction = 0;
@@ -150,11 +157,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (key != mirrorFaction)
                 {
                     // Faction change: the old faction's rows must never outlive the switch.
-                    if (mirrorFaction != 0) spaceMirror.Reset();
+                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); }
                     mirrorFaction = key;
                 }
             }
             if (network == null) return;
+            UpdateCyberMirror();
+            UpdateSofMirror();
+            UpdateOpsMirror();
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {

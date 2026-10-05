@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -17,6 +18,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public readonly int Id, HumanProfile;
         public readonly SupportActionId Action;
+        /// <summary>The OPS domain that made this post (SPACE rod, CYBER package, later SOF); derived from the action, never from a client.</summary>
+        public readonly TaskedDomain Domain;
         public readonly ulong Maker;
         public readonly bool WatchOfficer;
         public readonly float CreatedAt, ExpiresAt;
@@ -26,7 +29,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public TaskedCall(int id, SupportActionId action, ulong maker, bool watchOfficer, int humanProfile,
             float createdAt, SpaceMark[] marks, EffortShare[] shares)
         {
-            Id = id; Action = action; Maker = maker; WatchOfficer = watchOfficer; HumanProfile = humanProfile;
+            Id = id; Action = action; Domain = TaskedKinds.DomainOf(action); Maker = maker; WatchOfficer = watchOfficer; HumanProfile = humanProfile;
             CreatedAt = createdAt; ExpiresAt = createdAt + TaskedBoard.CallSeconds;
             // Refuse oversized input without allocating from an untrusted length.
             this.marks = marks != null && marks.Length <= TaskedBoard.MaxMarks ? (SpaceMark[])marks.Clone() : null;
@@ -44,7 +47,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         internal bool Valid(float now)
         {
             if (Id <= 0 || (!WatchOfficer && Maker == 0) || !TaskedFees.ValidProfile(HumanProfile) ||
-                !CallSheet.TryGet(Action, out _) || !SpaceRules.MissionTime(CreatedAt) ||
+                !TaskedKinds.TryGet(Action, out _) || !SpaceRules.MissionTime(CreatedAt) ||
                 !SpaceRules.MissionTime(now) || now < CreatedAt || !SpaceRules.Finite(ExpiresAt) ||
                 ExpiresAt <= CreatedAt || now >= ExpiresAt || marks == null || marks.Length == 0 || shares == null) return false;
             for (int i = 0; i < marks.Length; i++)
@@ -161,6 +164,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             SyncContacts();
             int n = 0;
             foreach (Entry entry in calls.Values) if (entry.Call.WatchOfficer && entry.Call.Valid(now)) n++;
+            return n;
+        }
+
+        /// <summary>Live OVERLORD posts of one domain: SPACE, CYBER and SOF each keep their own allowance, so one domain's posts never use up another's.</summary>
+        public int CountWatchOfficer(float now, TaskedDomain domain)
+        {
+            SyncContacts();
+            int n = 0;
+            foreach (Entry entry in calls.Values) if (entry.Call.WatchOfficer && entry.Call.Domain == domain && entry.Call.Valid(now)) n++;
             return n;
         }
 
@@ -325,6 +337,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (TryClaim(claim, out Entry entry)) ResetClaim(entry);
         }
 
+        /// <summary>Takes an unclaimed post off the board (a SOF post whose team is no longer in need). A held or launching post stays.</summary>
+        public bool Withdraw(int callId)
+        {
+            SyncContacts();
+            if (!calls.TryGetValue(callId, out Entry entry) || entry.Status != Status.Available || entry.Claims.Count > 0) return false;
+            calls.Remove(callId);
+            return true;
+        }
+
         public void Prune(float now)
         {
             SyncContacts();
@@ -456,7 +477,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public static int Quote(SupportActionId action, int hostBaselinePrice, int humanProfile, bool ownCall)
         {
-            if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !CallSheet.TryGet(action, out CallRow row)) return -1;
+            if (SofPosts.IsPost(action)) return ValidProfile(humanProfile) ? 0 : -1; // a SOF post is a service: free to claim
+            if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !TaskedKinds.TryGet(action, out TaskedKind row)) return -1;
             if ((humanProfile == 1 && ownCall) || (humanProfile >= 2 && humanProfile <= 4)) return 0;
             return action == SupportActionId.Artillery ? Math.Max(1, (int)Math.Round(hostBaselinePrice * .25d, MidpointRounding.AwayFromZero)) :
                 row.Tier == CallTier.Light ? 10 : row.Tier == CallTier.Heavy ? 25 : 120;
