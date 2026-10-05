@@ -99,6 +99,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private bool AnchorUp(FactionOps f, OpKind kind, bool executing)
         {
             if (cyber == null || !cyber.DataCenterUp(f.Owner)) return false;
+            if (kind == OpKind.Asat && executing && f.LauncherSpawned && !LauncherUp(f)) return false;
             return true;
         }
 
@@ -141,7 +142,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             f.Desk = new OpsDesk(new Ports(this, f));
             f.Desk.Happened += e => OnOp(f, e);
             factions.Add(hq, f);
-            Plugin.Logger?.LogInfo("[Support.Ops] " + hq.name + ": OPERATIONS ready.");
+            Plugin.Logger?.LogInfo("[Support.Ops] " + hq.name + ": OPERATIONS ready (" + CyberAnchorSpawner.DescribeLauncher() + ").");
         }
 
         private void OnOp(FactionOps f, OpEvent e)
@@ -218,6 +219,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             target = default;
             switch (kind)
             {
+                case OpKind.Asat:
+                    // A satellite class, not a unit: the enemy constellation is never listed, so every valid class is accepted and a strike on a dead one fizzles.
+                    if (id < 0 || id >= SpaceRules.BirdCount) return false;
+                    target = new OpTarget(id, 0f, 0f, 0);
+                    return true;
                 case OpKind.ZeroDay: return cyber != null && cyber.TryNodeTarget(f.Owner, id, out target);
                 default: return false;
             }

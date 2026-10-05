@@ -23,6 +23,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal static readonly string[] CampKeys = { "HLT-L", "Truck2-L", "HLT-R", "Truck2-R" };
         internal static readonly string[] CampGuardKeys = { "Truck2-MRAP", "LightTruck1_AA", "SPAAG1" };
+        /// <summary>
+        /// M6a ASAT launcher: a real launcher vehicle for the 60 s countdown. RadarSAM1 (a T9K41 SAM launcher) is the one proven allowed and usable (world check, 2026-10-04); the
+        /// ballistic-missile and rocket trucks are tried first only when the encyclopedia allows them, so a better-looking launcher wins without ever failing the operation.
+        /// </summary>
+        internal static readonly string[] LauncherKeys = { "Truck2-TBM", "Truck2-MLRS", "RadarSAM1" };
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
@@ -44,6 +49,31 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             VehicleDefinition camp = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
             return "camp=" + (camp != null ? camp.jsonKey : "none") + " escort=" + (guard != null ? guard.jsonKey : "none");
+        }
+
+        /// <summary>The launcher key this mission resolved, for the log line and the native fixture.</summary>
+        internal static string DescribeLauncher()
+        {
+            VehicleDefinition launcher = FindFirst(LauncherKeys, null);
+            return "launcher=" + (launcher != null ? launcher.jsonKey : "none");
+        }
+
+        /// <summary>One launcher near <paramref name="near"/> (a data center): rings of 8 points at 70, 110 and 150 m, the first legal one wins. Held in place like every anchor.</summary>
+        internal bool TryCreateLauncher(FactionHQ owner, int ordinal, GlobalPosition near, Airbase parent, out Unit launcher)
+        {
+            launcher = null;
+            VehicleDefinition definition = FindFirst(LauncherKeys, null);
+            if (definition == null) return false;
+            Vector3 origin = near.ToLocalPosition();
+            foreach (float radius in new[] { 70f, 110f, 150f })
+                for (int step = 0; step < 8; step++)
+                {
+                    float angle = step * Mathf.PI / 4f;
+                    Vector3 desired = origin + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * radius;
+                    if (!PlanOne(definition, desired, parent, Quaternion.identity, out GlobalPosition planned)) continue;
+                    if (TryCreateGroup(owner, "Launcher", ordinal, new[] { definition }, new[] { planned }, Quaternion.identity, parent, out launcher)) return true;
+                }
+            return false;
         }
 
         internal bool TryPlanCamp(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions, out Quaternion rotation)

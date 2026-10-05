@@ -71,6 +71,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void UpdateOpsMirror()
         {
+            Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
             if (network == null || !opsWanted || opsMirror.Known) return;
             float t = Time.unscaledTime;
             if (t < nextOpsSync) return;

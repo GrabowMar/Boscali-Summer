@@ -24,6 +24,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public TaskedDesk Tasked;
             /// <summary>Callsigns of the humans whose posts this faction shows, so a poll does not look every one up again.</summary>
             public readonly Dictionary<ulong, string> Labels = new Dictionary<ulong, string>();
+            /// <summary>Last mission second a dead bird's rebuild bar was funded (M6a: an ASAT strike kills a bird).</summary>
+            public float BirdFundedAt;
         }
         private struct IntentEntry { public string Words; public float NextAt; }
         private readonly struct Candidate
@@ -425,7 +427,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null) continue;
-                if (factions.TryGetValue(hq, out FactionSpace faction)) { Refresh(hq, faction, now); continue; }
+                if (factions.TryGetValue(hq, out FactionSpace faction)) { Refresh(hq, faction, now); RebuildBirds(hq, faction, now); continue; }
                 if (factions.Count >= MaximumFactions || nextAttempt.Count >= MaximumFactions && !nextAttempt.ContainsKey(hq)) continue;
                 if (nextAttempt.TryGetValue(hq, out float retry) && now < retry) continue;
                 nextAttempt[hq] = now + 30f;
@@ -439,6 +441,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
                 break; // Expensive initial world sampling is limited to one faction per mission second.
             }
+        }
+
+        /// <summary>
+        /// Space spec 5.2: a bird an ASAT strike killed returns through a 400 CR restore bar (auto-funded from HQ FUND at 40 CR per minute, a flat seed for an AI-only faction, like an anchor)
+        /// and then a 6 minute build. The pure <see cref="SpaceState"/> owns the clock; this only pays the bar and says when a bird is back.
+        /// </summary>
+        private void RebuildBirds(FactionHQ owner, FactionSpace faction, float now)
+        {
+            byte down = faction.State.DownMask;
+            if (down == 0) { faction.BirdFundedAt = now; return; }
+            float dt = Mathf.Clamp(now - faction.BirdFundedAt, 0f, 5f);
+            faction.BirdFundedAt = now;
+            bool flat = manager.HumanCount(owner) == 0;
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+            {
+                if ((down & (1 << i)) == 0) continue;
+                var bar = faction.State.BirdBar((BirdKind)i);
+                if (bar.Complete) continue;
+                float took = bar.AutoFund(dt, manager.CyberTreasury(owner), flat);
+                if (took > 0f) manager.CyberTreasurySpend(owner, took);
+            }
+            byte back = faction.State.TickBirds(now);
+            for (int i = 0; i < SpaceRules.BirdCount; i++)
+                if ((back & (1 << i)) != 0) Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + (BirdKind)i + " bird rebuilt and back on station.");
         }
 
         private static void Refresh(FactionHQ owner, FactionSpace faction, float now)
