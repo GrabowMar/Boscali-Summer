@@ -14,12 +14,12 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>SUPPLY (spec WMC rebuild §SUPPLY), the 0.9 shop rebuilt on R4a's rules and now a kit v2 flow: a DISPATCH card and its
-    /// REQUISITION button first (the card's blocker also rides the footer's alert line, so it is always in view), INBOUND and ADOPT
-    /// only when they have something to say, then the numbered steps 1 PILOT &amp; CREW · 2 AIRFRAME (with the HANGAR store) ·
-    /// 3 FIT &amp; FUEL · 4 LAUNCH BASE. REQUISITION sends the card as a Call order (airframe, field, pilot, fit, fuel); the executor
-    /// quotes again on the same rules and answers in the same words. A client looks; the host requisitions. The console body
-    /// scrolls, so nothing pages except the lists.</summary>
+    /// <summary>SUPPLY (spec 2026-10-04 §SUPPLY × LOADOUT, "One Sheet"): one sheet that does not scroll on a tall dock. A DISPATCH card
+    /// first (state tag, what REQUISITION would send, next-call price, funds after, crew, REQUISITION and the blocker's reason in
+    /// words — it also rides the footer's alert line), INBOUND and ADOPT strips only when they have something to say, then
+    /// ① PILOT &amp; CREW · ② AIRFRAME (compact rows, with the HANGAR strip) · ③ FIT &amp; FUEL · ④ LAUNCH BASE. REQUISITION sends the
+    /// card as a Call order (airframe, field, pilot, fit, fuel); the executor quotes again on the same rules and answers in the same
+    /// words. A client looks; the host requisitions: everything stays visible, disabled with the one reason.</summary>
     internal sealed partial class WmcSupply : IWmcPage
     {
         /// <summary>A client sees every control disabled with this one reason.</summary>
@@ -44,8 +44,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private Airbase field;
 
         private string alert, hint;
-        private int hintKey = int.MinValue, vitalsKey = int.MinValue;
-        private AvSection vitals;
+        private int hintKey = int.MinValue;
 
         public WmcSupply(WmcControls controls) => ids = controls;
 
@@ -58,7 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow = pageFlow;
             ticker = pageTicker;
             pageIndex = index;
-            // Spec bezel v2: FUNDS · HANGAR · STOCK are the DISPATCH section's caption.
             BuildPin(flow);
             BuildInbound();
             BuildAdopt();
@@ -66,13 +64,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildAirframe(flow);
             BuildFit(flow);
             BuildBase(flow);
-            // Last, so its list draws over the page.
-            fitPopup = new AvPopup(flow.Content, flow.Width);
         }
 
         /// <summary>A step header's caption: the state word, with the glyph a caution or danger carries.</summary>
-        private static void StepCaption(AvSection section, string text, string cls) =>
-            section.SetCaption(AvStates.Glyph(WmcState.Of(cls)) + text);
+        private static string StepCaption(string text, string cls) => AvStates.Glyph(WmcState.Of(cls)) + text;
 
         /// <summary>The wing, the selected airframe's quote and its launch field, once a panel refresh: Metrics takes it and
         /// Refresh reuses it, so a pick, a toggle or an order made since the last refresh is always seen (review R4b: a per-frame
@@ -105,7 +100,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // One snapshot a refresh (Shown takes a forced one first when the page comes on screen).
             if (!ReferenceEquals(last, c) || !snapFresh) Snapshot(c, false);
             snapFresh = false;
-            RefreshVitals();
             RefreshInbound();
             RefreshAdopt(c);
             RefreshPilot();
@@ -131,25 +125,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             Snapshot(c, true);
             OnShown();
-            vitalsKey = int.MinValue;
-        }
-
-        /// <summary>FUNDS · HANGAR · STOCK, rebuilt only when their inputs change.</summary>
-        private void RefreshVitals()
-        {
-            float funds = wing.Funds;
-            int stock = air.FactionStock + air.Held, held = WingSupplyReserve.Count, cap = WingSupplyReserve.Capacity;
-            bool offline = client || !WingSupplyReserve.HasFaction;
-            int key;
-            unchecked
-            {
-                key = (int)funds * 31 + stock * 101 + held * 7 + cap * 3 + (offline ? 1 : 0) + (client ? 5 : 0) + (wing.Sandbox ? 11 : 0)
-                    + (selected != null ? selected.GetHashCode() : 0);
-            }
-            if (key == vitalsKey) return;
-            vitalsKey = key;
-            vitals.SetCaption(SupplyWords.Vitals(funds, client, wing.Sandbox, held, cap, offline, stock, selected != null));
-            relayout = true;
+            pinSet = false;
         }
 
         /// <summary>SUPPLY came into view: the lists refill now, and a fit deleted on LOADOUT meanwhile goes back to AUTO.</summary>
@@ -175,14 +151,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildPin(AvFlow f)
         {
-            vitals = f.Section(AvIcon.Coins, "DISPATCH", "");
-            dispatch = f.Add(new WmcDispatchCard(f.Content));
-            requisition = f.Buttons(new AvControl.Spec("REQUISITION", () => { WmcMotion.Punch(requisition); Requisition(); },
-                AvButtonStyle.Primary, AvIcon.ArrowUp)).Controls[0];
+            dispatch = f.Add(new WmcDispatchCard(f.Content, SupplyWords.Requisition(0f), () => { WmcMotion.Punch(requisition); Requisition(); }));
+            requisition = dispatch.Button;
             ids.Add("sup.requisition", requisition);
         }
 
-        /// <summary>The card says what REQUISITION would send and, on line 3, why it cannot or what being over the faction's AI
+        /// <summary>The card says what REQUISITION would send and, under it, why it cannot or what being over the faction's AI
         /// limit does — always in words, always in view.</summary>
         private void RefreshPin()
         {
@@ -194,7 +168,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 key = (int)quote.Wing * 3 + (int)quote.Tile * 29 + (int)(quote.Price * 10f) * 7 + (quote.OverLimit ? 1013 : 0)
                     + WingRequisition.FuelPercent * 131 + inboundCount * 17 + wing.FactionAi * 37 + (int)(wing.FactionAiLimit * 10f) * 41
                     + wing.Members * 43 + wing.Pending * 47 + (int)wing.Mode * 53 + (client ? 59 : 0) + wing.PlayerRank * 61
-                    + (wing.Sandbox ? 67 : 0) + (int)ShopRules.WingBlocker(wing) * 71 + (int)wing.Funds * 73;
+                    + (wing.Sandbox ? 67 : 0) + (int)ShopRules.WingBlocker(wing) * 71 + (int)wing.Funds * 73 + (air.FactionStock + air.Held) * 79;
             }
             if (pinSet && key == pinKey && ReferenceEquals(selected, pinSelected) && ReferenceEquals(pilot, pinPilot)
                 && ReferenceEquals(field, pinField) && ReferenceEquals(fit, pinFit)) return;
@@ -214,6 +188,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 blocker = b != WingBlock.None ? "BLOCKED · " + ShopRules.WingReason(b, wing) : null;
                 dispatch.Set(word, WmcState.Of(cls), "NO AIRFRAME", null, "Pick one in step 2",
                     blocker ?? "Pick a pilot, an airframe, its fit and a base", blocker != null ? "warn" : "");
+                dispatch.SetMeta(client ? "THE HOST REQUISITIONS" : SupplyWords.Crew(wing.Members, wing.Pending, wing.MaxMembers));
             }
             else
             {
@@ -221,10 +196,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 string line = ShopRules.DispatchLine(pilot != null ? WmcText.Cut(pilot.Callsign, PilotPick.CallsignChars) : null, fitWord,
                     WingRequisition.FuelPercent, field != null ? BaseName.Short(WingRequisition.NameOf(field)) : null);
                 blocker = ShopRules.Blocker(quote, wing, air);
-                string ready = "READY · FUNDS " + Credits.Text(wing.Funds) + " › " + Credits.Text(wing.Funds - quote.Price);
                 string level = blocker != null ? "warn" : quote.OverLimit ? "info" : "ok";
                 dispatch.Set(word, WmcState.Of(cls), selected.unitName + " · " + Credits.Price(quote.Price), IconFactory.Aircraft(selected), line,
-                    blocker ?? (quote.OverLimit ? ShopRules.OverLimitNote(wing) : ready), level);
+                    blocker ?? (quote.OverLimit ? ShopRules.OverLimitNote(wing) : null), level);
+                dispatch.SetMeta(client ? "THE HOST REQUISITIONS"
+                    : SupplyWords.NextCall(wing.Sandbox, quote.Price, wing.Funds, wing.Members, wing.Pending, wing.MaxMembers, air.FactionStock + air.Held));
             }
             alert = selected != null && !client ? blocker : null;
 
