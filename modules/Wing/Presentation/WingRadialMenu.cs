@@ -5,6 +5,7 @@ using HarmonyLib;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
@@ -22,8 +23,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <list type="bullet">
     /// <item>Pages are shown by swapping <c>actionsMain</c> and rebuilding the native wheel.</item>
     /// <item>The stock wheel comes back after a leaf action, or 6 s after the wheel closes.</item>
-    /// <item>Pages: Call Wingmen, Form Up, Formation, Spacing, Autopilot, Combat, Recover, Orders (with Escort and
-    /// Dismiss).</item>
+    /// <item>Four leaves (spec 2026-10-04 §2): FORM UP, STANCE (a sub-page of the six stance slots), ENGAGE, RTB. The rest of
+    /// the orders live on the WMC and the wing key's Call Ladder.</item>
     /// </list></summary>
     internal static class WingRadialMenu
     {
@@ -31,7 +32,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private const float RestoreAfterSeconds = 6f;
 
         private static WingMenuAction rootEntry;
-        private static WingMenuAction[] mainMenu, callMenu, formationMenu, spacingMenu, autopilotMenu, combatMenu, recoverMenu, ordersMenu;
+        private static WingMenuAction[] mainMenu, stanceMenu;
+        private static RadialMenuAction[] appearance;
         private static RadialMenuAction[] stockActions;
         private static RadialMenuAction[] baselineWheel;
         private static bool inSubmenu;
@@ -111,131 +113,38 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             if (rootEntry == null) rootEntry = WingMenuAction.Create(RootLabel, _ => Swap(mainMenu, submenu: true));
 
+            appearance = templates;
             mainMenu = new[]
             {
-                Icon(WingMenuAction.Create("Call Wingmen", _ => Swap(callMenu, submenu: true)), "airframe"),
                 Leaf("Form Up", WingCommands.FormUp, "rejoin"),
-                Icon(WingMenuAction.Create("Formation", _ => ShowFormation()), "formation"),
-                Icon(WingMenuAction.Create("Spacing", _ => ShowSpacing()), "posture"),
-                Icon(WingMenuAction.Create("Autopilot", _ => ShowAutopilot()), "move"),
-                Icon(WingMenuAction.Create("Combat", _ => Swap(combatMenu, submenu: true)), "selection"),
-                Icon(WingMenuAction.Create("Recover", _ => Swap(recoverMenu, submenu: true)), "rtb"),
-                Icon(WingMenuAction.Create("Orders", _ => Swap(ordersMenu, submenu: true)), "move"),
+                Icon(WingMenuAction.Create("Stance", _ => ShowStances()), "posture"),
+                Leaf("Engage", () => WingCommands.Engage(), "selection"),
+                Leaf("RTB", () => WingCommands.Rtb(), "rtb"),
             };
-            ordersMenu = new[]
-            {
-                Leaf("Orbit Here", WingCommands.OrbitHere, "move"),
-                Leaf("Hold Here", WingCommands.HoldHere, "move"),
-                Leaf("Move Ahead", WingCommands.MoveAhead, "move"),
-                Leaf("Scout Ahead", WingCommands.ScoutAhead, "move"),
-                Leaf("Patrol Here", WingCommands.PatrolHere, "move"),
-                Leaf("Escort Target", WingCommands.EscortTarget, "selection"),
-                Leaf("Escort Me", WingCommands.EscortMe, "rejoin"),
-                Leaf("Dismiss", WingCommands.Dismiss, "rtb"),
-                Leaf("WMC", () => WmcPanel.Instance?.Open(), "selection"),
-                Back(),
-            };
-            recoverMenu = new[]
-            {
-                Leaf("RTB", WingCommands.Rtb, "rtb"),
-                Leaf("Refit", WingCommands.Refit, "rtb"),
-                // Helicopter landings (spec M4 §5, §7) live with the recovery orders: the Orders page stays readable.
-                Leaf("Land Here", WingCommands.LandHere, "rtb"),
-                Leaf("Take Off", WingCommands.TakeOff, "rejoin"),
-                Leaf("Deliver Cargo", WingCommands.DeliverCargo, "rtb"),
-                Leaf("Rescue", WingCommands.Rescue, "rtb"),
-                Back(),
-            };
-            combatMenu = new[]
-            {
-                Leaf("Engage", WingCommands.Engage, "selection"),
-                Leaf("Attack Target", WingCommands.AttackTarget, "selection"),
-                Leaf("Splash", WingCommands.Splash, "selection"),
-                Leaf("Buddy Attack", WingCommands.BuddyAttack, "selection"),
-                Leaf("Clear My Six", WingCommands.ClearMySix, "selection"),
-                Leaf("Bogey Dope", WingCommands.BogeyDope, "selection"),
-                Leaf("Disengage", WingCommands.Disengage, "rejoin"),
-                Leaf("Doctrine", WingCommands.NextDoctrine, "selection"),
-                Back(),
-            };
-            callMenu = new[]
-            {
-                Leaf("Call 1", () => WingCommands.Call(1), "selection"),
-                Leaf("Call 2", () => WingCommands.Call(2), "selection"),
-                Leaf("Call 3", () => WingCommands.Call(3), "selection"),
-                Leaf("Next Field", WingCommands.NextField, "airframe"),
-                Leaf("Adopt", WingCommands.Recruit, "selection"),
-                Back(),
-            };
-            formationMenu = new[]
-            {
-                Leaf("Next Shape", WingCommands.NextShape, "formation"),
-                Leaf("Next Family", WingCommands.NextFamily, "formation"),
-                Leaf("Go High", () => WingCommands.Stack(WingCommands.GoHighMetres, "Going high"), "formation"),
-                Leaf("Go Low", () => WingCommands.Stack(WingCommands.GoLowMetres, "Going low"), "formation"),
-                Leaf("Level", () => WingCommands.Stack(0f, "Level with you"), "formation"),
-                Leaf("Buster", () => WingCommands.Afterburner(false), "formation"),
-                Leaf("Gate", () => WingCommands.Afterburner(true), "formation"),
-                Back(),
-            };
-            spacingMenu = new[]
-            {
-                Leaf("Close", () => WingCommands.SetSpacing(SpacingPreset.Close), "formation"),
-                Leaf("Standard", () => WingCommands.SetSpacing(SpacingPreset.Standard), "formation"),
-                Leaf("Open", () => WingCommands.SetSpacing(SpacingPreset.Open), "formation"),
-                Leaf("Spread", () => WingCommands.SetSpacing(SpacingPreset.Spread), "formation"),
-                Back(),
-            };
-            autopilotMenu = new[]
-            {
-                Leaf("Level", () => WingCommands.Autopilot(ApCommand.Level), "move"),
-                Leaf("Heading", () => WingCommands.Autopilot(ApCommand.Heading), "move"),
-                Leaf("Altitude", () => WingCommands.Autopilot(ApCommand.Altitude), "move"),
-                Leaf("Vertical Speed", () => WingCommands.Autopilot(ApCommand.VerticalSpeed), "move"),
-                Leaf("Speed", () => WingCommands.Autopilot(ApCommand.Speed), "move"),
-                Leaf("Off", () => WingCommands.Autopilot(ApCommand.Off), "back"),
-                Back(),
-            };
-
             ApplyAppearance(rootEntry, template(0), "root");
             ApplyAll(mainMenu, template);
-            ApplyAll(callMenu, template);
-            ApplyAll(formationMenu, template);
-            ApplyAll(spacingMenu, template);
-            ApplyAll(autopilotMenu, template);
-            ApplyAll(combatMenu, template);
-            ApplyAll(recoverMenu, template);
-            ApplyAll(ordersMenu, template);
         }
 
-        private static void ShowFormation()
+        /// <summary>The stance sub-page: the six slots by name (an empty slot is left out), then Back. Built each time it is
+        /// opened, so a renamed or reordered slot reads true.</summary>
+        private static void ShowStances()
         {
-            FormationSelection sel = WingService.Instance?.Selection;
-            if (sel != null) formationMenu[0].DisplayName = "Next Shape (" + sel.Current.Name + ")";
-            Swap(formationMenu, submenu: true);
+            Destroy(ref stanceMenu);
+            var entries = new List<WingMenuAction>();
+            for (int i = 0; i < StanceBook.Slots; i++)
+            {
+                Stance st = WmcStanceActions.Book.Slot(i);
+                if (st == null) continue;
+                int slot = i;
+                entries.Add(Leaf(st.Name, () => WingCallLadder.RunStance(slot), "posture"));
+            }
+            entries.Add(Back());
+            stanceMenu = entries.ToArray();
+            Func<int, RadialMenuAction> template = i =>
+                appearance != null && appearance.Length > 0 ? appearance[i % appearance.Length] : null;
+            ApplyAll(stanceMenu, template);
+            Swap(stanceMenu, submenu: true);
         }
-
-        private static void ShowSpacing()
-        {
-            FormationSelection sel = WingService.Instance?.Selection;
-            string[] names = { "Close", "Standard", "Open", "Spread" };
-            for (int i = 0; i < names.Length; i++)
-                spacingMenu[i].DisplayName = sel != null && (int)sel.Spacing == i ? "▶ " + names[i] : names[i];
-            Swap(spacingMenu, submenu: true);
-        }
-
-        private static void ShowAutopilot()
-        {
-            HoldSpec h = PlayerAutopilot.Instance != null ? PlayerAutopilot.Instance.Session.Spec : default;
-            autopilotMenu[0].DisplayName = Mark("Level", h.Lateral == LateralHold.Level);
-            autopilotMenu[1].DisplayName = Mark("Heading", h.Lateral == LateralHold.Heading);
-            autopilotMenu[2].DisplayName = Mark("Altitude", h.Vertical == VerticalHold.Altitude);
-            autopilotMenu[3].DisplayName = Mark("Vertical Speed", h.Vertical == VerticalHold.VerticalSpeed);
-            autopilotMenu[4].DisplayName = Mark("Speed", h.Speed);
-            Swap(autopilotMenu, submenu: true);
-        }
-
-        private static string Mark(string label, bool active) => active ? "▶ " + label : label;
 
         private static void ApplyAll(WingMenuAction[] entries, Func<int, RadialMenuAction> template)
         {
@@ -312,10 +221,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             baselineWheel = null;
             inSubmenu = false;
             Destroy(ref mainMenu);
-            Destroy(ref callMenu);
-            Destroy(ref formationMenu);
-            Destroy(ref spacingMenu);
-            Destroy(ref autopilotMenu);
+            Destroy(ref stanceMenu);
+            appearance = null;
             if (rootEntry != null) UnityEngine.Object.Destroy(rootEntry);
             rootEntry = null;
         }

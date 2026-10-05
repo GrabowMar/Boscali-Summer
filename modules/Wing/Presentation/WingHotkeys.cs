@@ -27,7 +27,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
         }
 
-        public void Deactivate() => WingRadialMenu.Reset();
+        public void Deactivate()
+        {
+            WingRadialMenu.Reset();
+            WingCallLadder.Close();
+        }
 
         public void FixedTick(float dt)
         {
@@ -37,6 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             WingRadialMenu.Tick();
             WingConfig s = WingSettings.Instance;
+            WingChordInput.Tick(s, WmcNameField.Typing);
             // R5: keys typed into a WMC text field are text, never commands (HOTAS buttons still act).
             if (WmcNameField.Typing)
             {
