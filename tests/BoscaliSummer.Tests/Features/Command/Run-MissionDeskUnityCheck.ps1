@@ -5,6 +5,8 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
+if (-not [IO.Path]::IsPathRooted($PreviewDirectory)) { $PreviewDirectory = Join-Path $repo $PreviewDirectory }
+$PreviewDirectory = [IO.Path]::GetFullPath($PreviewDirectory)
 $gameManaged = 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/NuclearOption_Data/Managed'
 New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets/Harness", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
 Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value 'm_EditorVersion: 2022.3.62f3'
@@ -15,6 +17,9 @@ Get-ChildItem -LiteralPath $gameManaged -Filter '*.dll' | Where-Object {
 Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' -Filter '*.dll' | Where-Object { $_.Name -match '^(BepInEx.dll$|Mono|0Harmony.dll$|HarmonyXInterop)' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$PSScriptRoot/MissionDeskUnityCheck.cs", "$PSScriptRoot/BoscaliStockPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+# Reuse the production assembly's existing preview friendship for a typed fake host-view fixture.
+# The shared stock-preview asmdef stays unchanged; this isolated project owns its assembly name.
+Set-Content -LiteralPath "$PreviewDirectory/Assets/Harness/BoscaliStockPreview.asmdef" -Value '{"name":"BoscaliSupportPreview","references":["Unity.TextMeshPro","Unity.ugui"],"includePlatforms":["Editor"]}'
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
 $arguments = @('-batchmode', '-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'MissionDeskUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
 if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }

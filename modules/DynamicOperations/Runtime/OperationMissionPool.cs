@@ -145,6 +145,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             }
             bool returned = op.Returning && valid && target.ReturnAircraft.IsLanded() &&
                 (target.ReturnAircraft.transform.position - target.Base.center.position).sqrMagnitude <= 1000f * 1000f;
+            target.OnStation = present || target.Serviced;
             op.Observe(now, elapsed, valid, true, target.Life.Neutralized, present || target.Serviced,
                 returned: returned, serviced: target.Serviced);
             if (op.Kind == OperationKind.SortieReport && op.HoldSeconds >= op.HoldRequired && target.Observer != null && op.BeginReturn(now))

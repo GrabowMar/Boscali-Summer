@@ -1159,7 +1159,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.DynamicOperations.Networking.OperationsNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 4)
         throw new InvalidOperationException("Operations protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1199,7 +1199,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     object Snapshot(int count, object card)
     {
         object snapshot = Activator.CreateInstance(snapshotType)!;
-        snapshotType.GetField("Protocol")!.SetValue(snapshot, (byte)3);
+        snapshotType.GetField("Protocol")!.SetValue(snapshot, (byte)4);
         snapshotType.GetField("Scene")!.SetValue(snapshot, 345u);
         snapshotType.GetField("Token")!.SetValue(snapshot, 678u);
         snapshotType.GetField("Status")!.SetValue(snapshot, new string('S', 200));
@@ -1209,7 +1209,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
         return snapshot;
     }
     object query = Activator.CreateInstance(queryType)!;
-    queryType.GetField("Protocol")!.SetValue(query, (byte)3);
+    queryType.GetField("Protocol")!.SetValue(query, (byte)4);
     queryType.GetField("OperationId")!.SetValue(query, 123);
     queryType.GetField("Action")!.SetValue(query, (byte)1);
     queryType.GetField("Scene")!.SetValue(query, uint.MaxValue);
@@ -1228,6 +1228,41 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
         false, true, true, 12500f, -6750f, 1500f, "b" + new string('P', 31))!;
     foreach (PropertyInfo property in cardType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(property.GetValue(expectedCard), property.GetValue(cardResult))) throw new InvalidOperationException("Operations card roundtrip changed " + property.Name);
+
+    object EnumValue(string name, byte value) => Enum.ToObject(plugin.GetType("BoscaliSummer.Core.Contracts." + name, true)!, value);
+    Type phaseType = plugin.GetType("BoscaliSummer.Core.Contracts.ObjectivePhase", true)!;
+    Type taskingType = plugin.GetType("BoscaliSummer.Core.Contracts.ObjectiveTasking", true)!;
+    object Tasking(byte family = 8, float age = 0f, bool duplicatePhase = false)
+    {
+        Array phases = Array.CreateInstance(phaseType, 3);
+        string[] phaseNames = { "JOIN", "COVER", "TRANSFER" };
+        for (int i = 0; i < phases.Length; i++)
+            phases.SetValue(Activator.CreateInstance(phaseType, (byte)(duplicatePhase ? 1 : i + 1), phaseNames[i], "Host gate " + i,
+                EnumValue("ObjectivePhaseStatus", i == 0 ? (byte)2 : i == 1 ? (byte)1 : (byte)0), i == 0 ? 1f : i == 1 ? .55f : 0f), i);
+        return Activator.CreateInstance(taskingType, EnumValue("ObjectiveFamily", family), EnumValue("ObjectiveAsset", 2),
+            EnumValue("ObjectiveContact", 2), age, "Cover the truck.", "", "Keep the eastern line supplied.", phases,
+            EnumValue("ObjectiveLifecycle", 1), "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", 1))!;
+    }
+    object TypedCard(object tasking) => Activator.CreateInstance(cardType, 124, "COVER THE SUPPLY RUN", "Host briefing", "Supply truck", "COVER", "Morale +3",
+        .55f, 702f, 1400, 125, false, false, true, true, 12500f, -6750f, 1500f, "ROOK 1", tasking)!;
+    object typedInput = Tasking();
+    object typedSnapshot = Decode(snapshotType, Encode(snapshotType, Snapshot(1, TypedCard(typedInput))));
+    object typedResult = cardType.GetProperty("Tasking")!.GetValue(((Array)snapshotType.GetField("Cards")!.GetValue(typedSnapshot)!).GetValue(0))!;
+    foreach (PropertyInfo property in taskingType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+    {
+        if (property.Name == "Phases") continue;
+        if (!Equals(property.GetValue(typedInput), property.GetValue(typedResult))) throw new InvalidOperationException("Operations tasking roundtrip changed " + property.Name);
+    }
+    Array inputPhases = (Array)taskingType.GetProperty("Phases")!.GetValue(typedInput)!;
+    Array resultPhases = (Array)taskingType.GetProperty("Phases")!.GetValue(typedResult)!;
+    if (resultPhases.Length != 3) throw new InvalidOperationException("Operations phase gate count changed");
+    for (int i = 0; i < inputPhases.Length; i++)
+        foreach (PropertyInfo property in phaseType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (!Equals(property.GetValue(inputPhases.GetValue(i)), property.GetValue(resultPhases.GetValue(i))))
+                throw new InvalidOperationException("Operations phase roundtrip changed " + property.Name);
+    Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(family: 255)))));
+    Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(age: 31f)))));
+    Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(duplicatePhase: true)))));
     Reject(Encode(snapshotType, Snapshot(1, Card(float.NaN))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, float.PositiveInfinity))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, 300f, -1))));
@@ -1237,7 +1272,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     writerType.GetField("_bitPosition", flags)!.SetValue(excessiveCount, bitPosition - 8);
     writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)4 });
     Reject(excessiveCount);
-    Console.WriteLine("  Dynamic operations serializers: query/card roundtrip, 3-card/128-char/32-pilot bounds, non-finite/range/count rejection");
+    Console.WriteLine("  Dynamic operations serializers v4: query/card/typed-tasking/phase roundtrip, 3-card/128-char/32-pilot bounds, non-finite/range/count/enum/duplicate-phase rejection");
 }
 
 static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)

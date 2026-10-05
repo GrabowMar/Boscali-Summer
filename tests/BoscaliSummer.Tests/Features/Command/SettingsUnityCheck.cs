@@ -642,6 +642,13 @@ public static class SettingsUnityCheck
 
     private sealed class TaskingFixture : ISecondaryObjectivesView
     {
+        public bool IsFresh => true;
+        public float SnapshotAgeSeconds => 0f;
+        public int SelectedForHud { get; private set; }
+        public bool IsActionPending => false;
+        public int PendingObjectiveId => 0;
+        public string ActionResult => "";
+        public void SelectForHud(int id) => SelectedForHud = id;
         private readonly SecondaryObjectiveView[] cards =
         {
             new SecondaryObjectiveView(1, "RELAY STRIKE", "Destroy the relay.", "RADAR RELAY NORTH", "IN PROGRESS", "$14,000 · 300 XP",

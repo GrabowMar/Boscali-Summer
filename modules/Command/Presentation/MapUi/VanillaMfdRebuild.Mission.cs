@@ -18,15 +18,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>
         /// The MIS bezel as a briefing board. MISSION is the hero card (name, clock, lead objective,
         /// briefing) over key numbers, the escalation ladder, the lead contract and a live log;
-        /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS is a stack of cards with the
-        /// reward in mono and a primary action. Reads happen in <see cref="Gather"/> into one reusable
+        /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS shares the tactical briefing,
+        /// phase gates and host actions with the task desk. Reads happen in <see cref="Gather"/> into one reusable
         /// <see cref="BoardModel"/>; <see cref="Render"/> only writes it to already-built parts.
         /// </summary>
         private sealed class MissionPresenter : Presenter
         {
             private const int ObjectivePageSize = 10;
             private const int MaxObjectiveLines = 24;
-            private const int SecondaryPageSize = MfdSecondaryObjectives.MaxCards;
 
             private struct ObjectiveLine
             {
@@ -90,15 +89,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvRow objectivesEmpty;
 
             // CONTRACTS page.
-            private AvGauge[] moneyTiles;
+            private MissionTaskPart tasking;
+            private MissionTaskActions taskActions;
+            private AvStepper taskPicker;
+            private int secondarySelectedId=-1;
+            private int renderedTaskId=-1;
+            private bool secondaryFresh;
             private AvControl[] secondaryFilterControls;
             private AvSection boardSection;
-            private PagedPartStack<ContractCard> cardStack;
+
             private AvRow contractsEmpty;
             private AvControl openDesk;
             private MissionContractWindow contractWindow;
             private int secondaryFilter;
-            private int secondaryConfirmId;
+
             private bool secondaryHasCapacity;
             private string secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE";
 
@@ -146,6 +150,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
+                taskActions?.CancelConfirmation();
+                taskActions?.SetShown(index==2);
                 RequestRefresh();
             }
 
@@ -392,174 +398,95 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildContractsPage(AvFlow page)
             {
-                moneyTiles = new[]
-                {
-                    new AvGauge(page.Content, "IN FIELD", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "OFFERED", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "PAID", AvGaugeShape.Ring, 64f),
-                };
-                moneyTiles[0].Help = "In field: the money at stake in accepted contracts. The ring fills as active contracts approach the limit.";
-                moneyTiles[1].Help = "Offered: the total reward of offers nobody has accepted yet, against everything on the board.";
-                moneyTiles[2].Help = "Paid: rewards already earned from completed contracts, against everything on the board.";
-                page.Row(moneyTiles);
-
-                boardSection = page.Section(AvIcon.Star, "CONTRACTS");
-                // The desk button rides the filter row: one row of four instead of a row and a stray full-width button.
-                AvButtons filters = page.Buttons(
-                    new AvControl.Spec("AVAILABLE", () => { secondaryFilter = MfdSecondaryObjectives.FilterAvailable; cardStack.SetPage(0); RequestRefresh(); }),
-                    new AvControl.Spec("ACTIVE", () => { secondaryFilter = MfdSecondaryObjectives.FilterActive; cardStack.SetPage(0); RequestRefresh(); }),
-                    new AvControl.Spec("CLOSED", () => { secondaryFilter = MfdSecondaryObjectives.FilterResults; cardStack.SetPage(0); RequestRefresh(); }),
-                    new AvControl.Spec("DESK", OpenContractDesk, AvButtonStyle.Default, MfdChromeIcon.For("LEDGER")));
-                secondaryFilterControls = new[] { filters.Controls[0], filters.Controls[1], filters.Controls[2] };
-                string[] filterNames = { "available", "active", "closed" };
-                string[] filterHelp =
-                {
-                    "offers the host has not answered yet",
-                    "contracts this faction has accepted",
-                    "completed, lapsed and aborted contracts",
-                };
-                for (int i = 0; i < secondaryFilterControls.Length; i++)
-                    secondaryFilterControls[i].Help = "Show " + filterNames[i] + " contracts — " + filterHelp[i] + ".";
-                openDesk = filters.Controls[3];
-                openDesk.Help = "Desk: open the shared faction contract record in its own window.";
-
-                cardStack = page.Add(new PagedPartStack<ContractCard>(page.Content, page.Ticker, SecondaryPageSize, 6f,
-                    (parent, slot) => new ContractCard(parent,
-                        () => AcceptSecondary(cardStack.ItemIndex(slot)),
-                        () => DismissSecondary(cardStack.ItemIndex(slot))),
-                    BindContractCard));
-                contractsEmpty = page.Add(new AvRow(page.Content));
-                contractsEmpty.SetShown(false);
-
+                boardSection=page.Section(AvIcon.ListDetails,"FACTION TASKING");
+                AvButtons filters=page.Buttons(
+                    new AvControl.Spec("OFFERS",()=>{secondaryFilter=MfdSecondaryObjectives.FilterAvailable;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
+                    new AvControl.Spec("ACTIVE",()=>{secondaryFilter=MfdSecondaryObjectives.FilterActive;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
+                    new AvControl.Spec("RESULTS",()=>{secondaryFilter=MfdSecondaryObjectives.FilterResults;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
+                    new AvControl.Spec("DESK",OpenContractDesk,AvButtonStyle.Default,MfdChromeIcon.For("LEDGER")));
+                secondaryFilterControls=new[]{filters.Controls[0],filters.Controls[1],filters.Controls[2]};
+                openDesk=filters.Controls[3];openDesk.Help="Open the tactical task desk with the same host actions.";
+                taskPicker=page.Add(new AvStepper(page.Content,"TASK",()=>model.Contracts.Count==0?"NONE":(SelectedIndex()+1)+" / "+model.Contracts.Count,()=>MoveTask(-1),()=>MoveTask(1)));
+                tasking=page.Add(new MissionTaskPart(page.Content));
+                contractsEmpty=page.Add(new AvRow(page.Content));contractsEmpty.SetShown(false);
+                taskActions=new MissionTaskActions(Console.Root,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
+                taskActions.SetShown(false);
             }
-
+            private int SelectedIndex()
+            {
+                for(int i=0;i<model.Contracts.Count;i++)if(model.Contracts[i].Id==secondarySelectedId)return i;
+                return 0;
+            }
+            private void MoveTask(int delta)
+            {
+                if(model.Contracts.Count==0)return;
+                int i=(SelectedIndex()+delta+model.Contracts.Count)%model.Contracts.Count;
+                secondarySelectedId=model.Contracts[i].Id;taskActions.CancelConfirmation();RenderContracts();
+            }
             private void OpenContractDesk()
             {
-                if (contractWindow == null) contractWindow = MissionContractWindow.Create();
+                if(contractWindow==null)contractWindow=MissionContractWindow.Create();
                 contractWindow.Show();
             }
-
+            private void ExposeTaskMap()
+            {
+                var map=SceneSingleton<DynamicMap>.i;if(map!=null&&!DynamicMap.mapMaximized)map.Maximize();
+            }
             private void RenderContracts()
             {
-                if (!model.Installed)
-                    foreach (AvGauge ring in moneyTiles) ring.Set(0f, "—", AvState.Inert);
-                else
+                secondaryFilterControls[0].Label="OFFERS "+model.Offers;
+                secondaryFilterControls[1].Label="ACTIVE "+MfdSecondaryObjectives.ShortCount(model.ActiveContracts,model.Limit);
+                secondaryFilterControls[2].Label="RESULTS "+model.Closed;
+                for(int i=0;i<secondaryFilterControls.Length;i++)secondaryFilterControls[i].Latched=i==secondaryFilter;
+                boardSection.SetCaption(!model.Installed?"DIRECTOR UNAVAILABLE":!secondaryFresh?"HOST UNAVAILABLE":model.Limit>0?"ACTIVE LIMIT / "+model.Limit:"HOST TASKING");
+                bool empty=model.Contracts.Count==0;
+                contractsEmpty.SetShown(empty);taskPicker.SetShown(!empty);tasking.SetShown(!empty);
+                if(empty)
                 {
-                    float pool = Mathf.Max(1f, model.AtStake + model.Offered + model.Paid);
-                    moneyTiles[0].Set(model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : model.AtStake / pool,
-                        Cash(model.AtStake), model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
-                    moneyTiles[1].Set(model.Offered / pool, Cash(model.Offered), model.Offers > 0 ? AvState.Info : AvState.Inert);
-                    moneyTiles[2].Set(model.Paid / pool, Cash(model.Paid), model.Paid > 0 ? AvState.Ready : AvState.Inert);
+                    string message=MfdSecondaryObjectives.EmptyMessage(secondaryFilter,EmptyReason(model.Installed,secondaryFresh));
+                    int split=message.IndexOf('\n');
+                    contractsEmpty.Set(split<0?message:message.Substring(0,split),split<0?"":message.Substring(split+1),"",secondaryFresh?AvState.Inert:AvState.Caution);
                 }
-
-                secondaryFilterControls[0].Label = "AVAILABLE " + model.Offers;
-                secondaryFilterControls[1].Label = "ACTIVE " + MfdSecondaryObjectives.ShortCount(model.ActiveContracts, model.Limit);
-                secondaryFilterControls[2].Label = "CLOSED " + model.Closed;
-                for (int i = 0; i < secondaryFilterControls.Length; i++)
-                    secondaryFilterControls[i].Latched = i == secondaryFilter;
-
-                int count = model.Contracts.Count;
-                bool empty = count == 0;
-                boardSection.SetCaption(!model.Installed ? "UNAVAILABLE"
-                    : !model.Streamed ? "WAITING FOR HOST"
-                    : model.Limit > 0 ? "MAX " + model.Limit : "ONLINE");
-
-                cardStack.SetShown(!empty);
-                contractsEmpty.SetShown(empty);
-                if (empty)
+                if(!model.Contracts.Exists(e=>e.Id==secondarySelectedId))
                 {
-                    string message = MfdSecondaryObjectives.EmptyMessage(secondaryFilter,
-                        EmptyReason(model.Installed, model.Streamed, model.Offers, model.Closed));
-                    int cut = message.IndexOf('\n');
-                    contractsEmpty.Set(cut < 0 ? message : message.Substring(0, cut), "",
-                        "", model.Installed && model.Streamed ? AvState.Inert : AvState.Caution);
+                    int preferred=-1;
+                    if(ModuleServices.TryGet(out ISecondaryObjectivesView board))preferred=board.SelectedForHud;
+                    secondarySelectedId=model.Contracts.Exists(e=>e.Id==preferred)?preferred:empty?-1:model.Contracts[0].Id;
                 }
-                cardStack.SetCount(count);
-            }
-
-            private static BoardEmptyReason EmptyReason(bool installed, bool streamed, int available, int results) =>
-                !installed ? BoardEmptyReason.Unavailable
-                : !streamed ? BoardEmptyReason.LinkLost
-                : available + results == 0 ? BoardEmptyReason.DirectorExhausted
-                : BoardEmptyReason.Ready;
-
-            private void BindContractCard(int index, ContractCard card)
-            {
-                SecondaryObjectiveView objective = index >= 0 && index < model.Contracts.Count ? model.Contracts[index] : null;
-                if (objective == null)
+                SecondaryObjectiveView current=model.Contracts.Find(e=>e.Id==secondarySelectedId);
+                taskPicker.Refresh();taskPicker.Minus.Interactable=taskPicker.Plus.Interactable=model.Contracts.Count>1;
+                tasking.SetViewportHeight(contractsFlow.ViewportHeight);tasking.Set(current,secondaryFresh);
+                int hud=-1;bool pending=false;string result="";
+                if(ModuleServices.TryGet(out ISecondaryObjectivesView view)){hud=view.SelectedForHud;pending=view.IsActionPending;result=view.ActionResult;}
+                taskActions.Set(current,secondaryFresh,secondaryHasCapacity,hud,pending,result);
+                taskActions.SetShown(selectedPage==2);
+                FitTaskActions();
+                if(renderedTaskId!=secondarySelectedId)
                 {
-                    card.Set(new ContractCardData
+                    renderedTaskId=secondarySelectedId;
+                    contractsFlow.Relayout();
+                    if(selectedPage==2)
                     {
-                        Icon = AvIcon.AlertTriangle, Title = "OBJECTIVE LINK LOST", State = AvState.Caution,
-                        AcceptLabel = "ACCEPT", DismissLabel = "DISMISS",
-                    });
-                    return;
+                        var scroll=Console.Root.Find("Body")?.GetComponent<UnityEngine.UI.ScrollRect>();
+                        if(scroll!=null)scroll.verticalNormalizedPosition=1;
+                    }
                 }
-
-                bool complete = objective.IsComplete;
-                bool lapsed = !complete && objective.SecondsRemaining <= 0f;
-                bool urgent = !complete && !lapsed && objective.SecondsRemaining <= MfdSecondaryObjectives.UrgentSeconds;
-                AvState state = complete ? AvState.Ready : lapsed ? AvState.Danger : urgent ? AvState.Caution
-                    : objective.IsActive ? AvState.Info : AvState.Inert;
-
-                string family = MfdMissionLabels.ContractFamily(objective.Title);
-                string status = objective.IsOffered ? "AWAITING ACCEPTANCE" : objective.Status;
-                string sub = family + "  ·  " + status;
-                if (!string.IsNullOrWhiteSpace(objective.AcceptedBy)) sub += "  ·  TAKEN BY " + objective.AcceptedBy;
-                float fraction = MfdChartScale.Fraction(objective.Progress, 1f);
-                if (complete) fraction = 1f;
-
-                bool dismissable = objective.IsOffered || objective.IsActive;
-                card.Set(new ContractCardData
-                {
-                    Icon = ContractIcon(objective.Title),
-                    Title = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title),
-                    Sub = sub,
-                    Description = objective.Description,
-                    Reward = Cash(objective.Money),
-                    Xp = "+" + AvNum.Thousands(Math.Max(0, objective.Xp)) + " XP",
-                    Progress = objective.IsOffered ? "OFFER" : complete ? "100%" : AvNum.Percent(fraction),
-                    Chip = MfdSecondaryObjectives.ChipLabel(objective),
-                    Fraction = fraction,
-                    State = state,
-                    ShowActions = dismissable,
-                    CanAccept = MfdSecondaryObjectives.CanAccept(objective, secondaryHasCapacity),
-                    AcceptLabel = MfdSecondaryObjectives.AcceptLabel(objective, secondaryHasCapacity),
-                    CanDismiss = dismissable,
-                    DismissLabel = objective.IsActive
-                        ? (secondaryConfirmId == objective.Id ? "CONFIRM ABORT" : "ABORT")
-                        : "DISMISS",
-                    Help = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title) + " · " +
-                           objective.Description + " · " + objective.Target + " · " + objective.Reward +
-                           (string.IsNullOrWhiteSpace(objective.AcceptedBy) ? "" : " · ACCEPTED BY " + objective.AcceptedBy),
-                });
             }
-
-            private void AcceptSecondary(int index)
+            private void FitTaskActions()
             {
-                if (index < 0 || index >= model.Contracts.Count) return;
-                SecondaryObjectiveView objective = model.Contracts[index];
-                if (objective != null && MfdSecondaryObjectives.CanAccept(objective, secondaryHasCapacity) &&
-                    ModuleServices.TryGet(out ISecondaryObjectivesView view))
-                    view.RequestAccept(objective.Id);
-                RequestRefresh();
+                var body=Console.Root.Find("Body") as RectTransform;if(body==null)return;
+                float top=-body.anchoredPosition.y;
+                float reserve=selectedPage==2?Mathf.Max(64,taskActions.Measure(Console.Root.rect.width-28))+12:0;
+                float height=Mathf.Max(96,Console.Root.rect.height-top-AvGridTokens.Footer-reserve);
+                AvLay.Place(body,0,top,Console.Root.rect.width,height);
+                var scroll=body.GetComponent<UnityEngine.UI.ScrollRect>();
+                AvLay.Place(scroll.viewport,0,0,Console.Root.rect.width,height);
+                if(scroll.verticalScrollbar!=null){var bar=(RectTransform)scroll.verticalScrollbar.transform;bar.sizeDelta=new Vector2(bar.sizeDelta.x,height-4);}
+                briefFlow.ViewportHeight=objectivesFlow.ViewportHeight=contractsFlow.ViewportHeight=height;
+                if(selectedPage==2)taskActions.Place(new AvSlot(14,top+height+8,Console.Root.rect.width-28,reserve-12));
             }
-
-            private void DismissSecondary(int index)
-            {
-                if (index < 0 || index >= model.Contracts.Count) return;
-                SecondaryObjectiveView objective = model.Contracts[index];
-                if (objective == null) return;
-                if (objective.IsActive && secondaryConfirmId != objective.Id)
-                {
-                    secondaryConfirmId = objective.Id;
-                    RequestRefresh();
-                    return;
-                }
-                if (ModuleServices.TryGet(out ISecondaryObjectivesView view)) view.RequestCancel(objective.Id);
-                secondaryConfirmId = 0;
-                RequestRefresh();
-            }
+            private static BoardEmptyReason EmptyReason(bool installed,bool streamed)=>
+                !installed?BoardEmptyReason.Unavailable:!streamed?BoardEmptyReason.LinkLost:BoardEmptyReason.Ready;
 
             // ---------------------------------------------------------------- render
 
@@ -697,12 +624,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bool installed = ModuleServices.TryGet(out ISecondaryObjectivesView view);
                 IReadOnlyList<SecondaryObjectiveView> entries = null;
                 bool streamed = false;
+                secondaryFresh=false;
                 model.Installed = installed;
                 if (installed)
                 {
                     view.Refresh();
                     entries = view.Objectives;
                     streamed = !string.IsNullOrWhiteSpace(view.Status);
+                    secondaryFresh=view.IsFresh;
                     model.Limit = Math.Max(0, view.ActiveLimit);
                     secondaryStatus = streamed ? view.Status : "SECONDARY MISSIONS — WAITING FOR HOST";
                 }
@@ -806,24 +735,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            /// <summary>Contract-family icon: chrome, mapped from <see cref="MfdMissionLabels.ContractGlyph"/>'s
-            /// v1 glyph-kind strings onto the closest real <see cref="AvIcon"/>.</summary>
-            private static AvIcon ContractIcon(string title)
-            {
-                switch (MfdMissionLabels.ContractGlyph(title))
-                {
-                    case "shield": return AvIcon.Shield;
-                    case "target": return AvIcon.Target;
-                    case "air": return AvIcon.Plane;
-                    case "eye": return AvIcon.Eye;
-                    case "radar": return AvIcon.Radar2;
-                    case "person": return AvIcon.User;
-                    case "building": return AvIcon.BuildingBank;
-                    case "convoy": return AvIcon.Map2;
-                    case "repair": return AvIcon.Bolt;
-                    default: return AvIcon.Flag;
-                }
-            }
         }
 
         private sealed class UnavailablePresenter : Presenter
