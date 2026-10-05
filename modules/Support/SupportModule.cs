@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Support
             CyberService cyberService = context.AddSceneService<CyberService>(52);
             SofService sofService = context.AddSceneService<SofService>(53);
             OpsService opsService = context.AddSceneService<OpsService>(59);
+            OverlordService overlordService = context.AddSceneService<OverlordService>(60);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
@@ -58,6 +59,8 @@ namespace BoscaliSummer.Modules.Support
             manager.AttachSof(sofService);
             opsService.Configure(manager, space, cyberService, sofService);
             manager.AttachOps(opsService);
+            overlordService.Configure(manager, space, cyberService, sofService, opsService);
+            manager.AttachOverlord(overlordService);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);

@@ -253,7 +253,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
-            into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear();
+            into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Log.Clear();
             if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f)) return false;
             float now = SupportManager.MissionNow();
             ulong id = PlayerIdentity.Of(viewer);
@@ -290,6 +290,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 into.Events.Add(new OpsEventRow { Seq = f.Ring[i].Key, Kind = e.Kind, Domain = e.Domain, Op = e.Op });
             }
             FillBirdsAndFlights(viewer.HQ, now, into);
+            manager.CopyOverlordLog(viewer.HQ, into.Log); // OVERLORD's own actions and their reasons: this faction's console only
             return true;
         }
 
