@@ -87,6 +87,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 manager.Refresh();
             }
 
+            if (!manager.IsFresh)
+            {
+                cardCount = 0;
+                Hide();
+                return;
+            }
+
             if (root == null && !Build())
             {
                 Hide();
@@ -113,7 +120,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             IReadOnlyList<SecondaryObjectiveView> views = manager.Objectives;
             cardCount = 0;
-            if (views != null)
+            if (manager.IsFresh && views != null)
                 for (int i = 0; i < views.Count && cardCount < MaxTags; i++)
                     if (ContractCard.TryRead(views[i], out ContractCard card)) cards[cardCount++] = card;
         }

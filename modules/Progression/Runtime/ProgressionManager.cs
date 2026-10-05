@@ -259,10 +259,11 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             // carry no multiplier and are unaffected.
             float strength = settings.PerkStrength.Value;
             float multiplier = 1f;
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
+            PerkDefinition[] passives = PerkCatalog.Passives(effect);
+            for (int i = 0; i < passives.Length; i++)
             {
-                PerkDefinition definition = PerkCatalog.All[i];
-                if (definition.Capability == null && definition.Effect == effect && state.Has(definition.Id))
+                PerkDefinition definition = passives[i];
+                if (state.Has(definition.Id))
                     multiplier *= 1f + (definition.Multiplier - 1f) * strength;
             }
             return multiplier;

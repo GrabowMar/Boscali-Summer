@@ -7,7 +7,7 @@ using NOAvionics;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-    [BepInDependency("com.marci.wingcommand", "0.9.2.6")]
+    // Avionics is compiled in; consumers already handle an unavailable optional Wing service.
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";
@@ -22,6 +22,8 @@ namespace BoscaliSummer
         private void Awake()
         {
             Logger = base.Logger;
+            // The built-in wing replaces the stand-alone Wing Command plugin; stop it before it loads.
+            BoscaliSummer.Core.Game.ExternalWingGuard.Install(Logger);
             Settings = new ModConfiguration(Config);
 
             // The panels' look lives in stylesheets, not in literals. The embedded sheets are

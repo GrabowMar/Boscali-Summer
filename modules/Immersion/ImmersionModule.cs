@@ -29,6 +29,9 @@ namespace BoscaliSummer.Modules.Immersion
             immersion.Configure(context.Settings.Immersion, context.Logger);
             context.AddClientEffect(immersion);
             context.AddService<IImmersionSettings>(immersion);
+            CockpitPilot pilot = context.AddSceneService<CockpitPilot>(48);
+            pilot.Configure(context.Settings.Immersion, context.Logger);
+            context.AddClientEffect(pilot);
 
             context.AddClientSetting("IMMERSION", "IMMERSION MASTER",
                 "Master switch for all client-side cockpit immersion features.",
@@ -36,6 +39,9 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "HEAD MOTION",
                 "Cockpit view: rotational head inertia under G-load, roll lead, yaw lead, and breathing motion.",
                 context.Settings.Immersion.HeadMotionEnabled);
+            context.AddClientSetting("IMMERSION", "COMFORT MOTION",
+                "Reduce all added cockpit rotation to 25% and remove idle breathing.",
+                context.Settings.Immersion.ComfortMotionEnabled);
             context.AddClientSetting("IMMERSION", "EXTRA SHAKE",
                 "Cockpit view: dynamic vibrations for gunfire recoil, touchdowns, and runway roll.",
                 context.Settings.Immersion.ExtraShakeEnabled);
@@ -52,7 +58,7 @@ namespace BoscaliSummer.Modules.Immersion
                 "Cockpit view: physiological G-force visual effects (tunnel vision greyout under high G, redout under negative G).",
                 context.Settings.Immersion.GVignetteEnabled);
             context.AddClientSetting("IMMERSION", "SURFACE IMMERSION",
-                "Cockpit view: dynamic canopy and airframe surface effects (rain wetness, high-altitude frost, scorch, dirt).",
+                "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
                 context.Settings.Immersion.SurfaceImmersionEnabled);
             context.AddClientSetting("IMMERSION", "AIRFRAME CREAKS",
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.",
@@ -66,6 +72,14 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "PILOT STRAIN",
                 "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.",
                 context.Settings.Immersion.PilotStrainAudioEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT BODY",
+                "First-person flight suit, arms and legs using the native pilot model.", context.Settings.Immersion.PilotBodyEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT CONTROL MOTION",
+                "Hands follow reachable stick/throttle/collective controls; rudder feet, breathing and G-load bracing. Comfort Motion applies.",
+                context.Settings.Immersion.PilotControlMotionEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT REFLECTION",
+                "Faint pilot and helmet reflection on the windscreen; small pilot-only capture at most ten times per second.",
+                context.Settings.Immersion.PilotReflectionEnabled);
         }
     }
 }

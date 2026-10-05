@@ -21,7 +21,14 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.SupportMissileDetonatePatch),
             typeof(Patches.SupportMissileAuthorityPatch),
             typeof(Patches.SupportMissileDescentPatch),
-            typeof(Patches.CreditRewardPatch)
+            typeof(Patches.CreditRewardPatch),
+            typeof(Patches.CreditKillPatch),
+            typeof(Patches.ActivityInputPatch),
+            typeof(Patches.CyberLaunchMountPatch),
+            typeof(Patches.CyberLaunchFirePatch),
+            typeof(Patches.CyberDetectScopePatch),
+            typeof(Patches.CyberShareBlockPatch),
+            typeof(Patches.CyberUnitKilledPatch)
         };
 
         public void Install(ModuleContext context)
@@ -30,6 +37,11 @@ namespace BoscaliSummer.Modules.Support
             context.Services.TryGet(out IZoneFortificationService fortifications);
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
+            SpaceService space = context.AddSceneService<SpaceService>(51);
+            CyberService cyberService = context.AddSceneService<CyberService>(52);
+            SofService sofService = context.AddSceneService<SofService>(53);
+            OpsService opsService = context.AddSceneService<OpsService>(59);
+            OverlordService overlordService = context.AddSceneService<OverlordService>(60);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
@@ -39,6 +51,16 @@ namespace BoscaliSummer.Modules.Support
 
             network.Configure(manager);
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
+            space.Configure(manager);
+            manager.AttachSpace(space);
+            cyberService.Configure(manager, space);
+            manager.AttachCyber(cyberService);
+            sofService.Configure(manager, space, cyberService);
+            manager.AttachSof(sofService);
+            opsService.Configure(manager, space, cyberService, sofService);
+            manager.AttachOps(opsService);
+            overlordService.Configure(manager, space, cyberService, sofService, opsService);
+            manager.AttachOverlord(overlordService);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);
@@ -47,8 +69,10 @@ namespace BoscaliSummer.Modules.Support
             calls.Configure(manager, context.Settings.Support, observations);
             manager.AttachCalls(calls);
             hudLine.Configure(manager, calls);
+            SpaceFeedController feed = context.AddSceneService<SpaceFeedController>(57);
+            feed.Configure(manager, calls, context.Settings.Support, context.Logger);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
-            panel.Configure(manager, calls);
+            panel.Configure(manager, calls, feed);
             satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));

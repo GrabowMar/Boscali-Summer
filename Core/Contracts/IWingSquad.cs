@@ -37,6 +37,9 @@ namespace BoscaliSummer.Core.Contracts
 
         Sprite PilotPortrait(string name, string callsign);
 
+        /// <summary>Borrowed portrait for a role; clothing/equipment changes with role or faction.</summary>
+        Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1);
+
         /// <summary>Spawn an intercept flight through the native server spawner at a
         /// host-selected global ingress. Index zero is the ace. Empty when refused.</summary>
         Aircraft[] SpawnWingAt(Aircraft target, FactionHQ enemyHq, int seed, int tier,
@@ -62,13 +65,17 @@ namespace BoscaliSummer.Core.Contracts
         int PortraitFaceCount { get; }
         int PortraitHairCount { get; }
         int PortraitUniformCount { get; }
+        int PortraitAccessoryCount { get; }
         int PortraitBackdropCount { get; }
         string PortraitBodyLabel(int body);
         string PortraitUniformLabel(int uniform);
+        string PortraitAccessoryLabel(int accessory);
+        string PortraitBackdropLabel(int backdrop);
         string PersonaLabel(int persona);
         string RankNameForXp(int xp);
+        /// <summary>Preview reuses one mutable image; saved portraits remain cached and stable.</summary>
         Sprite PortraitForSelection(int body, int face, int hair, int uniform,
-            int accessory, int backdrop);
+            int accessory, int backdrop, bool preview = false);
         bool TryGetCustomPilot(string callsign, out CustomPilotView record);
         CustomPilotView[] ListCustomPilots();
         bool SaveCustomPilot(CustomPilotView record);

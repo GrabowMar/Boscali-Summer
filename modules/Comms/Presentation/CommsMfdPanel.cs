@@ -206,6 +206,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             console = AvConsole.Build(content, "COM", "MULTIPLAYER COMMS", TabSpecs.Length, Width, height);
             chips = console.Chips(3);
+            BindAudienceChip();
             console.Tabs(TabSpecs);
             console.PageChanged += _ => nextRefresh = 0f;
 
@@ -251,11 +252,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             float now = Time.unscaledTime;
 
             bool online = comms.Online;
-            string connText = !online ? "NOT CONNECTED"
-                : comms.HostSilent ? "HOST NOT ANSWERING"
+            string connText = comms.HostSilent ? "HOST NOT ANSWERING"
+                : !online ? "NOT CONNECTED"
                 : comms.IsHost ? "HOSTING COMMS" : "ONLINE";
             chips[0].Set(connText, !online || comms.HostSilent ? AvState.Caution : AvState.Info);
-            chips[1].Set(comms.Channel == CommsChannel.Team ? "TO TEAM" : "TO ALL",
+            chips[1].Set(comms.Channel == CommsChannel.Team ? "TO TEAM / CHANGE" : "TO ALL / CHANGE",
                 comms.Channel == CommsChannel.Team ? AvState.Ready : AvState.Caution);
             chips[2].Set(ToolName(comms.Tool), comms.Tool == CommsTool.None ? AvState.Inert : AvState.Info);
 
@@ -278,6 +279,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             if (alert != null) console.Footer.Set(alert, AvState.Caution);
             else if (prompt != null) console.Footer.Set(prompt, AvState.Info);
             else console.Footer.Set(ambient, AvState.Inert);
+        }
+
+        private void BindAudienceChip()
+        {
+            Image hit = AvLay.Solid(chips[1].Rect, "Change audience", Color.clear);
+            AvLay.Fill(hit.rectTransform);
+            AvHit.On(hit).Click = _ => { comms.ToggleChannel(); nextRefresh = 0f; };
+            AvHelpTip.Attach(hit.gameObject,
+                "Change audience on any COM page. TEAM reaches your side; ALL reaches both sides for one post, then returns to TEAM. The host can disable ALL.");
         }
 
         private string Ambient(CommsClientState state)

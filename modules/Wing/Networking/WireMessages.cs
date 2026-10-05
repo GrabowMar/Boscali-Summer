@@ -165,12 +165,15 @@ namespace BoscaliSummer.Modules.Wing.Networking
         }
     }
 
-    /// <summary>One member in a snapshot (11 bytes): no kinematics — the game syncs the aircraft. Slot is the member's seat
+    /// <summary>One member in a snapshot (14 bytes): no kinematics — the game syncs the aircraft. Slot is the member's seat
     /// (its #n is seat + 2); Element is the element it flies in (0 = A, spec WMC program §3.3).</summary>
     internal struct SnapshotMember
     {
         public uint Id;
         public byte Slot, Behaviour, Duty, Fuel, Ammo, Flags, Element;
+        /// <summary>Station Board (spec 2026-10-04): slot error in 10 m steps and a StationPhase; closure in m/s (+ = nearing).</summary>
+        public byte Err10, Phase;
+        public sbyte Closure;
     }
 
     /// <summary>Host → client, twice a second: the sender's wing as its HUD and menus show it.</summary>
@@ -199,6 +202,9 @@ namespace BoscaliSummer.Modules.Wing.Networking
                 w.U8(s.Ammo);
                 w.U8(s.Flags);
                 w.U8(s.Element);
+                w.U8(s.Err10);
+                w.U8((byte)s.Closure);
+                w.U8(s.Phase);
             }
         }
 
@@ -214,7 +220,7 @@ namespace BoscaliSummer.Modules.Wing.Networking
                 m.Members[i] = new SnapshotMember
                 {
                     Id = r.U32(), Slot = r.U8(), Behaviour = r.U8(), Duty = r.U8(), Fuel = r.U8(), Ammo = r.U8(), Flags = r.U8(),
-                    Element = r.U8(),
+                    Element = r.U8(), Err10 = r.U8(), Closure = (sbyte)r.U8(), Phase = r.U8(),
                 };
             return WireCodec.Done(r);
         }

@@ -1,0 +1,376 @@
+OTHER FEATURES AND CORE TEST RESTORATION AUDIT - 2026-10-03
+
+Scope: all 97 deleted files under Features except Command/Support/Progression, plus Framework, restored from f9a2c07e^ and reviewed against current production dependencies. Current imports migrated from Features/Framework/Runtime to Modules/Core; test assembly namespaces and file locations stay stable. No production source was changed by this audit.
+
+Review: production call sites/API and invariant documents, test assertions/scenarios, pure linked-source execution, every fixture source/stub/asmdef/runner dependency and failure propagation. Most domain expectations match unchanged linked implementation; exceptions and known limits are identified per file. Legacy TheaterOps director/offensive tests validate retained migration-domain code only; they do not establish that the legacy services are installed. New LivingWarRules and NavalTask tests cover current pure rules.
+
+Validation: final integrated pure runner reports 119 suites passed, 0 failed, 932,186 assertions including concurrent additions and internal Run methods. Owned runners pass PowerShell AST parsing and current static source-path inspection. Real Unity fixtures executed in isolated temporary projects: Events 1,412 text checks/64 flows; interaction menu PASS; Trench PASS; Rooftop 2,369 assertions; SoldierFactory 31 assertions; Parachute PASS; Weather 100 assertions; ENV 3,132 text checks/24 captures. CloudBench compiled and completed broken-high full / half / temporal / none modes.
+
+Limits: offline fixture adapters do not prove live Nuclear Option input, native AI, Mirage authority/serialization, late join, scene reload or subjective visuals/performance. Cloudbench timing is functional diagnostic output, not live game FPS acceptance. Rooftop editor runs do not exercise its separate BuildPlayer path. Concurrent Weather/Immersion work changed source and added RainBench/WeatherConsoleTests while this audit ran; additions were preserved and latest available harness snapshots were exercised. Input manifests and temporary fixture paths identify copied snapshots. Production DLL reflection in ENV validation requires a compatible built DLL.
+
+tests/BoscaliSummer.Tests/Features/AirSurvival/AirStationPolicyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Bounded idle-air objective ranks, advisory station split and last-second flare conditions.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/AceRadialMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Pure ACE fan geometry, collection caps, dwell/click navigation, recollection and leaf condition rechecks.
+  Verification: included in final 119-suite pure run; 39 direct assertion sites; cases: FanUsesAceStepsAndCentresOnParent, FanBecomesRingAtThreshold, SubLevelSqueezesIntoSpan, RadiusWidensAsStepNarrows, ExpandScaleAndSelector, ClosestPointWithinThreshold, CollectDropsHiddenAndPrunesEmptyBranches, CollectHonoursNodeBudget, RootOptionsFanRightOfCentre, DwellExpandsBranchAndKeepsBreadcrumb, LeafDwellCollapsesDeeperLevels, ReleaseRunsOnlyEnabledLeaf, ConditionsAreRecheckedBeforeRunning, ClickExpandsBranchImmediately, StatusAndIconTravelWithTheNode, StatusIsReadAgainOnRecollect, LayoutStopsAtVisibleCap, ToggleStatusReadsOnOff, Expand, Near.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/AutopilotHudCopyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Autoland and ILS copy, bounded beam/slope/radius and explicit warning words.
+  Verification: included in final 119-suite pure run; 15 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/AutopilotLandTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Manual override, weight speed, brake/energy/severity, carrier pattern gates.
+  Verification: included in final 119-suite pure run; 37 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/InteractionMenuUnityCheck.cs
+  Disposition: Migrated Autopilot and NOAvionics namespaces; preserves category, branch, icon/status, disabled/hovered fixture and explicit selector-highlight limitation. Current fixture PASS.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/InteractionMenuUnityStubs.cs
+  Disposition: Migrated lifecycle/Autopilot namespaces and supplied Core.Ui namespace; native input/catalog remain deliberately stubbed. Successful current fixture.
+
+tests/BoscaliSummer.Tests/Features/Autopilot/Run-InteractionMenuUnityCheck.ps1
+  Disposition: Removed absent Avionics source directory; copies current AvionicsUi root/Pure/Fui excluding tests. Fixture completes and checks result existence plus process exit; successful rendered menu.
+
+tests/BoscaliSummer.Tests/Features/Campaign/MissionInstallPlanTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Missing/owned/newer/foreign mission install revision decisions; never overwrite foreign content.
+  Verification: included in final 119-suite pure run; 4 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Comms/CommsTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 155 direct assertion sites; cases: CatalogIsWellFormed, TextIsSanitised, CodecRoundTripsAndValidates, SimplifyKeepsShapeAndBudget, ShapesAreClosedWhereTheyShouldBe, TeamPostsNeverReachTheOtherSide, PlacementIsValidated, AuthorBudgetRetiresOldest, OnlyAuthorOrHostErases, RateLimitStopsSpam, CallsDropAPingAtTheCaller, PollsCountOneBallotPerVoter, PollsCloseOnTime, DuelThrowStaysSecretAndResolves, DirectDuelsBuildRivalry, HuntRanksAndRevealsOnlyAtTheEnd, SnapshotShowsOnlyWhatTheViewerMaySee, ClientAppliesTheWholeLifecycle, ClientMutesAndSkipsSelfNoise, GlyphsStayInTheUnitBox, SnapshotReplaysSilently, SyncSkipsTheBucketButIsGated, CallPingsHaveTheirOwnSlotAndWords, RemovalsStayWithTheirAudience, OtherSideIsQuietAndLabelled, RefusalsReachTheHudAndUndoVotes.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/ContractMarkerTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 74 direct assertion sites; cases: VicinityBandIsGenerousAndSafe, ApproachAndBarStayInRange, CardsReadOnlyWhatTheHostPublished, SelectionOrdersInsideNearestThenLost, BoxGeometryKeepsMarkersOnScreen, ProjectionScalesLikeTheVanillaRing, RingAlphaFadesLikeVanilla, MarkerLookBorrowsTheVanillaIcon, LabelNudgePushesApartAndDecays, LabelGlideMovesAFifth.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/ContractSharesTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 11 direct assertion sites; cases: TestCancel, TestPayout.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationDirectorTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 39 direct assertion sites; cases: ChainMapIsExplicitAndExhaustedKindsStop, ChainDepthCeilingStopsPingPong, UnsetThresholdsMeanConventionalTempo, StageBoundariesFollowTheMissionsOwnThresholds, TempoClampsNonsenseInputs, AbortPenaltyOnlyForAcceptedContracts.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationMarkerCopyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 38 direct assertion sites; cases: FamiliesAreShortAndComplete, TitleAndDetailCarryTheContract, UnknownPartsAreDroppedNeverGuessed, DistanceReadsExactlyLikeVanilla, ToneFollowsReturnAndTheClock, VicinityBandAndApproachStayInRange.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 66 direct assertion sites; cases: ExtendedMissionsRequireTheirOwnEvidence, ReturnMissionsRetainStagesAndFailClosed, InterdictionDistinguishesDespawnFromCombat, AcceptanceAndContinuousTasks, CaptureAndInterdictionAwardOnce, DefenseRequiresObservedOwnership, TerminalStatesCannotPay, BoardRetainsHistoryAndBounds, InvalidTimeCannotChangeState.
+
+tests/BoscaliSummer.Tests/Features/DynamicOperations/OperationTitlesTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 5 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Events/EventDirectorTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 30 direct assertion sites; cases: OpeningRollAlwaysMovesAPrice, BalanceResolvesTargets, SuperEligibilityIsGated, TargetedSupersNeedALosingSide, SupersAreCappedAndSpaced, DisabledMeansNeverSuper, RecentEntriesAreAvoided, SelectionIsSeederDeterministic.
+
+tests/BoscaliSummer.Tests/Features/Events/EventSelectorTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 63 direct assertion sites; cases: CatalogIsWellFormed, CatalogIsGraded, SelectionIsStableAndAvoidsRepeats, DurationStaysInsideItsWindow, EffectStrengthScalesTheModifier, ResponseOnlyMovesThePriceInThePlayersFavour, DecisionRoutesStayBounded.
+
+tests/BoscaliSummer.Tests/Features/Events/EventsUnityCheck.cs
+  Disposition: Migrated Events/Core namespaces and NOAvionics root import; unchanged layout, decision-board/archive and late-fill gates. Current fixture PASS 1,412 text checks/64 flows.
+
+tests/BoscaliSummer.Tests/Features/Events/EventsUnityStubs.cs
+  Disposition: Migrated fixture namespaces to Modules.Events/Core.Lifecycle/Core.Game/Core.Fx and supplied Core.Ui namespace; fixture game values remain synthetic and do not validate actual transport/native hosting.
+
+tests/BoscaliSummer.Tests/Features/Events/Run-EventsUnityCheck.ps1
+  Disposition: Removed absent Avionics source directory, includes AvionicsUi/Pure plus root/Fui excluding test sources; remapped shared Core paths and requires PASS result. PASS 1,412 text checks/64 flows.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/CloudDeckTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Camera/plume/deck-side transparency ordering policy.
+  Verification: included in final 119-suite pure run; 5 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/CookoffTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Deterministic bounded 0-2 followups and delayed generations.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/FireScorchTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Separate ash/soot and small tree-clearance ranges, lobe overlap and monotonic growth.
+  Verification: included in final 119-suite pure run; 13 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/ForestIndexTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Cell/radius edge cases, negative coordinates, empty/unbuilt index and distributed tree lookup.
+  Verification: included in final 119-suite pure run; 33 direct assertion sites; cases: TestUnbuiltIndexReturnsFalse, TestEmptyIndexReturnsFalse, TestSinglePointHitRadius, TestCellBoundaryCrossing, TestMultiplePointsInSameCell, TestNegativeCoordinates, TestMultiCellPointDistribution.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/GroundSnapTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Surface anchoring, sea exclusion, bounded spread-height differences.
+  Verification: included in final 119-suite pure run; 6 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/HitEscalationTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Debounced visual hit stages and bounded breach/ground/tree-row scar dimensions.
+  Verification: included in final 119-suite pure run; 21 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/FireAndDestruction/ImpactScorchTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Yield-sized bounded scorch clusters and deterministic spatial jitter.
+  Verification: included in final 119-suite pure run; 15 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/HighCommand/HighCommandTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Scope comment now makes clear that live map diamonds remain removed; marker math is retained policy only. Independent read-only review confirms unchanged current domain semantics.
+  Verification: included in final 119-suite pure run; 100 direct assertion sites; cases: GenerationIsDeterministicAndBounded, PromotionMovesTheNextInLine, BonusesStateWhatACommanderIsWorth, CohesionTracksTheLivingRoster, EconomyPaysOnlyWhatItShould, StaffLogKeepsItsMemoryBounded, MapMarkersFollowTheFog, SelectionBracketsStayOnTheMarker, SnapshotRulesRejectMalformedRows.
+
+tests/BoscaliSummer.Tests/Features/Hud/HudShellTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Only surviving channel-filter parser; retired FUI shell behavior remains removed.
+  Verification: included in final 119-suite pure run; 7 direct assertion sites; cases: Channels.
+
+tests/BoscaliSummer.Tests/Features/Hud/HudTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Stable feed keys, warnings vs notices, expiry/mute/reset/capacity and current fixed-dock settings ladder.
+  Verification: included in final 119-suite pure run; 31 direct assertion sites; cases: FeedStore, Layout, Notices, Reusable.
+
+tests/BoscaliSummer.Tests/Features/Hud/ThirdPersonHudLayoutTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current third-person geometry across 16:9/21:9/32:9/4:3, aircraft frame clearance and idempotence.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites; cases: ClusterInsideAndClear, TargetCardInsideAndClear, KeepClearIsIdempotent, CollapsedCardHasNoHeight.
+
+tests/BoscaliSummer.Tests/Features/Hud/WingviewMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Frame-rate-independent pose smoothing, yaw/pitch bounds and nonfinite input sanitization.
+  Verification: included in final 119-suite pure run; 18 direct assertion sites; cases: FrameRateIndependence, LookAheadClamp, LevelHorizon, NaNSafety, Pose.
+
+tests/BoscaliSummer.Tests/Features/Intel/AirDefenceTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Scope comment identifies hardcoded WeaponInfo values as representative samples rather than claiming current game-asset verification. Independent read-only review confirms model assertions.
+  Verification: included in final 119-suite pure run; 28 direct assertion sites; cases: ConeRadiusMatchesAnalyzeTarget, EnvelopeEdgesNeverInventARing, StationsThatRingAndStationsThatDoNot, RadarGuidanceNeverComesFromMinRadar, CoverageAndExposureCountWhatTheyCover.
+
+tests/BoscaliSummer.Tests/Features/Intel/AttackProfileTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 18 direct assertion sites; cases: ABoltstrikeCoveredTargetIsRefusedAtEveryAltitude, AnR9OnlyTargetIsFlyableLowButNotAt300, TheArcFindsTheOpenSide, AnAttackerInsideARingStillGetsAProfile, StaleOnlyExposureIsFlagged, InvalidQueriesAreRefused.
+
+tests/BoscaliSummer.Tests/Features/Intel/KnownHostileTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 29 direct assertion sites; cases: FilterAdmitsOnlyWhatCanFightOrSee, EvictionKeepsAirDefenceAndMobileUnits, RediscoveryUpdatesInPlace, PreWarNeverDowngradesTracking, ReseedRecoversABatchedSyncThatFiredNoEvents.
+
+tests/BoscaliSummer.Tests/Features/Intel/ObservationTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current bounded observation storage/expiry and faction-local intel area reads, depending on module.
+  Verification: included in final 119-suite pure run; 30 direct assertion sites; cases: GridStampsCellsWithinRadius, APassStampsEachSourceCellOnce, NegativeCellsNeverAlias, GridStopsAtItsCeiling, ScoutedExpiresButAgeStaysKnown, RolesFollowTheUnitCode, AreaIntelSumsFreshGroundPower.
+
+tests/BoscaliSummer.Tests/Features/Intel/RingSetTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 45 direct assertion sites; cases: R9TrioTakesGuidanceFromItsRadarTruck, ALoneR9LauncherIsNotRadarGuided, BoltstrikeGuidesItself, TwoBandsAtOneSiteShareTheSite, MergeStopsAtTheSiteRadius, ChainedLaunchersAnchorOnARealLauncher, TheCapKeepsRadarOverIrOverGun, LaunchRingsStayUnknownUntilATrackedLauncherJoins, PreWarRingsAreMarkedUntilConfirmed, StaleNeedsEveryMemberStale, SensorsNeverRing, LaunchMemoryQuantisesRefreshesAndAges, LaunchMemoryReplacesItsOldestWhenFull, PreWarTakesOnlyFixedMissionSites, ADeadPreWarSiteLeavesOnlyOnceSeen.
+
+tests/BoscaliSummer.Tests/Features/Performance/FrameBudgetTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Warmup,hysteresis,load-hitch rejection,pause-reset and severeFPSwindows.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites; cases: Feed.
+
+tests/BoscaliSummer.Tests/Features/PlayerSpawnPriority/PlayerSpawnPriorityTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Native validated player spawn may evict only nearby unpiloted non-wing AI.
+  Verification: included in final 119-suite pure run; 2 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/QoL/FuelHudCopyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Fuel/divert wording,tone thresholds and clamped bars.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/QoL/ObservationTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current bounded observation storage/expiry and faction-local intel area reads, depending on module.
+  Verification: included in final 119-suite pure run; 7 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Radio/RadioHudCopyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current receiver/deck HUD copy with missing-content fallback.
+  Verification: included in final 119-suite pure run; 6 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Radio/RadioTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 96 direct assertion sites; cases: TuningMath, PropagationMath, SpectrumRows, VanillaHoldRules, InterceptRules, StationRules, DialAndProgramming, HuntMusicTransitions, WriteBigEndian.
+
+tests/BoscaliSummer.Tests/Features/Session/SessionTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Host-owned settings ledger applies/restores only admitted keys, retains first originals and bounded wire chunks.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites; cases: LedgerAppliesOnlyHostOwnedKeysAndRestoresTheOriginals, LedgerKeepsTheFirstOriginalAcrossRepeatedHostValues, ChunksStayWithinTheWireLimits.
+
+tests/BoscaliSummer.Tests/Features/Squad/AceCareerTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Authoritative damage/grace/cooldown,reward idempotence,caps,one-life successor and debug tier validation.
+  Verification: included in final 119-suite pure run; 32 direct assertion sites; cases: DebugTierOverridesCareerDifficulty, InvalidDamageCannotCreateThreat, GraceHuntAndCooldownDoNotBankDamage, DefeatPaysExactlyOnce, DifficultyAndBonusesStayBounded, PilotReplacementRequiresOneLifeDeath, RapidDeathsAndDelayedObservationsAreIdempotent.
+
+tests/BoscaliSummer.Tests/Features/Squad/SnapshotRevisionTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Deterministic nonzero revision, field/string boundaries and null/empty wire equivalence.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites; cases: EqualContentHasEqualRevision, EveryFieldChangesTheRevision, RevisionIsNeverZero.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/AreaResistanceTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites; cases: UnscoutedGroundTakesTheMedianOfScoutedTargets, WithNothingScoutedThePriorIsFour, HeldGroundAndMissingIntelKeepTheLiveScan, PowerRoundsHonestly.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/DirectorDecisionTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 36 direct assertion sites; cases: GroundUnderAttackIsNotAttackedTwice, WeaknessWinsTheAttack, SizingGrowsWithTheDefense, FieldworksChangeTargetAndWaveBudget, TheCommittedTargetSurvivesBetterOffers, HoldReserveAndCapacityShowInTheLog, ChestCapBlocksTheOpening, TheRealDefaultCostsOpenAnOffensive, ThreatOwnsTheEffortAtLowStance, OpportunityKeepsItAtHighStance, AnEmptyTheaterStaysQuiet, EffortNamesTheLabelNotTheKey, OutcomeWordsMatchTheBoard, TheDefaultChestOpensAnOffensive.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/DirectorScenarioTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/FrontlineTacticsTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 7 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/InfluenceTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 38 direct assertion sites; cases: DefaultsLeanAttackWithAnOpenChest, EverySetterIsBoundedAndReported, AxesLeanFavorAndAvoidWithinCeiling, DegenerateInputCannotCorrupt, TheChestIsPricedFromTheOffensiveCosts, AVotedChestIsReclampedNotReplaced, TheReserveIsBoundedByWaves.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/LivingWarRulesTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 3 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/LogisticsTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/NavalTaskTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 2 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/OffensiveTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 116 direct assertion sites; cases: PlanGathersThenPlansThenWaits, TargetOnlyWhenThePlanIsReady, CommitAddsWavesUpToTheCap, WavesDrawEscrowOnce, TwoGroupsAtHHourKeepTheThirdWaveScheduled, SpentWavesHoldAndCanBeReinforced, TheAssaultCeilingEndsALongFight, ConcludeRefundsOnce, ConcludedPlansExpire, TableBoundsAndPruning, ReadoutWordsCarryPhaseAndOutcome.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/PriorityTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/StaffLogTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 11 direct assertion sites; cases: ARepeatedLineIsNotLoggedTwice, NewestFirstBoundedAndCut.
+
+tests/BoscaliSummer.Tests/Features/TheaterOps/TheaterOpsHudCopyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Trenches/Run-TrenchUnityCheck.ps1
+  Disposition: Remapped territory contract path; quotes space-containing project/log paths; clears stale result and requires both zero exit and PASS. Current real Unity fixture PASS.
+
+tests/BoscaliSummer.Tests/Features/Trenches/TrenchGameStubs.cs
+  Disposition: Migrated Trenches namespace; retained terrain/spawn/floating-origin adapters and native instance-list catalog. Fixture validates adapter contracts, not actual Mirage or AI.
+
+tests/BoscaliSummer.Tests/Features/Trenches/TrenchTests.cs
+  Disposition: Updated exact build order for Cover at step 4: full 15,bare 7,support 10. Added mature-stage roof gating and strict radial 7 m firing-bay clearance. Other bounded siting, native stage, geometry, pressure, wire and barrage assertions preserved.
+  Verification: included in final 119-suite pure run; 172 direct assertion sites; cases: TestHoldFloors, TestFieldAbandonment, TestBeltLadder, TestSideResolution, TestContestedFrontSide, TestBuildableGround, TestResample, TestSplinePlacer, TestWindowByArc, TestNormalsAndClosure, TestTraverseWave, TestDensifyAndWave, TestSapGap, TestWireValidation, TestBuildSteps, TestRoutePlanning, TestDefensibleSiting, TestSitingNudges, TestPressureOrder, TestRunSplitting, TestStageRules, TestBaySchedule, TestMirrorSpacing, TestPressureLife, TestBarrageMath, TestAirfieldClear, TestFactionRotation.
+
+tests/BoscaliSummer.Tests/Features/Trenches/TrenchUnityCheck.cs
+  Disposition: Migrated namespaces; retained mesh/profile/curve/planner, garrison,no-respawn, native-ring safety, works, material and floating-origin LOD checks. Current real Unity fixture PASS.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/GarrisonCompositionTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current nativeMG/AT/AAdistribution,tier/clamped budgets and nonfinite boundaries.
+  Verification: included in final 119-suite pure run; 14 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/GarrisonMarkerInfoTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Replicated marker name/tier/footprint suffix parsing with invariant culture and malformed-row rejection.
+  Verification: included in final 119-suite pure run; 26 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/ParachuteUnityCheck.cs
+  Disposition: Assertions now throw after requesting failing editor exit, so execution cannot later log/pass after an error. Current mesh bounds/submesh/normals fixture PASS.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/RooftopUnityCheck.cs
+  Disposition: Retained actualUnityphysics and production rooftop/decoration sources with explicit native/game stubs. Current editor fixture PASS 2,369 assertions; player build/nativeAI/networking remain separate checks.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-ParachuteUnityCheck.ps1
+  Disposition: Changed fire-and-forget runner to wait with timeout, check exit and required assertion-pass marker. Current editor fixture PASS.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-RooftopUnityCheck.ps1
+  Disposition: Remapped Deterministic source; clears stale result and requires actual PASS for editor runs; BuildPlayer mode correctly validates build separately. Current editor fixture PASS 2,369 assertions.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/Run-SoldierFactoryUnityCheck.ps1
+  Disposition: Retained production source paths; requires assertion-pass marker and rejects explicit fixture FAIL. Narrowed output regex to fixture lines. Current fixture PASS 31 assertions.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/SiegeMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Vanilla-scaled defense/armor, tier/nest scaling and strongpoint floor semantics.
+  Verification: included in final 119-suite pure run; 40 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/SoldierFactoryUnityCheck.cs
+  Disposition: Assertions now throw after requesting failing editor exit to stop false-success fallthrough. Existing stripped-component, body/animator/template lifecycle checks retained. Current fixture PASS 31 assertions.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/StrongpointHitPolicyTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Native occupied-shell four-hit staging,overwhelming blast,debounce and client/host authority gates.
+  Verification: included in final 119-suite pure run; 24 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/TroopDeploymentTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Current deploy loadout,carrier validation,drop budget and geometry policies.
+  Verification: included in final 119-suite pure run; 24 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/UrbanRuinMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Deterministic bounded geometry math still used by destruction presentation; no revived ruin ownership.
+  Verification: included in final 119-suite pure run; 14 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/UrbanCombat/WarzoneDressingMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs. Coverage: Deterministic replicated-name dressing geometry,hash and caps.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/BoscaliWeatherEnv.asmdef
+  Disposition: Retained Editor-only assembly and existing TMP/UGUI references; successful current ENV fixture confirms assembly dependency closure.
+
+tests/BoscaliSummer.Tests/Features/Weather/CanopyScoringTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 23 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/CloudBench.cs
+  Disposition: Migrated Weather namespaces; catch now exits 1 instead of reporting failure and Quit(0). Preserved concurrent console/flythrough/temporal benchmark additions. Functional broken-high player exercised full / half / temporal / none; timings are not live game performance evidence.
+
+tests/BoscaliSummer.Tests/Features/Weather/CloudBodiesTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/CloudDressingStubs.cs
+  Disposition: Added current native LevelInfo sun/moon fields required by WeatherLighting; maintained fixture-only native-cloud ownership and reset adapters. Weather fixture compiles and passes.
+
+tests/BoscaliSummer.Tests/Features/Weather/CloudNoiseTests.cs
+  Disposition: Extended deterministic checking to allRGBAchannels including B Worley lobes; verifies lobes vary spatially, preserving shape/erosion/alpha and seed checks.
+  Verification: included in final 119-suite pure run; 4 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/LightningMathTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 9 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/RainSkyMathTests.cs
+  Disposition: Replaced obsolete brighter-than-fog/invisible-night expectations with current darker cool tint and exact 22 percent night floor; over-bright input must clamp to daytime tint. Fog/ambient/write-recognition assertions retained.
+  Verification: included in final 119-suite pure run; 20 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/RainVisualMathTests.cs
+  Disposition: Replaced obsolete 350/1600 emission expectations with authored 800/12000 and 6400 midpoint; preserved density/gust scaling,2500 particle budget, height/floating-origin exposure and alpha invariants.
+  Verification: included in final 119-suite pure run; 22 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/Run-CloudBench.ps1
+  Disposition: Remapped Core.Math/Core.Fx dependencies; uses usable f 3 editor and player exit/result checks; preserves concurrent evidence manifests. Invalid filter with no measurements correctly fails; broken-high functional run succeeds.
+
+tests/BoscaliSummer.Tests/Features/Weather/Run-WeatherEnvUnityCheck.ps1
+  Disposition: Retained production-DLL reflection fixture with current managed references; added mandatory OK result check so missing results cannot pass. Successful current run.
+
+tests/BoscaliSummer.Tests/Features/Weather/Run-WeatherUnityCheck.ps1
+  Disposition: Remapped Framework/Core.Math paths; preserved concurrent RainBench/EvidenceDir and manifest additions. Usable editor default 2022.3.62f3; f 2 installation lacks its PackageManager server. Current regular weather fixture completes and propagates failures.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherDebugTests.cs
+  Disposition: Added FAIR to complete ascending preset ladder; removed retired fine-tuning assertions which only tested two locally defined lambdas rather than production behavior. Existing preset and real rain-resolver assertions retained.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherEnvUnityCheck.cs
+  Disposition: Migrated reflection namespaces and NOAvionics import; removed retired Chip 0/Chip 1 fields, supplies current Next/NextFrac and 13-point density profile. Preserved contrast, overflow, overlap, icon and late-fill gates. PASS 3,132 text checks/24 captures.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherFieldTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 94 direct assertion sites; cases: TimelineStepsOnTheInterval, StatesMoveOnlyToNeighbours, HeldSkyNeverChanges, SkyIsStaticBetweenFades, FadesNeverPop, LayoutOnlyChangesUnderAnEmptySky, StatesBuildRealisticSkies, CoverGrowsUpTheLadder, FairCloudGroupsHaveSeparateCores, SuperstructuresAreStaticScenery, FrontSplitsTheSky, ConsoleFormationsFollowTheKey, FieldIsDeterministic, ForecastEqualsLiveField, ClassificationAndConditions, DomainStaysFreeOfUnity, VisibilityFollowsRain, MetarReadsLikeOne, CloudDensityMapsCover, FlightLevelPrecipitation, FrontCloudProfilesHaveVerticalStructure.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherForecastTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 24 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherRegimeTests.cs
+  Disposition: Restored and migrated production references; assertions retained against current linked APIs.
+  Verification: included in final 119-suite pure run; 16 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Features/Weather/WeatherUnityCheck.cs
+  Disposition: Migrated production namespaces/Core.Fx; replaced stale 1000 cap and below 10 percent-night assertions with current 2500 and 22 percent floor. Preserved all shader/material, canopy, teardown, terrain and native-cloud checks; preserved concurrent rain-lighting additions. Standalone PASS 100 assertions.
+
+tests/BoscaliSummer.Tests/Framework/FrameworkTests.cs
+  Disposition: Migrated FeatureMetadata/FeatureGraph/FeatureId to ModuleMetadata/ModuleGraph/ModuleId and separated Core.Services lookup; preserved dependency, cycle, exclusion and settings-math checks.
+  Verification: included in final 119-suite pure run; 19 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Framework/FxBusTests.cs
+  Disposition: Retained pure budget byte accounting, format mapping and quality-tier assertions; imports now Core.Contracts/Core.Fx. This does not exercise live GPU pools or voice allocation.
+  Verification: included in final 119-suite pure run; 20 direct assertion sites; cases: Budget_ClampsNegativeCeilings, RtBytes_CountsColourAndDepth, ColourBits_MapsKnownFormats, Quality_MapsLevelThirds, Scales_AreFullOnlyOnHigh.
+
+tests/BoscaliSummer.Tests/Framework/FxRegistryTests.cs
+  Disposition: Retained bounded, idempotent registration, duplicate ownership, diagnostics fault isolation and reverse-order teardown assertions; Core namespaces.
+  Verification: included in final 119-suite pure run; 13 direct assertion sites.
+
+tests/BoscaliSummer.Tests/Framework/WingApiVersionTests.cs
+  Disposition: Moved adapter import to Core.Game; API versions 1/2 and presence-board precedence still match current adapter.
+  Verification: included in final 119-suite pure run; 8 direct assertion sites.
+
+Concurrent Weather additions preserved: RainBench.cs and WeatherConsoleTests.cs (not part of the 97 restored files); current WeatherConsoleTests participates in the final pure runner. Their new functionality is separate from restoration and is not counted as original deleted-test recovery.

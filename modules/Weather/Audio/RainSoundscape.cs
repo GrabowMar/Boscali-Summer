@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Audio
 {
-    /// <summary>Two bounded, baked loops: rain rush outside and drops on cockpit glass.</summary>
+    /// <summary>One audible loop per view: exterior rush or cockpit glass patter.</summary>
     internal sealed class RainSoundscape : MonoBehaviour
     {
         private const int SampleRate = 22050;
@@ -13,6 +13,9 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         private AudioSource rush;
         private AudioSource patter;
+        private AudioSource active;
+        private AudioLowPassFilter rushFilter;
+        private AudioLowPassFilter patterFilter;
         private AudioClip rushClip;
         private AudioClip patterClip;
         private float[] rushSamples;
@@ -25,18 +28,24 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         internal bool ClipsReady => rushClip != null && patterClip != null;
         internal bool IsRouted => rush != null && rush.outputAudioMixerGroup != null;
-        internal bool IsPlaying => playing && rush != null && rush.isPlaying;
+        internal bool IsPlaying => playing && ((rush != null && rush.isPlaying) || (patter != null && patter.isPlaying));
         internal float RushVolume => rush != null ? rush.volume : 0f;
         internal float PatterVolume => patter != null ? patter.volume : 0f;
+        internal float ExteriorCutoff => rushFilter != null ? rushFilter.cutoffFrequency : 22000f;
+        internal float CanopyCutoff => patterFilter != null ? patterFilter.cutoffFrequency : 22000f;
 
         internal void Initialize()
         {
             rush = gameObject.AddComponent<AudioSource>();
             Configure(rush);
+            rushFilter = gameObject.AddComponent<AudioLowPassFilter>();
+            rushFilter.cutoffFrequency = 7500f;
             var patterRoot = new GameObject("CanopyPatter");
             patterRoot.transform.SetParent(transform, false);
             patter = patterRoot.AddComponent<AudioSource>();
             Configure(patter);
+            patterFilter = patterRoot.AddComponent<AudioLowPassFilter>();
+            patterFilter.cutoffFrequency = 4200f;
 
             ThreadPool.QueueUserWorkItem(_ =>
             {
@@ -57,7 +66,8 @@ namespace BoscaliSummer.Modules.Weather.Audio
             });
         }
 
-        internal void UpdateAudio(float rain, float cloud, float glassMoisture, bool cockpit, bool enabled)
+        internal void UpdateAudio(float rain, float cloud, float glassMoisture, bool cockpit, bool enabled,
+            float airspeedMps = 0f, float heightAboveGroundM = 0f, float exposure01 = 1f)
         {
             if (rush == null || patter == null || bakeState == 2) return;
             if (!ClipsReady && !CreateClips()) return;
@@ -68,26 +78,29 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 rush.outputAudioMixerGroup = mixer;
                 patter.outputAudioMixerGroup = mixer;
             }
-            // Do not bypass the game's effects-volume control while its mixer is unavailable.
-            float targetRush = enabled && mixer != null
-                ? Mathf.Clamp01(rain * 0.28f + cloud * 0.12f) * (cockpit ? 0.65f : 1f) : 0f;
-            float targetPatter = enabled && mixer != null && cockpit
-                ? Mathf.Clamp01(glassMoisture * 0.38f + rain * 0.07f) : 0f;
-
-            if (!playing && (targetRush > 0.01f || targetPatter > 0.01f) && FxVoiceBus.TryStartLoop(VoiceId))
+            if (!enabled || mixer == null) { Stop(); return; }
+            // Condensation has no impact sound. Rain is unexposed water; shelter is applied
+            // here so a hangar retains the quiet surrounding rain without canopy patter.
+            var target = EnvironmentAudioMath.Rain(rain, cockpit, airspeedMps,
+                heightAboveGroundM, exposure01, Time.unscaledTime);
+            float dt = Mathf.Clamp(Time.deltaTime, 0f, 0.05f);
+            AudioSource selected = cockpit ? patter : rush;
+            AudioLowPassFilter selectedFilter = cockpit ? patterFilter : rushFilter;
+            selectedFilter.cutoffFrequency = Mathf.MoveTowards(selectedFilter.cutoffFrequency, target.cutoff, dt * 6000f);
+            // A view change fades the outgoing loop before starting the incoming loop.
+            // This preserves the one-voice reservation instead of crossfading two voices.
+            if (playing && active != null && active != selected)
             {
-                rush.Play();
-                patter.Play();
-                playing = true;
+                active.volume = Mathf.MoveTowards(active.volume, 0f, dt * 0.8f);
+                if (active.volume > 0.001f) return;
+                active.Stop(); active.volume = 0f; active = null;
             }
+            if (!playing && target.gain > 0.005f && FxVoiceBus.TryStartLoop(VoiceId)) playing = true;
             if (!playing) return;
-
-            float step = Mathf.Max(0f, Time.deltaTime) * 0.5f;
-            rush.volume = Mathf.MoveTowards(rush.volume, targetRush, step);
-            patter.volume = Mathf.MoveTowards(patter.volume, targetPatter, step);
-            if (targetRush <= 0.01f && targetPatter <= 0.01f &&
-                rush.volume <= 0.001f && patter.volume <= 0.001f)
-                Stop();
+            if (active == null && target.gain > 0.005f) { active = selected; active.Play(); }
+            if (active == null) { Stop(); return; }
+            active.volume = Mathf.MoveTowards(active.volume, target.gain, dt * 0.5f);
+            if (target.gain <= 0.005f && active.volume <= 0.001f) Stop();
         }
 
         private bool CreateClips()
@@ -108,6 +121,8 @@ namespace BoscaliSummer.Modules.Weather.Audio
             source.playOnAwake = false;
             source.loop = true;
             source.spatialBlend = 0f;
+            source.dopplerLevel = 0f;
+            source.reverbZoneMix = 0f;
             source.volume = 0f;
         }
 
@@ -126,6 +141,26 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 right += 0.035f * (white - side * 0.25f - right);
                 samples[i * 2] = (left - low) * 0.65f + white * 0.015f;
                 samples[i * 2 + 1] = (right - low) * 0.65f + white * 0.015f;
+            }
+            // Warm surface impacts give low views texture; the per-source height/shelter
+            // filter and gain soften these into the quiet free-air bed farther from ground.
+            for (int hit = 0; hit < seconds * 58; hit++)
+            {
+                int start = random.Next(frames);
+                float size = (float)random.NextDouble();
+                float pan = 0.1f + (float)random.NextDouble() * 0.8f;
+                float filter = 0f;
+                int length = (int)(SampleRate * (0.012f + size * 0.033f));
+                for (int i = 0; i < length; i++)
+                {
+                    filter += (0.13f + size * 0.1f) * ((float)(random.NextDouble() * 2 - 1) - filter);
+                    float t = (float)i / SampleRate;
+                    float value = filter * Math.Min(1f, t * 650f) * (float)Math.Exp(-t * 95f)
+                        * (0.18f + size * 0.25f);
+                    int index = ((start + i) % frames) * 2;
+                    samples[index] += value * (float)Math.Sqrt(1f - pan);
+                    samples[index + 1] += value * (float)Math.Sqrt(pan);
+                }
             }
             playableFrames = CrossfadeLoop(samples, frames);
             Normalize(samples, playableFrames, 0.16f);
@@ -197,11 +232,14 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         private void Stop()
         {
-            rush.Stop();
-            patter.Stop();
+            if (rush != null) { rush.Stop(); rush.volume = 0f; }
+            if (patter != null) { patter.Stop(); patter.volume = 0f; }
             FxVoiceBus.EndLoop(VoiceId);
             playing = false;
+            active = null;
         }
+
+        internal void Release() => Stop();
 
         private void OnDestroy()
         {

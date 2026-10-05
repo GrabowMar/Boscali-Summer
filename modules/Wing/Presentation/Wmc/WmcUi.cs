@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The route editor's draft and the map's right-click orders (spec WMC program §4-§5).</summary>
         public readonly RouteDraft Draft = new RouteDraft();
         public readonly WmcMapInput Map = new WmcMapInput();
+        /// <summary>The QUEUE toggle on ORDERS: map orders add to the scope's element lane (as holding shift does) instead of replacing its task.</summary>
+        public bool Queue;
 
         /// <summary>Scope, label and element from the selection over this refresh's rows. The panel calls it on refresh, and
         /// every selection handler calls it at once (review P3 I3), so an order pressed right after a click goes to what

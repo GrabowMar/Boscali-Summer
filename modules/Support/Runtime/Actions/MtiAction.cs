@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
@@ -18,9 +19,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             try
             {
-                int contacts = ReconAction.Reveal(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value, context.Logger, RevealFilter.Ground,
-                    minimumSpeed: ReconAction.StationaryThreshold);
+                if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
+                int contacts = context.Host.OpenSpaceWindow(context.Owner, context.Target,
+                    context.Settings.SarSceneRadius.Value, BirdKind.Radar, ReconAction.StationaryThreshold, float.MaxValue);
+                if (contacts < 0) return SupportResult.SpawnFailed;
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }

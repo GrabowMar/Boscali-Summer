@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public bool HasCamera;
         public float CameraAlt, AirDensity, SoundSpeed;
+        public bool HasViewAir;
+        public float ViewCloud, ViewRain, ViewMoisture, ViewTemperature;
 
         public float SunElevation, SunAzimuth, TimeOfDay, Sunrise, Sunset;
         public bool PolarDay, PolarNight;
@@ -69,9 +71,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private EnvConditionCard card;
         private AvGauge visGauge, rainGauge, turbGauge, nextGauge;
         private AvHazardBar stormBar;
+        private AvRow viewAirRow;
         private EnvProfile profile;
         private EnvOutlookStrip outlook;
         private AvEqualizer coverEq;
+        private AvRow forecastMissing;
 
         // SKY & AIR
         private EnvSunCard sun;
@@ -127,6 +131,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             nextGauge = new AvGauge(p.Content, "NEXT", AvGaugeShape.Segments, 64f);
             nextGauge.Help = "NEXT: time to the next weather step. The ladder fills as the current state runs out; the sky then holds or moves one state along. HELD means the host or the mission froze it.";
             p.Row(Track(pg, visGauge), Track(pg, rainGauge), Track(pg, turbGauge), Track(pg, nextGauge));
+            viewAirRow = Track(pg, p.Add(new AvRow(p.Content)));
+            viewAirRow.Help = "VIEW AIR: conditions at the current camera. Cloud density follows visible cloud bodies, including clear gaps. Rain is falling precipitation; cloud moisture can wet the glass without rain. Temperature is the local weather estimate at altitude.";
             // Storm risk is only drawn while it is real; it is not a page part so the empty state cannot re-show it.
             stormBar = p.Add(new AvHazardBar(p.Content, "STORM RISK"));
             stormBar.SetShown(false);
@@ -136,6 +142,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             outlook.SetHelp("NEXT 60 MIN: the expected sky now and at +5, +10, +15, +30 and +60 minutes. The bar under each icon is the chance of rain; amber or red marks rain or a storm.");
             coverEq = Track(pg, p.Add(new AvEqualizer(p.Content, "COVER 60 MIN", 36f), 1f));
             coverEq.Help = "COVER 60 MIN: expected cloud cover from now (left) to +60 minutes (right), one bar per five minutes. Growing bars mean the sky is closing in; the text gives cover now and at +60.";
+            forecastMissing = p.Add(new AvRow(p.Content));
+            forecastMissing.Set("OUTLOOK UNAVAILABLE", "Waiting for mission weather data.", "", AvState.Inert);
+            forecastMissing.SetShown(false);
             AddEmpty(p, pg);
         }
 
@@ -152,7 +161,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             altGauge.Help = "ALT M: your camera altitude in metres; the ladder is full at 12 000 m. Density and the speed of sound are read at this height.";
             densityGauge = new AvGauge(p.Content, "DENSITY", AvGaugeShape.Segments, 64f);
             soundGauge = new AvGauge(p.Content, "SOUND M/S", AvGaugeShape.Segments, 64f);
-            densityGauge.Help = "DENSITY: air density at your altitude; the ladder is full at 1.5. Thin air cuts lift and engine power.";
+            densityGauge.Help = "DENSITY: air density at your altitude as a percentage of the mission's sea-level density. The ladder is full at 100% SL; thin air cuts lift and engine power.";
             soundGauge.Help = "SOUND M/S: speed of sound at your altitude, in metres per second. The ladder is full at 400.";
             p.Row(Track(pg, altGauge), Track(pg, densityGauge), Track(pg, soundGauge));
             // Shown only while the density profile is known; not a tracked page part so the empty state cannot re-show it.
@@ -183,6 +192,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 for (int i = 0; i < metrics.Length; i++) metrics[i].Set("—", "", 0f, AvState.Inert);
                 stormBar.SetShown(false);
                 densityEq.SetShown(false);
+                forecastMissing.SetShown(false);
                 return;
             }
 
@@ -192,7 +202,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             metrics[1].Set(AvNum.Fixed(d.Deck, 0), "M", Mathf.Clamp01(d.Deck / 4000f), lowDeck ? AvState.Caution : AvState.Ready);
             metrics[2].Set(AvNum.Fixed(d.WindKts, 0), "KT " + AvNum.Fixed(d.WindFrom, 0) + "°",
                 Mathf.Clamp01(d.WindKts / 40f), d.WindKts > 25f ? AvState.Caution : AvState.Ready);
-            metrics[3].Set(d.HasCamera ? AvNum.Percent(d.AirDensity) : "—", "SL", Mathf.Clamp01(d.AirDensity), AvState.Ready);
+            float density = DensityRatio(d);
+            bool hasDensity = d.HasCamera && density >= 0f;
+            metrics[3].Set(hasDensity ? AvNum.Percent(density) : "—", "SL", hasDensity ? Mathf.Clamp01(density) : 0f,
+                !hasDensity ? AvState.Inert : density < 0.6f ? AvState.Caution : AvState.Ready);
 
             if (allPages || Console.CurrentPage == PageWeather) ApplyWeather(d);
             if (allPages || Console.CurrentPage == PageSky) ApplySky(d);
@@ -215,6 +228,18 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private void ApplyWeather(EnvData d)
         {
             float rain = Mathf.Clamp01(d.Rain);
+            viewAirRow.SetShown(d.HasViewAir);
+            if (d.HasViewAir)
+            {
+                bool cloud = d.ViewCloud > 0.08f;
+                bool wet = d.ViewRain > 0.02f;
+                bool coldWet = d.ViewTemperature < 0f && Mathf.Max(d.ViewRain, d.ViewMoisture) > 0.02f;
+                string air = coldWet ? "COLD MOISTURE" : wet ? "RAIN" : cloud ? "IN CLOUD" : "CLEAR AIR";
+                viewAirRow.Set("VIEW AIR / " + air,
+                    "CLOUD " + AvNum.Percent(d.ViewCloud) + " · RAIN " + AvNum.Percent(d.ViewRain) +
+                    " · MOISTURE " + AvNum.Percent(d.ViewMoisture),
+                    AvNum.Fixed(d.ViewTemperature, 0) + "°C EST", coldWet ? AvState.Caution : AvState.Info);
+            }
             FlightCat(d, out string cat, out AvState catState);
 
             int lit = EnvStateRow.LitFor(d.Regime);
@@ -270,7 +295,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Base = d.Deck, Top = d.Top, CameraAlt = d.CameraAlt, HasCamera = d.HasCamera, State = statusState, Status = status,
             });
 
-            if (rows == null) return;
+            bool hasForecast = rows != null && rows.Length > 0;
+            outlook.SetShown(hasForecast);
+            coverEq.SetShown(hasForecast);
+            forecastMissing.SetShown(!hasForecast);
+            if (!hasForecast) return;
             for (int i = 0; i < rows.Length; i++)
             {
                 EnvForecastRow r = rows[i];
@@ -278,7 +307,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     : r.Rain > 0.2f ? AvState.Caution : RegimeState(r.Regime);
                 outlook.Set(i, i == 0 ? "NOW" : "+" + r.OffsetMinutes, i == 0, r.Regime, r.Code, r.Rain, st);
             }
-            if (rows.Length == 0) return;
             // 13 bars on a true time axis (0..60 min, 5 min apiece), interpolated between the forecast steps.
             var bars = new float[13];
             for (int b = 0; b < bars.Length; b++)
@@ -327,22 +355,24 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             });
 
             float[] dens = d.DensityByAlt;
-            densityEq.SetShown(dens != null && dens.Length > 0);
-            if (dens != null && dens.Length > 0)
+            float density = DensityRatio(d);
+            bool hasDensityProfile = dens != null && dens.Length > 0 && dens[0] > 0f;
+            densityEq.SetShown(hasDensityProfile);
+            if (hasDensityProfile)
             {
                 int m = Mathf.Min(dens.Length, densityBuf.Length);
                 var shown = new float[m];
-                for (int i = 0; i < m; i++) shown[i] = Mathf.Clamp01(dens[i] / 1.5f);
-                densityEq.Set(shown, d.HasCamera ? AvNum.Percent(d.AirDensity) + " @ " + AvNum.Fixed(d.CameraAlt / 1000f, 1) + " KM" : "",
-                    d.HasCamera && d.AirDensity < 0.6f ? AvState.Caution : AvState.Ready);
+                for (int i = 0; i < m; i++) shown[i] = Mathf.Clamp01(dens[i] / dens[0]);
+                densityEq.Set(shown, d.HasCamera ? AvNum.Percent(density) + " SL @ " + AvNum.Fixed(d.CameraAlt / 1000f, 1) + " KM" : "",
+                    d.HasCamera && density < 0.6f ? AvState.Caution : AvState.Ready);
             }
 
             if (d.HasCamera)
             {
                 altGauge.Set(Mathf.Clamp01(d.CameraAlt / 12000f), AvNum.Fixed(d.CameraAlt, 0), AvState.Ready);
-                bool thin = d.AirDensity < 0.6f;
-                AvState densState = thin ? AvState.Caution : AvState.Ready;
-                densityGauge.Set(Mathf.Clamp01(d.AirDensity / 1.5f), Tag(AvNum.Percent(d.AirDensity), densState), densState);
+                bool thin = density < 0.6f;
+                AvState densState = density < 0f ? AvState.Inert : thin ? AvState.Caution : AvState.Ready;
+                densityGauge.Set(Mathf.Clamp01(density), density < 0f ? "—" : Tag(AvNum.Percent(density), densState), densState);
                 soundGauge.Set(Mathf.Clamp01(d.SoundSpeed / 400f), AvNum.Fixed(d.SoundSpeed, 0), AvState.Ready);
             }
             else
@@ -355,12 +385,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private static void FlightCat(EnvData d, out string name, out AvState state)
         {
-            FlightCategory c = WeatherWords.Category(d.VisibilityKm < 0f ? 50f : d.VisibilityKm, d.Deck);
+            if (d.VisibilityKm < 0f) { name = "N/A"; state = AvState.Inert; return; }
+            FlightCategory c = WeatherWords.Category(d.VisibilityKm, d.Deck);
             name = WeatherWords.CategoryName(c);
             state = c == FlightCategory.Vfr ? AvState.Ready
                 : c == FlightCategory.Mvfr ? AvState.Info
                 : c == FlightCategory.Ifr ? AvState.Caution : AvState.Danger;
         }
+
+        private static float DensityRatio(EnvData d) => d.DensityByAlt != null && d.DensityByAlt.Length > 0 && d.DensityByAlt[0] > 0f
+            ? d.AirDensity / d.DensityByAlt[0] : -1f;
 
         internal static AvState RegimeState(WeatherRegimeType type)
         {

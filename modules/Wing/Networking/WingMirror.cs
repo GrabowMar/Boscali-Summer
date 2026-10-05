@@ -24,7 +24,8 @@ namespace BoscaliSummer.Modules.Wing.Networking
         public static byte Fraction(float f) => f >= 1f ? (byte)255 : f > 0f ? (byte)(f * 255f + 0.5f) : (byte)0;
 
         public static SnapshotMember Member(uint id, int slot, byte behaviour, MemberDuty duty, float fuel, float ammo,
-            bool fallingBehind, bool bingo, bool joker, bool winchester, int element = 0, bool damaged = false)
+            bool fallingBehind, bool bingo, bool joker, bool winchester, int element = 0, bool damaged = false,
+            byte err10 = 0, sbyte closure = 0, byte phase = 2)
         {
             SnapshotFlags flags = (fallingBehind ? SnapshotFlags.FallingBehind : 0) | (bingo ? SnapshotFlags.Bingo : 0)
                 | (joker ? SnapshotFlags.Joker : 0) | (winchester ? SnapshotFlags.Winchester : 0) | (damaged ? SnapshotFlags.Damaged : 0);
@@ -32,6 +33,7 @@ namespace BoscaliSummer.Modules.Wing.Networking
             {
                 Id = id, Slot = (byte)Math.Max(0, Math.Min(255, slot)), Behaviour = behaviour, Duty = (byte)duty,
                 Fuel = Fraction(fuel), Ammo = Fraction(ammo), Flags = (byte)flags, Element = (byte)element,
+                Err10 = err10, Closure = closure, Phase = phase,
             };
         }
     }

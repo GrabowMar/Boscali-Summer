@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>The cloud renderer's weather maps for one settled state: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
     /// bytes ready to upload. Pure: built on a worker, or once on the main thread to preload.
-    /// Structure: sheet cover, front cover, cell shape, cloud top. Profiles: front base, front
+    /// Structure: sheet cover, front cover, cell shape, low/tower top. Profiles: front base, front
     /// top, cloud base, rain.</summary>
     internal sealed class CloudMaps
     {
@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// outside [b, g] with margins, no cloud can be drawn and the march skips its density.</summary>
         internal readonly byte[] Envelope = new byte[EnvelopeSize * EnvelopeSize * 4];
         internal float Bottom, Top, HorizonCover;
+        /// <summary>Maximum encoded precipitation alpha across both displayed map levels, 0..1.</summary>
+        internal float RainMaximum;
         internal int Revision;
 
         private CloudMaps(float settledAt) { SettledAt = settledAt; }
@@ -38,17 +40,17 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             snapshot.Build(key, settledAt, halfX, halfZ, hour);
             var result = new CloudMaps(settledAt);
             float bottom = VolumeTop, top = 0f;
-            Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top);
-            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top);
+            Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
+            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum);
             result.HorizonCover = RingCover(result.Far, FarSize);
             BuildEnvelope(result.Near, result.NearProfiles, result.Envelope);
-            result.Bottom = Math.Max(0f, bottom - 500f);
+            result.Bottom = Math.Max(-30f, bottom - 800f);
             result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
             return result;
         }
 
         private static void Fill(WeatherField snapshot, float half, int size, byte[] pixels, byte[] profiles,
-            ref float bottom, ref float top)
+            ref float bottom, ref float top, ref float rainMaximum)
         {
             CloudGenus genus = CloudShape.Resolve(snapshot.Params);
             float deckDepth = Math.Max(genus.PuffDepth, snapshot.Params.LayerDepth) + genus.BaseWobble * 0.5f;
@@ -60,7 +62,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 WeatherPoint p = snapshot.Sample(worldX, worldZ);
                 // The deck's geometry has its own thickness, independent of cell coverage.
                 // Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
-                float visualTop = Math.Max(p.CloudTop, p.CloudBase + deckDepth);
+                float visualTop = Math.Max(p.LowTop, p.CloudBase + deckDepth);
                 int i = (z * size + x) * 4;
                 pixels[i] = Byte(p.BackgroundCover);
                 pixels[i + 1] = Byte(p.FrontCover);
@@ -70,6 +72,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 profiles[i + 1] = Byte(p.FrontTop / VolumeTop);
                 profiles[i + 2] = Byte(p.CloudBase / VolumeTop);
                 profiles[i + 3] = Byte(p.RainRate / 100f);
+                rainMaximum = Math.Max(rainMaximum, profiles[i + 3] / 255f);
                 if (p.Cover > 0.02f)
                 {
                     bottom = Math.Min(bottom, p.FrontCover > 0.02f ? Math.Min(p.CloudBase, p.FrontBase) : p.CloudBase);

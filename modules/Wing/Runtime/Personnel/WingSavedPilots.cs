@@ -11,6 +11,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>The saved pilots on disk (R7): <c>v1/pilots.user.json</c> (scenarios use <c>pilots.sim.json</c>), read at every mission
@@ -84,6 +85,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             SavedPilotStore s = Store;
             string backup = s.ToJson();
             string target = draft != null ? PilotText.Callsign(draft.Callsign) : null;
+            if (draft != null && !draft.HasCustomPortrait)
+            {
+                int faction = live != null && live.PortraitFaction >= 0 ? live.PortraitFaction : PortraitFactions.Local;
+                draft = draft.Clone();
+                draft.ApplySelection(PilotStudio.Frozen(draft.Name, draft.Callsign, null, faction));
+            }
             if (!s.Save(draft, original, c => LiveUnsaved(c, live), out why)) return false;
             if (!Write())
             {

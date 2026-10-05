@@ -34,6 +34,29 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             text = null;
             if (war == null || !war.Available) return false;
             war.Refresh();
+            bar = 0f;
+            if (!war.HasSnapshot)
+            {
+                bool unconfirmed = (war.CommandStatus ?? "").StartsWith("UNCONFIRMED", System.StringComparison.OrdinalIgnoreCase);
+                text = unconfirmed ? "STAFF COMMAND UNCONFIRMED" : "WAITING FOR STAFF";
+                detail = unconfirmed ? war.CommandStatus : "Host faction report requested";
+                tone = unconfirmed ? HudTone.Caution : HudTone.Info;
+                return true;
+            }
+            if (war.SnapshotAgeSeconds > 15f)
+            {
+                text = "STALE STAFF REPORT";
+                detail = "Recovering host report · commands disabled";
+                tone = HudTone.Caution;
+                return true;
+            }
+            if (war.CommandPending)
+            {
+                text = "STAFF COMMAND PENDING";
+                detail = war.CommandStatus;
+                tone = HudTone.Info;
+                return true;
+            }
             TheaterLiveOperationView operation = war.ActiveOperation;
             if (operation != null)
             {

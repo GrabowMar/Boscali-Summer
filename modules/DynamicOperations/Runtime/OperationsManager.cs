@@ -29,6 +29,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public int ShellId;
             public bool Inserted;
             public bool Serviced;
+            public bool OnStation;
+            public ObjectiveAsset Asset;
             public Aircraft ReturnAircraft, Observer;
             public readonly InterdictionState Life = new InterdictionState();
 
@@ -72,6 +74,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private FactionHQ viewHq;
         private bool wasEnabled;
         private bool generatedThisTick;
+        private bool hasSnapshot;
+        private bool pendingCancel;
         private IAirAssaultObservation assault;
         private readonly System.Random random = new System.Random();
         public static OperationsManager Active { get; private set; }
@@ -91,6 +95,27 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public IReadOnlyList<SecondaryObjectiveView> Objectives { get; private set; } = Array.Empty<SecondaryObjectiveView>();
         public string Status { get; private set; } = "Waiting for a running mission.";
         public int ActiveLimit => OperationBoard.MaximumActive;
+        public float SnapshotAgeSeconds => hasSnapshot ? Math.Max(0f, Time.unscaledTime - lastSnapshot) : float.PositiveInfinity;
+        public bool IsFresh => hasSnapshot && SnapshotAgeSeconds <= 6f &&
+            GameManager.GetLocalPlayer<Player>(out Player local) && local != null && local.HQ == viewHq;
+        public int SelectedForHud { get; private set; }
+        public bool IsActionPending { get; private set; }
+        public int PendingObjectiveId { get; private set; }
+        public string ActionResult { get; private set; } = string.Empty;
+
+        public void SelectForHud(int id)
+        {
+            if (id == -1 || id == 0) { SelectedForHud = id; return; }
+            if (!IsFresh) return;
+            for (int i = 0; i < Objectives.Count; i++)
+                if (Objectives[i].Id == id && Objectives[i].IsActive) { SelectedForHud = id; return; }
+        }
+
+        internal void BeginAction(int id, bool cancel = false)
+        { IsActionPending = true; PendingObjectiveId = id; pendingCancel = cancel; ActionResult = string.Empty; }
+
+        internal void EndAction(string result)
+        { IsActionPending = false; PendingObjectiveId = 0; pendingCancel = false; ActionResult = result ?? string.Empty; }
 
         public void Configure(DynamicOperationsSettings configuration, OperationsNet transport, ManualLogSource log)
         {
@@ -109,6 +134,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             foreach (Candidate candidate in candidates) { candidate.Unit = null; candidate.Base = null; candidate.Count = 0; }
             missionIdentity = null; previousTime = 0f; nextTick = 0f;
             viewHq = null;
+            hasSnapshot = false; SelectedForHud = 0;
+            EndAction(string.Empty);
             network?.ResetScene();
             SetLocalStatus("Waiting for a running mission.");
         }
@@ -218,6 +245,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (op.Kind == OperationKind.Rappel || op.Kind == OperationKind.Rooftop)
                     valid &= assault?.Available == true && (target.Inserted || target.ShellId == 0 || assault.IsRooftopAvailable(target.ShellId));
                 bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target);
+                target.OnStation = present;
                 op.Observe(now, elapsed, valid, owned, neutralized, present, target.Inserted);
                 if (!op.IsLive) target.Unwatch();
                 if (op.TryTakeAward()) Pay(hq, board, target, participant);
@@ -387,6 +415,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             var target = new Target
             {
                 Mission = op, Base = airbase, Unit = unit,
+                Asset = kind == OperationKind.Rappel || kind == OperationKind.Rooftop ? ObjectiveAsset.Site :
+                    unit == null ? ObjectiveAsset.Base : kind == OperationKind.Rescue ? ObjectiveAsset.Personnel :
+                    unit is Aircraft ? ObjectiveAsset.Aircraft : unit is GroundVehicle ? ObjectiveAsset.GroundVehicle : ObjectiveAsset.Site,
                 OriginalOwner = unit != null ? unit.NetworkHQ : airbase.CurrentHQ,
                 Name = OperationsNet.Text(unit != null ? unit.unitName : airbase.name),
                 Outcome = reward == OperationReward.Convoy ? "6-vehicle convoy if route/space permit; faction morale +3." :
@@ -635,7 +666,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     op.Progress, op.IsLive ? Mathf.Clamp(op.Deadline - now, 0f, 1200f) : 0f, op.Money, op.Xp,
                     op.State == OperationState.Completed, op.State == OperationState.Offered, active, marker,
                     marker ? target.Position.x : 0f, marker ? target.Position.z : 0f, marker ? target.Radius : 0f,
-                    op.AcceptedBy);
+                    op.AcceptedBy, Tasking(player.HQ, target, marker));
             }
             return snapshot;
         }
@@ -645,11 +676,56 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             Objectives = snapshot.Cards ?? Array.Empty<SecondaryObjectiveView>();
             Status = snapshot.Status;
             lastSnapshot = Time.unscaledTime;
+            hasSnapshot = true;
+            int fallback = 0;
+            bool selectedActive = false;
+            for (int i = 0; i < Objectives.Count; i++)
+            {
+                SecondaryObjectiveView card = Objectives[i];
+                if (!card.IsActive) continue;
+                if (fallback == 0 || card.Id < fallback) fallback = card.Id;
+                if (OperationRequestPolicy.SelectAccepted(IsActionPending, pendingCancel, PendingObjectiveId, card.Id)) SelectedForHud = card.Id;
+                if (card.Id == SelectedForHud) selectedActive = true;
+            }
+            if (!selectedActive && SelectedForHud >= 0) SelectedForHud = fallback;
             viewHq = GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? player.HQ : null;
         }
 
-        public void SetLocalStatus(string status) { Objectives = Array.Empty<SecondaryObjectiveView>(); Status = status; }
+        public void SetLocalStatus(string status)
+        { Objectives = Array.Empty<SecondaryObjectiveView>(); Status = status; hasSnapshot = false; SelectedForHud = 0; }
         internal void ReportStatus(string status) => Status = status;
+
+        private static ObjectiveTasking Tasking(FactionHQ hq, Target target, bool marker)
+        {
+            Operation op = target.Mission;
+            ObjectiveAsset asset = op.Returning ? ObjectiveAsset.Base : target.Asset;
+            bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) ||
+                op.Kind == OperationKind.DamageAssessment && target.Life.Neutralized;
+            float age = -1f;
+            ObjectiveContact contact = op.State != OperationState.Active ? ObjectiveContact.Unavailable :
+                !marker ? ObjectiveContact.Lost : fixedSite ? ObjectiveContact.Fixed : ObjectiveContact.Known;
+            if (marker && !fixedSite)
+            {
+                if (target.Unit != null && target.Unit.NetworkHQ == hq) age = 0f;
+                else if (target.Unit != null)
+                {
+                    TrackingInfo tracking = hq.GetTrackingData(target.Unit.persistentID);
+                    if (tracking != null)
+                    {
+                        float observedAge = Time.timeSinceLevelLoad - tracking.lastSpottedTime;
+                        if (Operation.Finite(observedAge) && observedAge >= 0f && observedAge <= 30f)
+                        { age = observedAge; if (age > 2f) contact = ObjectiveContact.LastKnown; }
+                    }
+                }
+            }
+            FactionHQ owner = op.Returning ? hq : target.Unit != null ? target.Unit.NetworkHQ :
+                target.Asset == ObjectiveAsset.Base && target.Base != null ? target.Base.CurrentHQ : target.OriginalOwner;
+            ObjectiveAllegiance allegiance = owner == null ? ObjectiveAllegiance.Unknown : owner == hq ? ObjectiveAllegiance.Friendly :
+                owner.faction != null && FactionHelper.EmptyOrNoFactionOrNeutral(owner.faction.factionName)
+                    ? ObjectiveAllegiance.Neutral : ObjectiveAllegiance.Hostile;
+            return OperationPresentation.Build(op, target.OnStation, target.Life.Neutralized, asset, contact, age,
+                target.Outcome, target.Base != null ? target.Base.name : string.Empty, allegiance);
+        }
 
         private static string Description(OperationKind kind) => kind switch
         {

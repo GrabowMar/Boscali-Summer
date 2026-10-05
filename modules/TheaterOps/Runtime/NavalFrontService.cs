@@ -93,6 +93,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             bool hasTask = hq != null && tasks.TryGetValue(hq, out task) &&
                 task.Until > Time.timeSinceLevelLoad;
             if (!NavalTask.CanRedirect(host, commanded, holding, inCombat, hasTask)) return false;
+            GlobalPosition here = ship.GlobalPosition();
+            if (!NavalTask.WithinAssignment(here.x, here.z, task.Position.x, task.Position.z))
+                return false;
             float now = Time.timeSinceLevelLoad;
             if (nextRoute.TryGetValue(ship, out float next) && now < next) return false;
             if (nextRoute.Count >= MaximumShips && !nextRoute.ContainsKey(ship))
@@ -113,7 +116,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (seaLanes == null || !seaLanes.TryGetNearestPoint(requested,
                     out GlobalPosition snapped, out _) ||
                 !Finite(snapped.x) || !Finite(snapped.z) ||
-                FastMath.Distance(requested, snapped) > MaximumSeaLaneOffset)
+                FastMath.Distance(requested, snapped) > MaximumSeaLaneOffset ||
+                !NavalTask.WithinAssignment(task.Position.x, task.Position.z, snapped.x, snapped.z) ||
+                !NavalTask.WithinAssignment(here.x, here.z, snapped.x, snapped.z))
                 return false;
 
             destination = snapped;

@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public int Sorties { get; set; }
         /// <summary>Missions flown by a saved pilot (R7's service record; xp is then the best XP of one mission).</summary>
         public int Missions { get; set; }
-        public int PortraitVersion { get; set; } = 2;
+        public int PortraitVersion { get; set; } = 3;
         public PortraitBody Body { get; set; } = PortraitBody.Male;
         public int Face { get; set; } = -1;
         public int Hair { get; set; }
@@ -37,14 +37,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public bool HasCustomPortrait => Face >= 0;
 
-        /// <summary>Canonical v2 selection. This is safe to persist and pass through live roster state.</summary>
+        /// <summary>Canonical selection. This is safe to persist and pass through live roster state.</summary>
         public PortraitSelection Selection => PilotPortraitGenerator.Normalize(
             new PortraitSelection(Body, Face, Hair, Uniform, Accessory, Backdrop));
 
         public void ApplySelection(PortraitSelection selection)
         {
             selection = PilotPortraitGenerator.Normalize(selection);
-            PortraitVersion = 2;
+            PortraitVersion = 3;
             Body = selection.Body;
             Face = selection.Face;
             Hair = selection.Hair;
@@ -297,7 +297,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (face >= 0)
             {
                 PortraitSelection selection = portraitVersion >= 2
-                    ? new PortraitSelection(body, face, hair, uniform, accessory, backdrop)
+                    ? new PortraitSelection(body, face, hair, uniform, portraitVersion >= 3 ? accessory : 0, backdrop)
                     : PilotPortraitGenerator.FromLegacySelection(face, hair, uniform, backdrop);
                 record.ApplySelection(selection);
             }
@@ -334,11 +334,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     {
                         PortraitSelection selection = p.Selection;
                         sb.AppendLine(",");
-                        sb.AppendLine("      \"portraitVersion\": 2,");
+                        sb.AppendLine("      \"portraitVersion\": 3,");
                         sb.AppendLine($"      \"body\": \"{PilotPortraitGenerator.BodyLabel(selection.Body).ToLowerInvariant()}\",");
                         sb.AppendLine($"      \"face\": {selection.Face},");
                         sb.AppendLine($"      \"hair\": {selection.Hair},");
                         sb.AppendLine($"      \"uniform\": {selection.Uniform},");
+                        sb.AppendLine($"      \"accessory\": {selection.Accessory},");
                         sb.Append($"      \"backdrop\": {selection.Backdrop}");
                     }
                     sb.AppendLine();

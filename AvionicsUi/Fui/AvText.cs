@@ -34,6 +34,12 @@ namespace NOAvionics
             t.enableWordWrapping = wrap;
         }
 
+        /// <summary>Fixed point size for a part that fits its text by truncation instead of shrinking (never below the 10 px micro floor).</summary>
+        public static void Size(TMP_Text t, float size)
+        {
+            if (t != null) t.fontSize = Mathf.Max(AvTokens.FontMicro, size);
+        }
+
         public static float Height(TMP_Text t, float width) =>
             t == null ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, Mathf.Max(1f, width), 0f).y);
 

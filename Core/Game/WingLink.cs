@@ -54,10 +54,14 @@ namespace BoscaliSummer.Core.Game
         }
 
         /// <summary>Borrowed Wing-owned portrait. Do not destroy the sprite or texture.</summary>
-        public static Sprite PilotPortrait(string name, string callsign)
+        public static Sprite PilotPortrait(string name, string callsign) =>
+            PersonnelPortrait(name, callsign, PortraitRole.Pilot);
+
+        /// <summary>Borrowed Wing-owned portrait with role-specific clothing and equipment.</summary>
+        public static Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1)
         {
             if (!ResolveSquad()) return null;
-            try { return squad.PilotPortrait(name, callsign); }
+            try { return squad.PersonnelPortrait(name, callsign, role, faction); }
             catch (Exception error)
             {
                 if (!portraitFailureLogged)
@@ -134,6 +138,7 @@ namespace BoscaliSummer.Core.Game
         public static int PortraitFaceCount => StudioCount(s => s.PortraitFaceCount);
         public static int PortraitHairCount => StudioCount(s => s.PortraitHairCount);
         public static int PortraitUniformCount => StudioCount(s => s.PortraitUniformCount);
+        public static int PortraitAccessoryCount => StudioCount(s => s.PortraitAccessoryCount);
         public static int PortraitBackdropCount => StudioCount(s => s.PortraitBackdropCount);
 
         public static string PortraitBodyLabel(int body)
@@ -150,6 +155,20 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailStudio(error); return "SUIT"; }
         }
 
+        public static string PortraitAccessoryLabel(int accessory)
+        {
+            if (!ResolveStudio()) return "NONE";
+            try { return squad.PortraitAccessoryLabel(accessory) ?? "NONE"; }
+            catch (Exception error) { FailStudio(error); return "NONE"; }
+        }
+
+        public static string PortraitBackdropLabel(int backdrop)
+        {
+            if (!ResolveStudio()) return "BACKDROP";
+            try { return squad.PortraitBackdropLabel(backdrop) ?? "BACKDROP"; }
+            catch (Exception error) { FailStudio(error); return "BACKDROP"; }
+        }
+
         public static string PersonaLabel(int persona)
         {
             if (!ResolveStudio()) return "PROFESSIONAL";
@@ -164,12 +183,12 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailStudio(error); return "ROOKIE"; }
         }
 
-        /// <summary>Borrow a Wing-owned portrait; never destroy the sprite.</summary>
+        /// <summary>Borrow a Wing-owned portrait; preview is updated in place. Never destroy the sprite.</summary>
         public static Sprite PilotPortraitForSelection(
-            int body, int face, int hair, int uniform, int accessory, int backdrop)
+            int body, int face, int hair, int uniform, int accessory, int backdrop, bool preview = false)
         {
             if (!ResolveStudio()) return null;
-            try { return squad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop); }
+            try { return squad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop, preview); }
             catch (Exception error)
             {
                 if (!selectionPortraitFailureLogged)

@@ -639,7 +639,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private string Ambient(TacticalTheaterState state)
         {
-            string text = state.ContestedSectorCount > 0
+            string text = overlay == null || !overlay.HasControlData ? "sector field unavailable"
+                : state.ContestedSectorCount > 0
                 ? state.ContestedSectorCount + " contested sector" +
                   (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
                   TheaterReadout.Kilometres(state.FrontlineLengthMetres)
@@ -661,6 +662,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 TheaterLiveOperationView active = theaterWar?.ActiveOperation;
                 text += " · " + (theaterWar == null || !theaterWar.Available
                     ? "theater staff unavailable"
+                    : !theaterWar.HasSnapshot ? "waiting for staff report"
+                    : theaterWar.SnapshotAgeSeconds > 15f ? "staff report stale · awaiting host refresh"
                     : active == null ? "staff observing fronts" : active.Label + " / " + active.Phase);
             }
             return text;

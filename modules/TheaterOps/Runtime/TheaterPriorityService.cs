@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
     /// destinations from <see cref="GroundFrontService"/> through the advance query; nothing
     /// else is steered. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
     /// </summary>
-    internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView
+    internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView, IEnemyIntentSource
     {
         internal static TheaterPriorityService Active { get; private set; }
 
@@ -87,6 +87,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 return false;
             }
             return table.TryGet(faction, out directive);
+        }
+
+        // ---- IEnemyIntentSource -----------------------------------------------------------
+
+        /// <summary>Host only: the name of the faction's current main-effort objective. No position leaves this method.</summary>
+        public bool TryGetMainEffort(string factionName, out string objectiveLabel)
+        {
+            objectiveLabel = null;
+            if (!authoritative || string.IsNullOrEmpty(factionName) || !table.TryGet(factionName, out PriorityDirective directive)) return false;
+            objectiveLabel = directive.Label;
+            return !string.IsNullOrEmpty(objectiveLabel);
         }
 
         // ---- ITheaterPriorityView ---------------------------------------------------------

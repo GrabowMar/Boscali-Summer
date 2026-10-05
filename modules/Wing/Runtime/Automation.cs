@@ -765,7 +765,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 // The tabs cut on 2026-09-28 live on as sub-pages.
                 string old = name.ToUpperInvariant();
                 if (old == "FORM" || old == "ROUTE") panel.Tactical?.ShowSubNamed(old);
-                else if (old == "PLAN" || old == "TUNING" || old == "OPTIONS") panel.Plan?.ShowSubNamed(old);
+                else if (old == "PLAN" || old == "TUNING" || old == "OPTIONS" || old == "STANCES" || old == "SORTIE" || old == "RECORD") panel.Plan?.ShowSubNamed(old);
+                else if (old == "ROSTER" || old == "AIRCRAFT" || old == "STUDIO") panel.WingPage?.ShowSubNamed(old);
                 else if (old == "INSPECT") panel.WingPage?.ShowSub(WmcWing.SubInspect);
             }
             // A sub-page by name: SQUADRON's (ROSTER, STUDIO, INSPECT) or BEHAVIOUR's (FORM, OPTIONS, PLAN or ELEMENTS, ROUTE, TIMELINE,

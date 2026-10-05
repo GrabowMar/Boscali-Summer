@@ -155,6 +155,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             private bool calm = true;
             private bool scripted;
             private int stepCount;
+            private int nextStep = -1;
 
             public EventHeroPart(RectTransform parent)
             {
@@ -210,6 +211,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 effectState = AvState.Inert;
                 scripted = false;
                 stepCount = 0;
+                nextStep = -1;
                 foreach (TMP_Text step in steps) step.text = "";
                 effectLine.text = "";
                 plate.Bind(null, AvIcon.Radar2, TextColor(AvState.Inert));
@@ -238,6 +240,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 int wasCount = stepCount;
                 scripted = view != null && view.IsSuper && count > 0;
                 stepCount = Mathf.Clamp(count, 0, steps.Length);
+                int previousNext = nextStep;
+                nextStep = -1;
+                if (scripted && view.TargetResolved)
+                    for (int i = 0; i < stepCount; i++)
+                        if (now < start + view.Steps[i].AtSeconds) { nextStep = i; break; }
                 bool textChanged = wasScripted != scripted || wasCount != stepCount;
                 for (int i = 0; i < steps.Length; i++)
                 {
@@ -250,16 +257,16 @@ namespace BoscaliSummer.Modules.Events.Presentation
                         else
                         {
                             bool fired = now >= start + step.AtSeconds;
-                            line = "T+" + AvNum.Clock(step.AtSeconds) + "  " + (fired ? "[DONE] " : "[NEXT] ") + step.Label;
+                            line = "T+" + AvNum.Clock(step.AtSeconds) + "  " + (fired ? "[DONE] " : i == nextStep ? "[NEXT] " : "[QUEUED] ") + step.Label;
                         }
                     }
                     if (steps[i].text != line)
                     {
-                        // [NEXT] -> [DONE] keeps the line length; only a line appearing or going changes height.
-                        textChanged |= steps[i].text.Length == 0 || line.Length == 0;
+                        textChanged = true;
                         steps[i].text = line;
                     }
                 }
+                if (previousNext != nextStep) Restyle();
                 if (textChanged) Changed();
             }
 
@@ -360,7 +367,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 effectLine.color = TextColor(effectState);
                 consequence.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                foreach (TMP_Text step in steps) step.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                for (int i = 0; i < steps.Length; i++)
+                    steps[i].color = i == nextStep ? TextColor(AvState.Info) : AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                 plate.Restyle();
             }
         }

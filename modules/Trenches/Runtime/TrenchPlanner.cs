@@ -46,19 +46,63 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// <paramref name="foliageAt"/> and <paramref name="roadDistanceAt"/> nudge the route
         /// toward forest edges and off road surfaces; null keeps the relief-only siting.
         /// </summary>
-        public static bool TryPlanWindow(int lineId, string name, FactionHQ owner, float pressure,
+        /// <summary>One planning attempt that can run across frames; see <see cref="StepPlan"/>.</summary>
+        internal sealed class PlanJob
+        {
+            public bool Planned;
+            public TrenchLine Line;
+            public int NextStation;
+            public TrenchRefusal Refusal;
+            internal IEnumerator<bool> Steps;
+        }
+
+        private sealed class SearchResult
+        {
+            public bool Ok;
+            public TrenchRefusal Refusal;
+        }
+
+        private static readonly System.Diagnostics.Stopwatch planClock = new System.Diagnostics.Stopwatch();
+
+        /// <summary>
+        /// Starts planning one window. The work is the same as planning it in one call, but
+        /// <see cref="StepPlan"/> runs it a station at a time inside a frame budget: one
+        /// attempt probes every station at every depth for ground, forest and roads, which
+        /// took up to 80 ms in a single frame. Only one job may run at a time, and belt growth
+        /// must wait while it does: they share this class's buffers.
+        /// </summary>
+        public static PlanJob BeginPlanWindow(int lineId, string name, FactionHQ owner, float pressure,
             FrontlineTracePoint[] points, int pointOffset, int pointCount, int windowStartStation,
-            ITerritoryIngress territory, out TrenchLine line, out int nextStation, out TrenchRefusal refusal,
+            ITerritoryIngress territory,
             Func<float, float, bool> foliageAt = null, Func<float, float, float> roadDistanceAt = null,
             float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
-            line = null;
-            nextStation = 0;
-            refusal = TrenchRefusal.None;
+            var job = new PlanJob();
+            job.Steps = PlanWindowSteps(job, lineId, name, owner, pressure, points, pointOffset, pointCount,
+                windowStartStation, territory, foliageAt, roadDistanceAt, airfieldX, airfieldZ, airfieldCount);
+            return job;
+        }
+
+        /// <summary>Advances a job until it finishes or the budget is spent; true once finished.</summary>
+        public static bool StepPlan(PlanJob job, double budgetMs)
+        {
+            planClock.Restart();
+            while (job.Steps.MoveNext())
+                if (planClock.Elapsed.TotalMilliseconds >= budgetMs) return false;
+            return true;
+        }
+
+        private static IEnumerator<bool> PlanWindowSteps(PlanJob job, int lineId, string name, FactionHQ owner, float pressure,
+            FrontlineTracePoint[] points, int pointOffset, int pointCount, int windowStartStation,
+            ITerritoryIngress territory,
+            Func<float, float, bool> foliageAt, Func<float, float, float> roadDistanceAt,
+            float[] airfieldX, float[] airfieldZ, int airfieldCount)
+        {
+            job.Refusal = TrenchRefusal.None;
             if (points == null || territory == null || owner == null || pointCount < 2)
             {
-                refusal = TrenchRefusal.TooShort;
-                return false;
+                job.Refusal = TrenchRefusal.TooShort;
+                yield break;
             }
 
             pointCount = Math.Min(pointCount, traceX.Length);
@@ -76,8 +120,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             }
             if (traceLength < TrenchTraceMath.MinRunLength)
             {
-                refusal = TrenchRefusal.TooShort;
-                return false;
+                job.Refusal = TrenchRefusal.TooShort;
+                yield break;
             }
 
             // A window is one position: the raw contour points it spans, up to
@@ -93,18 +137,18 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int last = TrenchTraceMath.WindowEnd(traceArc, usable, first, MaximumLineLength);
             if (last <= first)
             {
-                refusal = TrenchRefusal.NoStations;
-                return false;
+                job.Refusal = TrenchRefusal.NoStations;
+                yield break;
             }
-            nextStation = last + 1 < usable ? last + 1 : 0;
+            job.NextStation = last + 1 < usable ? last + 1 : 0;
 
             int stations = TrenchTraceMath.Resample(traceX, traceZ, first, last - first + 1,
                 TrenchTraceMath.CurveSpacing, closed && first == 0 && last == usable - 1,
                 stationX, stationZ);
             if (stations < 4)
             {
-                refusal = TrenchRefusal.NoStations;
-                return false;
+                job.Refusal = TrenchRefusal.NoStations;
+                yield break;
             }
             int count = stations;
             float spacing = Math.Max(TrenchTraceMath.CurveSpacing,
@@ -119,11 +163,15 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             for (int pass = 0; pass < 2 && !placed; pass++)
             {
                 depthCenter = TrenchTraceMath.FireDepth + pass * TrenchTraceMath.BeachFallbackExtraDepth;
-                if (!SearchOffsets(territory, owner, count, depthCenter, foliageAt, roadDistanceAt, airfieldX, airfieldZ, airfieldCount,
-                    out refusal))
+                var search = new SearchResult();
+                IEnumerator<bool> searching = SearchOffsetsSteps(search, territory, owner, count, depthCenter,
+                    foliageAt, roadDistanceAt, airfieldX, airfieldZ, airfieldCount);
+                while (searching.MoveNext()) yield return false;
+                job.Refusal = search.Refusal;
+                if (!search.Ok)
                 {
                     // Only refused ground retries deeper: a missing side never resolves landward.
-                    if (pass > 0 || refusal != TrenchRefusal.NoGround) return false;
+                    if (pass > 0 || job.Refusal != TrenchRefusal.NoGround) yield break;
                     continue;
                 }
                 int runs = TrenchTraceMath.SplitRuns(valid, count,
@@ -131,7 +179,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     runStarts, runLengths, MaximumRuns);
                 if (runs <= 0)
                 {
-                    if (pass > 0) { refusal = TrenchRefusal.NoRun; return false; }
+                    if (pass > 0) { job.Refusal = TrenchRefusal.NoRun; yield break; }
                     continue;
                 }
                 int best = 0;
@@ -141,7 +189,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 runCount = (int)runLengths[best];
                 placed = true;
             }
-            if (!placed) return false;
+            if (!placed) yield break;
 
             var baseCurve = new Vector3[runCount];
             var inward = new Vector3[runCount];
@@ -169,8 +217,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int faction = owner.GetInstanceID();
             built.Validator = p => TrenchTerrain.TryGround(p, out _) &&
                 Diggable(territory, faction, p) && WithinCorridor(built, p);
-            line = built;
-            return true;
+            job.Line = built;
+            job.Planned = true;
         }
 
         /// <summary>
@@ -183,9 +231,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// a crest or knoll instead of the lowest hollow it can reach. Foliage and road
         /// probes nudge the route toward forest edges and off road surfaces when present.
         /// </summary>
-        private static bool SearchOffsets(ITerritoryIngress territory, FactionHQ owner, int count,
+        private static IEnumerator<bool> SearchOffsetsSteps(SearchResult result, ITerritoryIngress territory, FactionHQ owner, int count,
             float depthCenter, Func<float, float, bool> foliageAt,
-            Func<float, float, float> roadDistanceAt, float[] airfieldX, float[] airfieldZ, int airfieldCount, out TrenchRefusal refusal)
+            Func<float, float, float> roadDistanceAt, float[] airfieldX, float[] airfieldZ, int airfieldCount)
         {
             float sector = (TrenchTraceMath.DepthSearchLevels - 1) * 0.5f;
             int faction = owner.GetInstanceID();
@@ -243,23 +291,24 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                         cost[s, k] += TrenchTraceMath.RoadCost(roadDistanceAt(groundX, groundZ));
                     anyGround = true;
                 }
+                yield return false;
             }
             if (!anySide)
             {
-                refusal = TrenchRefusal.NoSide;
-                return false;
+                result.Refusal = TrenchRefusal.NoSide;
+                yield break;
             }
             if (!anyGround)
             {
-                refusal = TrenchRefusal.NoGround;
-                return false;
+                result.Refusal = TrenchRefusal.NoGround;
+                yield break;
             }
 
             for (int s = 0; s < count; s++) route[s] = -1;
             if (!TrenchTraceMath.PlanRoute(height, cost, count, TrenchTraceMath.UndulationWeight, route))
             {
-                refusal = TrenchRefusal.NoGround;
-                return false;
+                result.Refusal = TrenchRefusal.NoGround;
+                yield break;
             }
             for (int s = 0; s < count; s++)
             {
@@ -270,8 +319,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 curveX[s] = stationX[s] + inwardX[s] * depth;
                 curveZ[s] = stationZ[s] + inwardZ[s] * depth;
             }
-            refusal = TrenchRefusal.None;
-            return true;
+            result.Refusal = TrenchRefusal.None;
+            result.Ok = true;
         }
 
         /// <summary>True when a forest stand touches the ground near a candidate.</summary>

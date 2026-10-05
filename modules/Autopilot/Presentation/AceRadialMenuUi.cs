@@ -57,7 +57,6 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private const float RailWidth = 2f;
         private const float PlateBaseAlpha = 0.72f;
         private const float LabelDimAlpha = 0.55f;
-        private const float BoldAllowance = 1.07f;
         private const float CenterLabelDrop = 30f;
         private const float HintDrop = 250f;
 
@@ -262,6 +261,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         private void Render(float unit)
         {
+            float textScale = 1f / Mathf.Clamp(unit, .1f, 1f);
+            float hintSize = 11f * textScale;
+            bool hintSizeChanged = !Mathf.Approximately(hint.fontSize, hintSize);
+            if (hintSizeChanged) hint.fontSize = hintSize;
             IReadOnlyList<AceRadialNodeLayout> layout = tree.Layout;
             int hovered = tree.HoveredIndex;
             int count = Mathf.Min(layout.Count, widgets.Count);
@@ -272,7 +275,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 : holding ? "RELEASE TO SELECT  ·  RMB CANCEL"
                 : "CLICK TO SELECT  ·  RMB CLOSE";
             bool hintChanged = hintText != hint.text;
-            if (hintChanged)
+            if (hintChanged || hintSizeChanged)
             {
                 hint.SetText(hintText);
                 Vector2 hintPref = hint.GetPreferredValues(hintText, 0f, 0f);
@@ -285,7 +288,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             for (int i = count; i < widgets.Count; i++)
                 if (widgets[i].Root.gameObject.activeSelf) widgets[i].Root.gameObject.SetActive(false);
 
-            bool geometryDirty = tagsDirty || count != prevCount || hovered != prevHovered || hintChanged;
+            bool geometryDirty = tagsDirty || count != prevCount || hovered != prevHovered || hintChanged || hintSizeChanged;
             for (int i = 0; i < count && !geometryDirty; i++)
             {
                 AceVec2 p = layout[i].Position;
@@ -331,6 +334,18 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             string status = centre ? string.Empty : data.Status.Text ?? string.Empty;
 
             bool changed = false;
+            // Keep text readable when the reference canvas scales down at 720p.
+            // Only owned labels change; discs and navigation retain their existing layout.
+            float textScale = 1f / Mathf.Clamp(unit, .1f, 1f);
+            float labelSize = (centre ? CenterLabelSize : LabelSize) * textScale;
+            float statusSize = StatusSize * textScale;
+            if (!Mathf.Approximately(widget.Label.fontSize, labelSize) ||
+                !Mathf.Approximately(widget.Status.fontSize, statusSize))
+            {
+                widget.Label.fontSize = labelSize;
+                widget.Status.fontSize = statusSize;
+                changed = true;
+            }
             if (label != widget.LastLabel)
             {
                 widget.Label.SetText(label);
@@ -341,6 +356,12 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             {
                 widget.Status.SetText(status);
                 widget.LastStatus = status;
+                changed = true;
+            }
+            FontStyles weight = hovered || (node.OnPath && !centre) ? FontStyles.Bold : FontStyles.Normal;
+            if (widget.Label.fontStyle != weight)
+            {
+                widget.Label.fontStyle = weight;
                 changed = true;
             }
             if (changed || side != widget.Side)
@@ -354,7 +375,6 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             bool live = centre || node.OnPath || node.CurrentLevel;
             float alpha = live || hovered ? 1f : LabelDimAlpha;
             widget.Label.color = (data.Enabled ? AvTheme.TextPrimary : AvTheme.Disabled).WithAlpha(alpha);
-            widget.Label.fontStyle = hovered || (node.OnPath && !centre) ? FontStyles.Bold : FontStyles.Normal;
             widget.Status.color = (data.Enabled ? ToneColor(data.Status.Tone) : AvTheme.Disabled).WithAlpha(alpha);
         }
 
@@ -363,8 +383,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             Vector2 labelPref = string.IsNullOrEmpty(widget.LastLabel) ? Vector2.zero : widget.Label.GetPreferredValues(widget.LastLabel, 0f, 0f);
             Vector2 statusPref = string.IsNullOrEmpty(widget.LastStatus) ? Vector2.zero : widget.Status.GetPreferredValues(widget.LastStatus, 0f, 0f);
-            // Measured in the regular weight; leave room for the bold hover/breadcrumb weight.
-            widget.TextW = Mathf.Max(labelPref.x * BoldAllowance, statusPref.x);
+            // Measure the displayed weight; bold hover/breadcrumb labels must fit both
+            // their text rect and the plate. Leave a pixel each side for SDF rounding.
+            if (labelPref != Vector2.zero) labelPref += new Vector2(2f, 2f);
+            if (statusPref != Vector2.zero) statusPref += new Vector2(2f, 2f);
+            widget.TextW = Mathf.Max(labelPref.x, statusPref.x);
             widget.LabelH = labelPref.y;
             widget.StatusH = statusPref.y;
 

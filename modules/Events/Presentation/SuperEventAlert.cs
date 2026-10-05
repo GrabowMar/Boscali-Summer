@@ -394,12 +394,16 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             compactTitle = AvText.Make(compactPanel, "CompactTitle", AvTextRole.Head, "", TextAlignmentOptions.TopLeft);
             compactTitle.color = ink;
-            AvLay.Place(compactTitle.rectTransform, 106f, 6f, width - 244f, 21f);
+            AvLay.Place(compactTitle.rectTransform, 106f, 6f, width - 286f, 21f);
             compactImpact = AvText.Make(compactPanel, "CompactImpact", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
-            AvLay.Place(compactImpact.rectTransform, 106f, 28f, width - 244f, 18f);
+            AvLay.Place(compactImpact.rectTransform, 106f, 28f, width - 286f, 18f);
             compactClock = AvText.Make(compactPanel, "CompactClock", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
             compactClock.color = dim;
-            AvLay.Place(compactClock.rectTransform, width - 130f, 12f, 112f, 27f);
+            AvLay.Place(compactClock.rectTransform, width - 172f, 12f, 112f, 27f);
+            AvControl compactDismiss = AvControl.Make(compactPanel,
+                new AvControl.Spec("", Dismiss, AvButtonStyle.Quiet, AvIcon.X));
+            compactDismiss.Help = "Dismiss this dispatch; its event and effects remain active on EVN.";
+            AvLay.Place(compactDismiss.Rect, width - 46f, 10f, 32f, 30f);
             compactPanel.gameObject.SetActive(false);
         }
 

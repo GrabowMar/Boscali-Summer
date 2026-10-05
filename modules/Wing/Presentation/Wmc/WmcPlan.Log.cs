@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
@@ -13,14 +14,25 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>BEHAVIOUR › RECORD, the LOG half (spec bezel v2 §5; the room's LOG drawer) on kit v2: the wing's events and radio
-    /// lines, newest first, filtered by element or the selected aircraft, under TIMELINE's card (<see cref="WmcPlan.BuildRecord"/>),
-    /// as a pooled <see cref="AvList"/> (every line has an id, so no pager). A line with an aircraft opens it on INSPECT and centres the map on it. STEPS and DEBRIEF swap
-    /// what the list shows (the plan's steps planned against actual; the sortie's summary).</summary>
+    /// <summary>BEHAVIOUR › SORTIE, the events half (spec 2026-10-04 §4.4): the wing's events, its radio lines, your order results
+    /// (<see cref="WingAcks.Feed"/>) and the steps that ran LATE or EARLY, merged by time, newest first, filtered by element or the
+    /// selected aircraft; and the sortie's AFTER-ACTION REPORT in their place. A line with an aircraft opens it on INSPECT and centres
+    /// the map on it. A pooled <see cref="AvList"/> that pages by <see cref="PageRows"/>.</summary>
     internal sealed partial class WmcPlan
     {
-        private const int LogPageRows = LogRows.MaxRows;
+        private const int PageRows = 8, MaxEvents = LogRows.MaxRows + AckFeed.Capacity + WingPlan.Lanes * WingPlan.MaxSteps;
         private static readonly string[] LogChipLabels = { "ALL", "A", "B", "C", "D", "SELECTED" };
+        private static readonly System.Comparison<SortieEvent> Newest = (a, b) => b.Time.CompareTo(a.Time);
+
+        /// <summary>One line of the merged event list; <see cref="Tone"/> is <see cref="SortieWords.Tone"/> (2 danger, 1 caution).</summary>
+        private struct SortieEvent
+        {
+            public float Time;
+            public string Who, Text;
+            public int Tone, Lane;
+            public uint Id;
+            public bool Radio;
+        }
 
         /// <summary>What a list line shows and where a click goes (an aircraft id, or none).</summary>
         private struct LogLine
@@ -31,24 +43,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private readonly List<LogRow> logRows = new List<LogRow>(LogRows.MaxRows);
-        private readonly List<LogLine> logLines = new List<LogLine>(LogRows.MaxRows);
+        private readonly List<LogLine> logLines = new List<LogLine>(MaxEvents);
+        private readonly List<SortieEvent> sortieEvents = new List<SortieEvent>(MaxEvents);
         private AvControl[] logChips;
-        private AvControl debriefButton, stepsButton;
+        private AvControl debriefButton;
         private AvSection logSection;
         private AvList logList;
         private WmcLines logEmpty;
         private int logElement = -1;
         private bool logSelected;
-        private long logStamp = long.MinValue;
-        private bool logFilled, debrief, steps;
-        private float stepsNext;
+        private bool debrief;
 
         /// <summary>LOG lines showing now (automation).</summary>
         public int LogRowsShown { get; private set; }
 
         private void BuildLog(AvFlow f, AvTicker t)
         {
-            logSection = f.Section(AvIcon.Message2, "LOG", "");
+            logSection = f.Section(AvIcon.Message2, "EVENTS", "");
             var chipSpecs = new AvControl.Spec[LogChipLabels.Length];
             for (int i = 0; i < chipSpecs.Length; i++)
             {
@@ -56,24 +67,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 chipSpecs[i] = new AvControl.Spec(LogChipLabels[i], () => PickLogFilter(k));
             }
             logChips = f.Buttons(chipSpecs).Controls;
-            for (int i = 0; i < logChips.Length; i++) ids.Add("plan.log.filter" + AvNum.Fixed(i, 0), logChips[i]);
-            AvControl[] toggles = f.Buttons(
-                new AvControl.Spec("STEPS", ToggleSteps, AvButtonStyle.Default, AvIcon.ListDetails),
-                new AvControl.Spec("DEBRIEF", ToggleDebrief, AvButtonStyle.Default, AvIcon.Flag)).Controls;
-            stepsButton = toggles[0];
-            debriefButton = toggles[1];
-            stepsButton.Help = "Every plan step: when it was planned, when it really went out, and how late or early.";
-            debriefButton.Help = "This sortie in a few lines (kills, losses, tasks), then the last ones.";
-            ids.Add("plan.log.steps", stepsButton);
-            ids.Add("plan.log.debrief", debriefButton);
+            string[] chipTips = { "Every element and aircraft.", "Element A's lines.", "Element B's lines.", "Element C's lines.", "Element D's lines.", "The selected aircraft's lines." };
+            for (int i = 0; i < logChips.Length; i++)
+            {
+                logChips[i].Help = chipTips[i];
+                ids.Add("plan.log.filter" + AvNum.Fixed(i, 0), logChips[i]);
+            }
             logEmpty = f.Add(new WmcLines(f.Content, 1));
             logEmpty.Set(0, "Nothing logged yet.");
-            logList = f.Add(new AvList(f.Content, t, LogPageRows, BindLog));
+            logList = f.Add(new AvList(f.Content, t, PageRows, BindLog));
             logList.RowClicked = ClickLog;
+            debriefButton = f.Buttons(new AvControl.Spec("AFTER-ACTION REPORT", ToggleDebrief, AvButtonStyle.Default, AvIcon.Flag)).Controls[0];
+            debriefButton.Help = "This sortie in a few lines (kills, losses, tasks), then the last ones; press again for the events.";
+            ids.Add("plan.log.debrief", debriefButton);
         }
 
         private void BindLog(int item, AvRow row)
         {
+            if (item >= logLines.Count) return;
             LogLine l = logLines[item];
             row.Set(l.Name, l.Sub, l.Value, l.State);
             ids.Add("plan.log.row" + AvNum.Fixed(item, 0), row);
@@ -83,9 +94,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             logSelected = chip == 5;
             logElement = chip >= 1 && chip <= 4 ? chip - 1 : -1;
-            logFilled = false;
-            if (last != null) RefreshLog(last);
-            FlushRelayout();
+            debrief = false;
+            debriefButton.Latched = false;
+            Refreshed();
         }
 
         private void ClickLog(int item)
@@ -98,34 +109,93 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (WingRows.IndexOf(last.Rows, last.Count, id) >= 0) WmcPanel.Instance?.Inspect(id);
         }
 
-        private void ToggleSteps()
-        {
-            steps = !steps;
-            if (steps) debrief = false;
-            stepsButton.Latched = steps;
-            debriefButton.Latched = debrief;
-            stepsNext = 0f;
-            logFilled = false;
-            if (last != null) RefreshLog(last);
-            FlushRelayout();
-        }
-
         private void ToggleDebrief()
         {
             debrief = !debrief;
-            if (debrief) steps = false;
-            stepsButton.Latched = steps;
             debriefButton.Latched = debrief;
-            logFilled = false;
-            if (last != null) RefreshLog(last);
-            FlushRelayout();
+            Refreshed();
         }
 
-        private void FlushRelayout()
+        /// <summary>Merges the wing's events and radio lines, your order results and the steps that ran late or early into
+        /// <see cref="sortieEvents"/>, newest first, as the filter says.</summary>
+        private void RebuildEvents(WmcContext c, WingPlan plan, PlanRunner r, bool live, WingService w, float now)
         {
-            if (!relayout) return;
-            relayout = false;
-            flow.RequestRelayout();
+            sortieEvents.Clear();
+            WingEventRing events = c.Client ? null : c.Wing?.Events;
+            RadioLog radio = RadioDirector.Instance?.Log;
+            var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
+            int n = LogRows.Fill(events, radio, logRows, LogRows.MaxRows, filter);
+            for (int i = 0; i < n; i++)
+            {
+                LogRow row = logRows[i];
+                sortieEvents.Add(new SortieEvent
+                {
+                    Time = row.Time, Who = row.Radio ? "RADIO" : LogRows.Who(row.Member), Text = row.Text, Id = row.Id, Radio = row.Radio,
+                    Tone = SortieWords.Tone(row.Text), Lane = -1,
+                });
+            }
+            // Your orders: the ack's clock is real time, the events' is the mission's.
+            if (!logSelected)
+                for (int i = 0; i < WingAcks.Feed.Count; i++)
+                {
+                    AckLine a = WingAcks.Feed.Newest(i);
+                    if (logElement >= 0 && a.Who != ElementRoster.Letter(logElement)) continue;
+                    float t = c.MissionTime - (Time.unscaledTime - a.Time);
+                    sortieEvents.Add(new SortieEvent
+                    {
+                        Time = t, Who = a.Who, Text = a.Accepted ? "WILCO · " + (a.What ?? "") : "UNABLE · " + (string.IsNullOrEmpty(a.Reason) ? "REFUSED" : a.Reason.ToUpperInvariant()),
+                        Tone = a.Accepted ? 0 : 2, Lane = -1,
+                    });
+                }
+            // Steps that went out late or early: the STEPS table, as events.
+            if (live && !logSelected)
+                for (int l = 0; l < WingPlan.Lanes; l++)
+                {
+                    if (logElement >= 0 && l != logElement) continue;
+                    for (int s = 0; s < plan.Steps[l].Count && sortieEvents.Count < MaxEvents; s++)
+                    {
+                        float actual = r.StartedAt(l, s);
+                        string diff = SortieWords.Diff(drawnStart[l, s], actual);
+                        if (diff.Length == 0 || diff == "ON TIME") continue;
+                        sortieEvents.Add(new SortieEvent
+                        {
+                            Time = r.ExecutedAt + actual, Who = PlanRules.Name(l, s), Text = PlanWords.Kind(plan.Steps[l][s].Kind) + " " + diff,
+                            Tone = diff.StartsWith("LATE", System.StringComparison.Ordinal) ? 1 : 0, Lane = l,
+                        });
+                    }
+                }
+            if (live && sortieEvents.Count < MaxEvents) AddExecute(r, plan);
+            sortieEvents.Sort(Newest);
+            logLines.Clear();
+            for (int i = 0; i < sortieEvents.Count; i++)
+            {
+                SortieEvent e = sortieEvents[i];
+                logLines.Add(new LogLine
+                {
+                    Name = e.Who + " · " + e.Text, Value = SortieWords.Stamp(e.Time, live, live ? r.ExecutedAt : 0f),
+                    State = e.Radio ? AvState.Info : e.Tone == 2 ? AvState.Danger : e.Tone == 1 ? AvState.Caution : AvState.Ready, Id = e.Id,
+                });
+            }
+        }
+
+        /// <summary>The run's first line, at the foot of the list (it is the oldest).</summary>
+        private void AddExecute(PlanRunner r, WingPlan plan)
+        {
+            int lanes = 0;
+            for (int l = 0; l < WingPlan.Lanes; l++)
+                if (plan.Steps[l].Count > 0) lanes++;
+            if (logElement >= 0 || logSelected) return;
+            sortieEvents.Add(new SortieEvent { Time = r.ExecutedAt, Who = "EXECUTE", Text = AvNum.Fixed(lanes, 0) + (lanes == 1 ? " LANE" : " LANES"), Lane = -1 });
+        }
+
+        /// <summary>Puts <see cref="logLines"/> on the list (the events, or the after-action report), with its caption and chips.</summary>
+        private void RefreshEventList()
+        {
+            for (int k = 0; k < logChips.Length; k++)
+                logChips[k].Latched = k == 5 ? logSelected : k == 0 ? !logSelected && logElement < 0 : !logSelected && logElement == k - 1;
+            Enable(logChips[5], last != null && last.Selection.Single != 0u);
+            if (debrief) RefreshDebrief();
+            else ShowLines(AvNum.Fixed(logLines.Count, 0) + (logLines.Count == 1 ? " LINE" : " LINES"));
         }
 
         /// <summary>The lines are in <see cref="logLines"/>: the list and its caption follow.</summary>
@@ -144,49 +214,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             logLines.Add(new LogLine { Name = name, Sub = sub, Value = value, State = state, Id = id });
         }
 
-        /// <summary>STEPS (the old TIMELINE table, kept): STEP · PLANNED · ACTUAL · DIFF per plan step, once a second.</summary>
-        private void RefreshSteps()
-        {
-            if (Time.unscaledTime < stepsNext) return;
-            stepsNext = Time.unscaledTime + 1f;
-            WingPlans plans = WingPlans.Instance;
-            WingPlan plan = plans?.Plan;
-            PlanRunner r = plans?.Runner;
-            bool live = r != null && (r.Running || plans.Completed);
-            logLines.Clear();
-            for (int l = 0; plan != null && l < WingPlan.Lanes; l++)
-                for (int s = 0; s < plan.Steps[l].Count && logLines.Count < LogRows.MaxRows; s++)
-                {
-                    float rs = live ? r.StartedAt(l, s) : float.NaN;
-                    StepLine(l, s, PlanWords.Kind(plan.Steps[l][s].Kind), drawnStart[l, s], rs);
-                }
-            ShowLines("STEP · PLANNED · ACTUAL · DIFF");
-        }
-
-        /// <summary>"B2 ATTACK" over "PLANNED T+1:50 · ACTUAL T+2:40", LATE 0:50 on the right.</summary>
-        private void StepLine(int l, int s, string kind, float planned, float actual)
-        {
-            string p = float.IsNaN(planned) ? "?" : "T+" + Clock(planned);
-            string a = float.IsNaN(actual) ? "-" : "T+" + Clock(actual);
-            string diff = "";
-            if (!float.IsNaN(planned) && !float.IsNaN(actual))
-            {
-                float d = actual - planned;
-                diff = Mathf.Abs(d) < 5f ? "ON TIME" : (d > 0f ? "LATE " : "EARLY ") + Clock(Mathf.Abs(d));
-            }
-            AddLine(PlanRules.Name(l, s) + " " + kind, "PLANNED " + p + " · ACTUAL " + a, diff, float.IsNaN(actual) ? AvState.Info : AvState.Ready, 0u);
-        }
-
-        /// <summary>DEBRIEF: this sortie's lines, then the first line of each kept one (spec WMC rebuild §PLAN DEBRIEF).</summary>
+        /// <summary>AFTER-ACTION REPORT: this sortie's lines, then the first line of each kept one (spec WMC rebuild §PLAN DEBRIEF).</summary>
         private void RefreshDebrief()
         {
             DebriefService d = DebriefService.Instance;
             SortieLog s = d?.Sortie;
-            long stamp = s == null ? 0 : ((long)(s.End - s.Start) / 10L) * 131L + s.Launched + s.Airborne * 3 + s.Landed * 7 + s.Lost * 11
-                                         + s.Kills * 13 + s.TasksDone * 17 + s.TasksFailed * 19 + s.TargetsDown * 23 + s.Relocated * 29 + s.Gcas * 31;
-            if (stamp == logStamp && logFilled) return;
-            logStamp = stamp;
-            logFilled = true;
             logLines.Clear();
             if (s != null)
                 foreach (string line in s.Lines())
@@ -194,43 +226,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             DebriefStore store = d?.Store;
             for (int i = 0; store != null && i < store.Count && logLines.Count < LogRows.MaxRows; i++)
                 AddLine("EARLIER", store.Lines(i)[0], null, AvState.Info, 0u);
-            ShowLines("DEBRIEF");
-        }
-
-        private void RefreshLog(WmcContext c)
-        {
-            if (debrief)
-            {
-                RefreshDebrief();
-                return;
-            }
-            if (steps)
-            {
-                RefreshSteps();
-                return;
-            }
-            WingEventRing events = c.Client ? null : c.Wing?.Events;
-            RadioLog radio = RadioDirector.Instance?.Log;
-            // Fill allocates while it describes events: only when something was logged, or the filter or the selection changed.
-            long stamp = LogRows.Stamp(events, radio) * 31L + (logElement + 2) * 7L + c.Selection.Single * 3L + (logSelected ? 1L : 0L);
-            for (int k = 0; k < logChips.Length; k++)
-                logChips[k].Latched = k == 5 ? logSelected : k == 0 ? !logSelected && logElement < 0 : !logSelected && logElement == k - 1;
-            Enable(logChips[5], c.Selection.Single != 0u);
-            if (stamp == logStamp && logFilled) return;
-            logStamp = stamp;
-            logFilled = true;
-            var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
-            int n = LogRows.Fill(events, radio, logRows, LogRows.MaxRows, filter);
-            logLines.Clear();
-            for (int i = 0; i < n; i++)
-            {
-                LogRow r = logRows[i];
-                string when = Clock(r.Time);
-                // A radio line or a wing-level event has no one to centre on: no false click target (review P1 m3).
-                AddLine(r.Radio ? when + " · RADIO" : when + " · " + LogRows.Who(r.Member), r.Text, null,
-                    r.Radio ? AvState.Info : r.Member < 0 ? AvState.Caution : AvState.Ready, r.Id);
-            }
-            ShowLines(AvNum.Fixed(n, 0) + " LINES");
+            ShowLines("AFTER-ACTION REPORT");
         }
     }
 }

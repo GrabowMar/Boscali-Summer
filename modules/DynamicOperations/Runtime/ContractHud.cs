@@ -88,9 +88,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             IReadOnlyList<SecondaryObjectiveView> views = manager.Objectives;
             cardCount = 0;
-            if (views != null)
+            if (manager.IsFresh && views != null)
                 for (int i = 0; i < views.Count && cardCount < MaxMarkers; i++)
-                    if (ContractCard.TryRead(views[i], out ContractCard card)) cards[cardCount++] = card;
+                    if (ContractCard.TryRead(views[i], out ContractCard card) &&
+                        (manager.SelectedForHud == 0 || card.Id == manager.SelectedForHud)) cards[cardCount++] = card;
         }
 
         private void Render(Camera camera, Vector3 self)

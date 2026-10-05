@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float FrontBase;
         public float FrontTop;
         public float CloudBase;
+        /// <summary>Ordinary deck/tower ceiling; excludes the independent frontal shield.</summary>
+        public float LowTop;
         public float CloudTop;
         public float VisibilityKm;
 
@@ -132,10 +134,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, key.FrontTurn);
             FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
             StateParams convection = StateTable.At(timeline.GrowthLevel);
-            CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ);
+            CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ, Split);
             CloudClusterCount = 0;
             for (int i = 0; i < cloudClusters.Length; i++)
-                if (DryCloudCluster.TryResolve(timeline.Layout, i, convection, HalfX, HalfZ, out DryCloudCluster cloud))
+                if (DryCloudCluster.TryResolve(timeline.Layout, i, convection, HalfX, HalfZ, out DryCloudCluster cloud, driftX, driftZ))
                     cloudClusters[CloudClusterCount++] = cloud;
             SuperstructureCount = Superstructures.Fill(superstructures, timeline.Layout, convection,
                 HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
@@ -221,11 +223,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float column = (float)Math.Pow(Math.Max(shape, 0f), 0.65f);
                 if (p.Anvil > 0.05f)
                 {
-                    float dist = (float)Math.Sqrt(dx * dx + dz * dz);
+                    float dist = cell.EllipticDistance(dx, dz);
                     float flare = CloudShape.Footprint(0.82f, p.Anvil);
                     float anvilReach = cell.Radius * 1.35f * flare;
                     float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, dist);
                     shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, p.Anvil);
+                    // The spreading crown is lower away from the updraft. A literal flat
+                    // shelf=1 across this radius made every ordinary storm a giant saucer.
+                    shelf *= 0.82f + 0.18f * WeatherMath.Clamp01(shape);
                     if (shelf > column) column = shelf;
                 }
                 float cellCrown = cell.Base + (cell.Top - cell.Base) * column;
@@ -268,8 +273,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float crown = top;
             // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
             crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, p.LayerDepth)), crown, genus.TowerBlend);
-            point.CloudTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
-            point.CloudTop = Math.Max(point.CloudTop,
+            point.LowTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
+            point.CloudTop = Math.Max(point.LowTop,
                 WeatherMath.Lerp(point.CloudBase, point.FrontTop, point.FrontCover));
 
             float haze = Math.Max(p.HazeKm * HazeScale, 0.5f);
@@ -350,14 +355,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         public const int MaxCount = 8;
         public int Slot;
-        public float X, Z, Radius, Base, Top, Strength, AxisX, AxisZ;
+        public float X, Z, Radius, Base, Top, Strength, AxisX, AxisZ, Aspect;
 
         public float CoverAt(float x, float z)
         {
             float dx = x - X, dz = z - Z;
-            if (dx * dx + dz * dz > Radius * Radius * 1.7f) return 0f;
-            float along = dx * AxisX + dz * AxisZ;
-            float across = -dx * AxisZ + dz * AxisX;
+            if (dx * dx + dz * dz > Radius * Radius * 4f) return 0f;
+            float along = (dx * AxisX + dz * AxisZ) / Math.Max(1f, Aspect);
+            float across = (-dx * AxisZ + dz * AxisX) / 0.72f;
             float r = Radius;
             float shape = Math.Max(Blob(along, across, r * 0.50f),
                 Math.Max(Blob(along - r * 0.48f, across - r * 0.18f, r * 0.38f),
@@ -374,7 +379,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         public static bool TryResolve(uint layout, int slot, StateParams sky, float halfX, float halfZ,
-            out DryCloudCluster cloud)
+            out DryCloudCluster cloud, float windX = 0f, float windZ = 0f)
         {
             cloud = default;
             uint seed = unchecked(layout ^ (uint)(slot * 73856093) ^ 0x7c15u);
@@ -392,9 +397,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 0.65f, 1.1f) * puff *
                 (0.75f + 0.25f * sky.Cumulus);
             cloud.Strength = strength;
-            float angle = WeatherMath.Hash01(seed, 77) * 2f * (float)Math.PI;
+            float angle = windX * windX + windZ * windZ > 0.001f
+                ? (float)Math.Atan2(windZ, windX) + WeatherMath.HashRange(seed, 77, 0, 0, -0.28f, 0.28f)
+                : WeatherMath.Hash01(seed, 77) * 2f * (float)Math.PI;
             cloud.AxisX = (float)Math.Cos(angle);
             cloud.AxisZ = (float)Math.Sin(angle);
+            cloud.Aspect = WeatherMath.HashRange(seed, 78, 0, 0, 1.05f, 1.45f);
             return true;
         }
     }

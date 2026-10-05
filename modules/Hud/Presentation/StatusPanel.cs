@@ -26,13 +26,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// </summary>
     internal sealed class StatusPanel
     {
-        private const float RowHeight = 18f;
+        private const float RowHeight = 22f;
+        private const float DetailHeight = 18f;
         private const float RowFontSize = 13f;
+        private const float DetailFontSize = 12f;
         private const float HeaderFontSize = 11f;
         private const float RowPad = 3f;
         private const float GlyphSize = 6f;
         private const float DockGap = 4f;
-        private const float HeaderHeight = 14f;
+        private const float HeaderHeight = 16f;
 
         private static readonly FieldInfo TopRightPanelField = AccessTools.Field(typeof(CombatHUD), "topRightPanel");
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
@@ -47,7 +49,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Color nativeBackingColor = new Color(0f, 0f, 0f, 1f);
         private TMP_FontAsset font;
         private Material fontMaterial;
-        private float baseFontSize = 12f;
 
         private readonly Row[] rows = new Row[HudLayout.MaxRows];
         private float lastGroupAlpha = -1f;
@@ -57,6 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public RectTransform Root;
             public Image Glyph;
             public TextMeshProUGUI Text;
+            public TextMeshProUGUI Detail;
             public Image Bar;
             public bool Active;
             public bool Initialized;
@@ -103,7 +105,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI nameLabel = weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
             font = nameLabel != null ? nameLabel.font : null;
             fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
-            baseFontSize = nameLabel != null && nameLabel.fontSize > 0f ? nameLabel.fontSize : 12f;
 
             var rootObject = new GameObject("BoscaliStatusPanel", typeof(RectTransform));
             root = (RectTransform)rootObject.transform;
@@ -209,6 +210,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             text.overflowMode = TextOverflowModes.Ellipsis;
             text.raycastTarget = false;
 
+            var detailObject = new GameObject("Detail", typeof(RectTransform));
+            detailObject.transform.SetParent(rowRect, false);
+            TextMeshProUGUI detail = detailObject.AddComponent<TextMeshProUGUI>();
+            detail.font = font;
+            detail.fontSharedMaterial = fontMaterial;
+            detail.fontSize = DetailFontSize;
+            detail.alignment = TextAlignmentOptions.MidlineLeft;
+            detail.enableWordWrapping = false;
+            detail.overflowMode = TextOverflowModes.Ellipsis;
+            detail.raycastTarget = false;
+            detail.gameObject.SetActive(false);
+
             var barObject = new GameObject("Bar", typeof(RectTransform), typeof(Image));
             RectTransform barRect = (RectTransform)barObject.transform;
             barRect.SetParent(rowRect, false);
@@ -228,7 +241,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rowObject.SetActive(false);
             return new Row
             {
-                Root = rowRect, Glyph = glyph, Text = text, Bar = bar,
+                Root = rowRect, Glyph = glyph, Text = text, Detail = detail, Bar = bar,
                 Active = false, Initialized = false, LastBar = -1f, LastFontSize = -1f
             };
         }
@@ -262,9 +275,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (border.color != borderColor) border.color = borderColor;
             if (header.color != themeAllClear) header.color = themeAllClear;
 
-            float rowHeight = RowHeight * scale;
             float fontSize = RowFontSize * scale;
+            float mainHeight = RowHeight * scale;
             const float headerHeight = HeaderHeight;
+            float nextY = headerHeight;
             for (int i = 0; i < rows.Length; i++)
             {
                 bool active = i < count;
@@ -275,13 +289,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
                 if (!active) continue;
 
+                HudMessage message = snapshot[i];
+                bool hasDetail = showDetails && !string.IsNullOrEmpty(message.Detail);
+                float rowHeight = mainHeight + (hasDetail ? DetailHeight * scale : 0f);
                 RectTransform rowRect = rows[i].Root;
-                Vector2 wantPosition = new Vector2(0f, -headerHeight - i * rowHeight);
+                Vector2 wantPosition = new Vector2(0f, -nextY);
+                nextY += rowHeight;
                 if (rowRect.anchoredPosition != wantPosition) rowRect.anchoredPosition = wantPosition;
                 Vector2 wantSize = new Vector2(0f, rowHeight);
                 if (rowRect.sizeDelta != wantSize) rowRect.sizeDelta = wantSize;
 
-                HudMessage message = snapshot[i];
+                PlaceLine(rows[i].Text.rectTransform, 0f, mainHeight, scale);
+                PlaceLine(rows[i].Detail.rectTransform, mainHeight, DetailHeight * scale, scale);
+                rows[i].Glyph.rectTransform.anchorMin = rows[i].Glyph.rectTransform.anchorMax = new Vector2(0f, 1f);
+                rows[i].Glyph.rectTransform.anchoredPosition = new Vector2(RowPad, -mainHeight * .5f);
+                if (rows[i].Detail.gameObject.activeSelf != hasDetail) rows[i].Detail.gameObject.SetActive(hasDetail);
                 Color toneColor = ToneColor(message.Tone);
                 bool changed = !rows[i].Initialized || rows[i].LastTone != message.Tone ||
                     rows[i].LastText != message.Text || rows[i].LastDetail != message.Detail ||
@@ -290,9 +312,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     rows[i].Glyph.color = toneColor;
                     rows[i].Text.color = toneColor;
-                    rows[i].Text.text = showDetails && !string.IsNullOrEmpty(message.Detail)
-                        ? message.Text + "  <alpha=#99>" + message.Detail
-                        : message.Text;
+                    rows[i].Detail.color = new Color(toneColor.r, toneColor.g, toneColor.b, .7f);
+                    rows[i].Text.text = message.Text;
+                    rows[i].Detail.text = hasDetail ? message.Detail : "";
                     rows[i].LastTone = message.Tone;
                     rows[i].LastText = message.Text;
                     rows[i].LastDetail = message.Detail;
@@ -302,6 +324,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (rows[i].LastFontSize != fontSize)
                 {
                     rows[i].Text.fontSize = fontSize;
+                    rows[i].Detail.fontSize = DetailFontSize * scale;
                     rows[i].LastFontSize = fontSize;
                 }
                 float barValue = showDetails ? message.Bar : 0f;
@@ -313,11 +336,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
 
-            float totalHeight = headerHeight + Mathf.Max(rowHeight, count * rowHeight);
+            float totalHeight = nextY;
             Vector2 rootSize = new Vector2(0f, totalHeight);
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
             Vector2 rootPosition = new Vector2(offsetX, -DockGap + offsetY);
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
+        }
+
+        private static void PlaceLine(RectTransform rect, float top, float height, float scale)
+        {
+            rect.anchorMin = new Vector2(0f, 1f);
+            rect.anchorMax = new Vector2(1f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.anchoredPosition = new Vector2(RowPad * 2f + GlyphSize, -top - scale);
+            rect.sizeDelta = new Vector2(-RowPad * 3f - GlyphSize, height - 2f * scale);
         }
 
         private static Color ToneColor(HudTone tone)

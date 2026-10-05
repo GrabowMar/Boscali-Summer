@@ -149,7 +149,9 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public RadioDial TunedDial => tunedDial;
         public RadioReception Reception => reception;
         public float SignalLevel => fx == null ? 0f : fx.Level;
-        public float[] Spectrum => spectrum;
+        /// <summary>Only the panel's waterfall reads this, so the row is refreshed on read (at most
+        /// every 0.12 s) rather than ticking while the panel is closed.</summary>
+        public float[] Spectrum { get { SpectrumTick(); return spectrum; } }
 
         /// <summary>
         /// True when the tuned station has a resolved tower and the player has a position, so
@@ -395,7 +397,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             ProgramTick();
             FilterTick();
             PropagationTick();
-            SpectrumTick();
 
             if (receiver.IsPlaying && Time.unscaledTime >= nextLevelSample)
             {

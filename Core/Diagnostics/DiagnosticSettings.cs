@@ -7,6 +7,7 @@ namespace BoscaliSummer.Core.Diagnostics
         public readonly ConfigEntry<bool> VerboseLogging;
         public readonly ConfigEntry<bool> BypassRequirements;
         public readonly ConfigEntry<bool> DisableOpsCooldowns;
+        public readonly ConfigEntry<bool> FootprintProfiler;
 
         public DiagnosticSettings(ConfigFile config)
         {
@@ -22,6 +23,17 @@ namespace BoscaliSummer.Core.Diagnostics
                 "DEBUG CHEAT: Disable loading times (cooldowns) between abilities in OPS, " +
                 "allowing consecutive support requests without waiting. " +
                 "Host-authoritative: on a server, only the host's value decides what is allowed.");
+            FootprintProfiler = config.Bind("Debug", "FootprintProfiler", false,
+                "DEVELOPER TOOL: measure what Boscali itself costs per frame, per module and per " +
+                "method (read it with `nomod bridge footprint` or the BepInEx log). Wraps every " +
+                "Boscali Update and patch while on, which itself costs a little; free when off. " +
+                "Applies live. Client-local.");
+            if (FootprintProfiler.Value) NOModKitTelemetry.StartWhenReady(deep: false);
+            FootprintProfiler.SettingChanged += (_, __) =>
+            {
+                if (FootprintProfiler.Value) Diagnostics.FootprintProfiler.Start(deep: false);
+                else Diagnostics.FootprintProfiler.Stop();
+            };
         }
     }
 }

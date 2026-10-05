@@ -13,39 +13,36 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // SUPPLY step 4 LAUNCH BASE: NEAREST or ANY FIELD, and the friendly fields a page at a time (only the ON button toggles one).
+    // SUPPLY step ④ LAUNCH BASE: NEAREST or ANY FIELD in the header, and the friendly fields a page at a time (only the ON button
+    // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / NO JETS and ON / OFF.
     internal sealed partial class WmcSupply
     {
-        private sealed class BaseRow
-        {
-            public int Item;
-            public AvControl Toggle;
-        }
-
-        private readonly Dictionary<AvRow, BaseRow> baseRows = new Dictionary<AvRow, BaseRow>(BezelLayout.BaseRows);
         private AvControl nearest, anyField;
-        private AvSection baseSection;
-        private AvList baseList;
+        private WmcHeadBar baseHead;
+        private WmcStripBlock baseList;
         private WmcLines baseEmpty;
-        private int baseChipKey = -1, baseKey = int.MinValue;
+        private int basePage, baseChipKey = -1, baseKey = int.MinValue;
         private int modeKey = -1;
 
         private void BuildBase(AvFlow f)
         {
-            baseSection = f.Section(AvIcon.BuildingBank, "4 · " + SupplyWords.BaseTitle, "");
-            AvControl[] mode = f.Buttons(new AvControl.Spec("NEAREST", () => SetMode(LaunchMode.Nearest)),
-                new AvControl.Spec("ANY FIELD", () => SetMode(LaunchMode.Any))).Controls;
-            nearest = mode[0];
-            anyField = mode[1];
+            baseHead = f.Add(new WmcHeadBar(f.Content, AvIcon.BuildingBank, "4 · " + SupplyWords.BaseTitle,
+                new AvControl.Spec("NEAREST", () => SetMode(LaunchMode.Nearest), AvButtonStyle.Default),
+                new AvControl.Spec("ANY FIELD", () => SetMode(LaunchMode.Any), AvButtonStyle.Default)));
+            nearest = baseHead.Control(0);
+            anyField = baseHead.Control(1);
             ids.Add("sup.base.nearest", nearest);
             ids.Add("sup.base.any", anyField);
-            baseList = f.Add(new AvList(f.Content, ticker, BezelLayout.BaseRows, BindBase));
-            WmcListPaging.Register(ids, "sup.bases.", baseList, BezelLayout.BaseRows);
+            baseList = f.Add(new WmcStripBlock(f.Content, "Fields", BezelLayout.BaseRows, TurnBases, (row, k) => ToggleBase(basePage * BezelLayout.BaseRows + row),
+                new AvControl.Spec("ON", null, AvButtonStyle.Default)));
+            ids.Add("sup.bases.prev", baseList.PagerPrev);
+            ids.Add("sup.bases.next", baseList.PagerNext);
+            for (int i = 0; i < BezelLayout.BaseRows; i++) ids.Add("sup.base" + i, baseList.Button(i, 0));
             baseEmpty = f.Add(new WmcLines(f.Content, 1));
         }
 
-        /// <summary>The mode, the step chip and this page of fields: each row's name, ON/OFF and status (READY, APRON, NO JETS,
-        /// OFF; ON/OFF alone with no airframe picked), the field the requisition will use highlighted.</summary>
+        /// <summary>The mode, the step caption and this page of fields: each row's name, distance, status (READY, APRON, NO JETS, OFF; ON/OFF
+        /// alone with no airframe picked) and ON toggle, the field the requisition will use marked.</summary>
         private void RefreshBase()
         {
             List<Airbase> fields = WingRequisition.Fields;
@@ -59,7 +56,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 nearest.Help = client ? ClientWhy : "Launch from the field picked on the radial when it is ON, else the nearest ON field.";
                 anyField.Help = client ? ClientWhy : "Launch from the nearest ON field with a hangar ready for this airframe, else as NEAREST.";
             }
-            int on = 0, key = fields.Count * 7919 + (client ? 1 : 0);
+            int per = BezelLayout.BaseRows, pages = Pages.Count(fields.Count, per);
+            basePage = Pages.Clamp(basePage, fields.Count, per);
+            int on = 0, key = fields.Count * 7919 + (client ? 1 : 0) + basePage * 17;
             unchecked
             {
                 foreach (Airbase f in fields)
@@ -70,49 +69,58 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     string status = selected == null ? (isOn ? "ON" : "OFF") : WingRequisition.Status(f, selected);
                     key = key * 31 + f.GetHashCode() + (isOn ? 3 : 0) + (ReferenceEquals(f, field) ? 5 : 0) + (status != null ? status.GetHashCode() * 7 : 0)
                         + (selected != null ? 11 : 0);
+                    if (caller != null) key += (int)((f.transform.position - caller.transform.position).magnitude / 1000f) * 13;
                 }
             }
             int chip = on * 1000 + fields.Count;
             if (chip != baseChipKey)
             {
                 baseChipKey = chip;
-                StepCaption(baseSection, SupplyWords.BaseChip(on, fields.Count), on > 0 ? "live" : "warn");
+                baseHead.SetCaption(StepCaption(SupplyWords.BaseChip(on, fields.Count), on > 0 ? "live" : "warn"));
                 bool none = fields.Count == 0;
                 baseEmpty.Set(0, none ? caller == null ? SupplyWords.NotFlyingBases : SupplyWords.NoField : "");
                 relayout = true;
             }
             if (key == baseKey) return;
             baseKey = key;
-            baseList.SetCount(fields.Count);
+            int first = basePage * per;
+            for (int s = 0; s < per; s++)
+            {
+                if (first + s >= fields.Count) baseList.Hide(s);
+                else BindBase(s, fields[first + s]);
+            }
+            baseList.SetPaging(basePage, pages, (first + 1) + "–" + Mathf.Min(fields.Count, first + per) + " OF " + fields.Count);
             relayout = true;
         }
 
-        /// <summary>A field's row: its name, READY / APRON / NO JETS / OFF (ON / OFF with no airframe picked) and an ON toggle; the field
-        /// the requisition will use is armed.</summary>
-        private void BindBase(int item, AvRow row)
+        /// <summary>A field's strip: a dot in its state colour, its name, how far it is, READY / APRON / NO JETS / OFF (ON / OFF with no
+        /// airframe picked) and an ON toggle; the field the requisition will use is marked.</summary>
+        private void BindBase(int slot, Airbase f)
         {
-            if (!baseRows.TryGetValue(row, out BaseRow r))
+            if (f == null)
             {
-                r = new BaseRow();
-                BaseRow made = r;
-                made.Toggle = row.AddTrailing(new AvControl.Spec("ON", () => ToggleBase(made.Item)));
-                baseRows[row] = made;
+                baseList.Hide(slot);
+                return;
             }
-            r.Item = item;
-            List<Airbase> fields = WingRequisition.Fields;
-            Airbase f = item < fields.Count ? fields[item] : null;
-            if (f == null) return;
             bool isOn = WingRequisition.IsOn(f), picked = ReferenceEquals(f, field);
             string status = selected == null ? (isOn ? "ON" : "OFF") : WingRequisition.Status(f, selected);
             AvState state = status == "READY" ? AvState.Ready : status == "NO JETS" || status == "OFF" ? AvState.Caution : isOn ? AvState.Info : AvState.Inert;
-            row.Set(BaseName.Short(WingRequisition.NameOf(f), 40), picked ? "LAUNCH FIELD" : "", AvStates.Glyph(state) + status, state);
-            row.Armed = picked;
-            row.Help = picked ? "The field the requisition will launch from." : null;
-            r.Toggle.Label = isOn ? "ON" : "OFF";
-            r.Toggle.Latched = isOn;
-            r.Toggle.Interactable = !client;
-            r.Toggle.Help = client ? ClientWhy : isOn ? "Turn this field OFF: requisitions will not launch from it." : "Turn this field ON.";
-            ids.Add("sup.base" + item % BezelLayout.BaseRows, r.Toggle);
+            string km = caller != null ? SupplyWords.FieldDistance((f.transform.position - caller.transform.position).magnitude / 1000f) : "";
+            string sub = (km.Length > 0 ? km : "") + (picked ? (km.Length > 0 ? " · " : "") + "LAUNCH FIELD" : "");
+            baseList.Set(slot, "●", state, BaseName.Short(WingRequisition.NameOf(f), 40), sub, -1f, AvStates.Glyph(state) + status, state,
+                picked ? AvState.Ready : state);
+            AvControl toggle = baseList.Button(slot, 0);
+            toggle.Label = isOn ? "ON" : "OFF";
+            toggle.Latched = isOn;
+            toggle.Interactable = !client;
+            toggle.Help = client ? ClientWhy : isOn ? "Turn this field OFF: requisitions will not launch from it." : "Turn this field ON.";
+        }
+
+        private void TurnBases(int dir)
+        {
+            basePage = Pages.Clamp(basePage + dir, WingRequisition.Fields.Count, BezelLayout.BaseRows);
+            baseKey = int.MinValue;
+            WmcPanel.Instance?.Refresh();
         }
 
         private void SetMode(LaunchMode mode)

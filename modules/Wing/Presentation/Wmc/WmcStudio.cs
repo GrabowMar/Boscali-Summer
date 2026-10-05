@@ -11,6 +11,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>SQUADRON › STUDIO (spec bezel v2 §5; the room's SQUADRON moved onto the bezel): a pilot picker (saved pilots, then this
@@ -219,7 +220,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 Callsign = p.Callsign, Name = p.Name, DialogueTag = p.DialogueTag, Persona = p.Persona, Background = p.Background ?? "",
             };
-            r.ApplySelection(PilotStudio.Frozen(p.Name, p.Callsign, p.PortraitSelection));
+            int faction = p.PortraitFaction >= 0 ? p.PortraitFaction : PortraitFactions.Local;
+            r.ApplySelection(PilotStudio.Frozen(p.Name, p.Callsign, p.PortraitSelection, faction));
             return r;
         }
 

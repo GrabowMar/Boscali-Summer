@@ -202,6 +202,25 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             }
         }
 
+        // Multiplier runs on every fuel draw; the passives per effect never change after startup.
+        private static readonly PerkDefinition[][] PassivesByEffect = BuildPassives();
+
+        private static PerkDefinition[][] BuildPassives()
+        {
+            var table = new PerkDefinition[Enum.GetValues(typeof(PerkEffect)).Length][];
+            for (int effect = 0; effect < table.Length; effect++)
+            {
+                var list = new System.Collections.Generic.List<PerkDefinition>();
+                for (int i = 0; i < All.Length; i++)
+                    if (All[i].Capability == null && (int)All[i].Effect == effect) list.Add(All[i]);
+                table[effect] = list.ToArray();
+            }
+            return table;
+        }
+
+        /// <summary>The capability-free perks that carry <paramref name="effect"/>, in catalogue order.</summary>
+        public static PerkDefinition[] Passives(PerkEffect effect) => PassivesByEffect[(int)effect];
+
         public static bool IsDefined(byte id) => id < All.Length;
 
         public static PerkDefinition Get(byte id)

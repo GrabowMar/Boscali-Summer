@@ -129,7 +129,7 @@ namespace BoscaliSummer.Modules.Wing.Patches
             try
             {
                 // Same id BoscaliMod builds for this module ("wing" is WingModule's id).
-                var harmony = new Harmony(Plugin.PluginGuid + ".feature.wing");
+                var harmony = new Harmony(Plugin.PluginGuid + ".module.wing");
                 var names = new List<string>();
                 foreach (MethodBase m in harmony.GetPatchedMethods())
                 {

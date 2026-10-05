@@ -34,9 +34,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return flash > 1f ? 1f : flash;
         }
 
-        /// <summary>Thunder travel time for a strike distance in metres, clamped.</summary>
+        /// <summary>Physical travel delay. Presentation culls distant events before queueing.</summary>
         public static float ThunderDelay(float distanceM) =>
-            Clamp(Math.Max(0f, distanceM) / SoundSpeed, 0.5f, 8f);
+            Math.Max(0f, distanceM) / SoundSpeed;
 
         /// <summary>Thunder loudness for a strike distance, scaled by the master volume.</summary>
         public static float ThunderGain(float distanceM, float master) =>

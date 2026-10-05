@@ -6,7 +6,7 @@ namespace BoscaliSummer.Core.Fx
 {
     /// <summary>
     /// The render-target ledger: every persistent client-effects RT is owned here, counted in
-    /// bytes against one cap (24 MB: canopy 16 + imagers ~2 + headroom for FxPass scratch).
+    /// bytes against one 24 MiB cap shared by clouds, canopy panes, imagers and FX scratch.
     /// Actual pooling stays Unity's GetTemporary; this only guarantees nothing grows unbounded
     /// and every byte shows up in Describe. Refused allocations return false — the caller
     /// destroys and skips, never half-renders.

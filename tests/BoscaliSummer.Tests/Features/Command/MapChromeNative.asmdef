@@ -1,0 +1,4 @@
+{
+  "name": "BoscaliMapChromeNative",
+  "references": ["Unity.TextMeshPro", "Unity.ugui"]
+}

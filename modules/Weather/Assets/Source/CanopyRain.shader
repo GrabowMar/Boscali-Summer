@@ -10,6 +10,8 @@ Shader "Boscali/CanopyRain"
     Properties
     {
         _Intensity ("Glass Wetness", Range(0, 1)) = 0
+        _Frost ("Cold Moisture Edge", Range(0, 1)) = 0
+        _PaneBounds ("Pane Bounds", Vector) = (-1,-1,1,1)
         _DropTex ("Droplet State", 2D) = "black" {}
         _Salt ("Pane Salt", Vector) = (0, 0, 0, 0)
         _MapAxis ("Planar Axis (0=z 1=x 2=y)", Float) = 0
@@ -40,7 +42,8 @@ Shader "Boscali/CanopyRain"
 
             sampler2D _CameraOpaqueTexture;
             sampler2D _DropTex;
-            float _Intensity, _LightLevel, _Refract, _Distortion, _MapAxis;
+            float _Intensity, _LightLevel, _Refract, _Distortion, _MapAxis, _Frost;
+            float4 _PaneBounds;
             float4 _Salt, _SunDir, _SunColor, _FogColor, _Tint;
 
             #define DENSITY 3.0 // pattern tiles per metre, identical on every pane
@@ -59,6 +62,7 @@ Shader "Boscali/CanopyRain"
                 float3 worldNormal : TEXCOORD1;
                 float4 screen : TEXCOORD2;
                 float3 objNormal : TEXCOORD3;
+                float2 paneUv : TEXCOORD4;
             };
 
             Interpolated vert(Input v)
@@ -72,6 +76,8 @@ Shader "Boscali/CanopyRain"
                 float3 meters = v.vertex.xyz * scale;
                 float2 planar = _MapAxis < 0.5 ? meters.xy : (_MapAxis < 1.5 ? meters.zy : meters.xz);
                 o.simUv = planar * DENSITY + _Salt.xy;
+                float2 pane = _MapAxis < 0.5 ? v.vertex.xy : (_MapAxis < 1.5 ? v.vertex.zy : v.vertex.xz);
+                o.paneUv = (pane - _PaneBounds.xy) / max(float2(0.001,0.001), _PaneBounds.zw - _PaneBounds.xy);
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
                 o.objNormal = v.normal;
                 o.screen = ComputeScreenPos(o.pos);
@@ -80,14 +86,17 @@ Shader "Boscali/CanopyRain"
 
             float4 frag(Interpolated i) : SV_Target
             {
-                clip(_Intensity - 0.001);
+                clip(max(_Intensity, _Frost) - 0.001);
 
                 float4 drop = tex2D(_DropTex, i.simUv);
                 float hC = drop.r;
                 float bead = smoothstep(0.025, 0.28, hC);
                 float cover = saturate(bead + drop.g * 0.25);
+                float paneEdge = max(abs(i.paneUv.x * 2.0 - 1.0), abs(i.paneUv.y * 2.0 - 1.0));
+                float grain = frac(sin(dot(floor(i.simUv * 24.0), float2(12.9898,78.233))) * 43758.5453);
+                float cold = _Frost * smoothstep(0.68, 0.98, paneEdge) * (0.5 + grain * 0.5);
                 // Dry glass needs no gradient taps, lighting or scene refraction.
-                clip(cover - 0.004);
+                clip(max(cover, cold) - 0.004);
                 float hx = tex2D(_DropTex, i.simUv + float2(TEXEL, 0.0)).r
                     - tex2D(_DropTex, i.simUv - float2(TEXEL, 0.0)).r;
                 float hy = tex2D(_DropTex, i.simUv + float2(0.0, TEXEL)).r
@@ -137,6 +146,8 @@ Shader "Boscali/CanopyRain"
                 // opacity by rain again made individual light-shower beads disappear.
                 float alpha = saturate(cover * lerp(0.15 + bead * 0.32,
                     0.22 + bead * 0.50, _Refract)) * smoothstep(0.0, 0.12, _Intensity);
+                finalColor = lerp(finalColor, float3(0.70,0.78,0.82) * max(0.08,_LightLevel), saturate(cold * 3.0));
+                alpha = max(alpha, cold * 0.65);
                 return float4(finalColor, alpha);
             }
             ENDHLSL

@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private const float EdgeMarginX = 150f;
         private const float EdgeMarginY = 120f;
         private const float ContentSeconds = 0.25f;
+        private const float CaptionWidth = 260f, CaptionHeight = 44f, CaptionGap = 6f;
 
         private CommsSettings settings;
         private CommsManager manager;
@@ -32,6 +33,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private RectTransform canvasRect;
         private Marker[] markers;
         private readonly List<CommsItem> pings = new List<CommsItem>(16);
+        private readonly Rect[] captions = new Rect[MaxMarkers];
+        private readonly Vector2[] positions = new Vector2[MaxMarkers];
+        private readonly float[] bearings = new float[MaxMarkers];
+        private readonly bool[] projected = new bool[MaxMarkers], pinned = new bool[MaxMarkers];
         private float nextContent;
 
         public void Configure(CommsSettings config, CommsManager owner)
@@ -132,22 +137,25 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             float now = Time.unscaledTime;
             bool metric = VanillaHudStyle.Metric;
+            float minimumFontSize = AvTypeScale.Floor / Mathf.Max(.1f, canvasRect.GetComponent<Canvas>().scaleFactor);
+            int captionCount = 0;
+            // Reserve every fixed glyph before placing any caption, including older calls.
             for (int i = 0; i < markers.Length; i++)
             {
-                if (i >= pings.Count)
+                projected[i] = false;
+                if (i >= pings.Count) continue;
+                CommsItem ping = pings[i];
+                Vector3 target = new GlobalPosition(ping.X, float.IsNaN(ping.Height) ? 0f : ping.Height, ping.Z).ToLocalPosition();
+                projected[i] = Project(camera, target, halfWidth, halfHeight, out positions[i], out bearings[i], out pinned[i]);
+            }
+            for (int i = 0; i < markers.Length; i++)
+            {
+                if (!projected[i])
                 {
                     markers[i].SetVisible(false);
                     continue;
                 }
                 CommsItem ping = pings[i];
-                // Until the ground under it is known, a ping sits at sea level as it always did.
-                Vector3 target = new GlobalPosition(ping.X, float.IsNaN(ping.Height) ? 0f : ping.Height, ping.Z).ToLocalPosition();
-                if (!Project(camera, target, halfWidth, halfHeight, out Vector2 at, out float bearing, out bool clamped))
-                {
-                    markers[i].SetVisible(false);
-                    continue;
-                }
-
                 PingKind kind = CommsCatalog.Pings[ping.Style];
                 float dx = ping.X - self.x, dz = ping.Z - self.z;
                 float range = Mathf.Sqrt(dx * dx + dz * dz);
@@ -156,10 +164,49 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 Color colour = CommsMesh.Tone(ping.Faction == manager.LocalFaction ? kind.Tone : CommsTone.Caution);
                 colour.a *= fade;
                 string code = ping.IsCall && !string.IsNullOrEmpty(ping.Text) ? ping.Text : kind.Code;
-                markers[i].Show(at, kind.Glyph, code + " · " + who + " · " + CommsText.Distance(range, metric),
-                    colour, clamped, bearing);
+                Vector2 at = positions[i];
+                Vector2 captionAt = PlaceCaption(at, captionCount);
+                captions[captionCount++] = CaptionBounds(captionAt);
+                markers[i].Show(at, captionAt - at, kind.Glyph, code + " · " + CommsText.Distance(range, metric) + "\n" + who,
+                    colour, pinned[i], bearings[i], minimumFontSize);
             }
         }
+
+        // Keep glyphs on their exact projected positions. Only captions move: newest first,
+        // within the screen, with a short leader when older calls share the same sightline.
+        private Vector2 PlaceCaption(Vector2 at, int count)
+        {
+            Rect screen = canvasRect.rect;
+            Vector2 desired = new Vector2(Mathf.Clamp(at.x, screen.xMin + CaptionWidth * .5f + 8f,
+                screen.xMax - CaptionWidth * .5f - 8f), at.y - 24f);
+            Vector2 candidate = desired;
+            for (int step = 0; step <= MaxMarkers * 4; step++)
+            {
+                int row = step <= MaxMarkers * 2 ? step : -(step - MaxMarkers * 2);
+                candidate.y = Mathf.Clamp(desired.y - row * (CaptionHeight + CaptionGap),
+                    screen.yMin + CaptionHeight + 8f, screen.yMax - 8f);
+                Rect box = CaptionBounds(candidate);
+                box.yMin -= CaptionGap; box.yMax += CaptionGap;
+                bool clear = true;
+                for (int i = 0; i < projected.Length; i++)
+                {
+                    if (!projected[i]) continue;
+                    if (box.Overlaps(new Rect(positions[i].x - 18f, positions[i].y - 18f, 36f, 36f)))
+                    { clear = false; break; }
+                    if (!pinned[i]) continue;
+                    Vector2 arrowAt = positions[i] + new Vector2(Mathf.Cos(bearings[i] * Mathf.Deg2Rad), Mathf.Sin(bearings[i] * Mathf.Deg2Rad)) * 26f;
+                    if (box.Overlaps(new Rect(arrowAt.x - 14f, arrowAt.y - 14f, 28f, 28f)))
+                    { clear = false; break; }
+                }
+                for (int i = 0; i < count; i++)
+                    if (box.Overlaps(captions[i])) { clear = false; break; }
+                if (clear) break;
+            }
+            return candidate;
+        }
+
+        private static Rect CaptionBounds(Vector2 top) =>
+            new Rect(top.x - CaptionWidth * .5f, top.y - CaptionHeight, CaptionWidth, CaptionHeight);
 
         /// <summary>Screen position in canvas units, clamped to the frame when off screen or behind.</summary>
         private bool Project(Camera camera, Vector3 world, float halfWidth, float halfHeight,
@@ -215,9 +262,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             group.interactable = false;
 
             canvasRect = (RectTransform)root.transform;
-            TMP_FontAsset font = VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style) ? style.Font : AvType.VanillaFallback;
+            bool nativeStyle = VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style);
+            TMP_FontAsset font = nativeStyle ? style.Font : AvType.VanillaFallback;
             markers = new Marker[MaxMarkers];
-            for (int i = 0; i < markers.Length; i++) markers[i] = new Marker(canvasRect, font);
+            for (int i = 0; i < markers.Length; i++) markers[i] = new Marker(canvasRect, font, nativeStyle ? style.FontMaterial : null);
         }
 
         /// <summary>One projected ping: its glyph, a caption, and an edge arrow when pinned.</summary>
@@ -226,10 +274,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             private readonly RectTransform root;
             private readonly CommsGlyphGraphic glyph;
             private readonly CommsGlyphGraphic arrow;
+            private readonly Image leader, captionBack;
             private readonly TMP_Text label;
+            private readonly float fontSize;
             private string text;
 
-            public Marker(RectTransform parent, TMP_FontAsset font)
+            public Marker(RectTransform parent, TMP_FontAsset font, Material fontMaterial)
             {
                 var go = new GameObject("CommsMarker", typeof(RectTransform));
                 root = (RectTransform)go.transform;
@@ -238,19 +288,31 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 root.pivot = new Vector2(0.5f, 0.5f);
                 root.sizeDelta = new Vector2(24f, 24f);
 
+                leader = AvLay.Solid(parent, "Caption leader", Color.clear);
+                leader.raycastTarget = false;
+                leader.rectTransform.anchorMin = leader.rectTransform.anchorMax = leader.rectTransform.pivot = new Vector2(.5f, .5f);
+                leader.rectTransform.SetAsFirstSibling(); // every caption paints over every leader
+                leader.enabled = false;
                 glyph = Glyph(root, "Glyph", 24f);
                 arrow = Glyph(root, "Arrow", 18f);
 
+                captionBack = AvLay.Solid(root, "Caption backing", Color.clear);
+                captionBack.raycastTarget = false;
+                captionBack.rectTransform.anchorMin = captionBack.rectTransform.anchorMax = new Vector2(.5f, .5f);
+                captionBack.rectTransform.pivot = new Vector2(.5f, 1f);
+                captionBack.rectTransform.sizeDelta = new Vector2(CaptionWidth, CaptionHeight);
                 var labelGo = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
                 var labelRect = (RectTransform)labelGo.transform;
                 labelRect.SetParent(root, false);
                 labelRect.anchorMin = labelRect.anchorMax = new Vector2(0.5f, 0.5f);
                 labelRect.pivot = new Vector2(0.5f, 1f);
-                labelRect.sizeDelta = new Vector2(320f, 20f);
+                labelRect.sizeDelta = new Vector2(CaptionWidth - 12f, CaptionHeight - 4f);
                 labelRect.anchoredPosition = new Vector2(0f, -15f);
                 label = labelGo.GetComponent<TextMeshProUGUI>();
                 AvType.Apply(label, AvTextRole.Data);
+                fontSize = label.fontSize;
                 if (font != null) label.font = font;
+                if (fontMaterial != null) label.fontSharedMaterial = fontMaterial;
                 label.alignment = TextAlignmentOptions.Top;
                 label.enableWordWrapping = false;
                 label.richText = false;
@@ -258,10 +320,25 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 go.SetActive(false);
             }
 
-            public void Show(Vector2 at, string kind, string caption, Color colour, bool clamped, float bearing)
+            public void Show(Vector2 at, Vector2 captionOffset, string kind, string caption, Color colour, bool clamped, float bearing, float minimumFontSize)
             {
                 if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
                 root.anchoredPosition = at;
+                captionBack.rectTransform.anchoredPosition = captionOffset;
+                Color back = CommsMesh.Under; back.a = colour.a * (230f / 255f); captionBack.color = back;
+                label.rectTransform.anchoredPosition = captionOffset + new Vector2(0f, -2f);
+                bool moved = (captionOffset - new Vector2(0f, -24f)).sqrMagnitude > 4f;
+                leader.enabled = moved;
+                if (moved)
+                {
+                    Vector2 start = new Vector2(0f, captionOffset.y > 0f ? 15f : -15f);
+                    Vector2 end = captionOffset + (captionOffset.y > 0f ? new Vector2(0f, -CaptionHeight) : Vector2.zero);
+                    Vector2 line = end - start;
+                    leader.rectTransform.anchoredPosition = at + (start + end) * .5f;
+                    leader.rectTransform.sizeDelta = new Vector2(line.magnitude, 1f);
+                    leader.rectTransform.localRotation = Quaternion.Euler(0f, 0f, Mathf.Atan2(line.y, line.x) * Mathf.Rad2Deg);
+                    Color ink = colour; ink.a *= .65f; leader.color = ink;
+                }
                 glyph.Set(kind, colour, 1.4f, underStroke: true);
                 if (arrow.gameObject.activeSelf != clamped) arrow.gameObject.SetActive(clamped);
                 if (clamped)
@@ -278,11 +355,13 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     label.text = caption;
                 }
                 label.color = colour;
+                label.fontSize = Mathf.Max(fontSize, minimumFontSize);
             }
 
             public void SetVisible(bool visible)
             {
                 if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible);
+                if (!visible) leader.enabled = false;
             }
 
             private static CommsGlyphGraphic Glyph(RectTransform parent, string name, float size)

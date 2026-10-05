@@ -47,6 +47,36 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
+        /// <summary>The roster table's status tag (word + colour on the row): FLYING #n, NEXT UP, a downed pilot's SAR state, LOCAL SAR with
+        /// its m:ss while the search runs, MIA, CAPTURED, KIA. Short enough for the tag column.</summary>
+        public static string Tag(PilotStatus s, bool next, int number, float localLeft)
+        {
+            switch (s)
+            {
+                case PilotStatus.Free: return next ? "NEXT UP" : "FREE";
+                case PilotStatus.Downed: return "DOWNED";
+                case PilotStatus.Rescue: return "SAR #" + N(number);
+                case PilotStatus.LocalSar: return localLeft >= 0f ? "LOCAL SAR · " + WmcText.Clock(localLeft) : "LOCAL SAR";
+                default: return Row(s, next, number);
+            }
+        }
+
+        /// <summary>The squadron header's counts: "8 PILOTS · 2 FLYING · 1 NEXT UP · 1 SAR · 1 MIA · 1 CAPTURED" (zero counts left out).</summary>
+        public static string CountLine(int pilots, int flying, int next, int sar, int mia, int captured, int kia)
+        {
+            if (pilots <= 0) return "NO PILOTS";
+            var sb = new StringBuilder(N(pilots) + (pilots == 1 ? " PILOT" : " PILOTS"));
+            if (flying > 0) sb.Append(" · ").Append(N(flying)).Append(" FLYING");
+            if (next > 0) sb.Append(" · ").Append(N(next)).Append(" NEXT UP");
+            if (sar > 0) sb.Append(" · ").Append(N(sar)).Append(" SAR");
+            if (mia > 0) sb.Append(" · ").Append(N(mia)).Append(" MIA");
+            if (captured > 0) sb.Append(" · ").Append(N(captured)).Append(" CAPTURED");
+            if (kia > 0) sb.Append(" · ").Append(N(kia)).Append(" KIA");
+            return sb.ToString();
+        }
+
+        public const string SquadronTitle = "WING SQUADRON", FileTitle = "PERSONNEL FILE";
+
         public static string Stamp(PilotStatus s, bool next, int number)
         {
             switch (s)

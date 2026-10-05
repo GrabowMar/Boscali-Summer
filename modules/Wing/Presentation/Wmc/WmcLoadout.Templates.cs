@@ -13,68 +13,44 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // LOADOUT's airframe tiles and template bar: pick an airframe, pick a template, NEW · COPY · DELETE (two-press).
+    // LOADOUT's AIRFRAME row (◂ word · n / N ▸) and TEMPLATE chips: pick an airframe, pick a template, NEW · COPY · DELETE (two-press).
     internal sealed partial class WmcLoadout
     {
-        private WmcAirframeGrid tiles;
-        private int tilePage;
-        private AvControl picker, create, copy, delete;
-        private AvPopup popup;
-        private readonly List<AvPopupEntry> entries = new List<AvPopupEntry>();
-        private readonly List<string> entryIds = new List<string>();
+        private WmcPickRow airRow;
+        private WmcChipRow templateRow;
+        private AvControl create, copy, delete;
+        private readonly List<string> templateIds = new List<string>();
+        private readonly List<string> templateNames = new List<string>();
         private ConfirmGate deleteGate = new ConfirmGate();
 
-        private void BuildTiles(AvFlow f)
+        private void BuildAirframeRow(AvFlow f)
         {
-            f.Section(AvIcon.Plane, "AIRFRAME");
-            tiles = f.Add(new WmcAirframeGrid(f.Content, ids, BezelLayout.TileCols, BezelLayout.TileRows, BezelLayout.LoadoutTileH, false, "lo.tile",
-                "lo.tiles.", PickTile, TurnTiles));
+            airRow = f.Add(new WmcPickRow(f.Content, "AIRFRAME", true, StepAirframe, null));
+            ids.Add("lo.airframe.prev", airRow.Prev);
+            ids.Add("lo.airframe.next", airRow.Next);
+            // The 0.9 tile pager's ids answer the same arrows.
+            ids.Add("lo.tiles.prev", airRow.Prev);
+            ids.Add("lo.tiles.next", airRow.Next);
         }
 
-        private void RefreshTiles()
+        private void RefreshAirframeRow()
         {
-            int per = tiles.PerPage;
-            tilePage = Pages.Clamp(tilePage, airframes.Count, per);
-            tiles.SetPage(tilePage, Pages.Count(airframes.Count, per));
-            tiles.ShowEmpty(airframes.Count > 0 ? null : "NO AIRFRAME · none with readable hardpoints is in this game");
-            int first = Pages.First(tilePage, per);
-            for (int s = 0; s < per; s++)
-            {
-                int k = first + s;
-                if (k >= airframes.Count)
-                {
-                    tiles.Hide(s);
-                    continue;
-                }
-                AircraftDefinition d = airframes[k];
-                bool sel = ReferenceEquals(d, airframe);
-                int count = WingLoadoutTemplates.CountFor(d);
-                int key;
-                unchecked
-                {
-                    key = d.GetHashCode() * 31 + (sel ? 1 : 0) + count * 7;
-                }
-                if (!tiles.NeedsBind(s, key)) continue;
-                string n = AvNum.Fixed(count, 0);
-                tiles.Bind(s, IconFactory.Aircraft(d), SupplyWords.Code(d.code, d.unitName), SupplyWords.Name(d.unitName, d.code), null, "",
-                    sel ? "live" : count > 0 ? "info" : "inert", sel, true,
-                    d.unitName + " · " + (count == 1 ? "1 template" : n + " templates"));
-            }
+            int at = airframe != null ? airframes.IndexOf(airframe) : -1;
+            if (airframe == null)
+                airRow.Set(airframes.Count > 0 ? "NO AIRFRAME" : "NO AIRFRAME · none with readable hardpoints is in this game", "", null, Color.clear);
+            else
+                airRow.Set(SupplyWords.Code(airframe.code, airframe.unitName) + " " + SupplyWords.Name(airframe.unitName, airframe.code).ToUpperInvariant(),
+                    at >= 0 ? "· " + (at + 1) + " / " + airframes.Count : "", IconFactory.Aircraft(airframe), Color.clear);
+            airRow.SetEnabled(airframes.Count > 1, airframes.Count > 1 ? "Edit the previous or next airframe." : "Only one airframe has readable hardpoints.");
         }
 
-        private void PickTile(int slot)
+        private void StepAirframe(int dir)
         {
-            int k = Pages.First(tilePage, tiles.PerPage) + slot;
-            if (k < 0 || k >= airframes.Count) return;
-            airframe = airframes[k];
+            if (airframes.Count == 0) return;
+            int at = airframe != null ? airframes.IndexOf(airframe) : -1;
+            airframe = airframes[((at < 0 ? 0 : at + dir) % airframes.Count + airframes.Count) % airframes.Count];
             hpResetPending = true;
             deleteGate = new ConfirmGate();
-            WmcPanel.Instance?.Refresh();
-        }
-
-        private void TurnTiles(int dir)
-        {
-            tilePage = Pages.Clamp(tilePage + dir, airframes.Count, tiles.PerPage);
             WmcPanel.Instance?.Refresh();
         }
 
@@ -82,15 +58,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildTemplateBar(AvFlow f)
         {
-            f.Section(AvIcon.ListDetails, "TEMPLATE");
-            picker = f.Buttons(new AvControl.Spec(LoadoutWords.Picker(null), OpenPicker, AvButtonStyle.Default, AvIcon.ListDetails)).Controls[0];
-            ids.Add("lo.template", picker);
-            AvControl[] bar = f.Buttons(new AvControl.Spec("NEW", New, AvButtonStyle.Default, AvIcon.Plus),
+            templateRow = f.Add(new WmcChipRow(f.Content, "TEMPLATE", TemplateNames.PerAirframe, PickTemplate,
+                new AvControl.Spec("NEW", New, AvButtonStyle.Default, AvIcon.Plus),
                 new AvControl.Spec("COPY", Copy, AvButtonStyle.Default, AvIcon.LayersSubtract),
-                new AvControl.Spec("DELETE", Delete, AvButtonStyle.Danger, AvIcon.X)).Controls;
-            create = bar[0];
-            copy = bar[1];
-            delete = bar[2];
+                new AvControl.Spec("DELETE", Delete, AvButtonStyle.Danger, AvIcon.X)));
+            create = templateRow.Action(0);
+            copy = templateRow.Action(1);
+            delete = templateRow.Action(2);
+            ids.Add("lo.template", CycleTemplate);
+            for (int i = 0; i < TemplateNames.PerAirframe; i++) ids.Add("lo.template" + i, templateRow.Choice(i));
             ids.Add("lo.new", create);
             ids.Add("lo.copy", copy);
             ids.Add("lo.delete", delete);
@@ -98,10 +74,20 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void RefreshTemplateBar(bool asking)
         {
-            int count = airframe != null ? WingLoadoutTemplates.CountFor(airframe) : 0;
-            picker.Label = LoadoutWords.Picker(current?.Name);
-            picker.Interactable = count > 0;
-            picker.Help = count > 0 ? "Pick the template to edit." : airframe == null ? "Pick an airframe first." : "NEW starts a template.";
+            templateIds.Clear();
+            templateNames.Clear();
+            int pick = -1;
+            if (airframe != null)
+                foreach (LoadoutTemplateRecord t in WingLoadoutTemplates.For(airframe))
+                {
+                    if (current != null && t.Id == current.Id) pick = templateIds.Count;
+                    templateIds.Add(t.Id);
+                    templateNames.Add(t.Name);
+                }
+            templateRow.SetChoices(templateNames, pick);
+            string tip = airframe == null ? "Pick an airframe first." : "Pick the template to edit.";
+            for (int i = 0; i < templateNames.Count; i++) templateRow.Choice(i).Help = tip;
+            int count = templateIds.Count;
             string why = airframe == null ? "Pick an airframe first." : LoadoutWords.NewWhy(layout != null, count);
             create.Interactable = why == null;
             create.Help = why ?? "Start a template from this airframe's standard stores (its gun, radar and hook included).";
@@ -115,28 +101,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             delete.Latched = asking;
         }
 
-        private void OpenPicker()
-        {
-            if (airframe == null) return;
-            entries.Clear();
-            entryIds.Clear();
-            string fit = WingRequisition.FitOf(airframe);
-            foreach (LoadoutTemplateRecord t in WingLoadoutTemplates.For(airframe))
-            {
-                entries.Add(new AvPopupEntry(t.Name, t.Id == fit ? "SUPPLY FIT" : "", current != null && t.Id == current.Id));
-                entryIds.Add(t.Id);
-            }
-            if (entries.Count == 0) return;
-            popup.Show(WmcPopup.Area(flow.Content, picker.Rect, entries.Count), entries, PickTemplate);
-        }
-
         private void PickTemplate(int i)
         {
-            if (airframe == null || i < 0 || i >= entryIds.Count) return;
-            editing[airframe.jsonKey] = entryIds[i];
+            if (airframe == null || i < 0 || i >= templateIds.Count) return;
+            editing[airframe.jsonKey] = templateIds[i];
             deleteGate = new ConfirmGate();
             hpResetPending = true;
             WmcPanel.Instance?.Refresh();
+        }
+
+        /// <summary>The next template of this airframe (for automation: the 0.9 picker's id).</summary>
+        private void CycleTemplate()
+        {
+            if (templateIds.Count == 0) return;
+            int at = current != null ? templateIds.IndexOf(current.Id) : -1;
+            PickTemplate((at + 1) % templateIds.Count);
         }
 
         private void New()
@@ -153,6 +132,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 return;
             }
             editing[airframe.jsonKey] = t.Id;
+            hpResetPending = true;
             WingToast.Show(t.Name + " started for " + airframe.unitName);
             WmcPanel.Instance?.Refresh();
         }
@@ -167,6 +147,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 return;
             }
             editing[airframe.jsonKey] = t.Id;
+            hpResetPending = true;
             WingToast.Show(t.Name + " copied");
             WmcPanel.Instance?.Refresh();
         }
@@ -185,6 +166,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingLoadoutTemplates.Delete(t);
             bool wasFit = WingRequisition.DropFit(t.Id);
             editing.Remove(t.AirframeKey);
+            hpResetPending = true;
             WingToast.Show(LoadoutWords.Deleted(t.Name, wasFit));
             WmcPanel.Instance?.Refresh();
         }

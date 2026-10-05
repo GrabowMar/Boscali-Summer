@@ -5,19 +5,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 {
     internal enum EarnKind : byte { None, Kill, Capture, Recon, Jamming, Support }
 
-    /// <summary>Core §6.2: vanilla reward allocation → CR.</summary>
+    /// <summary>Kill CR follows native vehicle value; other earnings ride the vanilla allocation reward.</summary>
     internal static class EarningRules
     {
         public const float CreditPerAllocation = 10f, KillCap = 50f, CaptureCredit = 40f, MinorCap = 20f;
+        // Live build cb745d6c44f1: ordinary combat values 6.1–15.3 pay 9.15–22.95 CR.
+        public const float CreditPerUnitValue = 1.5f;
 
+        /// <summary>Non-kill earnings ride the vanilla allocation reward. Kills pay through <see cref="FromKill"/>.</summary>
         public static float FromReward(EarnKind kind, float rewardAllocation, bool repeatType, bool opsAssisted)
         {
-            if (kind == EarnKind.None) return 0f;
+            if (kind == EarnKind.None || kind == EarnKind.Kill) return 0f;
             if (kind == EarnKind.Capture) return CaptureCredit;
             if (float.IsNaN(rewardAllocation) || float.IsInfinity(rewardAllocation) || rewardAllocation <= 0f) return 0f;
-            float credit = rewardAllocation * CreditPerAllocation;
-            if (kind != EarnKind.Kill) return Math.Min(MinorCap, credit);
-            credit = Math.Min(KillCap, credit);
+            return Math.Min(MinorCap, rewardAllocation * CreditPerAllocation);
+        }
+
+        /// <summary>
+        /// One contributor's CR for a kill. Vanilla reports one kill per contributor with
+        /// <paramref name="damageShare"/> = that contributor's share of the damage, so the target value is split
+        /// the same way. The cap applies to the share, then repeat and OPS-assist halves; EarnKnob is applied last by the caller.
+        /// </summary>
+        public static float FromKill(float unitValue, float damageShare, bool repeatType, bool opsAssisted)
+        {
+            if (float.IsNaN(unitValue) || float.IsInfinity(unitValue) || unitValue <= 0f ||
+                float.IsNaN(damageShare) || damageShare <= 0f) return 0f;
+            float credit = Math.Min(KillCap, unitValue * CreditPerUnitValue * Math.Min(1f, damageShare));
             if (repeatType) credit *= 0.5f;
             if (opsAssisted) credit *= 0.5f;
             return credit;

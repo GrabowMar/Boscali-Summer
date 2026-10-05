@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             }
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
             float radius = Mathf.Min(context.Settings.EmpRadius.Value, SupportEffectPolicy.MaxEmpRadius);
-            float duration = SupportEffectPolicy.EmpDuration;
+            float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration, 60f); // EXPLOIT x1.5 while a node is held
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");

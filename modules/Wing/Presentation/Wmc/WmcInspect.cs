@@ -1,3 +1,4 @@
+using System;
 using NOAvionics;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,31 +14,33 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>INSPECT (spec bezel v2 §5 INSPECT; the room's deep card) on kit v2: one aircraft in depth — a chip per member, CENTER, what
-    /// it is doing, fuel and hull tapes, ammo, radar, target, height and speed, its task, its stores by station, its pilot (DOSSIER ›
-    /// opens SQUADRON on them), its own recent events, and RTB · REFIT · RELEASE for that aircraft only. Inspecting never changes who
-    /// orders go to (review R1 I1): the buttons act on the inspected aircraft. 2026-09-28: no longer its own tab — WING's ROSTER builds
-    /// this inline, under PERKS (<see cref="Build"/> adds its parts to that sub-page's flow). Only WING uses it.</summary>
+    /// <summary>INSPECT as WING's AIRCRAFT sub-page (spec bezel v2 §5 INSPECT; the 2026-10-05 redesign): one aircraft in depth — a chip per
+    /// member and CENTER, a card with the damage map (the real parts over a drawn outline), FUEL with bingo, AMMO and HULL gauges and the
+    /// RADAR · ALT · TASK · TARGET values, its stores by station, WHY it does what it does, its pilot (DOSSIER › opens ROSTER on them), its
+    /// own recent events, and RTB · REFIT · RELEASE for that aircraft only. Inspecting never changes who orders go to (review R1 I1): the
+    /// buttons act on the inspected aircraft. <see cref="Build"/> adds its parts to that sub-page's flow. Only WING uses it.</summary>
     internal sealed class WmcInspect
     {
         private const int MaxChips = WcSnapshot.MaxMembers, StoreRows = 4, RecentRows = 5;
 
         private readonly WmcControls ids;
         private readonly uint[] chipIds = new uint[MaxChips];
-        private readonly List<string> storeLines = new List<string>(8);
+        private readonly PartMap partMap = new PartMap();
         private readonly List<LogRow> recentRows = new List<LogRow>(RecentRows);
         private readonly ConfirmGate rtbGate = new ConfirmGate(), releaseGate = new ConfirmGate();
-        private MemberDetail detail = new MemberDetail { Stores = new StoreLine[8] };
+        private MemberDetail detail = new MemberDetail { Stores = new StoreLine[8], Parts = new PartDot[PartMap.Max] };
+        private readonly AircraftFace face = new AircraftFace();
         private AvFlow outer;
-        private AvSection section, storesSection, recentSection;
+        private AvSection storesSection, recentSection;
         private InspectChips chips;
         private WmcSubPages pages;
-        private WmcLines empty, storesLeft, storesRight, recentLines;
-        private AvRow statusRow, whyRow, pilotRow;
-        private InspectKv fuel, ammo, hull, radar, alt, task;
-        private AvControl dossier, rtb, refit, release;
+        private WmcLines empty, recentLines;
+        private WingAircraftCard card;
+        private WingStoresList storesList;
+        private WingPilotLine pilotLine;
+        private AvRow whyRow;
+        private AvControl rtb, refit, release;
         private int gate = -1, whyKey = int.MinValue;
-        private bool captionCleared;
         private int key = int.MinValue, chipsKey = int.MinValue, recentKey = int.MinValue;
         private uint inspected;
         private string pilotCallsign;
@@ -49,8 +52,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The aircraft on show (automation).</summary>
         public uint Inspected => inspected;
 
-        /// <summary>The INSPECT section's header, where WING scrolls to (null before <see cref="Build"/>).</summary>
-        public RectTransform Anchor => section?.Rect;
+        /// <summary>The page's top (the member chips; null before <see cref="Build"/>).</summary>
+        public RectTransform Anchor => chips?.Rect;
 
         /// <summary>Show this aircraft (INSPECT › on TACTICAL, a chip, automation).</summary>
         public void Focus(uint id)
@@ -60,11 +63,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             recentKey = int.MinValue;
         }
 
-        /// <summary>Adds INSPECT to <paramref name="flow"/> (WING's ROSTER sub-page).</summary>
+        /// <summary>Adds the AIRCRAFT page to <paramref name="flow"/> (WING's AIRCRAFT sub-page).</summary>
         public void Build(AvFlow flow, AvTicker ticker, int pageIndex)
         {
             outer = flow;
-            section = flow.Section(AvIcon.Radar2, "INSPECT");
             chips = flow.Add(new InspectChips(flow.Content, ids, MaxChips, PickChip, Center));
             pages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, 2));
 
@@ -72,37 +74,20 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             empty = e.Add(new WmcLines(e.Content, 1, AvTextRole.ProseSmall, "hint"));
 
             AvFlow d = pages.Flow(1);
-            statusRow = d.Add(new AvRow(d.Content));
-            whyRow = d.Add(new AvRow(d.Content));
-            AvCellGrid kv = d.Grid(2);
-            fuel = new InspectKv(d.Content, "FUEL", true);
-            ammo = new InspectKv(d.Content, "AMMO", false);
-            hull = new InspectKv(d.Content, "HULL", true);
-            radar = new InspectKv(d.Content, "RADAR", false);
-            alt = new InspectKv(d.Content, "ALT", false);
-            task = new InspectKv(d.Content, "TASK", false);
-            kv.Add(fuel);
-            kv.Add(ammo);
-            kv.Add(hull);
-            kv.Add(radar);
-            kv.Add(alt);
-            kv.Add(task);
-
+            card = d.Add(new WingAircraftCard(d.Content));
             storesSection = d.Section(AvIcon.Stack2, "STORES");
-            storesLeft = new WmcLines(d.Content, StoreRows);
-            storesRight = new WmcLines(d.Content, StoreRows);
-            d.Row(storesLeft, storesRight);
-
-            pilotRow = d.Add(new AvRow(d.Content));
-            pilotRow.Set("PILOT", "", "", AvState.Info);
-            dossier = pilotRow.AddTrailing(new AvControl.Spec("DOSSIER", OpenDossier, AvButtonStyle.Quiet));
-            dossier.Help = "This pilot's record on SQUADRON.";
-            ids.Add("insp.dossier", dossier);
+            storesList = d.Add(new WingStoresList(d.Content));
+            whyRow = d.Add(new AvRow(d.Content));
+            pilotLine = d.Add(new WingPilotLine(d.Content, OpenDossier));
+            pilotLine.Dossier.Help = "This pilot's personnel file on ROSTER.";
+            ids.Add("insp.dossier", pilotLine.Dossier);
 
             recentSection = d.Section(AvIcon.Clock, "RECENT");
             recentLines = d.Add(new WmcLines(d.Content, RecentRows));
 
-            AvControl[] foot = d.Buttons(new AvControl.Spec("RTB", Rtb), new AvControl.Spec("REFIT", Refit), new AvControl.Spec("RELEASE", Release)).Controls;
+            AvControl[] foot = d.Buttons(new AvControl.Spec("RTB", Rtb, AvButtonStyle.Default, AvIcon.ArrowBackUp),
+                new AvControl.Spec("REFIT", Refit, AvButtonStyle.Default, AvIcon.Refresh),
+                new AvControl.Spec("RELEASE", Release, AvButtonStyle.Danger, AvIcon.Unlink)).Controls;
             rtb = foot[0];
             refit = foot[1];
             release = foot[2];
@@ -140,17 +125,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             chips.Center.Interactable = inspected != 0u;
             if (!show)
             {
-                bool moved = empty.Set(0, InspectWords.Empty(c.Client));
-                if (!captionCleared)
-                {
-                    captionCleared = true;
-                    section.SetCaption("");
-                    moved = true;
-                }
-                if (moved) outer.RequestRelayout();
+                if (empty.Set(0, InspectWords.Empty(c.Client))) outer.RequestRelayout();
                 return;
             }
-            captionCleared = false;
             RefreshDetail(c, m);
             RefreshWhy(c, m);
             RefreshRecent(c);
@@ -180,6 +157,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void RefreshDetail(WmcContext c, WingMember m)
         {
             WmcDetail.Gather(m, ref detail);
+            partMap.Gather(m, inspected, ref detail);
             int row = WingRows.IndexOf(c.Rows, c.Count, inspected);
             int e = c.Wing.ElementOf(m);
             WingPlanner p = c.Wing.Roster.InUse(e) ? c.Wing.PlannerOf(e) : null;
@@ -189,41 +167,55 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     + detail.Radar * 3 + R(m.Last.RadarAlt / 50f) * 1009 + R(m.Last.Speed * 0.36f) * 97 + R(detail.BingoSeconds / 10f)
                     + m.Seat * 7919 + e * 104729
                     + (detail.Target?.GetHashCode() ?? 0) + (row >= 0 ? c.Rows[row].Duty * 13 + c.Rows[row].Flags * 19 : 0)
-                    + (p != null && p.Active ? (int)p.Current.Kind * 23 + p.Leg * 29 : -1) + detail.StoreCount * 41;
+                    + (p != null && p.Active ? (int)p.Current.Kind * 23 + p.Leg * 29 : -1) + detail.StoreCount * 41
+                    + detail.PartsLost * 53 + detail.PartsHit * 59 + detail.PartCount * 61;
                 for (int i = 0; i < detail.StoreCount && i < detail.Stores.Length; i++) k = k * 3 + detail.Stores[i].Ammo;
                 if (k == key) return;
                 key = k;
             }
             Aircraft a = m.Aircraft;
             string type = a.definition != null && !string.IsNullOrEmpty(a.definition.code) ? a.definition.code : WmcText.Unknown;
-            section.SetCaption(InspectWords.Title(m.Seat, detail.Callsign, type));
             string state = row >= 0 ? WingRows.State(c.Rows[row]) : WmcText.Unknown;
             string name = c.Wing.Roster.Name(e);
             string letter = ElementRoster.Letter(e);
-            statusRow.Set(state + " · ELEMENT " + (string.IsNullOrEmpty(name) || name == letter ? letter : letter + " " + name), "", "", AvState.Info);
             string b = WingHudText.BingoTime(detail.BingoSeconds);
-            fuel.Set(WmcText.Percent(detail.Fuel) + (b.Length > 0 ? " · " + b : ""));
-            fuel.SetTape(detail.Fuel, LevelClass(WmcStyle.Level(detail.Fuel)));
-            ammo.Set(WmcText.Percent(detail.Ammo));
             float hullFrac = float.IsNaN(detail.Damage) ? float.NaN : 1f - detail.Damage;
-            hull.Set(WmcText.Percent(hullFrac));
-            hull.SetTape(hullFrac, LevelClass(WmcStyle.Level(hullFrac)));
-            radar.Set((detail.Radar < 0 ? "NONE" : detail.Radar > 0 ? "ON" : "OFF") + " · TGT "
-                + (string.IsNullOrEmpty(detail.Target) ? "NONE" : detail.Target));
-            alt.Set(WmcWords.Altitude(m.Last.RadarAlt) + " · " + WmcWords.Speed(m.Last.Speed));
-            task.Set(p == null || !p.Active ? (e == 0 ? "FORM · on you" : "FORM")
-                : TaskCard.Short(p.Current, p.Leg, p.Lead != null ? p.Lead.Position : Vec3.Zero, p.Lead != null ? p.Lead.Speed : 0f));
-            FlightPool.StationLines(detail, storeLines);
+            int loaded = 0;
+            for (int i = 0; i < detail.StoreCount && i < detail.Stores.Length; i++)
+                if (detail.Stores[i].Ammo > 0) loaded++;
+            face.Title = InspectWords.Title(m.Seat, null, type);
+            face.Sub = state + " · ELEMENT " + (string.IsNullOrEmpty(name) || name == letter ? letter : letter + " " + name);
+            face.Fuel = detail.Fuel;
+            face.FuelText = WmcText.Percent(detail.Fuel);
+            face.FuelSub = b.Length > 0 ? b : "NO BINGO CALL";
+            face.FuelRail = LevelClass(WmcStyle.Level(detail.Fuel));
+            face.Ammo = detail.Ammo;
+            face.AmmoText = WmcText.Percent(detail.Ammo);
+            face.AmmoSub = detail.StoreCount > 0 ? AvNum.Fixed(loaded, 0) + " OF " + AvNum.Fixed(detail.StoreCount, 0) + " STATIONS LOADED" : "NO STORES";
+            face.AmmoRail = LevelClass(WmcStyle.Level(detail.Ammo));
+            face.Hull = hullFrac;
+            face.HullText = WmcText.Percent(hullFrac);
+            face.HullSub = detail.PartsLost > 0 ? AvNum.Fixed(detail.PartsLost, 0) + (detail.PartsLost == 1 ? " PART LOST" : " PARTS LOST")
+                : detail.PartsHit > 0 ? AvNum.Fixed(detail.PartsHit, 0) + (detail.PartsHit == 1 ? " PART HIT" : " PARTS HIT") : "NO DAMAGE";
+            face.HullRail = LevelClass(WmcStyle.Level(hullFrac));
+            face.Radar = detail.Radar < 0 ? "NONE" : detail.Radar > 0 ? "ON" : "OFF";
+            face.Alt = WmcWords.Altitude(m.Last.RadarAlt) + " · " + WmcWords.Speed(m.Last.Speed);
+            face.Task = WmcText.Cut(p == null || !p.Active ? (e == 0 ? "FORM · on you" : "FORM")
+                : TaskCard.Short(p.Current, p.Leg, p.Lead != null ? p.Lead.Position : Vec3.Zero, p.Lead != null ? p.Lead.Speed : 0f), 26);
+            face.Target = string.IsNullOrEmpty(detail.Target) ? "NONE" : WmcText.Cut(detail.Target, 24);
+            face.PartCount = detail.PartCount;
+            Array.Copy(detail.Parts, face.Parts, detail.PartCount);
+            face.MapNote = detail.PartCount > 0
+                ? AvNum.Fixed(detail.PartCount, 0) + " PARTS · " + AvNum.Fixed(detail.PartsHit, 0) + " HIT · " + AvNum.Fixed(detail.PartsLost, 0) + " LOST"
+                : "PART MAP UNAVAILABLE";
+            card.Show(face);
             storesSection.SetCaption(AvNum.Fixed(detail.StoreCount, 0) + (detail.StoreCount == 1 ? " STATION" : " STATIONS"));
-            for (int i = 0; i < StoreRows; i++)
-            {
-                storesLeft.Set(i, i < storeLines.Count ? storeLines[i] : "");
-                storesRight.Set(i, StoreRows + i < storeLines.Count ? storeLines[StoreRows + i] : "");
-            }
+            storesList.Show(detail);
             WingPilot wp = WingPilotRoster.Of(a);
             pilotCallsign = wp?.Callsign;
-            pilotRow.Set("PILOT", InspectWords.Pilot(wp?.Callsign, detail.Rank, wp?.Xp ?? 0, wp?.Kills ?? 0, null), "", AvState.Info);
-            dossier.Interactable = wp != null;
+            pilotLine.SetPilot(wp, wp != null ? "\"" + WmcText.Cut(wp.Callsign, PilotPick.CallsignChars) + "\"" : "NO PILOT RECORD",
+                wp != null ? (detail.Rank ?? WmcText.Unknown) + " · XP " + AvNum.Fixed(wp.Xp, 0) + " · " + AvNum.Fixed(wp.Kills, 0) + (wp.Kills == 1 ? " KILL" : " KILLS") : "");
+            pilotLine.Dossier.Interactable = wp != null;
             outer.RequestRelayout();
         }
 
@@ -348,7 +340,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             into["inspect_member"] = inspected != 0u && last != null && WingRows.IndexOf(last.Rows, last.Count, inspected) >= 0
                 ? last.Rows[WingRows.IndexOf(last.Rows, last.Count, inspected)].Slot + 2 : 0;
-            into["inspect_stores"] = storeLines.Count;
+            into["inspect_stores"] = storesList != null ? storesList.Shown : 0;
+            into["inspect_parts"] = detail.PartCount;
+            into["inspect_parts_lost"] = detail.PartsLost;
         }
 
         /// <summary>A tape's level word (ok, warn, bad, none) as the state class the rail colours read.</summary>

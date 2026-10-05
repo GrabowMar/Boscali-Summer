@@ -13,10 +13,10 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>TACTICAL's alerts (spec FUI §TACTICAL) on kit v2: the wing's alerts, worst first — the worst as an <see cref="AvAlert"/>
-    /// card, the rest as <see cref="AvList"/> rows, each with the alert's word, the aircraft and the detail; a click centres the map on
-    /// the aircraft and selects it. A new MISSILE pulses on the card (kit motion tier; Wmc/ReduceMotion is the kit's reduced-motion
-    /// switch). With nothing standing the list says ALL CLEAR. The footer's ALERT still carries the urgent one.</summary>
+    /// <summary>TACTICAL's alerts (spec 2026-10-04 §4.2): the wing's alerts, worst first. The wing table's summary line carries the worst
+    /// word; ORDERS adds one compact strip under it — the worst alert with how many more stand — and a click centres the map on its
+    /// aircraft and selects it. The ids <c>tac.alert0</c> to <c>tac.alert4</c> still answer (the strip, then the next alerts by number).
+    /// The footer's ALERT still carries the urgent one.</summary>
     internal sealed partial class WmcTactical
     {
         private const int AlertListRows = 4;
@@ -25,9 +25,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly uint[] alertLineIds = new uint[AlertList.Max];
         private int alertCount = -1, alertKey = int.MinValue, alertViewKey = int.MinValue;
         private string alertText;
-        private AvSection alertSection;
-        private AvAlert alertCard;
-        private AvList alertList;
+        private AvRow alertStrip;
         private WmcContext alertBinding;
 
         /// <summary>Alerts standing now (automation).</summary>
@@ -44,15 +42,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildAlerts(AvFlow f)
         {
-            alertSection = f.Section(AvIcon.AlertTriangle, "ALERTS", "ALL CLEAR");
-            alertCard = f.Add(new AvAlert(f.Content));
-            AvFrame cardFrame = alertCard.Rect.GetComponentInChildren<AvFrame>(true);
-            AvHit hit = AvHit.On(cardFrame);
-            hit.Click = e => AlertClick(0);
-            AvHelpTip.Attach(cardFrame.gameObject, "Centre the map on this aircraft and select it.");
-            ids.Add("tac.alert0", alertCard);
-            alertList = f.Add(new AvList(f.Content, ticker, AlertListRows, BindAlertRow));
-            alertList.RowClicked = item => AlertClick(alertCount > 0 ? item + 1 : -1);
+            alertStrip = f.Add(new AvRow(f.Content, () => AlertClick(0)));
+            alertStrip.Help = "Centre the map on this aircraft and select it.";
+            alertStrip.Rect.gameObject.SetActive(false);
+            ids.Add("tac.alert0", alertStrip);
+            for (int i = 1; i <= AlertListRows; i++)
+            {
+                int k = i;
+                ids.Add("tac.alert" + i, () => AlertClick(k), () => alertCount > k);
+            }
         }
 
         private string AlertLine(in Alert a, WmcContext c)
@@ -71,18 +69,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return WingRows.Number(a.Slot) + (string.IsNullOrEmpty(callsign) ? "" : " " + callsign);
         }
 
-        private static Glyph AlertGlyph(AlertKind k)
+        /// <summary>The worst alert as one word for the table's summary line ("ALL CLEAR", "MISSILE #3 +2").</summary>
+        private string AlertWord(WmcContext c, out AvState state)
         {
-            switch (k)
+            if (alertCount <= 0)
             {
-                case AlertKind.Missile: return Glyph.Missile;
-                case AlertKind.Lost: return Glyph.Lost;
-                case AlertKind.Damaged: return Glyph.Warn;
-                case AlertKind.Bingo:
-                case AlertKind.Joker: return Glyph.Fuel;
-                case AlertKind.Winchester: return Glyph.Ammo;
-                default: return Glyph.Behind;
+                state = AvState.Ready;
+                return "ALL CLEAR";
             }
+            Alert a = alerts[0];
+            state = a.Kind <= AlertKind.Damaged ? AvState.Danger : AvState.Caution;
+            return AlertList.Word(a.Kind) + " " + WingRows.Number(a.Slot) + (alertCount > 1 ? " +" + AvNum.Fixed(alertCount - 1, 0) : "");
         }
 
         private void RefreshAlertList(WmcContext c)
@@ -99,46 +96,28 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static int AlertKeyOf(in Alert a) => (int)a.Kind * 1000003 + (int)(a.Id % 1000003u) + a.Slot * 7 + (int)a.Why * 131 + 1;
 
-        private void RefreshAlertCard(WmcContext c)
+        private void RefreshAlertStrip(WmcContext c)
         {
             alertBinding = c;
+            for (int r = 0; r < alertLineIds.Length; r++) alertLineIds[r] = r < alertCount ? alerts[r].Id : 0u;
+            // The strip only shows with the full table: a collapsed table's summary line says the same word.
+            bool on = alertCount > 0 && !table.Collapsed;
+            if (alertStrip.Rect.gameObject.activeSelf != on)
+            {
+                alertStrip.Rect.gameObject.SetActive(on);
+                relayout = true;
+            }
             int key = alertCount * 7919;
             for (int r = 0; r < alertCount && r <= AlertListRows; r++) key = key * 31 + AlertKeyOf(alerts[r]);
-            if (alertCount == 0) key += c.ScopeLabel?.GetHashCode() ?? 0;
-            for (int r = 0; r < alertLineIds.Length; r++) alertLineIds[r] = r < alertCount ? alerts[r].Id : 0u;
             if (key == alertViewKey) return;
             alertViewKey = key;
-            if (alertCount > 0)
-            {
-                Alert a = alerts[0];
-                bool urgent = a.Kind <= AlertKind.Damaged;
-                alertCard.Show(WmcIcons.Of(AlertGlyph(a.Kind)), AlertList.Word(a.Kind) + "  " + AlertWho(a, c), AlertList.Detail(a),
-                    urgent ? AvState.Danger : AvState.Caution);
-            }
-            else alertCard.Hide();
-            int listed = alertCount == 0 ? 1 : Mathf.Min(alertCount - 1, AlertListRows);
-            alertList.SetCount(listed);
-            int more = alertCount - 1 - AlertListRows;
-            alertSection.SetCaption(alertCount == 0 ? "ALL CLEAR"
-                : AvNum.Fixed(alertCount, 0) + " STANDING" + (more > 0 ? " · +" + AvNum.Fixed(more, 0) + " MORE" : ""));
+            if (alertCount == 0) return;
+            Alert a = alerts[0];
+            AvState state = a.Kind <= AlertKind.Damaged ? AvState.Danger : AvState.Caution;
+            int more = alertCount - 1;
+            alertStrip.Set(AvStates.Glyph(state) + AlertList.Word(a.Kind) + "  " + AlertWho(a, c),
+                AlertList.Detail(a) + (more > 0 ? " · +" + AvNum.Fixed(more, 0) + " MORE" : ""), "", state);
             relayout = true;
-        }
-
-        private void BindAlertRow(int item, AvRow row)
-        {
-            WmcContext c = alertBinding;
-            ids.Add("tac.alert" + (item + 1), row);
-            if (alertCount == 0)
-            {
-                row.Set("ALL CLEAR", "orders go to " + (c?.ScopeLabel ?? "WING"), "", AvState.Ready);
-                row.Help = null;
-                return;
-            }
-            Alert a = alerts[item + 1];
-            bool urgent = a.Kind <= AlertKind.Damaged;
-            AvState state = urgent ? AvState.Danger : AvState.Caution;
-            row.Set(AvStates.Glyph(state) + AlertList.Word(a.Kind) + "  " + (c != null ? AlertWho(a, c) : ""), AlertList.Detail(a), "", state);
-            row.Help = "Centre the map on this aircraft and select it.";
         }
 
         private void AlertClick(int r)

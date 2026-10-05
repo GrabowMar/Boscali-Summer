@@ -293,11 +293,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void WriteHeading(float headingDeg)
         {
             float normalized = ((headingDeg % 360f) + 360f) % 360f;
-            float rounded = Mathf.Round(normalized);
+            int rounded = Mathf.RoundToInt(normalized) % 360;
             if (hdg.Initialized && hdg.LastValue == rounded) return;
-            int len = AvNumFormat.Write(buf, 0, rounded, 0);
-            len = AvNumFormat.Append(buf, len, "°");
-            hdg.Value.text = new string(buf, 0, len);
+            buf[0] = (char)('0' + rounded / 100);
+            buf[1] = (char)('0' + rounded / 10 % 10);
+            buf[2] = (char)('0' + rounded % 10);
+            buf[3] = '°';
+            hdg.Value.text = new string(buf, 0, 4);
             hdg.LastValue = rounded;
             hdg.Initialized = true;
         }

@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private AudioClip creakClip;
         private float[] creakBake;
         private volatile int bakeState; // 0 pending, 1 ready, 2 failed
+        private volatile bool released;
         private bool clipsReady;
         private bool routed;
         private Vector3 lastForce = Vector3.up;
@@ -29,6 +30,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
         /// <summary>Creaks fired since the scene loaded (automation readout).</summary>
         public int Creaks { get; private set; }
+        internal bool IsPlaying => creakSource != null && creakSource.isPlaying;
 
         public void Initialize()
         {
@@ -41,7 +43,9 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             {
                 try
                 {
-                    creakBake = BakeCreak(CreakSeconds, SampleRate);
+                    float[] samples = BakeCreak(CreakSeconds, SampleRate);
+                    if (released) return;
+                    creakBake = samples;
                     bakeState = 1;
                 }
                 catch (System.Exception)
@@ -62,17 +66,17 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             float jerk = dt > 0f ? (forceG - lastForce).magnitude / dt : 0f;
             lastForce = forceG;
 
-            if (!enabled || !cockpitView) return;
+            if (!enabled || !cockpitView) { Silence(); return; }
+            if (!routed) return;
             if (!clipsReady && !TryCreateClip()) return;
-            if (cooldown > 0f || masterVolume <= 0.01f) return;
+            if (cooldown > 0f || masterVolume <= 0.01f || creakSource.isPlaying) return;
 
             float volume = ImmersionMath.CreakVolume(jerk);
             if (volume <= 0f) return;
 
             // Check global client FX voice bus allocation
-            if (!FxVoiceBus.TryOneShot(1.2f)) return;
-
             creakSource.pitch = 0.75f + (float)rng.NextDouble() * 0.5f;
+            if (!FxVoiceBus.TryOneShot(creakClip.length / creakSource.pitch)) return;
             creakSource.PlayOneShot(creakClip, volume * masterVolume);
             cooldown = 0.6f + (float)rng.NextDouble() * 1.2f;
             Creaks++;
@@ -92,7 +96,18 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         {
             primed = false;
             cooldown = 0f;
+            routed = false;
             if (creakSource != null) creakSource.Stop();
+        }
+
+        public void Release()
+        {
+            released = true;
+            Silence();
+            if (creakSource != null) { Destroy(creakSource); creakSource = null; }
+            if (creakClip != null) { Destroy(creakClip); creakClip = null; }
+            creakBake = null;
+            clipsReady = false;
         }
 
         private bool TryCreateClip()
@@ -153,7 +168,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
         private void OnDestroy()
         {
-            if (creakClip != null) Destroy(creakClip);
+            Release();
         }
     }
 }

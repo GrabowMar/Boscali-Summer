@@ -23,22 +23,23 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private ColorAdjustments colorAdjust;
         private float currentWeight;
         private float targetWeight;
+        private Camera flightCamera;
 
         public float Weight => currentWeight;
 
-        public void Tick(Vector3 forceG, bool cockpitView, bool enabled, float dt)
+        public void Tick(float positive, float negative, bool cockpitView, bool enabled, float dt)
         {
             if (!enabled || !cockpitView)
             {
-                if (volume != null && volume.weight > 0f)
-                {
-                    currentWeight = Mathf.MoveTowards(currentWeight, 0f, 6f * dt);
-                    volume.weight = currentWeight;
-                }
+                currentWeight = 0f;
+                if (volume != null) volume.weight = 0f;
                 return;
             }
 
-            var (weight, intensity, saturation, redout) = ImmersionMath.GVignette(forceG.y, cockpitView);
+            float weight = Mathf.Max(positive, negative);
+            float intensity = 0.45f;
+            float saturation = -positive * 55f;
+            float redout = negative;
             targetWeight = weight;
 
             if (targetWeight <= 0.001f && currentWeight <= 0.001f)
@@ -55,7 +56,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (volume == null) return;
 
             // Slew weight smoothly
-            currentWeight = Mathf.MoveTowards(currentWeight, targetWeight, 4f * dt);
+            currentWeight = targetWeight;
             volume.weight = currentWeight;
 
             if (vignette != null)
@@ -89,12 +90,15 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         public void Release()
         {
+            RenderPipelineManager.beginCameraRendering -= ScopeForCamera;
             if (volume != null)
             {
                 volume.weight = 0f;
             }
             if (profile != null)
             {
+                if (vignette != null) Object.Destroy(vignette);
+                if (colorAdjust != null) Object.Destroy(colorAdjust);
                 Object.Destroy(profile);
                 profile = null;
             }
@@ -105,7 +109,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             vignette = null;
             colorAdjust = null;
+            volume = null;
             currentWeight = targetWeight = 0f;
+            flightCamera = null;
         }
 
         private void EnsureVolume()
@@ -138,6 +144,21 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             colorAdjust.colorFilter.value = Color.white;
 
             volume.profile = profile;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Camera camera = cameras != null ? cameras.mainCamera : null;
+            flightCamera = camera;
+            UniversalAdditionalCameraData cameraData = camera != null ? camera.GetComponent<UniversalAdditionalCameraData>() : null;
+            if (cameraData != null)
+            {
+                int mask = cameraData.volumeLayerMask;
+                for (int i = 0; i < 32; i++) if ((mask & (1 << i)) != 0) { host.layer = i; break; }
+            }
+            RenderPipelineManager.beginCameraRendering += ScopeForCamera;
+        }
+
+        private void ScopeForCamera(ScriptableRenderContext context, Camera camera)
+        {
+            if (volume != null) volume.weight = camera == flightCamera ? currentWeight : 0f;
         }
     }
 }

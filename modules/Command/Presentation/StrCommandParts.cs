@@ -404,8 +404,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             frame.raycastTarget = true;
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             portraitFrame = AvFrame.Add(Rect, "PortraitFrame", AvChamfer.Diagonal(5f));
-            portrait = AvLay.Solid(Rect, "Portrait", Color.white);
+            portrait = AvLay.Solid(portraitFrame.rectTransform, "Portrait", Color.white);
             portrait.preserveAspect = true;
+            AvLay.Fill(portrait.rectTransform, 2f);
             portraitIcon = AvIcons.Make(Rect, AvIcon.User, 30f, Color.white);
             name = AvText.Make(Rect, "Name", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
             role = AvText.Make(Rect, "Role", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
@@ -514,7 +515,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             float w = TextW(s.W), y = Pad;
             AvLay.Place(rail.rectTransform, 0f, 0f, 3f, s.H);
             AvLay.Place(portraitFrame.rectTransform, Pad, y, PortraitSize, PortraitSize);
-            AvLay.Place(portrait.rectTransform, Pad + 2f, y + 2f, PortraitSize - 4f, PortraitSize - 4f);
             AvLay.Place(portraitIcon.rectTransform, Pad, y, PortraitSize, PortraitSize);
             float x = Pad + PortraitSize + 12f, chip = ChipW(s.W), nameW = Mathf.Max(20f, w - chip - 6f);
             float nh = AvText.Height(name, nameW), rh = AvText.Height(role, w);

@@ -285,10 +285,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 orders = string.Join("\n", lines);
             }
             Sprite art = EventArtCache.Get(definition.IconKey, definition.IsSuper ? "tier_super" : "tier_medium");
-            detail.ShowEvent(EventCatalog.TierLabel(definition.Tier) + " / " +
+            detail.ShowEvent("CATALOG / " + EventCatalog.TierLabel(definition.Tier) + " / " +
                 EventCatalog.CategoryLabel(definition.Category) + " · " + EventCatalog.TargetLabel(definition.Target),
                 definition.Title.ToUpperInvariant(), art, EventsMfdPanel.CategoryIcon(EventCatalog.CategoryLabel(definition.Category)),
-                figures, definition.FlavorText, orders);
+                figures, "Authored effects at standard strength; the live dispatch applies the host's effect setting.\n\n" + definition.FlavorText, orders);
         }
 
         private void DocDetail(EventDocEntry entry) =>

@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         // Part heights, gaps and padding of everything on the CALL page except its recent list (biased a few px high).
         private const float CallFixedHeight = 175f;
 
-        // POLL page: the fixed part plus 33 px per visible option, and 16 px more while a poll is on screen (its row is two lines).
+        // POLL page: the fixed part plus 41 px per visible option, and 16 px more while a poll is on screen (its row is two lines).
         private const float PollFixedHeight = 407f;
         private static readonly string[] PollSeconds = { "30s", "1m", "2m", "5m" };
 
@@ -139,7 +139,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }, AvButtonStyle.Danger, AvIcon.X));
             pollClose.Help = "Close your poll now and announce the result. The host can close any poll.";
 
-            // Options sit two to a line: a poll of four is two lines, not four.
+            // Full-width choices keep the words readable beside the live tally.
             optionRows = new PollOptionRow[CommsPoll.MaxOptions];
             for (int i = 0; i < CommsPoll.MaxOptions; i++)
             {
@@ -148,9 +148,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 {
                     if (shownPoll != 0) comms.Vote(shownPoll, option);
                 }, "Vote for this option. You can change your mind until the poll closes; the bar and number are the live tally.");
+                p.Add(optionRows[i]);
             }
-            p.Row(optionRows[0], optionRows[1]);
-            p.Row(optionRows[2], optionRows[3]);
 
             // Ready-made questions: one click asks. The length strip below applies to these and to your own.
             p.Section(AvIcon.QuestionMark, "QUICK POLLS", "CLICK TO ASK");
@@ -276,7 +275,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             durationStrip.Refresh();
 
             // ---- every poll on record, sized to what is left of the page
-            float fixedHeight = PollFixedHeight + ((optionCount + 1) / 2) * 33f + (poll != null ? 16f : 0f);
+            float fixedHeight = PollFixedHeight + optionCount * 41f + (poll != null ? 16f : 0f);
             int fit = FitRows(console.Page(TabPoll), fixedHeight, PollHistoryRows, 0);
             int rows = Mathf.Min(fit, ordered.Count);
             for (int i = 0; i < PollHistoryRows; i++)
@@ -336,12 +335,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 count.text = AvNum.Fixed(tally, 0) + "\u00b7" + AvNum.Percent(fill01);
             }
 
-            public override float Measure(float width) => AvGridTokens.Row;
+            public override float Measure(float width) => 36f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                float countW = 64f, voteW = (s.W - countW) * 0.55f, trackW = Mathf.Max(0f, s.W - voteW - countW - 8f);
+                float countW = 70f, trackW = 84f, voteW = Mathf.Max(0f, s.W - countW - trackW - 16f);
                 AvLay.Place(vote.Rect, 0f, 0f, voteW, s.H);
                 AvLay.Place((RectTransform)track.transform, voteW + 4f, (s.H - 6f) * 0.5f, trackW, 6f);
                 AvLay.Place(count.rectTransform, s.W - countW, 0f, countW, s.H);

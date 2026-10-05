@@ -42,6 +42,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return WmcText.Cut(first, LineChars);
         }
 
+        /// <summary>A badge's line: the text whole when it fits <paramref name="max"/>, else up to its last clause break (; , .) inside it,
+        /// else cut at a word. No ellipsis.</summary>
+        public static string Badge(string line, int max)
+        {
+            if (string.IsNullOrEmpty(line) || line.Length <= max) return line ?? "";
+            int stop = line.LastIndexOfAny(new[] { ';', ',', '.' }, max - 1);
+            return stop > max / 3 ? line.Substring(0, stop).TrimEnd() : WmcText.Cut(line, max);
+        }
+
         public static PerkCard For(int slot, IReadOnlyList<PilotPerk> owned, WingRank rank)
         {
             int count = owned != null ? owned.Count : 0;

@@ -20,7 +20,7 @@ namespace NOAvionics
         private UnityEngine.UI.Image rail;
         private TMP_Text text, glyph;
         private AvFx fx;
-        private string classes;
+        private string classes, baseClass;
         private bool hover, pressed, latched, armed, interactable = true, iconRight, iconOnly;
 
         public RectTransform Rect => (RectTransform)transform;
@@ -30,8 +30,8 @@ namespace NOAvionics
         {
             RectTransform root = AvLay.Child(parent, "Control " + spec.Label);
             var c = root.gameObject.AddComponent<AvControl>();
-            c.classes = cssClass + (spec.Style == AvButtonStyle.Primary ? " primary" : spec.Style == AvButtonStyle.Quiet ? " quiet"
-                : spec.Style == AvButtonStyle.Danger ? " danger" : "");
+            c.baseClass = cssClass;
+            c.classes = ClassesFor(cssClass, spec.Style);
             c.frame = AvFrame.Add(root, "Frame", AvChamfer.Diagonal(4f));
             c.frame.Bracket = 4f;
             AvLay.Fill(c.frame.rectTransform);
@@ -62,6 +62,18 @@ namespace NOAvionics
             c.fx = AvFx.On(c.frame);
             c.Restyle();
             return c;
+        }
+
+        private static string ClassesFor(string cssClass, AvButtonStyle style) => cssClass + (style == AvButtonStyle.Primary ? " primary" : style == AvButtonStyle.Quiet ? " quiet"
+            : style == AvButtonStyle.Danger ? " danger" : "");
+
+        /// <summary>Swap the button's style after build (a row's one action changes AUTHORIZE to EXECUTE to DENIED).</summary>
+        public void SetStyle(AvButtonStyle style)
+        {
+            string next = ClassesFor(baseClass, style);
+            if (next == classes) return;
+            classes = next;
+            Restyle();
         }
 
         public bool Latched { get => latched; set { if (latched == value) return; latched = value; if (value) fx?.Play(AvFxKind.Shine, 0.2f); Restyle(); } }

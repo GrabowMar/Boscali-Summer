@@ -11,6 +11,7 @@ using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
+using BoscaliSummer.Core.Game;
 // Use Unity's random generator for roster creation.
 using Random = UnityEngine.Random;
 
@@ -22,6 +23,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     {
         public string Name;
         public string Callsign;
+        /// <summary>Native faction remembered when seated; cosmetic only, never a gameplay owner.</summary>
+        public int PortraitFaction = -1;
 
         /// <summary>Person-specific radio style, independent of airframe and combat tuning.</summary>
         public ChatterPersona Persona;
@@ -252,7 +255,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (aircraft == null) return null;
 
             PersistentID id = aircraft.persistentID;
-            if (assigned.TryGetValue(id, out WingPilot existing)) return existing;
+            int faction = PortraitFactions.Of(aircraft.NetworkHQ);
+            if (assigned.TryGetValue(id, out WingPilot existing))
+            {
+                RememberPortraitFaction(existing, faction);
+                return existing;
+            }
 
             WingPilot pilot = (IsSelectable(preferred) && !IsFlying(preferred))
                 ? preferred
@@ -261,6 +269,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             reserved.Remove(pilot);
             assigned[id] = pilot;
             losses.Remove(id);
+            RememberPortraitFaction(pilot, faction);
             pilot.LastAircraft = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             pilot.LossCause = null;
             pilot.KilledBy = null;
@@ -271,6 +280,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             Version++;
             return pilot;
+        }
+
+        private static void RememberPortraitFaction(WingPilot pilot, int faction)
+        {
+            if (pilot.PortraitFaction == faction) return;
+            pilot.PortraitFaction = faction;
+            LookVersion++;
         }
 
         /// <summary>Release the seat, returning survivors to the free pilots with their records and marking

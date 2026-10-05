@@ -1,71 +1,44 @@
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
-    /// <summary>
-    /// Cockpit MFD glass night glow. Binds first-person cockpit screen renderers
-    /// (via GameAccess.GetCockpitRenderers) and brightens them through a MaterialPropertyBlock,
-    /// leaving base materials and assets untouched.
-    /// </summary>
     internal sealed class MfdGlow
     {
         private const int MaxPanels = 8;
-        private const int MaxVisited = 256;
-
-        private static readonly int ColorId = Shader.PropertyToID("_Color");
-        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
-        private static readonly int EmissiveColorId = Shader.PropertyToID("_EmissiveColor");
-        private static readonly int EmissionMapId = Shader.PropertyToID("_EmissionMap");
-        private static readonly int EmissiveMapId = Shader.PropertyToID("_EmissiveMap");
-        private static readonly string[] ScreenWords = { "mfd", "screen", "display", "monitor", "lcd", "ddi", "crt", "hud" };
-
-        private readonly List<Renderer> panels = new List<Renderer>(MaxPanels);
-        private readonly List<Color> baseColors = new List<Color>(MaxPanels);
+        private readonly List<MaterialSlotClone> panels = new List<MaterialSlotClone>(MaxPanels);
         private readonly List<Material> materials = new List<Material>(8);
-        private readonly MaterialPropertyBlock block = new MaterialPropertyBlock();
         private Aircraft bound;
-        private float applied = -1f;
-
+        private int bindAttempts;
+        private float nextBind;
         internal ManualLogSource Logger { get; set; }
-
         public int PanelCount => panels.Count;
         public float Boost { get; private set; } = 1f;
 
         public void Tick(Aircraft aircraft, bool cockpitView, float ambient01, bool enabled)
         {
+            if (!enabled || !cockpitView || aircraft == null) { Release(); return; }
             if (aircraft != bound) Bind(aircraft);
-            float target = enabled && cockpitView && panels.Count > 0 ? ImmersionMath.MfdBoost(ambient01) : 1f;
-            Boost = target;
-            if (Mathf.Abs(target - applied) < 0.005f) return;
-            applied = target;
-
-            for (int i = 0; i < panels.Count; i++)
+            else if (bindAttempts > 0 && Time.unscaledTime >= nextBind) BindSlots(aircraft);
+            Boost = panels.Count > 0 ? 1f + 0.15f * (1f - Mathf.Clamp01(ambient01)) : 1f;
+            for (int i = panels.Count - 1; i >= 0; i--)
             {
-                Renderer r = panels[i];
-                if (r == null) continue;
-                r.GetPropertyBlock(block);
-                block.SetColor(ColorId, baseColors[i] * target);
-                r.SetPropertyBlock(block);
+                panels[i].Apply(Boost);
+                if (!panels[i].Active) panels.RemoveAt(i);
             }
+            if (panels.Count == 0) Boost = 1f;
         }
 
         public void Release()
         {
-            if (bound != null)
-            {
-                block.Clear();
-                for (int i = 0; i < panels.Count; i++)
-                    if (panels[i] != null) panels[i].SetPropertyBlock(block);
-            }
-            bound = null;
+            for (int i = 0; i < panels.Count; i++) panels[i].Restore();
             panels.Clear();
-            baseColors.Clear();
             materials.Clear();
-            applied = -1f;
+            bound = null;
+            bindAttempts = 0;
+            nextBind = 0f;
             Boost = 1f;
         }
 
@@ -73,74 +46,35 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             Release();
             bound = aircraft;
-            if (aircraft == null) return;
-            int candidates = 0;
-            Renderer[] cockpit = GameAccess.GetCockpitRenderers(aircraft);
-            if (cockpit != null)
-            {
-                for (int i = 0; i < cockpit.Length && panels.Count < MaxPanels; i++)
-                {
-                    if (cockpit[i] == null) continue;
-                    candidates++;
-                    Consider(cockpit[i]);
-                }
-            }
-            else if (aircraft.cockpit != null)
-            {
-                var queue = new Queue<Transform>(64);
-                queue.Enqueue(aircraft.cockpit.transform);
-                int visited = 0;
-                while (queue.Count > 0 && panels.Count < MaxPanels && visited < MaxVisited)
-                {
-                    Transform t = queue.Dequeue();
-                    visited++;
-                    for (int c = 0; c < t.childCount; c++) queue.Enqueue(t.GetChild(c));
-                    var renderer = t.GetComponent<Renderer>();
-                    if (renderer == null) continue;
-                    candidates++;
-                    Consider(renderer);
-                }
-            }
-            if (Logger != null && panels.Count > 0)
-            {
-                Logger.LogInfo("[Immersion] MFD glow bound " + panels.Count + " of " +
-                    candidates + " cockpit renderers on " + aircraft.name + ".");
-            }
+            bindAttempts = 3;
+            BindSlots(aircraft);
         }
 
-        private void Consider(Renderer renderer)
+        private void BindSlots(Aircraft aircraft)
         {
-            Material shared = renderer.sharedMaterial;
-            if (shared == null || !shared.HasProperty(ColorId)) return;
-            renderer.GetSharedMaterials(materials);
-            bool screen = false;
-            for (int i = 0; i < materials.Count; i++)
+            bindAttempts--;
+            nextBind = Time.unscaledTime + 1f;
+            Renderer[] cockpit = GameAccess.GetCockpitRenderers(aircraft);
+            if (cockpit == null) return; // Unsupported aircraft skip safely; no whole-assembly name guesses.
+            for (int i = 0; i < cockpit.Length && panels.Count < MaxPanels; i++)
             {
-                Material m = materials[i];
-                if (m != null && (IsEmissive(m) || m.mainTexture is RenderTexture)) { screen = true; break; }
+                Renderer renderer = cockpit[i];
+                if (!NativeMaterialGuard.CanBindRenderer(aircraft, renderer)) continue;
+                renderer.GetSharedMaterials(materials);
+                for (int slot = 0; slot < materials.Count && panels.Count < MaxPanels; slot++)
+                {
+                    Material material = materials[slot];
+                    bool boundSlot = false;
+                    for (int p = 0; p < panels.Count; p++)
+                        if (panels[p].Matches(renderer, slot)) { boundSlot = true; break; }
+                    if (boundSlot) continue;
+                    MaterialSlotClone panel = MaterialSlotClone.TryBindDisplay(renderer, material, slot);
+                    if (panel != null) panels.Add(panel);
+                }
             }
             materials.Clear();
-            if (!screen)
-            {
-                string name = renderer.name.ToLowerInvariant();
-                for (int i = 0; i < ScreenWords.Length; i++)
-                    if (name.Contains(ScreenWords[i])) { screen = true; break; }
-            }
-            if (!screen) return;
-            panels.Add(renderer);
-            baseColors.Add(shared.GetColor(ColorId));
+            if (Logger != null && panels.Count > 0 && bindAttempts == 2)
+                Logger.LogInfo("[Immersion] Night glow bound " + panels.Count + " verified display slots.");
         }
-
-        private static bool IsEmissive(Material m)
-        {
-            if (m.IsKeywordEnabled("_EMISSION")) return true;
-            if (m.HasProperty(EmissionColorId) && MaxComponent(m.GetColor(EmissionColorId)) > 0.01f) return true;
-            if (m.HasProperty(EmissiveColorId) && MaxComponent(m.GetColor(EmissiveColorId)) > 0.01f) return true;
-            if (m.HasProperty(EmissionMapId) && m.GetTexture(EmissionMapId) != null) return true;
-            if (m.HasProperty(EmissiveMapId) && m.GetTexture(EmissiveMapId) != null) return true;
-            return false;
-        }
-
-        private static float MaxComponent(Color c) => Mathf.Max(c.r, Mathf.Max(c.g, c.b));
     }
 }

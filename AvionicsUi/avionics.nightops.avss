@@ -1,0 +1,22 @@
+/* Theme G · Night Ops NVG-safe teal-green, dimmed whites. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #020507 fc;
+  surface:         #071014 fa;
+  surface-raised:  #0D1A1F fa;
+  surface-inert:   #050C0F f5;
+  surface-sunken:  #020608 f8;
+  hairline:        #1C3A3C a8;
+  frame:           #2F6A66 d8;
+  ink:             #BFDCD2;
+  ink-dim:         #93B7AC;
+  ink-muted:       #6E9086;
+  key:             #4FCFB0;
+  select:          #6FE3C4;
+  ready:           #4FCF8A;
+  caution:         #D9B24A;
+  danger:          #E05A52;
+  info:            #6FB8C8;
+  inert:           #1F3A38 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

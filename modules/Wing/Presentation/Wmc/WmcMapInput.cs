@@ -233,6 +233,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
             MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);
             if (click == MapClick.None) return;
+            if ((shift || c.Queue) && WmcQueue.TryKind(click, out PlanKind queued))
+            {
+                WmcQueue.Append(c, queued, point, radius);
+                return;
+            }
             if (click == MapClick.NeedEnemy)
             {
                 WingToast.Show("Right-click an enemy on the map");

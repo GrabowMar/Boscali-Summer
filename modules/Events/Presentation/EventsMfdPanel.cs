@@ -63,6 +63,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private const int VisibleLogRows = 5;
         private ArchiveTilePart[] tiles;
         private EventCaseFilePart deskCase;
+        private AvButtons deskCaseAction;
+        private int deskCaseCatalog = -1;
         private AvSection recentSection;
         private AvRow[] recentRows;
         private readonly int[] recentCatalog = new int[RecentRecords];
@@ -73,6 +75,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private float boundMultiplier = float.NaN;
         private float boundCooldown = float.NaN;
         private bool boundAimed;
+        private bool boundResolved;
         private float nextAttempt;
         private float nextRefresh;
         private bool failed;
@@ -104,6 +107,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             historyCapacity = 0;
             tiles = null;
             deskCase = null;
+            deskCaseAction = null;
+            deskCaseCatalog = -1;
             recentSection = null;
             recentRows = null;
             archive?.Close();
@@ -113,6 +118,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             boundMultiplier = float.NaN;
             boundCooldown = float.NaN;
             boundAimed = false;
+            boundResolved = false;
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -327,6 +333,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
             deskCase = p.Add(new EventCaseFilePart(p.Content), 1f);
             deskCase.Help = "CASE FILE: the running event, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are listed under RECENT.";
             deskCase.Bind("AWAITING REPORT", "NO CASE FILED", "", AvIcon.Radar2, null, AvState.Inert);
+            deskCaseAction = p.Buttons(new AvControl.Spec("OPEN CASE DOSSIER", () =>
+            {
+                if (deskCaseCatalog >= 0) OpenArchive(1, deskCaseCatalog);
+            }, AvButtonStyle.Quiet, AvIcon.Bookmark));
+            deskCaseAction.Controls[0].Help = "Read this event's catalog dossier, including its authored effects and timed orders.";
+            deskCaseAction.SetShown(false);
 
             recentSection = p.Section(AvIcon.ListDetails, "RECENT", "OPEN");
             recentRows = new AvRow[RecentRecords];
@@ -426,13 +438,15 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             string id = current != null ? current.Id : "";
             float started = current != null ? current.StartedAtMissionTime : 0f;
+            bool resolved = current != null && current.TargetResolved;
             bool rebind = id != boundId || started != boundStart || aimedAtLocal != boundAimed ||
-                          multiplier != boundMultiplier || cooldown != boundCooldown;
+                          multiplier != boundMultiplier || cooldown != boundCooldown || resolved != boundResolved;
             if (rebind)
             {
                 boundId = id;
                 boundStart = started;
                 boundAimed = aimedAtLocal;
+                boundResolved = resolved;
                 boundMultiplier = multiplier;
                 boundCooldown = cooldown;
                 if (current != null)
@@ -509,6 +523,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             if (deskCase == null) return;
             ActiveEventView file = current ?? (history.Count > 0 ? history[history.Count - 1] : null);
+            deskCaseCatalog = file != null ? CatalogIndexOf(file.Id) : -1;
+            deskCaseAction?.SetShown(deskCaseCatalog >= 0);
             int aircraft = Encyclopedia.i?.aircraft?.Count ?? 0;
             tiles[0].SetCount(AvNum.Fixed(aircraft, 0) + " RECORDS");
             tiles[1].SetCount(AvNum.Fixed(EventCatalog.All.Length, 0) + " RECORDS");
@@ -583,11 +599,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
         }
 
         /// <summary>
-        /// The hero's one-line flag. The pills already carry the effect, so this only speaks when the dispatch is
-        /// broken; the full plain-words consequence lives on the tier slab's hover help.
+        /// The hero's plain-language effect, visible without hovering, or a cancellation notice.
         /// </summary>
         private static string Consequence(ActiveEventView view, bool aimedAtLocal) =>
-            view != null && !view.TargetResolved ? "TARGET LOST // ORDERS CANCELLED" : "";
+            view != null && !view.TargetResolved ? "TARGET LOST // ORDERS CANCELLED" : ConsequenceHelp(view, aimedAtLocal);
 
         /// <summary>Plain words for what the live effect means, for hover help.</summary>
         private static string ConsequenceHelp(ActiveEventView view, bool aimedAtLocal)

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
@@ -31,7 +33,7 @@ namespace BoscaliSummer.Fire
                 if (!visuals[i].Active) { visual = visuals[i]; break; }
             if (visual == null)
             {
-                if (visuals.Count >= Plugin.Settings.FireAndDestruction.MaximumCollapseBursts) return;
+                if (visuals.Count >= FxBudget.ScaleCount(Plugin.Settings.FireAndDestruction.MaximumCollapseBursts, FxBus.Scales.Particles)) return;
                 visual = Create();
                 if (visual == null) return;
                 visuals.Add(visual);

@@ -11,6 +11,7 @@ namespace BoscaliSummer.Core.Contracts
         float HeadMotionStrength { get; set; }
         bool ExtraShakeEnabled { get; set; }
         float ShakeStrength { get; set; }
+        bool ComfortMotionEnabled { get; set; }
         bool SunGlareEnabled { get; set; }
         bool MfdGlowEnabled { get; set; }
         bool AirframeAudioEnabled { get; set; }

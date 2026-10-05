@@ -401,14 +401,63 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             }
         }
 
-        private void Update()
+        // No per-instance Update: one static driver ticks every live chunk (a native-to-managed
+        // call per chunk per frame bought nothing between the 0.25 s LOD checks).
+        private static readonly List<TrenchVisualChunk> live = new List<TrenchVisualChunk>();
+        private static TrenchChunkDriver driver;
+        private static int cameraFrame = -1;
+        private static Camera frameCamera;
+
+        private void OnEnable()
+        {
+            if (!live.Contains(this)) live.Add(this);
+            if (driver == null)
+            {
+                var go = new GameObject("TrenchChunkDriver") { hideFlags = HideFlags.HideAndDontSave };
+                DontDestroyOnLoad(go);
+                driver = go.AddComponent<TrenchChunkDriver>();
+            }
+        }
+
+        private void OnDisable() => live.Remove(this);
+
+        private void Tick(float now)
         {
             if (pendingBuild.Count > 0) PumpBuildQueue();
-            float now = Time.time;
             if (now < nextLodCheckTime) return;
             nextLodCheckTime = now + 0.25f;
 
             UpdateLod(false);
+        }
+
+        /// <summary>The view camera, resolved at most once per frame however many chunks ask.</summary>
+        private static Camera ViewCamera()
+        {
+            int frame = Time.frameCount;
+            if (frame != cameraFrame || frameCamera == null)
+            {
+                cameraFrame = frame;
+                CameraStateManager view = SceneSingleton<CameraStateManager>.i;
+                frameCamera = view != null && view.mainCamera != null ? view.mainCamera : Camera.main;
+            }
+            return frameCamera;
+        }
+
+        private sealed class TrenchChunkDriver : MonoBehaviour
+        {
+            private void Update()
+            {
+                float now = Time.time;
+                // Index loop with a live bound: a tick may destroy or rebuild a chunk.
+                for (int i = 0; i < live.Count; i++)
+                {
+                    TrenchVisualChunk chunk = live[i];
+                    if (chunk == null) { live.RemoveAt(i--); continue; }
+                    int before = live.Count;
+                    chunk.Tick(now);
+                    if (live.Count < before) i -= before - live.Count;
+                }
+            }
         }
 
         private void UpdateLod(bool force)
@@ -423,8 +472,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             // (terrain probes return GlobalPosition) while the camera is local, so comparing
             // them raw measures the floating origin, not the chunk: every built earthwork
             // reads as tens of kilometres away and sits at LOD3 — fully culled — forever.
-            CameraStateManager view = SceneSingleton<CameraStateManager>.i;
-            Camera cam = view != null && view.mainCamera != null ? view.mainCamera : Camera.main;
+            Camera cam = ViewCamera();
             if (cam == null) return;
 
             Vector3 center = WorldCenter;

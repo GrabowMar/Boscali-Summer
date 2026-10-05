@@ -1,0 +1,12 @@
+Use case: stylized-concept. Production portrait BACKGROUND atlas for a nearfutureAceCombatinspired realisticcartoon game. Create a landscape1280x800 image with exactly8 illustrated environments in a seamless precise4columns2rowsgrid, eachpanel320x400portrait4:5. No gutters orborder. The eightpanelsmustnotbleedinto eachother. Backgrounds only, no people, head, body orclothes. Eyelevel camera, moderate backgrounddefocus and lowcontrast, large simple environmental forms so afaceinfrontremainsreadable. Allpanelshavesoftneutralfrontlighting andrestrained atmosphere, no intense neonorbusytext. No labels, flags, logos, readabletext orUI.
+Row1lefttoright:
+1 blue-slate studio backdrop, subtlepapertexture and broadsoftlightgradient, understated;
+2 aircraftmaintenance hangar interior blurredsteel structuralarches withdefocusedwarmworklights, daylight;
+3 naval carrier flightdeck withblurredshipstructure and oceanhorizon, cloudymaritimelight;
+4 sunlitdesertairfield ramp sandstonehills and indistincthardenedaircraftshelters, mutedwarmdust.
+Row2lefttoright:
+1 operational commandroom with distant unfocused greenblue screens on darkwalls, no readablegraphics;
+2 modern coastalcity with low industrialrooflines and a defocusedshoreline, overcastdawn;
+3 temperate woodland with softtrees and a small militarycamp silhouette, coolgraygreen;
+4 nightairfield with deepnavyhorizon, softbluewhite runwaylightbokeh, calmexposure.
+Cohesive original paintedCGillustration, believable nearfuture materials, painterlysimplification. Distinctsettings visible atsmallportraitthumbnails. Opaquebackgrounds. Deliver exactlythis8panelatlas.

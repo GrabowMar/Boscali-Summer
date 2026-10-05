@@ -28,6 +28,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, masterGrid, page, "IMMERSION MASTER",
                 "Master switch for all client-side cockpit immersion features (physics, vibrations, shaders, and audio).",
                 () => immersion.IsEnabled, v => immersion.IsEnabled = v);
+            ToggleCell(flow, masterGrid, page, "COMFORT MOTION",
+                "Reduce all added cockpit rotation to 25% and remove idle breathing. Individual switches still work.",
+                () => immersion.ComfortMotionEnabled, v => immersion.ComfortMotionEnabled = v,
+                masterOn, needMaster);
 
             flow.Section(AvIcon.Activity, "COCKPIT MOTION", "HEAD · SHAKES · BUFFET");
             AvCellGrid motionGrid = flow.Grid(3);
@@ -47,18 +51,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var motionRings = flow.Add(new SetRingRow(flow.Content));
             Ring(flow, motionRings, page, "HEAD STRENGTH",
                 () => AvNum.Percent(immersion.HeadMotionStrength),
-                () => Mathf.Clamp01((immersion.HeadMotionStrength - 0.2f) / 1.8f),
-                d => immersion.HeadMotionStrength = Mathf.Clamp(Mathf.Round((immersion.HeadMotionStrength + d * 0.1f) * 10f) / 10f, 0.2f, 2.0f),
-                () => immersion.HeadMotionStrength > 0.201f,
+                () => Mathf.Clamp01(immersion.HeadMotionStrength / 2f),
+                d => immersion.HeadMotionStrength = Mathf.Clamp(Mathf.Round((immersion.HeadMotionStrength + d * 0.1f) * 10f) / 10f, 0f, 2.0f),
+                () => immersion.HeadMotionStrength > 0.001f,
                 () => immersion.HeadMotionStrength < 1.999f,
                 "Strength of cockpit head inertia under G-forces and angular rates.",
                 () => immersion.IsEnabled && immersion.HeadMotionEnabled,
                 () => !immersion.IsEnabled ? needMaster() : "Turn on HEAD MOTION first.");
             Ring(flow, motionRings, page, "SHAKE STRENGTH",
                 () => AvNum.Percent(immersion.ShakeStrength),
-                () => Mathf.Clamp01((immersion.ShakeStrength - 0.2f) / 1.8f),
-                d => immersion.ShakeStrength = Mathf.Clamp(Mathf.Round((immersion.ShakeStrength + d * 0.1f) * 10f) / 10f, 0.2f, 2.0f),
-                () => immersion.ShakeStrength > 0.201f,
+                () => Mathf.Clamp01(immersion.ShakeStrength / 2f),
+                d => immersion.ShakeStrength = Mathf.Clamp(Mathf.Round((immersion.ShakeStrength + d * 0.1f) * 10f) / 10f, 0f, 2.0f),
+                () => immersion.ShakeStrength > 0.001f,
                 () => immersion.ShakeStrength < 1.999f,
                 "Strength of extra camera vibrations for gunfire, touchdowns, and Mach buffet.",
                 () => immersion.IsEnabled && (immersion.ExtraShakeEnabled || immersion.MachBuffetEnabled),
@@ -78,8 +82,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Physiological G-force visual effects: peripheral tunnel vision greyout under +G, redout under -G.",
                 () => immersion.GVignetteEnabled, v => immersion.GVignetteEnabled = v,
                 masterOn, needMaster);
-            ToggleCell(flow, visualGrid, page, "SURFACE WEATHER",
-                "Cockpit view: dynamic canopy and airframe surface effects (rain wetness, frost, scorch, dirt).",
+            ToggleCell(flow, visualGrid, page, "DAMAGE SURFACES",
+                "Subtle damage shading on supported opaque cockpit material slots. Weather owns glass rain and cold moisture.",
                 () => immersion.SurfaceImmersionEnabled, v => immersion.SurfaceImmersionEnabled = v,
                 masterOn, needMaster);
 
@@ -110,6 +114,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 immersion.HeadMotionStrength = 1f;
                 immersion.ExtraShakeEnabled = true;
                 immersion.ShakeStrength = 1f;
+                immersion.ComfortMotionEnabled = false;
                 immersion.MachBuffetEnabled = true;
                 immersion.SunGlareEnabled = true;
                 immersion.MfdGlowEnabled = true;

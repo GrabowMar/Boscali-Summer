@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class SetRingCell : AvPart
     {
-        private const float Pad = 6f, TitleH = 16f, BtnH = 24f, Top = 5f;
+        private const float Pad = 6f, TitleH = 16f, BtnH = 28f, Top = 5f;
         private readonly AvFrame frame;
         private readonly TMP_Text title, value;
         private readonly AvGaugeGraphic dial;
@@ -65,17 +65,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             plus.Help = plusHelp;
         }
 
-        public override float Measure(float width) => 66f;
+        public override float Measure(float width) => 72f;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             AvLay.Place(title.rectTransform, Pad, Top, s.W - 2f * Pad, TitleH);
-            float bw = 25f, x = s.W - Pad - 2f * bw - 3f;
-            AvLay.Place(value.rectTransform, Pad, 24f, x - Pad - 3f, 24f);
+            float bw = 30f, x = s.W - Pad - 2f * bw - 4f;
+            AvLay.Place(value.rectTransform, Pad, 24f, x - Pad - 4f, BtnH);
             AvLay.Place(minus.Rect, x, 24f, bw, BtnH);
-            AvLay.Place(plus.Rect, x + bw + 3f, 24f, bw, BtnH);
-            AvLay.Place((RectTransform)dial.transform, Pad, 55f, s.W - 2f * Pad, 4f);
+            AvLay.Place(plus.Rect, x + bw + 4f, 24f, bw, BtnH);
+            AvLay.Place((RectTransform)dial.transform, Pad, 63f, s.W - 2f * Pad, 4f);
         }
 
         public override void Restyle()
@@ -100,8 +100,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     }
 
     /// <summary>
-    /// One flow line that holds up to four ring cells in equal columns. Hidden cells collapse and the rest
-    /// share the width, so a row of dials never has a hole in the middle. The flow re-lays a line only when
+    /// Step cells wrap when their labels and values need more width. Hidden cells collapse and the rest
+    /// share each line's width, so a row of dials never has a hole in the middle. The flow re-lays a line only when
     /// its height moves, so a caller that shows or hides a cell calls <see cref="Reflow"/>.
     /// </summary>
     internal sealed class SetRingRow : AvPart
@@ -134,11 +134,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             int n = ShownCount();
             if (n == 0) return 0f;
-            float w = AvFlowMath.ColumnWidth(width, n, Gap), h = 0f;
+            int columns = Columns(width, n), at = 0;
+            float total = 0f, lineHeight = 0f;
             for (int i = 0; i < cells.Count; i++)
-                if (cells[i].Shown) h = Mathf.Max(h, cells[i].Measure(w));
-            return h;
+            {
+                if (!cells[i].Shown) continue;
+                int lineCount = Mathf.Min(columns, n - at / columns * columns);
+                float w = AvFlowMath.ColumnWidth(width, lineCount, Gap);
+                lineHeight = Mathf.Max(lineHeight, cells[i].Measure(w));
+                at++;
+                if (at % columns == 0 || at == n)
+                {
+                    total += lineHeight + (at == n ? 0f : Gap);
+                    lineHeight = 0f;
+                }
+            }
+            return total;
         }
+
+        private static int Columns(float width, int count) =>
+            Mathf.Clamp(Mathf.FloorToInt((width + Gap) / (160f + Gap)), 1, count);
 
         public override void Place(AvSlot s)
         {
@@ -146,13 +161,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lastSlot = s; placed = true;
             int n = ShownCount();
             if (n == 0) return;
-            float w = AvFlowMath.ColumnWidth(s.W, n, Gap);
-            int at = 0;
+            int columns = Columns(s.W, n), at = 0;
+            float y = 0f, lineHeight = 0f;
             for (int i = 0; i < cells.Count; i++)
             {
                 if (!cells[i].Shown) continue;
-                cells[i].Place(new AvSlot(at * (w + Gap), 0f, w, s.H));
+                int lineCount = Mathf.Min(columns, n - at / columns * columns);
+                float w = AvFlowMath.ColumnWidth(s.W, lineCount, Gap);
+                float h = cells[i].Measure(w);
+                cells[i].Place(new AvSlot(at % columns * (w + Gap), y, w, h));
+                lineHeight = Mathf.Max(lineHeight, h);
                 at++;
+                if (at % columns == 0 || at == n) { y += lineHeight + Gap; lineHeight = 0f; }
             }
         }
 

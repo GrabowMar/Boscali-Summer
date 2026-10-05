@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
+    // Native CameraStateManager (order 2) finalizes its camera and floating origin first.
+    [DefaultExecutionOrder(100)]
     internal sealed class MapUiManager : MonoBehaviour, ISceneService
     {
         private float nextRefresh;
@@ -22,26 +24,32 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             mapWasMaximized = true;
+            if (Time.unscaledTime >= nextRefresh)
+            {
+                nextRefresh = Time.unscaledTime + 0.1f;
+                var map = SceneSingleton<DynamicMap>.i;
+                var canvas = map == null ? null : map.maximizedMapCanvas;
+                var mfd = MapMfdLookup.Resolve(canvas);
+                if (mfd != null && canvas != null)
+                {
+                    int count = Count(MapUiAccess.GetLeftScreens(mfd)) + Count(MapUiAccess.GetRightScreens(mfd));
+                    var size = MfdLayout.CanvasSize(canvas);
+                    if (count != screenCount || size != MfdRailPatch.AppliedCanvasSize)
+                    {
+                        MfdRailPatch.OnStructureChanged(map);
+                        screenCount = count;
+                    }
+                    MfdRailPatch.Reconcile();
+                    VanillaMfdRebuild.Tick();
+                    MfdLogPanel.Tick();
+                    MfdMapFooter.Tick();
+                }
+            }
+            // Rail reconciliation can resize/reposition the viewport. Capture/render its
+            // final layout before projecting symbols or resolving this frame's pointer.
             MfdTerrainRelief.Tick();
             MfdMapInteractions.Tick(SceneSingleton<DynamicMap>.i);
             MfdNewsTicker.Tick();
-            if (Time.unscaledTime < nextRefresh) return;
-            nextRefresh = Time.unscaledTime + 0.1f;
-            var map = SceneSingleton<DynamicMap>.i;
-            var canvas = map == null ? null : map.maximizedMapCanvas;
-            var mfd = MapMfdLookup.Resolve(canvas);
-            if (mfd == null || canvas == null) return;
-            int count = Count(MapUiAccess.GetLeftScreens(mfd)) + Count(MapUiAccess.GetRightScreens(mfd));
-            var size = MfdLayout.CanvasSize(canvas);
-            if (count != screenCount || size != MfdRailPatch.AppliedCanvasSize)
-            {
-                MfdRailPatch.OnStructureChanged(map);
-                screenCount = count;
-            }
-            MfdRailPatch.Reconcile();
-            VanillaMfdRebuild.Tick();
-            MfdLogPanel.Tick();
-            MfdMapFooter.Tick();
         }
         private static int Count(System.Collections.Generic.List<MFDScreen> screens)
         {

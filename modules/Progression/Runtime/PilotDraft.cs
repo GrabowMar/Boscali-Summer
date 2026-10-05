@@ -73,6 +73,12 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return this;
         }
 
+        public PilotDraft CycleAccessory(int delta, int count)
+        {
+            Accessory = Wrap(Accessory + delta, count);
+            return this;
+        }
+
         public PilotDraft CyclePersona(int delta)
         {
             Persona = Wrap(Persona + delta, PersonaCount);

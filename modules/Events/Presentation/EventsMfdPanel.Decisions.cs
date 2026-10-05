@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 private const float PadX = 10f, ButtonHeight = 28f;
                 private readonly AvFrame frame;
                 private readonly Image rail;
-                private readonly TMP_Text name, scope, effect, cost, note;
+                private readonly TMP_Text name, scope, effect, effectKey, cost, note;
                 private readonly AvControl button;
                 private bool chosen, enabled;
 
@@ -207,6 +207,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     scope = AvText.Make(Root, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
                     effect = AvText.Make(Root, "Effect", AvTextRole.Display, "", TextAlignmentOptions.MidlineRight);
                     AvText.Fit(effect, false);
+                    effectKey = AvText.Make(Root, "EffectKey", AvTextRole.Micro, "SUPPORT", TextAlignmentOptions.MidlineRight);
+                    AvText.Fit(effectKey, false);
                     cost = AvText.Make(Root, "Cost", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft, true);
                     note = AvText.Make(Root, "Note", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                     button = AvControl.Make(Root, new AvControl.Spec("CHOOSE", onChoose, AvButtonStyle.Primary));
@@ -234,13 +236,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 }
 
                 // Name and scope stack on the left; the price it would set is the big number on the right.
-                private float PriceWidth => Mathf.Ceil(AvText.Width(effect)) + 4f;
+                private float PriceWidth => Mathf.Ceil(Mathf.Max(AvText.Width(effect), AvText.Width(effectKey))) + 4f;
 
                 public float Measure(float width)
                 {
                     float w = width - 2f * PadX;
                     float nameW = Mathf.Max(30f, w - PriceWidth - 6f);
-                    float head = Mathf.Max(32f, AvText.Height(name, nameW) + 1f + AvText.Height(scope, nameW));
+                    float head = Mathf.Max(46f, AvText.Height(name, nameW) + 1f + AvText.Height(scope, nameW));
                     float h = 8f + head + 2f + 16f;
                     if (note.text.Length > 0) h += 2f + AvText.Height(note, w);
                     return h + 6f + ButtonHeight + 8f;
@@ -253,10 +255,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     AvLay.Place(rail.rectTransform, 0f, 0f, 2f, height);
                     float pw = PriceWidth, nameW = Mathf.Max(30f, w - pw - 6f);
                     float nh = AvText.Height(name, nameW), sh = AvText.Height(scope, nameW);
-                    float head = Mathf.Max(32f, nh + 1f + sh);
+                    float head = Mathf.Max(46f, nh + 1f + sh);
                     AvLay.Place(name.rectTransform, PadX, cy, nameW, nh);
                     AvLay.Place(scope.rectTransform, PadX, cy + nh + 1f, nameW, sh);
-                    AvLay.Place(effect.rectTransform, PadX + w - pw, cy, pw, 32f);
+                    AvLay.Place(effectKey.rectTransform, PadX + w - pw, cy, pw, 14f);
+                    AvLay.Place(effect.rectTransform, PadX + w - pw, cy + 14f, pw, 32f);
                     cy += head + 2f;
                     AvLay.Place(cost.rectTransform, PadX, cy, w, 16f);
                     cy += 16f;
@@ -272,6 +275,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                     rail.color = chosen ? AvStyleHost.FuiColor("select", AvTheme.Accent)
                         : enabled ? AvStyleHost.FuiColor("info", AvTheme.RailInfo) : AvStyleHost.FuiColor("inert", AvTheme.RailInert);
+                    effectKey.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     name.color = enabled || chosen ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     scope.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     effect.color = chosen ? AvStyleHost.FuiColor("select", AvTheme.Accent)

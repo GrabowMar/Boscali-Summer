@@ -14,22 +14,18 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>SQUADRON (spec bezel v2 §5; WING renamed so "wing" keeps meaning the aircraft), in two sub-pages on kit v2: ROSTER carries
-    /// what used to be three tabs — the roster in join order with one status word per pilot (a badge on the row, the same word on the
-    /// dossier stamp), a dossier card (portrait, rank and XP tape with rank ticks, record, radio, RELEASE), the AIRFRAME ASSIGNMENT bar
-    /// with AIR SAR and LOCAL SAR, PERKS 2×2 and an inline INSPECT section (one aircraft in depth: member chips, status, fuel/hull tapes,
-    /// radar, target, stores, its pilot, recent events, RTB · REFIT · RELEASE). A row inspects only (R6 ruling): SUPPLY's pilot card picks
-    /// who flies. STUDIO: the saved pilots and the pilot studio (the room's SQUADRON, moved here; still the v1 page, hosted in a fixed
-    /// slot until it converts). <see cref="SubInspect"/> is kept as an alias of <see cref="SubRoster"/> so old callers
-    /// (<c>ShowSub(SubInspect)</c>, <c>Sub == SubInspect</c>) still land on the merged page. The roster is the host's; a client sees one
-    /// card. The console body scrolls, so nothing is pinned to the floor any more.</summary>
+    /// <summary>SQUADRON (spec bezel v2 §5; WING renamed so "wing" keeps meaning the aircraft), in three sub-pages on kit v2 (the 2026-10-05
+    /// Personnel File redesign): ROSTER is the squadron header and table (rank insignia, callsign, name, kills, sorties, a status tag) above a
+    /// personnel file card for the selected pilot (portrait, rotated status stamp, rank ladder with XP, record, ribbon rack, the assignment
+    /// line, four perk badges, AIR SAR · LOCAL SAR · RELEASE); AIRCRAFT is INSPECT given its own page (one aircraft in depth: member chips, the
+    /// damage map, gauges, stores, its pilot, RTB · REFIT · RELEASE); STUDIO is the pilot studio with a live aircrew ID card. A row inspects
+    /// only (R6 ruling): SUPPLY's pilot card picks who flies. <see cref="SubInspect"/> aliases <see cref="SubAircraft"/> so old callers
+    /// (<c>ShowSub(SubInspect)</c>) land on AIRCRAFT. The roster is the host's; a client sees one card.</summary>
     internal sealed partial class WmcWing : IWmcPage
     {
-        /// <summary>ROSTER now also holds INSPECT (2026-09-28 merge): <see cref="SubInspect"/> aliases <see cref="SubRoster"/> so a
-        /// caller that still says <c>ShowSub(SubInspect)</c> or compares <c>Sub == SubInspect</c> lands on the one merged page.</summary>
-        public const int SubRoster = 0, SubStudio = 1, SubInspect = SubRoster;
-        private static readonly string[] SubLabels = { "ROSTER", "STUDIO" };
-        private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Pencil };
+        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2, SubInspect = SubAircraft;
+        private static readonly string[] SubLabels = { "ROSTER", "AIRCRAFT", "STUDIO" };
+        private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Plane, AvIcon.Pencil };
         private const int PerPage = 6;
 
         private readonly WmcControls ids;
@@ -41,8 +37,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private WmcSubPages subPages;
         private AvControl[] subTabs;
         private int sub = -1;
-        private bool relayout, scrollPending;
-        private int scrollDelay;
+        private bool relayout;
 
         // This refresh's snapshot: Refresh takes it first, everything after reuses it.
         private WmcContext last;
@@ -53,7 +48,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly List<WingPilot> roster = new List<WingPilot>();
         private PilotStatus[] status = new PilotStatus[0];
         private int[] number = new int[0];
-        private int scanVersion = int.MinValue, flying, free, sar, kia, captured, lost;
+        private int scanVersion = int.MinValue, flying, free, sar, mia, kia, captured, lost;
+        private float[] localLeft = new float[0];
         private bool scanClient;
         private WingService scanWing;
         private WingPilot upcoming;
@@ -97,14 +93,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 specs[i] = new AvControl.Spec(SubLabels[i], () => ShowSub(k), AvButtonStyle.Default, SubIcons[i]);
             }
             subTabs = flow.Buttons(specs).Controls;
-            subTabs[SubRoster].Help = "This mission's pilots, the dossier, one aircraft in depth, and SAR.";
+            subTabs[SubRoster].Help = "This mission's pilots and the selected pilot's personnel file: rank, record, ribbons, perks, SAR.";
+            subTabs[SubAircraft].Help = "One aircraft in depth: damage, fuel, ammo, stores, why it does what it does, and its pilot.";
             subTabs[SubStudio].Help = "The saved pilots and the pilot studio: identity, look, radio and bio.";
             for (int i = 0; i < subTabs.Length; i++) ids.Add("sq.sub." + SubLabels[i].ToLowerInvariant(), subTabs[i]);
 
             subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
             BuildRoster(subPages.Flow(SubRoster));
+            inspectPage.Build(subPages.Flow(SubAircraft), ticker, pageIndex);
             BuildStudio(subPages.Flow(SubStudio));
-            ticker?.Add(pageIndex, AvTickRate.Fast, TickScroll);
             ShowSub(SubRoster);
         }
 
@@ -121,7 +118,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (subPages == null || k < 0 || k >= SubLabels.Length) return;
             if (sub == SubStudio && k != SubStudio) studioPage.Hide();
-            if (k == SubInspect && sub != SubInspect && last != null) inspectPage.Shown(last);
+            if (k == SubAircraft && sub != SubAircraft && last != null) inspectPage.Shown(last);
             sub = k;
             subPages.Show(k);
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
@@ -134,7 +131,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (id == null) return;
             if (id.StartsWith("sq.sub.", System.StringComparison.Ordinal)) return;
-            if (id.StartsWith("insp.", System.StringComparison.Ordinal)) ShowSub(SubInspect);
+            if (id.StartsWith("insp.", System.StringComparison.Ordinal)) ShowSub(SubAircraft);
             else if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
             else if (id.StartsWith("wing.", System.StringComparison.Ordinal)) ShowSub(SubRoster);
         }
@@ -158,10 +155,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 status = new PilotStatus[roster.Count + 8];
                 number = new int[roster.Count + 8];
             }
-            flying = free = sar = kia = captured = 0;
+            if (localLeft.Length < roster.Count) localLeft = new float[roster.Count + 8];
+            flying = free = sar = mia = kia = captured = 0;
             for (int i = 0; i < roster.Count; i++)
             {
                 status[i] = StatusOf(roster[i], out number[i]);
+                localLeft[i] = status[i] == PilotStatus.LocalSar ? WingSearchAndRescue.LocalRecoveryRemaining(roster[i]) : -1f;
                 switch (status[i])
                 {
                     case PilotStatus.Free: free++; break;
@@ -169,10 +168,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     case PilotStatus.Inbound: break;
                     case PilotStatus.Kia: kia++; break;
                     case PilotStatus.Captured: captured++; break;
+                    case PilotStatus.Missing: mia++; break;
                     default: sar++; break;
                 }
             }
-            lost = sar + kia + captured;
+            lost = sar + mia + kia + captured;
             upcoming = client ? null : WingPilotRoster.Upcoming;
             // The dossier follows its pilot; a pilot who left gives way to the next up, else the first.
             if (inspected == null || !roster.Contains(inspected)) inspected = upcoming ?? (roster.Count > 0 ? roster[0] : null);
@@ -186,16 +186,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
-        /// <summary>A sub-page by its label (automation). "INSPECT" is gone as its own page (2026-09-28 merge): it shows ROSTER and
-        /// scrolls down to the inline inspect section.</summary>
+        /// <summary>A sub-page by its label (automation). "INSPECT" is the old name of AIRCRAFT.</summary>
         public bool ShowSubNamed(string name)
         {
-            if (string.Equals(name, "INSPECT", System.StringComparison.OrdinalIgnoreCase))
-            {
-                ShowSub(SubRoster);
-                ScrollToInspect();
-                return true;
-            }
+            if (string.Equals(name, "INSPECT", System.StringComparison.OrdinalIgnoreCase)) name = "AIRCRAFT";
             for (int i = 0; i < SubLabels.Length; i++)
                 if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -205,50 +199,32 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return false;
         }
 
-        /// <summary>Scrolls the console body down to the inline INSPECT section (best-effort: <see cref="ShowSubNamed"/> on "INSPECT").
-        /// The layout settles first, so it runs a couple of ticks later.</summary>
-        private void ScrollToInspect()
-        {
-            scrollPending = true;
-            scrollDelay = 2;
-            rosterFlow?.RequestRelayout();
-        }
-
-        private void TickScroll()
-        {
-            if (!scrollPending || --scrollDelay > 0) return;
-            scrollPending = false;
-            RectTransform anchor = inspectPage.Anchor;
-            ScrollRect scroll = flow?.Content != null ? flow.Content.GetComponentInParent<ScrollRect>() : null;
-            if (anchor == null || scroll == null || scroll.viewport == null) return;
-            float max = flow.Content.rect.height - scroll.viewport.rect.height;
-            if (max <= 1f) return;
-            float depth = -WmcKit.RectIn(flow.Content, anchor).y;
-            scroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(depth / max);
-        }
-
         public void Shown(WmcContext c)
         {
             Snapshot(c);
-            if (sub == SubRoster) inspectPage.Shown(c);
+            if (sub == SubAircraft) inspectPage.Shown(c);
         }
 
         public void Refresh(WmcContext c)
         {
+            Snapshot(c);
             if (sub == SubStudio)
             {
-                Snapshot(c);
                 RefreshAlert();
                 studioPage.Refresh(c);
                 return;
             }
-            // ROSTER, now also INSPECT's inline section (2026-09-28 merge). Review U1-U2: every refresh (the panel passes the same
-            // context each time; Snapshot and inspectPage.Refresh each skip their own work when nothing moved).
-            Snapshot(c);
+            if (sub == SubAircraft)
+            {
+                RefreshAlert();
+                inspectPage.Refresh(c);
+                return;
+            }
+            // ROSTER: the table, the personnel file and what hangs on it. Review U1-U2: every refresh (the panel passes the same context
+            // each time; Snapshot and each Refresh below skip their own work when nothing moved).
             RefreshRoster();
-            RefreshDossier();
+            RefreshFile();
             RefreshPerks();
-            inspectPage.Refresh(c);
             RefreshAssignment();
             RefreshAlert();
             if (relayout)
@@ -269,38 +245,37 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 alert = SquadronWords.Alert(status[i], WmcText.Cut(roster[i].Callsign, PilotPick.CallsignChars));
         }
 
-        // ---------------------------------------------------------------- SQUADRON: head, rows, footer
+        // ---------------------------------------------------------------- ROSTER: head, table, footer
 
-        private AvSection headSection;
+        private WingSquadronHead head;
         private WingPilotList list;
         private WingRosterFoot foot;
 
-        // The row's NAME column narrowed to make room for the kills count and the status badge.
-        private const int RowNameChars = 12;
+        // The row's NAME column.
+        private const int RowNameChars = 19;
 
         private void BuildRoster(AvFlow f)
         {
             rosterFlow = f;
-            headSection = f.Section(AvIcon.User, SquadronWords.Title);
+            head = f.Add(new WingSquadronHead(f.Content));
             list = f.Add(new WingPilotList(f.Content, PerPage, PressRow, ids));
             foot = f.Add(new WingRosterFoot(f.Content, ids, TurnPage, Recruit, OpenStudio));
-            BuildDossier(f);
-            BuildAssignment(f);
-            BuildPerks(f);
-            inspectPage.Build(f, ticker, pageIndex);
+            BuildFile(f);
         }
 
-        /// <summary>Rows, head, pager and footer: rebuilt only when the roster, the page, the dossier's pilot or the next up changed.</summary>
+        /// <summary>Rows, head, pager and footer: rebuilt when the roster, the page, the file's pilot, the next up or a local search's second moved.</summary>
         private void RefreshRoster()
         {
             int key;
             unchecked
             {
                 key = scanVersion * 31 + listPage * 7 + (client ? 3 : 0) + IndexOf(inspected) * 131 + IndexOf(upcoming) * 1009;
+                for (int i = 0; i < roster.Count; i++)
+                    if (localLeft[i] >= 0f) key = key * 17 + (int)localLeft[i];
             }
             if (key == rowsKey) return;
             rowsKey = key;
-            headSection.SetCaption(client ? WmcText.Unknown : SquadronWords.Head(roster.Count - kia, flying, free, lost - kia));
+            head.SetCounts(client ? WmcText.Unknown : SquadronWords.CountLine(roster.Count, flying, upcoming != null ? 1 : 0, sar, mia, captured, kia));
             bool none = client || roster.Count == 0;
             int first = Pages.First(listPage, PerPage);
             int shown = none ? 0 : Mathf.Clamp(roster.Count - first, 0, list.Count);
@@ -312,9 +287,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 WingPilot p = roster[at];
                 bool next = ReferenceEquals(p, upcoming);
                 v.Pilot = p;
-                v.SetIdentity(SquadronWords.Badge(p.Rank), p.Rank, WmcText.Cut(p.Callsign, PilotPick.CallsignChars),
-                    WmcText.Cut(p.Name, RowNameChars), p.Kills > 0 ? "K" + AvNum.Fixed(p.Kills, 0) : "");
-                v.SetState(SquadronWords.Row(status[at], next, number[at]), SquadronWords.Rail(status[at], next));
+                v.SetIdentity(p.Rank, WmcText.Cut(p.Callsign, PilotPick.CallsignChars), WmcText.Cut(p.Name, RowNameChars), p.Kills, p.Sorties);
+                v.SetState(SquadronWords.Tag(status[at], next, number[at], localLeft[at]), SquadronWords.Rail(status[at], next));
                 v.SetSelected(ReferenceEquals(p, inspected));
             }
             foot.Set(listPage, Pages.Count(roster.Count, PerPage));
@@ -324,7 +298,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             relayout = true;
         }
 
-        /// <summary>A row opens its pilot's dossier (inspect only: R6 ruling).</summary>
+        /// <summary>A row opens its pilot's personnel file (inspect only: R6 ruling).</summary>
         private void PressRow(int index)
         {
             WingPilot p = index >= 0 && index < list.Count ? list[index].Pilot : null;
@@ -332,7 +306,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Inspect(p);
         }
 
-        /// <summary>Show this pilot in the dossier and the bar; the page follows it.</summary>
+        /// <summary>Show this pilot's personnel file; the page follows it.</summary>
         public void Inspect(WingPilot p)
         {
             if (p == null) return;

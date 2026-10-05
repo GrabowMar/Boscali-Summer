@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
@@ -122,7 +123,7 @@ namespace BoscaliSummer.Fire
                     main.startLifetimeMultiplier = LifetimeScale;
                     main.startSizeMultiplier = SizeScale;
                     ParticleSystem.EmissionModule emission = system.emission;
-                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity;
+                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity * FxBus.Scales.Particles;
                     ParticleSystem.ShapeModule shape = system.shape;
                     shape.scale = new Vector3(
                         BaseShapes[i].x * spread,

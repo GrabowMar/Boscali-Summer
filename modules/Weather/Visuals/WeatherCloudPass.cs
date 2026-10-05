@@ -8,21 +8,23 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>The reduced-resolution cloud march: a URP pass on the main camera that fills the
     /// half-size sky (<see cref="CloudLowRes"/>) before transparents. The camera-following cube
     /// then composites it at the volume's render queue, so water, clouds and vanilla smoke keep
-    /// their order. Enqueued only for the camera it was bound to; if it stops executing, the
-    /// dressing falls back to the full-resolution march.</summary>
+    /// their order. Enqueued only for the camera it was bound to; if it stops executing,
+    /// Balanced quality restores native clouds.</summary>
     internal sealed class WeatherCloudPass : ScriptableRenderPass, IDisposable
     {
         private readonly CloudLowRes targets = new CloudLowRes();
         private Material march, composite;
         private Camera camera;
         private Renderer volume;
-        private Action<Camera> beforeRender;
+        private Action<Camera, Matrix4x4, Matrix4x4> beforeRender;
         private bool reduced, temporal;
         private bool hooked;
 
         /// <summary>Frame of the last execution on the bound camera.</summary>
         internal int ExecutedFrame { get; private set; } = -1;
         internal int Height => targets.Height;
+        internal int Width => targets.Width;
+        internal long TargetBytes => targets.TargetBytes;
 
         internal WeatherCloudPass()
         {
@@ -35,8 +37,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <paramref name="temporalUpdate"/> marches a quarter of it per frame;
         /// <paramref name="onRender"/> runs at render time with the camera's final pose.</summary>
         internal void Bind(Camera target, Renderer volumeRenderer, Material marchMaterial, Material compositeMaterial,
-            bool halfResolution, bool temporalUpdate, Action<Camera> onRender)
+            bool halfResolution, bool temporalUpdate, Action<Camera, Matrix4x4, Matrix4x4> onRender)
         {
+            if (camera != target || temporal != temporalUpdate || reduced != halfResolution)
+            {
+                targets.Dispose();
+                ExecutedFrame = -1;
+            }
             camera = target;
             volume = volumeRenderer;
             march = marchMaterial;
@@ -56,8 +63,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (rendering == null) return;
             if (volume != null) volume.forceRenderingOff = rendering != camera;
             if (rendering != camera) return;
-            beforeRender?.Invoke(rendering);
-            if (!reduced || march == null || composite == null) return;
+            if (!reduced) { beforeRender?.Invoke(rendering, rendering.worldToCameraMatrix, rendering.projectionMatrix); return; }
+            if (march == null || composite == null) return;
             UniversalAdditionalCameraData data = rendering.GetUniversalAdditionalCameraData();
             if (data == null || data.renderType != CameraRenderType.Base || data.scriptableRenderer == null) return;
             data.scriptableRenderer.EnqueuePass(this);
@@ -67,9 +74,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             if (march == null || composite == null || renderingData.cameraData.camera != camera) return;
             RenderTextureDescriptor screen = renderingData.cameraData.cameraTargetDescriptor;
-            if (!targets.Ensure(screen.width, screen.height)) return;
+            if (!targets.Ensure(screen.width, screen.height)) { ExecutedFrame = -1; return; }
             // A frame without the pass leaves stale history behind.
             if (ExecutedFrame != Time.frameCount - 1) targets.InvalidateHistory();
+            // URP has installed this camera's matrices and depth target now. Other begin-
+            // camera subscribers may finish changing its pose after our enqueue callback.
+            beforeRender?.Invoke(camera, renderingData.cameraData.GetViewMatrix(), renderingData.cameraData.GetProjectionMatrix());
 
             CommandBuffer cmd = CommandBufferPool.Get("Boscali Clouds");
             try

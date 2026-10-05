@@ -13,14 +13,18 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// re-checked every tick rather than once on a state transition. No Harmony patch: this only
     /// ever flips a GameObject the module did not create back to a state vanilla itself is
     /// capable of, through <c>FlightHud.EnableCanvas</c>/<c>DynamicMap.EnableCanvas</c>, and the
-    /// prior <c>activeSelf</c> is restored exactly once the condition ends for any reason.
+    /// inactive state is restored on release only for objects it actually activated, while the
+    /// same native camera state/ownship still owns the view. Native camera transitions retain
+    /// the visibility already chosen by EnterState.
     /// </summary>
     internal sealed class ExternalHudEnabler
     {
         private static readonly FieldInfo CanvasField = AccessTools.Field(typeof(FlightHud), "canvas");
 
-        private bool hudForced, mapForced;
-        private bool hudPriorActive, mapPriorActive;
+        private GameObject forcedHud, forcedMap;
+        private CameraStateManager cameraOwner;
+        private CameraBaseState cameraState;
+        private Unit followingUnit;
 
         /// <summary>
         /// True while the local player's own live aircraft is being viewed in the orbit or chase
@@ -43,6 +47,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return true;
         }
 
+        public static bool CanShowExternalHud(bool settingEnabled, bool viewingOwnExternally) =>
+            settingEnabled && viewingOwnExternally && !Application.isBatchMode &&
+            !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode;
+
         /// <summary>
         /// Re-evaluate this tick. <paramref name="settingEnabled"/> is the pilot's
         /// <c>Hud.ExternalHud</c> preference ANDed with the board being enabled;
@@ -53,11 +61,21 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// </summary>
         public void Tick(bool settingEnabled, bool viewingOwnExternally)
         {
-            if (!settingEnabled || !viewingOwnExternally || Application.isBatchMode ||
-                DynamicMap.mapMaximized || GameplayUI.GameIsPaused || PlayerSettings.cinematicMode)
+            if (!CanShowExternalHud(settingEnabled, viewingOwnExternally))
             {
                 Release();
                 return;
+            }
+
+            CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
+            if (cameraOwner != cam || cameraState != cam.currentState || followingUnit != cam.followingUnit)
+            {
+                // EnterState has already chosen native visibility for the new view. The old
+                // view's saved inactive value must not hide the cockpit HUD on this transition.
+                Release();
+                cameraOwner = cam;
+                cameraState = cam.currentState;
+                followingUnit = cam.followingUnit;
             }
 
             FlightHud flightHud = SceneSingleton<FlightHud>.i;
@@ -65,43 +83,45 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (canvas != null)
             {
                 GameObject hudObject = canvas.gameObject;
-                if (!hudForced) { hudPriorActive = hudObject.activeSelf; hudForced = true; }
-                if (!hudObject.activeSelf) FlightHud.EnableCanvas(true);
+                if (!hudObject.activeSelf)
+                {
+                    forcedHud = hudObject;
+                    FlightHud.EnableCanvas(true);
+                }
             }
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null)
             {
                 GameObject mapObject = map.gameObject;
-                if (!mapForced) { mapPriorActive = mapObject.activeSelf; mapForced = true; }
-                if (!mapObject.activeSelf) DynamicMap.EnableCanvas(true);
+                if (!mapObject.activeSelf)
+                {
+                    forcedMap = mapObject;
+                    DynamicMap.EnableCanvas(true);
+                }
             }
         }
 
         /// <summary>
-        /// Restore exactly what this enabler forced, then forget it. Idempotent, and safe to call
+        /// Release exactly what this enabler forced, then forget it. Idempotent, and safe to call
         /// every tick the condition is false as well as on scene reset and feature teardown.
-        /// Never deactivates a GameObject this enabler did not activate, and never restores the
-        /// minimap while it is maximized -- vanilla owns it then.
+        /// Never deactivates a GameObject this enabler did not activate, never overrides a new
+        /// native view's visibility, and never restores a maximized minimap.
         /// </summary>
         public void Release()
         {
-            if (hudForced)
+            bool sameNativeView = cameraOwner == null ||
+                (cameraOwner == SceneSingleton<CameraStateManager>.i &&
+                 cameraOwner.currentState == cameraState && cameraOwner.followingUnit == followingUnit);
+            if (sameNativeView)
             {
-                FlightHud flightHud = SceneSingleton<FlightHud>.i;
-                Canvas canvas = flightHud != null ? CanvasField?.GetValue(flightHud) as Canvas : null;
-                if (canvas != null) canvas.gameObject.SetActive(hudPriorActive);
-                hudForced = false;
+                if (forcedHud != null) forcedHud.SetActive(false);
+                if (forcedMap != null && !DynamicMap.mapMaximized) forcedMap.SetActive(false);
             }
-            if (mapForced)
-            {
-                if (!DynamicMap.mapMaximized)
-                {
-                    DynamicMap map = SceneSingleton<DynamicMap>.i;
-                    if (map != null) map.gameObject.SetActive(mapPriorActive);
-                }
-                mapForced = false;
-            }
+            forcedHud = forcedMap = null;
+            cameraOwner = null;
+            cameraState = null;
+            followingUnit = null;
         }
     }
 }

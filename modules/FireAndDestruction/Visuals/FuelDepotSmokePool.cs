@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
@@ -139,7 +140,7 @@ namespace BoscaliSummer.Fire
                             PulseSeed + sourceIndex * 3.17f,
                             Time.timeSinceLevelLoad * 0.11f) * 0.26f;
                         emission.rateOverTimeMultiplier = BaseRates[i] * baseIntensity *
-                            sourceGrowth * SourceIntensity[sourceIndex] * sourcePulse;
+                            sourceGrowth * SourceIntensity[sourceIndex] * sourcePulse * FxBus.Scales.Particles;
                     }
 
                     // The original silo plume is made for a static showcase object. Add a

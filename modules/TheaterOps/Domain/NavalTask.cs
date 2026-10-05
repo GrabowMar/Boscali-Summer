@@ -6,6 +6,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
 
     internal static class NavalTask
     {
+        internal const float AssignmentRadius = 12000f;
+
         // Separate ships along and across the objective instead of sending a fleet to one point.
         internal static void Position(NavalRole role, float x, float z, int shipId, int leg,
             out float destinationX, out float destinationZ)
@@ -35,5 +37,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
 
         internal static bool CanRedirect(bool host, bool commanded, bool holding, bool inCombat,
             bool hasTask) => host && !commanded && !holding && !inCombat && hasTask;
+
+        internal static bool WithinAssignment(float ax, float az, float bx, float bz)
+        {
+            float dx = ax - bx, dz = az - bz;
+            return dx * dx + dz * dz <= AssignmentRadius * AssignmentRadius;
+        }
     }
 }

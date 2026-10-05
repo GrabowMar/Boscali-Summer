@@ -20,7 +20,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public float Extinction;
         /// <summary>Lightning flash envelope, 0..1: lights the cloud cores the sun cannot reach.</summary>
         public float Flash;
+        public Vector4 FlashA, FlashB;
         public bool LowDetail;
+        public bool RainVisualsEnabled;
         public float DeltaTime;
     }
 
@@ -52,7 +54,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FogId = Shader.PropertyToID("_CloudFogColor");
         private static readonly int ExtinctionId = Shader.PropertyToID("_CloudAirExtinction");
         private static readonly int FlashId = Shader.PropertyToID("_CloudFlash");
+        private static readonly int FlashAId = Shader.PropertyToID("_CloudFlashA");
+        private static readonly int FlashBId = Shader.PropertyToID("_CloudFlashB");
+        private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
         private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
+        private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
         private static readonly int LayerDepthId = Shader.PropertyToID("_LayerDepth");
         private static readonly int LayerSmoothId = Shader.PropertyToID("_LayerSmooth");
         private static readonly int MidCoverId = Shader.PropertyToID("_MidCover");
@@ -85,15 +91,20 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
         private readonly float[] heroShown = new float[Superstructures.MaxCount];
         private readonly Vector2[] heroSite = new Vector2[Superstructures.MaxCount];
-        private readonly Vector3[] corners = new Vector3[4];
         private float fogShown;
         private Matrix4x4 previousRotation = Matrix4x4.identity;
+        private Matrix4x4 previousProjection;
+        private Camera previousCamera;
+        private RenderTexture previousTarget;
+        private Rect previousRect;
         private Vector3 previousPosition;
         private Quaternion previousQuat = Quaternion.identity;
         private float previousFov;
         private bool hasPrevious;
         private int checkerFrame;
         private float jitterPhase;
+        private float previousFlash;
+        internal float[] HeroStrengths => heroShown;
 
         /// <summary>0..1 how far the console fog bank has built up.</summary>
         internal float FogShown => fogShown;
@@ -102,6 +113,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             for (int i = 0; i < heroShown.Length; i++) { heroShown[i] = 0f; heroSite[i] = Vector2.zero; }
             fogShown = 0f;
+            previousFlash = 0f;
+            hasPrevious = false;
+            previousCamera = null;
+            previousTarget = null;
+            checkerFrame = 0;
+            jitterPhase = 0f;
         }
 
         /// <summary>Jump set-pieces and fog to their targets (the bench, or a preload).</summary>
@@ -141,8 +158,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 heroA[i] = new Vector4(s.X, s.Z, s.Heading, (float)s.Kind);
                 heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
                 if (s.Kind == SuperstructureKind.StormEye) eye = new Vector4(s.X, s.Z, s.Size, heroShown[i]);
-                heroBottom = Mathf.Min(heroBottom, 300f + frame.CloudShift);
-                heroTop = Mathf.Max(heroTop, s.Top + 1500f + frame.CloudShift);
+                // Set-pieces use absolute seeded heights in both CPU and shader bodies.
+                // Native cloud-height changes shift the ordinary weather volume only.
+                heroBottom = Mathf.Min(heroBottom, 300f);
+                heroTop = Mathf.Max(heroTop, s.Top + 1500f);
             }
             // The console fog bank eases in and out like the set-pieces.
             fogShown = Mathf.MoveTowards(fogShown, (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f,
@@ -164,7 +183,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetColor(FogId, frame.Fog);
             material.SetFloat(ExtinctionId, frame.Extinction);
             material.SetFloat(FlashId, frame.Flash);
+            material.SetVector(FlashAId, frame.FlashA);
+            material.SetVector(FlashBId, frame.FlashB);
+            Shader.SetGlobalFloat(FlashChangeId, Mathf.Abs(frame.Flash - previousFlash));
+            previousFlash = frame.Flash;
             material.SetFloat(StormId, sky.Severity);
+            material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // Cloud genera for the current state (they fade with it).
             material.SetFloat(LayerDepthId, sky.LayerDepth);
             material.SetFloat(LayerSmoothId, sky.LayerSmooth);
@@ -213,44 +237,66 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <paramref name="globalPosition"/> is the camera in the map frame (unaffected by
         /// floating-origin shifts). Returns false when last frame's view cannot be reused
         /// (first frame, a cut, a zoom).</summary>
-        internal bool ApplyView(Camera camera, Vector3 globalPosition)
+        internal bool ApplyView(Camera camera, Vector3 globalPosition, Material material = null)
+            => ApplyView(camera, globalPosition, camera.worldToCameraMatrix, camera.projectionMatrix, material);
+
+        internal bool ApplyView(Camera camera, Vector3 globalPosition, Matrix4x4 view,
+            Matrix4x4 projection, Material material = null)
         {
-            camera.CalculateFrustumCorners(new Rect(0f, 0f, 1f, 1f), 1f, Camera.MonoOrStereoscopicEye.Mono, corners);
-            // CalculateFrustumCorners: bottom-left, top-left, top-right, bottom-right (view space).
+            // Reconstruct the view URP actually rendered. TransformVector includes parent
+            // scale, which Unity's camera matrix ignores, and misses overridden views.
+            Matrix4x4 inverseView = view.inverse, inverseProjection = projection.inverse;
             Transform t = camera.transform;
-            Vector3 bl = t.TransformVector(corners[0]), tl = t.TransformVector(corners[1]);
-            Vector3 tr = t.TransformVector(corners[2]), br = t.TransformVector(corners[3]);
             var m = new Matrix4x4();
-            m.SetRow(0, bl);
-            m.SetRow(1, br);
-            m.SetRow(2, tl);
-            m.SetRow(3, tr);
+            for (int i = 0; i < 4; i++)
+            {
+                Vector3 corner = inverseProjection.MultiplyPoint(new Vector3((i & 1) == 0 ? -1f : 1f,
+                    i < 2 ? -1f : 1f, -1f));
+                m.SetRow(i, inverseView.MultiplyVector(corner / -corner.z));
+            }
+            Vector3 origin = inverseView.GetColumn(3);
+            Vector3 forward = inverseView.MultiplyVector(Vector3.back).normalized;
+            Quaternion rotation = Quaternion.LookRotation(forward, inverseView.GetColumn(1));
+            Vector3 worldOffset = globalPosition - t.position;
+            Vector3 renderedGlobalPosition = origin + worldOffset;
             Shader.SetGlobalMatrix(FrustumId, m);
-            Shader.SetGlobalVector(CameraPosId, t.position);
+            Shader.SetGlobalVector(CameraPosId, origin);
+            if (material != null)
+            {
+                material.SetVector(OffsetId, worldOffset);
+                material.SetVector(ForwardId, forward);
+            }
 
             // Last frame's rotation and projection (OpenGL convention: uv v up, like the
             // targets), applied to points relative to last frame's camera.
-            Vector3 delta = globalPosition - previousPosition;
-            // Static views freeze the march dither so accumulation converges bit-exact;
-            // rotation counts as motion for the resolve (history alone ghosts on pans).
-            float rotAngle = hasPrevious ? Quaternion.Angle(t.rotation, previousQuat) : 180f;
-            bool staticView = hasPrevious && delta.sqrMagnitude < 0.0025f && rotAngle < 0.01f &&
-                Mathf.Abs(camera.fieldOfView - previousFov) < 0.05f;
-            float rotMotion = hasPrevious ? Mathf.Clamp01(rotAngle * 2f) : 1f;
-            bool reusable = hasPrevious && delta.sqrMagnitude < 2000f * 2000f &&
-                Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f;
-            Shader.SetGlobalMatrix(PrevMatrixId, camera.projectionMatrix * previousRotation);
+            Vector3 delta = renderedGlobalPosition - previousPosition;
+            // Rays reproject exactly under rotation. Preserve accumulation on ordinary pans;
+            // the previous 0.5-degree threshold discarded it and exposed a quarter-size grid.
+            float rotAngle = hasPrevious ? Quaternion.Angle(rotation, previousQuat) : 180f;
+            float rotMotion = hasPrevious ? Mathf.Clamp01(rotAngle * 0.15f) : 1f;
+            bool sameProjection = true;
+            for (int i = 0; i < 16; i++)
+                if (Mathf.Abs(projection[i] - previousProjection[i]) > 0.0001f) { sameProjection = false; break; }
+            bool reusable = hasPrevious && previousCamera == camera && previousTarget == camera.targetTexture &&
+                previousRect == camera.pixelRect && sameProjection && delta.sqrMagnitude < 2000f * 2000f &&
+                Mathf.Abs(camera.fieldOfView - previousFov) < 0.5f && rotAngle < 45f;
+            Shader.SetGlobalMatrix(PrevMatrixId, previousProjection * previousRotation);
             Shader.SetGlobalVector(CamDeltaId, new Vector4(delta.x, delta.y, delta.z, rotMotion));
             Vector2 offset = CheckerOrder[checkerFrame & 3];
             // The march dither cycles each frame (golden-ratio steps never line up with the
             // 4-frame checkerboard period), so temporal accumulation converges to smooth cloud.
-            if (!staticView) jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
+            jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
             Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, jitterPhase, reusable ? 1f : 0f));
             checkerFrame++;
-            previousRotation = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * Matrix4x4.Rotate(Quaternion.Inverse(t.rotation));
-            previousPosition = globalPosition;
-            previousQuat = t.rotation;
+            previousRotation = view;
+            previousRotation.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));
+            previousPosition = renderedGlobalPosition;
+            previousQuat = rotation;
             previousFov = camera.fieldOfView;
+            previousProjection = projection;
+            previousCamera = camera;
+            previousTarget = camera.targetTexture;
+            previousRect = camera.pixelRect;
             hasPrevious = true;
             return reusable;
         }

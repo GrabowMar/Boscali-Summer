@@ -11,14 +11,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
-    /// Accepted contracts on the common HUD element: one line each, the contracted title above
-    /// the distance and clock, a thin vanilla-style bar under the text, and a notice the moment
+    /// The locally selected accepted contract on the common HUD element: its title above
+    /// the current host instruction and clock, a thin vanilla-style bar under the text, and a notice the moment
     /// the pilot enters or leaves the objective area. Colours come from the live vanilla theme.
     /// A contract whose contact the host lost stays listed as CONTACT LOST, because that is the
     /// state the pilot most needs to see.
     ///
     /// <para>Lines are held per slot rather than per contract, so a mission that issues a hundred
-    /// contracts still costs three lines. The board's own visibility rule keeps the element off
+    /// contracts still costs one line. The board's own visibility rule keeps the element off
     /// the screen while the map is open or the pilot is not flying.</para>
     /// </summary>
     internal sealed class OperationZoneHud : MonoBehaviour, ISceneService
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private const string Owner = "dynamic-operations";
         private const string Channel = "contracts";
 
-        private const int MaxRows = OperationBoard.MaximumCards;
+        private const int MaxRows = 1;
         private const float ContentSeconds = 0.25f;
         private const float ServerRefreshSeconds = 2f;
 
@@ -35,7 +35,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly IHudLine[] lines = new IHudLine[MaxRows];
         private readonly int[] shownIds = new int[MaxRows];
         private readonly bool[] inside = new bool[MaxRows];
-        private readonly ContractCard[] cards = new ContractCard[MaxRows];
+        private readonly string[] phaseTitles = new string[MaxRows];
+        private readonly ContractCard[] cards = new ContractCard[OperationBoard.MaximumCards];
         private readonly ContractCard[] selected = new ContractCard[MaxRows];
         private readonly float[] distances = new float[MaxRows];
         private float nextContent, nextServer;
@@ -90,7 +91,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
             IReadOnlyList<SecondaryObjectiveView> views = manager.Objectives;
             int count = 0;
-            if (views != null)
+            if (manager.IsFresh && manager.SelectedForHud >= 0 && views != null)
                 for (int i = 0; i < views.Count && count < cards.Length; i++)
                     if (ContractCard.TryRead(views[i], out ContractCard card)) cards[count++] = card;
             if (count == 0)
@@ -104,7 +105,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             board.DeclareChannel(Channel, "CONTRACTS");
 
             var self = aircraft.transform.position.ToGlobalPosition().AsVector3();
-            int shown = ContractSelection.Select(cards, count, self.x, self.z, selected, distances, MaxRows);
+            int shown = ContractSelection.Select(cards, count, self.x, self.z, selected, distances, MaxRows, manager.SelectedForHud);
 
             bool metric = VanillaHudStyle.Metric;
 
@@ -132,12 +133,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
             if (!card.HasMarker)
             {
-                lines[row].Set(HudTone.Warning, card.TitleLine, "CONTACT LOST", 0f);
+                lines[row].Set(HudTone.Warning, card.TitleLine,
+                    string.IsNullOrEmpty(card.Blocker) ? "CONTACT LOST" : card.Blocker, 0f);
                 return;
             }
 
             string clock = OperationMarkerCopy.Clock(card.Seconds);
-            string detail = OperationMarkerCopy.Distance(distance, metric);
+            string detail = string.IsNullOrEmpty(card.NextAction) ? OperationMarkerCopy.Distance(distance, metric) :
+                (string.IsNullOrEmpty(card.PhaseTitle) ? "" : card.PhaseTitle + "  ·  ") + card.NextAction;
             if (!string.IsNullOrEmpty(clock)) detail += "  ·  " + clock;
 
             lines[row].Set(
@@ -156,10 +159,20 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 shownIds[row] = card.Id;
                 inside[row] = isInside;
+                phaseTitles[row] = card.PhaseTitle;
                 return;
             }
 
             HudTone tone = card.Tone == MarkerTone.Caution ? HudTone.Caution : HudTone.Info;
+            if (phaseTitles[row] != card.PhaseTitle)
+            {
+                phaseTitles[row] = card.PhaseTitle;
+                inside[row] = isInside;
+                if (!string.IsNullOrEmpty(card.PhaseTitle)) board.Notice(Channel, tone,
+                    card.PhaseTitle + "  ·  " + card.TitleLine,
+                    string.IsNullOrEmpty(card.Blocker) ? card.NextAction : card.Blocker);
+                return;
+            }
             if (isInside && !inside[row])
             {
                 inside[row] = true;
@@ -188,6 +201,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 shownIds[i] = 0;
                 inside[i] = false;
+                phaseTitles[i] = string.Empty;
                 cards[i] = default;
                 selected[i] = default;
                 distances[i] = 0f;

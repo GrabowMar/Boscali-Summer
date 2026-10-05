@@ -9,13 +9,15 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     {
         public static int Select(
             ContractCard[] cards, int count, float selfX, float selfZ,
-            ContractCard[] selected, float[] distances, int maximum)
+            ContractCard[] selected, float[] distances, int maximum, int selectedId = 0)
         {
             int used = 0;
-            if (cards == null || selected == null || distances == null) return 0;
+            if (cards == null || selected == null || distances == null || maximum <= 0 || selectedId < 0) return 0;
             int limit = count < cards.Length ? count : cards.Length;
             if (maximum < limit) limit = maximum;
             if (limit > selected.Length) limit = selected.Length;
+            if (limit > distances.Length) limit = distances.Length;
+            if (limit <= 0) return 0;
 
             for (int i = 0; i < count && i < cards.Length; i++)
             {
@@ -23,17 +25,17 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                 float distance = card.HasMarker && OperationMarkerCopy.Finite(selfX) && OperationMarkerCopy.Finite(selfZ)
                     ? ContractMarkerMath.Distance(selfX, selfZ, card.X, card.Z)
                     : float.NaN;
-                if (!Visible(card, distance)) continue;
+                if (card.Id != selectedId && !Visible(card, distance)) continue;
 
                 // A full list still takes a better candidate: the worst row makes way.
                 if (used == limit)
                 {
-                    if (!ComesFirst(card, distance, selected[used - 1], distances[used - 1])) continue;
+                    if (!ComesFirst(card, distance, selected[used - 1], distances[used - 1], selectedId)) continue;
                     used--;
                 }
 
                 int slot = used;
-                while (slot > 0 && ComesFirst(card, distance, selected[slot - 1], distances[slot - 1]))
+                while (slot > 0 && ComesFirst(card, distance, selected[slot - 1], distances[slot - 1], selectedId))
                 {
                     selected[slot] = selected[slot - 1];
                     distances[slot] = distances[slot - 1];
@@ -54,8 +56,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         }
 
         /// <summary>Does the candidate outrank the item already in the row?</summary>
-        public static bool ComesFirst(ContractCard candidate, float candidateDistance, ContractCard current, float currentDistance)
+        public static bool ComesFirst(ContractCard candidate, float candidateDistance, ContractCard current, float currentDistance, int selectedId = 0)
         {
+            if (selectedId > 0 && (candidate.Id == selectedId) != (current.Id == selectedId)) return candidate.Id == selectedId;
             int a = Group(candidate, candidateDistance);
             int b = Group(current, currentDistance);
             if (a != b) return a < b;

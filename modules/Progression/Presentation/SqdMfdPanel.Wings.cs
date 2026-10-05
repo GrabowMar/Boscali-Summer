@@ -145,6 +145,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 ? "Show the next two hostile wings, including previous encounters."
                 : "Already on the last page.";
 
+            int faction = PortraitFactions.OpposingLocal;
             for (int i = 0; i < wingRows.Count; i++)
             {
                 HostileWingCard card = wingRows[i];
@@ -166,14 +167,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     card.SetCrest(EmblemRenderer.Procedural(EmblemDesign.Hostile(crestKey)));
                 }
 
-                if (!string.Equals(wingPortraitKeys[i], wing.AceName, StringComparison.Ordinal))
+                string portraitKey = wing.AceName + "|" + faction;
+                if (!string.Equals(wingPortraitKeys[i], portraitKey, StringComparison.Ordinal))
                 {
-                    wingPortraitKeys[i] = wing.AceName;
+                    wingPortraitKeys[i] = portraitKey;
                     string ace = wing.AceName ?? string.Empty;
                     int separator = ace.IndexOf(" / ", StringComparison.Ordinal);
                     string name = separator < 0 ? ace : ace.Substring(0, separator);
                     string handle = separator < 0 ? string.Empty : ace.Substring(separator + 3);
-                    card.SetPortrait(WingLink.PilotPortrait(name, handle));
+                    card.SetPortrait(WingLink.PersonnelPortrait(name, handle, PortraitRole.Pilot, faction));
                 }
             }
         }

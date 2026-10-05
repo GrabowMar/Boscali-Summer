@@ -119,7 +119,7 @@ namespace BoscaliSummer.Garrisons
             if (sand == null || steel == null || flagMaterial == null) { CleanUp(); return; }
             ApplyBanner(owner);
             flagMaterial.EnableKeyword("_EMISSION");
-            flagMaterial.SetColor("_EmissionColor", FactionColor(owner) * 0.18f);
+            flagMaterial.SetColor(EmissionId, FactionColor(owner) * 0.18f);
             root = new GameObject("BoscaliSummer.OccupiedRoof");
             root.transform.SetParent(transform, false);
             var definition = building.definition as BuildingDefinition;
@@ -212,11 +212,11 @@ namespace BoscaliSummer.Garrisons
             accentMaterial = CreateMaterial(ViewerAccent(owner));
             if (bandMaterial == null) return;
             bandMaterial.EnableKeyword("_EMISSION");
-            bandMaterial.SetColor("_EmissionColor", faction * 0.35f);
+            bandMaterial.SetColor(EmissionId, faction * 0.35f);
             if (accentMaterial != null)
             {
                 accentMaterial.EnableKeyword("_EMISSION");
-                accentMaterial.SetColor("_EmissionColor", ViewerAccent(owner) * 0.25f);
+                accentMaterial.SetColor(EmissionId, ViewerAccent(owner) * 0.25f);
             }
 
             bool alongX = spanX >= spanZ;
@@ -266,10 +266,50 @@ namespace BoscaliSummer.Garrisons
             return localHq;
         }
 
-        private void Update()
+        private static readonly int EmissionId = Shader.PropertyToID("_EmissionColor");
+        private static readonly List<OccupiedBuildingMarking> live = new List<OccupiedBuildingMarking>();
+        private static MarkingDriver driver;
+        private static int nextSlot;
+        private bool ticked;
+
+        // No per-instance Update: one static driver ticks every live marking (each still runs
+        // its 0.5 s check; a native-to-managed call per building per frame bought nothing).
+        private void OnEnable()
         {
-            if (Time.unscaledTime < nextCheck) return;
-            nextCheck = Time.unscaledTime + 0.5f;
+            if (!live.Contains(this)) live.Add(this);
+            if (driver == null)
+            {
+                var go = new GameObject("OccupiedMarkingDriver") { hideFlags = HideFlags.HideAndDontSave };
+                DontDestroyOnLoad(go);
+                driver = go.AddComponent<MarkingDriver>();
+            }
+        }
+
+        private void OnDisable() => live.Remove(this);
+
+        private sealed class MarkingDriver : MonoBehaviour
+        {
+            private void Update()
+            {
+                float now = Time.unscaledTime;
+                for (int i = 0; i < live.Count; i++)
+                {
+                    OccupiedBuildingMarking marking = live[i];
+                    if (marking == null) { live.RemoveAt(i--); continue; }
+                    int before = live.Count;
+                    marking.Tick(now);
+                    if (live.Count < before) i -= before - live.Count;
+                }
+            }
+        }
+
+        private void Tick(float now)
+        {
+            if (now < nextCheck) return;
+            // Buildings marked in the same burst would all tick on one frame every 0.5 s; the
+            // first tick pushes each into one of ten 50 ms bins so the cohort spreads out.
+            nextCheck = now + 0.5f + (ticked ? 0f : (nextSlot++ % 10) * 0.05f);
+            ticked = true;
             if (building == null || building.disabled)
             {
                 CleanUp();
@@ -295,17 +335,17 @@ namespace BoscaliSummer.Garrisons
                 float scorch = Mathf.Clamp01(shellDamage);
                 float flash = Time.unscaledTime < hitFlashUntil ? 1f : 0f;
                 Color battle = Color.Lerp(color, new Color(0.16f, 0.14f, 0.13f), scorch * 0.8f);
-                flagMaterial.SetColor("_EmissionColor", battle * (0.18f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.35f);
+                flagMaterial.SetColor(EmissionId, battle * (0.18f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.35f);
                 if (bandMaterial != null)
                 {
                     bandMaterial.color = battle;
-                    bandMaterial.SetColor("_EmissionColor", battle * (0.35f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.5f);
+                    bandMaterial.SetColor(EmissionId, battle * (0.35f * dim * (1f - 0.7f * scorch)) + Color.white * flash * 0.5f);
                 }
                 if (accentMaterial != null)
                 {
                     Color accent = ViewerAccent(owner);
                     accentMaterial.color = accent;
-                    accentMaterial.SetColor("_EmissionColor", accent * 0.25f);
+                    accentMaterial.SetColor(EmissionId, accent * 0.25f);
                 }
             }
         }

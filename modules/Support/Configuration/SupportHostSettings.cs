@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Images a scene and reveals stationary ground contacts. Spawns nothing.")
                 .Toggle(2, settings.FortifyEnabled, "ZONE FORTIFICATION",
                     "Reinforce a friendly controlled zone. Refused, and nothing charged, when defenders cannot be placed.")
-                .Toggle(3, settings.ArtilleryEnabled, "ROD FROM GOD",
+                .Toggle(3, settings.ArtilleryEnabled, "ORBITAL ROD",
                     "Orbital kinetic strike: one high-velocity projectile onto the mark.")
                 .Toggle(4, settings.EmpEnabled, "EMP SHOCK",
                     "High-altitude airburst: the prompt pulse upsets electronics, the geomagnetic phase jams radars across a wide area.")
@@ -36,6 +36,18 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     5f, v => v.ToString("0") + " s")
                 .Toggle(13, settings.MtiEnabled, "MTI SWEEP",
                     "Tracks moving enemy ground contacts near the mark. Shares the radar scan recharge.")
+                .Toggle(16, settings.SatCameraEnabled, "SAT CAMERA",
+                    "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
+                .Toggle(17, settings.WatchOfficerEnabled, "WATCH OFFICER",
+                    "OVERLORD staffs SPACE, CYBER and SOF while no human is working them: scans and TASKED calls from revealed contacts, intrusions on revealed nodes, one SOF team on revealed targets.")
+                .Toggle(18, settings.CyberEnabled, "CYBER / EW",
+                    "EW trucks and data centers, node intrusion (hop, hold, burn, drop) and the CYBER BURN packages on the TASKED board.")
+                .Toggle(19, settings.SofEnabled, "SOF / JTAC",
+                    "A camp, abstract teams (raise, route, push, hold, divert, exfil), the five odds-resolved missions, held buildings and the helicopter lift.")
+                .Toggle(20, settings.OpsEnabled, "OPERATIONS",
+                    "Faction projects: DECRYPT SATELLITE TRACK (an ASAT strike), ZERO-DAY SAM NET FAIL and the FORWARD OPERATING BASE. Funded by any member; needs CYBER or SOF.")
+                .Toggle(21, settings.AiFactionsEnabled, "AI FACTIONS",
+                    "A faction with no humans works CYBER and SOF itself (one domain action every 30 s) and, leading with a treasury over 500 CR, plans and funds operations. Never targets what it has not revealed.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

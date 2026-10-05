@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     internal sealed class WeatherConsoleWindow : MonoBehaviour
     {
         private const float Width = 920f;
-        private const float Height = 600f;   // fits the compact body exactly: no scroll bar, no dead band
+        private const float Height = 624f;   // full set-piece status and forecast fit without scrolling
         private const int SortOrder = 30004;
 
         private static readonly WeatherRegimeType[] States =
@@ -248,7 +248,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             window = AvWindow.Build(uiRoot, "WeatherConsole", "WEATHER CONSOLE", Width, Height, SortOrder);
             // AvWindow scales itself when its root is not under a UI canvas (WeatherManager.transform is not).
+            // This standalone console fits at 1:1 on 720p; the shared window's 1080p
+            // reference otherwise shrinks its 11 px micro text below a readable size.
+            CanvasScaler scaler = window.Root.parent.GetComponent<CanvasScaler>();
+            if (scaler != null && window.Root.parent.parent == uiRoot)
+            {
+                scaler.referenceResolution = new Vector2(1280f, 720f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            }
             window.Closed += OnWindowClosed;
+            window.CloseControl.Help = "Close weather console (Esc or Ctrl+O).";
 
             AvFlow body = window.Body;
             body.ViewportHeight = Height - 30f - AvGridTokens.Footer;   // title bar and footer are fixed chrome

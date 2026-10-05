@@ -4,6 +4,10 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Ops;
+using BoscaliSummer.Modules.Support.Domain.Sof;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BepInEx.Configuration;
 using NOAvionics;
@@ -23,6 +27,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private readonly ArmState arm = new ArmState();
         private readonly CallRequestTracker request = new CallRequestTracker();
+        private readonly TaskedIntent tasked = new TaskedIntent();
+        private const float ClaimTimeoutSeconds = 30f;
+        private int callGeneration = 1;           // bumps on teardown and disarm: an old TASKED arm can never fire after either
+        private int claimRequest, claimPost;      // the one TASKED claim in flight (SPACE request id), 0 when none
+        private float claimStartedAt;
         private SupportManager manager;
         private SupportSettings settings;
         private IObservationSource observations;
@@ -37,18 +46,48 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string LastWords { get; private set; } = "";
         public bool Pending => request.Pending;
 
+        /// <summary>Raised with every line of words the controller says (arm, refusal, receipt): the C2 console mirrors them.</summary>
+        internal event System.Action<string> Spoke;
+
+        /// <summary>The point the armed CALL would fire at now: the own designation first, else the pick of this arm. False when neither exists.</summary>
+        public bool TryAimPoint(out GlobalPosition point)
+        {
+            if (TryPod(out point)) return true;
+            if (mapAim.HasValue) { point = mapAim.Value; return true; }
+            if (TryTeamAim(out point)) return true;
+            point = default;
+            return false;
+        }
+
+        /// <summary>AIM: TEAM (spec 2.4): the target a SOF team of this faction is lasing right now, from the faction mirror. Last in line after the pod and the map pick.</summary>
+        private bool TryTeamAim(out GlobalPosition point)
+        {
+            point = default;
+            if (manager == null || !manager.SofMirror.TryLase(out _, out float x, out float z)) return false;
+            point = new GlobalPosition(x, 0f, z);
+            return true;
+        }
+
         public void Configure(SupportManager manager, SupportSettings settings, IObservationSource observations)
         {
             this.manager = manager;
             this.settings = settings;
             this.observations = observations;
             for (int i = 0; i < Favourites.Length; i++) Favourites[i] = Defaults[i];
+            if (manager != null) manager.SpaceReplied += OnSpaceReply;
+        }
+
+        private void OnDestroy()
+        {
+            if (manager != null) manager.SpaceReplied -= OnSpaceReply;
         }
 
         public void ResetForScene()
         {
             arm.Clear();
             request.Clear();
+            ClearTasked();
+            claimRequest = claimPost = 0; // a scene change abandons any claim in flight: its receipt belongs to the old scene
             pinCycle = 0;
             mapAim = null;
             lastMapPick = null;
@@ -77,11 +116,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Press(SupportActionId id)
         {
             if (manager == null) return;
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (!Check(id)) return;
 
             if (arm.Press(id, now) == ArmStep.Armed)
             {
+                tasked.Clear(); // a STANDARD arm gives way to nothing and a TASKED arm gives way to it
                 mapAim = null;
                 bool mapOk = manager.ArmLocalPick(Label(id), point =>
                 {
@@ -89,7 +129,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     lastMapPick = point;
                     armHasPick = false; // the manager consumed its pick
                     if (arm.Armed != id) return;
-                    if (Check(id)) Fire(id, point, Time.unscaledTime); // right-click while armed fires at once
+                    if (Check(id)) Fire(id, point, SupportManager.MissionNow()); // right-click while armed fires at once
                     else arm.Clear(); // the pick is spent, so the arm is too; Check already worded why
                 });
                 armHasPick = mapOk;
@@ -98,6 +138,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (TryPod(out GlobalPosition pod)) { Fire(id, pod, now); return; }
             if (mapAim.HasValue) { Fire(id, mapAim.Value, now); return; }
+            if (TryTeamAim(out GlobalPosition team)) { Fire(id, team, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
 
@@ -119,8 +160,137 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public void Disarm()
         {
             arm.Clear();
+            ClearTasked();
             manager?.Disarm();
             Say("DISARMED", AvUiCue.Release);
+        }
+
+        // ---- TASKED claims (the SPACE feed's cards) ---------------------------------------------------------------------
+        // A TASKED claim is its own path. It must never go through Press/Fire: those price STANDARD, give the POD and the map
+        // pick priority and would overwrite the MARK. The host prices the claim from the post and derives the aim itself.
+
+        /// <summary>The post whose second press would claim it, 0 when none.</summary>
+        public int ArmedTasked => tasked.PostId;
+
+        /// <summary>A claim is in flight and has not reached a final receipt.</summary>
+        public bool TaskedPending => claimRequest != 0;
+
+        /// <summary>The post the in-flight claim is for, 0 when none.</summary>
+        public int ClaimingPost => claimPost;
+
+        private void ClearTasked()
+        {
+            tasked.Clear();
+            callGeneration++;
+        }
+
+        private bool TryFindPost(int postId, out FeedPost post)
+        {
+            var posts = manager.SpaceMirror.State.Posts;
+            for (int i = 0; i < posts.Count; i++)
+                if (posts[i].CallId == postId) { post = posts[i]; return true; }
+            post = default;
+            return false;
+        }
+
+        /// <summary>
+        /// The TASKED preflight on the mirrored post: busy, link, post status, the host's claim gate for this viewer and the host
+        /// quote on the post (never the STANDARD price). Says why and returns false.
+        /// </summary>
+        private bool CheckTasked(in FeedPost post, float now)
+        {
+            if (request.Pending || manager.RequestPending || claimRequest != 0) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return false; }
+            SpaceFeedState state = manager.SpaceMirror.State;
+            if (!manager.SpaceMirror.Known || !state.Active) { Say(CallWords.Refusal(CallRefusal.Offline), AvUiCue.Caution); return false; }
+            switch (SpaceFeedRules.PostStatusOf(post, now))
+            {
+                case PostStatus.Stale: Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution); return false;
+                case PostStatus.Launching: Say(TaskedWords.Of(TaskedOutcome.ClaimedByOther), AvUiCue.Caution); return false;
+            }
+            if (state.Gate != TaskedOutcome.None && post.Domain == TaskedDomain.Space) // the headline gate is the rod's: a CYBER package or a SOF post has no bird
+            {
+                int detail = SpaceMirror.GateIsDeadline(state.Gate) ? Mathf.Max(1, state.GateDetail - Mathf.FloorToInt(now)) : state.GateDetail;
+                Say(TaskedWords.Of(state.Gate, detail), AvUiCue.Caution);
+                return false;
+            }
+            if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
+            {
+                Say(CallWords.Refusal(CallRefusal.LowCredit, need: post.Price), AvUiCue.Caution);
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>First press arms exactly this post; the next press on it (same mirror and call generation) sends the claim.</summary>
+        public void PressTasked(int postId)
+        {
+            if (manager == null) return;
+            float now = SupportManager.MissionNow();
+            if (!TryFindPost(postId, out FeedPost post))
+            {
+                tasked.Clear();
+                Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution);
+                return;
+            }
+            if (!CheckTasked(post, now)) { tasked.Clear(); return; }
+            if (tasked.Press(postId, manager.SpaceMirror.Generation, callGeneration, now) == ArmStep.Armed)
+            {
+                arm.Clear();
+                manager.Disarm(); // one armed intent at a time: a STANDARD arm gives way
+                Say("ARMED · TASKED " + (post.Points != null ? post.Points.Length : 0) + " TARGET" +
+                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " CR" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
+                return;
+            }
+            // No aim is sent: the host claims the post's own stored ground point and prices it itself.
+            int id = manager.SpaceClaim(postId);
+            if (id <= 0) { Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; }
+            claimRequest = id; // registered before any verdict: in-process replies arrive on the next Update
+            claimPost = postId;
+            claimStartedAt = now;
+            AnswerTasked(id, TaskedReceiptState.Pending, TaskedReceipts.Words(TaskedReceiptState.Pending, TaskedOutcome.Queued, 0));
+        }
+
+        /// <summary>The receipt of the claim: PENDING and LAUNCHING are not SHOT; only the physical launch is.</summary>
+        internal void AnswerTasked(int requestId, TaskedReceiptState state, string words)
+        {
+            if (requestId != claimRequest) return; // a late answer to a claim already finished or cleared
+            if (state == TaskedReceiptState.Launched || state == TaskedReceiptState.Refused) { claimRequest = 0; claimPost = 0; }
+            Say(words, state == TaskedReceiptState.Launched ? AvUiCue.Confirm
+                : state == TaskedReceiptState.Refused ? AvUiCue.Caution
+                : state == TaskedReceiptState.Launching ? AvUiCue.Engage : AvUiCue.Press);
+        }
+
+        private void OnSpaceReply(SpaceReply reply)
+        {
+            if (reply.Kind >= SpaceCommandKind.CyberHop && reply.Kind <= SpaceCommandKind.CyberDrop)
+            {
+                // A CYBER verdict (HOP / BURN / DROP): its words reach the console and the NET footer; a refusal also cautions.
+                CyberResult verdict = new CyberResult(reply.CyberVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind >= SpaceCommandKind.SofRaise && reply.Kind <= SpaceCommandKind.SofDivert)
+            {
+                // A SOF verdict (RAISE / ORDER / MISSION / DIVERT): its words reach the console and the SOF footer; a refusal also cautions.
+                var verdict = new SofResult(reply.SofVerdict, reply.CallId, reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind >= SpaceCommandKind.OpFund && reply.Kind <= SpaceCommandKind.OpCancel)
+            {
+                // An OPERATIONS verdict (FUND / PLAN / CANCEL): its words reach the console and the NET and SOF footers; a refusal also cautions.
+                var verdict = new OpResult((OpOutcome)reply.Outcome, (OpKind)Mathf.Clamp(reply.CallId, 0, (int)OpKind.Fob), reply.Charged, reply.Detail);
+                Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
+                return;
+            }
+            if (reply.Kind != SpaceCommandKind.ClaimTasked || reply.RequestId != claimRequest || claimRequest == 0) return;
+            bool launching = TryFindPost(claimPost, out FeedPost post) && post.Launching;
+            TaskedReceiptState state = TaskedReceipts.State(reply.Tasked, launching);
+            string words = TaskedReceipts.Words(state, reply.Tasked, reply.Detail);
+            if (reply.Tasked == TaskedOutcome.ClaimedByOther && !string.IsNullOrEmpty(reply.Claimant))
+                words = "NEGATIVE: CLAIMED BY " + reply.Claimant + " — IT REOPENS IF THEIR LAUNCH FAILS";
+            if (reply.Replayed) words = "EARLIER · " + words; // a retry replays the original receipt: history, not a new event
+            AnswerTasked(reply.RequestId, state, words);
         }
 
         /// <summary>JTAC UNLASE at the current POD / last map pick; no arm step, no floors.</summary>
@@ -128,7 +298,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             if (manager == null) return;
             if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return; }
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (TryPod(out GlobalPosition pod)) { Fire(SupportActionId.JtacUnlase, pod, now); return; }
             if (lastMapPick.HasValue) { Fire(SupportActionId.JtacUnlase, lastMapPick.Value, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
@@ -156,7 +326,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void Update()
         {
             if (manager == null) return;
-            float now = Time.unscaledTime;
+            float now = SupportManager.MissionNow();
             if (arm.Tick(now)) { manager.Disarm(); Say("DISARMED", AvUiCue.Release); }
             else if (arm.Armed != null && armHasPick && !manager.LocalPickArmed)
             {
@@ -164,7 +334,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Say("DISARMED", AvUiCue.Release);
             }
             if (request.Tick(now, out _)) { manager.AbandonPending(); Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution); }
-            AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue);
+            if (tasked.Tick(now)) Say("DISARMED", AvUiCue.Release);
+            else if (tasked.PostId != 0 && (tasked.Revalidate(manager.SpaceMirror.Generation, callGeneration) || !StillOpen(tasked.PostId, now)))
+            {
+                tasked.Clear(); // the board moved or the post went stale under the arm: it can never fire
+                Say(TaskedWords.Of(TaskedOutcome.NoCall), AvUiCue.Caution);
+            }
+            if (claimRequest != 0 && now - claimStartedAt > ClaimTimeoutSeconds)
+            {
+                claimRequest = claimPost = 0;
+                Say("NEGATIVE: NO ANSWER — CHECK THE BOARD BEFORE PRESSING AGAIN", AvUiCue.Caution);
+            }
+            AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue, TryTeamAim(out _));
 
             if (GameplayUI.GameIsPaused || InputFieldChecker.InsideInputField || !Application.isFocused) return;
             Poll(settings.CallKey1, 0);
@@ -172,6 +353,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Poll(settings.CallKey3, 2);
             Poll(settings.CallKey4, 3);
         }
+
+        private bool StillOpen(int postId, float now) =>
+            TryFindPost(postId, out FeedPost post) && SpaceFeedRules.PostStatusOf(post, now) == PostStatus.Open;
 
         private void Poll(ConfigEntry<KeyboardShortcut> key, int slot)
         {
@@ -203,8 +387,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void Say(string words, AvUiCue cue)
         {
             LastWords = words ?? "";
-            LastWordsAt = Time.unscaledTime;
+            LastWordsAt = SupportManager.MissionNow();
             AvUiSound.Play(cue);
+            Spoke?.Invoke(LastWords);
         }
 
         private static string Label(SupportActionId id) => CallSheet.TryGet(id, out CallRow row) ? row.Label : id.ToString();

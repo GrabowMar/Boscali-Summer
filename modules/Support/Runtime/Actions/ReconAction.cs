@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
@@ -36,9 +37,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             try
             {
-                int contacts = Reveal(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value, context.Logger, RevealFilter.Ground,
-                    maximumSpeed: StationaryThreshold);
+                if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
+                int contacts = context.Host.OpenSpaceWindow(context.Owner, context.Target,
+                    context.Settings.SarSceneRadius.Value, BirdKind.Radar, 0f, StationaryThreshold);
+                if (contacts < 0) return SupportResult.SpawnFailed;
                 context.Host.ReportContacts(context.RequestId, contacts);
                 return SupportResult.Accepted;
             }
@@ -67,8 +69,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (filter == RevealFilter.Air && !(unit is Aircraft)) continue;
                 if (filter == RevealFilter.Ground && unit is Aircraft) continue;
                 if (filter == RevealFilter.Emitters && !Emitting(unit)) continue;
-                if (unit.speed > maximumSpeed) continue;
-                if (unit.speed < minimumSpeed) continue;
+                float speed = Math.Abs(unit.speed); // native speed is signed
+                if (speed > maximumSpeed || speed < minimumSpeed) continue;
                 Vector3 position = unit.transform.position;
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
                 attempted++;

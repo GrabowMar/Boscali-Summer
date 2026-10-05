@@ -11,6 +11,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // Service and lifecycle only. Feed handles contain data; the panel owns a fixed widget pool
     // parented directly under the native weapons panel (see StatusPanel).
+    // Native CameraStateManager runs at order 2 and owns camera-state entry/visibility.
+    [DefaultExecutionOrder(1000)]
     internal sealed class HudBoard : MonoBehaviour, ISceneService, IHudBoard
     {
         /// <summary>The one HudBoard alive this scene, reached statically from
@@ -35,9 +37,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Configure(HudSettings config, ManualLogSource logger)
         {
             settings = config;
+            SubscribeProjection();
+        }
+
+        private void OnEnable() => SubscribeProjection();
+
+        private void SubscribeProjection()
+        {
+            if (settings == null || !isActiveAndEnabled) return;
             hudCenterProjection.Subscribe(
-                () => settings != null && Enabled && settings.ExternalHud.Value &&
-                    ExternalHudEnabler.IsOwnAircraftExternalView(out _),
+                () => isActiveAndEnabled && ExternalHudEnabler.CanShowExternalHud(
+                    Enabled && settings.ExternalHud.Value, ExternalHudEnabler.IsOwnAircraftExternalView(out _)),
                 () => ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft aircraft) ? aircraft : null);
         }
 
@@ -150,6 +160,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (settings == null || Application.isBatchMode) return;
 
+            CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
+            // Orbit state objects are reused. A trip through cockpit/chase must clear old pose
+            // smoothing even though the orbit postfix does not run while that view is inactive.
+            if (cam == null || cam.currentState != cam.orbitState) wingview.Reset();
+
             // Re-checked every tick regardless of Enabled/below: vanilla re-disables FlightHud's
             // canvas on every orbit/chase state entry, and a forced canvas must be released the
             // instant the condition ends even if the board itself just got switched off.
@@ -159,8 +174,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // Same gate as the forced-canvas condition above: the third-person HUD (hidden
             // native numbers, screen-fixed cluster, releveled HUDCenter) only ever shows where
             // the native HUDCanvas is actually up.
-            bool thirdPerson = Enabled && settings.ExternalHud.Value && viewingOwnExternally;
+            bool thirdPerson = ExternalHudEnabler.CanShowExternalHud(Enabled && settings.ExternalHud.Value, viewingOwnExternally);
             flightNumberHider.Tick(thirdPerson, ownAircraft);
+            if (!thirdPerson) cluster?.Hide();
 
             if (!Enabled)
             {
@@ -251,6 +267,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             panel?.Hide();
             cluster?.Hide();
+            externalHud.Release();
+            wingview.Reset();
+            flightNumberHider.Tick(false, null);
+            hudCenterProjection.Unsubscribe();
         }
         private void OnDestroy()
         {

@@ -13,19 +13,32 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.TheaterOps.Networking
 {
     [NetworkMessage]
-    internal struct LivingFrontQuery { public byte Protocol; }
+    internal struct LivingFrontQuery { public byte Protocol; public int Session; }
 
     [NetworkMessage]
     internal struct LivingFrontIntent
     {
         public byte Protocol, Kind, Posture;
-        public int Id, Revision;
+        public int Id, Revision, RequestId, Session, HostEpoch;
+    }
+
+    [NetworkMessage]
+    internal struct LivingFrontResult
+    {
+        public byte Protocol;
+        public string Faction;
+        public int RequestId;
+        public bool Accepted;
+        public string Status;
+        public int Session, HostEpoch;
     }
 
     [NetworkMessage]
     internal struct LivingFrontSnapshot
     {
         public byte Protocol, Posture;
+        public bool HasSnapshot;
+        public int Session, HostEpoch;
         public string Faction;
         public TheaterFrontView[] Fronts;
         public TheaterProposalView[] Proposals;
@@ -36,7 +49,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
     /// <summary>Faction-private, host-authored war picture and validated player intent.</summary>
     internal sealed class LivingFrontNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 2;
         private const int MaximumRecipients = 64;
         private const int MaximumPlayers = 64;
         private const int MaximumFaction = 64;
@@ -44,9 +57,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private const int MaximumLabel = 64;
         private const int MaximumStatus = 32;
         private const int MaximumBrief = 160;
-        private const int MaximumForces = 96;
+        private const int MaximumForces = 256;
         private const float QueryInterval = 1f;
         private const float IntentInterval = 0.5f;
+        private const float IntentTimeout = 8f;
 
         private readonly List<TheaterFrontView> fronts = new List<TheaterFrontView>(LivingWarRules.MaximumFronts);
         private readonly List<TheaterProposalView> proposals =
@@ -54,12 +68,20 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private readonly List<string> log = new List<string>(StaffLog.MaximumEntries);
         private readonly Dictionary<ulong, float> nextQuery = new Dictionary<ulong, float>(16);
         private readonly Dictionary<ulong, float> nextIntent = new Dictionary<ulong, float>(16);
+        private readonly Dictionary<ulong, (int Session, FactionHQ HQ)> clientSessions =
+            new Dictionary<ulong, (int, FactionHQ)>(16);
         private readonly List<ulong> stale = new List<ulong>(16);
         private LivingFrontService owner;
         private MessageHandler serverHandler, clientHandler;
         private float nextRegistration, nextPrune, nextClientQuery, nextFactionCheck;
-        private bool queried;
         private FactionHQ queriedHq;
+        private int nextRequestId, pendingRequestId;
+        private static int nextHostEpoch;
+        private int hostEpoch = NewHostEpoch(), clientSession = 1, seenHostEpoch;
+        private float pendingDeadline;
+        private string pendingFaction, commandStatus = "";
+        internal bool CommandPending => pendingRequestId > 0;
+        internal string CommandStatus => commandStatus;
 
         internal void Configure(LivingFrontService service)
         {
@@ -72,21 +94,43 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             serverHandler?.UnregisterHandler<LivingFrontQuery>();
             serverHandler?.UnregisterHandler<LivingFrontIntent>();
             clientHandler?.UnregisterHandler<LivingFrontSnapshot>();
+            clientHandler?.UnregisterHandler<LivingFrontResult>();
             serverHandler = null;
             clientHandler = null;
-            queried = false;
+            ClearClientState();
+            owner?.ClearRemoteState();
+            hostEpoch = NewHostEpoch();
             queriedHq = null;
             nextRegistration = nextPrune = nextFactionCheck = 0f;
             nextClientQuery = -10f;
             nextQuery.Clear(); nextIntent.Clear(); stale.Clear();
+            clientSessions.Clear();
             fronts.Clear(); proposals.Clear(); log.Clear();
         }
 
         private void OnDestroy() => ResetScene();
 
+        internal void ClearClientState()
+        {
+            pendingRequestId = 0; pendingFaction = null; commandStatus = "";
+            clientSession = clientSession >= int.MaxValue ? 1 : clientSession + 1;
+            seenHostEpoch = 0;
+            nextClientQuery = 0f;
+        }
+
+        private static int NewHostEpoch() => nextHostEpoch = nextHostEpoch >= int.MaxValue
+            ? 1 : nextHostEpoch + 1;
+
         private void Update()
         {
             float now = Time.unscaledTime;
+            if (CommandPending && now >= pendingDeadline)
+            {
+                pendingRequestId = 0;
+                commandStatus = "UNCONFIRMED · host reply timed out; refreshing staff";
+                owner?.ClearRemoteState();
+                nextClientQuery = 0f;
+            }
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
@@ -96,6 +140,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             {
                 serverHandler?.UnregisterHandler<LivingFrontQuery>();
                 serverHandler?.UnregisterHandler<LivingFrontIntent>();
+                nextQuery.Clear(); nextIntent.Clear(); clientSessions.Clear();
+                hostEpoch = NewHostEpoch();
                 serverHandler = server;
                 serverHandler?.RegisterHandler<LivingFrontQuery>(ReceiveQuery, false);
                 serverHandler?.RegisterHandler<LivingFrontIntent>(ReceiveIntent, false);
@@ -103,21 +149,29 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (client != clientHandler)
             {
                 clientHandler?.UnregisterHandler<LivingFrontSnapshot>();
+                clientHandler?.UnregisterHandler<LivingFrontResult>();
                 clientHandler = client;
-                queried = false;
+                ClearClientState();
+                owner?.ClearRemoteState();
                 clientHandler?.RegisterHandler<LivingFrontSnapshot>(ReceiveSnapshot, false);
+                clientHandler?.RegisterHandler<LivingFrontResult>(ReceiveResult, false);
             }
             if (clientHandler != null && !GameAccess.IsServer() && now >= nextFactionCheck)
             {
                 nextFactionCheck = now + 1f;
                 GameManager.GetLocalHQ(out FactionHQ hq);
-                if (!ReferenceEquals(hq, queriedHq)) queried = false;
-                if (!queried && hq != null && hq.faction != null && now >= nextClientQuery)
+                if (!ReferenceEquals(hq, queriedHq))
                 {
                     queriedHq = hq;
-                    queried = true;
-                    nextClientQuery = now + 4f;
-                    network.Client.Send(new LivingFrontQuery { Protocol = ProtocolVersion });
+                    ClearClientState(); owner?.ClearRemoteState();
+                }
+                if (hq != null && hq.faction != null && now >= nextClientQuery)
+                {
+                    // Retry absent/stale pictures; heartbeat also keeps a paused
+                    // mission's transport current while gameplay clocks stand still.
+                    nextClientQuery = now + (owner?.HasSnapshot == true &&
+                        owner.SnapshotAgeSeconds <= LivingWarRules.SnapshotFreshSeconds ? 10f : 4f);
+                    network.Client.Send(new LivingFrontQuery { Protocol = ProtocolVersion, Session = clientSession });
                 }
             }
             if (now < nextPrune) return;
@@ -131,18 +185,29 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             stale.Clear();
             foreach (KeyValuePair<ulong, float> pair in table)
                 if (now - pair.Value > 30f) stale.Add(pair.Key);
-            foreach (ulong id in stale) table.Remove(id);
+            foreach (ulong id in stale)
+            {
+                table.Remove(id);
+                if (ReferenceEquals(table, nextQuery)) clientSessions.Remove(id);
+            }
         }
 
         internal bool SendIntent(byte kind, int id, int revision, byte posture)
         {
-            if (GameAccess.IsServer() || !ValidIntent(kind, id, revision, posture)) return false;
+            if (GameAccess.IsServer() || CommandPending || !ValidIntent(kind, id, revision, posture) ||
+                seenHostEpoch <= 0 || !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null)
+                return false;
             NetworkClient client = NetworkManagerNuclearOption.i?.Client;
             if (client == null || !client.Active) return false;
+            pendingRequestId = nextRequestId = nextRequestId >= int.MaxValue ? 1 : nextRequestId + 1;
+            pendingFaction = hq.faction.factionName;
+            pendingDeadline = Time.unscaledTime + IntentTimeout;
+            commandStatus = "PENDING · awaiting host";
             client.Send(new LivingFrontIntent
             {
                 Protocol = ProtocolVersion, Kind = kind, Id = id,
-                Revision = revision, Posture = posture,
+                Revision = revision, Posture = posture, RequestId = pendingRequestId,
+                Session = clientSession, HostEpoch = seenHostEpoch,
             });
             return true;
         }
@@ -161,6 +226,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                     !connection.TryGetPlayer<Player>(out Player player) || player?.HQ?.faction == null ||
                     !string.Equals(player.HQ.faction.factionName, faction, StringComparison.Ordinal))
                     continue;
+                if (!clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) ||
+                    !ReferenceEquals(session.HQ, player.HQ)) continue;
+                snapshot.Session = session.Session;
                 connection.Send(snapshot);
             }
         }
@@ -174,6 +242,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 Protocol = ProtocolVersion,
                 Faction = Text(faction, MaximumFaction),
                 Posture = (byte)posture,
+                HasSnapshot = owner.HasSnapshotFor(faction),
+                HostEpoch = hostEpoch,
                 Fronts = fronts.ToArray(),
                 Proposals = proposals.ToArray(),
                 Operation = operation,
@@ -183,31 +253,72 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
 
         private void ReceiveQuery(INetworkPlayer sender, LivingFrontQuery query)
         {
-            if (query.Protocol != ProtocolVersion || owner?.Authoritative != true || sender == null ||
+            if (query.Protocol != ProtocolVersion || query.Session <= 0 || owner?.Authoritative != true || sender == null ||
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) ||
                 player?.HQ?.faction == null || !Allow(nextQuery, player, QueryInterval)) return;
-            sender.Send(SnapshotOf(player.HQ.faction.factionName));
+            clientSessions[PlayerIdentity.Of(player)] = (query.Session, player.HQ);
+            LivingFrontSnapshot snapshot = SnapshotOf(player.HQ.faction.factionName);
+            snapshot.Session = query.Session;
+            sender.Send(snapshot);
         }
 
         private void ReceiveIntent(INetworkPlayer sender, LivingFrontIntent intent)
         {
             if (intent.Protocol != ProtocolVersion || owner?.Authoritative != true || sender == null ||
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) ||
-                player?.HQ?.faction == null ||
-                !ValidIntent(intent.Kind, intent.Id, intent.Revision, intent.Posture) ||
-                !Allow(nextIntent, player, IntentInterval)) return;
-            owner.ApplyIntent(player.HQ, intent.Kind, intent.Id, intent.Revision, intent.Posture);
+                player?.HQ?.faction == null || intent.RequestId <= 0) return;
+            bool valid = ValidIntent(intent.Kind, intent.Id, intent.Revision, intent.Posture);
+            bool current = intent.HostEpoch == hostEpoch && intent.Session > 0 &&
+                clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) &&
+                session.Session == intent.Session && ReferenceEquals(session.HQ, player.HQ);
+            bool allowed = valid && current && Allow(nextIntent, player, IntentInterval);
+            bool accepted = allowed && owner.ApplyIntent(player.HQ,
+                intent.Kind, intent.Id, intent.Revision, intent.Posture);
+            sender.Send(new LivingFrontResult
+            {
+                Protocol = ProtocolVersion, Faction = player.HQ.faction.factionName,
+                RequestId = intent.RequestId, Accepted = accepted,
+                Session = intent.Session, HostEpoch = hostEpoch,
+                Status = accepted ? "ACCEPTED · staff updated" : !valid
+                    ? "REJECTED · invalid command" : !current
+                    ? "REJECTED · mission or faction changed" : !allowed
+                    ? "REJECTED · command rate limited" : "REJECTED · choice changed; review current options",
+            });
+            if (current)
+            {
+                LivingFrontSnapshot snapshot = SnapshotOf(player.HQ.faction.factionName);
+                snapshot.Session = intent.Session;
+                sender.Send(snapshot);
+            }
+        }
+
+        private void ReceiveResult(INetworkPlayer _, LivingFrontResult result)
+        {
+            if (GameAccess.IsServer() || result.Protocol != ProtocolVersion ||
+                result.Session != clientSession || result.HostEpoch != seenHostEpoch ||
+                !CommandPending || result.RequestId != pendingRequestId ||
+                !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null ||
+                result.Faction != pendingFaction || result.Faction != hq.faction.factionName ||
+                string.IsNullOrEmpty(result.Status) || result.Status.Length > MaximumBrief) return;
+            pendingRequestId = 0;
+            commandStatus = (result.Accepted ? "ACCEPTED" : "REJECTED") + " · " +
+                (result.Accepted ? "staff updated" : result.Status.Replace("REJECTED · ", ""));
+            nextClientQuery = 0f;
         }
 
         private void ReceiveSnapshot(INetworkPlayer _, LivingFrontSnapshot snapshot)
         {
             if (snapshot.Protocol != ProtocolVersion || GameAccess.IsServer() || owner == null ||
+                snapshot.Session != clientSession || snapshot.HostEpoch <= 0 ||
+                snapshot.HostEpoch < seenHostEpoch ||
                 snapshot.Posture > (byte)TheaterWarPosture.Bold ||
                 snapshot.Fronts == null || snapshot.Fronts.Length > LivingWarRules.MaximumFronts ||
                 snapshot.Proposals == null || snapshot.Proposals.Length > LivingWarRules.MaximumOffers ||
                 snapshot.Log == null || snapshot.Log.Length > StaffLog.MaximumEntries ||
                 !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null ||
                 !string.Equals(snapshot.Faction, hq.faction.factionName, StringComparison.Ordinal)) return;
+            seenHostEpoch = snapshot.HostEpoch;
+            if (!snapshot.HasSnapshot) { owner.ClearRemoteState(); nextClientQuery = 0f; return; }
             owner.ApplyRemote(snapshot.Faction, snapshot.Fronts, snapshot.Proposals,
                 snapshot.Operation, (TheaterWarPosture)snapshot.Posture, snapshot.Log);
         }
@@ -230,25 +341,66 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private static string Text(string value, int max) => string.IsNullOrEmpty(value) ? ""
             : value.Length > max ? value.Substring(0, max) : value;
 
+        private static string ReadText(NetworkReader reader, int max)
+        {
+            string value = reader.ReadString();
+            return value == null || value.Length > max ? null : value;
+        }
+
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static void InstallSerializers()
         {
             Bind(typeof(Writer<LivingFrontQuery>), "Write",
-                (Action<NetworkWriter, LivingFrontQuery>)((w, v) => w.WriteByte(v.Protocol)));
+                (Action<NetworkWriter, LivingFrontQuery>)((w, v) =>
+                { w.WriteByte(v.Protocol); w.WriteInt32(v.Session); }));
             Bind(typeof(Reader<LivingFrontQuery>), "Read",
-                (Func<NetworkReader, LivingFrontQuery>)(r => new LivingFrontQuery { Protocol = r.ReadByte() }));
+                (Func<NetworkReader, LivingFrontQuery>)(r =>
+                {
+                    byte protocol = r.ReadByte();
+                    if (protocol != ProtocolVersion) return default;
+                    return new LivingFrontQuery { Protocol = protocol, Session = r.ReadInt32() };
+                }));
             Bind(typeof(Writer<LivingFrontIntent>), "Write",
                 (Action<NetworkWriter, LivingFrontIntent>)((w, v) =>
                 {
                     w.WriteByte(v.Protocol); w.WriteByte(v.Kind); w.WriteInt32(v.Id);
                     w.WriteInt32(v.Revision); w.WriteByte(v.Posture);
+                    w.WriteInt32(v.RequestId);
+                    w.WriteInt32(v.Session); w.WriteInt32(v.HostEpoch);
                 }));
             Bind(typeof(Reader<LivingFrontIntent>), "Read",
-                (Func<NetworkReader, LivingFrontIntent>)(r => new LivingFrontIntent
+                (Func<NetworkReader, LivingFrontIntent>)(r =>
                 {
-                    Protocol = r.ReadByte(), Kind = r.ReadByte(), Id = r.ReadInt32(),
-                    Revision = r.ReadInt32(), Posture = r.ReadByte(),
+                    byte protocol = r.ReadByte();
+                    if (protocol != ProtocolVersion) return default;
+                    return new LivingFrontIntent
+                    {
+                        Protocol = protocol, Kind = r.ReadByte(), Id = r.ReadInt32(),
+                        Revision = r.ReadInt32(), Posture = r.ReadByte(), RequestId = r.ReadInt32(),
+                        Session = r.ReadInt32(), HostEpoch = r.ReadInt32(),
+                    };
+                }));
+            Bind(typeof(Writer<LivingFrontResult>), "Write",
+                (Action<NetworkWriter, LivingFrontResult>)((w, v) =>
+                {
+                    w.WriteByte(v.Protocol); w.WriteString(Text(v.Faction, MaximumFaction));
+                    w.WriteInt32(v.RequestId); w.WriteByte(v.Accepted ? (byte)1 : (byte)0);
+                    w.WriteString(Text(v.Status, MaximumBrief));
+                    w.WriteInt32(v.Session); w.WriteInt32(v.HostEpoch);
+                }));
+            Bind(typeof(Reader<LivingFrontResult>), "Read",
+                (Func<NetworkReader, LivingFrontResult>)(r =>
+                {
+                    byte protocol = r.ReadByte();
+                    if (protocol != ProtocolVersion) return default;
+                    var v = new LivingFrontResult { Protocol = protocol, Faction = r.ReadString(),
+                        RequestId = r.ReadInt32() };
+                    byte accepted = r.ReadByte(); v.Accepted = accepted == 1; v.Status = r.ReadString();
+                    v.Session = r.ReadInt32(); v.HostEpoch = r.ReadInt32();
+                    return accepted > 1 || v.RequestId <= 0 || v.Session <= 0 || v.HostEpoch <= 0 || string.IsNullOrEmpty(v.Faction) ||
+                        v.Faction.Length > MaximumFaction || string.IsNullOrEmpty(v.Status) ||
+                        v.Status.Length > MaximumBrief ? default : v;
                 }));
             Bind(typeof(Writer<LivingFrontSnapshot>), "Write",
                 (Action<NetworkWriter, LivingFrontSnapshot>)WriteSnapshot);
@@ -256,6 +408,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 (Func<NetworkReader, LivingFrontSnapshot>)ReadSnapshot);
             MessagePacker.RegisterMessage<LivingFrontQuery>();
             MessagePacker.RegisterMessage<LivingFrontIntent>();
+            MessagePacker.RegisterMessage<LivingFrontResult>();
             MessagePacker.RegisterMessage<LivingFrontSnapshot>();
         }
 
@@ -264,6 +417,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             w.WriteByte(value.Protocol);
             w.WriteString(Text(value.Faction, MaximumFaction));
             w.WriteByte(value.Posture);
+            w.WriteByte(value.HasSnapshot ? (byte)1 : (byte)0);
+            w.WriteInt32(value.Session); w.WriteInt32(value.HostEpoch);
             int count = Math.Min(value.Fronts?.Length ?? 0, LivingWarRules.MaximumFronts);
             w.WriteByte((byte)count);
             for (int i = 0; i < count; i++)
@@ -317,22 +472,31 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         {
             var value = new LivingFrontSnapshot { Protocol = r.ReadByte() };
             if (value.Protocol != ProtocolVersion) return value;
-            value.Faction = Text(r.ReadString(), MaximumFaction);
+            value.Faction = ReadText(r, MaximumFaction);
             value.Posture = r.ReadByte();
+            byte hasSnapshot = r.ReadByte();
+            if (hasSnapshot > 1 || value.Posture > (byte)TheaterWarPosture.Bold ||
+                string.IsNullOrEmpty(value.Faction)) return default;
+            value.HasSnapshot = hasSnapshot == 1;
+            value.Session = r.ReadInt32(); value.HostEpoch = r.ReadInt32();
+            if (value.Session <= 0 || value.HostEpoch <= 0) return default;
             int count = r.ReadByte();
             if (count > LivingWarRules.MaximumFronts) return value;
             value.Fronts = new TheaterFrontView[count];
             for (int i = 0; i < count; i++)
             {
-                string key = Text(r.ReadString(), MaximumKey);
-                string label = Text(r.ReadString(), MaximumLabel);
+                string key = ReadText(r, MaximumKey);
+                string label = ReadText(r, MaximumLabel);
                 float x = r.ReadSingle(), z = r.ReadSingle();
-                string status = Text(r.ReadString(), MaximumStatus);
+                string status = ReadText(r, MaximumStatus);
                 float pressure = r.ReadSingle(), trend = r.ReadSingle();
-                bool observed = r.ReadByte() == 1;
+                byte observedValue = r.ReadByte();
+                bool observed = observedValue == 1;
                 float age = r.ReadSingle();
-                if (string.IsNullOrEmpty(key) || !Finite(x) || !Finite(z) ||
-                    !Finite(pressure) || !Finite(trend) || !Finite(age)) return default;
+                if (string.IsNullOrEmpty(key) || label == null || status == null || !Finite(x) || !Finite(z) ||
+                    !Finite(pressure) || pressure < 0f || pressure > 1f ||
+                    !Finite(trend) || trend < -1f || trend > 1f ||
+                    !Finite(age) || age < -1f || age > 86400f || observedValue > 1) return default;
                 value.Fronts[i] = new TheaterFrontView(key, label, x, z, status,
                     pressure, trend, observed, age);
             }
@@ -342,31 +506,37 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             for (int i = 0; i < count; i++)
             {
                 int id = r.ReadInt32(), revision = r.ReadInt32();
-                string kind = Text(r.ReadString(), MaximumStatus);
-                string label = Text(r.ReadString(), MaximumLabel);
-                string key = Text(r.ReadString(), MaximumKey);
+                string kind = ReadText(r, MaximumStatus);
+                string label = ReadText(r, MaximumLabel);
+                string key = ReadText(r, MaximumKey);
                 float x = r.ReadSingle(), z = r.ReadSingle();
-                string brief = Text(r.ReadString(), MaximumBrief);
-                string risk = Text(r.ReadString(), MaximumStatus);
-                string forces = Text(r.ReadString(), MaximumForces);
+                string brief = ReadText(r, MaximumBrief);
+                string risk = ReadText(r, MaximumStatus);
+                string forces = ReadText(r, MaximumForces);
                 float seconds = r.ReadSingle();
                 if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
-                    !Finite(x) || !Finite(z) || !Finite(seconds)) return default;
+                    label == null || brief == null || risk == null || forces == null ||
+                    !Finite(x) || !Finite(z) || !ValidKind(kind) ||
+                    !Finite(seconds) || seconds < 0f || seconds > LivingWarRules.OfferSeconds) return default;
                 value.Proposals[i] = new TheaterProposalView(id, revision, kind, label,
                     key, x, z, brief, risk, forces, seconds);
             }
-            if (r.ReadByte() != 0)
+            byte hasOperation = r.ReadByte();
+            if (hasOperation > 1) return default;
+            if (hasOperation == 1)
             {
                 int id = r.ReadInt32(), revision = r.ReadInt32();
-                string kind = Text(r.ReadString(), MaximumStatus);
-                string key = Text(r.ReadString(), MaximumKey);
-                string label = Text(r.ReadString(), MaximumLabel);
+                string kind = ReadText(r, MaximumStatus);
+                string key = ReadText(r, MaximumKey);
+                string label = ReadText(r, MaximumLabel);
                 float x = r.ReadSingle(), z = r.ReadSingle();
-                string phase = Text(r.ReadString(), MaximumStatus);
-                string summary = Text(r.ReadString(), MaximumForces);
+                string phase = ReadText(r, MaximumStatus);
+                string summary = ReadText(r, MaximumForces);
                 int ground = r.ReadByte(), air = r.ReadByte(), naval = r.ReadByte();
                 if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
-                    !Finite(x) || !Finite(z)) return default;
+                    label == null || phase == null || summary == null ||
+                    !Finite(x) || !Finite(z) || !ValidKind(kind) ||
+                    ground > 32 || air > 32 || naval > 32) return default;
                 value.Operation = new TheaterLiveOperationView(id, revision, kind, key,
                     label, x, z, phase, summary, ground, air, naval);
             }
@@ -374,9 +544,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (count > StaffLog.MaximumEntries) return default;
             value.Log = new string[count];
             for (int i = 0; i < count; i++)
-                value.Log[i] = Text(r.ReadString(), StaffLog.MaximumTextLength);
+            {
+                value.Log[i] = ReadText(r, StaffLog.MaximumTextLength);
+                if (value.Log[i] == null) return default;
+            }
             return value;
         }
+
+        private static bool ValidKind(string kind) => kind == "ASSAULT" || kind == "DEFEND" || kind == "RECON";
 
         private static void Bind(Type holder, string property, object value)
         {

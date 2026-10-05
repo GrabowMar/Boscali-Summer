@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
     /// </summary>
     internal sealed class WeatherNet : MonoBehaviour
     {
-        public const byte ProtocolVersion = 6;
+        public const byte ProtocolVersion = 7;
 
         private WeatherManager manager;
         private MessageHandler serverHandler;

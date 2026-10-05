@@ -1,0 +1,22 @@
+/* Theme E · Amber CRT monochrome phosphor, red only for danger. Fixed palette; friendly/hostile still follow the game. */
+:root {
+  ground:          #0A0702 fb;
+  surface:         #140E05 fa;
+  surface-raised:  #22180A fa;
+  surface-inert:   #110C04 f5;
+  surface-sunken:  #070501 f8;
+  hairline:        #5A4219 b0;
+  frame:           #A8792C e6;
+  ink:             #FFD9A0;
+  ink-dim:         #E0B470;
+  ink-muted:       #A88552;
+  key:             #FFB23F;
+  select:          #FFC85A;
+  ready:           #FFD27A;
+  caution:         #FF9A2E;
+  danger:          #FF4B3A;
+  info:            #E8B66A;
+  inert:           #4A3618 a6;
+  friendly:        friendly;
+  hostile:         hostile;
+}

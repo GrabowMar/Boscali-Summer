@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// a hard vertex ceiling, hottest trace first.</para>
     /// </summary>
     [RequireComponent(typeof(CanvasRenderer))]
+    [DefaultExecutionOrder(101)] // Invalidate after MapUiManager commits the displayed relief pose.
     internal sealed class FrontlineGraphic : MaskableGraphic
     {
         private const int MaximumTraces = FrontlineTraceLimits.MaximumTraces;

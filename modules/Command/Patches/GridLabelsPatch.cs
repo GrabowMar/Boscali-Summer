@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Command.Patches
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && map.mapImage != null)
             {
-                RectTransform rt = map.mapImage.GetComponent<RectTransform>();
+                RectTransform rt = MfdTerrainRelief.MapImageRect(map.mapImage);
                 if (rt != null && rt.sizeDelta.x > 100f)
                     return rt.sizeDelta.x;
             }
@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Command.Patches
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && DynamicMap.mapMaximized)
             {
-                RectTransform rt = map.GetComponent<RectTransform>();
+                RectTransform rt = map.transform as RectTransform;
                 if (rt != null)
                 {
                     Rect rect = rt.rect;

@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             new CallRow(SupportActionId.Prsm, CallTier.Light, CallFamily.Space, "PRSM"),
             new CallRow(SupportActionId.JtacMark, CallTier.Light, CallFamily.Sof, "JTAC LASE"),
             new CallRow(SupportActionId.MtiSweep, CallTier.Heavy, CallFamily.Space, "MTI SWEEP"),
+            new CallRow(SupportActionId.SatCamera, CallTier.Heavy, CallFamily.Space, "SAT CAMERA"),
             new CallRow(SupportActionId.ElintSweep, CallTier.Heavy, CallFamily.Space, "ELINT SWEEP"),
             new CallRow(SupportActionId.Cruise, CallTier.Heavy, CallFamily.Space, "CRUISE SALVO"),
             new CallRow(SupportActionId.FlareMissile, CallTier.Heavy, CallFamily.Cyber, "FLARE BARRAGE"),

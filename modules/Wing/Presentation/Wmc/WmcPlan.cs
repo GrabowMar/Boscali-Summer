@@ -12,21 +12,23 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>BEHAVIOUR (spec FUI §tabs) as a kit v2 flow page: TUNING (every standing setting, granular per element and aircraft),
-    /// PLAN (every element's steps on the game's map, with EXECUTE, SKIP, FORM UP and FIT), and RECORD (the plan against what
-    /// happened, then the wing's events and radio lines; a line opens it on INSPECT and centres the map on it). FORM and ROUTE·AP moved
-    /// to TACTICAL. The sub-pages share one flow line (<see cref="WmcSubPages"/>); the console body scrolls, so nothing pages or clips.
-    /// The plan bar's and the profile picker's lists open the toolkit popup (<see cref="AvPopup"/>).</summary>
+    /// <summary>BEHAVIOUR (spec 2026-10-04 §4.1, §4.4) as a kit v2 flow page: STANCES (the stance list and editor, what each element
+    /// flies, the radio: <see cref="WmcOptions"/>) and SORTIE (the plan against what happened on one timeline per element, the plan's
+    /// bar, the events and the after-action report). It replaces TUNING, PLAN and RECORD: PLAN's map tools are gone (plans are built on
+    /// ORDERS by queueing; SORTIE times, saves and runs them), and the STEPS table became the selected step's line and the LATE / EARLY
+    /// events. The sub-pages share one flow line (<see cref="WmcSubPages"/>); the console body scrolls, so nothing pages or clips.
+    /// The plan bar's list opens the toolkit popup (<see cref="AvPopup"/>).</summary>
     internal sealed partial class WmcPlan : IWmcPage
     {
-        public const int SubOptions = 0, SubPlan = 1, SubRecord = 2;
-        private static readonly string[] SubLabels = { "TUNING", "PLAN", "RECORD" };
-        private static readonly AvIcon[] SubIcons = { AvIcon.AdjustmentsHorizontal, AvIcon.ListDetails, AvIcon.Activity };
+        /// <summary>STANCES is the first sub-page (it keeps TUNING's number: the panel's scope bar rule), SORTIE the second (PLAN's:
+        /// the map shows the plan only there).</summary>
+        public const int SubStances = 0, SubSortie = 1, SubOptions = SubStances, SubPlan = SubSortie;
+        private static readonly string[] SubLabels = { "STANCES", "SORTIE" };
+        private static readonly AvIcon[] SubIcons = { AvIcon.AdjustmentsHorizontal, AvIcon.Activity };
         private static readonly string[] SubHelp =
         {
-            "How the wing fights and flies, per element and per aircraft: targets, weapons, radar, falling back, bingo and winchester, the radio.",
-            "Every element's steps on the map, with EXECUTE, SKIP, FORM UP and FIT.",
-            "The plan against what happened, lane by lane; the wing's events and radio lines, and the sortie's DEBRIEF.",
+            "How the wing fights and flies: stances (targets, weapons, radar, defence, fall back, bingo and winchester), which element flies which, your radio.",
+            "The plan against what happened, lane by lane, with the events and the after-action report. Plans are built on ORDERS.",
         };
 
         private readonly WmcControls ids;
@@ -52,9 +54,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
 
-        public string Hint => sub == SubOptions ? options.Hint
-            : sub == SubRecord ? "PLAN is frozen at EXECUTE; REAL is when each step went out and was done. A line with an aircraft opens it on INSPECT; DEBRIEF sums up the sortie."
-            : "Pick a tool and right-click the map to add steps to the selected lane; EXECUTE runs the plan.";
+        public string Hint => sub == SubStances ? options.Hint
+            : "PLAN (dashed) is frozen at EXECUTE; REAL (solid) is when each step went out and was done. Tap a bar for its step.";
 
         public string Alert => null;
 
@@ -76,23 +77,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
 
             subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
-            options.Build(subPages.Flow(SubOptions), ticker, pageIndex);
-            BuildElements(subPages.Flow(SubPlan), ticker, pageIndex);
-            BuildRecord(subPages.Flow(SubRecord), ticker, pageIndex);
-            // Last, so its list draws over the page (TUNING's profile picker has its own, inside its sub-page).
+            options.Build(subPages.Flow(SubStances), ticker, pageIndex);
+            BuildSortie(subPages.Flow(SubSortie), ticker, pageIndex);
+            // Last, so its list draws over the page.
             popup = new AvPopup(flow.Content, flow.Width);
-            ShowSub(SubOptions);
+            ShowSub(SubStances);
         }
 
         /// <summary>A sub-page by its number (automation, the tabs).</summary>
         public void ShowSub(int k)
         {
             if (subPages == null || k < 0 || k >= SubLabels.Length) return;
-            if (k != sub && last != null && k == SubOptions) options.Shown(last);
+            if (k != sub && last != null && k == SubStances) options.Shown(last);
             sub = k;
             subPages.Show(k);
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
             AvPopup.CloseAny();
+            sortieKey = long.MinValue;
             if (last != null) Refresh(last);
         }
 
@@ -100,23 +101,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void ShowSubFor(string id)
         {
             if (id == null) return;
-            if (id.StartsWith("opt.", System.StringComparison.Ordinal)) ShowSub(SubOptions);
-            else if (id.StartsWith("plan.el", System.StringComparison.Ordinal) || id.StartsWith("plan.step", System.StringComparison.Ordinal)
-                     || id.StartsWith("plan.edit.", System.StringComparison.Ordinal) || id.StartsWith("plan.tool.", System.StringComparison.Ordinal)
-                     || id.StartsWith("plan.bar.", System.StringComparison.Ordinal) || id.StartsWith("plan.cue.", System.StringComparison.Ordinal)
-                     || id.StartsWith("plan.add.", System.StringComparison.Ordinal)) ShowSub(SubPlan);
-            else if (id.StartsWith("plan.log.", System.StringComparison.Ordinal)) ShowSub(SubRecord);
+            if (id.StartsWith("opt.", System.StringComparison.Ordinal)) ShowSub(SubStances);
+            else if (id.StartsWith("plan.", System.StringComparison.Ordinal) && !id.StartsWith("plan.sub.", System.StringComparison.Ordinal)) ShowSub(SubSortie);
         }
 
-        /// <summary>A sub-page by its label (automation).</summary>
+        /// <summary>A sub-page by its label (automation). Scenarios written for TUNING / OPTIONS open STANCES; PLAN, ELEMENTS, RECORD,
+        /// TIMELINE and LOG open SORTIE.</summary>
         public bool ShowSubNamed(string name)
         {
-            // Scenarios written before BEHAVIOUR call PLAN's first sub-page ELEMENTS; OPTIONS is TUNING now, and TIMELINE/LOG
-            // merged into RECORD.
-            if (string.Equals(name, "ELEMENTS", System.StringComparison.OrdinalIgnoreCase)) name = "PLAN";
-            if (string.Equals(name, "OPTIONS", System.StringComparison.OrdinalIgnoreCase)) name = "TUNING";
-            if (string.Equals(name, "TIMELINE", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "LOG", System.StringComparison.OrdinalIgnoreCase)) name = "RECORD";
+            if (string.Equals(name, "TUNING", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "OPTIONS", System.StringComparison.OrdinalIgnoreCase)) name = "STANCES";
+            if (string.Equals(name, "PLAN", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "ELEMENTS", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "RECORD", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "TIMELINE", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "LOG", System.StringComparison.OrdinalIgnoreCase)) name = "SORTIE";
             for (int i = 0; i < SubLabels.Length; i++)
                 if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
                 {
@@ -128,22 +127,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Shown(WmcContext c)
         {
-            if (sub == SubOptions) options.Shown(c);
-            elementsKey = long.MinValue;
-            timelineNext = 0f;
-            logFilled = false;
+            if (sub == SubStances) options.Shown(c);
+            sortieKey = long.MinValue;
         }
 
         public void Refresh(WmcContext c)
         {
             last = c;
-            if (sub == SubOptions) options.Refresh(c);
-            else if (sub == SubPlan) RefreshElements(c);
-            else if (sub == SubRecord)
-            {
-                RefreshTimeline(c);
-                RefreshLog(c);
-            }
+            if (sub == SubStances) options.Refresh(c);
+            else if (sub == SubSortie) RefreshSortie(c);
             if (relayout)
             {
                 relayout = false;

@@ -89,11 +89,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 crest.enabled = compactCrest.enabled = mark != null;
                 crestCaption.text = string.IsNullOrEmpty(wing.WingName) ? "HOSTILE" : wing.WingName;
             }
-            if (portraitIdentity != ace)
+            int faction = PortraitFactions.OpposingLocal;
+            string portraitKey = ace + "|" + faction;
+            if (portraitIdentity != portraitKey)
             {
-                portraitIdentity = ace;
+                portraitIdentity = portraitKey;
                 // Borrow the same identity-based portrait as Wing Command; never own/destroy it.
-                portrait.sprite = WingLink.PilotPortrait(name, separator < 0 ? "" : handle);
+                portrait.sprite = WingLink.PersonnelPortrait(name, separator < 0 ? "" : handle, PortraitRole.Pilot, faction);
                 portrait.enabled = portrait.sprite != null;
                 portraitFallback.gameObject.SetActive(portrait.sprite == null);
             }
