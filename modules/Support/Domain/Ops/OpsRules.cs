@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public const float ZeroDaySeconds = 180f, ZeroDayHalvedSeconds = 90f, EwHalveMetres = 18000f, FobSeconds = 1200f;
         public const float DoneLingerSeconds = 45f, CooldownSeconds = 480f, CounterTraceFraction = 0.10f, BrokenRefundFraction = 0.5f, HalfFraction = 0.5f;
         public const float PingSeconds = 90f, LossPingSeconds = 45f;
+        /// <summary>A FOB whose held building stays lost this long is given up: the operation is cancelled and every member is refunded in full.</summary>
+        public const float FobAnchorGraceSeconds = 120f;
 
         public static bool Valid(OpKind kind) => kind == OpKind.Asat || kind == OpKind.ZeroDay || kind == OpKind.Fob;
 

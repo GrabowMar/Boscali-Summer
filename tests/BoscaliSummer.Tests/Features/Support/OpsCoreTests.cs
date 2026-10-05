@@ -18,6 +18,7 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckBroken();
             CheckCounterTrace();
             CheckStallAndCancel();
+            CheckReviewFixes();
             CheckPingsAndWords();
             CheckLifecycle();
         }
@@ -35,6 +36,8 @@ namespace BoscaliSummer.Tests.Features.Support
             public readonly List<int> Refunded = new List<int>();
             private int pingSeq;
             public int NextPingSeq() => ++pingSeq;
+            public readonly HashSet<ulong> Gone = new HashSet<ulong>();
+            public bool InFaction(ulong op) => !Gone.Contains(op);
             public OpOutcome TrySpend(ulong op, int cr, out int detail)
             {
                 detail = 0;
@@ -228,6 +231,85 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(p.Wallet, wallet + 75, "everything is refunded");
             Eq(desk.Slot(OpDomain.Sof).State, OpState.Idle, "the slot is free");
             Eq(desk.Plan(Owner, OpKind.Fob, new OpTarget(1, 0f, 0f)).Outcome, OpOutcome.Started, "a cancelled FOB has no cooldown");
+        }
+
+        private static void CheckReviewFixes()
+        {
+            // BROKEN then CANCEL: refunds plus what is left in the ledger equal what was paid in (the ledger must not be halved twice).
+            var p = new Ports { Humans = 2 };
+            OpsDesk desk = Make(p);
+            desk.Plan(Owner, OpKind.Asat, Bird);
+            int paid = 0, start = p.Wallet;
+            for (int i = 0; i < 40 && desk.Slot(OpDomain.Cyber).State != OpState.Execute; i++)
+                foreach (ulong who in new[] { Owner, Other, 9UL, 10UL }) if (desk.Fund(who, OpDomain.Cyber, 50).Ok) { }
+            OpSlot s = desk.Slot(OpDomain.Cyber);
+            Eq(s.State, OpState.Execute, "full bar");
+            paid = start - p.Wallet;
+            p.Now += 10f; p.CyberUp = false; desk.Tick();
+            Eq(s.State, OpState.Broken, "BROKEN");
+            float left = 0f; foreach (var kv in s.Ledger) left += kv.Value;
+            Near(left, paid - (p.Wallet - (start - paid)), "the ledger keeps exactly what was not refunded");
+            Eq(desk.Cancel(Owner, OpDomain.Cyber).Outcome, OpOutcome.Cancelled, "cancel after BROKEN");
+            TestAssert.That(start - p.Wallet <= 4, "BROKEN then CANCEL returns everything paid in (within the floor of each member's half)");
+
+            // The owner left the faction: any member may cancel and retarget.
+            p = new Ports { Humans = 2 };
+            desk = Make(p);
+            desk.Plan(Owner, OpKind.Fob, new OpTarget(1, 0f, 0f));
+            desk.Fund(Other, OpDomain.Sof, 50);
+            Eq(desk.Cancel(Other, OpDomain.Sof).Outcome, OpOutcome.NotOwner, "a member cannot cancel while the owner is present");
+            p.Gone.Add(Owner);
+            Eq(desk.Plan(Other, OpKind.Fob, new OpTarget(2, 0f, 0f)).Outcome, OpOutcome.Retargeted, "a member retargets when the owner is gone");
+            p.Gone.Add(Other);
+            Eq(desk.Cancel(9, OpDomain.Sof).Outcome, OpOutcome.Cancelled, "a member cancels when the owner is gone");
+            Eq(p.Wallet, 10000, "the ledger came back in full");
+
+            // A FOB whose held building stays lost for more than 120 s cancels itself with a full refund.
+            p = new Ports { Humans = 1 };
+            var log = new List<OpEvent>();
+            desk = Make(p, log);
+            desk.Plan(Owner, OpKind.Fob, new OpTarget(1, 0f, 0f));
+            desk.Fund(Owner, OpDomain.Sof, 50); desk.Fund(Owner, OpDomain.Sof, 25);
+            p.BuildingUp = false; desk.Tick();
+            p.Now += 100f; desk.Tick();
+            Eq(desk.Slot(OpDomain.Sof).State, OpState.Funding, "still waiting inside the grace");
+            p.BuildingUp = true; desk.Tick();
+            p.BuildingUp = false; p.Now += 50f; desk.Tick();
+            p.Now += 100f; desk.Tick();
+            Eq(desk.Slot(OpDomain.Sof).State, OpState.Funding, "a restored anchor restarts the grace");
+            p.Now += 30f; desk.Tick();
+            Eq(desk.Slot(OpDomain.Sof).State, OpState.Idle, "the lost FOB is given up after 120 s");
+            Eq(p.Wallet, 10000, "full refund");
+            Eq(log.Exists(e => e.Kind == OpEventKind.Cancelled), true, "the cancel event");
+
+            // Withdraw (OPERATIONS switched off) refunds every ledger; Fail refunds a Done operation and lifts the cooldown; EndEffect stops a Done FOB showing.
+            p = new Ports { Humans = 1 };
+            desk = Make(p);
+            desk.Plan(Owner, OpKind.ZeroDay, new OpTarget(3, 0f, 0f, 2)); desk.Fund(Owner, OpDomain.Cyber, 50);
+            desk.Plan(Owner, OpKind.Fob, new OpTarget(1, 0f, 0f)); desk.Fund(Owner, OpDomain.Sof, 25);
+            desk.Withdraw();
+            Eq(p.Wallet, 10000, "disabling refunds every ledger");
+            Eq(desk.Slot(OpDomain.Cyber).Kind, OpKind.None, "slots are empty after the withdraw");
+            desk.Plan(Owner, OpKind.ZeroDay, new OpTarget(3, 0f, 0f, 2));
+            for (int i = 0; i < 12; i++) desk.Fund(Owner, OpDomain.Cyber, 50);
+            Eq(desk.Slot(OpDomain.Cyber).State, OpState.Execute, "ZERO-DAY full");
+            p.Now += 61f; desk.Tick();
+            Eq(desk.Slot(OpDomain.Cyber).State, OpState.Done, "ZERO-DAY fired");
+            desk.Fail(OpDomain.Cyber);
+            Eq(p.Wallet, 10000, "a failed effect refunds the members");
+            Eq(desk.Plan(Owner, OpKind.ZeroDay, new OpTarget(3, 0f, 0f, 2)).Outcome, OpOutcome.Started, "and lifts the cooldown");
+            desk.Cancel(Owner, OpDomain.Cyber);
+            desk.Plan(Owner, OpKind.Fob, new OpTarget(1, 0f, 0f));
+            for (int i = 0; i < 12; i++) desk.Fund(Owner, OpDomain.Sof, 50);
+            p.Now += 61f; desk.Tick();
+            desk.SetEffectEnd(OpDomain.Sof, p.Now + 1000f);
+            desk.EndEffect(OpDomain.Sof);
+            p.Now += 50f; desk.Tick();
+            Eq(desk.Slot(OpDomain.Sof).Kind, OpKind.None, "a FOB whose effect ended early leaves the page");
+            // Pings carry the victim.
+            desk.Plan(Owner, OpKind.ZeroDay, new OpTarget(3, 0f, 0f, 2));
+            for (int i = 0; i < 6; i++) desk.Fund(Owner, OpDomain.Cyber, 50);
+            Eq(desk.Pings.Count > 0 && desk.Pings[0].Victim == 2, true, "a ping names its victim faction");
         }
 
         private static void CheckPingsAndWords()

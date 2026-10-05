@@ -39,7 +39,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             flightSerial = 0;
         }
 
-        partial void TickEffects(float now) => TickFlights(now);
+        partial void TickEffects(float now)
+        {
+            TickFlights(now);
+            // A FOB that ended early (the building was retaken) stops showing as up.
+            foreach (var pair in factions)
+            {
+                OpSlot s = pair.Value.Desk.Slot(OpDomain.Sof);
+                if (s.Kind == OpKind.Fob && s.State == OpState.Done && s.EffectEnds > now && sof != null && !sof.FobUp(pair.Key)) pair.Value.Desk.EndEffect(OpDomain.Sof);
+            }
+        }
 
         /// <summary>The countdown started: an ASAT puts its launcher on the ground. Anything that ends the countdown without a launch (BROKEN, a counter-trace, a cancel) removes it.</summary>
         partial void OpEventReact(FactionOps f, OpEvent e)
@@ -70,7 +79,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (sof == null || !sof.StartFob(f.Owner, target.Id, out float until))
             {
-                Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " FOB could not start: the held building " + target.Id + " is gone.");
+                Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " FOB could not start: the held building " + target.Id + " is gone; every member is refunded.");
+                f.Desk.Fail(OpDomain.Sof);
                 return;
             }
             f.Desk.SetEffectEnd(OpDomain.Sof, until);
@@ -82,7 +92,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void DiscardLauncher(FactionOps f)
         {
-            if (f.Launcher != null && cyber != null) cyber.Spawner.DiscardGroup(f.Launcher);
+            if (!ReferenceEquals(f.Launcher, null) && cyber != null) cyber.Spawner.DiscardGroup(f.Launcher); // a destroyed launcher still owns its spawner slot
             f.Launcher = null; f.LauncherSpawned = false;
         }
 
@@ -101,17 +111,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// The launch: the ascent starts (60 s, played by every client from the flight row), the victim is warned (ASAT LAUNCH DETECTED), and the hit is host-timed in <see cref="TickFlights"/>.
-        /// The victim is the first other faction that still has the chosen satellite class up; with none the strike flies and fizzles (logged).
+        /// The victim is the other faction with the chosen satellite class up and the highest objective share; with none the strike flies and fizzles (logged).
         /// </summary>
         private void FireAsat(FactionOps f, in OpTarget target)
         {
             float now = SupportManager.MissionNow();
             var bird = (BirdKind)Mathf.Clamp(target.Id, 0, SpaceRules.BirdCount - 1);
-            FactionHQ victim = null;
-            var hqs = FactionRegistry.GetAllHQs();
-            if (hqs != null && space != null)
-                foreach (FactionHQ hq in hqs)
-                    if (hq != null && hq != f.Owner && space.TryGetStateCoarse(hq, out SpaceState state) && state.HasBird(bird)) { victim = hq; break; }
+            FactionHQ victim = ChooseVictim(f, bird);
+            int victimKey = victim != null && manager != null ? manager.FactionKeyOf(victim) : 0;
             GlobalPosition at = default;
             bool placed = f.Launcher != null && !f.Launcher.disabled;
             if (placed) at = f.Launcher.transform.position.ToGlobalPosition();
@@ -120,8 +127,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (flights.Count < 4)
                 flights.Add(new Flight { Id = ++flightSerial, Attacker = f, Victim = victim, Bird = (int)bird, X = placed ? (float)at.x : 0f, Z = placed ? (float)at.z : 0f, EndsAt = end });
             f.Desk.SetEffectEnd(OpDomain.Cyber, end);
-            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, OpsRules.AsatFlightSeconds + 5f);
+            f.Desk.AddPing(OpKind.Asat, OpPingPhase.Launch, OpsRules.AsatFlightSeconds + 5f, 0, victimKey);
             Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " ASAT launched at the " + OpsWords.Bird((int)bird) + " bird of " + (victim != null ? victim.name : "nobody (no such bird is up)") + ", impact in " + (int)OpsRules.AsatFlightSeconds + " s.");
+        }
+
+        /// <summary>The victim of an ASAT on <paramref name="bird"/>: the other faction that still has that class up and the highest objective share (with two factions, simply the enemy).</summary>
+        private FactionHQ ChooseVictim(FactionOps f, BirdKind bird)
+        {
+            FactionHQ best = null;
+            float bestShare = -1f;
+            var hqs = FactionRegistry.GetAllHQs();
+            if (hqs == null || space == null) return null;
+            foreach (FactionHQ hq in hqs)
+            {
+                if (hq == null || hq == f.Owner || !space.TryGetStateCoarse(hq, out SpaceState state) || !state.HasBird(bird)) continue;
+                float share = manager != null ? manager.ObjectiveShare(hq) : 0f;
+                if (share > bestShare) { best = hq; bestShare = share; }
+            }
+            return best;
         }
 
         /// <summary>The ascent ended: the chosen bird dies through the SPACE state's own loss and rebuild path, the victim is told SAT LOST, and the launcher is removed.</summary>
@@ -133,7 +156,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (now < fl.EndsAt) continue;
                 flights.RemoveAt(i);
                 bool hit = fl.Victim != null && space != null && space.TryGetStateCoarse(fl.Victim, out SpaceState state) && state.KillBird((BirdKind)fl.Bird, now);
-                if (hit) fl.Attacker.Desk.AddPing(OpKind.Asat, OpPingPhase.Loss, OpsRules.LossPingSeconds, fl.Bird);
+                if (hit) fl.Attacker.Desk.AddPing(OpKind.Asat, OpPingPhase.Loss, OpsRules.LossPingSeconds, fl.Bird, manager != null ? manager.FactionKeyOf(fl.Victim) : 0);
                 Plugin.Logger?.LogInfo("[Support.Ops] " + fl.Attacker.Owner.name + " ASAT " + (hit ? "HIT: SAT LOST " + OpsWords.Bird(fl.Bird) + " of " + fl.Victim.name : "fizzled: nothing to hit") + ".");
                 DiscardLauncher(fl.Attacker);
             }
@@ -150,17 +173,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             foreach (Flight fl in flights)
                 if (into.Flights.Count < OpsWire.MaxFlights && now < fl.EndsAt)
-                    into.Flights.Add(new OpsFlightRow { Id = fl.Id, X = fl.X, Z = fl.Z, EndsAt = fl.EndsAt, Seconds = (byte)OpsRules.AsatFlightSeconds });
+                {
+                    // The launching faction sees the exact point; everyone else sees it on a 5 km grid (a launch is visible in the sky, the site stays unknown).
+                    bool own = fl.Attacker != null && fl.Attacker.Owner == viewer;
+                    into.Flights.Add(new OpsFlightRow { Id = fl.Id, X = own ? fl.X : Mathf.Round(fl.X / 5000f) * 5000f, Z = own ? fl.Z : Mathf.Round(fl.Z / 5000f) * 5000f, EndsAt = fl.EndsAt, Seconds = (byte)OpsRules.AsatFlightSeconds });
+                }
         }
 
         private void FireZeroDay(FactionOps f, in OpTarget target)
         {
             float now = SupportManager.MissionNow();
-            bool truckNear = cyber != null && cyber.EnemyTruckWithin(f.Owner, target.X, target.Z, OpsRules.EwHalveMetres);
+            bool truckNear = cyber != null && cyber.EnemyTruckWithin(target.Victim, target.X, target.Z, OpsRules.EwHalveMetres);
             float seconds = OpsRules.ZeroDayEffectSeconds(truckNear);
             if (cyber == null || !cyber.AddSamNetFail(f.Owner, target, seconds))
             {
-                Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " SAM NET FAIL could not be applied (CYBER desk missing or the effect book is full).");
+                Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " SAM NET FAIL could not be applied (CYBER desk missing or the effect book is full); every member is refunded.");
+                f.Desk.Fail(OpDomain.Cyber);
                 return;
             }
             f.Desk.SetEffectEnd(OpDomain.Cyber, now + seconds);

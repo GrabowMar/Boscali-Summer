@@ -49,9 +49,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public readonly OpPingPhase Phase;
         public readonly float Until;
         public readonly int Seq;
+        /// <summary>The faction key this ping concerns (the victim); 0 = nobody in particular (a FOB ping reaches every other faction, any other ping with no victim reaches none).</summary>
+        public readonly int Victim;
         /// <summary>A Loss ping names the satellite that died (0 OPTICAL, 1 RADAR, 2 KINETIC); 0 otherwise.</summary>
         public readonly int Detail;
-        public OpPing(OpKind kind, OpPingPhase phase, float until, int seq, int detail = 0) { Kind = kind; Phase = phase; Until = until; Seq = seq; Detail = detail; }
+        public OpPing(OpKind kind, OpPingPhase phase, float until, int seq, int detail = 0, int victim = 0) { Kind = kind; Phase = phase; Until = until; Seq = seq; Detail = detail; Victim = victim; }
     }
 
     internal interface IOpsPorts
@@ -67,6 +69,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         bool AnchorUp(OpKind kind, bool executing);
         /// <summary>A ping sequence number unique across every faction's desk (the HUD notice tracker tells new pings from old by it).</summary>
         int NextPingSeq();
+        /// <summary>The player (by identity) is still a member of this faction (an operation whose owner left may be cancelled or retargeted by any member).</summary>
+        bool InFaction(ulong op);
     }
 
     internal sealed class OpSlot
@@ -74,7 +78,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public OpKind Kind;
         public OpState State;
         public int Goal;
-        public float Funded, Work, LastProgressAt, CountdownEnds, EffectEnds, DoneAt;
+        public float Funded, Work, LastProgressAt, CountdownEnds, EffectEnds, DoneAt, PausedSince;
         public ulong Owner;
         public bool HasTarget, HalfPinged, Paused;
         public OpTarget Target;
@@ -120,7 +124,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (s.Open && s.Kind != OpKind.None)
             {
                 if (s.Kind != kind) return new OpResult(OpOutcome.Busy, s.Kind);
-                if (s.Owner != op) return new OpResult(OpOutcome.NotOwner, kind);
+                if (s.Owner != op)
+                {
+                    if (ports.InFaction(s.Owner)) return new OpResult(OpOutcome.NotOwner, kind);
+                    s.Owner = op; // the owner left the faction: the retargeting member takes the operation over
+                }
                 s.Target = target; s.HasTarget = true;
                 Queue(OpEventKind.Retargeted, s);
                 Pump();
@@ -174,7 +182,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         {
             OpSlot s = Slot(domain);
             if (s.Kind == OpKind.None || !s.Open) return new OpResult(s.State == OpState.Execute ? OpOutcome.Executing : OpOutcome.NoOperation, s.Kind);
-            if (s.Owner != op) return new OpResult(OpOutcome.NotOwner, s.Kind);
+            if (s.Owner != op && ports.InFaction(s.Owner)) return new OpResult(OpOutcome.NotOwner, s.Kind);
             OpKind kind = s.Kind;
             RefundAll(s, 1f);
             Queue(OpEventKind.Cancelled, s);
@@ -228,7 +236,37 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         /// <summary>An ASAT left the rail or a satellite died: a ping for the victim only (the runtime decides which factions read it).</summary>
-        public void AddPing(OpKind kind, OpPingPhase phase, float seconds, int detail = 0) => PutPing(kind, phase, ports.Now + seconds, detail);
+        public void AddPing(OpKind kind, OpPingPhase phase, float seconds, int detail = 0, int victim = 0) => PutPing(kind, phase, ports.Now + seconds, detail, victim);
+
+        /// <summary>The effect of a DONE operation ended before its timer (a retaken FOB): the slot stops showing it and closes after the usual linger.</summary>
+        public void EndEffect(OpDomain domain)
+        {
+            OpSlot s = Slot(domain);
+            if (s.State == OpState.Done) s.EffectEnds = 0f;
+        }
+
+        /// <summary>Fire could not apply the effect: every member gets the CR back in full, the cooldown is lifted and the slot is freed. Never pumps (the caller may be inside an event).</summary>
+        public void Fail(OpDomain domain)
+        {
+            OpSlot s = Slot(domain);
+            if (s.Kind == OpKind.None || s.State != OpState.Done) return;
+            cooldownUntil[(int)s.Kind] = 0f;
+            RefundAll(s, 1f);
+            Queue(OpEventKind.Cancelled, s);
+            Clear(s);
+        }
+
+        /// <summary>OPERATIONS was switched off mid-mission: every unfinished operation is withdrawn and every ledger refunded in full (a finished one keeps nothing to refund).</summary>
+        public void Withdraw()
+        {
+            foreach (OpSlot s in slots)
+            {
+                if (s.Kind == OpKind.None) continue;
+                if (s.Open || s.State == OpState.Execute) RefundAll(s, 1f);
+                Clear(s);
+            }
+            pings.Clear(); pending.Clear();
+        }
 
         // ---- Time ----------------------------------------------------------------------------------
 
@@ -243,7 +281,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 if (s.Kind == OpKind.None) continue;
                 if (s.Open)
                 {
+                    bool wasPaused = s.Paused;
                     s.Paused = !ports.AnchorUp(s.Kind, false);
+                    if (s.Paused && !wasPaused) s.PausedSince = now;
+                    if (s.Paused && s.Kind == OpKind.Fob && now - s.PausedSince > OpsRules.FobAnchorGraceSeconds)
+                    {
+                        RefundAll(s, 1f);
+                        Queue(OpEventKind.Cancelled, s);
+                        Clear(s);
+                        continue;
+                    }
                     if (s.State != OpState.NeedsFunding && now - s.LastProgressAt >= OpsRules.StallSeconds) { s.State = OpState.NeedsFunding; Queue(OpEventKind.Stalled, s); }
                 }
                 else if (s.State == OpState.Execute)
@@ -280,14 +327,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             {
                 s.HalfPinged = true;
                 Queue(OpEventKind.Half, s);
-                PutPing(s.Kind, OpPingPhase.Half, ports.Now + OpsRules.PingSeconds);
+                PutPing(s.Kind, OpPingPhase.Half, ports.Now + OpsRules.PingSeconds, 0, s.Target.Victim);
             }
             if (s.Value >= s.Goal - 0.001f && s.State != OpState.Execute)
             {
                 s.State = OpState.Execute;
                 s.CountdownEnds = ports.Now + OpsRules.CountdownSeconds;
                 Queue(OpEventKind.Execute, s);
-                PutPing(s.Kind, OpPingPhase.Execute, s.CountdownEnds + 5f);
+                PutPing(s.Kind, OpPingPhase.Execute, s.CountdownEnds + 5f, 0, s.Target.Victim);
             }
         }
 
@@ -295,7 +342,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         private void Break(OpSlot s)
         {
             RefundAll(s, OpsRules.BrokenRefundFraction);
-            Scale(s, 0.5f);
+            // RefundAll already took the refunded half out of every ledger entry: only the bar halves here (scaling the ledger too would halve it twice).
+            s.Funded *= 0.5f; s.Work *= 0.5f;
             s.State = OpState.Broken; s.CountdownEnds = 0f; s.LastProgressAt = ports.Now; s.HalfPinged = true;
             RemovePing(s.Kind, OpPingPhase.Execute);
             Queue(OpEventKind.Broken, s);
@@ -326,11 +374,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             s.Owner = 0; s.HasTarget = s.HalfPinged = s.Paused = false; s.Target = default; s.Ledger.Clear();
         }
 
-        private void PutPing(OpKind kind, OpPingPhase phase, float until, int detail = 0)
+        private void PutPing(OpKind kind, OpPingPhase phase, float until, int detail = 0, int victim = 0)
         {
             RemovePing(kind, phase);
             if (pings.Count >= OpsRules.MaxPings) pings.RemoveAt(0);
-            pings.Add(new OpPing(kind, phase, until, ports.NextPingSeq(), detail));
+            pings.Add(new OpPing(kind, phase, until, ports.NextPingSeq(), detail, victim));
         }
 
         private void RemovePing(OpKind kind, OpPingPhase phase)

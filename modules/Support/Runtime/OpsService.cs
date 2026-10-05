@@ -27,6 +27,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public int Key;
             public OpsDesk Desk;
             public int EventSeq;
+            public string Name;
             public readonly List<KeyValuePair<int, OpEvent>> Ring = new List<KeyValuePair<int, OpEvent>>(OpsWire.MaxEvents);
         }
 
@@ -43,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public void Refund(ulong op, int cr) => service.manager.OpsRefund(faction.Owner, op, cr);
             public bool AnchorUp(OpKind kind, bool executing) => service.AnchorUp(faction, kind, executing);
             public int NextPingSeq() => ++service.pingSeq;
+            public bool InFaction(ulong op) => service.manager != null && service.manager.InFaction(faction.Owner, op);
         }
 
         private readonly Dictionary<FactionHQ, FactionOps> factions = new Dictionary<FactionHQ, FactionOps>();
@@ -111,7 +113,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (!Enabled)
             {
-                if (factions.Count > 0) ResetForScene();
+                if (factions.Count > 0)
+                {
+                    // Switched off mid-mission: every unfinished operation is withdrawn and every member gets their pledge back.
+                    foreach (var pair in factions) pair.Value.Desk.Withdraw();
+                    ResetForScene();
+                }
                 return;
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
@@ -224,7 +231,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case OpKind.Asat:
                     // A satellite class, not a unit: the enemy constellation is never listed, so every valid class is accepted and a strike on a dead one fizzles.
                     if (id < 0 || id >= SpaceRules.BirdCount) return false;
-                    target = new OpTarget(id, 0f, 0f, 0);
+                    FactionHQ victim = ChooseVictim(f, (BirdKind)id);
+                    target = new OpTarget(id, 0f, 0f, victim != null ? manager.FactionKeyOf(victim) : 0);
                     return true;
                 case OpKind.ZeroDay: return cyber != null && cyber.TryNodeTarget(f.Owner, id, out target);
                 case OpKind.Fob: return sof != null && sof.TryHeldTarget(f.Owner, id, out target);
@@ -261,13 +269,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     EndsAt = s.State == OpState.Execute ? s.CountdownEnds : s.State == OpState.Done ? s.EffectEnds : 0f
                 });
             }
+            int viewerKey = f.Key;
             foreach (var pair in factions)
             {
                 if (pair.Key == viewer.HQ) continue;
                 foreach (OpPing p in pair.Value.Desk.Pings)
                 {
+                    // A ping reaches only the faction it concerns: the victim (a FOB, which has none, reaches every other faction). A third party learns nothing.
                     if (into.Pings.Count >= OpsWire.MaxPings || now >= p.Until) continue;
-                    into.Pings.Add(new OpsPingRow { Kind = p.Kind, Phase = p.Phase, Seq = p.Seq, Until = p.Until, Name = FactionName(pair.Key) });
+                    if (p.Victim != viewerKey && !(p.Victim == 0 && p.Kind == OpKind.Fob)) continue;
+                    into.Pings.Add(new OpsPingRow { Kind = p.Kind, Phase = p.Phase, Seq = p.Seq, Until = p.Until, Detail = (byte)p.Detail, Name = pair.Value.Name ??= FactionName(pair.Key) });
                 }
             }
             for (int i = 0; i < f.Ring.Count && into.Events.Count < OpsWire.MaxEvents; i++)

@@ -58,6 +58,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (owner == null || !factions.TryGetValue(owner, out FactionSof f) || !TryHeldTarget(owner, heldId, out OpTarget spot)) return false;
             float now = SupportManager.MissionNow();
             until = Mathf.Max(f.FobUntil, now) + FobSeconds;
+            if (f.FobUntil > now && f.FobHeldId != heldId) DiscardFobVehicles(f); // a renewal on another building: the old vehicles go, new ones are placed there
             f.FobUntil = until; f.FobHeldId = heldId;
             f.Desk.FobActive = true; f.Desk.FobX = spot.X; f.Desk.FobZ = spot.Z;
             f.Desk.ExtendHeld(heldId, until);
@@ -75,16 +76,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private Unit EnsureFobVehicle(FactionHQ owner, Unit current, GlobalPosition at, bool fuel, int ordinal)
         {
             if (current != null && !current.disabled) return current;
-            if (current != null) spawner.DiscardGroup(current);
+            if (!ReferenceEquals(current, null)) spawner.DiscardGroup(current); // a destroyed truck still owns its spawner slot
             return spawner.TryCreateFobSupply(owner, ordinal, at, fuel, out Unit made) ? made : null;
+        }
+
+        private void DiscardFobVehicles(FactionSof f)
+        {
+            if (!ReferenceEquals(f.FobSupply, null)) spawner.DiscardGroup(f.FobSupply);
+            if (!ReferenceEquals(f.FobFuel, null)) spawner.DiscardGroup(f.FobFuel);
+            f.FobSupply = null; f.FobFuel = null;
         }
 
         private void EndFob(FactionSof f, string why)
         {
             f.FobUntil = 0f; f.FobHeldId = 0;
             f.Desk.FobActive = false;
-            if (f.FobSupply != null) { spawner.DiscardGroup(f.FobSupply); f.FobSupply = null; }
-            if (f.FobFuel != null) { spawner.DiscardGroup(f.FobFuel); f.FobFuel = null; }
+            DiscardFobVehicles(f);
             Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " FOB ended: " + why + ".");
         }
     }

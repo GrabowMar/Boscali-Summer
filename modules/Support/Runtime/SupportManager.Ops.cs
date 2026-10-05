@@ -43,6 +43,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return OpOutcome.None; // the CR is gone from the economy: an operation is a sink, it does not feed HQ FUND
         }
 
+        /// <summary>The player (by identity) is still in the faction (an operation whose owner left can be cancelled by any member).</summary>
+        internal bool InFaction(FactionHQ owner, ulong op) => FindPlayer(owner, op) != null;
+
+        /// <summary>The faction's share of the map objectives it holds (the ASAT victim is the other faction with the chosen bird and the highest share).</summary>
+        internal float ObjectiveShare(FactionHQ hq)
+        {
+            if (hq == null || credits == null) return 0f;
+            ObjectiveCount c = credits.Census(hq);
+            return Domain.Calls.CallFloors.Share(c.held, c.contested, c.n);
+        }
+
         internal void OpsRefund(FactionHQ owner, ulong op, int cr)
         {
             if (cr <= 0 || BypassRequirements || credits == null) return;

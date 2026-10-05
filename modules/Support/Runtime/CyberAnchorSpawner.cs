@@ -246,7 +246,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Removes a whole anchor group (the anchor and its guards): a rebuilt anchor's wreck. A unit that heads no group is removed alone.</summary>
         internal void DiscardGroup(Unit first)
         {
-            if (first == null) return;
+            if (ReferenceEquals(first, null)) return; // a destroyed unit is Unity-null but still owns its group slot
             if (!groups.TryGetValue(first, out List<Unit> group)) { Remove(first); return; }
             groups.Remove(first);
             for (int i = group.Count - 1; i >= 0; i--) Remove(group[i]);

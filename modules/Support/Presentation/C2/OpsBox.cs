@@ -165,6 +165,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private OpChoice Choice => choices.Count == 0 ? default : choices[Mathf.Clamp(choiceIndex, 0, choices.Count - 1)];
 
+        /// <summary>A finished FOB can be renewed (another 20 minutes, on the same or another held building) while it is still showing.</summary>
+        private bool Renewable => hasRow && row.Kind == OpKind.Fob && row.State == OpState.Done;
+        private bool wasRenewable;
+
         private bool Open => hasRow && (row.State == OpState.Funding || row.State == OpState.NeedsFunding || row.State == OpState.Broken);
 
         /// <summary>A press is a request, never an effect: the host judges it. A 0.35 s debounce keeps a double click from sending twice.</summary>
@@ -188,6 +192,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             else if (choices.Count > 1) choiceIndex = (choiceIndex + 1) % choices.Count;
         }
 
+        private void RenewOrNothing() { if (Renewable && choices.Count > 0) act.Plan?.Invoke(OpKind.Fob, Choice.Id); }
+
         private void Three()
         {
             if (Open)
@@ -197,6 +203,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 OpChoice next = choices[(at + 1) % choices.Count];
                 if (next.Id != row.TargetId) act.Plan?.Invoke(row.Kind, next.Id);
             }
+            else if (Renewable) RenewOrNothing();
             else if (online && choices.Count > 0) act.Plan?.Invoke(IdleKind, Choice.Id);
         }
 
@@ -217,6 +224,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             fill?.Invoke(shownKind, choices);
             if (hasRow && row.HasTarget && choices.FindIndex(c => c.Id == row.TargetId) < 0) choices.Add(new OpChoice(row.TargetId, OpsWords.TargetWord(row.Kind, row.TargetId)));
             if (choiceIndex >= choices.Count) choiceIndex = 0;
+            bool renewable = Renewable;
+            if (renewable && !wasRenewable) { int cur = choices.FindIndex(c => c.Id == row.TargetId); if (cur >= 0) choiceIndex = cur; }
+            wasRenewable = renewable;
             string birds = online && domain == OpDomain.Cyber ? OpsPageWords.Birds(state) : "";
             if (full) box.SetMeta(!online ? "OFFLINE" : birds.Length > 0 ? birds : domain == OpDomain.Cyber ? "CYBER" : "SOF");
             Words = "";
@@ -267,6 +277,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 b4.Help = "Cancel the operation: every member's CR is returned in full (its owner only).";
                 if (row.Paused) Words = "NEGATIVE: " + OpsWords.Anchor(row.Kind) + " DOWN — RESTORE IT BEFORE FUNDING CONTINUES";
                 else if (row.State == OpState.Broken) Words = "OPERATION BROKEN · HALF RETURNED · BAR AT 50 % · FUND TO RESUME";
+            }
+            else if (Renewable)
+            {
+                SetButtons("", "TGT: " + target, "RENEW", "", false, choices.Count > 1, choices.Count > 0, false);
+                b2.Help = "Choose the held building for the renewal (the one already holding the FOB is listed first).";
+                b3.Help = "Renew the FOB: another 20 minutes of base, on the chosen held building. A different building moves the rearm and fuel vehicles. It is funded again like a new operation.";
+                Words = row.EndsAt > now ? "FOB UP · RENEW TO ADD 20 MINUTES (FUNDED AGAIN)" : "FOB ENDED · RENEW TO BUILD IT AGAIN (FUNDED AGAIN)";
             }
             else if (hasRow)
             {

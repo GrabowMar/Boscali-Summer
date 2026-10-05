@@ -104,7 +104,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// <summary>Engine-free OPERATIONS state codec (protocol 35). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class OpsWire
     {
-        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 3, MaxFlights = 1, MaxName = 12;
+        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxName = 12;
         private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
 

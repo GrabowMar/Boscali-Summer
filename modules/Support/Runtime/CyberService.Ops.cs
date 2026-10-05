@@ -43,13 +43,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>An EW truck of any other faction stands within <paramref name="metres"/> of the point (it halves SAM NET FAIL).</summary>
-        internal bool EnemyTruckWithin(FactionHQ attacker, float x, float z, float metres)
+        /// <summary>An EW truck of the victim faction (its key) stands within <paramref name="metres"/> of the point (it halves SAM NET FAIL). Other factions' trucks never count.</summary>
+        internal bool EnemyTruckWithin(int victimKey, float x, float z, float metres)
         {
+            if (victimKey == 0) return false;
             var trucks = new List<EwSource>(AnchorRules.MaxTrucks);
             foreach (var pair in factions)
             {
-                if (pair.Key == attacker) continue;
+                if (manager.FactionKeyOf(pair.Key) != victimKey) continue;
                 pair.Value.Anchors.CopyTrucks(trucks);
                 foreach (EwSource t in trucks) if (CyberGraph.InReach(t.X, t.Z, x, z, metres)) return true;
             }
