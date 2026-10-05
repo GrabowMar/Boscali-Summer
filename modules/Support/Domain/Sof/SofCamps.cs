@@ -117,34 +117,50 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         public const int Capacity = 128;
         private readonly Dictionary<ulong, int> byKey = new Dictionary<ulong, int>();
-        private readonly List<ulong> keys = new List<ulong>();
+        private readonly Dictionary<int, ulong> byId = new Dictionary<int, ulong>();
+        private readonly Stack<int> free = new Stack<int>();
+        private int next;
 
-        public int Count => keys.Count;
+        /// <summary>Live ids (allocated and not released).</summary>
+        public int Count => byId.Count;
 
         private static ulong Pack(TargetKind kind, AnchorSub sub, uint key) => ((ulong)(byte)kind << 40) | ((ulong)(byte)sub << 32) | key;
 
-        /// <summary>The id of (kind, sub, key); 0 when the table is full.</summary>
+        /// <summary>The id of (kind, sub, key) when one is allocated; 0 otherwise (never allocates).</summary>
+        public int Find(TargetKind kind, AnchorSub sub, uint key) => byKey.TryGetValue(Pack(kind, sub, key), out int id) ? id : 0;
+
+        /// <summary>The id of (kind, sub, key), allocating one (a released id is reused first); 0 when every id is live.</summary>
         public int GetOrAdd(TargetKind kind, AnchorSub sub, uint key)
         {
             ulong k = Pack(kind, sub, key);
             if (byKey.TryGetValue(k, out int id)) return id;
-            if (keys.Count >= Capacity) return 0;
-            keys.Add(k);
-            id = keys.Count;
+            if (byId.Count >= Capacity) return 0;
+            id = free.Count > 0 ? free.Pop() : ++next;
+            byId[id] = k;
             byKey[k] = id;
             return id;
+        }
+
+        /// <summary>Frees an id for reuse (its target is gone and no team is engaged on it). False when it was not live.</summary>
+        public bool Release(int id)
+        {
+            if (!byId.TryGetValue(id, out ulong k)) return false;
+            byId.Remove(id); byKey.Remove(k); free.Push(id);
+            return true;
         }
 
         public bool TryKey(int id, out TargetKind kind, out AnchorSub sub, out uint key)
         {
             kind = default; sub = default; key = 0;
-            if (id <= 0 || id > keys.Count) return false;
-            ulong k = keys[id - 1];
+            if (!byId.TryGetValue(id, out ulong k)) return false;
             kind = (TargetKind)(byte)(k >> 40); sub = (AnchorSub)(byte)(k >> 32); key = (uint)k;
             return true;
         }
 
-        public void Clear() { byKey.Clear(); keys.Clear(); }
+        /// <summary>Copies the live ids into <paramref name="into"/> (cleared first).</summary>
+        public void CopyIds(List<int> into) { into.Clear(); foreach (int id in byId.Keys) into.Add(id); }
+
+        public void Clear() { byKey.Clear(); byId.Clear(); free.Clear(); next = 0; }
     }
 
     /// <summary>A real thing the runtime looked at this refresh, with its fog verdict. Fog: <see cref="Sighted"/> is a fresh native sighting, never host truth.</summary>

@@ -358,9 +358,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private int FirstTeam() => state.Teams.Count > 0 ? state.Teams[0].Slot : -1;
 
+        // The footer words only change with the host's refusal text, the mirror and the page's own standing hint: build them once per change, not once per frame.
+        private string wordsSaid, wordsStanding, wordsCached;
+        private bool wordsKnown, wordsActive;
+        private int wordsSeq = int.MinValue;
+
         private string StandingWords(CapView v)
         {
             string said = v.Words;
+            int seq = v.SofKnown && v.Sof != null ? v.Sof.Seq : -2;
+            if (wordsCached != null && ReferenceEquals(said, wordsSaid) && wordsKnown == v.SofKnown && wordsActive == (state != null) && wordsSeq == seq && ReferenceEquals(standing, wordsStanding)) return wordsCached;
+            wordsSaid = said; wordsKnown = v.SofKnown; wordsActive = state != null; wordsSeq = seq; wordsStanding = standing;
+            return wordsCached = BuildStandingWords(v, said);
+        }
+
+        private string BuildStandingWords(CapView v, string said)
+        {
             if (!string.IsNullOrEmpty(said) && C2Cap.StartsNegative(said)) return said;
             if (!v.SofKnown) return "WAITING FOR THE HOST · SOF LINK";
             if (state == null) return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING, CALLS STILL LIVE";
@@ -571,7 +584,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (hasTarget)
             {
                 MissionKind kind = tgt.Kind == TargetKind.Ground ? MissionKind.Lase : tgt.Kind == TargetKind.Building ? MissionKind.Seize : tgt.Kind == TargetKind.Relay ? MissionKind.Tap : MissionKind.Sabotage;
-                int odds = SofRules.Odds(have ? cur.Exposure : 0f, 0, have && (cur.Carried || cur.Insert == Insertion.Helicopter), tgt.Exploit, v.Cyber != null && v.CyberKnown && v.Cyber.Nodes.Exists(n => n.Held));
+                float ox = have ? cur.X : tgt.X, oz = have ? cur.Z : tgt.Z; // the host measures the ring boost from the team, so the preview does too
+                bool ring = v.Cyber != null && v.CyberKnown && v.Cyber.Nodes.Exists(n => n.Held && SofRules.Distance(n.X, n.Z, ox, oz) <= SofRules.RingBoostMetres);
+                int odds = SofRules.Odds(have ? cur.Exposure : 0f, 0, have && (cur.Carried || cur.Insert == Insertion.Helicopter), tgt.Exploit, ring);
                 string text = SofWords.Target(tgt.Kind, tgt.Sub, tgt.Id) + " · " + SofWords.Kind(kind) + " " + SofRules.CostOf(kind, tgt.Exploit) + " CR" +
                     (kind == MissionKind.Lase ? " · NO ROLL" : " · ~" + odds + " %") + (tgt.Exploit ? " · EXPLOIT" : tgt.Resisted ? " · RESISTED" : "");
                 OpsText.Set(infoLine, C2Kit.FitTo(infoLine, text, width - 2f - 2f * Pad));

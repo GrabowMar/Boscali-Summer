@@ -394,6 +394,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
                 target == null) return;
             float now = MissionNow();
+            sof?.NoteKillBy(player, target); // a pilot's kill near a pinned SOF team (the only thing a COVER claim pays for)
             // The held-node kill assist now rides CyberUnitKilledPatch (Unit.ReportKilled), which also sees AI and indirect kills.
             ulong id = PlayerIdentity.Of(player);
             bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);

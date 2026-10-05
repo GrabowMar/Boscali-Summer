@@ -161,6 +161,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return linger.TryGetValue(id, out float until) && now < until;
         }
 
+        /// <summary>Drops every stamp of <paramref name="id"/> (the id was released and may name another target later).</summary>
+        public void Forget(int id) { seen.Remove(id); linger.Remove(id); }
+
         public void Clear() { seen.Clear(); linger.Clear(); }
     }
 }

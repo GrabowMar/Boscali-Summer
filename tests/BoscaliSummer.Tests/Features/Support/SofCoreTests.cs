@@ -25,6 +25,7 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckLift();
             CheckOracle();
             CheckTap();
+            CheckReviewFixes();
         }
 
         private static void Eq<T>(T actual, T expected, string message) =>
@@ -47,7 +48,7 @@ namespace BoscaliSummer.Tests.Features.Support
             public Func<float, float, SofScene> SceneAt = (x, z) => default;
             public readonly List<string> Log = new List<string>();
             public readonly List<int> Paid = new List<int>();
-            public bool Alive = true, BuildingUp = true;
+            public bool Alive = true, BuildingUp = true, LaseOk = true;
 
             public SofOutcome TrySpend(ulong op, int cr, out int detail)
             {
@@ -60,7 +61,7 @@ namespace BoscaliSummer.Tests.Features.Support
             public bool CyberNear(float x, float z) => CyberHolds;
             public bool Roll(int chancePercent) { LastChance = chancePercent; return RollResult; }
             public void Reveal(float x, float z, float radius, float seconds) => Log.Add("reveal " + (int)radius + " " + (int)seconds);
-            public void LaseBegin(int slot, uint key, float x, float z) => Log.Add("lase+" + slot);
+            public bool LaseBegin(int slot, uint key, float x, float z) { if (LaseOk) Log.Add("lase+" + slot); return LaseOk; }
             public void LaseEnd(int slot, uint key) => Log.Add("lase-" + slot);
             public bool TargetAlive(TargetKind kind, AnchorSub sub, uint key) => Alive;
             public bool Sabotage(AnchorSub sub, uint key) { Log.Add("sabotage " + sub); return true; }
@@ -240,6 +241,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(t.State, TeamState.Pinned, "cover extends the lost timer");
             for (int i = 0; i < 2; i++) Eq(d.CoverKill(t.X, t.Z), 1, "a kill within 2 km covers the team");
             Eq(d.CoverKill(t.X + 5000f, t.Z), 0, "a kill far away does not");
+            Eq(d.CoverKillBy(Pilot, t.X, t.Z), 1, "the claimant's own kill within 2 km is remembered");
             Near(t.Exposure, 50f, "each kill relieves 25 points", 6f);
             p.SceneAt = (x, z) => default;
             Advance(d, p, 5f);
@@ -448,7 +450,17 @@ namespace BoscaliSummer.Tests.Features.Support
             for (int i = 0; i < 3; i++) { q.Now += 1f; e.BeginHeliPass(); e.NoteHeli(3, Pilot, 400f, 0f, false); e.EndHeliPass(); e.Tick(); }
             for (int i = 0; i < 12; i++) { q.Now += 1f; e.BeginHeliPass(); e.NoteHeli(3, Pilot, 50f, 0f, true); e.EndHeliPass(); e.Tick(); }
             TestAssert.That(!u.Carried && u.State == TeamState.Ready, "landed at the camp");
-            Eq(q.Paid.Count, 1, "still one pay");
+            Eq(q.Paid.Count, 0, "a 650 m hop is no extraction: nothing is paid");
+            // A real extraction: 2.6 km out, lifted back to the camp: 40 CR to the pilot.
+            e.Divert(Op, 0, 2700f, 0f);
+            Advance(e, q, 300f);
+            Near(u.X, 2700f, "out in the field", 5f);
+            e.Order(Op, 0, TeamVerb.Lift);
+            for (int i = 0; i < 12; i++) { q.Now += 1f; e.BeginHeliPass(); e.NoteHeli(5, Pilot, 2700f, 20f, true); e.EndHeliPass(); e.Tick(); }
+            TestAssert.That(u.Carried, "boarded far out");
+            for (int i = 0; i < 3; i++) { q.Now += 1f; e.BeginHeliPass(); e.NoteHeli(5, Pilot, 1400f, 0f, false); e.EndHeliPass(); e.Tick(); }
+            for (int i = 0; i < 12; i++) { q.Now += 1f; e.BeginHeliPass(); e.NoteHeli(5, Pilot, 50f, 0f, true); e.EndHeliPass(); e.Tick(); }
+            TestAssert.That(!u.Carried && u.State == TeamState.Ready, "landed at the camp again");
             Eq(q.Paid.Count, 1, "one extraction pay"); Eq(q.Paid[0], 40, "40 CR extraction");
             // A helicopter that vanishes with a team aboard loses it.
             e.Order(Op, 0, TeamVerb.Lift);
@@ -485,6 +497,112 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(desk.Effects.Count, 1, "a second tap of the same network refreshes, not stacks");
         }
 
+        // ---- Review fixes (C1, C2, I1, I3, I4) ---------------------------------------------------------------
+
+        private static void CheckReviewFixes()
+        {
+            // C2: a team engaged on a target keeps it through a lapsed sighting; only the unit dying (no seed / Gone) ends the mission, and then it refunds the order.
+            var p = new Ports();
+            SofDesk d = Desk(p);
+            ReadyTeam(d, p);
+            Show(d, Seed(TargetKind.Anchor, AnchorSub.Camp, 71, 6000f, 0f));
+            int wallet = p.Wallet;
+            Eq(d.Send(Op, 0, MissionKind.Sabotage, d.Visible[0].Id, 0f, 0f).Outcome, SofOutcome.Sent, "sent on a sighted camp");
+            Eq(p.Wallet, wallet - 60, "the order is paid");
+            for (int i = 0; i < 20; i++) { p.Now += 10f; d.Refresh(new[] { Seed(TargetKind.Anchor, AnchorSub.Camp, 71, 6000f, 0f, false) }); d.Tick(); }
+            Eq(d.Teams[0].Mission, MissionKind.Sabotage, "an unsighted but engaged target keeps its mission");
+            Eq(d.Visible.Count, 1, "and stays listed");
+            var keep = new HashSet<uint>();
+            d.CollectKeep(keep);
+            TestAssert.That(keep.Contains(71u) && keep.Count == 1, "the runtime is told to keep resolving the engaged key");
+            d.Refresh(new SofSeed[0]);
+            Eq(d.Teams[0].Mission, MissionKind.None, "the unit vanishing ends the mission");
+            Eq(p.Wallet, wallet, "refunded: the team never arrived");
+            Eq(d.Ids.Count, 0, "the id is released");
+
+            // The same loss after arrival is not refunded and never counts as a success.
+            var q = new Ports();
+            SofDesk e = Desk(q);
+            ReadyTeam(e, q);
+            Show(e, Seed(TargetKind.Anchor, AnchorSub.Camp, 72, 300f, 0f));
+            var events = new List<SofEventKind>();
+            e.Happened += ev => events.Add(ev.Kind);
+            int before = q.Wallet;
+            e.Send(Op, 0, MissionKind.Sabotage, e.Visible[0].Id, 0f, 0f);
+            Advance(e, q, 40f);
+            Eq(e.Teams[0].State, TeamState.OnSite, "on site");
+            q.Alive = false;
+            Advance(e, q, 3f);
+            Eq(e.Teams[0].State, TeamState.Ready, "the target is gone: the team stands down");
+            TestAssert.That(!events.Contains(SofEventKind.Success), "a target that vanished is never a success");
+            TestAssert.That(!q.Log.Contains("sabotage Camp"), "and no effect ran");
+            Eq(q.Wallet, before - 60, "no refund once on site");
+
+            // C2: a LASE whose designation cannot be placed sets no LASE state and posts nothing.
+            var l = new Ports { LaseOk = false };
+            SofDesk g = Desk(l);
+            ReadyTeam(g, l);
+            Show(g, Seed(TargetKind.Ground, AnchorSub.Uplink, 73, 300f, 0f));
+            var gEvents = new List<SofEventKind>();
+            g.Happened += ev => gEvents.Add(ev.Kind);
+            g.Send(Op, 0, MissionKind.Lase, g.Visible[0].Id, 0f, 0f);
+            Advance(g, l, 40f);
+            TestAssert.That(!g.Teams[0].LaseActive && !g.IsLasing(0), "no laser, no LASE state");
+            TestAssert.That(!l.Log.Contains("lasepost0"), "no LASE post");
+            TestAssert.That(gEvents.Contains(SofEventKind.Failed) && !gEvents.Contains(SofEventKind.Success), "the mission failed, it did not succeed");
+            Eq(g.Teams[0].State, TeamState.Ready, "the team is free again");
+
+            // I1: ids exist only for visible targets, and are recycled.
+            var r = new Ports();
+            SofDesk h = Desk(r);
+            var hidden = new List<SofSeed>();
+            for (uint i = 0; i < 300; i++) hidden.Add(Seed(TargetKind.Ground, AnchorSub.Uplink, 5000 + i, 100f * i, 0f, false));
+            h.Refresh(hidden);
+            Eq(h.Ids.Count, 0, "300 hidden units take no id");
+            Eq(h.Visible.Count, 0, "and none is listed");
+            var seen = new List<SofSeed>();
+            for (uint i = 0; i < 40; i++) seen.Add(Seed(TargetKind.Ground, AnchorSub.Uplink, 6000 + i, 100f * i, 0f, true));
+            h.Refresh(seen);
+            Eq(h.Ids.Count, 40, "a sighted unit takes an id");
+            Eq(h.Visible.Count, SofDesk.MaxVisible, "the list stays capped");
+            r.Now += 200f;
+            h.Refresh(hidden);
+            Eq(h.Ids.Count, 0, "ids of targets no longer visible are released");
+            for (int round = 0; round < 10; round++)
+            {
+                var wave = new List<SofSeed>();
+                for (uint i = 0; i < 100; i++) wave.Add(Seed(TargetKind.Ground, AnchorSub.Uplink, 10000u + (uint)round * 1000u + i, 50f * i, 0f, true));
+                h.Refresh(wave);
+                r.Now += 200f;
+            }
+            Eq(h.Ids.Count <= SofTargetIds.Capacity, true, "ten waves of 100 never exhaust the table");
+            h.Refresh(new[] { Seed(TargetKind.Ground, AnchorSub.Uplink, 99999, 0f, 0f, true) });
+            Eq(h.Visible.Count, 1, "a new target still gets an id after the churn");
+            // A recycled id must not carry the old target's sighting.
+            var ids = new SofTargetIds();
+            int first = ids.GetOrAdd(TargetKind.Ground, AnchorSub.Uplink, 1);
+            TestAssert.That(ids.Release(first) && ids.GetOrAdd(TargetKind.Ground, AnchorSub.Uplink, 2) == first, "a released id is reused");
+            TestAssert.That(!ids.TryKey(99, out _, out _, out _) && ids.Find(TargetKind.Ground, AnchorSub.Uplink, 1) == 0, "the old key no longer resolves");
+
+            // I4: a COVER pay needs the claimant's own kill near the team while it was pinned.
+            var c = new Ports();
+            SofDesk k = Desk(c);
+            SofTeam t = ReadyTeam(k, c);
+            k.Divert(Op, 0, 20000f, 0f);
+            c.SceneAt = (x, z) => new SofScene(0, 3, 90, 1, false);
+            Advance(k, c, 8f);
+            Eq(t.State, TeamState.Pinned, "pinned");
+            TestAssert.That(k.CoverClaimed(0, Pilot), "claimed");
+            k.CoverKill(t.X, t.Z); k.CoverKill(t.X, t.Z); k.CoverKill(t.X, t.Z); k.CoverKill(t.X, t.Z); // somebody else's kills relieve the team
+            c.SceneAt = (x, z) => default;
+            Advance(k, c, 5f);
+            Eq(t.State, TeamState.Moving, "relieved: the team goes on");
+            Eq(c.Paid.Count, 0, "but a claimant with no kill is not paid");
+            Eq(k.CoverKillBy(Pilot, t.X, t.Z), 0, "a kill while the team is not pinned counts for nothing");
+
+            // I3 is covered in CheckLift (a 650 m hop pays nothing, a 2.6 km extraction pays 40).
+        }
+
         // ---- Anti-oracle ---------------------------------------------------------------------------------
 
         private static void CheckOracle()
@@ -513,6 +631,7 @@ namespace BoscaliSummer.Tests.Features.Support
             d.Send(Op, 0, MissionKind.Sabotage, d.Visible[0].Id, 0f, 0f);
             d.Refresh(new[] { new SofSeed(TargetKind.Anchor, AnchorSub.Camp, 62, 600f, 0f, 0f, false, true) });
             Eq(d.Teams[0].Mission, MissionKind.None, "a target that dies ends the mission");
+            Eq(p.Wallet, 940 - 60 + 60, "and a target lost before the team arrived refunds the order");
             // Scene reset.
             d.Reset();
             Eq(d.ActiveCount, 0, "reset clears the teams");

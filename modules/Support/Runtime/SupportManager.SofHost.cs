@@ -26,7 +26,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void SofRefund(FactionHQ owner, ulong op, int cr) => CyberRefund(owner, op, cr);
 
         /// <summary>Pilot pay for a lift, an extraction or a cover (core 6.2), through the capped contributor path.</summary>
-        internal void SofPay(FactionHQ owner, ulong pilot, int cr) => CyberAssist(owner, pilot, cr);
+        internal void SofPay(FactionHQ owner, ulong pilot, int cr)
+        {
+            // A pilot who has left the faction (or the game) since the claim or the boarding is paid nothing: the wallet check inside CyberAssist would also route it to the HQ fund.
+            if (owner == null || pilot == 0 || FindPlayer(owner, pilot) == null) return;
+            CyberAssist(owner, pilot, cr);
+        }
 
         /// <summary>Posts a COVER or LASE request for one team on the faction's TASKED board. False when the faction has no SPACE desk or the board has no room.</summary>
         internal bool PostSofPost(FactionHQ owner, SupportActionId action, int slot, float x, float z, ulong maker)

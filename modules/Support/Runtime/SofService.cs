@@ -44,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public SofDesk Desk;
             public readonly SofObservations Obs = new SofObservations();
             public readonly List<SofSeed> Seeds = new List<SofSeed>(64);
+            public readonly HashSet<uint> Keep = new HashSet<uint>();
             public System.Random Rng;
             public float NextRefresh;
         }
@@ -64,8 +65,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public bool CyberNear(float x, float z) => service.cyber != null && service.cyber.HoldsNodeNear(faction.Owner, x, z, SofRules.RingBoostMetres);
             public bool Roll(int chancePercent) => faction.Rng.Next(100) < chancePercent;
             public void Reveal(float x, float z, float radius, float seconds) => service.StartReveal(faction, x, z, radius, seconds);
-            public void LaseBegin(int slot, uint key, float x, float z) => service.Lase(faction, slot, key, true);
-            public void LaseEnd(int slot, uint key) => service.Lase(faction, slot, key, false);
+            public bool LaseBegin(int slot, uint key, float x, float z) => service.Lase(faction, slot, key, true);
+            public void LaseEnd(int slot, uint key) { service.Lase(faction, slot, key, false); }
             public bool TargetAlive(TargetKind kind, AnchorSub sub, uint key) => faction.Obs.Alive(kind, key);
             public bool Sabotage(AnchorSub sub, uint key) => service.Sabotage(faction, sub, key);
             public bool Tap(TargetKind kind, uint key, float seconds) => service.Tap(faction, key, seconds);
@@ -83,6 +84,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SpaceService space;
         private CyberService cyber;
         private float nextTick, nextCleanup, nextWarning;
+        private bool loggedNoCampKeys;
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickEffects(FactionSof f, float now);
@@ -108,6 +110,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             factions.Clear();
             nextAttempt.Clear();
             nextTick = 0f;
+            loggedNoCampKeys = false;
             spawner.ResetForScene();
         }
 
@@ -184,7 +187,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 nextAttempt[hq] = now + RelocateRetrySeconds;
                 establishedOne = true; // initial world sampling is limited to one faction per mission second
                 if (TryEstablish(hq, out f)) { factions.Add(hq, f); Plugin.Logger?.LogInfo("[Support.Sof] " + hq.name + ": " + f.Slots.Count + " native camp(s), " + CyberAnchorSpawner.DescribeCamp() + "."); }
+                else LogNoCampKeys(hq);
             }
+        }
+
+        /// <summary>Once per mission: when no camp vehicle key resolves, say which keys were tried (a faction with no legal site just has no SOF, which is not logged here).</summary>
+        private void LogNoCampKeys(FactionHQ hq)
+        {
+            if (loggedNoCampKeys) return;
+            string described = CyberAnchorSpawner.DescribeCamp();
+            if (!described.Contains("=none")) return;
+            loggedNoCampKeys = true;
+            Plugin.Logger?.LogWarning("[Support.Sof] " + hq.name + ": no camp vehicle key resolved (" + described + "; tried " + string.Join("/", CyberAnchorSpawner.CampKeys) + " and escorts " + string.Join("/", CyberAnchorSpawner.CampGuardKeys) + "): SOF stays offline.");
         }
 
         private void TickFaction(FactionSof f, float now)
@@ -217,7 +231,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         foreach (Unit unit in space.UplinksFor(hq)) if (unit != null) enemyAnchors.Add(new KeyValuePair<AnchorSub, Unit>(AnchorSub.Uplink, unit));
                     }
             }
-            f.Obs.Build(f.Owner, u => spawner.Owns(u) || (cyber != null && cyber.IsAnchorUnit(u)) || (space != null && space.Spawner.Owns(u)), enemyAnchors, f.Seeds);
+            f.Desk.CollectKeep(f.Keep);
+            f.Obs.Build(f.Owner, u => spawner.Owns(u) || (cyber != null && cyber.IsAnchorUnit(u)) || (space != null && space.Spawner.Owns(u)), enemyAnchors, f.Keep, f.Seeds);
             f.Desk.Refresh(f.Seeds);
         }
 

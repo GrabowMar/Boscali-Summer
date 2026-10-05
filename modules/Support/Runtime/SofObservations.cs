@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly Dictionary<uint, Unit> byKey = new Dictionary<uint, Unit>(64);
         private readonly Dictionary<uint, Airbase> relays = new Dictionary<uint, Airbase>(8);
         private readonly HashSet<uint> sighted = new HashSet<uint>();
-        private readonly List<SofSeed> grounds = new List<SofSeed>(64), buildings = new List<SofSeed>(32);
+        private readonly List<SofSeed> grounds = new List<SofSeed>(64), buildings = new List<SofSeed>(32), kept = new List<SofSeed>(8);
         private float enemiesAt = -100f;
 
         /// <summary>Rebuilds the enemy ground list at most once a second per faction (the scene queries are cheap lookups on it).</summary>
@@ -61,37 +61,46 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return new SofScene(w300, w1000, w2000, armored, stared);
         }
 
-        /// <summary>Fills <paramref name="into"/> with the viewer's target seeds. <paramref name="isAnchor"/> excludes the mod's own anchors from the generic ground list.</summary>
-        public void Build(FactionHQ viewer, Predicate<Unit> isAnchor, IReadOnlyList<KeyValuePair<AnchorSub, Unit>> enemyAnchors, List<SofSeed> into)
+        /// <summary>
+        /// Fills <paramref name="into"/> with the viewer's target seeds. <paramref name="isAnchor"/> excludes the mod's own anchors from the generic ground list.
+        /// <paramref name="keep"/> are the unit keys a team is engaged on or a held building stands on: they keep resolving (and keep a seed, <see cref="SofSeed.Sighted"/>
+        /// false once the sighting lapses) until the unit is dead or disabled, so "alive" never depends on the fog.
+        /// </summary>
+        public void Build(FactionHQ viewer, Predicate<Unit> isAnchor, IReadOnlyList<KeyValuePair<AnchorSub, Unit>> enemyAnchors, HashSet<uint> keep, List<SofSeed> into)
         {
-            into.Clear(); byKey.Clear(); relays.Clear(); sighted.Clear(); fresh.Clear(); ownBases.Clear(); enemyBases.Clear(); grounds.Clear(); buildings.Clear();
-            if (viewer == null) return;
+            List<Unit> all = UnitRegistry.allUnits;
+            if (viewer == null) { into.Clear(); return; }
+            if (all == null || all.Count > MaximumUnits) return; // too big to scan: keep the last map and seeds rather than dropping every engaged target
+            into.Clear(); byKey.Clear(); relays.Clear(); sighted.Clear(); fresh.Clear(); ownBases.Clear(); enemyBases.Clear(); grounds.Clear(); buildings.Clear(); kept.Clear();
             CollectFresh(viewer);
             CollectBases(viewer);
-            List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumUnits) return;
             for (int i = 0; i < all.Count; i++)
             {
                 Unit unit = all[i];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == viewer || unit is Aircraft || unit is Missile) continue;
                 uint id = unit.persistentID.Id;
-                if (id == 0 || !sighted.Contains(id) || (isAnchor != null && isAnchor(unit))) continue;
+                if (id == 0 || (isAnchor != null && isAnchor(unit))) continue;
+                bool isSighted = sighted.Contains(id), engagedKey = keep != null && keep.Contains(id);
+                if (!isSighted && !engagedKey) continue;
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();
                 if (unit is GroundVehicle)
                 {
                     byKey[id] = unit;
-                    grounds.Add(new SofSeed(TargetKind.Ground, AnchorSub.Uplink, id, (float)p.x, (float)p.z, FrontDistance((float)p.x, (float)p.z), true, false));
+                    var seed = new SofSeed(TargetKind.Ground, AnchorSub.Uplink, id, (float)p.x, (float)p.z, FrontDistance((float)p.x, (float)p.z), isSighted, false);
+                    if (engagedKey) kept.Add(seed); else grounds.Add(seed);
                 }
-                else if (unit is Building building && !(building.definition is BuildingDefinition def && def.buildingType == BuildingType.CIV) && NearEnemyBase((float)p.x, (float)p.z))
+                else if (unit is Building building && !(building.definition is BuildingDefinition def && def.buildingType == BuildingType.CIV) && (engagedKey || NearEnemyBase((float)p.x, (float)p.z)))
                 {
                     byKey[id] = unit;
-                    buildings.Add(new SofSeed(TargetKind.Building, AnchorSub.Uplink, id, (float)p.x, (float)p.z, FrontDistance((float)p.x, (float)p.z), true, false));
+                    var seed = new SofSeed(TargetKind.Building, AnchorSub.Uplink, id, (float)p.x, (float)p.z, FrontDistance((float)p.x, (float)p.z), isSighted, false);
+                    if (engagedKey) kept.Add(seed); else buildings.Add(seed);
                 }
             }
             grounds.Sort((a, b) => a.Front.CompareTo(b.Front));
             buildings.Sort((a, b) => a.Front.CompareTo(b.Front));
             for (int i = 0; i < grounds.Count && i < GroundTargets; i++) into.Add(grounds[i]);
             for (int i = 0; i < buildings.Count && i < BuildingTargets; i++) into.Add(buildings[i]);
+            for (int i = 0; i < kept.Count; i++) into.Add(kept[i]); // engaged and held units are never cut by the list caps
             for (int i = 0; enemyAnchors != null && i < enemyAnchors.Count && i < 16; i++)
             {
                 Unit unit = enemyAnchors[i].Value;
@@ -99,7 +108,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();
                 uint id = unit.persistentID.Id;
                 byKey[id] = unit;
-                bool gone = unit.disabled || (enemyAnchors[i].Key != AnchorSub.Camp && UplinkSpawner.Down(unit, unit.NetworkHQ));
+                bool gone = unit.disabled || UplinkSpawner.Down(unit, unit.NetworkHQ); // a DOWN camp is no more a target than a DOWN truck
                 into.Add(new SofSeed(TargetKind.Anchor, enemyAnchors[i].Key, id, (float)p.x, (float)p.z, FrontDistance((float)p.x, (float)p.z), sighted.Contains(id), gone));
             }
             AddRelays(viewer, into);

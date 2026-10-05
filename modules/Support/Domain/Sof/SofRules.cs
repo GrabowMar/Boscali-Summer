@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
         public const float HeldSeconds = 600f, HeldObserveRadius = 3000f, HeldRetakeMetres = 300f, HeldRetakeSeconds = 60f, HeldRevealPulseSeconds = 20f;
         public const float TapTraceFactor = 0.7f, RingBoostMetres = 12000f;
-        public const float LiftPickupMetres = 150f, LiftDropMetres = 300f, LiftDwellSeconds = 10f;
+        public const float LiftPickupMetres = 150f, LiftDropMetres = 300f, LiftDwellSeconds = 10f, LiftMinPayMetres = 2000f;
         public const int LiftPay = 40, ExtractionPay = 40, CoverPay = 25;
         public const int BaseOdds = 70, MinOdds = 10, MaxOdds = 95;
 

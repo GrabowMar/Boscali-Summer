@@ -93,7 +93,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         /// <summary>One odds roll: true = success.</summary>
         bool Roll(int chancePercent);
         void Reveal(float x, float z, float radius, float seconds);
-        void LaseBegin(int slot, uint key, float x, float z);
+        /// <summary>Holds a laser on the target. False when the target's unit cannot be resolved (the desk then sets no LASE state and posts nothing).</summary>
+        bool LaseBegin(int slot, uint key, float x, float z);
         void LaseEnd(int slot, uint key);
         bool TargetAlive(TargetKind kind, AnchorSub sub, uint key);
         bool Sabotage(AnchorSub sub, uint key);
@@ -126,6 +127,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public ulong CoverPilot, Carrier;
         public int CarrierId;
         public float CarrierSeenAt;
+        /// <summary>The mission fee and who paid it; zero once the team is on site (a target lost before then refunds it).</summary>
+        public int MissionCost;
+        public ulong MissionPayer;
+        /// <summary>Where the team boarded a helicopter (an extraction pays only for a real flight).</summary>
+        public float BoardX, BoardZ;
+        /// <summary>Pilots who killed an enemy ground unit within 2 km of the team while it was pinned (the only ones a COVER pay can go to).</summary>
+        public readonly HashSet<ulong> CoverKillers = new HashSet<ulong>();
 
         public string Callsign => SofRules.Callsign(Slot);
     }
@@ -148,7 +156,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private readonly ISofPorts ports;
         private readonly List<SofTarget> visible = new List<SofTarget>(MaxVisible);
         private readonly List<SofTarget> candidates = new List<SofTarget>(SofTargetIds.Capacity);
-        private readonly HashSet<int> engaged = new HashSet<int>(), seen = new HashSet<int>();
+        private readonly HashSet<int> engaged = new HashSet<int>(), seen = new HashSet<int>(), listed = new HashSet<int>();
+        private readonly List<int> idScratch = new List<int>(SofTargetIds.Capacity);
         private readonly List<HeldBuilding> held = new List<HeldBuilding>(SofRules.HeldCap);
         private readonly List<SofEvent> pending = new List<SofEvent>(16), drained = new List<SofEvent>(16);
         private readonly Dictionary<int, float> landedSince = new Dictionary<int, float>();
@@ -191,21 +200,57 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public void Refresh(IReadOnlyList<SofSeed> observed)
         {
             float now = ports.Now;
-            candidates.Clear(); engaged.Clear(); seen.Clear();
+            candidates.Clear(); engaged.Clear(); seen.Clear(); listed.Clear();
             for (int i = 0; i < Teams.Length; i++) if (Teams[i].Active && Teams[i].TargetId != 0 && Teams[i].Mission != MissionKind.None) engaged.Add(Teams[i].TargetId);
             for (int i = 0; observed != null && i < observed.Count; i++)
             {
                 SofSeed o = observed[i];
-                int id = Ids.GetOrAdd(o.Kind, o.Sub, o.Key);
-                if (id == 0) continue;
+                // An id exists only for a target the faction can see (a fresh sighting) or a team is engaged on: the table stays small and never counts the enemy's hidden units.
+                int id = Ids.Find(o.Kind, o.Sub, o.Key);
+                if (o.Gone) { if (id != 0) { seen.Add(id); TargetLost(id); } continue; }
+                if (id == 0)
+                {
+                    if (!o.Sighted) continue;
+                    id = Ids.GetOrAdd(o.Kind, o.Sub, o.Key);
+                    if (id == 0) continue;
+                }
                 seen.Add(id);
-                if (o.Gone) { TargetLost(id); continue; }
                 if (o.Sighted) Reveal.Note(id, now);
                 if (!Reveal.Visible(id, now, engaged.Contains(id))) continue;
+                listed.Add(id);
                 candidates.Add(new SofTarget(id, o.Kind, o.Sub, o.Key, o.X, o.Z, o.Front));
             }
             foreach (int id in engaged) if (!seen.Contains(id)) TargetLost(id);
             Select();
+            Recycle();
+        }
+
+        /// <summary>Releases every id that is neither listed this refresh nor engaged by a team (a gone or no longer visible target), so ids are reused instead of exhausting the table.</summary>
+        private void Recycle()
+        {
+            Ids.CopyIds(idScratch);
+            for (int i = 0; i < idScratch.Count; i++)
+            {
+                int id = idScratch[i];
+                if (listed.Contains(id) || IsEngaged(id)) continue;
+                Ids.Release(id);
+                Reveal.Forget(id);
+            }
+        }
+
+        private bool IsEngaged(int id)
+        {
+            for (int i = 0; i < Teams.Length; i++) if (Teams[i].Active && Teams[i].TargetId == id && Teams[i].Mission != MissionKind.None) return true;
+            return false;
+        }
+
+        /// <summary>The unit keys the runtime must keep resolving whatever the fog says: every team's mission target and every held building.</summary>
+        public void CollectKeep(HashSet<uint> into)
+        {
+            into.Clear();
+            for (int i = 0; i < Teams.Length; i++)
+                if (Teams[i].Active && Teams[i].Mission != MissionKind.None && Teams[i].Mission != MissionKind.Recon && Teams[i].TargetKey != 0) into.Add(Teams[i].TargetKey);
+            for (int i = 0; i < held.Count; i++) into.Add(held[i].Key);
         }
 
         private void Select()
@@ -226,6 +271,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (!t.Active || t.TargetId != id || t.Mission == MissionKind.None) continue;
                 if (t.Mission == MissionKind.Lase && t.LaseActive) EndLase(t);
                 bool onSite = t.State == TeamState.OnSite;
+                if (t.MissionCost > 0) { ports.Refund(t.MissionPayer, t.MissionCost); t.MissionCost = 0; } // lost before the team arrived: the order is refunded
                 t.Mission = MissionKind.None; t.TargetId = 0;
                 if (onSite) t.State = TeamState.Ready;
             }
@@ -277,6 +323,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             int cost = SofRules.CostOf(kind, exploit);
             SofOutcome paid = ports.TrySpend(op, cost, out int detail);
             if (paid != SofOutcome.None) return new SofResult(paid, slot, 0, detail);
+            t.MissionCost = cost; t.MissionPayer = op;
             t.Mission = kind; t.TargetId = id; t.TargetKind = tk; t.TargetSub = sub; t.TargetKey = key; t.TargetX = tx; t.TargetZ = tz; t.Exploit = exploit;
             t.DestX = tx; t.DestZ = tz; t.HasDest = true; t.HoldOn = false; t.PushOn = false;
             t.Insert = t.Carried ? Insertion.Helicopter : Insertion.Ground;
@@ -356,7 +403,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private void ClearMission(SofTeam t)
         {
             if (t.Mission == MissionKind.Lase && t.LaseActive) EndLase(t);
-            t.Mission = MissionKind.None; t.TargetId = 0; t.Exploit = false;
+            t.Mission = MissionKind.None; t.TargetId = 0; t.Exploit = false; t.MissionCost = 0;
         }
 
         private void EndLase(SofTeam t)
@@ -421,7 +468,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
             if (t.Exposure >= SofRules.PinExposure && (moving || t.State == TeamState.OnSite))
             {
-                t.PrePin = t.State; t.State = TeamState.Pinned; t.PinDeadline = now + SofRules.PinnedLostSeconds; t.CoverUntil = 0f; t.CoverPilot = 0;
+                t.PrePin = t.State; t.State = TeamState.Pinned; t.PinDeadline = now + SofRules.PinnedLostSeconds; t.CoverUntil = 0f; t.CoverPilot = 0; t.CoverKillers.Clear();
                 ports.PostCover(t.Slot, t.X, t.Z);
                 Queue(SofEventKind.Pinned, t);
                 return;
@@ -435,7 +482,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t.Exposure <= SofRules.UnpinExposure)
             {
                 t.State = t.PrePin == TeamState.OnSite ? TeamState.OnSite : t.PrePin == TeamState.Returning ? TeamState.Returning : TeamState.Moving;
-                if (t.CoverPilot != 0) { ports.Pay(t.CoverPilot, SofRules.CoverPay); t.CoverPilot = 0; }
+                // Cover pays only the claimant who killed something near the team while it was pinned; other relief unpins it for nothing.
+                if (t.CoverPilot != 0) { if (t.CoverKillers.Contains(t.CoverPilot)) ports.Pay(t.CoverPilot, SofRules.CoverPay); t.CoverPilot = 0; }
+                t.CoverKillers.Clear();
                 if (t.State == TeamState.OnSite) t.OnSiteEnd += Math.Max(0f, now - (t.PinDeadline - SofRules.PinnedLostSeconds));
                 Queue(SofEventKind.Unpinned, t);
                 return;
@@ -465,24 +514,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t.Mission != MissionKind.None)
             {
                 t.State = TeamState.OnSite; t.OnSiteStart = now; t.OnSiteEnd = now + SofRules.OnSiteSeconds(t.Mission);
+                t.MissionCost = 0; // on site: the fee is spent
                 Queue(SofEventKind.OnSite, t);
-                if (t.Mission == MissionKind.Lase) BeginLase(t);
+                if (t.Mission == MissionKind.Lase && !BeginLase(t))
+                {
+                    // The designation could not be placed (the unit does not resolve): no LASE state, no post; the mission ends as failed.
+                    ClearMission(t);
+                    t.State = TeamState.Ready;
+                    Queue(SofEventKind.Failed, t, MissionKind.Lase);
+                }
                 return;
             }
             t.State = TeamState.Ready;
         }
 
-        private void BeginLase(SofTeam t)
+        private bool BeginLase(SofTeam t)
         {
+            if (!ports.LaseBegin(t.Slot, t.TargetKey, t.TargetX, t.TargetZ)) { t.LaseActive = false; return false; }
             t.LaseActive = true;
-            ports.LaseBegin(t.Slot, t.TargetKey, t.TargetX, t.TargetZ);
             ports.PostLase(t.Slot, t.TargetX, t.TargetZ);
+            return true;
         }
 
         private void OnSite(SofTeam t, float now)
         {
             if (t.Mission == MissionKind.None) { t.State = TeamState.Ready; return; }
-            if (t.Mission != MissionKind.Recon && !ports.TargetAlive(t.TargetKind, t.TargetSub, t.TargetKey)) { Finish(t, true, false); return; }
+            if (t.Mission != MissionKind.Recon && !ports.TargetAlive(t.TargetKind, t.TargetSub, t.TargetKey)) { Finish(t, false, false); return; } // target gone: ends quietly, never a success
             if (now < t.OnSiteEnd) return;
             if (t.Mission == MissionKind.Lase) { Finish(t, true, true); return; }
             bool ok = ports.Roll(t.Odds <= 0 ? SofRules.Odds(t.Exposure, 0, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z)) : t.Odds);
@@ -578,6 +635,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return n;
         }
 
+        /// <summary>A pilot killed an enemy ground unit at (x, z): each pinned team within 2 km remembers it, so a COVER claim by that pilot pays when the team breaks free.</summary>
+        public int CoverKillBy(ulong pilot, float x, float z)
+        {
+            if (pilot == 0) return 0;
+            int n = 0;
+            for (int i = 0; i < Teams.Length; i++)
+            {
+                SofTeam t = Teams[i];
+                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.ExposureRadius) continue;
+                if (t.CoverKillers.Count < 8) t.CoverKillers.Add(pilot);
+                n++;
+            }
+            return n;
+        }
+
         /// <summary>A pilot claimed the COVER post of a team: the lost-timer extends and the pilot is paid when the team breaks free. False when the team is not pinned.</summary>
         public bool CoverClaimed(int slot, ulong pilot)
         {
@@ -622,12 +694,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                     if (!toDest && !atBase) continue;
                     t.Carried = false; t.CarrierId = 0; t.CarrierFlew = false; t.Exposure = 0f; t.Insert = Insertion.Helicopter;
                     if (toDest && !(atBase && t.Mission == MissionKind.None)) ports.Pay(pilot, SofRules.LiftPay);
-                    else ports.Pay(pilot, SofRules.ExtractionPay);
+                    else if (SofRules.Distance(t.BoardX, t.BoardZ, x, z) >= SofRules.LiftMinPayMetres) ports.Pay(pilot, SofRules.ExtractionPay); // no pay for a hop shorter than 2 km
                     if (!t.HasDest) t.State = TeamState.Ready;
                     Queue(SofEventKind.LiftDown, t);
                 }
                 else if (t.LiftWaiting && !t.Carried && t.State == TeamState.Ready && dwelled && SofRules.Distance(x, z, t.X, t.Z) <= SofRules.LiftPickupMetres)
                 {
+                    t.BoardX = t.X; t.BoardZ = t.Z;
                     t.Carried = true; t.CarrierFlew = false; t.CarrierId = heliId; t.Carrier = pilot; t.LiftWaiting = false; t.CarrierSeenAt = now; t.Insert = Insertion.Helicopter;
                     Queue(SofEventKind.LiftUp, t);
                 }
