@@ -106,7 +106,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class SortieTimeline : AvPart
     {
         public const int MaxLanes = WingPlan.Lanes, MaxBars = WingPlan.Lanes * WingPlan.MaxSteps, MaxEvents = 24;
-        private const float PadX = 6f, PadTop = 4f, AxisH = 14f, LabelW = 18f, BandH = 9f, PlanH = 15f, RealH = 12f, LaneGap = 6f, EventH = 14f, PadBottom = 6f;
+        private const float PadX = 6f, PadTop = 4f, AxisH = 19f, LabelW = 18f, BandH = 16f, PlanH = 15f, RealH = 12f, LaneGap = 6f, EventH = 14f, PadBottom = 6f;
         private const float LaneH = BandH + 1f + PlanH + 1f + RealH, Stride = LaneH + LaneGap;
 
         private readonly AvFrame frame;
@@ -333,7 +333,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 grid[i].Put(Mathf.Min(x, px + pw - 1f), PadTop + AxisH - 2f, 1f, bottom - PadTop - AxisH + 4f);
                 float lw = 52f;
                 float lx = i == 0 ? x : i == 4 ? x - lw : x - lw * 0.5f;
-                AvLay.Place(axis[i].rectTransform, lx, PadTop, lw, AxisH - 2f);
+                AvLay.Place(axis[i].rectTransform, lx, PadTop, lw, 16f);
             }
             for (int l = 0; l < MaxLanes; l++)
             {
@@ -385,7 +385,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 nowLine.Put(x, PadTop + AxisH - 2f, 1.5f, bottom - PadTop - AxisH + 2f);
                 bool left = x > px + pw - 34f;
                 nowLabel.alignment = left ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
-                AvLay.Place(nowLabel.rectTransform, left ? x - 36f : x + 3f, bottom - 10f, 34f, 10f);
+                AvLay.Place(nowLabel.rectTransform, left ? x - 36f : x + 3f, bottom - 16f, 34f, 16f);
             }
         }
     }

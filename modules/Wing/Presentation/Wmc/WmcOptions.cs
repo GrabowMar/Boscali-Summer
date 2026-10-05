@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvSegmented modeSeg;
         private AvSection inUseSection, editSection;
         private InUseView inUse;
-        private AvList stanceList;
+        private WmcButtonGrid stanceGrid;
         private AvControl newButton, copyButton, deleteButton, applyButton;
         private WmcNameField nameField;
         private WmcLines says;
@@ -109,12 +109,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             // ---- the stance list
             Gated(new AvSection(flow.Content, AvIcon.ListDetails, "STANCES", "WING KEY + 1-6"));
-            stanceList = new AvList(flow.Content, ticker, StanceBook.MaxStances, BindStance);
-            stanceList.RowClicked = SelectStance;
-            Gated(stanceList);
+            stanceGrid = new WmcButtonGrid(flow.Content, 2, StanceBook.MaxStances, i => new AvControl.Spec("", () => SelectStance(i)));
+            for (int i = 0; i < stanceGrid.Count; i++) ids.Add("opt.stance.row" + i, stanceGrid[i]);
+            Gated(stanceGrid);
             var bar = new AvButtons(flow.Content, new[]
             {
-                new AvControl.Spec("+ NEW", NewStance, AvButtonStyle.Default, AvIcon.Plus),
+                new AvControl.Spec("NEW", NewStance, AvButtonStyle.Default, AvIcon.Plus),
                 new AvControl.Spec("SAVE AS", CopyStance, AvButtonStyle.Default, AvIcon.Bookmark),
                 new AvControl.Spec("DELETE", DeleteStance, AvButtonStyle.Danger, AvIcon.X),
             });
@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Gated(bar);
 
             // ---- the editor
-            editSection = new AvSection(flow.Content, AvIcon.Pencil, "EDIT", "");
+            editSection = new AvSection(flow.Content, AvIcon.Pencil, "SETTINGS", "");
             flow.Add(editSection);
             nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The stance's name: Enter keeps it (16 characters at most).");
             Gated(nameField);
@@ -317,7 +317,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (key != listKey)
                 {
                     listKey = key;
-                    stanceList.SetCount(Book.All.Count);
+                    BindStances();
                     changed = true;
                 }
                 nameField.EditingId = selId;
@@ -610,20 +610,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         // ---------------------------------------------------------------- the stance list
 
-        private void BindStance(int item, AvRow row)
+        /// <summary>The stance buttons: slot, name and BUILT-IN tag; the selected one latched; who flies it in its help.</summary>
+        private void BindStances()
         {
-            if (item >= Book.All.Count) return;
-            Stance s = Book.All[item];
-            int slot = SlotOf(s);
-            int used = usedBy[Mathf.Min(item, usedBy.Length - 1)];
-            string by = "";
-            for (int e = 0; e < ElementRoster.MaxElements && used != 0; e++)
-                if ((used & (1 << e)) != 0) by += (by.Length > 0 ? " " : "") + ElementRoster.Letter(e);
-            row.Set(s.Name, (s.BuiltIn ? "BUILT-IN · " : "") + StanceWords.Brief(s.Axes) + (by.Length > 0 ? " · IN USE " + by : ""),
-                slot >= 0 ? "W+" + (slot + 1) : "", used != 0 ? AvState.Ready : AvState.Info);
-            row.Armed = s.Id == selId;
-            ids.Add("opt.stance.row" + item, row);
-            row.Help = "Edit this stance.";
+            int n = Book.All.Count;
+            stanceGrid.SetShownCount(n);
+            for (int i = 0; i < n; i++)
+            {
+                Stance s = Book.All[i];
+                int slot = SlotOf(s);
+                AvControl b = stanceGrid[i];
+                b.Label = (slot >= 0 ? "W+" + (slot + 1) + " " : "") + s.Name + (s.BuiltIn ? " · BUILT-IN" : "");
+                b.Latched = s.Id == selId;
+                int used = usedBy[Mathf.Min(i, usedBy.Length - 1)];
+                string by = "";
+                for (int e = 0; e < ElementRoster.MaxElements && used != 0; e++)
+                    if ((used & (1 << e)) != 0) by += (by.Length > 0 ? " " : "") + ElementRoster.Letter(e);
+                b.Help = StanceWords.Brief(s.Axes) + (by.Length > 0 ? " · IN USE " + by : "") + ". Press to edit it.";
+            }
         }
 
         // ---------------------------------------------------------------- IN USE
