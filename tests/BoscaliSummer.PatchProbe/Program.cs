@@ -435,6 +435,7 @@ string[] patchTypes =
     "BoscaliSummer.Modules.Support.Patches.CyberLaunchFirePatch",
     "BoscaliSummer.Modules.Support.Patches.CyberDetectScopePatch",
     "BoscaliSummer.Modules.Support.Patches.CyberShareBlockPatch",
+    "BoscaliSummer.Modules.Support.Patches.CyberUnitKilledPatch",
 
 
     "BoscaliSummer.Modules.QoL.Patches.NightVisionChoicePatch",

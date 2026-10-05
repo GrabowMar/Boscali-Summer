@@ -27,7 +27,8 @@ namespace BoscaliSummer.Modules.Support
             typeof(Patches.CyberLaunchMountPatch),
             typeof(Patches.CyberLaunchFirePatch),
             typeof(Patches.CyberDetectScopePatch),
-            typeof(Patches.CyberShareBlockPatch)
+            typeof(Patches.CyberShareBlockPatch),
+            typeof(Patches.CyberUnitKilledPatch)
         };
 
         public void Install(ModuleContext context)

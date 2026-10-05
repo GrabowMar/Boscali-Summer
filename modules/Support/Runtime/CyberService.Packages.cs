@@ -11,6 +11,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private readonly Dictionary<uint, float> recentKills = new Dictionary<uint, float>(16);
 
+        /// <summary>
+        /// EXPLOIT on FLARE BARRAGE and EMP (spec §1.4): while the faction holds any node the effect lasts x1.5 (host only; the quote chip says -25 %).
+        /// <paramref name="ceiling"/> keeps the value inside what the replicated flare name accepts on peers.
+        /// </summary>
+        internal static float ExploitDuration(FactionHQ owner, float seconds, float ceiling) =>
+            Active != null && owner != null && Active.HoldsAnyNode(owner) ? System.Math.Min(seconds * CyberPackages.ExploitDurationFactor, ceiling) : seconds;
+
         partial void ResetPackages() => recentKills.Clear();
 
         /// <summary>A claimed CYBER package fires: its effect starts for the package seconds. False when the effect book is full.</summary>

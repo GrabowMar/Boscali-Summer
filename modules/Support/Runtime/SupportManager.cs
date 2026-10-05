@@ -393,7 +393,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
                 target == null) return;
             float now = MissionNow();
-            cyber?.NoteKill(target); // an enemy killed while its node is held pays the operator a small assist (deduped per target)
+            // The held-node kill assist now rides CyberUnitKilledPatch (Unit.ReportKilled), which also sees AI and indirect kills.
             ulong id = PlayerIdentity.Of(player);
             bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
             GlobalPosition at = target.GlobalPosition();

@@ -40,7 +40,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void CyberRefund(FactionHQ owner, ulong op, int cr)
         {
             if (cr <= 0 || BypassRequirements || credits == null) return;
-            credits.Fund.TrySpend(credits.FactionKey(owner), cr);
+            // The refund comes out of HQ FUND (where the start cost went): if the fund no longer holds it, nothing is minted.
+            if (!credits.Fund.TrySpend(credits.FactionKey(owner), cr)) { Plugin.Logger?.LogWarning("[Support.Cyber] Refund of " + cr + " CR skipped: HQ FUND is short."); return; }
             credits.Tasked.Refund(op, cr);
         }
 
@@ -52,11 +53,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>Posts a BURN package on the faction's TASKED board. False when the faction has no SPACE desk or the board has no room.</summary>
-        internal bool PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
+        internal CyberOutcome PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
         {
-            if (space == null || !space.TryGetDesk(owner, out TaskedDesk desk)) return false;
+            if (space == null || !space.TryGetDesk(owner, out TaskedDesk desk)) return CyberOutcome.NoBoard;
             TaskedResult r = desk.PostPackage(op, def.Action, node.Id, node.X, node.Z, effort);
-            return r.Outcome == TaskedOutcome.Posted;
+            if (r.Outcome == TaskedOutcome.Posted) return CyberOutcome.None;
+            if (r.Outcome == TaskedOutcome.NotPosted)
+                // Every board holds at least six posts, so a refusal on a smaller board means the same package is already posted on that node.
+                return desk.Board.Count < 6 ? CyberOutcome.AlreadyPosted : CyberOutcome.BoardFull;
+            return CyberOutcome.Unavailable;
         }
     }
 }

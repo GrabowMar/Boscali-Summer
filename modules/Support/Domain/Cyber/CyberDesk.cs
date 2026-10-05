@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     {
         None = 0, Started = 1, HopStarted = 2, Burned = 3, Dropped = 4,
         NoTarget = 5, OutOfReach = 6, NodeBusy = 7, StillHopping = 8, IntrusionCap = 9, HeldCap = 10, TruckDown = 11, TruckLocked = 12,
-        LowCredit = 13, Frozen = 14, RateLimited = 15, Unavailable = 16, BoardFull = 17
+        LowCredit = 13, Frozen = 14, RateLimited = 15, Unavailable = 16, BoardFull = 17, NoBoard = 18, AlreadyPosted = 19
     }
 
     /// <summary>The three operator verbs a host command maps onto (HOLD is a state, not a verb).</summary>
@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
     internal static class CyberWords
     {
-        public const byte MaxOutcome = (byte)CyberOutcome.BoardFull;
+        public const byte MaxOutcome = (byte)CyberOutcome.AlreadyPosted;
 
         public static string Of(CyberOutcome outcome, int detail = 0)
         {
@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case CyberOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case CyberOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case CyberOutcome.BoardFull: return "NEGATIVE: BOARD FULL — FIRE A POST OR DROP THE NODE";
+                case CyberOutcome.NoBoard: return "NEGATIVE: NO TASKED BOARD — THE SPACE DESK IS NOT UP, DROP THE NODE";
+                case CyberOutcome.AlreadyPosted: return "NEGATIVE: ALREADY POSTED — THAT PACKAGE IS ON THE BOARD, CLAIM IT OR DROP THE NODE";
                 default: return "NEGATIVE: CYBER OFFLINE — NO EW ASSETS";
             }
         }
@@ -189,6 +191,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                     x.Release(nodeId, IntrusionEnd.NodeLost);
                     events.Add(new CyberEvent(CyberEventKind.Released, x.Operator, x.Id, nodeId, node.Kind, IntrusionEnd.NodeLost));
                 }
+                // The only hop target was cancelled above and nothing is held: the intrusion has nothing left to do, so it ends (an intrusion with a hop in flight or a held node never reads Idle).
                 else if (x.Phase == IntrusionPhase.Idle) x.Finish(IntrusionEnd.NodeLost);
             }
             Sweep();
@@ -250,8 +253,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// <summary>Takes CR from the operator's wallet. None when paid; LowCredit (detail = need) or Frozen otherwise.</summary>
         CyberOutcome TrySpend(ulong op, int cr, out int detail);
         void Refund(ulong op, int cr);
-        /// <summary>Posts the BURN package on the TASKED board. False when the board has no room.</summary>
-        bool PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort);
+        /// <summary>Posts the BURN package on the TASKED board. None when posted; BoardFull, NoBoard (no SPACE desk) or AlreadyPosted otherwise.</summary>
+        CyberOutcome PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort);
     }
 
     /// <summary>A real unit or airbase the runtime looked at this refresh, with its fog verdict.</summary>
@@ -282,6 +285,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private readonly HashSet<int> engagedIds = new HashSet<int>();
         private readonly HashSet<int> seenIds = new HashSet<int>();
         private const int MaxIntrusionsHint = CyberNetwork.MaxIntrusions;
+        /// <summary>Where each node id stood at its last fresh sighting (fog: a lingering or held node never moves with host truth).</summary>
+        private readonly Frozen[] frozen = new Frozen[NodeIdTable.Capacity + 1];
+        private struct Frozen { public bool Set; public float X, Z, Front; }
 
         public CyberDesk(ICyberPorts ports, CyberAnchorSet anchors)
         {
@@ -297,6 +303,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public NodeReveal Reveal { get; } = new NodeReveal();
         public IReadOnlyList<CyberNode> Visible => visible;
         public IReadOnlyList<EwSource> Trucks => trucks;
+        /// <summary>
+        /// Cross-faction trace multiplier (an enemy holding this faction's DATA CENTER node, x1.3). Effects live in the HOLDER's desk, so the runtime
+        /// folds every other faction's book into this port; the desk only multiplies. Null reads as 1.
+        /// </summary>
+        public Func<float, float> EnemyTraceFactor { get; set; }
         /// <summary>Raised once per intrusion event after the desk has applied it (console lines, notices, the mirror's event ring).</summary>
         public event Action<CyberEvent> Happened;
 
@@ -320,13 +331,25 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; observed != null && i < observed.Count; i++)
             {
                 NodeObservation o = observed[i];
-                int id = Ids.GetOrAdd(o.Seed.Kind, o.Seed.Key);
-                if (id == 0) continue;
+                // An id is handed out only when the node first becomes visible, so ids never reveal how many unsighted nodes exist.
+                if (!Ids.TryGet(o.Seed.Kind, o.Seed.Key, out int id))
+                {
+                    if (!o.Sighted || o.Gone) continue;
+                    id = Ids.GetOrAdd(o.Seed.Kind, o.Seed.Key);
+                    if (id == 0) continue;
+                }
                 seenIds.Add(id);
                 if (o.Gone) { Network.Lose(id); continue; }
-                if (o.Sighted) Reveal.Note(id, now);
+                if (o.Sighted)
+                {
+                    Reveal.Note(id, now);
+                    frozen[id] = new Frozen { Set = true, X = o.Seed.X, Z = o.Seed.Z, Front = o.Seed.FrontDistance };
+                }
                 if (!Reveal.Visible(id, now, engagedIds.Contains(id))) continue;
-                candidates.Add(new CyberNode(id, o.Seed.Kind, o.Seed.X, o.Seed.Z, o.Seed.Kind == NodeKind.Relay ? 0u : o.Seed.Key, o.Seed.FrontDistance, o.Victim));
+                // Position is frozen at the last sighted refresh: an unsighted (lingering or held) node never shows where it is now.
+                Frozen at = frozen[id];
+                float nx = at.Set ? at.X : o.Seed.X, nz = at.Set ? at.Z : o.Seed.Z, nf = at.Set ? at.Front : o.Seed.FrontDistance;
+                candidates.Add(new CyberNode(id, o.Seed.Kind, nx, nz, o.Seed.Kind == NodeKind.Relay ? 0u : o.Seed.Key, nf, o.Victim));
             }
             // A node we hold or are hopping to that is no longer among the real candidates (its unit died, its airbase changed hands) is lost.
             foreach (int id in engagedIds) if (!seenIds.Contains(id)) Network.Lose(id);
@@ -391,7 +414,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (!TryNode(nodeId, out CyberNode node)) return new CyberResult(CyberOutcome.NoTarget);
             bool exploit = CyberRules.Exploit(node.Kind);
             float effort = Math.Max(1, Math.Min(TaskedBoard.MaxMarks, mine.Hops));
-            if (!ports.PostPackage(op, node, def, exploit, effort)) return new CyberResult(CyberOutcome.BoardFull, nodeId);
+            CyberOutcome posted = ports.PostPackage(op, node, def, exploit, effort);
+            if (posted != CyberOutcome.None) return new CyberResult(posted, nodeId);
             Network.ReleaseNode(op, nodeId, IntrusionEnd.Burned, now);
             Pump(now);
             return new CyberResult(CyberOutcome.Burned, nodeId);
@@ -441,13 +465,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public float TraceFactor(float now)
         {
             float f = Anchors.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f;
-            return CyberRules.ClampFactor(f * Effects.TraceFactor(ports.Owner, now));
+            float enemy = EnemyTraceFactor != null ? EnemyTraceFactor(now) : 1f;
+            return CyberRules.ClampFactor(f * (float.IsNaN(enemy) || enemy < 1f ? 1f : enemy));
         }
 
         /// <summary>The scene ended: every intrusion ends and every effect clears.</summary>
         public void Reset()
         {
-            Network.Clear(); Effects.Clear(); visible.Clear(); trucks.Clear(); Ids.Clear(); Reveal.Clear();
+            Network.Clear(); Effects.Clear(); visible.Clear(); trucks.Clear(); Ids.Clear(); Reveal.Clear(); Array.Clear(frozen, 0, frozen.Length);
         }
 
         private void RefreshTrucks() => Anchors.CopyTrucks(trucks);

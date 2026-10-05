@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public int Owner => faction.Key;
             public CyberOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.CyberSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.CyberRefund(faction.Owner, op, cr);
-            public bool PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort) =>
+            public CyberOutcome PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort) =>
                 service.manager.PostCyberPackage(faction.Owner, op, node, def, exploit, effort);
         }
 
@@ -270,6 +270,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             FactionCyber captured = made;
             made.Desk = new CyberDesk(new Ports(this, made), anchors);
+            made.Desk.EnemyTraceFactor = _ => TraceFactorOf(captured.Owner); // an enemy holding our DATA CENTER node: x1.3 (hold effects live in the holder's desk)
             made.Desk.Happened += e => OnEvent(captured, e);
             return true;
         }

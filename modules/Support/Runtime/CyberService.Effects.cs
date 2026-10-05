@@ -40,6 +40,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>OPTICAL footprint multiplier of a jammed faction.</summary>
         internal float BirdOpticalFactor(FactionHQ victim) => EffectFold(victim, (book, key, now) => book.OpticalFactor(key, now), false);
 
+        /// <summary>
+        /// The trace multiplier other factions put on <paramref name="victim"/>'s intrusions: an enemy holding the victim's DATA CENTER node (x1.3).
+        /// Hold effects live in the holder's desk, so this folds every other faction's book, the same way <see cref="EffectFold"/> does for BIRD JAM.
+        /// </summary>
+        internal float TraceFactorOf(FactionHQ victim) => EffectFold(victim, (book, key, now) => book.TraceFactor(key, now), true);
+
         private float EffectFold(FactionHQ victim, Func<CyberEffectBook, int, float, float> read, bool max)
         {
             if (victim == null || factions.Count == 0) return 1f;
@@ -75,11 +81,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (factions.Count == 0 || detectorUnit == null || detectorUnit is Aircraft || detectorUnit is Missile || detectorUnit.NetworkHQ == null) return false;
             float now = SupportManager.MissionNow();
+            bool any = false;
+            foreach (var pair in factions) if (pair.Value.Desk.Effects.AnyShareBlock(now)) { any = true; break; }
+            if (!any) return false; // the common case: no RELAY is held, so no position or faction lookup
             GlobalPosition p = detectorUnit.transform.position.ToGlobalPosition();
             int key = manager.FactionKeyOf(detectorUnit.NetworkHQ);
             foreach (var pair in factions)
-                if (pair.Value.Owner != detectorUnit.NetworkHQ && pair.Value.Desk.Effects.AnyShareBlock(now) &&
-                    pair.Value.Desk.Effects.ShareBlocked(key, (float)p.x, (float)p.z, now)) return true;
+                if (pair.Value.Owner != detectorUnit.NetworkHQ && pair.Value.Desk.Effects.ShareBlocked(key, (float)p.x, (float)p.z, now)) return true;
             return false;
         }
 
@@ -91,7 +99,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions) if (pair.Value.Desk.Effects.Count > 0) { any = true; break; }
             if (!any && !scaler.Active) return;
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumScanUnits) return;
+            if (all == null || all.Count > MaximumScanUnits) { scaler.RestoreAll(); return; } // too many units to scan: never leave a radar jammed unseen
             scaler.Begin();
             for (int i = 0; i < all.Count; i++)
             {
@@ -120,6 +128,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (slot.Kind != AnchorKind.EwTruck || f.Anchors.RevealUntil(slot.Index) <= SupportManager.MissionNow() || slot.Unit == null) continue;
                 var hqs = FactionRegistry.GetAllHQs();
                 if (hqs == null) continue;
+                // Jobs are keyed per truck: a second trace of the same truck renews its jobs instead of stacking duplicates.
+                for (int r = reveals.Count - 1; r >= 0; r--) if (reveals[r].Truck == slot.Unit) reveals.RemoveAt(r);
                 foreach (FactionHQ enemy in hqs)
                     if (enemy != null && enemy != f.Owner && reveals.Count < 16)
                         reveals.Add(new RevealJob { Truck = slot.Unit, Enemy = enemy, Until = f.Anchors.RevealUntil(slot.Index), Next = 0f });

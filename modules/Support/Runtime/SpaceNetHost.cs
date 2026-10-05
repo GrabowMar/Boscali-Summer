@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly SpaceFeedState scratch = new SpaceFeedState();
         private readonly CyberSubscriptions cyberSubs = new CyberSubscriptions();
         private readonly CyberStateData cyberScratch = new CyberStateData();
+        private int cyberRound;
         private readonly HashSet<ulong> rosterIds = new HashSet<ulong>();
         private readonly List<SpaceContact> reveals = new List<SpaceContact>(SpaceContacts.MaxReveals);
         private readonly List<SpaceMark> marks = new List<SpaceMark>(SpaceContacts.MaxMarks);
@@ -138,6 +139,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (hqs == null) return;
             subs.BeginRound();
             rosterIds.Clear();
+            if (++cyberRound == int.MaxValue) cyberRound = 1;
             foreach (FactionHQ hq in hqs)
             {
                 List<Player> players = hq != null ? hq.GetPlayers(false) : null;
@@ -154,14 +156,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>The faction's CYBER state to one member: change-only, one message per two seconds at most, always the full state.</summary>
         private void PollCyber(Player player, float now, float wall)
         {
-            if (player == null || player.HQ == null || manager.Cyber == null) return;
+            // CYBER switched off: nothing is built and no CyberStateMessage is sent (a client simply stays on its NO LINK words).
+            if (player == null || player.HQ == null || manager.Cyber == null || manager.Settings == null || !manager.Settings.CyberEnabled.Value) return;
             ulong id = PlayerIdentity.Of(player);
             if (id == PlayerIdentity.None) return;
             rosterIds.Add(id);
             try
             {
                 cyberScratch.Protocol = SupportNet.ProtocolVersion;
-                manager.Cyber.FillState(player, cyberScratch);
+                manager.Cyber.FillState(player, cyberScratch, cyberRound); // the faction view is built once per poll round
                 CyberStateData send = cyberSubs.Next(id, manager.FactionKeyOf(player.HQ), cyberScratch, now, wall);
                 if (send != null) net.SendCyberState(player, send);
             }

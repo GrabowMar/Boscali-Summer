@@ -51,6 +51,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly List<CyberEdge> graphEdges = new List<CyberEdge>(CyberGraph.MaxEdges);
         private readonly HashSet<int> heldIds = new HashSet<int>();
         private int selected, ownHeldLast;
+        // Pooled paint arrays (AvLineGraphic.SetPoints copies them), so a repaint allocates nothing.
+        private const int CirclePoints = 64;
+        private readonly float[] circleX = new float[CirclePoints + 1], circleY = new float[CirclePoints + 1];
+        private readonly float[] edgeX = new float[2], edgeY = new float[2];
         private int paintedSeq = -1, paintedSelected = -1, paintedSecond = -1;
         private float nextPress;
         private bool hasOwn;
@@ -270,6 +274,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void PaintMap(CyberStateData s, float now)
         {
             bool active = s != null && s.Active;
+            if (selected != 0 && !(active && NodeListed(s, selected))) selected = 0; // the selected node left the list (fogged, lost): nothing stays selected
             headline.gameObject.SetActive(!active || (s.Nodes.Count == 0 && s.Anchors.Count == 0));
             detail.gameObject.SetActive(headline.gameObject.activeSelf);
             if (headline.gameObject.activeSelf)
@@ -346,10 +351,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 CyberEdge e = graphEdges[i];
                 if (!TryPoint(s, e.From, out MapPoint a) || !TryPoint(s, e.To, out MapPoint b)) continue;
                 bool chain = e.From > 0;
-                var xs = new[] { Mathf.Clamp01(a.X / mapW), Mathf.Clamp01(b.X / mapW) };
-                var ys = new[] { Mathf.Clamp01(1f - a.Y / mapH), Mathf.Clamp01(1f - b.Y / mapH) };
+                edgeX[0] = Mathf.Clamp01(a.X / mapW); edgeX[1] = Mathf.Clamp01(b.X / mapW);
+                edgeY[0] = Mathf.Clamp01(1f - a.Y / mapH); edgeY[1] = Mathf.Clamp01(1f - b.Y / mapH);
                 edges[i].LineColor = chain ? OpsInk.Word(AvState.Caution) : OpsInk.Hairline;
-                edges[i].SetPoints(xs, ys, 2);
+                edges[i].SetPoints(edgeX, edgeY, 2);
             }
             foreach (CyberIntrusionRow x in s.Intrusions)
             {
@@ -357,6 +362,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 hasOwn = true;
                 if (x.Held != null && x.Held.Length > 0) ownHeldLast = x.Held[x.Held.Length - 1];
             }
+        }
+
+        private static bool NodeListed(CyberStateData s, int id)
+        {
+            for (int i = 0; i < s.Nodes.Count; i++) if (s.Nodes[i].Id == id) return true;
+            return false;
         }
 
         private bool TryPoint(CyberStateData s, int endpoint, out MapPoint p)
@@ -378,17 +389,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void DrawCircle(AvLineGraphic g, MapPoint center, float radius)
         {
-            const int N = 64;
-            var xs = new float[N + 1];
-            var ys = new float[N + 1];
+            const int N = CirclePoints;
             for (int i = 0; i <= N; i++)
             {
                 float a = Mathf.PI * 2f * i / N;
-                xs[i] = Mathf.Clamp01((center.X + radius * Mathf.Cos(a)) / mapW);
-                ys[i] = Mathf.Clamp01(1f - (center.Y + radius * Mathf.Sin(a)) / mapH);
+                circleX[i] = Mathf.Clamp01((center.X + radius * Mathf.Cos(a)) / mapW);
+                circleY[i] = Mathf.Clamp01(1f - (center.Y + radius * Mathf.Sin(a)) / mapH);
             }
             g.LineColor = OpsInk.Hairline;
-            g.SetPoints(xs, ys, N + 1);
+            g.SetPoints(circleX, circleY, N + 1);
         }
 
         private void PaintIntrusion(CyberStateData s, float now)

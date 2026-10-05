@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
             float radius = context.Settings.FlareBarrageRadius.Value;
             int count = context.Settings.FlareBarrageCount.Value;
-            float duration = context.Settings.FlareBarrageDuration.Value;
+            float duration = CyberService.ExploitDuration(context.Owner, context.Settings.FlareBarrageDuration.Value, 45f); // EXPLOIT x1.5 while a node is held
             // The host's barrage values ride in the replicated name, so every peer seduces alike.
             string unique = SupportEffectPolicy.FlareName(SupportNaming.Unique("Flare", context), radius, duration, count);
 

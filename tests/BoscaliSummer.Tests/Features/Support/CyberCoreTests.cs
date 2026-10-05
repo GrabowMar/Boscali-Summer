@@ -213,7 +213,8 @@ namespace BoscaliSummer.Tests.Features.Support
             public readonly List<string> Posted = new List<string>();
             public float Now => Clock;
             public int Humans => HumanCount;
-            public int Owner => Us;
+            public int OwnerKey = Us;
+            public int Owner => OwnerKey;
             public CyberOutcome TrySpend(ulong op, int cr, out int detail)
             {
                 detail = 0;
@@ -223,11 +224,11 @@ namespace BoscaliSummer.Tests.Features.Support
                 return CyberOutcome.None;
             }
             public void Refund(ulong op, int cr) { Balance += cr; }
-            public bool PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
+            public CyberOutcome PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
             {
-                if (!BoardOpen) return false;
+                if (!BoardOpen) return CyberOutcome.BoardFull;
                 Posted.Add(def.Label + "@" + node.Id + "x" + effort + (exploit ? "!" : ""));
-                return true;
+                return CyberOutcome.None;
             }
         }
 
@@ -237,8 +238,9 @@ namespace BoscaliSummer.Tests.Features.Support
             public readonly CyberAnchorSet Anchors;
             public readonly CyberDesk Desk;
             public readonly List<CyberEvent> Events = new List<CyberEvent>();
-            public Rig(int trucks = 1, int dataCenters = 0)
+            public Rig(int trucks = 1, int dataCenters = 0, int owner = Us)
             {
+                Ports.OwnerKey = owner;
                 Anchors = new CyberAnchorSet(trucks, dataCenters);
                 for (int i = 0; i < trucks; i++) Anchors.SetPosition(AnchorKind.EwTruck, i, 0f, 0f);
                 Desk = new CyberDesk(Ports, Anchors);
@@ -257,6 +259,16 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void CheckDeskStartAndFog()
         {
+            // Fog: no id until a node first becomes visible, and its position freezes at the last sighted refresh.
+            var fz = new Rig();
+            fz.Observe(Obs(NodeKind.Radar, 70, 10000f, 0f, sighted: false));
+            TestAssert.That(!fz.Desk.Ids.TryGet(NodeKind.Radar, 70u, out _), "an unsighted node is given no id");
+            fz.Observe(Obs(NodeKind.Radar, 70, 4000f, 0f));
+            Eq(fz.Desk.Visible.Count, 1, "sighted: listed");
+            fz.Observe(Obs(NodeKind.Radar, 70, 9000f, 500f, sighted: false));
+            Near(fz.Desk.Visible[0].X, 4000f, "an unsighted refresh does not move the node (frozen at the last sighting)");
+            Near(fz.Desk.Visible[0].Z, 0f, "z frozen too");
+
             var rig = new Rig();
             rig.Observe(Obs(NodeKind.Radar, 70, 10000f, 0f, sighted: false));
             Eq(rig.Desk.Visible.Count, 0, "an unsighted node is not listed (fog)");
@@ -404,9 +416,27 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(safe.Desk.Network.Holds(safe.IdOf(NodeKind.DataCenter, 90)), "with our data center standing the 40 s hop completes at 48 %");
 
             // An enemy holding our data center node makes our trace x1.3 (and with ours standing 1.04).
+            // The hold lives in the HOLDER's desk (them); our desk reads it through the cross-faction port the runtime folds.
             var boosted = new Rig();
-            boosted.Desk.Effects.Add(CyberPackages.Hold(new CyberNode(1, NodeKind.DataCenter, 0f, 0f, 0u, 0f, Us), Them));
+            var holder = new Rig(1, 0, Them);
+            boosted.Desk.EnemyTraceFactor = n => holder.Desk.Effects.TraceFactor(Us, n);
+            Near(boosted.Desk.TraceFactor(0f), 1f, "nobody holds our data center node yet");
+            holder.Desk.Effects.Add(CyberPackages.Hold(new CyberNode(1, NodeKind.DataCenter, 0f, 0f, 0u, 0f, Us), Them));
             Near(boosted.Desk.TraceFactor(0f), 1.3f, "enemy holds our data center node");
+            Near(holder.Desk.TraceFactor(0f), 1f, "holding their node does not speed the holder's own trace");
+
+            // Two desks: faction Them holds Us's data center, so Us's intrusion traces 1.3x faster than an unheld twin.
+            var calm = new Rig(); var hit = new Rig(); var jammer = new Rig(1, 0, Them);
+            hit.Desk.EnemyTraceFactor = n => jammer.Desk.Effects.TraceFactor(Us, n);
+            jammer.Desk.Effects.Add(CyberPackages.Hold(new CyberNode(2, NodeKind.DataCenter, 0f, 0f, 0u, 0f, Us), Them));
+            foreach (Rig r in new[] { calm, hit })
+            {
+                r.Observe(Obs(NodeKind.Radar, 70, 5000f, 0f));
+                r.Desk.Hop(Op, r.IdOf(NodeKind.Radar, 70));
+                r.Run(10f);
+            }
+            float calmTrace = calm.Desk.Network.Of(Op).Trace, hitTrace = hit.Desk.Network.Of(Op).Trace;
+            Near(hitTrace / calmTrace, 1.3f, "the held data center raises the enemy trace by 30 %", 0.01f);
 
             // Upkeep: 2 CR per 10 s per node; stops at 0 CR and drops the intrusion.
             var up = new Rig();
