@@ -47,8 +47,40 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public TrickleMeter Trickle { get; } = new TrickleMeter();
         public RepeatTracker Repeats { get; } = new RepeatTracker();
         public AssistRegistry Assists { get; } = new AssistRegistry();
+        public CreditActivity Activity { get; } = new CreditActivity();
+        /// <summary>Operator fee income cap (core §6.2); kill-assist income shares this meter when it is built.</summary>
+        public OperatorIncomeMeter OperatorIncome { get; } = new OperatorIncomeMeter();
+        /// <summary>The TASKED call money path over this service's own wallets and HQ FUND.</summary>
+        public TaskedWallets Tasked { get; }
 
-        public CreditService(SupportNet network) => this.network = network;
+        public CreditService(SupportNet network)
+        {
+            this.network = network;
+            Tasked = new TaskedWallets(Ledger, Fund, OperatorIncome) { Changed = Mirror };
+        }
+
+        /// <summary>
+        /// Pays a verified contributor by identity (disconnected is fine; switched or frozen is refused). The receipt
+        /// conserves <paramref name="amount"/>: only <c>Unapplied</c> is still owed to the earned faction's HQ FUND.
+        /// </summary>
+        public ContributorCreditReceipt EarnContributor(ulong playerId, int earnedFaction, float amount, float missionNow) =>
+            Tasked.EarnContributor(playerId, earnedFaction, amount, missionNow);
+
+        private void Mirror(ulong id)
+        {
+            // Never throws: a failed mirror retries on the next Tick, the debit/refund it follows already happened.
+            try
+            {
+                if (FactionRegistry.GetAllHQs() == null) return;
+                foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+                {
+                    if (hq == null) continue;
+                    foreach (Player player in hq.GetPlayers(false))
+                        if (player != null && PlayerIdentity.Of(player) == id) { SendIfChanged(player, id, SupportManager.MissionNow()); return; }
+                }
+            }
+            catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support.Credit] Wallet mirror skipped: " + e.Message); }
+        }
 
         public void Tick(float now, float dt)
         {
@@ -71,7 +103,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     }
                     else Ledger.SetFaction(id, faction, now);
 
-                    bool active = player.Aircraft != null && !player.Aircraft.disabled;
+                    Aircraft aircraft = player.Aircraft;
+                    // radarAlt already subtracts spawnOffset; 0.2 m is vanilla's airborne threshold.
+                    bool airborne = aircraft != null && !aircraft.disabled && aircraft.radarAlt > 0.2f &&
+                        !float.IsNaN(aircraft.radarAlt) && !float.IsInfinity(aircraft.radarAlt);
+                    bool active = Activity.IsActive(id, airborne, now);
                     float trickle = Trickle.Tick(id, active, dt, now);
                     if (trickle > 0f) Fund.Add(faction, Ledger.Credit(id, trickle));
                     SendIfChanged(player, id, now);
@@ -82,6 +118,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             gone.Clear();
             foreach (ulong id in sent.Keys) if (!seen.Contains(id)) gone.Add(id);
             for (int i = 0; i < gone.Count; i++) sent.Remove(gone[i]);
+            Activity.Prune(seen);
+        }
+
+        /// <summary>Observe a raw pilot snapshot; applied aircraft controls may include autopilot commands.</summary>
+        public bool RecordAircraftInput(Aircraft aircraft, ActivityControls controls, float now)
+        {
+            Player player = aircraft?.Player;
+            if (player == null || player.HQ == null || aircraft.disabled || !ReferenceEquals(player.Aircraft, aircraft)) return false;
+            return Activity.Observe(PlayerIdentity.Of(player), aircraft.GetInstanceID(), controls, now);
+        }
+
+        public void RecordInput(Player player, float now)
+        {
+            if (player != null && player.HQ != null) Activity.Record(PlayerIdentity.Of(player), now);
+        }
+
+        public void RecordPulse(Player player, float now, float wallTime)
+        {
+            if (player != null && player.HQ != null) Activity.Pulse(PlayerIdentity.Of(player), now, wallTime);
         }
 
         public bool TrySpend(Player player, float cost, float now)
@@ -142,11 +197,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Trickle.Clear();
             Repeats.Clear();
             Assists.Clear();
+            Activity.Clear();
+            OperatorIncome.Clear();
             sent.Clear();
             census.Clear();
         }
 
         private void SendIfChanged(Player player, ulong id, float now)
+        {
+            // Presentation failure cannot turn an already-mutated host debit into a thrown transaction.
+            try { SendState(player, id, now); }
+            catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support.Credit] State mirror will retry: " + e.Message); }
+        }
+
+        private void SendState(Player player, ulong id, float now)
         {
             int balance = (int)Ledger.Balance(id);
             int frozen = (int)Ledger.FrozenRemaining(id, now);
@@ -154,8 +218,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float clock = Time.unscaledTime;
             if (sent.TryGetValue(id, out var last) && last.balance == balance && last.frozen == frozen &&
                 last.ev == ev && last.silent == silent && clock - last.at < ResendSeconds) return;
+            if (network == null) return;
+            if (!network.SendCredit(player, balance, frozen, ev, silent)) return;
             sent[id] = (balance, frozen, ev, silent, clock);
-            network?.SendCredit(player, balance, frozen, ev, silent);
         }
     }
 }

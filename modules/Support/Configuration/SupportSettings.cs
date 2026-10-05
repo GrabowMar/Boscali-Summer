@@ -12,10 +12,14 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> CruiseEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
         public ConfigEntry<bool> MtiEnabled { get; }
+        public ConfigEntry<bool> SatCameraEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
+        public ConfigEntry<bool> WatchOfficerEnabled { get; }
+        public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
+        public ConfigEntry<float> OpticalSceneRadius { get; }
         public ConfigEntry<float> ElintRadius { get; }
 
         public ConfigEntry<int> CruiseSalvo { get; }
@@ -77,15 +81,30 @@ namespace BoscaliSummer.Modules.Support.Configuration
             MtiEnabled = config.Bind("Support", "MtiSweep", true,
                 "MTI sweep: tracks moving enemy ground " +
                 "contacts near the mark. Shares the radar scan tasking. Spawns nothing.");
+            SatCameraEnabled = config.Bind("Support", "SatCamera", true,
+                "SAT CAMERA: the OPTICAL bird looks at the mark in daylight; ground units inside its window are revealed to the " +
+                "faction. Refuses at night and with no sky state. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding hostile IR-seeking missiles in the area. " +
                 "Friendly missiles fly through.");
 
+            WatchOfficerEnabled = config.Bind("Support", "WatchOfficer", true,
+                "WATCH OFFICER OVERLORD: when no human is working SPACE it scans for contacts and posts TASKED calls from the contacts " +
+                "the faction has revealed (never an unrevealed one). Host-authoritative: on a server, only the host's value applies.");
+            QuietNotices = config.Bind("Support", "QuietNotices", false,
+                "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
+                "RWR, missile, terrain) are never silenced.");
+
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(
                     "Half-width of a radar scan scene. " +
                     "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
+                    new AcceptableValueRange<float>(400f, 4000f)));
+            OpticalSceneRadius = config.Bind("Support", "OpticalSceneRadiusMeters", 1000f,
+                new ConfigDescription(
+                    "Half-width of a clear-day optical camera window. Cloud and rain shrink it (full cover halves it) and " +
+                    "the optical bird refuses at night; ground units inside it are revealed to the faction.",
                     new AcceptableValueRange<float>(400f, 4000f)));
             ElintRadius = config.Bind("Support", "ElintSweepRadiusMeters", 8000f,
                 new ConfigDescription(

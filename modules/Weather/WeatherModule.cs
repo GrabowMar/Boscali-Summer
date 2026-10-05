@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Weather
             manager.Configure(context.Settings.Weather, network, context.Logger);
             context.AddService<IFlightEnvironmentView>(manager);
             manager.RegisterClientEffects(context);
+            context.AddService<IWeatherView>(manager);
             network.Configure(manager);
 
             WeatherMfdPanel panel = context.AddSceneService<WeatherMfdPanel>(65);
