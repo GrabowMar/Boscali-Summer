@@ -107,6 +107,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return slot.Token == 0 && now >= slot.BusyUntil && now >= cooldownUntil[(int)task];
         }
 
+        /// <summary>
+        /// Mission seconds until this task could start: its cooldown and the bird's own busy time, zero when it is ready now,
+        /// positive infinity without a live uplink. The feed and OVERLORD read it; the host still decides through <see cref="CanStart"/>.
+        /// </summary>
+        public float ReadyIn(BirdTask task, float now)
+        {
+            if (retired || !SpaceRules.MissionTime(now) || LiveUplinkCount == 0 || !SpaceRules.TryBird(task, out BirdKind bird))
+                return float.PositiveInfinity;
+            BirdSlot slot = birds[(int)bird];
+            float wait = Math.Max(cooldownUntil[(int)task] - now, slot.BusyUntil - now);
+            if (slot.Token != 0) wait = Math.Max(wait, 1f); // reserved by a task that is mid-launch
+            return Math.Max(0f, wait);
+        }
+
         public bool TryReserve(BirdTask task, float now, out SpaceTaskReservation reservation)
         {
             reservation = default;

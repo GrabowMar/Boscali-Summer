@@ -232,7 +232,31 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public TaskedResult Send(ulong player, int requestId, int[] markIds)
         {
-            try { return SendCore(player, requestId, markIds); }
+            // OVERLORD's identity is reserved: a human request can never post as WATCH OFFICER.
+            if (player == SpaceContacts.WatchOfficerId) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
+            return SendGuarded(player, requestId, markIds, false);
+        }
+
+        /// <summary>
+        /// WATCH OFFICER OVERLORD's SEND: the same builder a human uses, but the post is labelled WATCH OFFICER, carries no effort
+        /// tokens and its fee (when there is one) goes 100 % to HQ FUND on a physical fire. It has no wallet and earns nothing.
+        /// </summary>
+        public TaskedResult SendWatchOfficer(int requestId, int[] markIds) =>
+            SendGuarded(SpaceContacts.WatchOfficerId, requestId, markIds, true);
+
+        /// <summary>The post capacity for the current human census (the board's own rule), for callers that must leave room.</summary>
+        public int Capacity
+        {
+            get
+            {
+                if (profile == null) profile = new TaskedHumanProfile(ports.Humans, ports.Now);
+                return TaskedBoard.CapacityFor(profile.Observe(ports.Humans, ports.Now));
+            }
+        }
+
+        private TaskedResult SendGuarded(ulong player, int requestId, int[] markIds, bool watchOfficer)
+        {
+            try { return SendCore(player, requestId, markIds, watchOfficer); }
             catch (Exception e)
             {
                 Warn("Send threw: " + e.Message);
@@ -240,7 +264,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        private TaskedResult SendCore(ulong player, int requestId, int[] markIds)
+        private TaskedResult SendCore(ulong player, int requestId, int[] markIds, bool watchOfficer)
         {
             if (player == 0 || requestId <= 0) return new TaskedResult(TaskedOutcome.Unavailable, 0, requestId);
             var key = new Key(player, requestId, Kind.Send);
@@ -257,7 +281,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             int humans = profile.Observe(ports.Humans, now);
             int id = nextCallId + 1;
             if (!MakeRoom()) return new TaskedResult(TaskedOutcome.Busy, 0, requestId);
-            if (id <= 0 || !board.TryPostVerified(id, SupportActionId.Artillery, player, false, humans, markIds, contacts, now, out _))
+            if (id <= 0 || !board.TryPostVerified(id, SupportActionId.Artillery, player, watchOfficer, humans, markIds, contacts, now, out _))
                 return Remember(key, TaskedOutcome.NotPosted, 0, 0, 0);
             nextCallId = id;
             return Remember(key, TaskedOutcome.Posted, id, 0, 0);

@@ -135,12 +135,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public float Expires;
         /// <summary>Callsign holding the call while it launches (printable ASCII; empty otherwise).</summary>
         public string Claimant;
+        /// <summary>Callsign of the human who posted it, for another viewer's OPERATOR card (empty for OVERLORD and for the viewer's own).</summary>
+        public string Maker;
 
         public bool SameAs(in FeedPost o)
         {
             if (CallId != o.CallId || Action != o.Action || WatchOfficer != o.WatchOfficer || Own != o.Own ||
                 Launching != o.Launching || Price != o.Price || Payoff != o.Payoff ||
-                !SpaceMirror.SameExpiry(Expires, o.Expires) || (Claimant ?? "") != (o.Claimant ?? "")) return false;
+                !SpaceMirror.SameExpiry(Expires, o.Expires) || (Claimant ?? "") != (o.Claimant ?? "") || (Maker ?? "") != (o.Maker ?? "")) return false;
             int a = Points?.Length ?? 0, b = o.Points?.Length ?? 0;
             if (a != b) return false;
             for (int i = 0; i < a; i++) if (!Points[i].SameAs(o.Points[i])) return false;
@@ -169,6 +171,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// seconds, so the client counts down locally and a cooling member does not get a packet every second.
         /// </summary>
         public int GateDetail;
+        /// <summary>
+        /// The newest live TASKED post of the faction, always sent (a pilot with the feed closed still hears about it): its id (0 none),
+        /// action, target count, who made it (WATCH OFFICER or a human, with that human's callsign unless it is the viewer's own).
+        /// </summary>
+        public int NewestPost;
+        public SupportActionId NewestAction;
+        public byte NewestTargets;
+        public bool NewestWatchOfficer, NewestOwn;
+        public string NewestMaker = "";
+        /// <summary>Host mission-time second the RADAR bird can take another scan (0 = ready now); the client counts down locally.</summary>
+        public int RadarReadyAt;
+        /// <summary>The faction's ENEMY INTENT line, host-derived words only (empty when unknown).</summary>
+        public string Intent = "";
         /// <summary>Not serialized: a message that did not fit one buffer is sent in two; the sender sends this one right after.</summary>
         public SpaceStateData Follow;
         public readonly List<FeedContact> Contacts = new List<FeedContact>();
@@ -189,7 +204,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private const int InvalidCoordinate = -8388608;
         /// <summary>Largest state message the sender emits in one piece (Mirage pools 1300 B writer buffers).</summary>
         public const int StateBudget = 1200;
-        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 16, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
+        public const int MaxMaker = 16, MaxIntent = 56;
+        private const int MinContactBytes = 11, MinMarkBytes = 10, MinPostBytes = 17, MaxExpiryDeciseconds = 65535, MaxContactDeciseconds = 255;
         private const byte FlagFull = 1, FlagActive = 2, FlagFeed = 4;
 
         // ---- Command ---------------------------------------------------------------------------
@@ -279,6 +295,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             w.WriteByte(s.LiveMarks);
             w.WriteByte((byte)s.Gate);
             WriteVar(w, (uint)Math.Max(0, s.GateDetail));
+            WriteVar(w, (uint)Math.Max(0, s.NewestPost));
+            if (s.NewestPost > 0)
+            {
+                w.WriteByte((byte)s.NewestAction);
+                w.WriteByte((byte)((Math.Max(1, Math.Min(TaskedBoard.MaxMarks, (int)s.NewestTargets))) | (s.NewestWatchOfficer ? 8 : 0) | (s.NewestOwn ? 16 : 0)));
+                WriteText(w, s.NewestMaker, MaxMaker);
+            }
+            WriteVar(w, (uint)Math.Max(0, s.RadarReadyAt));
+            WriteText(w, s.Intent, MaxIntent);
             if (!s.Active || !s.Feed) return; // headline only: no rows are ever sent to a passive faction member
             int n = Math.Min(s.Contacts.Count, MaxContacts);
             w.WriteByte((byte)n);
@@ -322,6 +347,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 WriteVar(w, (uint)Math.Max(0, p.Payoff));
                 WriteExpiry(w, p.Expires, s.Now);
                 WriteText(w, p.Claimant, SpaceReply.MaxClaimant);
+                WriteText(w, p.Maker, MaxMaker);
             }
             WriteIds(w, s.RemovedPosts, MaxPosts);
         }
@@ -337,7 +363,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 !r.TryReadByte(out s.UplinksLive) || !r.TryReadByte(out s.UplinksTotal) || s.UplinksTotal > 2 || s.UplinksLive > s.UplinksTotal ||
                 !r.TryReadByte(out s.LiveMarks) || s.LiveMarks > MaxMarks ||
                 !r.TryReadByte(out byte gate) || gate > (byte)TaskedOutcome.MarkExpired ||
-                !ReadInt(r, out int gateDetail)) return Bad();
+                !ReadInt(r, out int gateDetail) || !ReadInt(r, out int newest)) return Bad();
+            if (newest > 0)
+            {
+                if (!r.TryReadByte(out byte newestAction) || !CallSheet.TryGet((SupportActionId)newestAction, out _) ||
+                    !r.TryReadByte(out byte newestBits) || (newestBits & ~31) != 0 || (newestBits & 7) < 1 || (newestBits & 7) > TaskedBoard.MaxMarks ||
+                    !ReadText(r, MaxMaker, out string newestMaker)) return Bad();
+                s.NewestPost = newest; s.NewestAction = (SupportActionId)newestAction; s.NewestTargets = (byte)(newestBits & 7);
+                s.NewestWatchOfficer = (newestBits & 8) != 0; s.NewestOwn = (newestBits & 16) != 0; s.NewestMaker = newestMaker;
+            }
+            if (!ReadInt(r, out int radarReady) || !ReadText(r, MaxIntent, out string intent)) return Bad();
+            s.RadarReadyAt = radarReady; s.Intent = intent;
             s.Full = (flags & FlagFull) != 0; s.Active = (flags & FlagActive) != 0; s.Feed = (flags & FlagFeed) != 0;
             s.Generation = generation; s.Now = now; s.Family = (SpaceFamilyState)family; s.Gate = (TaskedOutcome)gate; s.GateDetail = gateDetail;
             if (!s.Active || !s.Feed) return s;
@@ -379,11 +415,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     points[j] = new FeedPoint { X = px, Z = pz, Source = (radar & (1 << j)) != 0 ? BirdKind.Radar : BirdKind.Optical };
                 }
                 if (!ReadInt(r, out int price) || !ReadInt(r, out int payoff) || !ReadExpiry(r, now, out float expires) ||
-                    !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return Bad();
+                    !ReadText(r, SpaceReply.MaxClaimant, out string claimant) || !ReadText(r, MaxMaker, out string maker)) return Bad();
                 s.Posts.Add(new FeedPost
                 {
                     CallId = call, Action = (SupportActionId)action, WatchOfficer = (bits & 1) != 0, Own = (bits & 2) != 0, Launching = (bits & 4) != 0,
-                    Points = points, Price = price, Payoff = payoff, Expires = expires, Claimant = claimant
+                    Points = points, Price = price, Payoff = payoff, Expires = expires, Claimant = claimant, Maker = maker
                 });
             }
             return ReadIds(r, s.RemovedPosts, MaxPosts) ? s : Bad();

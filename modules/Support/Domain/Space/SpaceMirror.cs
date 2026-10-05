@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -31,18 +32,29 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public byte UplinksLive, UplinksTotal, LiveMarks;
         public TaskedOutcome Gate;
         public int GateDetail;
+        /// <summary>The headline's newest-post summary, RADAR readiness deadline and ENEMY INTENT line (see <see cref="SpaceStateData"/>).</summary>
+        public int NewestPost, RadarReadyAt;
+        public SupportActionId NewestAction;
+        public byte NewestTargets;
+        public bool NewestWatchOfficer, NewestOwn;
+        public string NewestMaker = "", Intent = "";
         public readonly List<FeedContact> Contacts = new List<FeedContact>();
         public readonly List<FeedMark> Marks = new List<FeedMark>();
         public readonly List<FeedPost> Posts = new List<FeedPost>();
 
         public bool ScalarsEqual(SpaceFeedState o) =>
             Active == o.Active && Feed == o.Feed && Family == o.Family && UplinksLive == o.UplinksLive &&
-            UplinksTotal == o.UplinksTotal && LiveMarks == o.LiveMarks && Gate == o.Gate && GateDetail == o.GateDetail;
+            UplinksTotal == o.UplinksTotal && LiveMarks == o.LiveMarks && Gate == o.Gate && GateDetail == o.GateDetail &&
+            NewestPost == o.NewestPost && NewestAction == o.NewestAction && NewestTargets == o.NewestTargets &&
+            NewestWatchOfficer == o.NewestWatchOfficer && NewestOwn == o.NewestOwn && (NewestMaker ?? "") == (o.NewestMaker ?? "") &&
+            RadarReadyAt == o.RadarReadyAt && (Intent ?? "") == (o.Intent ?? "");
 
         public void CopyScalars(SpaceFeedState o)
         {
             Active = o.Active; Feed = o.Feed; Family = o.Family; UplinksLive = o.UplinksLive; UplinksTotal = o.UplinksTotal;
             LiveMarks = o.LiveMarks; Gate = o.Gate; GateDetail = o.GateDetail;
+            NewestPost = o.NewestPost; NewestAction = o.NewestAction; NewestTargets = o.NewestTargets; NewestWatchOfficer = o.NewestWatchOfficer;
+            NewestOwn = o.NewestOwn; NewestMaker = o.NewestMaker ?? ""; RadarReadyAt = o.RadarReadyAt; Intent = o.Intent ?? "";
         }
 
         public void ClearRows() { Contacts.Clear(); Marks.Clear(); Posts.Clear(); }
@@ -103,6 +115,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 Active = next.Active, Feed = next.Feed, Family = next.Family, UplinksLive = next.UplinksLive, UplinksTotal = next.UplinksTotal,
                 LiveMarks = next.LiveMarks, Gate = next.Gate, GateDetail = next.GateDetail
             };
+            CopyHeadline(next, d);
             if (!next.Active || !next.Feed) return d;
             SpaceFeedState basis = d.Full ? null : previous;
             for (int i = 0; i < next.Contacts.Count; i++)
@@ -132,6 +145,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return d;
         }
 
+        private static void CopyHeadline(SpaceFeedState from, SpaceStateData to)
+        {
+            to.NewestPost = from.NewestPost; to.NewestAction = from.NewestAction; to.NewestTargets = from.NewestTargets;
+            to.NewestWatchOfficer = from.NewestWatchOfficer; to.NewestOwn = from.NewestOwn; to.NewestMaker = from.NewestMaker ?? "";
+            to.RadarReadyAt = from.RadarReadyAt; to.Intent = from.Intent ?? "";
+        }
+
         /// <summary>CR short for a price is a quantity; the cooldown and wallet-freeze seconds are sent as a mission-time deadline.</summary>
         public static bool GateIsDeadline(TaskedOutcome gate) => gate == TaskedOutcome.Cooldown || gate == TaskedOutcome.Frozen;
 
@@ -152,7 +172,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             var follow = new SpaceStateData
             {
                 Protocol = d.Protocol, Full = false, Active = d.Active, Feed = d.Feed, Generation = d.Generation, Now = d.Now,
-                Family = d.Family, UplinksLive = d.UplinksLive, UplinksTotal = d.UplinksTotal, LiveMarks = d.LiveMarks, Gate = d.Gate, GateDetail = d.GateDetail
+                Family = d.Family, UplinksLive = d.UplinksLive, UplinksTotal = d.UplinksTotal, LiveMarks = d.LiveMarks, Gate = d.Gate, GateDetail = d.GateDetail,
+                NewestPost = d.NewestPost, NewestAction = d.NewestAction, NewestTargets = d.NewestTargets, NewestWatchOfficer = d.NewestWatchOfficer,
+                NewestOwn = d.NewestOwn, NewestMaker = d.NewestMaker, RadarReadyAt = d.RadarReadyAt, Intent = d.Intent
             };
             follow.Posts.AddRange(d.Posts); follow.RemovedPosts.AddRange(d.RemovedPosts);
             d.Posts.Clear(); d.RemovedPosts.Clear();
@@ -234,6 +256,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float offset = clientNow - d.Now;
             // A cooldown or freeze arrives as a host deadline: convert it to this clock like every other deadline.
             into.GateDetail = SpaceMirror.GateIsDeadline(d.Gate) ? d.GateDetail + (int)Math.Round(offset) : d.GateDetail;
+            into.NewestPost = d.NewestPost; into.NewestAction = d.NewestAction; into.NewestTargets = d.NewestTargets;
+            into.NewestWatchOfficer = d.NewestWatchOfficer; into.NewestOwn = d.NewestOwn; into.NewestMaker = d.NewestMaker ?? ""; into.Intent = d.Intent ?? "";
+            into.RadarReadyAt = d.RadarReadyAt > 0 ? d.RadarReadyAt + (int)Math.Round(offset) : 0;
             if (!d.Active || !d.Feed) { into.ClearRows(); return true; }
             if (full) into.ClearRows();
             for (int i = 0; i < d.RemovedContacts.Count; i++) { int at = SpaceMirror.IndexOf(into.Contacts, d.RemovedContacts[i]); if (at >= 0) into.Contacts.RemoveAt(at); }

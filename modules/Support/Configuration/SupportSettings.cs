@@ -15,6 +15,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> SatCameraEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
+        public ConfigEntry<bool> WatchOfficerEnabled { get; }
+        public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
         public ConfigEntry<float> OpticalSceneRadius { get; }
@@ -86,6 +88,13 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding hostile IR-seeking missiles in the area. " +
                 "Friendly missiles fly through.");
+
+            WatchOfficerEnabled = config.Bind("Support", "WatchOfficer", true,
+                "WATCH OFFICER OVERLORD: when no human is working SPACE it scans for contacts and posts TASKED calls from the contacts " +
+                "the faction has revealed (never an unrevealed one). Host-authoritative: on a server, only the host's value applies.");
+            QuietNotices = config.Bind("Support", "QuietNotices", false,
+                "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
+                "RWR, missile, terrain) are never silenced.");
 
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(

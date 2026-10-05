@@ -58,6 +58,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Status = "";
         public AvState StatusTone = AvState.Inert;
         public readonly FeedTileView[] Tiles = new FeedTileView[SpaceFeedRules.ContactsPerPage];
+        /// <summary>The single line that replaces the six contact targets when none is revealed (empty when there are contacts).</summary>
+        public string NoContacts = "";
+        public AvState NoContactsTone = AvState.Inert;
         public int Page, Pages = 1;
         public bool CanConfirm, CanSend, ConfirmFull, ZoomEnabled = true;
         public int SendCount;
@@ -101,7 +104,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // Threat strip, words line, status line.
         private readonly Image threatBack, threatRail, wordsBack, wordsRail;
-        private readonly TMP_Text threatText, wordsText, statusText, captionText, hintText;
+        private readonly TMP_Text threatText, wordsText, statusText, captionText, hintText, noContactsText;
 
         // Toolbar and actions.
         private readonly AvControl opticalButton, radarButton, zoomButton, fullButton, prevButton, nextButton, confirmButton, sendButton;
@@ -180,6 +183,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FeedBox box = layout.Tile(i);
                 tiles[i] = new Tile(Rect, box, id => Do(() => actions.SelectEntry(id)));
             }
+
+            // The one line that stands in for the six targets when the faction has no revealed contact (the tiles hide meanwhile).
+            noContactsText = Line(Rect, "NoContacts", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
+            Put(noContactsText.rectTransform, new FeedBox(layout.Tiles.X + 8f, layout.Tiles.Y, layout.Tiles.W - 12f, layout.Tiles.H));
+            noContactsText.gameObject.SetActive(false);
 
             // ---- Actions ----
             FeedBox ac = layout.Actions;
@@ -274,7 +282,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             SetHelp(sendButton, view.SendHelp);
 
             PaintPicture(view);
-            for (int i = 0; i < tiles.Length; i++) tiles[i].Paint(view.Tiles[i]);
+            bool none = view.NoContacts.Length > 0;
+            for (int i = 0; i < tiles.Length; i++) { tiles[i].SetVisible(!none); tiles[i].Paint(view.Tiles[i]); }
+            if (noContactsText.gameObject.activeSelf != none) noContactsText.gameObject.SetActive(none);
+            OpsText.Set(noContactsText, view.NoContacts);
+            noContactsText.color = OpsInk.Word(view.NoContactsTone == AvState.Inert ? AvState.Info : view.NoContactsTone);
 
             OpsText.Set(captionText, view.TaskedCaption);
             OpsText.Set(hintText, view.CardCount > 0 ? "CLICK A CARD TO ARM · CLICK AGAIN TO FIRE" : "NOTHING POSTED · MARK, THEN SEND");
@@ -426,6 +438,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>A fixed 36 px contact target: class word over percent/state, selected and MARKed marks.</summary>
         private sealed class Tile
         {
+            private readonly RectTransform root;
             private readonly AvFrame frame;
             private readonly Image rail;
             private readonly TMP_Text title, sub;
@@ -435,7 +448,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             public Tile(RectTransform parent, FeedBox box, Action<int> select)
             {
-                RectTransform root = AvLay.Child(parent, "Tile");
+                root = AvLay.Child(parent, "Tile");
                 AvLay.Place(root, box.X, box.Y, box.W, box.H);
                 frame = AvFrame.Add(root, "Frame", default(AvChamfer));
                 AvLay.Fill(frame.rectTransform);
@@ -450,6 +463,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 hit.Click = e => { if (present && e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) select(id); };
                 Restyle();
             }
+
+            public void SetVisible(bool visible) { if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible); }
 
             public void Paint(in FeedTileView v)
             {

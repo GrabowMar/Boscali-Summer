@@ -23,7 +23,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public bool Field;
             public SpaceObservations Observations;
             public TaskedDesk Tasked;
+            /// <summary>Callsigns of the humans whose posts this faction shows, so a poll does not look every one up again.</summary>
+            public readonly Dictionary<ulong, string> Labels = new Dictionary<ulong, string>();
         }
+        private struct IntentEntry { public string Words; public float NextAt; }
         private readonly struct Candidate
         {
             public readonly GlobalPosition Anchor, Position;
@@ -36,6 +39,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly Dictionary<FactionHQ, FactionSpace> factions = new Dictionary<FactionHQ, FactionSpace>();
         private readonly Dictionary<FactionHQ, float> nextAttempt = new Dictionary<FactionHQ, float>();
         private readonly UplinkSpawner spawner = new UplinkSpawner();
+        private readonly SpaceWatchOfficer watch = new SpaceWatchOfficer();
+        private readonly Dictionary<FactionHQ, IntentEntry> intents = new Dictionary<FactionHQ, IntentEntry>();
         private SupportManager manager;
         private float nextTick;
         private float nextCleanup;
@@ -44,7 +49,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public int Generation { get; private set; } = 1;
         internal UplinkSpawner Spawner => spawner;
 
-        public void Configure(SupportManager support) => manager = support;
+        public void Configure(SupportManager support)
+        {
+            manager = support;
+            watch.Configure(this, support);
+        }
 
         public void ResetForScene()
         {
@@ -56,6 +65,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
             manager?.SpaceNet?.ResetForScene(); // old receipts and every faction subscription end with the scene
+            watch.ResetForScene();
+            intents.Clear();
             factions.Clear();
             nextAttempt.Clear();
             nextTick = 0f;
@@ -74,6 +85,72 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal IReadOnlyList<Unit> UplinksFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.View : Array.Empty<Unit>();
+
+        /// <summary>The parts WATCH OFFICER OVERLORD works one faction through. False until the faction has a SPACE.</summary>
+        internal bool TryWatchParts(FactionHQ owner, out SpaceState state, out SpaceObservations observations, out TaskedDesk desk)
+        {
+            state = null; observations = null; desk = null;
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
+            state = faction.State; observations = faction.Observations; desk = faction.Tasked;
+            return state != null && observations != null && desk != null;
+        }
+
+        /// <summary>Fills the (cleared) list with every faction that has a SPACE. Bounded by <see cref="MaximumFactions"/>.</summary>
+        internal void CopyFactions(List<FactionHQ> into)
+        {
+            into.Clear();
+            foreach (var pair in factions) if (into.Count < MaximumFactions) into.Add(pair.Key);
+        }
+
+        /// <summary>A human of this faction did a SPACE domain verb (MARK, SEND, CLAIM or a bird task): OVERLORD steps back. Host only.</summary>
+        internal void NoteHumanSpaceVerb(Player player)
+        {
+            if (!GameAccess.IsServer() || player == null || player.HQ == null) return;
+            watch.RecordHumanActivity(player.HQ, PlayerIdentity.Of(player), SupportManager.MissionNow());
+        }
+
+        /// <summary>
+        /// The faction's ENEMY INTENT words: the name of the main effort the enemy's director has chosen, read from the host through a
+        /// Core contract, or UNKNOWN. Never a coordinate or a unit. Refreshed every five wall seconds, not per viewer poll.
+        /// </summary>
+        internal string IntentFor(FactionHQ owner)
+        {
+            if (owner == null || !GameAccess.IsServer()) return IntentWords.Unknown;
+            float t = Time.unscaledTime;
+            if (intents.TryGetValue(owner, out IntentEntry known) && t < known.NextAt) return known.Words;
+            string words = ReadIntent(owner);
+            if (intents.Count < MaximumFactions || intents.ContainsKey(owner)) intents[owner] = new IntentEntry { Words = words, NextAt = t + 5f };
+            return words;
+        }
+
+        private static string ReadIntent(FactionHQ owner)
+        {
+            if (!ModuleServices.TryGet(out IEnemyIntentSource source) || (source is UnityEngine.Object unity && unity == null)) return IntentWords.Unknown;
+            var hqs = FactionRegistry.GetAllHQs();
+            if (hqs == null) return IntentWords.Unknown;
+            foreach (FactionHQ hq in hqs)
+            {
+                if (hq == null || hq == owner || hq.faction == null) continue;
+                if (source.TryGetMainEffort(hq.faction.factionName, out string label)) return IntentWords.Line(label);
+            }
+            return IntentWords.Unknown;
+        }
+
+        private string LabelOf(FactionSpace faction, FactionHQ owner, ulong player)
+        {
+            if (faction.Labels.TryGetValue(player, out string known)) return known;
+            string label = manager != null ? manager.PlayerLabel(owner, player) : "";
+            // A name is cached once found; an absent player is looked up again next time (bounded by the posts on the board).
+            if (label.Length > 0 && faction.Labels.Count < SpaceContacts.MaxPlayers)
+                faction.Labels[player] = SpaceWire.Clean(label, SpaceWire.MaxMaker);
+            return SpaceWire.Clean(label, SpaceWire.MaxMaker);
+        }
+
+        private static int RadarDeadline(SpaceState state, float now)
+        {
+            float wait = state.ReadyIn(BirdTask.Scan, now);
+            return float.IsInfinity(wait) || wait <= 0.05f ? 0 : SpaceMirror.GateDeadline(now, wait);
+        }
 
         internal SpaceObservations ObservationsFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.Observations : null;
@@ -159,6 +236,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             into.Active = false; into.Feed = false; into.Family = SpaceFamilyState.Dark;
             into.UplinksLive = 0; into.UplinksTotal = 0; into.LiveMarks = 0; into.Gate = TaskedOutcome.None; into.GateDetail = 0;
+            into.NewestPost = 0; into.NewestAction = default; into.NewestTargets = 0; into.NewestWatchOfficer = false; into.NewestOwn = false;
+            into.NewestMaker = ""; into.RadarReadyAt = 0; into.Intent = "";
             into.ClearRows();
             if (viewer == null || viewer.HQ == null || manager == null || !factions.TryGetValue(viewer.HQ, out FactionSpace faction) ||
                 faction.Observations == null) return false;
@@ -179,6 +258,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             into.GateDetail = into.Gate == TaskedOutcome.Cooldown ? SpaceMirror.GateDeadline(now, manager.ServerCooldownRemaining(viewer))
                 : SpaceMirror.GateIsDeadline(into.Gate) ? SpaceMirror.GateDeadline(now, detail) : detail;
             ulong salt = manager.SpaceNet != null ? manager.SpaceNet.Salt : 0UL;
+            ulong viewerId = PlayerIdentity.Of(viewer);
+            into.RadarReadyAt = RadarDeadline(faction.State, now);
+            string intent = IntentFor(viewer.HQ);
+            into.Intent = IntentWords.IsKnown(intent) ? intent : ""; // UNKNOWN is the footer's default, not a payload
+            if (faction.Tasked != null)
+            {
+                // The headline always carries the newest post, so a pilot with the feed closed still hears about a new call.
+                faction.Tasked.Board.Snapshot(now, posts);
+                int newest = -1;
+                for (int i = 0; i < posts.Count; i++) if (newest < 0 || posts[i].Call.Id > posts[newest].Call.Id) newest = i;
+                if (newest >= 0)
+                {
+                    TaskedCall call = posts[newest].Call;
+                    into.NewestPost = call.Id; into.NewestAction = call.Action;
+                    into.NewestTargets = (byte)Math.Max(1, Math.Min(TaskedBoard.MaxMarks, call.MarkCount));
+                    into.NewestWatchOfficer = call.WatchOfficer;
+                    into.NewestOwn = !call.WatchOfficer && call.Maker == viewerId;
+                    into.NewestMaker = call.WatchOfficer || into.NewestOwn ? "" : LabelOf(faction, viewer.HQ, call.Maker);
+                }
+            }
             if (!rows) return true;
             into.Feed = true;
             contacts.CopyReveals(now, reveals);
@@ -198,9 +297,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     into.Marks.Add(new FeedMark { Id = marks[i].Id, X = marks[i].X, Z = marks[i].Z, Moving = marks[i].Moving,
                     Source = marks[i].Source, Expires = marks[i].ExpiresAt });
             if (faction.Tasked == null) return true;
-            faction.Tasked.Board.Snapshot(now, posts);
             int baseline = manager.TaskedBaseline(viewer, out bool charge);
-            ulong viewerId = PlayerIdentity.Of(viewer);
             for (int i = 0; i < posts.Count && into.Posts.Count < SpaceWire.MaxPosts; i++)
             {
                 TaskedCall call = posts[i].Call;
@@ -226,7 +323,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!codable) continue; // a post the wire cannot describe is not offered rather than poisoning the message
                 into.Posts.Add(new FeedPost { CallId = call.Id, Action = call.Action, WatchOfficer = call.WatchOfficer, Own = own,
                     Launching = posts[i].Launching, Points = points, Price = price, Payoff = payoff, Expires = call.ExpiresAt,
-                    Claimant = posts[i].Held ? manager.PlayerLabel(viewer.HQ, posts[i].Holder) : "" });
+                    Claimant = posts[i].Held ? manager.PlayerLabel(viewer.HQ, posts[i].Holder) : "",
+                    Maker = call.WatchOfficer || own ? "" : LabelOf(faction, viewer.HQ, call.Maker) });
             }
             return true;
         }
@@ -265,6 +363,19 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     {
                         nextTaskedWarning = Time.unscaledTime + 10f;
                         Plugin.Logger?.LogWarning("[Support.Tasked] Desk tick failed: " + e.Message);
+                    }
+                }
+            }
+            if (manager.Settings.WatchOfficerEnabled.Value)
+            {
+                // OVERLORD (host only) staffs a SPACE no human is working. A fault in it never stops the desks or the mirror.
+                try { watch.Tick(now); }
+                catch (Exception e)
+                {
+                    if (Time.unscaledTime >= nextTaskedWarning)
+                    {
+                        nextTaskedWarning = Time.unscaledTime + 10f;
+                        Plugin.Logger?.LogWarning("[Support.Overlord] Watch officer tick failed: " + e.Message);
                     }
                 }
             }

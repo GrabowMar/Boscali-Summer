@@ -155,6 +155,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Generation { get { SyncContacts(); return retired ? 0 : sceneGeneration; } }
         public int ConsumedTokenCount { get { SyncContacts(); return consumed.Count; } }
 
+        /// <summary>Live posts made by WATCH OFFICER OVERLORD (inside their own 600 s life).</summary>
+        public int CountWatchOfficer(float now)
+        {
+            SyncContacts();
+            int n = 0;
+            foreach (Entry entry in calls.Values) if (entry.Call.WatchOfficer && entry.Call.Valid(now)) n++;
+            return n;
+        }
+
         public static int CapacityFor(int humanProfile) => !TaskedFees.ValidProfile(humanProfile) ? 0 :
             humanProfile <= 4 ? 6 : humanProfile <= 16 ? 6 + humanProfile / 4 : MaxCalls;
 

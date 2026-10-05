@@ -258,6 +258,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return "MARKS " + s.LiveMarks + "/" + SpaceWire.MaxMarks + " · " + uplinks + " · SPACE " + (s.Family == SpaceFamilyState.Degraded ? "DEGRADED" : "NORMAL");
         }
 
+        /// <summary>Seconds until the RADAR bird can scan again, from the host's mission-time deadline mapped onto this clock (0 = ready).</summary>
+        public static int RadarReadySeconds(int deadline, float now)
+        {
+            if (deadline <= 0 || !SpaceRules.MissionTime(now)) return 0;
+            return Math.Max(0, (int)Math.Ceiling(deadline - (double)now));
+        }
+
+        /// <summary>
+        /// The one line that replaces the contact targets when the faction has none revealed: the legal next step (a RADAR SCAN, ready
+        /// or when) or that SPACE is offline. It never suggests a target; it says how to get one.
+        /// </summary>
+        public static string NoContactsLine(SpaceFamilyState family, int uplinksLive, int radarSeconds)
+        {
+            if (family == SpaceFamilyState.Dark || uplinksLive <= 0) return "NO CONTACTS — SPACE OFFLINE · RESTORE A SITE";
+            if (radarSeconds <= 0) return "NO CONTACTS — RADAR SCAN READY";
+            return "NO CONTACTS — RADAR READY " + (radarSeconds / 60) + ":" + (radarSeconds % 60).ToString("00");
+        }
+
         /// <summary>The words for a MARK verdict. A replay returns the historical verdict, so it is worded as history.</summary>
         public static string MarkWords(MarkVerdict verdict, bool replayed)
         {

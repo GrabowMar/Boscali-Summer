@@ -211,6 +211,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.StatusTone = !known || !state.Active || state.Family == SpaceFamilyState.Dark ? AvState.Danger
                 : state.Family == SpaceFamilyState.Degraded ? AvState.Caution : AvState.Info;
             FillTiles();
+            FillNoContacts(state, known, now);
             FillActions(state, known);
             FillPosts(state, now);
             FillWords(now);
@@ -404,6 +405,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
         }
 
+        /// <summary>
+        /// With nothing revealed the tile row says how to get a contact: a RADAR SCAN, ready or when, or that SPACE is offline. It never
+        /// names a target. The RADAR readiness is the host's deadline from the faction mirror, counted down on this clock.
+        /// </summary>
+        private void FillNoContacts(SpaceFeedState state, bool known, float now)
+        {
+            view.NoContacts = "";
+            view.NoContactsTone = AvState.Inert;
+            if (!known || !state.Active || !state.Feed || entries.Count > 0) return;
+            int seconds = SpaceFeedRules.RadarReadySeconds(state.RadarReadyAt, now);
+            view.NoContacts = SpaceFeedRules.NoContactsLine(state.Family, state.UplinksLive, seconds);
+            view.NoContactsTone = state.Family == SpaceFamilyState.Dark || state.UplinksLive <= 0 ? AvState.Danger
+                : seconds <= 0 ? AvState.Ready : AvState.Caution;
+        }
+
         private void FillActions(SpaceFeedState state, bool known)
         {
             bool linked = known && state.Active && state.Family != SpaceFamilyState.Dark;
@@ -453,7 +469,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
             int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
             string sub = (source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
-                (post.WatchOfficer ? "WATCH OFFICER OVERLORD" : post.Own ? "YOUR CALL" : "OPERATOR CALL") + " · " +
+                (post.WatchOfficer ? "WATCH OFFICER OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
                 (left / 60) + ":" + (left % 60).ToString("00");
             var card = new FeedCardView
             {
@@ -496,6 +512,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (callRecent && (!feedRecent || callAt >= feedWordsAt)) { words = calls.LastWords; tone = ToneOf(words); }
             else if (feedRecent) { words = feedWords; tone = feedTone; }
             else if (calls != null && calls.Armed != null) { words = "ARMED CALL · PRESS ITS CALL AGAIN, OR RIGHT-CLICK THE MAP"; tone = AvState.Caution; }
+            else if (IntentWords.IsKnown(manager.SpaceMirror.State.Intent)) { words = manager.SpaceMirror.State.Intent; tone = AvState.Info; } // the footer
             else { words = view.Ground ? "READY · CLICK A TARGET, CONFIRM, THEN SEND" : "READY · FLY ON: KEYBOARD AND JOYSTICK STAY LIVE"; tone = AvState.Ready; }
             view.Words = words;
             view.WordsTone = tone;

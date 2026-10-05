@@ -38,6 +38,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Tracks moving enemy ground contacts near the mark. Shares the radar scan recharge.")
                 .Toggle(16, settings.SatCameraEnabled, "SAT CAMERA",
                     "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
+                .Toggle(17, settings.WatchOfficerEnabled, "WATCH OFFICER",
+                    "OVERLORD staffs SPACE while no human is working it: it scans for contacts and posts TASKED calls from revealed ones.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

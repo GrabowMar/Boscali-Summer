@@ -94,6 +94,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         if (commands.Admit(id, wall)) { subs.CloseFeed(id); Poll(player, now, wall); }
                         break;
                     default:
+                        // MARK, SEND and CLAIM are the SPACE domain verbs: a human doing one is working SPACE, so OVERLORD steps back.
+                        space?.NoteHumanSpaceVerb(player);
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
                             net.SendSpaceReply(player, reply);
                         break;

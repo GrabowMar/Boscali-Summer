@@ -37,6 +37,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return space != null && space.TryTaskedResult(player, requestId, out result);
         }
 
+        /// <summary>The call is in the catalogue and the host has it switched on (what OVERLORD may use).</summary>
+        internal bool ActionEnabled(SupportActionId id) => catalog?.Find(id)?.Enabled == true;
+
+        /// <summary>How long the catalogue says a bird stays busy for this call (zero when it has no bird task).</summary>
+        internal float TaskSecondsOf(SupportActionId id) => catalog?.Find(id)?.TaskSeconds ?? 0f;
+
         internal int HumanCount(FactionHQ owner)
         {
             int humans = 0;
@@ -66,8 +72,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
             if (!GameAccess.IsServer() || catalog == null || credits == null || !TaskedSupported(action)) return TaskedOutcome.Unavailable;
             SupportActionDefinition definition = catalog.Find(action);
-            Player player = FindPlayer(owner, playerId);
-            if (definition == null || !definition.Enabled || player == null || player.HQ != owner) return TaskedOutcome.Unavailable;
+            // WATCH OFFICER OVERLORD has no Player: it may SEND (a live uplink and the bird are all it needs) but it never claims.
+            bool overlord = playerId == SpaceContacts.WatchOfficerId;
+            if (overlord && claiming) return TaskedOutcome.Unavailable;
+            Player player = overlord ? null : FindPlayer(owner, playerId);
+            if (definition == null || !definition.Enabled || (!overlord && (player == null || player.HQ != owner))) return TaskedOutcome.Unavailable;
             if (!TryGetSpaceState(owner, out SpaceState state) || !HasRequiredBird(state, definition.RequiredBird)) return TaskedOutcome.Unavailable;
             if (state.LiveUplinkCount == 0) return TaskedOutcome.UplinkDown;
             if (!claiming) return TaskedOutcome.None;

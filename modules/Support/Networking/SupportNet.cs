@@ -100,8 +100,11 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// Older peers must not interpret the retired action and result ids.
         /// Protocol 31 adds the faction-only SPACE mirror: SpaceCommand / SpaceReply / SpaceState messages. Every one carries this
         /// byte and a mismatched byte decodes to an empty message. No faction, price, class or favourite is ever sent by a client.
+        /// Protocol 32 widens the SPACE headline (always sent, even with the feed closed) by the newest live TASKED post (id, action,
+        /// target count, OVERLORD or OPERATOR, the poster's callsign), the RADAR scan-ready deadline and the ENEMY INTENT line, and gives
+        /// each post row its poster's callsign. Notices are derived on the client from that mirror: there is no new message.
         /// </summary>
-        internal const byte ProtocolVersion = 31;
+        internal const byte ProtocolVersion = 32;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
