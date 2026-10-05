@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
                 .Toggle(17, settings.WatchOfficerEnabled, "WATCH OFFICER",
                     "OVERLORD staffs SPACE while no human is working it: it scans for contacts and posts TASKED calls from revealed ones.")
+                .Toggle(18, settings.CyberEnabled, "CYBER / EW",
+                    "EW trucks and data centers, node intrusion (hop, hold, burn, drop) and the CYBER BURN packages on the TASKED board.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Support
 
             SupportManager manager = context.AddSceneService<SupportManager>(50);
             SpaceService space = context.AddSceneService<SpaceService>(51);
+            CyberService cyberService = context.AddSceneService<CyberService>(52);
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
@@ -44,6 +45,8 @@ namespace BoscaliSummer.Modules.Support
             manager.Configure(context.Settings.Support, perks, fortifications, network, context.Logger);
             space.Configure(manager);
             manager.AttachSpace(space);
+            cyberService.Configure(manager, space);
+            manager.AttachCyber(cyberService);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);
             manager.ConfigureDisableCooldowns(context.Settings.Diagnostics.DisableOpsCooldowns);
             context.AddService<ICameraTargetService>(manager);

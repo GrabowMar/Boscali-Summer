@@ -170,6 +170,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return wait <= 0.05f ? 0 : SpaceMirror.GateDeadline(now, wait);
         }
 
+        /// <summary>The faction's TASKED desk (the CYBER service posts its BURN packages on it). False until the faction has a SPACE.</summary>
+        internal bool TryGetDesk(FactionHQ owner, out TaskedDesk desk)
+        {
+            desk = owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.Tasked : null;
+            return desk != null;
+        }
+
         internal SpaceObservations ObservationsFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.Observations : null;
 

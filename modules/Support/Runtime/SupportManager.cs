@@ -330,6 +330,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
             Clock.Reset();
             space?.ResetForScene();
+            cyber?.ResetForScene();
             ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();

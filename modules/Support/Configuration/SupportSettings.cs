@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
         public ConfigEntry<bool> WatchOfficerEnabled { get; }
+        public ConfigEntry<bool> CyberEnabled { get; }
         public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
@@ -92,6 +93,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
             WatchOfficerEnabled = config.Bind("Support", "WatchOfficer", true,
                 "WATCH OFFICER OVERLORD: when no human is working SPACE it scans for contacts and posts TASKED calls from the contacts " +
                 "the faction has revealed (never an unrevealed one). Host-authoritative: on a server, only the host's value applies.");
+            CyberEnabled = config.Bind("Support", "Cyber", true,
+                "CYBER / EW: EW trucks and data centers spawn at rear airbases, and operators intrude into revealed enemy nodes (hold, burn, drop). " +
+                "Host-authoritative: on a server, only the host's value applies.");
             QuietNotices = config.Bind("Support", "QuietNotices", false,
                 "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
                 "RWR, missile, terrain) are never silenced.");
