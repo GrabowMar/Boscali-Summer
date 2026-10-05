@@ -287,7 +287,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static byte[] Compose(string identity, byte[] atlas) => Compose(Select(identity), atlas);
 
-        public static byte[] Compose(PortraitSelection selection, byte[] atlas)
+        public static byte[] Compose(PortraitSelection selection, byte[] atlas) =>
+            FinishDisplay(ComposeLayers(selection, atlas));
+
+        // Unfinished pixels keep anatomical/layer checks independent of the display treatment.
+        internal static byte[] ComposeLayers(PortraitSelection selection, byte[] atlas)
         {
             if (atlas == null || atlas.Length != AtlasWidth * AtlasHeight * 4)
                 throw new ArgumentException($"Expected a {AtlasWidth} x {AtlasHeight} RGBA portrait atlas.", nameof(atlas));
@@ -309,8 +313,34 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Layer(pixels, atlas, parts.AccessoryTile, sourceTopRows: headsetRows);
             }
 
-            // Art shares its lighting and palette; preserving source colors keeps eyes and skin readable in thumbnails.
             return pixels;
+        }
+
+        internal static byte[] FinishDisplay(byte[] pixels)
+        {
+            var finished = new byte[pixels.Length];
+            for (int y = 0; y < Height; y++)
+            {
+                // Static scanlines use portrait coordinates, independent of Unity's bottom-up storage.
+                int shade = (Height - 1 - y) % 4 == 2 ? 220 : 256;
+                int lower = Math.Max(0, y - 1) * Width * 4;
+                int upper = Math.Min(Height - 1, y + 1) * Width * 4;
+                for (int x = 0; x < Width; x++)
+                {
+                    int p = (y * Width + x) * 4;
+                    int left = (y * Width + Math.Max(0, x - 1)) * 4;
+                    int right = (y * Width + Math.Min(Width - 1, x + 1)) * 4;
+                    for (int c = 0; c < 3; c++)
+                    {
+                        // Half-pixel soft focus: retain the center and blend only its immediate neighbors.
+                        int soft = (pixels[p + c] * 8 + 2 * (pixels[left + c] + pixels[right + c] +
+                            pixels[lower + x * 4 + c] + pixels[upper + x * 4 + c]) + 8) / 16;
+                        finished[p + c] = (byte)((soft * shade + 128) / 256);
+                    }
+                    finished[p + 3] = pixels[p + 3];
+                }
+            }
+            return finished;
         }
 
         private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(max, value));

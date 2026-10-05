@@ -126,6 +126,10 @@ def register(sheet, family, index, rect_override=None, uniform_selector=None, fe
     else:
         rect = (round(column * sheet.width / 4), round(row * sheet.height / 4),
                 round((column + 1) * sheet.width / 4), round((row + 1) * sheet.height / 4))
+    if family == "hair":
+        # A connected wig can extend into the nominal gutter; crop padding retains
+        # its temple/sideburn while the scalp floodfill rejects neighboring wigs.
+        rect = (max(0, rect[0] - 16), rect[1], min(sheet.width, rect[2] + 16), rect[3])
     source = sheet.crop(rect)
     if family == "accessories":
         alpha = source.getchannel("A")
@@ -144,15 +148,12 @@ def register(sheet, family, index, rect_override=None, uniform_selector=None, fe
         # to this cell's center scalp, retaining nearby wisps and antialiased edges.
         # Neighbor fragments must not become part of the registered sprite bounds.
         alpha = source.getchannel("A")
-        occupied = [y for y in range(source.height) if alpha.getpixel((128, y)) > 100]
+        scalp_x = round((column + .5) * sheet.width / 4) - rect[0]
+        occupied = [y for y in range(source.height) if alpha.getpixel((scalp_x, y)) > 100]
         if not occupied:
             raise ValueError("Hair component lacks a center scalp anchor")
         mask = alpha.point(lambda a: 255 if a > 16 else 0)
-        # Enforce the requested source gutters before component extraction. A
-        # neighbor's wig can touch this wig across a faint bridge at the border.
-        mask.paste(0, (0, 0, 16, source.height))
-        mask.paste(0, (WIDTH - 16, 0, WIDTH, source.height))
-        ImageDraw.floodfill(mask, (128, occupied[len(occupied) // 2]), 128)
+        ImageDraw.floodfill(mask, (scalp_x, occupied[len(occupied) // 2]), 128)
         own_wig = mask.point(lambda a: 255 if a == 128 else 0).filter(ImageFilter.MaxFilter(5))
         source.putalpha(ImageChops.multiply(alpha, own_wig))
     if family == "uniforms" and uniform_selector is not None:
@@ -420,7 +421,7 @@ def main():
                 "tile_height": HEIGHT, "columns": COLUMNS, "rows": ROWS,
                 "tile_order": "top-left, row-major", "rgba_rows": "Unity bottom-up",
                 "source_rect_format": "Pillow left, top, right, bottom; right/bottom exclusive",
-                "hair_isolation": "16px source side gutters, center-scalp-connected alpha, 2px edge retention",
+                "hair_isolation": "16px horizontal crop padding, original cell scalp-connected alpha, 2px edge retention; natural temple/sideburn silhouette retained",
                 "composition": ["backdrop", "uniform-body", "head-and-masked-neck", "hair", "front-collar", "equipment"],
                 "landmarks": {"frame_ratio": "4:5", "eyes_y": 120, "head_width": 132, "hair_widths": HAIR_WIDTHS,
                               "body_width_before_crop": [324, 316], "desert_carrier_width_before_crop": [352, 354],
