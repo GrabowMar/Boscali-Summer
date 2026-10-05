@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Image back, rule, slab;
         private readonly TMP_Text slabText, words;
         private AvState tone = AvState.Inert;
-        private string slabRaw = "", wordsRaw = "";
+        private string slabRaw = "", wordsRaw = "", hint;
         private float width = AvTokens.PanelWidth;
 
         public C2Footer(RectTransform parent)
@@ -37,6 +37,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             Layout();
         }
 
+        /// <summary>Hover help: the TIP slab and the hint replace the status words while the pointer is over a control; null or empty restores them.</summary>
+        public void SetHint(string text)
+        {
+            string h = string.IsNullOrEmpty(text) ? null : text;
+            if (h == hint) return;
+            hint = h;
+            Restyle();
+            Layout();
+        }
+
         public override float Measure(float w) => Height;
 
         public override void Place(AvSlot s)
@@ -52,20 +62,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(rule.rectTransform, 0f, 0f, width, 1f);
             AvLay.Place(slab.rectTransform, 4f, 4f, SlabW, 16f);
             C2Kit.Place(slabText, 4f, 4f, SlabW, 16f);
-            OpsText.Set(slabText, C2Kit.FitTo(slabText, slabRaw, SlabW - 4f));
+            OpsText.Set(slabText, C2Kit.FitTo(slabText, hint != null ? "TIP" : slabRaw, SlabW - 4f));
             float x = 4f + SlabW + 8f, w = width - x - 8f;
-            OpsText.Set(words, C2Kit.FitTo(words, wordsRaw, w));
+            OpsText.Set(words, C2Kit.FitTo(words, hint ?? wordsRaw, w));
             C2Kit.Place(words, x, 0f, w, Height);
         }
 
         public override void Restyle()
         {
-            AvStyle f = AvStyleHost.FuiStyle("footer " + AvStates.Class(tone));
+            AvState shown = hint != null ? AvState.Inert : tone;
+            AvStyle f = AvStyleHost.FuiStyle("footer " + AvStates.Class(shown));
             back.color = AvStyleHost.Resolve(f.Background, AvTheme.SurfaceInert);
             rule.color = OpsInk.Hairline;
-            slab.color = C2Kit.SlabFill(tone == AvState.Inert ? AvState.Ready : tone);
+            slab.color = C2Kit.SlabFill(shown == AvState.Inert ? AvState.Ready : shown);
             slabText.color = C2Kit.SlabInk;
-            words.color = tone == AvState.Inert || tone == AvState.Ready || tone == AvState.Info ? OpsInk.Dim : OpsInk.Word(tone);
+            words.color = hint != null ? OpsInk.Ink
+                : tone == AvState.Inert || tone == AvState.Ready || tone == AvState.Info ? OpsInk.Dim : OpsInk.Word(tone);
         }
     }
 }

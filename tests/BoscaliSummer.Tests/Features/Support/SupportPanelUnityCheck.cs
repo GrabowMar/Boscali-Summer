@@ -3,7 +3,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
@@ -14,8 +16,8 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Current production CALLS builder and painter with pure model fixtures. Verifies both supported
-/// panel heights, row facts, favourites, banner, text and layout. No game, input or network simulation.
+/// Current production C2 CAP builder and painter with pure model fixtures. Verifies both supported
+/// panel heights, row facts, favourites, footer, text and layout. No game, input or network simulation.
 /// </summary>
 public static partial class SupportPanelUnityCheck
 {
@@ -115,29 +117,38 @@ public static partial class SupportPanelUnityCheck
         string words = state == "refused" ? CallWords.Refusal(CallRefusal.NoAim)
             : state == "armed" ? "ARMED · PRSM · PRESS AGAIN OR RIGHT-CLICK MAP"
             : state == "pending" ? "PENDING · CRUISE SALVO" : "";
-        panel.Paint(tiles, state == "fresh" ? "75 CR" : "600 CR", state == "fresh" ? "HOLD A BASE → HEAVY" : "", words, state == "pending");
-        AvConsole shell = Read<AvConsole>(panel, "shell");
-        for (int i = 0; i < 8; i++) shell.Ticker.TickNow();
+        var view = new CapView();
+        view.Tiles.AddRange(tiles);
+        view.Credit = state == "fresh" ? 75 : 600;
+        view.NextUnlock = state == "fresh" ? "HOLD A BASE → HEAVY" : "";
+        view.Words = words;
+        view.Pending = state == "pending";
+        for (int i = 0; i < view.Favourites.Length; i++) view.Favourites[i] = controller.Favourites[i];
+        view.Console = new BoscaliSummer.Modules.Support.Domain.C2.C2Console();
+        view.Console.Add("LEDGER +9 CR · 600 CR", BoscaliSummer.Modules.Support.Domain.C2.C2Tone.Info, 1f);
+        view.Faction = "Boscali";
+        view.Callsign = "VIPER-2";
+        view.Session = "36-91-E5";
+        view.KeyRot = "4:12";
+        view.Uplinks = "3/4";
+        view.UplinkTone = AvState.Caution;
+        view.Space = "DEGRADED";
+        panel.Paint(view);
+        for (int i = 0; i < 8; i++) panel.Ticker.TickNow();
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
         string where = state + " " + height;
         Capture(height, "calls-" + state + "-" + height + ".png");
-        GateConsole(shell, where);
+        GateConsole(panel.ConsoleRoot, where);
         CheckFacts(panel, controller, tiles, words, where);
 
-        var rows = Read<Dictionary<SupportActionId, CallLine>>(panel, "rows");
-        RectTransform viewport = shell.Root.GetComponentInChildren<ScrollRect>().viewport;
-        foreach (CallLine line in rows.Values)
+        var cap = Read<object>(panel, "cap");
+        var rows = Read<Dictionary<SupportActionId, C2Row>>(cap, "rows");
+        foreach (C2Row row in rows.Values)
         {
-            Rect rect = InSpace(viewport, line.Rect);
-            Check(rect.yMax <= viewport.rect.yMax + 1f && rect.yMin >= viewport.rect.yMin - 1f,
-                where + ": every CALL row must fit inside the page.");
-        }
-        if (height == 896f)
-        {
-            CallLine last = rows[CallSheet.Rows[CallSheet.Rows.Count - 1].Id];
-            float empty = InSpace(viewport, last.Rect).yMin - viewport.rect.yMin;
-            Check(empty <= viewport.rect.height * 0.12f, "896 CALLS page must not leave a bottom band over 12 percent.");
+            Rect rect = InSpace(panel.ConsoleRoot, row.Rect);
+            Check(rect.yMin >= panel.ConsoleRoot.rect.yMin + C2Footer.Height - 1f && rect.yMax <= panel.ConsoleRoot.rect.yMax - C2Chrome.Height + 1f,
+                where + ": every CALL row must sit between the chrome and the footer.");
         }
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(controllerObject);
@@ -145,33 +156,32 @@ public static partial class SupportPanelUnityCheck
 
     private static void CheckFacts(CallsPanel panel, CallsController calls, IReadOnlyList<CallTile> tiles, string words, string where)
     {
-        var rows = Read<Dictionary<SupportActionId, CallLine>>(panel, "rows");
+        var cap = Read<object>(panel, "cap");
+        var rows = Read<Dictionary<SupportActionId, C2Row>>(cap, "rows");
         Check(rows.Count == CallSheet.Rows.Count, where + ": exactly one row per current CALL.");
         foreach (CallTile tile in tiles)
         {
-            CallLine line = rows[tile.Id];
-            Check(Read<TMP_Text>(line, "name").text == tile.Label && Read<TMP_Text>(line, "tier").text == tile.TierWord,
-                where + ": CALL label and tier come from the pure view.");
-            Check(Read<TMP_Text>(line, "cost").text == tile.CostText && Read<TMP_Text>(line, "state").text == tile.StateWord,
-                where + ": CALL price and readiness come from the pure view.");
-            Check(line.Armed == (tile.State == CallState.Armed) && line.Dim == !tile.Enabled,
-                where + ": row armed and dim state follow the pure view.");
-            TMP_Text reason = Read<TMP_Text>(line, "reason");
-            Check(reason.text == tile.Reason, where + ": one reason chip comes from the pure quote.");
-            if (reason.gameObject.activeSelf) Check(reason.text.Length > 0, where + ": no empty reason chip.");
+            C2Row row = rows[tile.Id];
+            Check(Read<TMP_Text>(row, "nameText").text == tile.Label, where + ": CALL label comes from the pure view.");
+            Check(Read<TMP_Text>(row, "priceText").text == tile.CostText, where + ": CALL price comes from the pure view.");
+            Check(Read<TMP_Text>(row, "stateText").text == C2Cap.StateWord(tile), where + ": CALL readiness comes from the pure view.");
+            Check(row.Primary.Interactable == tile.Enabled, where + ": the primary button follows the tile's enabled state.");
+            Check(row.Armed == (tile.State == CallState.Armed), where + ": row armed state follows the pure view.");
+            TMP_Text chip = Read<TMP_Text>(row, "chipText");
+            if (chip.gameObject.activeSelf) Check(chip.text == tile.Reason && chip.text.Length > 0, where + ": the reason chip comes from the pure quote.");
         }
-        AvControl[] favourites = Read<AvControl[]>(panel, "favourites");
+        AvControl[] favourites = Read<AvControl[]>(cap, "favourites");
         for (int i = 0; i < favourites.Length; i++)
             foreach (CallTile tile in tiles)
                 if (tile.Id == calls.Favourites[i])
                     Check(favourites[i].Label == (i + 1) + " · " + tile.Label && favourites[i].Interactable == tile.Enabled &&
                         favourites[i].Armed == (tile.State == CallState.Armed), where + ": favourite mirrors its CALL.");
-        BriefCard banner = Read<BriefCard>(panel, "banner");
-        Check(Read<TMP_Text>(banner, "body").text == (words.Length == 0 ? "HOTLINE OPEN · PRESS A CALL TO ARM" : words),
-            where + ": outcome words have one home in the banner.");
         bool armed = false;
         foreach (CallTile tile in tiles) armed |= tile.State == CallState.Armed;
-        Check(banner.Control.Rect.gameObject.activeSelf == armed, where + ": ABORT appears only while armed.");
+        C2Footer footer = Read<C2Footer>(panel, "footer");
+        Check(Read<TMP_Text>(footer, "words").text.StartsWith(C2Cap.FooterWords(words, "").Substring(0, Mathf.Min(12, C2Cap.FooterWords(words, "").Length)), StringComparison.Ordinal),
+            where + ": outcome words have one home in the footer.");
+        Check(Read<AvControl>(cap, "abort").Rect.gameObject.activeSelf == armed, where + ": ABORT appears only while armed.");
     }
 
     private static T Read<T>(object target, string name) => (T)target.GetType().GetField(name, Hidden).GetValue(target);

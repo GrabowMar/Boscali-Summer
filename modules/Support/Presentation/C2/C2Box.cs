@@ -44,6 +44,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             set { if (Mathf.Approximately(value, bodyHeight)) return; bodyHeight = value; Layout(); Changed(); }
         }
 
+        public void SetTitle(string title)
+        {
+            string t = title ?? "";
+            if (t == titleRaw) return;
+            titleRaw = t;
+            Layout();
+        }
+
         public void SetMeta(string meta)
         {
             string m = meta ?? "";

@@ -25,7 +25,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private float width = AvTokens.PanelWidth;
         private AvState chipTone = AvState.Ready, stateTone = AvState.Inert;
         private bool armed, pinShown, extraShown;
-        private string indexRaw = "", nameRaw = "", chipRaw = "", subRaw = "", priceRaw = "", stateRaw = "";
+        private string indexRaw = "", nameRaw = "", chipRaw = "", subRaw = "", priceRaw = "", stateRaw = "", helpRaw = "", chipOverflowTip;
+        private string primaryLabelRaw;
+        private AvButtonStyle primaryStyleRaw;
+        private bool primaryEnabledRaw, hasSet;
 
         public C2Row(RectTransform parent, float height, bool subLine)
         {
@@ -69,6 +72,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public void Set(string index, string name, string chip, AvState chipState, string sub, string price, string state, AvState stateState,
             string primaryLabel, AvButtonStyle primaryStyle, bool primaryEnabled)
         {
+            // A refresh that changes nothing must not re-fit every string (the page refreshes several times a second).
+            if (hasSet && indexRaw == (index ?? "") && nameRaw == (name ?? "") && chipRaw == (chip ?? "") && subRaw == (sub ?? "") &&
+                priceRaw == (price ?? "") && stateRaw == (state ?? "") && chipTone == chipState && stateTone == stateState &&
+                primaryLabelRaw == (primaryLabel ?? "") && primaryStyleRaw == primaryStyle && primaryEnabledRaw == primaryEnabled) return;
+            hasSet = true;
+            primaryLabelRaw = primaryLabel ?? ""; primaryStyleRaw = primaryStyle; primaryEnabledRaw = primaryEnabled;
             indexRaw = index ?? ""; nameRaw = name ?? ""; chipRaw = chip ?? ""; subRaw = sub ?? ""; priceRaw = price ?? ""; stateRaw = state ?? "";
             chipTone = chipState;
             bool toneChanged = stateTone != stateState;
@@ -94,11 +103,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>Show the star pin button; <paramref name="pinnedNow"/> latches it.</summary>
         public void SetPin(bool pinnedNow, Action onPress)
         {
+            if (pinShown == (onPress != null) && pin.Latched == pinnedNow && pinAction == onPress) return;
             pinAction = onPress;
             pinShown = onPress != null;
             pin.Rect.gameObject.SetActive(pinShown);
             pin.Latched = pinnedNow;
             Layout();
+        }
+
+        /// <summary>
+        /// Hover help for the whole row and for its pin button; both show in the footer of the owning console. The row help is
+        /// followed by price and reason when the reason chip had to be dropped for room.
+        /// </summary>
+        public void SetHelp(string rowHelp, string pinHelp)
+        {
+            string r = rowHelp ?? "";
+            if (r != helpRaw) { helpRaw = r; ApplyTip(); }
+            if (pin.Help != pinHelp) pin.Help = pinHelp;
         }
 
         public override float Measure(float w) => rowHeight;
@@ -121,12 +142,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             x -= PrimaryW;
             AvLay.Place(Primary.Rect, x, (h - CtlH) * 0.5f, PrimaryW, CtlH);
             x -= Gap;
-            if (extraShown)
-            {
-                x -= ExtraW;
-                AvLay.Place(Extra.Rect, x, (h - CtlH) * 0.5f, ExtraW, CtlH);
-                x -= Gap;
-            }
             x -= StateW;
             OpsText.Set(stateText, C2Kit.FitTo(stateText, stateRaw, StateW));
             C2Kit.Place(stateText, x, 0f, StateW, h);
@@ -134,6 +149,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             OpsText.Set(priceText, C2Kit.FitTo(priceText, priceRaw, PriceW));
             C2Kit.Place(priceText, x, 0f, PriceW, h);
             float right = x - 6f;
+            // The extra button sits left of the price so every row keeps its price and state in the same columns.
+            // With a sub-line and room (a tall row) the extra button rides the top half, so the sub-line may run underneath it.
+            bool lift = subLine && h >= 43f;
+            float subRight = right;
+            if (extraShown)
+            {
+                right -= ExtraW;
+                AvLay.Place(Extra.Rect, right, lift ? 3f : (h - CtlH) * 0.5f, ExtraW, CtlH);
+                right -= 4f;
+            }
 
             // Left cluster.
             float left = RailW + 5f;
@@ -169,13 +194,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             subText.gameObject.SetActive(subLine && subRaw.Length > 0);
             if (subLine)
             {
-                OpsText.Set(subText, C2Kit.FitTo(subText, subRaw, area));
-                C2Kit.Place(subText, left, h - 17f, area, 14f);
+                float subArea = Mathf.Max(20f, (lift ? subRight : right) - left);
+                OpsText.Set(subText, C2Kit.FitTo(subText, subRaw, subArea));
+                C2Kit.Place(subText, left, h - 17f, subArea, 14f);
             }
         }
 
-        private void SetTip(string tip)
+        private void SetTip(string overflow)
         {
+            if (overflow == chipOverflowTip) return;
+            chipOverflowTip = overflow;
+            ApplyTip();
+        }
+
+        private void ApplyTip()
+        {
+            string tip = helpRaw.Length > 0 && chipOverflowTip != null ? helpRaw + " · " + chipOverflowTip
+                : helpRaw.Length > 0 ? helpRaw : chipOverflowTip;
             if (helpTip == null && tip == null) return;
             frame.raycastTarget = tip != null;
             helpTip = AvHelpTip.Attach(frame.gameObject, tip ?? "");

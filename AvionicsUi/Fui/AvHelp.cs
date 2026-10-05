@@ -10,8 +10,10 @@ namespace NOAvionics
     public sealed class AvHelpScope : MonoBehaviour
     {
         internal AvFooter Footer;
-        public void Show(string text) => Footer?.SetHint(text);
-        public void Clear() => Footer?.SetHint(null);
+        /// <summary>A console with its own footer part (the OPS C2 terminal) receives the hint here; null restores its status line.</summary>
+        internal System.Action<string> Sink;
+        public void Show(string text) { Footer?.SetHint(text); Sink?.Invoke(text); }
+        public void Clear() { Footer?.SetHint(null); Sink?.Invoke(null); }
     }
 
     /// <summary>Attach to any raycast target; shows <see cref="Text"/> in the nearest <see cref="AvHelpScope"/>.</summary>

@@ -1,5 +1,7 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.C2;
+using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Tests.Features.Support
 {
@@ -58,12 +60,60 @@ namespace BoscaliSummer.Tests.Features.Support
             console.Add(null, C2Tone.Info, 1f);
             Eq(console.CopyNewest(buf, 8), 0, "null ignored");
 
+            Cap();
+
             TestAssert.That(!C2Tabs.KeyAllowed(false, false, false), "keys not taken while flying");
             TestAssert.That(C2Tabs.KeyAllowed(true, false, false), "keys over page");
             TestAssert.That(C2Tabs.KeyAllowed(false, true, false), "keys in full screen");
             TestAssert.That(!C2Tabs.KeyAllowed(true, true, true), "never while typing");
             Eq(C2Tabs.FromKey(5), C2Tab.Board, "key 5");
             Eq(C2Tabs.FromKey(9), C2Tab.Cap, "bad key");
+        }
+
+        private static CallTile Tile(SupportActionId id, CallState state, string word, string cost = "140 CR", string reason = "", string tier = "HEAVY") =>
+            new CallTile(id, "LABEL", tier, cost, reason, state, word, state == CallState.Ready || state == CallState.Armed);
+
+        private static void Cap()
+        {
+            Eq(C2Cap.ChipKind(""), C2Chip.None, "chip none");
+            Eq(C2Cap.ChipKind("-30 % UNDERDOG"), C2Chip.Discount, "chip discount");
+            Eq(C2Cap.ChipKind("+25 % CONTESTED"), C2Chip.Surcharge, "chip surcharge");
+            Eq(C2Cap.ChipKind("WEATHER"), C2Chip.Other, "chip other");
+
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Ready, "READY")), "READY", "state ready");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Armed, "ARMED — PRESS AGAIN")), "ARMED", "state armed");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Cooldown, "72s")), "COOL 1:12", "state cooldown clock");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Cooldown, "FROZEN 3 MIN")), "FROZEN", "state frozen");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Locked, "HOLD A BASE → HEAVY")), "LOCKED", "state locked");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.LowCredit, "NEED 140 CR")), "LOW CR", "state low credit");
+            Eq(C2Cap.StateWord(Tile(SupportActionId.Prsm, CallState.Offline, "OFFLINE")), "OFFLINE", "state offline");
+
+            CallTile locked = Tile(SupportActionId.Cruise, CallState.Locked, "HOLD A BASE → HEAVY");
+            Eq(C2Cap.UnlockText(locked), "HOLD A BASE → HEAVY", "unlock text");
+            Eq(C2Cap.UnlockText(Tile(SupportActionId.Cruise, CallState.Locked, "LOCKED")), "", "bare locked has no unlock text");
+            Eq(C2Cap.Sub(locked, false), "LOCKED · HOLD A BASE → HEAVY", "locked sub-line carries the goal");
+            TestAssert.That(System.Text.RegularExpressions.Regex.IsMatch(C2Cap.Sub(Tile(SupportActionId.Cruise, CallState.Ready, "READY"), false), "^AUTH [0-9A-F]{4}-H · HEAVY$"), "sub-line auth and tier");
+            TestAssert.That(C2Cap.Sub(Tile(SupportActionId.JtacMark, CallState.Ready, "READY", tier: "LIGHT"), true).EndsWith("· UNLASE FREE"), "jtac sub-line says unlase is free");
+
+            Eq(C2Cap.RowTip(locked), CallWords.Refusal(CallRefusal.Locked, unlock: "HOLD A BASE → HEAVY"), "locked tip is the refusal");
+            Eq(C2Cap.RowTip(Tile(SupportActionId.Prsm, CallState.Cooldown, "72s")), CallWords.Refusal(CallRefusal.Cooldown, seconds: 72), "cooldown tip");
+            Eq(C2Cap.RowTip(Tile(SupportActionId.Prsm, CallState.Cooldown, "FROZEN 3 MIN")), CallWords.Refusal(CallRefusal.Frozen, seconds: 180), "frozen tip");
+            Eq(C2Cap.RowTip(Tile(SupportActionId.Prsm, CallState.LowCredit, "NEED 400 CR", "400 CR")), CallWords.Refusal(CallRefusal.LowCredit, need: 400), "low credit tip");
+            Eq(C2Cap.RowTip(Tile(SupportActionId.Prsm, CallState.Offline, "OFFLINE")), CallWords.Refusal(CallRefusal.Offline), "offline tip");
+            TestAssert.That(C2Cap.RowTip(Tile(SupportActionId.Prsm, CallState.Ready, "READY", "25 CR", "-30 % UNDERDOG")).Contains("25 CR (-30 % UNDERDOG)"), "ready tip quotes price and reason");
+
+            Eq(C2Cap.Slab(true, false, ""), "ARMED", "slab armed");
+            Eq(C2Cap.Slab(false, true, ""), "WAIT", "slab pending");
+            Eq(C2Cap.Slab(false, false, "NEGATIVE: NO AIM — DESIGNATE OR RIGHT-CLICK MAP"), "NEG", "slab refusal");
+            Eq(C2Cap.Slab(false, false, ""), "READY", "slab ready");
+            Eq(C2Cap.FooterWords("", "HOLD A BASE → HEAVY"), "HOTLINE OPEN · PRESS A CALL TO ARM · NEXT: HOLD A BASE → HEAVY", "footer next unlock");
+            Eq(C2Cap.FooterWords("", ""), "HOTLINE OPEN · PRESS A CALL TO ARM", "footer plain");
+            Eq(C2Cap.FooterWords("SHOT · RADAR", "X"), "SHOT · RADAR", "footer words win");
+            Eq(C2Cap.Delta(0), "NO CHANGE", "delta none");
+            Eq(C2Cap.Delta(9), "+9 CR", "delta up");
+            Eq(C2Cap.Delta(-140), "-140 CR", "delta down");
+            Eq(C2Cap.LineTone("NEGATIVE: LOW CREDIT — NEED 400 CR"), C2Tone.Warn, "refusal line is amber");
+            Eq(C2Cap.LineTone("DISARMED"), C2Tone.Info, "other lines are info");
         }
 
         private static void Eq<T>(T actual, T expected, string message) =>

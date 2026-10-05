@@ -43,6 +43,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string LastWords { get; private set; } = "";
         public bool Pending => request.Pending;
 
+        /// <summary>Raised with every line of words the controller says (arm, refusal, receipt): the C2 console mirrors them.</summary>
+        internal event System.Action<string> Spoke;
+
+        /// <summary>The point the armed CALL would fire at now: the own designation first, else the pick of this arm. False when neither exists.</summary>
+        public bool TryAimPoint(out GlobalPosition point)
+        {
+            if (TryPod(out point)) return true;
+            if (mapAim.HasValue) { point = mapAim.Value; return true; }
+            point = default;
+            return false;
+        }
+
         public void Configure(SupportManager manager, SupportSettings settings, IObservationSource observations)
         {
             this.manager = manager;
@@ -342,6 +354,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             LastWords = words ?? "";
             LastWordsAt = SupportManager.MissionNow();
             AvUiSound.Play(cue);
+            Spoke?.Invoke(LastWords);
         }
 
         private static string Label(SupportActionId id) => CallSheet.TryGet(id, out CallRow row) ? row.Label : id.ToString();
