@@ -66,9 +66,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             into["wing_focus_shown"] = at >= 0 && Pages.Of(at, PerPage) == listPage ? 1 : 0;
             into["wing_focus_flying"] = at >= 0 && s == PilotStatus.Flying ? 1 : 0;
             into["wing_focus_state"] = at >= 0 ? SquadronWords.Row(s, ReferenceEquals(inspected, upcoming), number[at]) : "";
-            into["wing_stamp"] = dossier.StampWord ?? "";
-            into["wing_rank_line"] = dossier.RankLine;
+            into["wing_stamp"] = fileTop.StampWord ?? "";
+            into["wing_rank_line"] = fileTop.RankText;
             into["wing_xp_fill"] = at >= 0 ? Mathf.RoundToInt(PilotXp.Fill(inspected.Xp) * 100f) : 0;
+            into["wing_file_tab"] = fileTop.TabText ?? "";
+            into["wing_ribbons"] = fileTop.RibbonCount;
             into["wing_perk_cards"] = owned;
             into["wing_airframe"] = assign.NameText;
             into["wing_slot"] = assign.SlotText;

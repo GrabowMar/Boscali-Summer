@@ -13,23 +13,22 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // WING's AIRFRAME ASSIGNMENT bar (right under the dossier): where the dossier's pilot is (the airframe it flies, is queued in or last
+    // WING's ASSIGNED line (in the personnel file card): where the dossier's pilot is (the airframe it flies, is queued in or last
     // flew, and a slot line that may wrap), AIR SAR for that pilot (not the nearest) and an affordable LOCAL SAR with its countdown. Both
     // SAR buttons always show, disabled with their reason (0.9 critique §8.6).
     internal sealed partial class WmcWing
     {
-        private WingAssignBar assign;
+        private WingAssignLine assign;
+        private AvControl assignAir, assignLocal;
         private readonly ConfirmGate localGate = new ConfirmGate();
         private readonly InboundRow[] inboundRows = new InboundRow[8];
         private int barKey = int.MinValue, iconFor = int.MinValue;
         private string airWhy, localWhy;
 
+        /// <summary>The ASSIGNED line, in the file card's flow (AIR SAR and LOCAL SAR are the card's action row, built with it).</summary>
         private void BuildAssignment(AvFlow f)
         {
-            f.Section(AvIcon.Plane, SquadronWords.AssignTitle);
-            assign = f.Add(new WingAssignBar(f.Content, AirSar, LocalSar));
-            ids.Add("wing.airsar", assign.AirSar);
-            ids.Add("wing.localsar", assign.LocalSar);
+            assign = f.Add(new WingAssignLine(f.Content));
         }
 
         /// <summary>The bar, rebuilt only when what it says changed: the roster, the pilot, its member's duty, its launch's phase, the
@@ -69,8 +68,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 assign.SetRail("inert");
                 SetIcon(null);
                 airWhy = localWhy = client ? SquadronWords.ClientWhy : SquadronWords.NoFocus;
-                SetSar(assign.AirSar, SquadronWords.AirLabel(0), false, false, airWhy);
-                SetSar(assign.LocalSar, SquadronWords.LocalLabel(false, null), false, false, localWhy);
+                SetSar(assignAir, SquadronWords.AirLabel(0), false, false, airWhy);
+                SetSar(assignLocal, SquadronWords.LocalLabel(false, null), false, false, localWhy);
                 return;
             }
             bool next = ReferenceEquals(p, upcoming);
@@ -83,13 +82,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // AIR SAR: the dossier's pilot, down on land; a helicopter already going latches its number.
             int rescuer = s == PilotStatus.Rescue ? number[at] : 0;
             airWhy = SquadronWords.AirWhy(s, false) ?? (airCan ? null : "AIR SAR · " + air);
-            SetSar(assign.AirSar, SquadronWords.AirLabel(rescuer), airWhy == null, rescuer > 0, airWhy ?? SquadronWords.AirTip);
+            SetSar(assignAir, SquadronWords.AirLabel(rescuer), airWhy == null, rescuer > 0, airWhy ?? SquadronWords.AirTip);
 
             // LOCAL SAR: two presses, priced on the slot line; the countdown latches while it runs.
             string countdown = left >= 0f ? WmcText.Clock(left) : null;
             if (SquadronWords.LocalWhy(s, false) is string stateWhy) localWhy = stateWhy;
             else localWhy = WingSearchAndRescue.CanOrganizeLocalRecovery(p, out string why) ? null : why;
-            SetSar(assign.LocalSar, SquadronWords.LocalLabel(asking, countdown), localWhy == null, asking || countdown != null,
+            SetSar(assignLocal, SquadronWords.LocalLabel(asking, countdown), localWhy == null, asking || countdown != null,
                 localWhy ?? SquadronWords.LocalTip(Credits.Price(cost)));
         }
 
