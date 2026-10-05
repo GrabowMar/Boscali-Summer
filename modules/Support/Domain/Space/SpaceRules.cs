@@ -9,6 +9,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public const int BirdCount = 3, TaskCount = 4;
         public const float DamagedHealth = 0.5f, DamagedCooldownFactor = 1.25f, DarkGraceSeconds = 120f;
+        /// <summary>Space spec 5.2: a killed bird returns through a fund bar of 400 CR (HQ FUND pays it) and then a 6 minute build.</summary>
+        public const float BirdRebuildGoal = 400f, BirdBuildSeconds = 360f;
 
         public static float Cooldown(BirdTask task) => task switch
         {
