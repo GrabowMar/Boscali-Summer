@@ -69,8 +69,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (filter == RevealFilter.Air && !(unit is Aircraft)) continue;
                 if (filter == RevealFilter.Ground && unit is Aircraft) continue;
                 if (filter == RevealFilter.Emitters && !Emitting(unit)) continue;
-                if (unit.speed > maximumSpeed) continue;
-                if (unit.speed < minimumSpeed) continue;
+                float speed = Math.Abs(unit.speed); // native speed is signed
+                if (speed > maximumSpeed || speed < minimumSpeed) continue;
                 Vector3 position = unit.transform.position;
                 if ((position - centre).sqrMagnitude > radiusSquared) continue;
                 attempted++;

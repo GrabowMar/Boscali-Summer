@@ -226,7 +226,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ContactClass classification = unit.NetworkHQ == owner ? ContactClass.Friendly :
                 unit.NetworkHQ == null ? ContactClass.Neutral : ContactClass.EnemyGround;
             bool fresh = newEntry || !Contacts.TryReveal(entry.Id, now, out _);
-            if (!Contacts.Reveal(entry.Id, classification, type, point.x, point.z, unit.speed >= 4f, now, source)) return false;
+            if (!Contacts.Reveal(entry.Id, classification, type, point.x, point.z, Math.Abs(unit.speed) >= 4f, now, source)) return false;
             if (newEntry) { indexed.Add(unit.persistentID, entry); ids.Add(entry.Id, entry); }
             if (owner.trackingDatabase != null && owner.trackingDatabase.TryGetValue(unit.persistentID, out TrackingInfo track)) Attach(entry, track);
             return fresh;

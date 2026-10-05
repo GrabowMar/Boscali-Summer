@@ -177,10 +177,16 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     return SupportResult.FriendlyNear;
                 }
                 Vector3 target = shot.Impact.ToLocalPosition();
+                Vector3 release = target + Vector3.up * RodTiming.ReleaseAltitude;
                 missile = spawner.SpawnSavedMissile(shot.Definition.unitPrefab,
-                    (target + Vector3.up * RodTiming.ReleaseAltitude).ToGlobalPosition(), Quaternion.LookRotation(Vector3.down),
+                    release.ToGlobalPosition(), Quaternion.LookRotation(Vector3.down),
                     shot.Owner, string.Empty, shot.Guide, Vector3.down * RodTiming.ReleaseSpeed, shot.Name);
                 if (missile == null) return SupportResult.SpawnFailed;
+                // SpawnSavedMissile moves only the transform. Missile.StartMissile places the rigidbody solely from a living guiding
+                // unit, so a rod claimed by a ground operator or by a pilot whose aircraft is gone started at the local origin and
+                // detonated there (observed live: 15 km from its aimpoint, beside the host camera). Place the body explicitly.
+                missile.transform.position = release;
+                if (missile.rb != null) missile.rb.position = release;
                 missile.SetAimpoint(shot.Impact, Vector3.zero);
                 missile.Arm();
                 // The receipt is the only thing that makes this a launch. A refused receipt deletes the spawn below.
