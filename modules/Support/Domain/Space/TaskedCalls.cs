@@ -17,6 +17,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public readonly int Id, HumanProfile;
         public readonly SupportActionId Action;
+        /// <summary>The OPS domain that made this post (SPACE rod, CYBER package, later SOF); derived from the action, never from a client.</summary>
+        public readonly TaskedDomain Domain;
         public readonly ulong Maker;
         public readonly bool WatchOfficer;
         public readonly float CreatedAt, ExpiresAt;
@@ -26,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public TaskedCall(int id, SupportActionId action, ulong maker, bool watchOfficer, int humanProfile,
             float createdAt, SpaceMark[] marks, EffortShare[] shares)
         {
-            Id = id; Action = action; Maker = maker; WatchOfficer = watchOfficer; HumanProfile = humanProfile;
+            Id = id; Action = action; Domain = TaskedKinds.DomainOf(action); Maker = maker; WatchOfficer = watchOfficer; HumanProfile = humanProfile;
             CreatedAt = createdAt; ExpiresAt = createdAt + TaskedBoard.CallSeconds;
             // Refuse oversized input without allocating from an untrusted length.
             this.marks = marks != null && marks.Length <= TaskedBoard.MaxMarks ? (SpaceMark[])marks.Clone() : null;
@@ -44,7 +46,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         internal bool Valid(float now)
         {
             if (Id <= 0 || (!WatchOfficer && Maker == 0) || !TaskedFees.ValidProfile(HumanProfile) ||
-                !CallSheet.TryGet(Action, out _) || !SpaceRules.MissionTime(CreatedAt) ||
+                !TaskedKinds.TryGet(Action, out _) || !SpaceRules.MissionTime(CreatedAt) ||
                 !SpaceRules.MissionTime(now) || now < CreatedAt || !SpaceRules.Finite(ExpiresAt) ||
                 ExpiresAt <= CreatedAt || now >= ExpiresAt || marks == null || marks.Length == 0 || shares == null) return false;
             for (int i = 0; i < marks.Length; i++)
@@ -456,7 +458,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public static int Quote(SupportActionId action, int hostBaselinePrice, int humanProfile, bool ownCall)
         {
-            if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !CallSheet.TryGet(action, out CallRow row)) return -1;
+            if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !TaskedKinds.TryGet(action, out TaskedKind row)) return -1;
             if ((humanProfile == 1 && ownCall) || (humanProfile >= 2 && humanProfile <= 4)) return 0;
             return action == SupportActionId.Artillery ? Math.Max(1, (int)Math.Round(hostBaselinePrice * .25d, MidpointRounding.AwayFromZero)) :
                 row.Tier == CallTier.Light ? 10 : row.Tier == CallTier.Heavy ? 25 : 120;

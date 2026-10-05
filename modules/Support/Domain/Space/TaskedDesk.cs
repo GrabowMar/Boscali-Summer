@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -287,6 +288,35 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return Remember(key, TaskedOutcome.Posted, id, 0, 0);
         }
 
+        /// <summary>
+        /// Posts a host-built package (a CYBER BURN) as one TASKED call: one fixed point, the maker as the only contributor.
+        /// Posted / NotPosted (board full, a duplicate of the same kind on that node, or a disallowed action).
+        /// </summary>
+        public TaskedResult PostPackage(ulong maker, SupportActionId action, int nodeId, float x, float z, float effort)
+        {
+            try
+            {
+                float now = ports.Now;
+                if (retired || maker == 0 || maker == SpaceContacts.WatchOfficerId || nodeId <= 0 || !SpaceRules.MissionTime(now) ||
+                    !CyberPackages.TryOfAction(action, out _) || !SpaceRules.Finite(effort) || effort <= 0f)
+                    return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
+                if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
+                int humans = profile.Observe(ports.Humans, now);
+                int id = nextCallId + 1;
+                var marks = new[] { new SpaceMark(nodeId, x, z, false, now + TaskedBoard.CallSeconds, BirdKind.Radar) };
+                var shares = new[] { new EffortShare(maker, effort) };
+                var call = new TaskedCall(id, action, maker, false, humans, now, marks, shares);
+                if (!board.TryPost(call, now)) return new TaskedResult(TaskedOutcome.NotPosted, 0, 0);
+                nextCallId = id;
+                return new TaskedResult(TaskedOutcome.Posted, id, 0);
+            }
+            catch (Exception e)
+            {
+                Warn("PostPackage threw: " + e.Message);
+                return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
+            }
+        }
+
         // ---- CLAIM -----------------------------------------------------------------------------
 
         public TaskedResult Claim(ulong player, int requestId, int callId, bool favorite = false)
@@ -502,6 +532,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Friendly standoff on the sampled impact. A port fault fails closed.</summary>
         private bool Clear(TaskedLaunchJob job)
         {
+            // The friendly standoff guards an impact point; a CYBER package has none.
+            if (job.Call.Domain != TaskedDomain.Space) return true;
             try { return ports.ImpactClear(job.ImpactX, job.ImpactZ); }
             catch (Exception e) { Warn("Standoff check threw: " + e.Message); return false; }
         }

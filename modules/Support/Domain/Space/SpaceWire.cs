@@ -126,6 +126,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public int CallId;
         public SupportActionId Action;
+        /// <summary>The post's OPS domain, derived from its action (also carried on the wire and checked there).</summary>
+        public TaskedDomain Domain => TaskedKinds.DomainOf(Action);
         /// <summary>Launching is a held, physically launching call only; the 2 s reservation window is not shown as launching.</summary>
         public bool WatchOfficer, Own, Launching;
         /// <summary>The post's snapshot ground points (1..6, fixed at SEND). The first is where the rod flies.</summary>
