@@ -221,7 +221,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             if (!presenting || Application.isBatchMode) return;
             head.Measure(boundAircraft, Time.fixedDeltaTime);
-            if (head.Discontinuity) { exposure.Reset(); shake.ResetMeasurements(); }
+            if (head.Discontinuity)
+            {
+                exposure.Reset();
+                shake.ResetMeasurements();
+                airframeAudio?.Silence();
+            }
         }
 
         private void Update()
@@ -269,7 +274,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             double missionClock = mission != null ? mission.MissionTime : Time.time;
             float loadDt = double.IsNaN(lastMissionClock) ? 0f : (float)(missionClock - lastMissionClock);
-            if (loadDt < 0f || loadDt > 0.25f) { exposure.Reset(); shake.ResetMeasurements(); loadDt = 0f; }
+            if (loadDt < 0f || loadDt > 0.25f)
+            {
+                exposure.Reset();
+                shake.ResetMeasurements();
+                airframeAudio?.Silence();
+                loadDt = 0f;
+            }
             lastMissionClock = missionClock;
             exposure.Step(head.ForceG.y, loadDt);
             bool comfort = settings.ComfortMotionEnabled.Value;
@@ -308,8 +319,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             {
                 windAudio.TryRoute();
                 float wetMask = environmentValid ? Mathf.Clamp01(environment.Precipitation01 + environment.Condensation01) : 0f;
+                Vector3 localAir = aircraft.rb.transform.InverseTransformDirection(relativeAir);
+                float slip = Mathf.Clamp(localAir.x / Mathf.Max(40f, airspeed) * 3f, -1f, 1f);
                 windAudio.Tick(airspeed, environmentValid ? environment.GustMps : 0f,
-                    true, settings.WindAudioEnabled.Value, dt, wetMask, altitude);
+                    true, settings.WindAudioEnabled.Value, dt, wetMask, altitude, slip,
+                    environmentValid ? environment.Turbulence01 : 0f);
             }
             if (pilotStrainAudio != null)
             {
@@ -368,6 +382,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["forceZ"] = force.z;
             state["shots"] = shake.Shots;
             state["touchdowns"] = shake.Touchdowns;
+            state["gearLocks"] = shake.GearLocks;
             state["sunGlare"] = glare.Intensity;
             state["mfdPanels"] = mfdGlow.PanelCount;
             state["mfdBoost"] = mfdGlow.Boost;
@@ -398,6 +413,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionSources"] = (airframeAudio != null ? 1 : 0) + (windAudio != null ? 1 : 0) + (pilotStrainAudio != null ? 1 : 0);
             state["immersionWindPlaying"] = windAudio != null && windAudio.IsPlaying;
             state["immersionWindVolume"] = windAudio != null ? windAudio.Volume : 0f;
+            state["immersionWindPan"] = windAudio != null ? windAudio.Pan : 0f;
             state["immersionCreakPlaying"] = airframeAudio != null && airframeAudio.IsPlaying;
             state["immersionStrainPlaying"] = pilotStrainAudio != null && pilotStrainAudio.IsPlaying;
 

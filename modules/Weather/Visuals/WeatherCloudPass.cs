@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Material march, composite;
         private Camera camera;
         private Renderer volume;
-        private Action<Camera> beforeRender;
+        private Action<Camera, Matrix4x4, Matrix4x4> beforeRender;
         private bool reduced, temporal;
         private bool hooked;
 
@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <paramref name="temporalUpdate"/> marches a quarter of it per frame;
         /// <paramref name="onRender"/> runs at render time with the camera's final pose.</summary>
         internal void Bind(Camera target, Renderer volumeRenderer, Material marchMaterial, Material compositeMaterial,
-            bool halfResolution, bool temporalUpdate, Action<Camera> onRender)
+            bool halfResolution, bool temporalUpdate, Action<Camera, Matrix4x4, Matrix4x4> onRender)
         {
             if (camera != target || temporal != temporalUpdate || reduced != halfResolution)
             {
@@ -63,8 +63,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (rendering == null) return;
             if (volume != null) volume.forceRenderingOff = rendering != camera;
             if (rendering != camera) return;
-            beforeRender?.Invoke(rendering);
-            if (!reduced || march == null || composite == null) return;
+            if (!reduced) { beforeRender?.Invoke(rendering, rendering.worldToCameraMatrix, rendering.projectionMatrix); return; }
+            if (march == null || composite == null) return;
             UniversalAdditionalCameraData data = rendering.GetUniversalAdditionalCameraData();
             if (data == null || data.renderType != CameraRenderType.Base || data.scriptableRenderer == null) return;
             data.scriptableRenderer.EnqueuePass(this);
@@ -77,6 +77,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (!targets.Ensure(screen.width, screen.height)) { ExecutedFrame = -1; return; }
             // A frame without the pass leaves stale history behind.
             if (ExecutedFrame != Time.frameCount - 1) targets.InvalidateHistory();
+            // URP has installed this camera's matrices and depth target now. Other begin-
+            // camera subscribers may finish changing its pose after our enqueue callback.
+            beforeRender?.Invoke(camera, renderingData.cameraData.GetViewMatrix(), renderingData.cameraData.GetProjectionMatrix());
 
             CommandBuffer cmd = CommandBufferPool.Get("Boscali Clouds");
             try

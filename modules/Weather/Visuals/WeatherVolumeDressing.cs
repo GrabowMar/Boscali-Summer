@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly ManualLogSource logger;
         private readonly CloudVolumeUniforms uniforms = new CloudVolumeUniforms();
         private readonly WeatherCloudPass pass = new WeatherCloudPass();
-        private readonly Action<Camera> onRender;
+        private readonly Action<Camera, Matrix4x4, Matrix4x4> onRender;
         private int mapStep = -1;
         private float fadeStart, fadeLength;
         private Material material, compositeMaterial;
@@ -306,11 +306,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         /// <summary>At render time, with the camera's final pose: the reduced-resolution march
         /// rebuilds its rays from the corners of this exact view.</summary>
-        private void RenderTimeCamera(Camera camera)
+        private void RenderTimeCamera(Camera camera, Matrix4x4 view, Matrix4x4 projection)
         {
             if (material == null || camera == null) return;
+            root.transform.position = view.inverse.GetColumn(3);
             GlobalPosition global = camera.transform.GlobalPosition();
-            uniforms.ApplyView(camera, new Vector3((float)global.x, (float)global.y, (float)global.z));
+            uniforms.ApplyView(camera, new Vector3((float)global.x, (float)global.y, (float)global.z), view, projection, material);
         }
 
         internal bool InCloud(float x, float y, float z) => DensityAt(x, y, z) > 0.08f;

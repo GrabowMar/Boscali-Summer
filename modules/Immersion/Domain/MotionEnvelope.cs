@@ -9,9 +9,12 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         private bool machArmed;
         private int outsideSide;
         private float lastCrossing = -100f;
+        private bool gearPrimed, gearMoving;
+        private int gearDirection;
         public float Recoil { get; private set; }
         public float Landing { get; private set; }
         public float Sonic { get; private set; }
+        public float GearLock { get; private set; }
 
         public void AddGun(float momentum, float strength)
         {
@@ -31,6 +34,24 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             Recoil *= (float)Math.Exp(-8f * dt);
             Landing *= (float)Math.Exp(-4.5f * dt);
             Sonic *= (float)Math.Exp(-7f * dt);
+            GearLock *= (float)Math.Exp(-12f * dt);
+        }
+
+        // Native gear sounds already supply the latch; this is only a small rotational impulse.
+        public bool GearTransition(int direction, bool moving, bool enabled, float dt)
+        {
+            if (!enabled || dt <= 0f || float.IsNaN(dt) || float.IsInfinity(dt) ||
+                (direction != 1 && direction != -1))
+            {
+                ResetGear();
+                return false;
+            }
+            bool locked = gearPrimed && gearMoving && !moving && direction == gearDirection;
+            gearPrimed = true;
+            gearMoving = moving;
+            gearDirection = direction;
+            if (locked) GearLock = -direction * 0.04f;
+            return locked;
         }
 
         public bool SonicCrossing(float mach, float time)
@@ -63,7 +84,8 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         }
 
         public void ResetMach() { machPrimed = machArmed = false; outsideSide = 0; lastCrossing = -100f; Sonic = 0f; }
-        public void ClearExtra() { Recoil = Landing = 0f; }
-        public void Reset() { Recoil = Landing = 0f; ResetMach(); }
+        private void ResetGear() { gearPrimed = gearMoving = false; gearDirection = 0; GearLock = 0f; }
+        public void ClearExtra() { Recoil = Landing = 0f; ResetGear(); }
+        public void Reset() { ClearExtra(); ResetMach(); }
     }
 }

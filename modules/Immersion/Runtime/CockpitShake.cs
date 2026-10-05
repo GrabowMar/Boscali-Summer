@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public Vector3 AnglesDeg { get; private set; }
         public int Shots { get; private set; }
         public int Touchdowns { get; private set; }
+        public int GearLocks { get; private set; }
 
         public void Tick(Aircraft aircraft, bool cockpit, bool extra, bool machOn,
             float shakeStrength, float mach, float turbulence, float gust, float dt)
@@ -26,6 +27,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             lastVerticalSpeed = aircraft.rb.velocity.y;
             primed = true;
             if (!extra) { events.ClearExtra(); }
+            LandingGear.GearState gear = aircraft.gearState;
+            int gearDirection = gear == LandingGear.GearState.Extending || gear == LandingGear.GearState.LockedExtended ? 1 :
+                gear == LandingGear.GearState.Retracting || gear == LandingGear.GearState.LockedRetracted ? -1 : 0;
+            bool gearMoving = gear == LandingGear.GearState.Extending || gear == LandingGear.GearState.Retracting;
+            if (events.GearTransition(gearDirection, gearMoving, active && strength > 0f, dt)) GearLocks++;
             if (machOn && strength > 0f) events.SonicCrossing(mach, Time.time);
             else events.ResetMach();
             events.Step(dt);
@@ -39,6 +45,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 -events.Recoil * 0.32f - events.Landing * 0.55f + Mathf.Sin(time * 31f) * buzz,
                 Mathf.Sin(time * 23f) * buzz * 0.4f,
                 Mathf.Sin(time * 41f) * (buzz + events.Recoil * 0.11f) + events.Sonic * 0.35f) * strength;
+            AnglesDeg += Vector3.right * Mathf.Clamp(events.GearLock * strength, -0.08f, 0.08f);
         }
 
         public void OnShot(Gun gun)
