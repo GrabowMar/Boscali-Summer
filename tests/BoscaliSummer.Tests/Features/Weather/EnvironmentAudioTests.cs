@@ -62,11 +62,30 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Low dynamic pressure produces no supplemental cockpit wind");
             TestAssert.That(CanopyWindMath.Target(float.NaN, 2f, 1f, 0f, 0f).volume == 0f,
                 "Invalid flight inputs cannot propagate NaN into the audio source");
+            var noCues = CanopyWindMath.Target(250f, 2f, 1f, 0f, 0f, 0f, 0f);
+            TestAssert.That(noCues == sea && noCues.pan == 0f && noCues.cutoff == 1800f + sea.pitch * 1200f,
+                "Optional airflow cues preserve the original centered wind target when absent");
+            float originalGain = (0.75f * 0.72f + 0.025f * 0.28f) * 0.35f *
+                (1f + 0.025f * (float)Math.Sin(1.8f));
+            TestAssert.That(noCues.volume == originalGain && noCues.pitch == 0.85f + 0.75f * 0.5f + 0.025f * 0.2f,
+                "Calm-air volume and pitch match the pre-extension dynamic-pressure mix exactly");
+            var left = CanopyWindMath.Target(250f, 2f, 1f, 0f, 0f, -1f, 0.8f);
+            var right = CanopyWindMath.Target(250f, 2f, 1f, 0f, 0f, 1f, 0.8f);
+            TestAssert.That(left.pan == -0.25f && right.pan == 0.25f && left.volume == right.volume &&
+                left.pitch == right.pitch && left.cutoff == right.cutoff,
+                "Lateral airflow changes stereo balance symmetrically without changing wind energy or timbre");
+            TestAssert.That(right.volume > sea.volume && right.cutoff > sea.cutoff,
+                "Rough air adds restrained gain and brighter wind texture to the existing loop");
+            TestAssert.That(CanopyWindMath.Target(250f, 2f, 1f, 0f, 0f, float.NaN, float.PositiveInfinity) == sea,
+                "Invalid optional airflow cues fall back to the unchanged wind target");
+            TestAssert.That(CanopyWindMath.Target(39f, 0f, 1f, 0f, 0f, 1f, 1f).volume == 0f,
+                "Airflow cues cannot create wind sound without enough dynamic pressure");
             for (int time = 0; time <= 600; time++)
             {
-                var wind = CanopyWindMath.Target(900f, 100f, 1.1f, 0f, time);
-                TestAssert.That(wind.volume >= 0f && wind.volume <= 0.32f && wind.pitch >= 0.85f && wind.pitch <= 1.5f,
-                    "Wind variation remains bounded even at maximum speed/gust/density");
+                var wind = CanopyWindMath.Target(900f, 100f, 1.1f, 0f, time, 100f, 100f);
+                TestAssert.That(wind.volume >= 0f && wind.volume <= 0.32f && wind.pitch >= 0.85f && wind.pitch <= 1.5f &&
+                    wind.pan == 0.25f && wind.cutoff >= 2800f && wind.cutoff <= 4200f,
+                    "Wind variation, spectrum and stereo balance remain bounded at maximum speed/gust/density/roughness");
             }
         }
     }

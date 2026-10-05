@@ -12,6 +12,7 @@ internal static class Program
         IdentityAndRoles();
         SemanticSelectors();
         Composition();
+        DisplayFinish();
         if (args.Length != 0)
         {
             Check((args.Length == 4 || args.Length == 6 && args[4] == "--manifest") && args[0] == "--atlas" && args[2] == "--out",
@@ -56,13 +57,21 @@ internal static class Program
             Registration(manifest.RootElement, atlas);
         }
         HeadsetFit(atlas);
+        // The brown side-part must bridge the right temple; source gutter clipping left a background wedge here.
+        foreach (int topY in new[] { 100, 108, 116 })
+        foreach (int x in new[] { 181, 183, 185 })
+            Check(atlas[AtlasOffset(16, x, PilotPortraitGenerator.Height - 1 - topY) + 3] >= 230,
+                  "Brown side-part has a clipped temple gap at " + x + "," + topY);
 
         outputDirectory = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(outputDirectory);
         var cases = new List<object>();
         void Write(string group, int index, PortraitSelection selection, byte[] pixels = null)
         {
-            pixels ??= PilotPortraitGenerator.Compose(selection, atlas);
+            pixels ??= PilotPortraitGenerator.ComposeLayers(selection, atlas);
+            if (group == "variety")
+                File.WriteAllBytes(Path.Combine(outputDirectory, "unfiltered-" + index.ToString("D3") + ".rgba"), pixels);
+            pixels = PilotPortraitGenerator.FinishDisplay(pixels);
             Check(pixels.Length == PilotPortraitGenerator.Width * PilotPortraitGenerator.Height * 4, "Invalid output dimensions.");
             for (int i = 3; i < pixels.Length; i += 4) Check(pixels[i] == 255, "Real portrait contains a transparent output pixel.");
             string file = group + "-" + index.ToString("D3") + ".rgba";
@@ -93,7 +102,7 @@ internal static class Program
             {
                 var selection = new PortraitSelection((PortraitBody)body, body == 0 ? 0 : 4,
                     body == 0 ? 1 : 5, uniforms[role, faction], 0, 0);
-                byte[] pixels = PilotPortraitGenerator.Compose(selection, atlas);
+                byte[] pixels = PilotPortraitGenerator.ComposeLayers(selection, atlas);
                 if (baseline == null) baseline = pixels;
                 else
                 {
@@ -162,7 +171,7 @@ internal static class Program
         for (int face = 0; face < PilotPortraitGenerator.FacesPerBody; face++)
         {
             var selection = new PortraitSelection((PortraitBody)body, face, 0, 0, 0, 0);
-            byte[] pixels = PilotPortraitGenerator.Compose(selection, atlas);
+            byte[] pixels = PilotPortraitGenerator.ComposeLayers(selection, atlas);
             foreach (int topDownY in new[] { eyesY, mouthY })
             {
                 int y = PilotPortraitGenerator.Height - 1 - topDownY;
@@ -186,10 +195,10 @@ internal static class Program
         {
             int face = body == 0 ? 0 : 4, hair = body == 0 ? 1 : 5;
             var selection = new PortraitSelection((PortraitBody)body, face, hair, faction == 0 ? 0 : 2, accessory, 0);
-            byte[] pixels = PilotPortraitGenerator.Compose(selection, atlas);
+            byte[] pixels = PilotPortraitGenerator.ComposeLayers(selection, atlas);
             if (accessory != 0)
             {
-                byte[] baseline = PilotPortraitGenerator.Compose(selection, gearlessAtlas);
+                byte[] baseline = PilotPortraitGenerator.ComposeLayers(selection, gearlessAtlas);
                 Check(!baseline.AsSpan().SequenceEqual(pixels), "Accessory " + accessory + " has no visible effect.");
                 int tile = PilotPortraitGenerator.Resolve(selection).AccessoryTile;
                 bool sampleFound = false;
@@ -215,7 +224,7 @@ internal static class Program
         File.WriteAllText(Path.Combine(outputDirectory, "cases.json"), JsonSerializer.Serialize(new
         {
             width = PilotPortraitGenerator.Width, height = PilotPortraitGenerator.Height,
-            format = "bottom-up RGBA", cases,
+            format = "bottom-up RGBA", displayFinish = "0.5px soft focus; static 1px scanline every 4px at 14.1% darkness", cases,
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine("Real atlas passed: 110 nonempty/18 reserved tiles, " +
                           (manifestPath == null ? "" : "neckline coverage, neck contours and shoulder fit, ") +
@@ -269,8 +278,8 @@ internal static class Program
                       "Headset band floats above or sinks into a bald crown: tile " + tile + ", face " + face +
                       ", band underside " + bandBottom + ", scalp " + crown);
                 var selection = new PortraitSelection((PortraitBody)(face / 8), face % 8, 0, tile == 49 ? 0 : 2, 2, 0);
-                byte[] fitted = PilotPortraitGenerator.Compose(selection, atlas);
-                byte[] bare = PilotPortraitGenerator.Compose(new PortraitSelection(selection.Body, selection.Face, 0, selection.Uniform, 0, 0), atlas);
+                byte[] fitted = PilotPortraitGenerator.ComposeLayers(selection, atlas);
+                byte[] bare = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(selection.Body, selection.Face, 0, selection.Uniform, 0, 0), atlas);
                 int visibleBottom = -1;
                 for (int y = 0; y < 80; y++)
                 for (int x = 123; x <= 133; x++)
@@ -486,7 +495,7 @@ internal static class Program
         Put(atlas, 16, 32, rearY, 20, 40, 60, 128);
         Put(atlas, 0, 10, 0, 1, 2, 3, 255);
         Put(atlas, 0, 10, PilotPortraitGenerator.Height - 1, 200, 210, 220, 255);
-        byte[] composed = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 0, 0), atlas);
+        byte[] composed = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 0, 0), atlas);
         Pixel(composed, 23, frontY, 120, 90, 110);
         Pixel(composed, 24, frontY, 13, 44, 85);
         Pixel(composed, 26, crownY, 5, 7, 9);
@@ -498,17 +507,17 @@ internal static class Program
         Pixel(composed, 10, PilotPortraitGenerator.Height - 1, 200, 210, 220);
         Check(composed[3] == 255, "Transparent cells did not retain an opaque backdrop.");
         Put(atlas, 48, 24, frontY, 90, 80, 70, 255);
-        byte[] glasses = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 1, 0), atlas);
+        byte[] glasses = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 1, 0), atlas);
         Pixel(glasses, 24, frontY, 90, 80, 70);
-        byte[] emptyCap = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 4, 0), atlas);
+        byte[] emptyCap = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 4, 0), atlas);
         Pixel(emptyCap, 26, crownY, 5, 7, 9);
         Put(atlas, 50, 25, frontY, 10, 20, 30, 255);
-        byte[] cap = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
+        byte[] cap = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
         Pixel(cap, 24, frontY, 13, 44, 85);
         Pixel(cap, 25, frontY, 10, 20, 30);
         Pixel(cap, 26, crownY, 220, 100, 60);
         Pixel(cap, 30, rearY, 5, 7, 9);
-        byte[] helmet = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 5, 0), atlas);
+        byte[] helmet = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 5, 0), atlas);
         Pixel(helmet, 24, frontY, 120, 90, 110);
         Pixel(helmet, 26, crownY, 220, 100, 60);
         Pixel(helmet, 30, rearY, 0, 0, 0);
@@ -525,7 +534,7 @@ internal static class Program
         Put(atlas, 16, 40, overlap, 5, 7, 9, 255);
         Put(atlas, 16, 39, overlap, 5, 7, 9, 255);
         Put(atlas, 16, 42, leftTemple, 5, 7, 9, 255);
-        byte[] tilted = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
+        byte[] tilted = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 3, 0), atlas);
         Pixel(tilted, 40, leftTemple, 5, 7, 9);
         Pixel(tilted, 41, leftTemple, 0, 0, 0);
         Pixel(tilted, 41, rightTemple, 5, 7, 9);
@@ -542,21 +551,51 @@ internal static class Program
         Put(atlas, 49, 128, band, 20, 40, 60, 128);
         Put(atlas, 56, 128, band, 20, 40, 60, 128);
         Put(atlas, 49, 72, ear, 9, 8, 7, 255);
-        byte[] bald = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 0, 0, 2, 0), atlas);
+        byte[] bald = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 0, 0, 2, 0), atlas);
         Pixel(bald, 128, lowCrown, 110, 100, 90);
         Pixel(bald, 72, ear, 9, 8, 7);
-        byte[] high = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Female, 0, 0, 2, 2, 0), atlas);
+        byte[] high = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Female, 0, 0, 2, 2, 0), atlas);
         Pixel(high, 128, highCrown, 110, 100, 90);
         Pixel(high, 128, PilotPortraitGenerator.Height - 1, 0, 0, 0);
-        byte[] haired = PilotPortraitGenerator.Compose(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 2, 0), atlas);
+        byte[] haired = PilotPortraitGenerator.ComposeLayers(new PortraitSelection(PortraitBody.Male, 0, 1, 0, 2, 0), atlas);
         Pixel(haired, 128, band, 10, 20, 30);
         Pixel(haired, 72, ear, 9, 8, 7);
         try
         {
-            PilotPortraitGenerator.Compose(PilotPortraitGenerator.DefaultSelection, new byte[4]);
+            PilotPortraitGenerator.ComposeLayers(PilotPortraitGenerator.DefaultSelection, new byte[4]);
             throw new InvalidOperationException("Invalid atlas dimensions were accepted.");
         }
         catch (ArgumentException) { }
+    }
+
+    private static void DisplayFinish()
+    {
+        var flat = new byte[PilotPortraitGenerator.Width * PilotPortraitGenerator.Height * 4];
+        for (int p = 0; p < flat.Length; p += 4)
+        {
+            flat[p] = 120; flat[p + 1] = 160; flat[p + 2] = 200; flat[p + 3] = 255;
+        }
+        byte[] finished = PilotPortraitGenerator.FinishDisplay(flat);
+        Check(!ReferenceEquals(flat, finished), "Display finish must not overwrite raw anatomical evidence.");
+        Pixel(flat, 128, PilotPortraitGenerator.Height - 1 - 2, 120, 160, 200);
+        Pixel(finished, 128, PilotPortraitGenerator.Height - 1, 120, 160, 200);
+        Pixel(finished, 128, PilotPortraitGenerator.Height - 1 - 2, 103, 138, 172);
+        Pixel(finished, 128, PilotPortraitGenerator.Height - 1 - 6, 103, 138, 172);
+        Check(finished.AsSpan().SequenceEqual(PilotPortraitGenerator.FinishDisplay(flat)),
+              "Static scanline phase must be deterministic.");
+        Array.Clear(flat);
+        for (int p = 3; p < flat.Length; p += 4) flat[p] = 255;
+        flat[0] = flat[1] = flat[2] = 255;
+        finished = PilotPortraitGenerator.FinishDisplay(flat);
+        Check(finished[0] < 255 && finished[4] > 0, "Soft focus must soften a one-pixel edge.");
+        Pixel(finished, PilotPortraitGenerator.Width - 1, 0, 0, 0, 0);
+        Pixel(finished, 0, PilotPortraitGenerator.Height - 1, 0, 0, 0);
+        for (int p = 3; p < finished.Length; p += 4) Check(finished[p] == 255, "Display finish created transparency.");
+        var atlas = new byte[PilotPortraitGenerator.AtlasWidth * PilotPortraitGenerator.AtlasHeight * 4];
+        Put(atlas, 78, 128, PilotPortraitGenerator.Height - 1 - 8, 120, 160, 200, 255);
+        byte[] raw = PilotPortraitGenerator.ComposeLayers(PilotPortraitGenerator.DefaultSelection, atlas);
+        Check(PilotPortraitGenerator.Compose(PilotPortraitGenerator.DefaultSelection, atlas).AsSpan().SequenceEqual(
+            PilotPortraitGenerator.FinishDisplay(raw)), "Production portrait skipped or doubled its display finish.");
     }
 
     private static void Put(byte[] atlas, int tile, int x, int y, byte r, byte g, byte b, byte a)

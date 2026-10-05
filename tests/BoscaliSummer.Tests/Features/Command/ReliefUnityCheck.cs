@@ -8,6 +8,8 @@ using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
 
 public static class ReliefUnityCheck
@@ -27,6 +29,15 @@ public static class ReliefUnityCheck
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons must load.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
+            if (Environment.GetEnvironmentVariable("BOSCALI_RELIEF_URP") == "1")
+            {
+                var renderer = ScriptableObject.CreateInstance<UniversalRendererData>();
+                var pipeline = UniversalRenderPipelineAsset.Create(renderer);
+                pipeline.msaaSampleCount = 1;
+                pipeline.renderScale = 1f;
+                GraphicsSettings.renderPipelineAsset = pipeline;
+                QualitySettings.renderPipeline = pipeline;
+            }
             const int side = 900;
             string assetName = Environment.GetEnvironmentVariable("BOSCALI_ASSET_NAME") ?? "terrain2_map";
             float mapWidth = float.Parse(Environment.GetEnvironmentVariable("BOSCALI_MAP_WIDTH") ?? "81920",
@@ -68,6 +79,11 @@ public static class ReliefUnityCheck
             var map = new GameObject("DynamicMap", typeof(DynamicMap)).GetComponent<DynamicMap>();
             map.mapImage = image;
             map.iconLayer = image;
+            map.viewIndicator = new GameObject("CameraIndicator", typeof(RectTransform));
+            map.viewIndicator.transform.SetParent(image.transform, false);
+            SceneSingleton<CameraStateManager>.i = new GameObject("ViewPose", typeof(CameraStateManager))
+                .GetComponent<CameraStateManager>();
+            SceneSingleton<CameraStateManager>.i.transform.position = new Vector3(5000f, 1500f, -9000f);
             map.mapBackground = background.GetComponent<Image>();
             map.mapScaleCenter = scaleCenter.transform;
             map.mapScaleProxy = scaleProxy.transform;
@@ -92,8 +108,13 @@ public static class ReliefUnityCheck
             if (assetName == "terrain_naval_map")
                 AssertNavalChartAlignment(image.GetComponent<Image>().sprite.texture, stylePath);
             Canvas.ForceUpdateCanvases();
+            UnitMapIcon openingTrack = Track(image.transform, map, -12000f, 7000f);
             MfdTerrainRelief.Tick();
             if (!MfdTerrainRelief.IsDrawing) throw new Exception("Terrain model did not mount.");
+            if (!MfdTerrainRelief.TryProject(-12000f, 7000f, ((RectTransform)image.transform).rect,
+                    out Vector2 openingPoint) ||
+                Vector2.Distance(openingTrack.iconImage.transform.localPosition, openingPoint) > .1f)
+                throw new Exception("Opening relief left an existing native glyph flat until its next update batch.");
             Transform orbit = map.mapBackground.transform.Find("NOAvionics.MapOrbit");
             if (orbit == null || orbit.GetComponentsInChildren<AvControl>(true).Length != 8 ||
                 orbit.Find("Footer") == null || orbit.GetComponent<AvHelpScope>() == null)
@@ -123,7 +144,7 @@ public static class ReliefUnityCheck
             Canvas.ForceUpdateCanvases();
             var rotatedTarget = new RenderTexture(1250, side, 24);
             screen.targetTexture = rotatedTarget;
-            screen.Render();
+            RenderCamera(screen);
             RenderTexture.active = rotatedTarget;
             var rotatedPreview = new Texture2D(1250, side, TextureFormat.RGB24, false);
             rotatedPreview.ReadPixels(new Rect(0, 0, 1250, side), 0, 0);
@@ -141,7 +162,7 @@ public static class ReliefUnityCheck
                 AssertWholeMap(map);
             }
             MfdTerrainRelief.Rig.ZoomAt(2f, .5f, .5f, 0f);
-            MfdTerrainRelief.Tick();
+            DrawTerrain();
             Vector2 beforePan = ProjectInViewport(map, 0f, 0f);
             image.transform.localPosition += new Vector3(90f, -60f, 0f);
             Canvas.ForceUpdateCanvases();
@@ -153,7 +174,7 @@ public static class ReliefUnityCheck
             if (!MfdTerrainRelief.TryGround(.4f, .6f, out Vector3 grabbed))
                 throw new Exception("No terrain under the grab point.");
             MfdTerrainRelief.Rig.Grab(grabbed.x, grabbed.y, grabbed.z, .6f, .4f);
-            MfdTerrainRelief.Tick();
+            DrawTerrain();
             AssertViewportTerrain(map, "ground grab");
             if (!MfdTerrainRelief.TryGround(.6f, .4f, out Vector3 held) ||
                 Vector3.Distance(held, grabbed) > 1f)
@@ -165,11 +186,12 @@ public static class ReliefUnityCheck
             Vector3 oldTrackPosition = cachedTrack.iconImage.transform.localPosition;
             int originalRevision = MfdTerrainRelief.ViewRevision;
             MfdTerrainRelief.Rotate(35f, 15f);
-            if (MfdTerrainRelief.ViewRevision <= originalRevision ||
-                Mathf.Abs(MfdTerrainRelief.Yaw - 35f) > .01f ||
+            if (Mathf.Abs(MfdTerrainRelief.Yaw - 35f) > .01f ||
                 Mathf.Abs(MfdTerrainRelief.Pitch - 55f) > .01f)
-                throw new Exception("Orbit did not change the view and projection revision.");
+                throw new Exception("Orbit did not change the intended view.");
             MfdTerrainRelief.Tick();
+            if (MfdTerrainRelief.ViewRevision <= originalRevision)
+                throw new Exception("Rendered orbit did not change the projection revision.");
             Rect mapRect = ((RectTransform)image.transform).rect;
             if (!MfdTerrainRelief.TryProject(-21000f, 13000f, mapRect, out Vector2 cachedPoint) ||
                 Vector3.Distance(cachedTrack.iconImage.transform.localPosition,
@@ -239,6 +261,8 @@ public static class ReliefUnityCheck
             MfdTerrainRelief.FollowIcon(info);
             if (Vector3.Distance(info.transform.position, icon.iconImage.transform.position) > .01f)
                 throw new Exception("Selected-unit information did not follow its icon.");
+            CheckRenderedPoseSynchronization(map, cachedTrack, objective, info);
+            CheckLayoutBeforeSnapshot(map);
             UnitMapIcon friendly = Track(image.transform, map, -11000f, 4000f);
             UnitMapIcon hostile = Track(image.transform, map, 9000f, 4000f);
             friendly.unit = new TestUnit { definition = new TestDefinition(),
@@ -298,7 +322,7 @@ public static class ReliefUnityCheck
             Canvas.ForceUpdateCanvases();
             var target = new RenderTexture(side, side, 24);
             screen.targetTexture = target;
-            screen.Render();
+            RenderCamera(screen);
             RenderTexture.active = target;
             var output = new Texture2D(side, side, TextureFormat.RGB24, false);
             output.ReadPixels(new Rect(0, 0, side, side), 0, 0);
@@ -310,7 +334,7 @@ public static class ReliefUnityCheck
                 .GetField("controlRenderers", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
             foreach (MeshRenderer field in fieldRenderers) field.enabled = false;
             terrainCamera.orthographicSize = 250f;
-            terrainCamera.Render();
+            RenderCamera(terrainCamera);
             RenderTexture.active = terrainCamera.targetTexture;
             var close = new Texture2D(terrainCamera.targetTexture.width,
                 terrainCamera.targetTexture.height, TextureFormat.RGB24, false);
@@ -321,6 +345,11 @@ public static class ReliefUnityCheck
             if (!control.enabled || !threat.enabled || !flatLabels.activeSelf ||
                 !secondTrack.iconImage.enabled || MfdTerrainRelief.IsDrawing)
                 throw new Exception("Closing the terrain model did not restore native overlay state.");
+            if (Vector2.Distance(cachedTrack.iconImage.transform.localPosition,
+                    new Vector2(-21000f, 13000f) * map.mapDisplayFactor) > .01f ||
+                Vector2.Distance(objective.transform.localPosition,
+                    new Vector2(18000f, 12000f) * map.mapDisplayFactor) > .01f)
+                throw new Exception("Closing relief left projected coordinates in the native map.");
             MfdTerrainRelief.Reset();
             string heightSidecar = Path.Combine(maps, assetName + ".bmap");
             byte[] invalid = File.ReadAllBytes(heightSidecar);
@@ -329,7 +358,7 @@ public static class ReliefUnityCheck
             MfdTerrainRelief.Tick();
             if (MfdTerrainRelief.IsDrawing || image.GetComponent<Image>().color.a < .99f)
                 throw new Exception("Invalid terrain data did not leave the native map visible.");
-            File.WriteAllText("result.txt", "PASS: 4 captures; native zoom hierarchy and full-viewport terrain coverage through pan/zoom/orbit, altitude projection, box selection, rendered context text and selection-box chrome, context lifecycle, native restoration, and invalid-asset fallback.");
+            File.WriteAllText("result.txt", "PASS: " + (GraphicsSettings.currentRenderPipeline != null ? "URP" : "built-in") + "; 4 captures; throttled terrain/icon/objective/selection/click synchronization, viewport resize, released render texture recovery, render-state restoration, native zoom hierarchy and full-viewport terrain coverage through pan/zoom/orbit, altitude projection, box selection, rendered context text and selection-box chrome, context lifecycle, native restoration, and invalid-asset fallback.");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -338,6 +367,182 @@ public static class ReliefUnityCheck
             Debug.LogException(error);
             EditorApplication.Exit(1);
         }
+    }
+
+    private static void RenderCamera(Camera camera)
+    {
+        if (GraphicsSettings.currentRenderPipeline == null) camera.Render();
+        else RenderPipeline.SubmitRenderRequest(camera,
+            new UniversalRenderPipeline.SingleCameraRequest { destination = camera.targetTexture });
+    }
+
+    private static void DrawTerrain()
+    {
+        typeof(MfdTerrainRelief).GetField("nextRender", BindingFlags.NonPublic | BindingFlags.Static)
+            .SetValue(null, 0f);
+        MfdTerrainRelief.Tick();
+    }
+
+    private static void CheckLayoutBeforeSnapshot(DynamicMap map)
+    {
+        var manager = new GameObject("MapUiOrder", typeof(MapUiManager)).GetComponent<MapUiManager>();
+        MethodInfo update = typeof(MapUiManager).GetMethod("LateUpdate", BindingFlags.NonPublic | BindingFlags.Instance);
+        Vector2 size = map.mapBackground.rectTransform.sizeDelta;
+        int layouts = 0;
+        MfdRailPatch.BeforeSnapshot = () =>
+        {
+            layouts++;
+            map.mapBackground.rectTransform.sizeDelta = size + new Vector2(125f, 0f);
+        };
+        update.Invoke(manager, null);
+        var camera = (Camera)typeof(MfdTerrainRelief).GetField("camera", BindingFlags.NonPublic | BindingFlags.Static)
+            .GetValue(null);
+        float aspect = map.mapBackground.rectTransform.rect.width / map.mapBackground.rectTransform.rect.height;
+        if (layouts == 0 || Mathf.Abs(camera.aspect - aspect) > .001f)
+            throw new Exception("Relief captured the viewport before rail reconciliation changed its layout.");
+        int previousLayouts = layouts, revision = MfdTerrainRelief.ViewRevision;
+        typeof(MapUiManager).GetField("nextRefresh", BindingFlags.NonPublic | BindingFlags.Instance)
+            .SetValue(manager, Time.unscaledTime + 60f);
+        MfdTerrainRelief.Rig.Yaw += 5f;
+        typeof(MfdTerrainRelief).GetField("nextRender", BindingFlags.NonPublic | BindingFlags.Static).SetValue(null, 0f);
+        update.Invoke(manager, null);
+        if (layouts != previousLayouts || MfdTerrainRelief.ViewRevision <= revision)
+            throw new Exception("The 10 Hz layout guard skipped this frame's relief update.");
+        MfdRailPatch.BeforeSnapshot = null;
+        map.mapBackground.rectTransform.sizeDelta = size;
+        MfdTerrainRelief.Rig.Yaw -= 5f;
+        DrawTerrain();
+    }
+
+    private static void CheckRenderedPoseSynchronization(DynamicMap map, UnitMapIcon track,
+        ObjectiveMarker objective, TargetMarker info)
+    {
+        const BindingFlags fields = BindingFlags.NonPublic | BindingFlags.Static;
+        var type = typeof(MfdTerrainRelief);
+        var camera = (Camera)type.GetField("camera", fields).GetValue(null);
+        var nextRender = type.GetField("nextRender", fields);
+        var moving = type.GetField("cameraWasMoving", fields);
+        RectTransform image = map.mapImage.GetComponent<RectTransform>();
+        Rect rect = image.rect;
+        Vector3 renderedCamera = camera.transform.position;
+        Quaternion renderedRotation = camera.transform.rotation;
+        Vector3 renderedTrack = track.iconImage.transform.position;
+        Vector3 renderedObjective = objective.transform.position;
+        int revision = MfdTerrainRelief.ViewRevision;
+        if (!MfdTerrainRelief.TryProject(18000f, 12000f, rect, out Vector2 clickPoint) ||
+            !MfdTerrainRelief.TryUnproject(clickPoint, rect, out GlobalPosition oldClick))
+            throw new Exception("Displayed terrain click ray unavailable.");
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(map.maximizedMapCanvas.worldCamera,
+            image.TransformPoint(clickPoint));
+        if (!MfdTerrainRelief.ViewportPoint(screenPoint, out float vx, out float vy) ||
+            !MfdTerrainRelief.TryGround(vx, vy, out Vector3 screenGround) ||
+            Vector2.Distance(new Vector2(screenGround.x, screenGround.z),
+                new Vector2(oldClick.x, oldClick.z) * (900f / 81920f)) > .1f)
+            throw new Exception("Canvas-camera screen coordinates missed the displayed terrain.");
+
+        MfdTerrainRelief.Rig.Yaw += 12f;
+        SceneSingleton<CameraStateManager>.i.transform.position = new Vector3(-7500f, 1500f, 12000f);
+        moving.SetValue(null, true);
+        nextRender.SetValue(null, Time.unscaledTime + 60f);
+        MfdTerrainRelief.Tick();
+        if (MfdTerrainRelief.ViewRevision != revision ||
+            Vector3.Distance(camera.transform.position, renderedCamera) > .001f ||
+            Quaternion.Angle(camera.transform.rotation, renderedRotation) > .001f ||
+            Vector3.Distance(track.iconImage.transform.position, renderedTrack) > .01f ||
+            Vector3.Distance(objective.transform.position, renderedObjective) > .01f ||
+            !MfdTerrainRelief.TryUnproject(clickPoint, rect, out GlobalPosition skippedClick) ||
+            Mathf.Abs(skippedClick.x - oldClick.x) > .1f || Mathf.Abs(skippedClick.z - oldClick.z) > .1f)
+            throw new Exception("A skipped terrain render advanced symbols or click rays ahead of the image.");
+        if (!MfdTerrainRelief.TryProject(-7500f, 12000f, rect, out Vector2 cameraPoint) ||
+            Vector2.Distance(map.viewIndicator.transform.localPosition, cameraPoint) > .1f)
+            throw new Exception("Camera switch left the native view indicator on the flat or previous-pose map.");
+
+        // Nuclear Option's FloatingOrigin translates every scene root, including the
+        // private terrain. A throttled frame must keep the camera with its terrain root.
+        var sceneRoot = (GameObject)type.GetField("sceneRoot", fields).GetValue(null);
+        Vector3 shift = new Vector3(1024f, 64f, -2048f);
+        sceneRoot.transform.position -= shift;
+        Physics.SyncTransforms();
+        MfdTerrainRelief.Tick();
+        bool shiftedHit = MfdTerrainRelief.TryUnproject(clickPoint, rect, out GlobalPosition shiftedClick);
+        Vector2 oldViewport = ProjectInViewport(map, oldClick.x, oldClick.z);
+        Vector2 shiftedViewport = ProjectInViewport(map, shiftedClick.x, shiftedClick.z);
+        Rect viewportBounds = map.mapBackground.rectTransform.rect;
+        Vector2 pixelDelta = shiftedViewport - oldViewport;
+        pixelDelta.x *= camera.targetTexture.width / viewportBounds.width;
+        pixelDelta.y *= camera.targetTexture.height / viewportBounds.height;
+        File.WriteAllText("sync-evidence.txt", $"Origin shift: camera drift {Vector3.Distance(camera.transform.position, renderedCamera - shift):R} m; click drift {shiftedClick.x - oldClick.x:R}/{shiftedClick.z - oldClick.z:R} world m; raster drift {pixelDelta.magnitude:R} px; hit {shiftedHit}.");
+        // PhysX/ray arithmetic at the private root's -100000 m offset quantizes the
+        // hit: observed z drift is 0.9423828 world m with exactly zero camera drift.
+        // 1 world m is 900/81920 = 0.010986 model units (versus 160 m source cells).
+        // Also bound the actual displayed raster drift to under 0.05 of one pixel.
+        if (Vector3.Distance(camera.transform.position, renderedCamera - shift) > .01f ||
+            !shiftedHit || Mathf.Abs(shiftedClick.x - oldClick.x) > 1f || Mathf.Abs(shiftedClick.z - oldClick.z) > 1f ||
+            pixelDelta.magnitude > .05f)
+            throw new Exception($"Floating origin separated relief: camera drift {Vector3.Distance(camera.transform.position, renderedCamera - shift)}, hit {shiftedHit}, click drift {shiftedClick.x - oldClick.x}/{shiftedClick.z - oldClick.z} m.");
+        sceneRoot.transform.position += shift;
+        Physics.SyncTransforms();
+
+        // A committed camera move must refresh both sparse native objectives and selected
+        // information after the native Update callbacks, without another native icon update.
+        var sentinel = new RenderTexture(8, 8, 0);
+        sentinel.Create();
+        RenderTexture.active = sentinel;
+        RenderSettings.fog = true;
+        nextRender.SetValue(null, 0f);
+        MfdTerrainRelief.Tick();
+        if (RenderTexture.active != sentinel || !RenderSettings.fog)
+            throw new Exception("Relief rendering leaked active render target or fog state.");
+        RenderTexture.active = null;
+        RenderSettings.fog = false;
+        UnityEngine.Object.DestroyImmediate(sentinel);
+        if (MfdTerrainRelief.ViewRevision <= revision ||
+            Vector3.Distance(track.iconImage.transform.position, renderedTrack) < 1f ||
+            !MfdTerrainRelief.TryProject(18000f, 12000f, rect, out Vector2 objectivePoint) ||
+            Vector2.Distance(objective.transform.localPosition, objectivePoint) > .1f ||
+            Vector3.Distance(info.transform.position, info.Icon.iconImage.transform.position) > .01f)
+            throw new Exception("Committed terrain render did not refresh cached contacts, objectives and selection together.");
+
+        // A native hierarchy change happens during camera/map transitions, independently
+        // of the relief rig. It must refresh all icon batches on this same frame.
+        image.localPosition += new Vector3(50f, -35f, 0f);
+        nextRender.SetValue(null, Time.unscaledTime + 60f);
+        type.GetField("nextIconRefresh", fields).SetValue(null, Time.unscaledTime + 60f);
+        MfdTerrainRelief.Tick();
+        if (!MfdTerrainRelief.TryProject(18000f, 12000f, rect, out objectivePoint) ||
+            Vector2.Distance(objective.transform.localPosition, objectivePoint) > .1f ||
+            Vector3.Distance(info.transform.position, info.Icon.iconImage.transform.position) > .01f)
+            throw new Exception("Native map hierarchy transition left cached markers behind.");
+        image.localPosition -= new Vector3(50f, -35f, 0f);
+        Quaternion imageRotation = image.localRotation;
+        image.localRotation = Quaternion.Euler(0f, 0f, 27f);
+        MfdTerrainRelief.Tick();
+        if (!MfdTerrainRelief.TryProject(-7500f, 12000f, rect, out cameraPoint) ||
+            !MfdTerrainRelief.TryProject(-7500f, 13000f, rect, out Vector2 cameraAhead) ||
+            Vector3.Dot(map.viewIndicator.transform.up,
+                image.TransformDirection((Vector3)(cameraAhead - cameraPoint)).normalized) < .999f)
+            throw new Exception("Rotated native hierarchy changed camera-indicator heading away from the projected direction.");
+        image.localRotation = imageRotation;
+
+        Vector2 oldSize = map.mapBackground.rectTransform.sizeDelta;
+        map.mapBackground.rectTransform.sizeDelta += new Vector2(125f, 0f);
+        nextRender.SetValue(null, Time.unscaledTime + 60f);
+        MfdTerrainRelief.Tick();
+        float aspect = map.mapBackground.rectTransform.rect.width / map.mapBackground.rectTransform.rect.height;
+        if (Mathf.Abs(camera.aspect - aspect) > .001f ||
+            (float)nextRender.GetValue(null) > Time.unscaledTime + 1f)
+            throw new Exception("Viewport resize did not draw the matching terrain aspect immediately.");
+        map.mapBackground.rectTransform.sizeDelta = oldSize;
+        MfdTerrainRelief.Tick();
+        camera.targetTexture.Release();
+        nextRender.SetValue(null, Time.unscaledTime + 60f);
+        MfdTerrainRelief.Tick();
+        if (!camera.targetTexture.IsCreated())
+            throw new Exception("Relief did not recover a released render texture.");
+
+        MfdTerrainRelief.Rig.Yaw -= 12f;
+        nextRender.SetValue(null, 0f);
+        MfdTerrainRelief.Tick();
     }
 
     private static void CaptureContext(Canvas canvas, Camera screen, int side,
@@ -367,7 +572,7 @@ public static class ReliefUnityCheck
             throw new Exception("Selection-box chrome must be rendered and pointer-transparent.");
         var target = new RenderTexture(side, side, 24);
         screen.targetTexture = target;
-        screen.Render();
+        RenderCamera(screen);
         RenderTexture.active = target;
         var picture = new Texture2D(side, side, TextureFormat.RGB24, false);
         picture.ReadPixels(new Rect(0f, 0f, side, side), 0, 0);

@@ -46,8 +46,45 @@ namespace BoscaliSummer.Tests.Features.Immersion
             motion.SonicCrossing(.96f, 6f);
             TestAssert.That(motion.SonicCrossing(1.03f, 7f), "A later outside-band crossing rearms.");
             motion.Reset();
-            TestAssert.That(motion.Recoil == 0 && motion.Landing == 0 && motion.Sonic == 0,
+            TestAssert.That(motion.Recoil == 0 && motion.Landing == 0 && motion.Sonic == 0 && motion.GearLock == 0,
                 "Binding reset clears event envelopes.");
+            var gear = new MotionEnvelope();
+            TestAssert.That(!gear.GearTransition(1, false, true, .02f) && gear.GearLock == 0f,
+                "Binding to already locked gear does not create an impulse.");
+            TestAssert.That(!gear.GearTransition(1, true, true, .02f) &&
+                gear.GearTransition(1, false, true, .02f) && gear.GearLock == -.04f,
+                "Extension creates a small impulse only when the moving gear locks down.");
+            TestAssert.That(!gear.GearTransition(1, false, true, .02f), "A held gear lock fires only once.");
+            gear.Step(.5f);
+            TestAssert.That(Math.Abs(gear.GearLock) < .0001f, "The mechanical impulse settles quickly.");
+            gear.GearTransition(-1, true, true, .02f);
+            TestAssert.That(gear.GearTransition(-1, false, true, .02f) && gear.GearLock == .04f,
+                "Retraction creates an equally restrained impulse at its native lock.");
+            gear.GearTransition(1, true, true, .02f);
+            TestAssert.That(!gear.GearTransition(-1, false, true, .02f),
+                "A mismatched direction or snapped state cannot impersonate a completed gear cycle.");
+            foreach (float badDt in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+            {
+                gear.GearTransition(1, true, true, .02f);
+                TestAssert.That(!gear.GearTransition(1, false, true, badDt) && gear.GearLock == 0f &&
+                    !gear.GearTransition(1, false, true, .02f),
+                    "Pause or invalid time clears gear history and cannot defer a latch impulse.");
+            }
+            gear.GearTransition(1, true, true, .02f);
+            TestAssert.That(!gear.GearTransition(1, false, false, .02f) && gear.GearLock == 0f &&
+                !gear.GearTransition(1, false, true, .02f),
+                "Disabled extra shake or zero strength suppresses the transition through re-enable.");
+            gear.GearTransition(1, true, true, .02f);
+            gear.Reset();
+            TestAssert.That(!gear.GearTransition(1, false, true, .02f) && gear.GearLock == 0f,
+                "Binding, camera or discontinuity reset discards a pending gear transition.");
+            gear.GearTransition(1, true, true, .02f);
+            TestAssert.That(!gear.GearTransition(0, false, true, .02f) &&
+                !gear.GearTransition(1, false, true, .02f), "Uninitialized or unsupported gear resets silently.");
+            gear.GearTransition(-1, true, true, .02f);
+            gear.GearTransition(-1, false, true, .02f);
+            gear.ClearExtra();
+            TestAssert.That(gear.GearLock == 0f, "Disabling extra motion clears any residual gear impulse.");
             var zero = ImmersionMath.ComposeMotion(100f, -100f, 100f, 0f, false);
             var full = ImmersionMath.ComposeMotion(100f, -100f, 100f, 1f, false);
             var comfort = ImmersionMath.ComposeMotion(100f, -100f, 100f, 1f, true);
