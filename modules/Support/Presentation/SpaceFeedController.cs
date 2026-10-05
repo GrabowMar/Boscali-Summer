@@ -734,7 +734,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (!draft.CanRestore(now) && !compactVisible) draft.Clear();
             draft.Touch(now);
             dirty = true;
-            if (!window.Open(view)) Say("NEGATIVE: FEED UNAVAILABLE — SPAWN OR TAKE A SEAT", AvState.Danger, AvUiCue.Caution);
+            chromeFill?.Invoke(chrome);
+            if (!window.Open(view, chrome)) Say("NEGATIVE: FEED UNAVAILABLE — SPAWN OR TAKE A SEAT", AvState.Danger, AvUiCue.Caution);
         }
 
         internal void CloseWindow(FeedCloseReason reason, bool quiet)

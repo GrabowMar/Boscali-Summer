@@ -63,6 +63,18 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
             }
         }
 
+        /// <summary>How many calls can be pressed now: Ready, Armed or Pending (the header's <c>n CALLS READY</c>).</summary>
+        public static int CallsReady(System.Collections.Generic.IReadOnlyList<CallTile> tiles)
+        {
+            int n = 0;
+            for (int i = 0; i < tiles.Count; i++)
+            {
+                CallState st = tiles[i].State;
+                if (st == CallState.Ready || st == CallState.Armed || st == CallState.Pending) n++;
+            }
+            return n;
+        }
+
         /// <summary>The next-unlock goal a locked tile carries as its state word (empty when it only says LOCKED).</summary>
         public static string UnlockText(in CallTile t) =>
             t.State == CallState.Locked && !string.IsNullOrEmpty(t.StateWord) && t.StateWord != "LOCKED" ? t.StateWord : "";

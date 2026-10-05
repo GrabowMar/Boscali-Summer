@@ -49,6 +49,16 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
             return s;
         }
 
+        /// <summary>The warning class words of a threat strip with no distances: <c>BANDIT 12 KM</c> reads <c>BANDIT</c>.</summary>
+        public static string ThreatClasses(string strip)
+        {
+            if (string.IsNullOrEmpty(strip)) return "";
+            string[] parts = strip.Split(new[] { " · " }, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i].StartsWith("BANDIT", StringComparison.Ordinal)) parts[i] = "BANDIT";
+            return string.Join(" · ", parts);
+        }
+
         public static string Fit(string text, int maxChars)
         {
             if (string.IsNullOrEmpty(text) || maxChars <= 0) return "";

@@ -19,13 +19,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     internal sealed class DomainOfflinePage
     {
         private const float Gap = 6f;
-        private readonly CallFamily family;
-        private readonly float width;
         private readonly Action<AvPart> register;
         private readonly C2Box map, callsBox;
         private readonly List<C2Row> rows = new List<C2Row>(4);
         private readonly List<SupportActionId> ids = new List<SupportActionId>(4);
         private readonly List<Action> pinActions = new List<Action>(4);
+        private readonly List<CapPage.RowMemo> memos = new List<CapPage.RowMemo>(4);
         private readonly List<Image> gridLines = new List<Image>(40);
         private readonly TMP_Text headline, detail;
 
@@ -34,12 +33,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public DomainOfflinePage(RectTransform parent, float width, float height, CallFamily family, CallsController calls, Action<AvPart> register)
         {
-            this.width = width;
-            this.family = family;
             this.register = register ?? (_ => { });
             bool net = family == CallFamily.Cyber;
             bool full = height >= 560f;
-            Words = net ? "NEGATIVE: CYBER OFFLINE — USE CAP FOR CYBER CALLS" : "NEGATIVE: SOF OFFLINE — USE JTAC LASE FROM CAP";
+            Words = net ? "CYBER DOMAIN OFFLINE · CALLS BELOW ARE LIVE" : "SOF DOMAIN OFFLINE · CALLS BELOW ARE LIVE";
 
             for (int i = 0; i < CallSheet.Rows.Count; i++)
                 if (CallSheet.Rows[i].Family == family) ids.Add(CallSheet.Rows[i].Id);
@@ -73,6 +70,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 row.Place(new AvSlot(1f, 1f + i * (rowH + 2f), width - 4f, rowH));
                 pinActions.Add(CapPage.Bind(row, calls, ids[i]));
                 rows.Add(row);
+                memos.Add(default);
             }
             Restyle();
         }
@@ -108,7 +106,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 for (int k = 0; k < v.Tiles.Count && !found; k++)
                     if (v.Tiles[k].Id == ids[i]) { tile = v.Tiles[k]; found = true; }
                 if (!found) continue;
-                CapPage.PaintRow(rows[i], tile, CapPage.IndexOf(ids[i]), CapPage.IsPinned(v, ids[i]), pinActions[i]);
+                bool pinned = CapPage.IsPinned(v, ids[i]);
+                CapPage.RowMemo memo = memos[i];
+                bool changed = memo.Changed(tile, pinned); // compare the tile first: no strings for a still row
+                memos[i] = memo;
+                if (changed) CapPage.PaintRow(rows[i], tile, CapPage.IndexOf(ids[i]), pinned, pinActions[i]);
             }
         }
 

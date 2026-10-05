@@ -19,10 +19,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private const float Gap = 6f, MinRowH = 46f, MaxRowH = 58f, NoticeBody = 44f;
         private static readonly string[] HowTo =
         {
-            "> " + C2Board.Empty,
-            "> an operator with MARKs presses TRANSMIT on the ORBIT page",
-            "> OVERLORD posts from revealed contacts when no one works SPACE",
-            "> CLAIM arms a post, EXECUTE fires it: the first claim wins"
+            C2Board.Empty,
+            "An operator with MARKs presses TRANSMIT on the ORBIT page.",
+            "OVERLORD posts from revealed contacts when no one works SPACE.",
+            "CLAIM arms a post, EXECUTE fires it: the first claim wins."
         };
 
         private readonly float width;
@@ -42,6 +42,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly TMP_Text quietWord, quietSub;
         private readonly AvControl quietButton;
         private bool quietShown, quietKnown, emptyShown;
+        private int titleLive = -1, titleStale = -1, titleHidden = -1;
 
         public BoardPage(RectTransform parent, float width, float height, Action<int> press, Action toggleQuiet, Action<AvPart> register)
         {
@@ -91,7 +92,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 AvLay.Place(ghost[i].rectTransform, 1f, 1f + i * (rowH + 2f), width - 4f, rowH);
                 ghostText[i] = C2Kit.Mono(board.Body, "GhostText" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
                 C2Kit.Place(ghostText[i], 14f, 1f + i * (rowH + 2f), width - 28f, rowH);
-                OpsText.Set(ghostText[i], "SLOT " + (i + 1).ToString("00") + " · OPEN");
+                OpsText.Set(ghostText[i], "OPEN SLOT");
                 ghost[i].gameObject.SetActive(false);
                 ghostText[i].gameObject.SetActive(false);
             }
@@ -133,8 +134,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             console.Show(v.Console);
             int shown = Mathf.Min(v.CardCount, rowCount);
-            board.SetTitle(C2Board.Title(v.PostsLive, v.PostsStale));
-            board.SetMeta(C2Board.Meta(Mathf.Max(0, v.CardCount - shown)));
+            int hidden = Mathf.Max(0, v.CardCount - shown);
+            if (v.PostsLive != titleLive || v.PostsStale != titleStale || hidden != titleHidden)
+            {
+                titleLive = v.PostsLive; titleStale = v.PostsStale; titleHidden = hidden;
+                board.SetTitle(C2Board.Title(v.PostsLive, v.PostsStale));
+                board.SetMeta(C2Board.Meta(hidden));
+            }
             for (int i = 0; i < rowCount; i++)
             {
                 FeedCardView c = i < shown ? v.Cards[i] : default;
@@ -187,7 +193,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void RestyleEmpty()
         {
-            for (int i = 0; i < howTo.Length; i++) if (howTo[i] != null) howTo[i].color = i == 0 ? OpsInk.Dim : OpsInk.Muted;
+            for (int i = 0; i < howTo.Length; i++) if (howTo[i] != null) howTo[i].color = OpsInk.Muted;
             if (ghost != null)
                 for (int i = 0; i < ghost.Length; i++)
                 {

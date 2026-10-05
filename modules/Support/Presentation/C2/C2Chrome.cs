@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private AvState bannerTone = AvState.Caution, uplinkTone = AvState.Ready;
         private string bannerRaw = "", titleRaw = "", subRaw = "", alertRaw = "", opRaw = "", sessionId = "", keyRot = "", uplinks = "", space = "";
         private int credit, boardCount;
-        private bool link = true;
+        private bool link = true, tabsSet;
         private C2Tab active = C2Tab.Cap;
 
         /// <param name="station">The full-screen station's chrome: banner 18, header 40, no tab strip (<see cref="StationHeight"/>).</param>
@@ -95,25 +95,31 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>The classification banner; Caution normally, Danger while an alert is up.</summary>
         public void SetBanner(string text, AvState tone)
         {
-            bannerRaw = text ?? "";
+            string raw = text ?? "";
+            if (raw == bannerRaw && tone == bannerTone) return;
+            bool toneChanged = tone != bannerTone;
+            bannerRaw = raw;
             bannerTone = tone;
-            Restyle();
-            Layout();
+            if (toneChanged) PaintBanner();
+            LayoutBanner();
         }
 
         /// <summary>Page title, one mono sub-line and an optional red alert slab (null or empty hides it).</summary>
         public void SetHeader(string titleText, string subText, string alert)
         {
-            titleRaw = titleText ?? "";
-            subRaw = subText ?? "";
-            alertRaw = alert ?? "";
-            Layout();
+            string t = titleText ?? "", sb = subText ?? "", al = alert ?? "";
+            if (t == titleRaw && sb == subRaw && al == alertRaw) return;
+            titleRaw = t;
+            subRaw = sb;
+            alertRaw = al;
+            LayoutHeader();
         }
 
         public void SetLedger(int value)
         {
+            if (value == credit) return;
             credit = value;
-            Layout();
+            LayoutHeader();
         }
 
         /// <summary>
@@ -122,20 +128,25 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// </summary>
         public void SetSession(string op, string sess, string keyRotation, string uplinkText, AvState tone, string spaceText, bool linkUp)
         {
-            opRaw = op ?? "";
-            sessionId = sess ?? "";
-            keyRot = keyRotation ?? "";
-            uplinks = uplinkText ?? "";
+            string o = op ?? "", id = sess ?? "", kr = keyRotation ?? "", up = uplinkText ?? "", sp = spaceText ?? "";
+            if (o == opRaw && id == sessionId && kr == keyRot && up == uplinks && tone == uplinkTone && sp == space && linkUp == link) return;
+            opRaw = o;
+            sessionId = id;
+            keyRot = kr;
+            uplinks = up;
             uplinkTone = tone;
-            space = spaceText ?? "";
+            space = sp;
             link = linkUp;
-            Layout();
+            RebuildSession(width); // the session line only: a ticking KEY ROT never re-lays the banner, header or tabs
         }
 
         public void SetTabs(C2Tab activeTab, int count)
         {
+            int n = Mathf.Max(0, count);
+            if (activeTab == active && n == boardCount && tabsSet) return;
+            tabsSet = true;
             active = activeTab;
-            boardCount = Mathf.Max(0, count);
+            boardCount = n;
             for (int i = 0; i < TabCount; i++)
             {
                 C2Tab tab = (C2Tab)(i + 1);
@@ -149,11 +160,31 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void Layout()
         {
+            LayoutBanner();
+            LayoutHeader();
+            float w = width;
+            AvLay.Place(session, 0f, BannerH + HeaderH, w, SessionH);
+            RebuildSession(w);
+            AvLay.Place(sessionRule.rectTransform, 0f, SessionH - 1f, w, 1f);
+
+            tabRow.gameObject.SetActive(!station);
+            AvLay.Place(tabRow, 0f, BannerH + HeaderH + SessionH, w, TabsH);
+            float tw = (w - 2f * 2f - 4f * 2f) / TabCount;
+            for (int i = 0; i < TabCount; i++) AvLay.Place(tabs[i].Rect, 2f + i * (tw + 2f), 2f, tw, TabsH - 4f);
+            PaintBoardEdge();
+        }
+
+        private void LayoutBanner()
+        {
             float w = width;
             AvLay.Place(bannerBack.rectTransform, 0f, 0f, w, BannerH);
             C2Kit.Place(bannerText, PadX, 0f, w - 2f * PadX, BannerH);
             OpsText.Set(bannerText, C2Kit.FitTo(bannerText, bannerRaw, w - 2f * PadX));
+        }
 
+        private void LayoutHeader()
+        {
+            float w = width;
             AvLay.Place(header, 0f, BannerH, w, HeaderH);
             float dy = (HeaderH - 36f) * 0.5f;
             AvLay.Place(plate.rectTransform, PadX, 6f + dy, 28f, 24f);
@@ -185,16 +216,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             OpsText.Set(sub, C2Kit.FitTo(sub, subRaw, textW));
             C2Kit.Place(title, titleX, 1f + dy, textW, 20f);
             C2Kit.Place(sub, titleX, 21f + dy, textW, 13f);
-
-            AvLay.Place(session, 0f, BannerH + HeaderH, w, SessionH);
-            RebuildSession(w);
-            AvLay.Place(sessionRule.rectTransform, 0f, SessionH - 1f, w, 1f);
-
-            tabRow.gameObject.SetActive(!station);
-            AvLay.Place(tabRow, 0f, BannerH + HeaderH + SessionH, w, TabsH);
-            float tw = (w - 2f * 2f - 4f * 2f) / TabCount;
-            for (int i = 0; i < TabCount; i++) AvLay.Place(tabs[i].Rect, 2f + i * (tw + 2f), 2f, tw, TabsH - 4f);
-            PaintBoardEdge();
         }
 
         private void RebuildSession(float w)
@@ -243,10 +264,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         // ---- Paint --------------------------------------------------------------------------
 
-        public override void Restyle()
+        private void PaintBanner()
         {
             bannerBack.color = C2Kit.SlabFill(bannerTone);
             bannerText.color = C2Kit.SlabInk;
+        }
+
+        public override void Restyle()
+        {
+            PaintBanner();
 
             AvStyle h = AvStyleHost.FuiStyle("header");
             headerBack.Paint(AvStyleHost.Resolve(h.Background, AvTheme.Surface), AvStyleHost.Resolve(h.Border, AvTheme.Hairline));

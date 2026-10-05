@@ -77,6 +77,15 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(C2Tabs.KeyAllowed(true, false, false), "keys over page");
             TestAssert.That(C2Tabs.KeyAllowed(false, true, false), "keys in full screen");
             TestAssert.That(!C2Tabs.KeyAllowed(true, true, true), "never while typing");
+            Eq(C2Words.ThreatClasses("TERRAIN · MISSILE WARNING · BANDIT 12 KM"), "TERRAIN · MISSILE WARNING · BANDIT", "threat classes drop the distance");
+            Eq(C2Words.ThreatClasses("BANDIT 3 KM"), C2Words.ThreatClasses("BANDIT 40 KM"), "a closing bandit is the same class");
+            Eq(C2Words.ThreatClasses(""), "", "no threat");
+            Eq(C2Cap.CallsReady(new[]
+            {
+                Tile(SupportActionId.Prsm, CallState.Ready, "READY"), Tile(SupportActionId.Prsm, CallState.Armed, "ARMED"),
+                Tile(SupportActionId.Prsm, CallState.Pending, "WAIT"), Tile(SupportActionId.Prsm, CallState.Locked, "LOCKED"),
+                Tile(SupportActionId.Prsm, CallState.Cooldown, "9s"), Tile(SupportActionId.Prsm, CallState.LowCredit, "NEED 1 CR")
+            }), 3, "calls ready counts ready, armed and pending only");
             Eq(C2Tabs.FromKey(5), C2Tab.Board, "key 5");
             Eq(C2Tabs.FromKey(9), C2Tab.Cap, "bad key");
         }

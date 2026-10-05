@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// </summary>
     internal sealed class C2Feed
     {
-        private const float CreditGapSeconds = 2f, TickSeconds = 0.25f;
+        private const float CreditGapSeconds = 2f, TickSeconds = 0.25f, ThreatGapSeconds = 5f, DeltaShownSeconds = 30f;
 
         private readonly C2Console console = new C2Console();
         private readonly SpaceNoticeTracker notices = new SpaceNoticeTracker();
@@ -23,7 +23,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private CallsController calls;
         private object faction;
         private bool creditPrimed, spacePrimed;
-        private float lastCredit, pendingDelta, nextCredit, nextTick;
+        private float lastCredit, pendingDelta, nextCredit, nextTick, nextThreatLine, lastDeltaAt;
+        private int lastDelta;
         private byte lastLive, lastTotal;
         private SpaceFamilyState lastFamily;
         private string lastThreat = "";
@@ -33,8 +34,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>The current cockpit warning words (RWR SPIKE, MISSILE WARNING ...), empty when none: the header's red slab.</summary>
         public string Alert { get; private set; } = "";
 
-        /// <summary>The last credit change, in whole CR (signed), 0 when none since the last clear.</summary>
-        public int LastDelta { get; private set; }
+        /// <summary>The last credit change, in whole CR (signed); 0 when none since the last clear or when it is older than 30 s (the page then shows the balance).</summary>
+        public int LastDelta => lastDelta != 0 && Time.unscaledTime - lastDeltaAt <= DeltaShownSeconds ? lastDelta : 0;
+
+        /// <summary>Counts local faction changes (A to B, not a scene reset): the panel returns to the CAP tab when it moves.</summary>
+        public int FactionEpoch { get; private set; }
 
         public void Attach(SupportManager supportManager, CallsController callsController)
         {
@@ -60,8 +64,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             pendingDelta = 0f;
             nextCredit = nextTick = 0f;
             lastThreat = "";
+            nextThreatLine = 0f;
             Alert = "";
-            LastDelta = 0;
+            lastDelta = 0;
             faction = null;
         }
 
@@ -69,21 +74,28 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void OnSpoke(string words) => console.Add(words, C2Cap.LineTone(words), Time.unscaledTime);
 
-        /// <summary>Polls the sources that have no event. Cheap; throttled to four times a second.</summary>
-        public void Tick()
+        /// <summary>
+        /// Polls the sources that have no event. Cheap; throttled to four times a second. The cockpit threat probe is read only while
+        /// <paramref name="watching"/> (the OPS page or the station is on screen): a pilot who never opens OPS pays nothing.
+        /// </summary>
+        public void Tick(bool watching)
         {
             if (manager == null) return;
             float wall = Time.unscaledTime;
             if (wall < nextTick) return;
             nextTick = wall + TickSeconds;
 
+            // A null read (no player for a moment) keeps the last faction, so A, null, B is still a change.
             object hq = Faction();
-            if (faction != null && hq != faction) Clear();
-            faction = hq;
+            if (hq != null)
+            {
+                if (faction != null && hq != faction) { Clear(); FactionEpoch++; }
+                faction = hq;
+            }
 
             Credit(wall);
             Space();
-            Threat();
+            if (watching) Threat(wall);
         }
 
         private static object Faction() =>
@@ -99,7 +111,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (whole == 0 || wall < nextCredit) return;
             nextCredit = wall + CreditGapSeconds;
             pendingDelta = 0f;
-            LastDelta = whole;
+            lastDelta = whole;
+            lastDeltaAt = wall;
             console.Add("LEDGER " + C2Cap.Delta(whole) + " · " + Mathf.RoundToInt(credit) + " CR", C2Tone.Info, wall);
         }
 
@@ -123,18 +136,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (notice.Kind != SpaceNoticeKind.None) console.Add(notice.Text, C2Tone.Info, Time.unscaledTime);
         }
 
-        private void Threat()
+        private void Threat(float wall)
         {
             if (!SpaceCockpitThreatProbe.TryRead(out CockpitThreatSnapshot snap)) snap = default;
             string strip = SpaceFeedRules.ThreatStrip(snap);
-            if (strip == lastThreat) return;
-            Alert = strip;
-            console.Add(strip.Length > 0 ? "WARNING · " + strip : "WARNING CLEARED", strip.Length > 0 ? C2Tone.Danger : C2Tone.Info, Time.unscaledTime);
-            lastThreat = strip;
+            Alert = strip; // the header slab keeps the full strip, distances included
+            string classes = C2Words.ThreatClasses(strip);
+            if (classes == lastThreat || wall < nextThreatLine) return; // edge only: a line when the set of classes changes, at most one per 5 s
+            lastThreat = classes;
+            nextThreatLine = wall + ThreatGapSeconds;
+            console.Add(classes.Length > 0 ? "WARNING · " + classes : "WARNING CLEARED", classes.Length > 0 ? C2Tone.Danger : C2Tone.Info, wall);
         }
 
         /// <summary>The family as the session line and the console say it.</summary>
         public static string SpaceWord(SpaceFamilyState family) =>
-            family == SpaceFamilyState.Normal ? "NORMAL" : family == SpaceFamilyState.Degraded ? "DEGRADED" : "DARK";
+            family == SpaceFamilyState.Normal ? "NORMAL" : family == SpaceFamilyState.Degraded ? "DEGRADED" : "OFFLINE";
     }
 }

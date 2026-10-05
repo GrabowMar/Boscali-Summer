@@ -57,7 +57,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int sceneGeneration;
 
         private float nextAttempt;
-        private float nextRefresh;
+        private float nextRefresh, failedUntil;
+        private int factionEpoch;
+        private Canvas pageCanvas;
+        private int aimCellX = int.MinValue, aimCellZ;
+        private string aimGrid = "";
         private bool failed;
         private string chromeKey = "", footerKey = "";
 
@@ -94,6 +98,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feed?.AttachBoard(null);
             nextAttempt = 0f;
             nextRefresh = 0f;
+            failedUntil = 0f;
+            factionEpoch = c2.FactionEpoch;
+            pageCanvas = null;
             failed = false;
         }
 
@@ -117,14 +124,26 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 return;
             }
 
+            if (Time.unscaledTime < failedUntil) return; // a console fault backs the page off for a moment instead of killing it
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             feed?.SetCompactVisible(visible && consoleRoot != null && tab == C2Tab.Orbit);
             feed?.SetBoardVisible(visible && consoleRoot != null && tab == C2Tab.Board);
-            try { c2.Tick(); }
+            try
+            {
+                // The cockpit threat probe is polled only while the page or the station is on screen.
+                c2.Tick((visible && consoleRoot != null) || (feed != null && feed.WindowOpen));
+                if (c2.FactionEpoch != factionEpoch)
+                {
+                    factionEpoch = c2.FactionEpoch;
+                    if (tab != C2Tab.Cap && consoleRoot != null) SelectTab(C2Tab.Cap); // the old faction's page is not the new faction's
+                }
+            }
             catch (Exception e)
             {
-                failed = true; // a console fault must not throw every frame
+                failedUntil = Time.unscaledTime + 2f; // a console fault must not throw every frame
+                feed?.SetCompactVisible(false);
+                feed?.SetBoardVisible(false);
                 logger?.LogError("OPS C2 console failed: " + e);
                 return;
             }
@@ -143,13 +162,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
         // ---- Tab keys ---------------------------------------------------------------------------------
 
         /// <summary>
-        /// Digit keys 1-5 pick a tab, but only through <see cref="C2Tabs.KeyAllowed"/>: never in flight (the keys belong to the
-        /// weapons), never while typing. The key is only read once that gate is open.
+        /// Digit keys 1-5 pick a tab, but only with the pointer over the page (never in flight: the keys belong to the weapons), never
+        /// while typing and never with Ctrl, Alt or Shift held. The cheap <c>anyKeyDown</c> test comes first, so a frame without a
+        /// key press never touches the canvas. The station has no tabs, so it never takes them.
         /// </summary>
         private void PollTabKeys()
         {
-            bool typing = InputFieldChecker.InsideInputField;
-            if (!C2Tabs.KeyAllowed(PointerOverPage(), feed != null && feed.WindowOpen, typing) || GameplayUI.GameIsPaused || !Application.isFocused) return;
+            if (!Input.anyKeyDown) return;
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt) ||
+                Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) return;
+            if (GameplayUI.GameIsPaused || !Application.isFocused) return;
+            if (!C2Tabs.KeyAllowed(PointerOverPage(), false, InputFieldChecker.InsideInputField)) return;
             for (int d = 1; d <= 5; d++)
             {
                 if (!Input.GetKeyDown(KeyCode.Alpha0 + d) && !Input.GetKeyDown(KeyCode.Keypad0 + d)) continue;
@@ -162,8 +185,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private bool PointerOverPage()
         {
             if (consoleRoot == null || !consoleRoot.gameObject.activeInHierarchy) return false;
-            Canvas canvas = consoleRoot.GetComponentInParent<Canvas>();
-            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            if (pageCanvas == null) pageCanvas = consoleRoot.GetComponentInParent<Canvas>();
+            Camera cam = pageCanvas != null && pageCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? pageCanvas.worldCamera : null;
             return RectTransformUtility.RectangleContainsScreenPoint(consoleRoot, Input.mousePosition, cam);
         }
 
@@ -290,7 +313,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
             feed?.AttachBoard(boardPage);
 
-            footer = Reg(new C2Footer(consoleRoot));
+            footer = Reg(new C2Footer(consoleRoot, () => calls?.Disarm()));
             footer.Place(new AvSlot(0f, height - C2Footer.Height, Width, C2Footer.Height));
             consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
 
@@ -384,9 +407,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.Pending = calls.Pending;
             for (int i = 0; i < view.Favourites.Length; i++) view.Favourites[i] = i < calls.Favourites.Length ? calls.Favourites[i] : null;
             view.Aim = calls.AimNow;
-            view.AimGrid = calls.Armed.HasValue && calls.TryAimPoint(out GlobalPosition p) ? TheaterGrid.Kilometres(p.x, p.z) : "";
+            view.AimGrid = AimGridNow();
             view.LastDelta = c2.LastDelta;
             FillChrome(view);
+        }
+
+        /// <summary>The armed call's aim as a grid string, rebuilt only when the aim moves into another 100 m cell (the text shows 0.1 km).</summary>
+        private string AimGridNow()
+        {
+            if (!calls.Armed.HasValue || !calls.TryAimPoint(out GlobalPosition p)) { aimCellX = int.MinValue; aimGrid = ""; return ""; }
+            int cx = Mathf.RoundToInt((float)(p.x / 100.0)), cz = Mathf.RoundToInt((float)(p.z / 100.0));
+            if (cx != aimCellX || cz != aimCellZ) { aimCellX = cx; aimCellZ = cz; aimGrid = TheaterGrid.Kilometres(p.x, p.z); }
+            return aimGrid;
         }
 
         /// <summary>Everything the shared C2 chrome shows (identity, ledger, session line, board count), for the MFD pages and the station.</summary>
@@ -416,7 +448,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 v.Space = C2Feed.SpaceWord(state.Family);
                 int open = 0;
                 for (int i = 0; i < state.Posts.Count; i++)
-                    if (SpaceFeedRules.PostStatusOf(state.Posts[i], now) == PostStatus.Open) open++;
+                    if (SpaceFeedRules.PostStatusOf(state.Posts[i], now) != PostStatus.Stale) open++; // live = not stale: the badge, the header and the LIVE POSTS box agree
                 v.BoardCount = open;
             }
             else
@@ -447,7 +479,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintChrome(C2Tab t, CapView v)
         {
             string key = string.Concat((int)t, "|", v.Faction, "|", v.Alert, "|", v.Credit, "|", v.Callsign, "|", v.Session, "|", v.KeyRot, "|",
-                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", CapPage.Authorized(v.Tiles));
+                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles));
             if (key == chromeKey) return;
             chromeKey = key;
 
@@ -459,7 +491,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = "NO TEAMS RAISED"; }
             else if (t == C2Tab.Board) { title = "TASKED BOARD"; sub = "LIVE POSTS · " + v.BoardCount; }
             else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SENSOR, TRACK FILE, TASKED"; }
-            else { title = "ORBITAL SUPPORT"; sub = "CAP · " + CapPage.Authorized(v.Tiles) + " CALLS AUTHORIZED"; }
+            else { title = "ORBITAL SUPPORT"; sub = "CAP · " + C2Cap.CallsReady(v.Tiles) + " CALLS READY"; }
             chrome.SetHeader(title, sub, alert ? C2Words.Fit(v.Alert, 18) : null);
             chrome.SetLedger(v.Credit);
             chrome.SetSession(v.Callsign, v.Session, v.KeyRot, v.Uplinks, v.UplinkTone, v.Space, v.Link);
@@ -470,10 +502,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             string slab, words;
             AvState tone;
+            bool armed = false;
+            foreach (CallTile t in v.Tiles) if (t.State == CallState.Armed) { armed = true; break; }
             if (tab == C2Tab.Cap)
             {
-                bool armed = false;
-                foreach (CallTile t in v.Tiles) if (t.State == CallState.Armed) { armed = true; break; }
                 slab = C2Cap.Slab(armed, v.Pending, v.Words);
                 words = C2Cap.FooterWords(v.Words, v.NextUnlock);
                 tone = armed ? AvState.Caution : v.Pending ? AvState.Info : C2Cap.StartsNegative(v.Words) ? AvState.Danger : AvState.Ready;
@@ -494,14 +526,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             else if (tab == C2Tab.Net || tab == C2Tab.Sof)
             {
-                // The domain is offline, but its real CALL rows work: a refusal from one of them replaces the standing words.
+                // The domain is offline, but its real CALL rows work: a refusal from one of them replaces the standing (info) words.
                 string said = v.Words ?? "";
                 bool refused = C2Cap.StartsNegative(said);
-                slab = refused ? "NEG" : "OFF";
-                tone = refused ? AvState.Danger : AvState.Caution;
+                slab = refused ? "NEG" : "INFO";
+                tone = refused ? AvState.Danger : AvState.Info;
                 words = refused ? said : (tab == C2Tab.Net ? netPage : sofPage)?.Words ?? "";
             }
             else { slab = "INT"; tone = AvState.Info; words = ""; }
+            // ABORT rides the footer on every page that has no abort of its own (CAP has one in the EXECUTE box) while a call is armed.
+            footer.ShowAbort(armed && tab != C2Tab.Cap);
             string key = slab + "|" + (int)tone + "|" + words;
             if (key == footerKey) return;
             footerKey = key;

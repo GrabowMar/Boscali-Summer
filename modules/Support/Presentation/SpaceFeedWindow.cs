@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         internal void Paint(SpaceFeedView view, C2ChromeView chrome) => station.Paint(view, chrome);
 
         /// <summary>Opens the window if an operator exists. False (and nothing taken) when there is none.</summary>
-        internal bool Open(SpaceFeedView view)
+        internal bool Open(SpaceFeedView view, C2ChromeView chrome)
         {
             if (window == null) return false;
             if (IsOpen) return true;
@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             {
                 window.Show();
                 TakeInput();
-                panel.Paint(view);
+                station.Paint(view, chrome); // the chrome and footer too: no empty header for the first frames
                 nextHits = 0f;
                 lastMouse = Input.mousePosition;
                 return true;

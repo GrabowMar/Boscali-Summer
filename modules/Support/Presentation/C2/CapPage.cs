@@ -58,6 +58,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Image stripRail;
         private readonly TMP_Text stripText;
         private readonly TMP_Text[] cellKey = new TMP_Text[4], cellValue = new TMP_Text[4];
+        private readonly RowMemo[] rowMemo, favMemo = new RowMemo[CapView.FavouriteSlots];
+        private readonly bool[] favEmpty = new bool[CapView.FavouriteSlots];
+        private readonly SupportActionId?[] shownFavourites = new SupportActionId?[CapView.FavouriteSlots];
+        private bool favouritesShown;
+        private ExecMemo execMemo;
         private SupportActionId armedId;
         private bool armedNow;
         private AvState stripTone = AvState.Inert;
@@ -92,12 +97,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 y += consoleH + Gap;
             }
 
-            caps = Make(new C2Box(parent, "AUTHORIZED CAPABILITIES · " + n));
+            caps = Make(new C2Box(parent, "CAPABILITIES · " + n));
             caps.BodyHeight = n * (rowH + 2f) + 2f;
             caps.Place(new AvSlot(0f, y, width, caps.Measure(width)));
             y += caps.Measure(width) + (full ? Gap : 4f);
 
             pinActions = new Action[n];
+            rowMemo = new RowMemo[n];
             for (int i = 0; i < n; i++)
             {
                 SupportActionId id = CallSheet.Rows[i].Id;
@@ -192,7 +198,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             console.Show(v.Console);
             armedNow = false;
-            int open = 0;
             for (int i = 0; i < v.Tiles.Count; i++)
             {
                 CallTile t = v.Tiles[i];
@@ -200,30 +205,73 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 int index = IndexOf(t.Id);
                 bool armed = t.State == CallState.Armed;
                 if (armed) { armedNow = true; armedId = t.Id; }
-                if (t.State != CallState.Locked && t.State != CallState.Offline) open++;
-                PaintRow(row, t, index, IsPinned(v, t.Id), pinActions[index]);
+                bool pinnedNow = IsPinned(v, t.Id);
+                if (rowMemo[index].Changed(t, pinnedNow)) PaintRow(row, t, index, pinnedNow, pinActions[index]); // compare the tile first: no strings for a still row
             }
 
-            string pinned = "";
-            for (int s = 0; s < v.Favourites.Length; s++)
+            if (!favouritesShown || FavouritesMoved(v))
             {
-                if (!v.Favourites[s].HasValue || !CallSheet.TryGet(v.Favourites[s].Value, out CallRow fr)) continue;
-                int space = fr.Label.IndexOf(' ');
-                pinned += (pinned.Length > 0 ? " · " : "") + (s + 1) + " " + (space > 0 ? fr.Label.Substring(0, space) : fr.Label);
+                favouritesShown = true;
+                string pinned = "";
+                for (int s = 0; s < v.Favourites.Length; s++)
+                {
+                    shownFavourites[s] = v.Favourites[s];
+                    if (!v.Favourites[s].HasValue || !CallSheet.TryGet(v.Favourites[s].Value, out CallRow fr)) continue;
+                    int space = fr.Label.IndexOf(' ');
+                    pinned += (pinned.Length > 0 ? " · " : "") + (s + 1) + " " + (space > 0 ? fr.Label.Substring(0, space) : fr.Label);
+                }
+                caps.SetMeta(pinned.Length > 0 ? "PINNED " + pinned : "NOTHING PINNED");
             }
-            caps.SetTitle("AUTHORIZED CAPABILITIES · " + open);
-            caps.SetMeta(pinned.Length > 0 ? "PINNED " + pinned : "NOTHING PINNED");
 
             for (int i = 0; i < favourites.Length; i++) PaintFavourite(i, v);
             PaintExecute(v);
         }
 
-        /// <summary>How many capabilities the header counts as authorized (everything not locked or offline).</summary>
-        public static int Authorized(IReadOnlyList<CallTile> tiles)
+        private bool FavouritesMoved(CapView v)
         {
-            int n = 0;
-            for (int i = 0; i < tiles.Count; i++) if (tiles[i].State != CallState.Locked && tiles[i].State != CallState.Offline) n++;
-            return n;
+            for (int s = 0; s < shownFavourites.Length; s++)
+                if (shownFavourites[s] != (s < v.Favourites.Length ? v.Favourites[s] : null)) return true;
+            return false;
+        }
+
+        /// <summary>True when two tiles would paint identically (every shown field equal). Strings compare by value, nothing is built.</summary>
+        internal static bool SameTile(in CallTile a, in CallTile b) =>
+            a.Id == b.Id && a.State == b.State && a.Enabled == b.Enabled && a.Label == b.Label && a.TierWord == b.TierWord &&
+            a.CostText == b.CostText && a.Reason == b.Reason && a.StateWord == b.StateWord;
+
+        /// <summary>The last tile a row painted: <see cref="Changed"/> says whether the row needs painting again.</summary>
+        internal struct RowMemo
+        {
+            private CallTile tile;
+            private bool pinned, known;
+
+            public bool Changed(in CallTile t, bool isPinned)
+            {
+                if (known && pinned == isPinned && SameTile(tile, t)) return false;
+                tile = t; pinned = isPinned; known = true;
+                return true;
+            }
+
+            public void Forget() => known = false;
+        }
+
+        /// <summary>The inputs of the EXECUTE box / strip; <see cref="Changed"/> is false while none of them moved.</summary>
+        private struct ExecMemo
+        {
+            private CallTile armedTile;
+            private bool armed, pending, known;
+            private AimSource aim;
+            private string aimGrid, nextUnlock;
+            private int delta, credit, pinned;
+
+            public bool Changed(bool armedNow, in CallTile tile, CapView v, int pinnedCount)
+            {
+                if (known && armed == armedNow && pending == v.Pending && aim == v.Aim && delta == v.LastDelta && credit == v.Credit &&
+                    pinned == pinnedCount && aimGrid == v.AimGrid && nextUnlock == v.NextUnlock && (!armedNow || SameTile(armedTile, tile))) return false;
+                known = true; armed = armedNow; pending = v.Pending; aim = v.Aim; delta = v.LastDelta; credit = v.Credit; pinned = pinnedCount;
+                aimGrid = v.AimGrid; nextUnlock = v.NextUnlock; armedTile = tile;
+                return true;
+            }
         }
 
         private void PaintFavourite(int slot, CapView v)
@@ -236,6 +284,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 {
                     CallTile t = v.Tiles[i];
                     if (t.Id != id.Value) continue;
+                    favEmpty[slot] = false;
+                    if (!favMemo[slot].Changed(t, true)) return;
                     button.Label = (slot + 1) + " · " + t.Label;
                     string tip = t.Label + " · " + C2Cap.StateWord(t) + " · " + t.CostText;
                     if (button.Help != tip) button.Help = tip;
@@ -244,6 +294,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                     return;
                 }
             }
+            favMemo[slot].Forget();
+            if (favEmpty[slot]) return;
+            favEmpty[slot] = true;
             button.Label = (slot + 1) + " · EMPTY";
             if (button.Help == null || !button.Help.StartsWith("Empty", StringComparison.Ordinal)) button.Help = "Empty slot: press the star on a call to pin it here.";
             button.Interactable = false;
@@ -259,6 +312,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             int pinnedCount = 0;
             foreach (SupportActionId? f in v.Favourites) if (f.HasValue) pinnedCount++;
 
+            if (!execMemo.Changed(armedNow, armedTile, v, pinnedCount)) return;
             execute.Rect.gameObject.SetActive(armedNow);
             abort.Rect.gameObject.SetActive(armedNow);
             if (armedNow) execute.Label = full ? "EXECUTE · " + armedTile.CostText : "EXECUTE";
@@ -275,8 +329,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 {
                     execBox.SetTitle(v.Pending ? "ORDER PENDING" : "STANDING BY");
                     execBox.SetMeta(v.Pending ? "AWAITING HOST" : "R-CLICK MAP TO AIM");
+                    // The last balance change shows for 30 s (the feed zeroes it after that), then the balance itself.
                     Cells(("NEXT UNLOCK", string.IsNullOrEmpty(v.NextUnlock) ? "ALL OPEN" : v.NextUnlock),
-                        ("LEDGER", C2Cap.Delta(v.LastDelta)), ("PINNED", pinnedCount + "/" + CapView.FavouriteSlots),
+                        v.LastDelta != 0 ? ("LEDGER", C2Cap.Delta(v.LastDelta)) : ("BALANCE", v.Credit + " CR"), ("PINNED", pinnedCount + "/" + CapView.FavouriteSlots),
                         ("AIM", v.Aim == AimSource.None ? "R-CLICK MAP" : aimSrc));
                 }
                 return;

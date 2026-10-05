@@ -149,6 +149,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly TMP_Text noContactsText, noTaskedText;
         private readonly C2ConsoleView consoleView;
 
+        // What each track / TASKED row last painted: a row whose data is unchanged is skipped before any string is built.
+        private FeedTileView[] shownTiles;
+        private FeedCardView[] shownCards;
+        private bool[] tileKnown, cardKnown;
+        private int metaPage = -1, metaPages = -1, labelSelected = -1, labelSend = -1, metaCards = -1;
+        private bool metaNone, labelFull, labelsKnown;
+
         private AvState threatTone = AvState.Inert;
         private string threatRaw = "", statusRaw = "", noTaskedRaw = "";
         private AvState statusTone = AvState.Info;
@@ -248,6 +255,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             nextButton = IconButton(AvIcon.ChevronRight, () => Do(this.actions.NextPage), navX, layout.Track.Y + 1f, 24f, 18f, "Next page of contact targets.");
             trackRows = new C2Row[layout.TrackRows];
             trackIds = new int[layout.TrackRows];
+            shownTiles = new FeedTileView[layout.TrackRows];
+            tileKnown = new bool[layout.TrackRows];
             for (int i = 0; i < trackRows.Length; i++)
             {
                 int slot = i;
@@ -276,6 +285,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             taskedBox.Place(Slot(layout.Tasked));
             cardRows = new C2Row[layout.CardRows];
             cardIds = new int[layout.CardRows];
+            shownCards = new FeedCardView[layout.CardRows];
+            cardKnown = new bool[layout.CardRows];
             for (int i = 0; i < cardRows.Length; i++)
             {
                 int slot = i;
@@ -349,10 +360,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             PaintTrack(view);
 
             SetEnabled(confirmButton, view.CanConfirm);
-            SetLabel(confirmButton, C2Orbit.ConfirmLabel(view.SelectedId, view.ConfirmFull));
+            if (!labelsKnown || labelSelected != view.SelectedId || labelFull != view.ConfirmFull || labelSend != view.SendCount)
+            {
+                labelsKnown = true; labelSelected = view.SelectedId; labelFull = view.ConfirmFull; labelSend = view.SendCount;
+                SetLabel(confirmButton, C2Orbit.ConfirmLabel(view.SelectedId, view.ConfirmFull));
+                SetLabel(sendButton, C2Orbit.TransmitLabel(view.SendCount));
+            }
             SetHelp(confirmButton, view.ConfirmHelp);
             SetEnabled(sendButton, view.CanSend);
-            SetLabel(sendButton, C2Orbit.TransmitLabel(view.SendCount));
             SetHelp(sendButton, view.SendHelp);
 
             PaintTasked(view);
@@ -401,7 +416,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintTrack(SpaceFeedView view)
         {
             bool none = view.NoContacts.Length > 0;
-            trackBox.SetMeta(none ? "NO TRACKS" : C2Orbit.PageMeta(view.Page, view.Pages));
+            if (none != metaNone || view.Page != metaPage || view.Pages != metaPages || metaPages < 0)
+            {
+                metaNone = none; metaPage = view.Page; metaPages = view.Pages;
+                trackBox.SetMeta(none ? "NO TRACKS" : C2Orbit.PageMeta(view.Page, view.Pages));
+            }
             SetEnabled(prevButton, !none && view.Page > 0);
             SetEnabled(nextButton, !none && view.Page + 1 < view.Pages);
             if (noContactsText.gameObject.activeSelf != none) noContactsText.gameObject.SetActive(none);
@@ -412,8 +431,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FeedTileView t = i < view.Tiles.Length ? view.Tiles[i] : default;
                 bool on = t.Present && !none;
                 if (trackRows[i].Rect.gameObject.activeSelf != on) trackRows[i].Rect.gameObject.SetActive(on);
-                if (!on) continue;
+                if (!on) { tileKnown[i] = false; continue; }
                 trackIds[i] = t.Id;
+                if (tileKnown[i] && SameTile(shownTiles[i], t)) continue;
+                shownTiles[i] = t;
+                tileKnown[i] = true;
                 AvState cls = t.Class == ProbableClass.Hostile ? AvState.Danger : t.Class == ProbableClass.Friendly ? AvState.Ready
                     : t.Class == ProbableClass.Neutral ? AvState.Info : AvState.Caution;
                 trackRows[i].Armed = t.Selected;
@@ -427,7 +449,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void PaintTasked(SpaceFeedView view)
         {
             taskedBox.SetTitle(view.TaskedCaption);
-            taskedBox.SetMeta(C2Orbit.TaskedMeta(view.CardCount));
+            if (view.CardCount != metaCards) { metaCards = view.CardCount; taskedBox.SetMeta(C2Orbit.TaskedMeta(view.CardCount)); }
             bool none = view.CardCount == 0;
             string empty = "NO TASKED CALL · POSTED CALLS APPEAR HERE";
             if (noTaskedText.gameObject.activeSelf != none) noTaskedText.gameObject.SetActive(none);
@@ -438,8 +460,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FeedCardView c = i < view.CardCount ? view.Cards[i] : default;
                 bool on = c.Present;
                 if (cardRows[i].Rect.gameObject.activeSelf != on) cardRows[i].Rect.gameObject.SetActive(on);
-                if (!on) continue;
+                if (!on) { cardKnown[i] = false; continue; }
                 cardIds[i] = c.PostId;
+                if (cardKnown[i] && SameCard(shownCards[i], c)) continue;
+                shownCards[i] = c;
+                cardKnown[i] = true;
                 cardRows[i].Armed = c.Armed;
                 cardRows[i].Set((i + 1).ToString("00"), c.Title, c.Chip, AvState.Ready, c.Sub, c.Price, c.State, c.Tone, c.Button,
                     c.Armed ? AvButtonStyle.Danger : c.Enabled && c.Tone == AvState.Ready ? AvButtonStyle.Primary : AvButtonStyle.Default, c.Enabled);
@@ -447,6 +472,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (cardRows[i].Primary.Help != c.Detail) cardRows[i].Primary.Help = c.Detail;
             }
         }
+
+        private static bool SameTile(in FeedTileView a, in FeedTileView b) =>
+            a.Selected == b.Selected && a.Marked == b.Marked && a.Moving == b.Moving && a.FixedPoint == b.FixedPoint && a.Id == b.Id &&
+            a.Percent == b.Percent && a.Class == b.Class && a.Title == b.Title && a.Sub == b.Sub;
+
+        private static bool SameCard(in FeedCardView a, in FeedCardView b) =>
+            a.Armed == b.Armed && a.Enabled == b.Enabled && a.PostId == b.PostId && a.Tone == b.Tone && a.Title == b.Title && a.Chip == b.Chip &&
+            a.Sub == b.Sub && a.Price == b.Price && a.State == b.State && a.Detail == b.Detail && a.Button == b.Button;
 
         private void SetTone(ref AvState current, AvState next)
         {
