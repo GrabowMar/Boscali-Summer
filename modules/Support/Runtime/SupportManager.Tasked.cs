@@ -4,6 +4,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -71,6 +72,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             out int baselinePrice, out bool charge, out int detail)
         {
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
+            if (SofPosts.IsPost(action)) return AuthorizeSofTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
             if (TaskedKinds.DomainOf(action) == TaskedDomain.Cyber && CyberPackages.TryOfAction(action, out _))
                 return AuthorizeCyberTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
             if (!GameAccess.IsServer() || catalog == null || credits == null || !TaskedSupported(action)) return TaskedOutcome.Unavailable;
@@ -106,6 +108,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             refusal = TaskedOutcome.Unavailable;
             if (CyberPackages.TryOfAction(action, out _)) return ReserveCyberTasked(owner, out refusal);
+            if (SofPosts.IsPost(action)) return ReserveSofTasked(owner, out refusal);
             SupportActionDefinition definition = catalog?.Find(action);
             if (definition == null || !definition.SpaceTask.HasValue || !TryGetSpaceState(owner, out SpaceState state)) return null;
             if (!state.TryReserve(definition.SpaceTask.Value, MissionNow(), out SpaceTaskReservation receipt))
@@ -121,6 +124,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void LaunchTasked(FactionHQ owner, TaskedLaunchJob job)
         {
             if (CyberPackages.TryOfAction(job.Action, out _)) { LaunchCyberTasked(owner, job); return; }
+            if (SofPosts.IsPost(job.Action)) { LaunchSofTasked(owner, job); return; }
             SupportActionDefinition definition = catalog?.Find(job.Action);
             Player pilot = FindPlayer(owner, job.Pilot);
             if (definition == null || pilot == null || !(job.Slot is TaskedSlot slot)) { job.ReportFailure(); return; }
@@ -152,12 +156,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal void TaskedFired(FactionHQ owner, TaskedLaunchJob job)
         {
             float now = MissionNow();
-            // TASKED receipts live only in the desk; the CALLS ledger gets the cooldown, never this request id.
-            ledger.StartCooldown(job.Pilot, now);
+            // TASKED receipts live only in the desk; the CALLS ledger gets the cooldown, never this request id. A SOF post is a service: no cooldown.
+            if (!SofPosts.IsPost(job.Action)) ledger.StartCooldown(job.Pilot, now);
             Player pilot = FindPlayer(owner, job.Pilot);
             if (pilot != null) credits?.RecordInput(pilot, now);
             // A CYBER package is not a strike: no OPS-assisted-kill window (its radius is not a blast radius).
-            if (!CyberPackages.TryOfAction(job.Action, out _))
+            if (!TaskedKinds.IsHostPost(job.Action))
             {
                 try { credits.Assists.Record(credits.FactionKey(owner), job.Aim.X, job.Aim.Z, GetEffectRadius(job.Action, owner), now); }
                 catch (Exception e) { logger.LogError(e); }
