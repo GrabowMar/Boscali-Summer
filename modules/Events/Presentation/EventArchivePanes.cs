@@ -93,7 +93,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             Rect = AvLay.Child(parent, "Panes");
             height = paneHeight;
-            leftWidth = Mathf.Floor(innerWidth * 0.38f);
+            // The list's two pager buttons and full record range need at least 288 px inside its padding.
+            leftWidth = Mathf.Max(330f, Mathf.Floor(innerWidth * 0.38f));
             rightWidth = innerWidth - leftWidth - PaneGap;
             Left = new ScrollPane(Rect, ticker, leftWidth);
             Right = new ScrollPane(Rect, ticker, rightWidth);
@@ -143,10 +144,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
             {
                 Frame = AvFrame.Add(parent, "Cell", AvChamfer.Diagonal(4f));
                 Key = AvText.Make(parent, "CellKey", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
-                Value = AvText.Make(parent, "CellValue", AvTextRole.DataStrong, "", TextAlignmentOptions.TopLeft);
+                Value = AvText.Make(parent, "CellValue", AvTextRole.DataStrong, "", TextAlignmentOptions.TopLeft, true);
                 Note = AvText.Make(parent, "CellNote", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
                 AvText.Fit(Key, false);
-                AvText.Fit(Value, false);
+                AvText.Fit(Value, true);
                 AvText.Fit(Note, false);
             }
 
@@ -294,6 +295,36 @@ namespace BoscaliSummer.Modules.Events.Presentation
             if (place) AvLay.Place(rule.rectTransform, 0f, y, w, 1f);
             y += 1f + 10f;
 
+            if (figureCount > 0)
+            {
+                int cols = Mathf.Min(w < 500f ? 2 : 3, figureCount);
+                float cw = (w - (cols - 1) * FigureGap) / cols;
+                for (int first = 0; first < figureCount; first += cols)
+                {
+                    float rowH = 46f;
+                    for (int i = first; i < Mathf.Min(first + cols, figureCount); i++)
+                    {
+                        Cell cell = cells[i];
+                        float valueH = Mathf.Max(20f, AvText.Height(cell.Value, cw - 20f));
+                        rowH = Mathf.Max(rowH, 6f + 15f + valueH +
+                            (cell.Note.text.Length > 0 ? 2f + 15f : 0f) + 6f);
+                    }
+                    if (place)
+                        for (int i = first; i < Mathf.Min(first + cols, figureCount); i++)
+                        {
+                            float cx = (i - first) * (cw + FigureGap);
+                            Cell cell = cells[i];
+                            float valueH = Mathf.Max(20f, AvText.Height(cell.Value, cw - 20f));
+                            AvLay.Place(cell.Frame.rectTransform, cx, y, cw, rowH);
+                            AvLay.Place(cell.Key.rectTransform, cx + 10f, y + 6f, cw - 20f, 15f);
+                            AvLay.Place(cell.Value.rectTransform, cx + 10f, y + 21f, cw - 20f, valueH);
+                            AvLay.Place(cell.Note.rectTransform, cx + 10f, y + 23f + valueH, cw - 20f,
+                                cell.Note.text.Length > 0 ? 15f : 0f);
+                        }
+                    y += rowH + (first + cols < figureCount ? FigureGap : 12f);
+                }
+            }
+
             if (media != Media.None)
             {
                 float mh = media == Media.Model ? ModelHeight : PosterHeight;
@@ -317,29 +348,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     }
                 }
                 y += mh + 12f;
-            }
-
-            if (figureCount > 0)
-            {
-                int cols = Mathf.Min(3, figureCount);
-                int rows = (figureCount + cols - 1) / cols;
-                float cw = (w - (cols - 1) * FigureGap) / cols;
-                bool anyNote = false;
-                for (int i = 0; i < figureCount; i++) anyNote |= cells[i].Note.text.Length > 0;
-                float ch = anyNote ? 62f : 46f;
-                if (place)
-                {
-                    for (int i = 0; i < figureCount; i++)
-                    {
-                        float cx = (i % cols) * (cw + FigureGap), cy = y + (i / cols) * (ch + FigureGap);
-                        Cell cell = cells[i];
-                        AvLay.Place(cell.Frame.rectTransform, cx, cy, cw, ch);
-                        AvLay.Place(cell.Key.rectTransform, cx + 10f, cy + 6f, cw - 20f, 15f);
-                        AvLay.Place(cell.Value.rectTransform, cx + 10f, cy + 21f, cw - 20f, 20f);
-                        AvLay.Place(cell.Note.rectTransform, cx + 10f, cy + 43f, cw - 20f, 15f);
-                    }
-                }
-                y += rows * ch + (rows - 1) * FigureGap + 12f;
             }
 
             if (body.text.Length > 0)

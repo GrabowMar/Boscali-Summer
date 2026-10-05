@@ -550,12 +550,19 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
             CommanderWire[] nodes = snapshot.Nodes;
             if (nodes == null) return;
+            bool host = GameAccess.IsServer();
+            int localFaction = PortraitFactions.Local;
+            int enemyFaction = host ? -1 : PortraitFactions.OpposingLocal;
             for (int i = 0; i < nodes.Length && viewCommanders.Count < CommandSnapshotRules.MaximumNodes; i++)
             {
                 CommanderWire node = nodes[i];
                 var traits = (CommandTrait)node.TraitMask;
                 bool friendly = (node.Flags & CommanderWire.Friendly) != 0;
                 bool isKia = (node.Flags & CommanderWire.Kia) != 0;
+                int portraitFaction = friendly ? localFaction : enemyFaction;
+                int owner = FactionOf(node.Id);
+                if (host && owner >= 0 && owner < factions.Count)
+                    portraitFaction = PortraitFactions.Of(factions[owner].Hq);
                 viewCommanders.Add(new CommanderView(
                     node.Id, node.ParentId, node.Tier,
                     friendly,
@@ -568,9 +575,9 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     CommandTraits.BonusLine(traits),
                     CommanderGenerator.Bio(node.Seed, traits),
                     node.Seed,
-                    // The same generated portrait every ace and wingman uses. Wing Command
-                    // owns the sprite; it is borrowed here and never destroyed.
-                    WingLink.PilotPortrait(node.Name, ""),
+                    // Every staff post is a commander. The shared identity generator
+                    // keeps faces stable and selects clothing/equipment for this role.
+                    WingLink.PersonnelPortrait(node.Name, "", PortraitRole.Commander, portraitFaction),
                     node.IntelAge, node.Weight, node.X, node.Z));
             }
 

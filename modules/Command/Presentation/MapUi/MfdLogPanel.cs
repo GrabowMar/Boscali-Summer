@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static AvControl pauseButton, filterButton, latestButton;
         private static TMP_Text trafficCount;
         private static bool paused, killsOnly;
+        private static int reportsWhilePaused;
         private static readonly List<Entry> pausedHistory = new List<Entry>(MaximumEntries);
         private static VirtualMFD mfd;
         private static MfdLayout.Columns columns;
@@ -174,6 +175,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             pauseButton = filterButton = latestButton = null;
             trafficCount = null;
             paused = killsOnly = false;
+            reportsWhilePaused = 0;
             pausedHistory.Clear();
             mfd = null;
             messageSource = null;
@@ -360,6 +362,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void TogglePause()
         {
             paused = !paused;
+            reportsWhilePaused = 0;
             pausedHistory.Clear();
             if (paused) pausedHistory.AddRange(history);
             RefreshFeed(false);
@@ -375,6 +378,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void Latest()
         {
             paused = false;
+            reportsWhilePaused = 0;
             pausedHistory.Clear();
             RefreshFeed(false);
             if (scroll != null) scroll.verticalNormalizedPosition = 1f;
@@ -387,7 +391,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             List<Entry> shown = paused ? pausedHistory : history;
             int count = 0;
             foreach (Entry entry in shown) if (!killsOnly || entry.KillFeed) count++;
-            if (trafficCount != null) trafficCount.text = count + " " + (paused ? "HELD" : "REPORTS");
+            if (trafficCount != null) trafficCount.text = count + " " +
+                (paused ? "HELD" + (reportsWhilePaused > 0 ? " / " + reportsWhilePaused + " NEW" : "") : "REPORTS");
             SetLiveChip(count > 0);
         }
 
@@ -554,6 +559,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ExpiresAt = now + RetentionSeconds,
                 KillFeed = killFeed,
             });
+            if (paused) reportsWhilePaused++;
             while (history.Count > MaximumEntries) history.RemoveAt(history.Count - 1);
             OnLineAdded?.Invoke(text);
         }

@@ -515,6 +515,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Icon = ContractIcon(objective.Title),
                     Title = MfdSecondaryObjectives.TitleLine(objective.Id, objective.Title),
                     Sub = sub,
+                    Description = objective.Description,
                     Reward = Cash(objective.Money),
                     Xp = "+" + AvNum.Thousands(Math.Max(0, objective.Xp)) + " XP",
                     Progress = objective.IsOffered ? "OFFER" : complete ? "100%" : AvNum.Percent(fraction),

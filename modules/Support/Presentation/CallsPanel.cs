@@ -230,7 +230,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 SupportActionId id = row.Id;
                 CallLine line = page.Add(new CallLine(page.Content, lineHeight));
                 line.AddControl(new AvControl.Spec("CALL", () => calls?.Press(id), AvButtonStyle.Primary), "Arm this CALL; press again to fire.");
-                line.AddControl(new AvControl.Spec("★", () => calls?.Pin(id), AvButtonStyle.Quiet), "Pin to a favourite slot.");
+                line.AddControl(new AvControl.Spec("", () => calls?.Pin(id), AvButtonStyle.Quiet, AvIcon.Star), "Pin to a favourite slot.");
                 if (id == SupportActionId.JtacMark)
                     line.AddControl(new AvControl.Spec("UNLASE", () => calls?.Unlase(), AvButtonStyle.Quiet),
                         "Clear the lase at the current POD or map aim. Free.");
