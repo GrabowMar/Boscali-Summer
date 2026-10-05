@@ -123,6 +123,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void ShowSubFor(string id)
         {
             if (id == null) return;
+            route.RevealFor(id);
             if (id.StartsWith("form.", System.StringComparison.Ordinal)) ShowSub(SubFormation);
             else if (id.StartsWith("plan.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
             else if (id.StartsWith("tac.orders.", System.StringComparison.Ordinal) || id.StartsWith("tac.react.", System.StringComparison.Ordinal)

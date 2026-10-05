@@ -59,6 +59,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public Action<int, bool> RowPicked;
         /// <summary>Offline renders and tests: callsign and type of an aircraft id (null: the host's own lookup).</summary>
         public Func<uint, string[]> PreviewIdentity;
+        /// <summary>Offline renders: an element row's task words (null: the host's planner).</summary>
+        public Func<int, string> PreviewTask;
         /// <summary>Until this unscaled time the scope's rows flash (an order went to them).</summary>
         public float FlashUntil;
 
@@ -478,7 +480,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string title = (string.IsNullOrEmpty(name) || name == letter ? "ELEMENT " + letter : letter + " · " + Cut(name, 9)) + " · " + AvNum.Fixed(members, 0) + " AC";
             WmcKit.Set(h.Num, letter);
             WmcKit.Set(h.Name, title);
-            string task = p == null ? (e == 0 ? "FORM · on you" : WmcText.Unknown)
+            string task = PreviewTask != null ? PreviewTask(e) : p == null ? (e == 0 ? "FORM · on you" : WmcText.Unknown)
                 : !p.Active ? (e == 0 ? "FORM · on you" : "FORM")
                 : TaskCard.Short(p.Current, p.Leg, p.Lead != null ? p.Lead.Position : Vec3.Zero, p.Lead != null ? p.Lead.Speed : 0f);
             WmcKit.Set(h.Task, task);
