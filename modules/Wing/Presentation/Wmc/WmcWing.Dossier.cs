@@ -2,6 +2,7 @@ using NOAvionics;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
@@ -12,25 +13,43 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // WING's dossier card (portrait, identity, stamp, rank line, XP bar with rank ticks, record, radio, RELEASE) and its PERKS 2×2.
+    // WING's personnel file (one card under the roster table): the file's face (portrait, stamp, rank and XP ladder, record, radio style,
+    // ribbon rack), the ASSIGNED line, the PERKS badges and the action row AIR SAR · LOCAL SAR · RELEASE. 2026-10-05 redesign of the
+    // dossier + assignment bar + perks 2x2 (every fact kept; rescues are not tracked by the game's record, so the record line has none).
     internal sealed partial class WmcWing
     {
-        private AvCard dossierCard;
-        private WingDossier dossier;
+        private AvCard fileCard;
+        private WingFileTop fileTop;
         private bool releaseOn;
+        private AvControl releaseButton;
         private readonly ConfirmGate releaseGate = new ConfirmGate();
-        private int dossierKey = int.MinValue;
+        private readonly FileFace face = new FileFace();
+        private readonly RibbonId[] rack = new RibbonId[Ribbons.Max];
+        private int fileKey = int.MinValue;
 
-        private void BuildDossier(AvFlow f)
+        /// <summary>The file card under the roster: face, ASSIGNED, PERKS, actions.</summary>
+        private void BuildFile(AvFlow f)
         {
-            f.Section(AvIcon.Crown, "DOSSIER");
-            dossierCard = f.Add(new AvCard(f.Content, f.Ticker, f.Inner));
-            dossier = dossierCard.Flow.Add(new WingDossier(dossierCard.Flow.Content, Release));
-            ids.Add("wing.release", dossier.Release);
+            fileCard = f.Add(new AvCard(f.Content, f.Ticker, f.Inner));
+            AvFlow c = fileCard.Flow;
+            fileTop = c.Add(new WingFileTop(c.Content));
+            BuildAssignment(c);
+            BuildPerks(c);
+            AvControl[] actions = c.Buttons(
+                new AvControl.Spec("AIR SAR", AirSar, AvButtonStyle.Default, AvIcon.Plane),
+                new AvControl.Spec("LOCAL SAR", LocalSar, AvButtonStyle.Default, AvIcon.Flag),
+                new AvControl.Spec("RELEASE", Release, AvButtonStyle.Danger, AvIcon.Unlink)).Controls;
+            assignAir = actions[0];
+            assignLocal = actions[1];
+            releaseButton = actions[2];
+            releaseButton.Help = SquadronWords.ReleaseTip;
+            ids.Add("wing.airsar", assignAir);
+            ids.Add("wing.localsar", assignLocal);
+            ids.Add("wing.release", releaseButton);
         }
 
-        /// <summary>The dossier of the inspected pilot, rebuilt only when the roster, the pilot or RELEASE's ask changed.</summary>
-        private void RefreshDossier()
+        /// <summary>The selected pilot's file, rebuilt only when the roster, the pilot, RELEASE's ask or a local search's second changed.</summary>
+        private void RefreshFile()
         {
             WingPilot p = client ? null : inspected;
             int at = IndexOf(p);
@@ -39,49 +58,69 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int key;
             unchecked
             {
-                key = scanVersion * 31 + at * 7 + (client ? 3 : 0) + (asking ? 5 : 0);
+                key = scanVersion * 31 + at * 7 + (client ? 3 : 0) + (asking ? 5 : 0) + (at >= 0 && localLeft[at] >= 0f ? (int)localLeft[at] * 13 + 1 : 0);
             }
-            if (key == dossierKey) return;
-            dossierKey = key;
-            dossier.SetPilot(p);
+            if (key == fileKey) return;
+            fileKey = key;
+            relayout = true;
+            fileTop.SetPilot(p);
             if (p == null)
             {
-                dossier.SetIdentity(client ? SquadronWords.ClientWhy : SquadronWords.NoFocus);
-                dossier.SetStamp(WmcText.Unknown, "inert");
-                dossier.SetRail("inert");
-                dossier.SetRankLine("");
-                dossier.SetXp(0f, false);
-                for (int i = 0; i < 5; i++) SetLetter(i, false);
-                dossier.SetRecord("");
-                dossier.SetRadio("");
+                face.Tab = SquadronWords.FileTitle;
+                face.Callsign = client ? WmcText.Unknown : "NO PILOT";
+                face.Name = client ? SquadronWords.ClientWhy : SquadronWords.NoFocus;
+                face.RankLine = "";
+                face.Stats = "";
+                face.Radio = "";
+                face.Stamp = WmcText.Unknown;
+                face.Rail = "inert";
+                face.RibbonHelp = "";
+                face.Rank = WingRank.Rookie;
+                face.Xp = 0f;
+                face.Dim = true;
+                face.RibbonCount = 0;
+                fileTop.Show(face);
                 SetRelease(false, false, client ? SquadronWords.ClientWhy : SquadronWords.NoFocus);
                 return;
             }
             bool next = ReferenceEquals(p, upcoming);
-            dossier.SetIdentity(PilotPick.NameLine(p.Callsign, p.Name));
-            dossier.SetStamp(SquadronWords.Stamp(s, next, number[at]), SquadronWords.Rail(s, next));
-            dossier.SetRail(SquadronWords.Rail(s, next));
-            dossier.SetRankLine(PilotXp.RankLine(p.Xp));
-            dossier.SetXp(PilotXp.Fill(p.Xp), s == PilotStatus.Kia);
-            for (int i = 0; i < 5; i++) SetLetter(i, i == (int)p.Rank);
-            dossier.SetRecord(SquadronWords.Record(p.Kills, p.Sorties));
-            dossier.SetRadio(SquadronWords.Persona(p.Persona.ToString()));
+            face.Tab = SquadronWords.FileTitle + " · " + PersonnelFile.Number(p.Callsign, p.Name);
+            face.Callsign = "\"" + WmcText.Cut(p.Callsign, PilotPick.CallsignChars) + "\"";
+            face.Name = WmcText.Cut(p.Name, 24).ToUpperInvariant();
+            face.RankLine = PilotXp.RankLine(p.Xp);
+            face.Stats = SquadronWords.Record(p.Kills, p.Sorties);
+            face.Radio = SquadronWords.Persona(p.Persona.ToString());
+            face.Stamp = SquadronWords.Tag(s, next, number[at], localLeft[at]);
+            face.Rail = SquadronWords.Rail(s, next);
+            face.Rank = p.Rank;
+            face.Xp = PilotXp.Fill(p.Xp);
+            face.Dim = s == PilotStatus.Kia;
+            face.RibbonCount = Ribbons.For(p.Kills, p.Sorties, (int)p.Rank, rack);
+            for (int i = 0; i < face.RibbonCount; i++) face.Rack[i] = rack[i];
+            face.RibbonHelp = RibbonHelp(face.RibbonCount);
+            fileTop.Show(face);
             SetRelease(s == PilotStatus.Flying, asking, SquadronWords.ReleaseWhy(s, false));
         }
 
-        private void SetLetter(int i, bool lit) => dossier.SetLetter(i, SquadronWords.Badge((WingRank)i), (WingRank)i, lit);
+        /// <summary>The rack's words, for the footer help (the bars are small): the earned ribbons by name, or what earns the first.</summary>
+        private string RibbonHelp(int n)
+        {
+            if (n == 0) return "No ribbons yet: 5 kills, 5 sorties or the first rank-up earn one.";
+            var sb = new System.Text.StringBuilder("Ribbons:");
+            for (int i = 0; i < n; i++) sb.Append(i == 0 ? " " : " · ").Append(Ribbons.Word(rack[i]));
+            return sb.ToString();
+        }
 
         private void SetRelease(bool on, bool asking, string why)
         {
             releaseOn = on;
-            AvControl release = dossier.Release;
-            release.Label = SquadronWords.ReleaseLabel(asking);
-            release.Latched = asking;
-            release.Interactable = on;
-            release.Help = on ? SquadronWords.ReleaseTip : why;
+            releaseButton.Label = SquadronWords.ReleaseLabel(asking);
+            releaseButton.Latched = asking;
+            releaseButton.Interactable = on;
+            releaseButton.Help = on ? SquadronWords.ReleaseTip : why;
         }
 
-        /// <summary>RELEASE, pressed twice: the member flying the dossier's pilot goes to the game's AI (the Release order).</summary>
+        /// <summary>RELEASE, pressed twice: the member flying the file's pilot goes to the game's AI (the Release order).</summary>
         private void Release()
         {
             WingPilot p = inspected;
@@ -93,17 +132,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (!releaseGate.Press(p.Callsign, Time.unscaledTime))
                 {
                     WingToast.Show(SquadronWords.ReleaseAsk(WmcText.Cut(p.Callsign, PilotPick.CallsignChars), m.Number));
-                    dossierKey = int.MinValue;
+                    fileKey = int.MinValue;
                     WmcPanel.Instance?.Refresh();
                     return;
                 }
                 WingOrders.Run(new WingOrder { Kind = OrderKind.Release, Scope = WingScope.OfMembers(m.Aircraft.persistentID.Id) });
-                dossierKey = int.MinValue;
+                fileKey = int.MinValue;
                 WmcPanel.Instance?.Refresh();
             });
         }
 
-        // ---------------------------------------------------------------- PERKS 2×2
+        // ---------------------------------------------------------------- PERKS: four badges
 
         private static readonly PilotPerk[] NoPerks = new PilotPerk[0];
         private AvSection perksSection;
@@ -121,8 +160,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The inspected pilot's perks in order, the ones not active in 1.0 marked, locked slots naming the rank and XP
-        /// that earn them, and "+n MORE" on the fourth card past four (PerkCards).</summary>
+        /// <summary>The selected pilot's perks in order, the ones not active in 1.0 marked, locked slots naming the rank and XP that earn
+        /// them, and "+n MORE" on the fourth card past four (PerkCards).</summary>
         private void RefreshPerks()
         {
             WingPilot p = client ? null : inspected;

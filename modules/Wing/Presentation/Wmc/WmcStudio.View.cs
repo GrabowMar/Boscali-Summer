@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
@@ -16,10 +17,12 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // SQUADRON › STUDIO's view on kit v2 (spec bezel v2 §5 SQUADRON › STUDIO), one flow: PILOT — the picker with ‹ › and the draft's
-    // chip, NEW · CLONE · DELETE and IMPORT · EXPORT · FOLDER; LOOK — the portrait beside its layer steppers, RANDOM LOOK; IDENTITY —
-    // CALLSIGN and NAME with RANDOM, RADIO; BIO with its counter, GENERATE and the field; the problem alert; SAVE · REVERT and
-    // RECRUIT / DISCHARGE; the SERVICE line. The portrait is art (a data image): it keeps its sprite inside a kit frame.
+    // SQUADRON › STUDIO's view on kit v2 (spec bezel v2 §5 SQUADRON › STUDIO; the 2026-10-05 Personnel File redesign), one flow: PILOT — the
+    // picker with ‹ › and the draft's chip, NEW · CLONE · DELETE · IMPORT · EXPORT · FOLDER in one row; the live aircrew ID card (the
+    // portrait, callsign, name, rank, radio and bio as they are edited); LOOK — the layer steppers, RANDOM LOOK; IDENTITY — CALLSIGN and
+    // NAME with RANDOM, RADIO; BIO with its counter, GENERATE and the field; the problem alert; SAVE · REVERT and RECRUIT / DISCHARGE; the
+    // SERVICE line. The portrait is art (a data image): it keeps its sprite inside the card's kit frame. No HEAR button: no voice-line
+    // player takes a draft's persona (VoicePacks plays a flying member's call), so a sample would be made up.
     internal sealed partial class WmcStudio
     {
         private static readonly LookLayer[] Layers = { LookLayer.Body, LookLayer.Face, LookLayer.Hair, LookLayer.Suit, LookLayer.Scene };
@@ -29,6 +32,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private PickerPart picker;
         private LookPart look;
+        private WingIdCard idCard;
+        private readonly IdCardFace idFace = new IdCardFace();
         private WmcNameField callsignField, nameField, bioField;
         private AvSection bioSection;
         private AvStepper radioStepper;
@@ -57,31 +62,33 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids.Add("sq.pick", picker.Pick);
             ids.Add("sq.pick.next", picker.Next);
 
-            AvControl[] make = f.Buttons(
-                new AvControl.Spec("NEW", NewPilot, AvButtonStyle.Default, AvIcon.Plus),
-                new AvControl.Spec("CLONE", Clone, AvButtonStyle.Default, AvIcon.LayersSubtract),
-                new AvControl.Spec("DELETE", Delete, AvButtonStyle.Danger, AvIcon.X)).Controls;
-            make[0].Help = "A new pilot as a draft: a random identity, look and bio. Nothing is saved until SAVE.";
-            cloneButton = make[1];
+            AvControl[] file = f.Buttons(
+                new AvControl.Spec("NEW", NewPilot),
+                new AvControl.Spec("CLONE", Clone),
+                new AvControl.Spec("DELETE", Delete, AvButtonStyle.Danger),
+                new AvControl.Spec("IMPORT", Import),
+                new AvControl.Spec("EXPORT", Export),
+                new AvControl.Spec("FOLDER", () => WingSavedPilots.OpenFolder())).Controls;
+            file[0].Help = "A new pilot as a draft: a random identity, look and bio. Nothing is saved until SAVE.";
+            cloneButton = file[1];
             cloneButton.Help = "Copy this pilot into a new draft under the next free callsign.";
-            deleteButton = make[2];
+            deleteButton = file[2];
             deleteButton.Help = "Delete this saved pilot (press twice). This mission keeps them.";
-            ids.Add("sq.new", make[0]);
+            file[3].Help = "Add pilots from the Pilots folder and 0.9's folder: new callsigns only, the files are left as they are.";
+            file[4].Help = "Write every saved pilot to Pilots/exported_pilots.json.";
+            file[5].Help = "Open the Pilots folder.";
+            ids.Add("sq.new", file[0]);
             ids.Add("sq.clone", cloneButton);
             ids.Add("sq.delete", deleteButton);
-            AvControl[] files = f.Buttons(
-                new AvControl.Spec("IMPORT", Import, AvButtonStyle.Default, AvIcon.ArrowDown),
-                new AvControl.Spec("EXPORT", Export, AvButtonStyle.Default, AvIcon.ArrowUp),
-                new AvControl.Spec("FOLDER", () => WingSavedPilots.OpenFolder(), AvButtonStyle.Default, AvIcon.Stack2)).Controls;
-            files[0].Help = "Add pilots from the Pilots folder and 0.9's folder: new callsigns only, the files are left as they are.";
-            files[1].Help = "Write every saved pilot to Pilots/exported_pilots.json.";
-            files[2].Help = "Open the Pilots folder.";
-            ids.Add("sq.import", files[0]);
-            ids.Add("sq.export", files[1]);
-            ids.Add("sq.folder", files[2]);
+            ids.Add("sq.import", file[3]);
+            ids.Add("sq.export", file[4]);
+            ids.Add("sq.folder", file[5]);
 
-            // The portrait beside its layer steppers and RANDOM LOOK.
-            f.Section(AvIcon.MoodSmile, "LOOK");
+            // The live aircrew ID card: it repaints as the draft is edited.
+            idCard = f.Add(new WingIdCard(f.Content));
+
+            // The layer steppers (the card above shows the result) and RANDOM LOOK.
+            f.Section(AvIcon.MoodSmile, "LOOK", "STEPS THE PORTRAIT");
             look = f.Add(new LookPart(f.Content, layerText, StepLook));
             for (int i = 0; i < Layers.Length; i++)
             {
@@ -247,7 +254,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             DraftState state = has ? StateOf() : DraftState.Saved;
             string rail = "inert";
             picker.Chip.Set(has ? StudioWords.Chip(state, out rail) : WmcText.Unknown, has ? WmcState.Of(rail) : AvState.Inert);
-            look.SetPreview(has ? PilotPortrait.Preview(draft.Selection) : null);
+            RefreshCard(has);
             PortraitSelection sel = has ? draft.Selection : PilotPortraitGenerator.DefaultSelection;
             layerText[0] = PilotPortraitGenerator.BodyLabel(sel.Body);
             layerText[1] = StudioWords.Face(sel.Face);
@@ -266,6 +273,34 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (problem != null) problemAlert.Show(AvIcon.AlertTriangle, "PROBLEM", problem, AvState.Caution);
             else problemAlert.Hide();
             noteLines.Set(0, problem != null ? "" : !has ? StudioWords.NoPilot : state == DraftState.Edited ? "EDITED · SAVE keeps it, REVERT drops it" : "");
+        }
+
+        /// <summary>The ID card from the draft: its words as typed, the rank its pilot holds (a saved record's XP, a live pilot's rank, else
+        /// ROOKIE), the barcode and number from the identity, and the bio's first lines.</summary>
+        private void RefreshCard(bool has)
+        {
+            if (!has)
+            {
+                idFace.Callsign = idFace.Name = idFace.Number = idFace.Bio = "";
+                idFace.Radio = WmcText.Unknown;
+                idFace.RankWord = PilotPerks.RankName(WingRank.Rookie).ToUpperInvariant();
+                idFace.Rank = WingRank.Rookie;
+                idFace.Portrait = PilotPortrait.Preview(PilotPortraitGenerator.DefaultSelection);
+                idCard.Show(idFace);
+                return;
+            }
+            CustomPilotRecord stored = !draftNew && draftOriginal != null ? WingSavedPilots.Store.Find(draftOriginal) : null;
+            WingRank rank = draftLive != null && !draftNew ? draftLive.Rank : stored != null ? PilotPerks.RankFor(stored.Xp) : WingRank.Rookie;
+            idFace.Callsign = WmcText.Cut(draft.Callsign ?? "", PilotText.CallsignChars);
+            idFace.Name = WmcText.Cut(draft.Name ?? "", PilotText.NameChars);
+            idFace.Rank = rank;
+            idFace.RankWord = PilotPerks.RankName(rank).ToUpperInvariant();
+            idFace.Radio = StudioWords.Radio(draft.Persona);
+            idFace.Number = PersonnelFile.Number(draft.Callsign, draft.Name);
+            string excerpt = PersonnelFile.Excerpt(draft.Background, 150);
+            idFace.Bio = excerpt.Length > 0 ? "\"" + excerpt + "\"" : "";
+            idFace.Portrait = PilotPortrait.Preview(draft.Selection);
+            idCard.Show(idFace);
         }
 
         private void RefreshRecord()
@@ -340,21 +375,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The portrait (art, a sprite in a kit frame) beside its five layer steppers.</summary>
+        /// <summary>The five layer steppers in two columns (the ID card above shows the portrait they change).</summary>
         private sealed class LookPart : AvPart
         {
-            private const float PortraitW = 96f, PortraitH = 144f, StepPitch = AvGridTokens.Row + 2f;
+            private const float StepPitch = AvGridTokens.Row + 2f;
 
             public readonly AvStepper[] Steppers = new AvStepper[5];
-            private readonly AvFrame frame;
-            private readonly Image preview;
 
             public LookPart(RectTransform parent, string[] values, Action<LookLayer, int> step)
             {
                 Rect = AvLay.Child(parent, "Look");
-                frame = AvFrame.Add(Rect, "PortraitFrame", default(AvChamfer));
-                preview = AvLay.Solid(Rect, "Portrait", Color.white);
-                preview.preserveAspect = true;
                 for (int i = 0; i < Steppers.Length; i++)
                 {
                     int k = i;
@@ -364,32 +394,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Restyle();
             }
 
-            public void SetPreview(Sprite sprite)
-            {
-                preview.sprite = sprite;
-                preview.enabled = sprite != null;
-            }
-
             public void RefreshValues()
             {
                 foreach (AvStepper s in Steppers) s.Refresh();
             }
 
-            public override float Measure(float width) => Mathf.Max(PortraitH, Steppers.Length * StepPitch - 2f);
+            public override float Measure(float width) => 3 * StepPitch - 2f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                AvLay.Place(frame.rectTransform, 0f, 0f, PortraitW, PortraitH);
-                AvLay.Place(preview.rectTransform, 1f, 1f, PortraitW - 2f, PortraitH - 2f);
-                float x = PortraitW + AvGridTokens.Gap;
-                for (int i = 0; i < Steppers.Length; i++) Steppers[i].Place(new AvSlot(x, i * StepPitch, s.W - x, AvGridTokens.Row));
+                float cw = (s.W - AvGridTokens.Gap) * 0.5f;
+                for (int i = 0; i < Steppers.Length; i++)
+                    Steppers[i].Place(new AvSlot((i % 2) * (cw + AvGridTokens.Gap), (i / 2) * StepPitch, cw, AvGridTokens.Row));
             }
 
             public override void Restyle()
             {
-                AvStyle m = AvStyleHost.FuiStyle("metric");
-                frame.Paint(AvStyleHost.Resolve(m.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(m.Border, AvTheme.Frame));
                 foreach (AvStepper s in Steppers) s.Restyle();
             }
         }

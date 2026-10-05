@@ -22,6 +22,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public StoreClass Class;
     }
 
+    /// <summary>One part of the aircraft on the AIRCRAFT damage map: its place on the drawing (−1..1 sideways and along the length, nose
+    /// positive) and its state (0 whole, 1 damaged, 2 lost).</summary>
+    internal struct PartDot
+    {
+        public float X, Z;
+        public byte State;
+    }
+
     /// <summary>What the deep card knows about one member (spec WMC program §4); NaN, -1 and null are unknown.</summary>
     internal struct MemberDetail
     {
@@ -31,6 +39,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public string Target, Callsign, Rank, Perks;
         public StoreLine[] Stores;
         public int StoreCount;
+        /// <summary>The parts as the damage map draws them (only those whose place is known), and how many parts are lost in all.</summary>
+        public PartDot[] Parts;
+        public int PartCount, PartsLost, PartsHit;
     }
 #pragma warning restore CS0649
 
