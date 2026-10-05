@@ -279,10 +279,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     : m.OnGround ? MemberDuty.Grounded
                     : MemberDuty.Formation;
                 float ammo = AmmoFraction(m.Aircraft);
+                Station(m, duty == MemberDuty.Formation, out byte err10, out sbyte closure, out byte phase);
                 into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
                     m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m),
-                    m.Damage.Damaged);
+                    m.Damage.Damaged, err10, closure, phase);
             }
+            PruneStation();
             return n;
         }
 
