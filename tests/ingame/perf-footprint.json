@@ -1,7 +1,6 @@
 {
   "name": "perf-footprint",
   "mods": [
-    "wingcommand",
     "boscalisummer"
   ],
   "timeout_s": 300,
