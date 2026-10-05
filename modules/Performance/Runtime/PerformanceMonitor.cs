@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             wasEnabled = false;
             FxBus.SetAdaptiveCap(null);
             AdaptiveBudgetReport.Reduced = false;
+            AdaptiveBudgetReport.LastAverageMs = AdaptiveBudgetReport.LastFps = 0f;
         }
 
         private void OnDestroy()
@@ -64,10 +65,12 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 !DynamicMap.mapMaximized &&
                 GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
             policy.Observe(Time.unscaledDeltaTime, active);
+            AdaptiveBudgetReport.LastAverageMs = policy.LastAverageMs;
+            AdaptiveBudgetReport.LastFps =
+                policy.LastAverageMs > 0.01f ? 1000f / policy.LastAverageMs : 0f;
             if (appliedReduction == policy.Reduced) return;
             appliedReduction = policy.Reduced;
             AdaptiveBudgetReport.Reduced = appliedReduction;
-            AdaptiveBudgetReport.LastAverageMs = policy.LastAverageMs;
             FxBus.SetAdaptiveCap(appliedReduction ? FxQuality.Low : (FxQuality?)null);
             logger?.LogInfo("Performance: Boscali cosmetic budget " +
                 (appliedReduction ? "reduced" : "restored") +

@@ -5,6 +5,8 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Diagnostics;
 using UnityEngine;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Fire
@@ -37,7 +39,7 @@ namespace BoscaliSummer.Fire
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
 
         private static int QueueCapacity => Fire.ImpactScorchQueue;
-        private static int PerFrame => Fire.ImpactScorchesPerFrame;
+        private static int PerFrame => FxBudget.ScaleCount(Fire.ImpactScorchesPerFrame, FxBus.Scales.Particles);
         private static int MaximumMarks => Fire.MaximumImpactScorches;
 
         private void Awake() => Instance = this;

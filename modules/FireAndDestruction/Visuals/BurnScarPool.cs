@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Math;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -68,7 +70,7 @@ namespace BoscaliSummer.Fire
 
         private GameObject Acquire()
         {
-            if (marks.Count < MaximumScars)
+            if (marks.Count < FxBudget.ScaleCount(MaximumScars, FxBus.Scales.RenderTargets))
             {
                 GameObject prefab = GameAssets.i != null ? GameAssets.i.scorchMarkDecal : null;
                 if (prefab == null)
