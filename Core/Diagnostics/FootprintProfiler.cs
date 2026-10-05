@@ -376,7 +376,7 @@ namespace BoscaliSummer.Core.Diagnostics
         private static Slot NewSlot(Type type, string name, string kind) =>
             new Slot { Name = name, Module = ModuleOf(type), Kind = kind };
 
-        /// <summary>BoscaliSummer.Modules.Weather.Runtime → "weather"; BoscaliSummer.Core.* → "core".</summary>
+        /// <summary>A module namespace (…Modules.Weather.Runtime) → "weather"; BoscaliSummer.Core.* → "core".</summary>
         internal static string ModuleOf(Type type)
         {
             string ns = type?.Namespace ?? "";

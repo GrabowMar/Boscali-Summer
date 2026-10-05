@@ -81,6 +81,7 @@ namespace BoscaliSummer.Tests.Architecture
             "modules/Command/Presentation/MapUi/SettingsPreviews.cs", // draws preview pixels from setting values
                         "modules/Progression/Presentation/EmblemRenderer.cs",
             "modules/Radio/Presentation/RadioWaterfall.cs",
+            "modules/Support/Presentation/SpaceFeedPanel.cs",           // full-screen threat strip reads at 22 px
             "modules/Command/Presentation/MapUi/MfdRailPatch.cs",       // map-ground tint
             "modules/Command/Presentation/MapUi/MfdChromeLay.cs",       // restores a captured vanilla TMP size
             "modules/Comms/Presentation/CommsCockpitMarkers.cs",      // projected native HUD markers counter-scale text to a physical pixel floor

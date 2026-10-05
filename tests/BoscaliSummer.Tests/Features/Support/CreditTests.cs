@@ -80,10 +80,12 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void CheckEarning()
         {
-            Near(EarningRules.FromReward(EarnKind.Kill, 2f, false, false), 20f, "kill = allocation x 10");
-            Near(EarningRules.FromReward(EarnKind.Kill, 9f, false, false), 50f, "kill cap 50");
-            Near(EarningRules.FromReward(EarnKind.Kill, 2f, true, false), 10f, "repeat type halves");
-            Near(EarningRules.FromReward(EarnKind.Kill, 2f, true, true), 5f, "repeat and assisted quarter");
+            Near(EarningRules.FromReward(EarnKind.Kill, 2f, false, false), 0f, "kills never ride the allocation reward");
+            Near(EarningRules.FromKill(10f, 1f, false, false), 15f, "kill = value x 1.5");
+            Near(EarningRules.FromKill(10f, 0.4f, false, false), 6f, "kill split by damage share");
+            Near(EarningRules.FromKill(60f, 1f, false, false), 50f, "kill cap 50");
+            Near(EarningRules.FromKill(10f, 1f, true, false), 7.5f, "repeat type halves");
+            Near(EarningRules.FromKill(10f, 1f, true, true), 3.75f, "repeat and assisted quarter");
             Near(EarningRules.FromReward(EarnKind.Capture, 0.1f, false, false), 40f, "capture flat 40");
             Near(EarningRules.FromReward(EarnKind.Recon, 5f, false, false), 20f, "minor cap 20");
             Near(EarningRules.FromReward(EarnKind.Support, 0.5f, false, false), 5f, "minor scaled");
@@ -161,7 +163,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Near(fund.Balance(9), 50f, "another faction retains its HQ fund");
             fund.Clear();
             Near(fund.Balance(7), 0f, "mission end resets shadow HQ funds");
-            Near(EarningRules.FromReward(EarnKind.Kill, 9f, false, true), 25f,
+            Near(EarningRules.FromKill(60f, 1f, false, true), 25f,
                 "assisted kill discount applies after the per-kill cap");
             Near(EarningRules.FromReward(EarnKind.Jamming, 9f, true, true), 20f,
                 "kill-only discounts do not reduce minor rewards");

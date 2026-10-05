@@ -98,12 +98,12 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(CallFloors.NextUnlock(0, 2, 5.5f, 1f), "3 MIN → HEAVY", "small map countdown");
 
             Eq(CallWords.Refusal(CallRefusal.LowCredit, need: 45), "NEGATIVE: LOW CREDIT — NEED 45 CR", "low credit");
-            Eq(CallWords.Refusal(CallRefusal.Cooldown, seconds: 12), "NEGATIVE: COOLDOWN 12s", "cooldown");
+            Eq(CallWords.Refusal(CallRefusal.Cooldown, seconds: 12), "NEGATIVE: COOLDOWN — WAIT 12s", "cooldown");
             Eq(CallWords.Refusal(CallRefusal.Locked, unlock: "HOLD A BASE → HEAVY"), "NEGATIVE: LOCKED — HOLD A BASE → HEAVY", "locked");
             Eq(CallWords.Refusal(CallRefusal.Locked, unlock: ""), "NEGATIVE: LOCKED — HOLD MORE GROUND", "locked empty fix");
             Eq(CallWords.Refusal(CallRefusal.NoAim), "NEGATIVE: NO AIM — DESIGNATE OR RIGHT-CLICK MAP", "no aim");
-            Eq(CallWords.Refusal(CallRefusal.Timeout), "NEGATIVE: NO ANSWER — CREDIT RETURNED", "timeout");
-            Eq(CallWords.Refusal(CallRefusal.Frozen, seconds: 540), "NEGATIVE: CREDIT FROZEN 9 MIN — NEW FACTION", "frozen");
+            Eq(CallWords.Refusal(CallRefusal.Timeout), "NEGATIVE: NO ANSWER — WAIT FOR HOST BALANCE", "timeout");
+            Eq(CallWords.Refusal(CallRefusal.Frozen, seconds: 540), "NEGATIVE: CREDIT FROZEN 9 MIN — STAND BY", "frozen");
             Eq(CallWords.Refusal(CallRefusal.None), "", "none");
             Eq(CallWords.Refusal(CallRefusal.Offline), "NEGATIVE: OPS OFFLINE — WAIT FOR THE HOST LINK", "offline");
             Eq(CallWords.Refusal(CallRefusal.Unavailable), "NEGATIVE: UNAVAILABLE — TRY ANOTHER CALL", "unavailable");
@@ -169,9 +169,9 @@ namespace BoscaliSummer.Tests.Features.Support
         private static void CheckBoundaries()
         {
             SupportActionId[] ids = { SupportActionId.Recon, SupportActionId.Prsm, SupportActionId.JtacMark,
-                SupportActionId.MtiSweep, SupportActionId.ElintSweep, SupportActionId.Cruise,
+                SupportActionId.MtiSweep, SupportActionId.SatCamera, SupportActionId.ElintSweep, SupportActionId.Cruise,
                 SupportActionId.FlareMissile, SupportActionId.Fortify, SupportActionId.Artillery, SupportActionId.Emp };
-            Eq(CallSheet.Rows.Count, ids.Length, "M0 lists the ten surviving priced CALLs");
+            Eq(CallSheet.Rows.Count, ids.Length, "M1 lists the eleven priced CALLs (SAT CAMERA added)");
             var seen = new HashSet<SupportActionId>();
             for (int i = 0; i < ids.Length; i++)
             {
@@ -224,7 +224,7 @@ namespace BoscaliSummer.Tests.Features.Support
                     TestAssert.That(CallWords.Refusal(refusal, 25, 1).StartsWith("NEGATIVE: "),
                         "every current refusal has player-facing words: " + refusal);
             Eq(CallWords.Refusal(CallRefusal.Frozen, seconds: 1),
-                "NEGATIVE: CREDIT FROZEN 1 MIN — NEW FACTION", "frozen credit rounds partial minutes up");
+                "NEGATIVE: CREDIT FROZEN 1 MIN — STAND BY", "frozen credit rounds partial minutes up");
             Eq(Aim.Label(AimSource.None), "AIM: NONE", "no aim is explicit");
 
             var arm = new ArmState();

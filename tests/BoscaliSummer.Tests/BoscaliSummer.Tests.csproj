@@ -12,6 +12,7 @@
     <Compile Include="..\..\modules\Support\Domain\Calls\*.cs" LinkBase="Features\Support\Calls" />
     <Compile Include="..\..\modules\Support\Domain\Space\*.cs" LinkBase="Features\Support\Space" />
     <Compile Include="..\..\Core\Contracts\FxBudget.cs" Link="Framework\FxBudget.cs" />
+    <Compile Include="..\..\Core\Contracts\IWeatherView.cs" Link="Framework\IWeatherView.cs" />
     <Compile Include="..\..\Core\Contracts\IClientEffect.cs" Link="Framework\IClientEffect.cs" />
     <Compile Include="..\..\Core\Fx\FxRegistry.cs" Link="Framework\FxRegistry.cs" />
     <Compile Include="..\..\Core\Fx\FxQualityMapper.cs" Link="Framework\FxQualityMapper.cs" />
