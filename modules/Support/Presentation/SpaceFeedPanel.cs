@@ -77,8 +77,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public int SendCount;
         public string ConfirmHelp = "", SendHelp = "";
         public string TaskedCaption = "";
-        public readonly FeedCardView[] Cards = new FeedCardView[6];
+        public readonly FeedCardView[] Cards = new FeedCardView[C2Board.Rows896];
         public int CardCount;
+        /// <summary>Posts on the faction board still claimable or launching, and those gone stale (the BOARD page header).</summary>
+        public int PostsLive, PostsStale;
         /// <summary>The three bird cells in <see cref="BirdKind"/> order: OPTICAL, RADAR, KINETIC.</summary>
         public readonly FeedBirdView[] Birds = new FeedBirdView[3];
         public string ConstellationMeta = "";

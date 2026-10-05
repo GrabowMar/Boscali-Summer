@@ -32,6 +32,17 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(C2Words.Clock(592f), "9:52", "clock");
             Eq(C2Words.Clock(-1f), "—", "clock negative");
             Eq(C2Words.Clock(float.NaN), "—", "clock nan");
+            Eq(C2Words.HudStrip(C2HudKind.Tasked), "C2 // TASKED // NEW POST", "hud strip tasked");
+            Eq(C2Words.HudStrip(C2HudKind.Inbound), "C2 // INBOUND", "hud strip inbound");
+            Eq(C2Words.HudStrip(C2HudKind.Intent), "C2 // INT", "hud strip intent");
+            Eq(C2Words.HudStripTone(C2HudKind.Tasked), C2Tone.Warn, "hud tone tasked");
+            Eq(C2Words.HudStripTone(C2HudKind.Inbound), C2Tone.Danger, "hud tone inbound");
+            Eq(C2Words.HudStripTone(C2HudKind.Intent), C2Tone.Info, "hud tone intent");
+            Eq(C2Board.Title(3, 0), "LIVE POSTS · 3", "board title");
+            Eq(C2Board.Title(3, 2), "LIVE POSTS · 3 · STALE 2", "board title stale");
+            Eq(C2Board.QuietWord(true), "QUIET MODE · ON", "quiet on");
+            Eq(C2Board.QuietWord(false), "QUIET MODE · OFF", "quiet off");
+            TestAssert.That(C2Board.QuietHelp(true).Contains("Inbound") && C2Board.QuietHelp(false).Contains("Inbound"), "quiet help keeps inbound audible");
 
             var console = new C2Console();
             var buf = new C2Line[8];

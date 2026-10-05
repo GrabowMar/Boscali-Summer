@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
@@ -22,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// The OPS bezel page, drawn as the SATCOM C2 terminal: the shared <see cref="C2Chrome"/> (banner, header, session line, tabs),
     /// one page per tab and the <see cref="C2Footer"/> that also carries the hover help of every row and button.
     /// [1] CAP is the CALL page (<see cref="CapPage"/>); [2] ORBIT hosts the SPACE feed (<see cref="SpaceFeedPanel"/>);
-    /// [3] NET, [4] SOF and [5] BOARD are temporary empty pages until their own steps. The panel owns no policy: every figure comes from
+    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET and [4] SOF are temporary empty pages until their own steps. The panel owns no policy: every figure comes from
     /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="SpaceFeedController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
@@ -49,6 +50,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private C2Chrome chrome;
         private C2Footer footer;
         private CapPage cap;
+        private BoardPage boardPage;
         private C2Tab tab = C2Tab.Cap;
         private int sceneGeneration;
 
@@ -78,12 +80,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
             chrome = null;
             footer = null;
             cap = null;
+            boardPage = null;
             spacePanel = null;
             tab = C2Tab.Cap;
             sceneGeneration++;
             c2.Clear();
             chromeKey = footerKey = "";
             feed?.SetCompactVisible(false);
+            feed?.SetBoardVisible(false);
+            feed?.AttachBoard(null);
             nextAttempt = 0f;
             nextRefresh = 0f;
             failed = false;
@@ -112,6 +117,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             feed?.SetCompactVisible(visible && consoleRoot != null && tab == C2Tab.Orbit);
+            feed?.SetBoardVisible(visible && consoleRoot != null && tab == C2Tab.Board);
             try { c2.Tick(); }
             catch (Exception e)
             {
@@ -250,17 +256,26 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feed?.AttachCompact(spacePanel);
             BuildPlaceholder(pages[(int)C2Tab.Net - 1], "NET");
             BuildPlaceholder(pages[(int)C2Tab.Sof - 1], "SOF");
-            BuildPlaceholder(pages[(int)C2Tab.Board - 1], "BOARD");
+            boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
+            feed?.AttachBoard(boardPage);
 
             footer = Reg(new C2Footer(consoleRoot));
             footer.Place(new AvSlot(0f, height - C2Footer.Height, Width, C2Footer.Height));
             consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
 
             CapPage capPage = cap;
-            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); }));
+            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); boardPage?.Restyle(); }));
             back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame);
             chromeKey = footerKey = "";
             SelectTab(C2Tab.Cap);
+        }
+
+        /// <summary>The QUIET switch of the BOARD page: flips the existing client QuietNotices setting.</summary>
+        private void ToggleQuiet()
+        {
+            SupportSettings s = manager?.Settings;
+            if (s != null) s.QuietNotices.Value = !s.QuietNotices.Value;
+            nextRefresh = 0f;
         }
 
         private T Reg<T>(T part) where T : AvPart
@@ -304,6 +319,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         internal void ShowPage(int page) => SelectTab((C2Tab)Mathf.Clamp(page + 1, 1, 5));
 
         internal SpaceFeedPanel SpacePanel => spacePanel;
+        internal BoardPage Board => boardPage;
         internal AvTicker Ticker => ticker;
         internal RectTransform ConsoleRoot => consoleRoot;
 
@@ -448,6 +464,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 string said = spacePanel != null ? spacePanel.Words : "";
                 tone = spacePanel != null && said.Length > 0 ? spacePanel.WordsTone : AvState.Ready;
                 words = said.Length > 0 ? said : "ORBIT FEED · OPEN FULL FOR THE TASKING STATION";
+                slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
+            }
+            else if (tab == C2Tab.Board && boardPage != null)
+            {
+                tone = boardPage.WordsTone;
+                words = boardPage.Words.Length > 0 ? boardPage.Words : "BOARD CLEAR \u00B7 WAITING FOR A POSTED CALL";
                 slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
             }
             else { slab = "INT"; tone = AvState.Info; words = "THIS PAGE ARRIVES IN A LATER STEP"; }

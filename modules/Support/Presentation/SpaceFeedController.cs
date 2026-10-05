@@ -48,6 +48,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int pageRows = SpaceFeedRules.ContactsPerPage;
         private float nextChrome;
         private SpaceFeedPanel compact;
+        private BoardPage board;
+        private bool boardVisible;
         private SpaceFeedWindow window;
         private bool compactVisible, leaseOpen, dirty;
         private float nextRefresh, nextActivity, failedUntil;
@@ -85,6 +87,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>The ORBIT page of the OPS console; null until it is built.</summary>
         internal void AttachCompact(SpaceFeedPanel panel) { compact = panel; dirty = true; }
 
+        /// <summary>The BOARD page of the OPS console; null until it is built.</summary>
+        internal void AttachBoard(BoardPage page) { board = page; dirty = true; }
+
+        /// <summary>The OPS console says whether the BOARD page is on screen (it needs the posts, not the sensors).</summary>
+        internal void SetBoardVisible(bool visible)
+        {
+            if (boardVisible == visible) return;
+            boardVisible = visible;
+            if (visible) draft.Touch(SupportManager.MissionNow());
+            dirty = true;
+        }
+
         /// <summary>The OPS console says whether the SPACE page is on screen.</summary>
         internal void SetCompactVisible(bool visible)
         {
@@ -100,6 +114,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             ClearView();
             leaseOpen = false;
             compactVisible = false;
+            boardVisible = false;
             baselined = false;
             SpaceCockpitThreatProbe.ResetForScene();
             DisposeSensors();
@@ -156,7 +171,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             WatchFaction();
             ExpireRequests(now);
 
-            bool wanted = compactVisible || WindowOpen;
+            bool wanted = compactVisible || WindowOpen || boardVisible;
             leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
@@ -217,6 +232,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
             SpaceFeedState state = mirror.State;
             bool known = mirror.Known;
 
+            if (!compactVisible && !WindowOpen)
+            {
+                // Only the BOARD page is showing: the posts and the words, never the sensors.
+                if (imager != null) imager.Visible = false;
+                if (sar != null) sar.Visible = false;
+                view.Console = c2?.Console;
+                FillPosts(state, now);
+                FillWords(now);
+                PaintBoard();
+                return;
+            }
+
             SpaceFeedEntries.Build(state.Contacts, state.Marks, now, entries);
             // The station lists six tracks per page, the ORBIT page as many as its box holds; one page index serves whichever shows.
             pageRows = WindowOpen ? SpaceFeedLayout.Tiles6 : compact != null ? Math.Min(SpaceFeedLayout.Tiles6, compact.Layout.TrackRows) : SpaceFeedLayout.Tiles6;
@@ -253,6 +280,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (Time.unscaledTime >= nextChrome) { nextChrome = Time.unscaledTime + 0.25f; chromeFill?.Invoke(chrome); } // identity strings: no need at 12 Hz
                 window.Paint(view, chrome);
             }
+            PaintBoard();
+        }
+
+        private void PaintBoard()
+        {
+            if (boardVisible && board != null) board.Paint(view, settings != null && settings.QuietNotices.Value);
         }
 
         private int IndexOf(int id)
@@ -497,6 +530,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 postOrder.Insert(at, i);
             }
             view.CardCount = Math.Min(view.Cards.Length, postOrder.Count);
+            view.PostsLive = view.PostsStale = 0;
+            for (int i = 0; i < posts.Count; i++)
+                if (SpaceFeedRules.PostStatusOf(posts[i], now) == PostStatus.Stale) view.PostsStale++; else view.PostsLive++;
             for (int i = 0; i < view.CardCount; i++) view.Cards[i] = Card(posts[postOrder[i]], state, now);
         }
 

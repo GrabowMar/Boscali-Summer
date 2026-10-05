@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
+        private C2HudKind noticeKind;
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "support";
@@ -56,7 +58,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             if (noticeText != null && SupportManager.MissionNow() < noticeUntil)
             {
-                text = noticeText; detail = ""; tone = HudTone.Info; return true;
+                // The 14 px C2 strip word rides the line's detail row; the words stay the notice's own.
+                text = noticeText; detail = C2Words.HudStrip(noticeKind);
+                C2Tone strip = C2Words.HudStripTone(noticeKind);
+                tone = strip == C2Tone.Danger ? HudTone.Warning : strip == C2Tone.Warn ? HudTone.Caution : HudTone.Info;
+                return true;
             }
             return false;
         }
@@ -71,6 +77,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;
             noticeText = notice.Text;
+            noticeKind = notice.Kind == SpaceNoticeKind.Tasked ? C2HudKind.Tasked : C2HudKind.Intent;
             noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
             AvUiSound.Play(notice.Kind == SpaceNoticeKind.Tasked ? AvUiCue.Confirm : AvUiCue.Navigate);
         }
