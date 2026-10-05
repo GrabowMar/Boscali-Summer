@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 Stance s = book.Slot(i);
                 bool on = i == stanceSlot && same;
-                slots.Set(i, s != null ? s.Name : "", s != null ? StanceWords.Summary(s.Axes) : "EMPTY · SAVE AS…", s != null, on, on && changed);
+                slots.Set(i, s != null ? s.Name : "", s != null ? StanceSlotWords.Summary(s.Axes) : "EMPTY · SAVE AS…", s != null, on, on && changed);
             }
             Stance matched = stanceSlot >= 0 ? book.Slot(stanceSlot) : null;
             int diff = StanceDiff.Count(stanceMask);

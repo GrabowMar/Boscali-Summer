@@ -9,7 +9,7 @@ using BoscaliSummer.Modules.Wing.Domain.Pure;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Words for a stance's four combat settings (TARGETS · RANGE · RADAR · WEAPONS) in the width of a stance slot.</summary>
-    internal static class StanceWords
+    internal static class StanceSlotWords
     {
         public static readonly string[] Targets = { "HOLD", "AIR", "GND", "BOTH", "COVER" };
         public static readonly string[] Reach = { "6K", "12K" };
