@@ -57,6 +57,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Restyle() => Paint();
 
+        public void SetShown(bool on)
+        {
+            if (root.gameObject.activeSelf != on) root.gameObject.SetActive(on);
+        }
+
         private void Paint()
         {
             Color c = WmcState.Color(rail);
@@ -235,6 +240,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcKit.Set(ribbonCaption, f.RibbonCount > 0 ? AvNum.Fixed(f.RibbonCount, 0) + (f.RibbonCount == 1 ? " RIBBON" : " RIBBONS") : "NO RIBBONS");
             AvHelpTip.Attach(ribbonHit.gameObject, f.RibbonHelp);
             stamp.Set(f.Stamp, f.Rail);
+            stamp.SetShown(f.Stamp != WmcText.Unknown);
             PlaceFill();
             Restyle();
             Draw();
