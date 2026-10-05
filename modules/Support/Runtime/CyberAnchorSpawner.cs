@@ -17,6 +17,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Verified allowed and usable in the world check: HLT-R and Truck2-R (300 HP radar trucks), SPAAG1. RadarContainer1 is disallowed in Free Flight, so it is tried first and skipped when unusable.</summary>
         internal static readonly string[] TruckKeys = { "HLT-R", "Truck2-R" };
         internal static readonly string[] CenterKeys = { "RadarContainer1", "Truck2-R", "HLT-R" };
+        /// <summary>
+        /// SOF camp: one supply or command vehicle plus two light escorts. UNVERIFIED keys (the world check proved only HLT-R, Truck2-R, SPAAG1 and RadarSAM1 usable):
+        /// the first usable key of each list is taken and the log line names what was resolved; the native fixture probes the real encyclopedia (plan Task 8).
+        /// </summary>
+        internal static readonly string[] CampKeys = { "HLT-L", "Truck2-L", "HLT-R", "Truck2-R" };
+        internal static readonly string[] CampGuardKeys = { "Truck2-MRAP", "LightTruck1_AA", "SPAAG1" };
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
@@ -31,6 +37,37 @@ namespace BoscaliSummer.Modules.Support.Runtime
             VehicleDefinition truck = FindFirst(TruckKeys, null), center = FindFirst(CenterKeys, truck);
             return "truck=" + (truck != null ? truck.jsonKey : "none") + " center=" + (center != null ? center.jsonKey : "none") +
                 " guard=" + (Find("SPAAG1") != null ? "SPAAG1" : "none");
+        }
+
+        /// <summary>What the SOF camp resolved to this mission, for the log line and the native fixture.</summary>
+        internal static string DescribeCamp()
+        {
+            VehicleDefinition camp = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
+            return "camp=" + (camp != null ? camp.jsonKey : "none") + " escort=" + (guard != null ? guard.jsonKey : "none");
+        }
+
+        internal bool TryPlanCamp(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions, out Quaternion rotation)
+        {
+            positions = null;
+            rotation = Quaternion.identity;
+            VehicleDefinition camp = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
+            if (camp == null || guard == null) return false;
+            Vector3 origin = anchor.ToLocalPosition();
+            var definitions = new[] { camp, guard, guard };
+            var offsets = new[] { Vector3.zero, new Vector3(28f, 0f, 22f), new Vector3(-28f, 0f, -22f) };
+            var planned = new GlobalPosition[3];
+            for (int i = 0; i < planned.Length; i++)
+                if (!PlanOne(definitions[i], origin + offsets[i], parent, rotation, out planned[i])) return false;
+            positions = planned;
+            return true;
+        }
+
+        internal bool TryCreateCamp(FactionHQ owner, int ordinal, GlobalPosition anchor, Airbase parent, out Unit camp)
+        {
+            camp = null;
+            if (!TryPlanCamp(anchor, parent, out GlobalPosition[] positions, out Quaternion rotation)) return false;
+            VehicleDefinition site = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
+            return TryCreateGroup(owner, "Camp", ordinal, new[] { site, guard, guard }, positions, rotation, parent, out camp);
         }
 
         internal bool TryPlanTruck(GlobalPosition anchor, Airbase parent, out GlobalPosition position, out Quaternion rotation)

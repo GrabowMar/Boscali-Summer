@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
         public ConfigEntry<bool> WatchOfficerEnabled { get; }
         public ConfigEntry<bool> CyberEnabled { get; }
+        public ConfigEntry<bool> SofEnabled { get; }
         public ConfigEntry<bool> QuietNotices { get; }
 
         public ConfigEntry<float> SarSceneRadius { get; }
@@ -95,6 +96,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "the faction has revealed (never an unrevealed one). Host-authoritative: on a server, only the host's value applies.");
             CyberEnabled = config.Bind("Support", "Cyber", true,
                 "CYBER / EW: EW trucks and data centers spawn at rear airbases, and operators intrude into revealed enemy nodes (hold, burn, drop). " +
+                "Host-authoritative: on a server, only the host's value applies.");
+            SofEnabled = config.Bind("Support", "Sof", true,
+                "SOF / JTAC: a camp spawns near a rear airbase, and operators raise abstract teams that recon, lase, sabotage, seize and tap on revealed enemy targets. " +
                 "Host-authoritative: on a server, only the host's value applies.");
             QuietNotices = config.Bind("Support", "QuietNotices", false,
                 "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +

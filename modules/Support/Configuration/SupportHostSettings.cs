@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "OVERLORD staffs SPACE while no human is working it: it scans for contacts and posts TASKED calls from revealed ones.")
                 .Toggle(18, settings.CyberEnabled, "CYBER / EW",
                     "EW trucks and data centers, node intrusion (hop, hold, burn, drop) and the CYBER BURN packages on the TASKED board.")
+                .Toggle(19, settings.SofEnabled, "SOF / JTAC",
+                    "A camp, abstract teams (raise, route, push, hold, divert, exfil), the five odds-resolved missions, held buildings and the helicopter lift.")
                 .Number(14, settings.PriceKnob, "CALL PRICES",
                     "Scales every CALL price. 1.0 charges the spec prices.",
                     0.05f, v => v.ToString("0.00") + "x")

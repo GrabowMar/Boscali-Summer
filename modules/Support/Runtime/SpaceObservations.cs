@@ -71,6 +71,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return admitted;
         }
 
+        /// <summary>An active SPACE reveal window of this faction covers the point: an enemy bird is looking there (the SOF Overwatch: SPACE beats SOF).</summary>
+        public bool Covers(float x, float z, float now)
+        {
+            for (int i = 0; i < windows.Length; i++)
+                if (windows[i].Active(now) && windows[i].Contains(x, z, windows[i].MinimumSpeed, now)) return true;
+            return false;
+        }
+
         public void Tick(float now)
         {
             if (disposed || owner == null || !GameAccess.IsServer()) return;
