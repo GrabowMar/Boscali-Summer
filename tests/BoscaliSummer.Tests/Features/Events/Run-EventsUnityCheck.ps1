@@ -19,7 +19,7 @@ Get-ChildItem -LiteralPath "$repo/modules/Events/Presentation" -Filter '*.cs' |
     Where-Object { $_.Name -notin @('SuperEventAlert.cs', 'SuperEventPlaneHud.cs', 'EventAlertTone.cs') } |
     Copy-Item -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath "$repo/modules/Events/Domain" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Events/Configuration/EventsSettings.cs", "$repo/Core/Contracts/IActiveEventsView.cs", "$repo/Core/Math/Deterministic.cs", "$PSScriptRoot/EventsUnityCheck.cs", "$PSScriptRoot/EventsUnityStubs.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Events/Configuration/EventsSettings.cs", "$repo/Core/Contracts/IActiveEventsView.cs", "$repo/Core/Math/Deterministic.cs", "$PSScriptRoot/EventsUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/EventsUnityStubs.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx\.dll$|Mono|0Harmony\.dll$)'
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles -IfExists -NoDefaults
 if ($PrepareOnly) { Write-Output "Prepared preview project: $PreviewDirectory"; return }

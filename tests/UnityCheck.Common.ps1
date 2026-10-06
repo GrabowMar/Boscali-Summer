@@ -4,6 +4,8 @@
 # It defines $repo (the checkout this file lives in) and $UnityCheckGame, plus the helpers below.
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $UnityCheckGame = 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option'
+# The C# helpers every *UnityCheck.cs shares; a runner copies it next to the check that uses it.
+$UnityCheckHarness = "$repo/tests/BoscaliSummer.Tests/UnityCheckHarness.cs"
 
 # Named package manifests and DLL filters that several runners share verbatim.
 $UnityCheckManifest = @{

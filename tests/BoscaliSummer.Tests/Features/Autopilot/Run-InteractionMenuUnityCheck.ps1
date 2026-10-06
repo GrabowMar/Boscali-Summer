@@ -12,7 +12,7 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi", "$repo/AvionicsUi/Pure" -Filter '
 Get-ChildItem -LiteralPath "$repo/AvionicsUi/Fui" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath "$repo/modules/Autopilot/Presentation" -Filter 'AceRadial*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath "$repo/modules/Autopilot/Domain" -Filter 'AceRadial*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$PSScriptRoot/InteractionMenuUnityStubs.cs", "$PSScriptRoot/InteractionMenuUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$PSScriptRoot/InteractionMenuUnityStubs.cs", "$PSScriptRoot/InteractionMenuUnityCheck.cs", $UnityCheckHarness -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles
 $extra = @()

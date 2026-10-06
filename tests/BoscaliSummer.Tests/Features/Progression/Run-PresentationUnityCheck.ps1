@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0"}}' -Folders 'Assets/Harness', 'NOAvionics'
 Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
 Copy-Item -LiteralPath "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$PSScriptRoot/PresentationUnityCheck.cs", "$PSScriptRoot/BoscaliPresentationPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/PresentationUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/BoscaliPresentationPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/"
 # SuperEventAlert deliberately refuses Application.isBatchMode. Keep the Editor window hidden,
 # but run a normal Editor process so the production overlay builder and camera path are exercised.

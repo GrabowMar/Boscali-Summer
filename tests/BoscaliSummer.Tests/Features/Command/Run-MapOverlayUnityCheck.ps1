@@ -12,7 +12,7 @@ if (-not $ModAssembly) { $ModAssembly = Join-Path $repo 'bin/Release/netstandard
 New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}' -Folders 'Assets/Harness', 'NOAvionics'
 Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
 Copy-Item -LiteralPath $ModAssembly -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
-Copy-Item -LiteralPath "$PSScriptRoot/MapOverlayUnityCheck.cs", "$PSScriptRoot/MapOverlayUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/MapOverlayUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/MapOverlayUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-AvionicsStyles $PreviewDirectory
 $widgets = @('TrenchMapOverlay', 'TrenchMapGraphic', 'ComMapOverlay', 'FrontlineGraphic', 'ThreatMapOverlay', 'CommsMapLayer', 'CommsMapTag', 'CommsInkGraphic', 'CommsPulseGraphic', 'AircraftTrailGraphic')
 if (-not $NonWingOnly) { $widgets += @('WingMarkerBadge', 'WingMapRingGraphic', 'WmcMapOverlay') }

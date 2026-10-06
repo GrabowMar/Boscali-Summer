@@ -8,6 +8,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // The real ENV console (WeatherEnvView from the production DLL) driven with synthetic snapshots.
 // Renders both pages at 420/596/896 panel heights (top and bottom of the scrolled body) and as
@@ -15,7 +16,6 @@ using Object = UnityEngine.Object;
 // under the 11 px floor or 4.5:1 contrast, and on any two texts that overlap each other.
 public static class WeatherEnvUnityCheck
 {
-    private const BindingFlags All = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
     private const string Ns = "BoscaliSummer.Modules.Weather.Presentation.";
     private const string DomainNs = "BoscaliSummer.Modules.Weather.Domain.";
     private static readonly List<string> Failures = new List<string>();
@@ -24,30 +24,13 @@ public static class WeatherEnvUnityCheck
 
     public static void Run()
     {
-        if (Shader.Find("TextMeshPro/Distance Field") == null)
-        {
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-            UnityEditor.AssetDatabase.importPackageCompleted += _ => UnityEditor.EditorApplication.delayCall += Run;
-            UnityEditor.AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-            return;
-        }
+        if (!EnsureTmpEssentials(Run)) return;
         try
         {
             string outDir = Path.GetFullPath("env");
             Directory.CreateDirectory(outDir);
-            MethodInfo setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            ParameterInfo[] pathParameters = setPaths.GetParameters();
-            var pathArguments = new object[pathParameters.Length];
-            pathArguments[0] = Path.GetFullPath("WeatherEnvPreview.exe");
-            for (int i = 1; i < pathArguments.Length; i++)
-                pathArguments[i] = pathParameters[i].HasDefaultValue ? pathParameters[i].DefaultValue : null;
-            setPaths.Invoke(null, pathArguments);
-            AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            Shader.SetGlobalFloat("_NOA_Now", 1e6f);
-            AvBundle.ResetForTests();
-            AvBundle.Load(Debug.Log);
-            if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons did not load.");
-            AvFxDriver.Configure(AvFxTier.Off, false);
+            SetExecutablePath("WeatherEnvPreview.exe");
+            InitAvionics();
             new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
             foreach (AvThemeId theme in (AvThemeId[])Enum.GetValues(typeof(AvThemeId)))
             {
@@ -64,10 +47,9 @@ public static class WeatherEnvUnityCheck
             CheckImmersionLifecycle();
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
-        File.WriteAllText("result.txt", Failures.Count == 0
+        Finish(Failures.Count == 0
             ? "PASS: ENV " + textChecks + " text checks, " + captures + " captures"
-            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures));
-        UnityEditor.EditorApplication.Exit(Failures.Count == 0 ? 0 : 1);
+            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures), Failures.Count == 0);
     }
 
     // ---- Reflection helpers -------------------------------------------------------------
@@ -280,14 +262,7 @@ public static class WeatherEnvUnityCheck
 
     private static void Capture(Camera cam, RenderTexture rt, string path)
     {
-        cam.Render();
-        RenderTexture.active = rt;
-        var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
-        tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-        tex.Apply();
-        File.WriteAllBytes(path, tex.EncodeToPNG());
-        Object.DestroyImmediate(tex);
-        RenderTexture.active = null;
+        CapturePng(cam, rt, path);
         captures++;
     }
 

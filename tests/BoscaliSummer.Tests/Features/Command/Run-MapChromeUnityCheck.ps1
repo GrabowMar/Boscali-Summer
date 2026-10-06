@@ -13,7 +13,7 @@ if (-not $ModDll) { $ModDll = Join-Path $repo 'bin/Release/netstandard2.1/Boscal
 New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}' -Folders 'Assets/Harness/Native', 'NOAvionics'
 Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
 Copy-Item -LiteralPath $ModDll -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
-Copy-Item -LiteralPath "$PSScriptRoot/MapChromeUnityCheck.cs", "$PSScriptRoot/MapChromeUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/MapChromeUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/MapChromeUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-Item -LiteralPath "$PSScriptRoot/MapChromeNativeShell.cs", "$PSScriptRoot/MapChromeNative.asmdef" -Destination "$PreviewDirectory/Assets/Harness/Native/"
 Copy-AvionicsStyles $PreviewDirectory
 $fixtureHash = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/Harness/MapChromeUnityCheck.cs").Hash

@@ -7,7 +7,7 @@ New-UnityCheckProject $proj $UnityCheckManifest.KitFull -Folders 'Assets/Harness
 if (-not $ModDll) { $ModDll = "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" }
 Copy-Item -LiteralPath $ModDll -Destination "$proj/Assets/BoscaliSummer.dll"
 Set-Content -LiteralPath "$proj/dll-sha256.txt" -Value (Get-FileHash -LiteralPath "$proj/Assets/BoscaliSummer.dll").Hash
-Copy-Item "$PSScriptRoot/ComEnvOverlayUnityCheck.cs", "$PSScriptRoot/BoscaliCommsPreview.asmdef" "$proj/Assets/Harness/"
+Copy-Item "$PSScriptRoot/ComEnvOverlayUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/BoscaliCommsPreview.asmdef" "$proj/Assets/Harness/"
 $taskFixtureHash = (Get-FileHash -LiteralPath "$proj/Assets/Harness/ComEnvOverlayUnityCheck.cs").Hash
 Set-Content -LiteralPath "$proj/fixture-sha256.txt" -Value $taskFixtureHash
 Copy-Item "$repo/AvionicsUi/Assets/avionics-ui.bundle" "$proj/"

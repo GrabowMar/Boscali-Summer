@@ -17,6 +17,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Offline gate for the EVN console (empty, active, scripted superevent, decision board, late fill) and the
@@ -32,21 +33,10 @@ public static class EventsUnityCheck
 
     public static void Run()
     {
-        if (Shader.Find("TextMeshPro/Distance Field") == null)
-        {
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-            AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-            AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-            return;
-        }
+        if (!EnsureTmpEssentials(Run)) return;
         try
         {
-            var setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            var parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("EventsCheck.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            SetExecutablePath("EventsCheck.exe");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvBundle.ResetForTests();
             if (File.Exists("avionics-ui.bundle")) AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);

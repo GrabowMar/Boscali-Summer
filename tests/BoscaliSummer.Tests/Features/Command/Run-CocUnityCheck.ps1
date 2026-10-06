@@ -33,7 +33,7 @@ Copy-Item -LiteralPath `
     "$repo/Core/Contracts/ITerritoryIngress.cs", `
     "$repo/Core/Contracts/IThreatPicture.cs", `
     "$PSScriptRoot/SettingsUnityStubs.cs", `
-    "$PSScriptRoot/CocUnityCheck.cs" `
+    "$PSScriptRoot/CocUnityCheck.cs", $UnityCheckHarness `
     -Destination "$PreviewDirectory/Assets/"
 Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx|Mono|0Harmony)'
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"

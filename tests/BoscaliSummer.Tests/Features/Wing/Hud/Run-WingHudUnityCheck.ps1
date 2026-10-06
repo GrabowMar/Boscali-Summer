@@ -14,7 +14,7 @@ if (-not $ProductionDll) { $ProductionDll = "$repo/bin/Release/netstandard2.1/Bo
 if ((Resolve-Path -LiteralPath $ProductionDll).Path -ne [IO.Path]::GetFullPath("$PreviewDirectory/Assets/BoscaliSummer.dll")) {
     Copy-Item -LiteralPath $ProductionDll -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
 }
-Copy-Item -LiteralPath "$PSScriptRoot/WingHudUnityCheck.cs", "$PSScriptRoot/BoscaliWingHudPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/WingHudUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/BoscaliWingHudPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-Item -LiteralPath "$PSScriptRoot/Native/WingHudNativeAdapter.cs", "$PSScriptRoot/Native/BoscaliWingHudNativeAdapter.asmdef" -Destination "$PreviewDirectory/Assets/Harness/Native/"
 foreach ($obsoleteAdapter in @("$PreviewDirectory/Assets/Harness/WingHudNativeAdapter.cs", "$PreviewDirectory/Assets/Harness/WingHudNativeAdapter.cs.meta")) {
     if (Test-Path -LiteralPath $obsoleteAdapter) { Remove-Item -LiteralPath $obsoleteAdapter }

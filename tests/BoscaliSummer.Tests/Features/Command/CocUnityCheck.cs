@@ -15,6 +15,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Standalone render check for the STR console — SITUATION (threat ladder, force balance, air tasking
@@ -41,20 +42,9 @@ public static class CocUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
 
-            var setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            var parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("CocCheck.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            SetExecutablePath("CocCheck.exe");
 
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
@@ -435,30 +425,11 @@ public static class CocUnityCheck
         int pixelWidth = Mathf.RoundToInt(width * 2f);
         int pixelHeight = Mathf.RoundToInt(height * 2f);
 
-        var cameraObject = new GameObject("CocCamera", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = height * 0.5f;
-        camera.transform.position = new Vector3(center?.x ?? 0f, center?.y ?? 0f, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = new Color(0.04f, 0.07f, 0.06f);
-
-        var target = new RenderTexture(pixelWidth, pixelHeight, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-
-        var image = new Texture2D(pixelWidth, pixelHeight, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0f, 0f, pixelWidth, pixelHeight), 0, 0);
-        image.Apply();
+        Camera camera = OrthoCamera("CocCamera", height * 0.5f, new Color(0.04f, 0.07f, 0.06f),
+            new Vector3(center?.x ?? 0f, center?.y ?? 0f, -10f));
         string path = Path.GetFullPath(file);
-        File.WriteAllBytes(path, image.EncodeToPNG());
-
-        RenderTexture.active = null;
-        camera.targetTexture = null;
-        Object.DestroyImmediate(target);
-        Object.DestroyImmediate(image);
-        Object.DestroyImmediate(cameraObject);
+        CapturePng(camera, pixelWidth, pixelHeight, path);
+        Object.DestroyImmediate(camera.gameObject);
 
         var info = new FileInfo(path);
         Check(info.Exists && info.Length > 0, "render produced no bytes: " + file);

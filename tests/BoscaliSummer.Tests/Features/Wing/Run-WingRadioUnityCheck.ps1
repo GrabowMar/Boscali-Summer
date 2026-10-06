@@ -43,7 +43,7 @@ if (-not $ProductionDll) { $ProductionDll = "$repo/bin/Release/netstandard2.1/Bo
 if ((Resolve-Path -LiteralPath $ProductionDll).Path -ne [IO.Path]::GetFullPath("$PreviewDirectory/Assets/BoscaliSummer.dll")) {
     Copy-Item -LiteralPath $ProductionDll -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
 }
-Copy-Item -LiteralPath "$PSScriptRoot/WingRadioUnityCheck.cs", "$PSScriptRoot/BoscaliWingRadioPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/WingRadioUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/BoscaliWingRadioPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Set-Content -LiteralPath "$PreviewDirectory/production-dll.sha256" -Value (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll").Hash
 Set-Content -LiteralPath "$PreviewDirectory/preview-mode.txt" -Value $(if ($RadioOnly) { 'RadioOnly' } else { 'WingRadioHistorical' })
 Export-UnityCheckHashes "$PreviewDirectory/input-manifest.csv" (@((Get-Item -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll"), (Get-Item -LiteralPath "$PreviewDirectory/preview-mode.txt"), (Get-ChildItem -LiteralPath "$PreviewDirectory/NOAvionics" -Filter '*.avss'), (Get-ChildItem -LiteralPath "$PreviewDirectory/Assets/Harness" -File)) | ForEach-Object { $_ })

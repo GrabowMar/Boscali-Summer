@@ -13,7 +13,7 @@ New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.
 # -Recurse also picks up AvionicsUi/Fui/*.cs (kit v2: AvLay, AvText, AvFrame's siblings, ...) that
 # MfdRail.cs and MfdChromeLay.cs now depend on since the rail moved onto kit v2 primitives.
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", "$repo/modules/Command/Presentation/MapUi/MfdRail.cs", "$repo/modules/Command/Presentation/MapUi/MfdRailCatalog.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", "$repo/modules/Command/Presentation/MapUi/MfdScreenFinish.cs", "$PSScriptRoot/SettingsUnityStubs.cs", "$PSScriptRoot/RailUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", "$repo/modules/Command/Presentation/MapUi/MfdRail.cs", "$repo/modules/Command/Presentation/MapUi/MfdRailCatalog.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", "$repo/modules/Command/Presentation/MapUi/MfdScreenFinish.cs", "$PSScriptRoot/SettingsUnityStubs.cs", "$PSScriptRoot/RailUnityCheck.cs", $UnityCheckHarness -Destination "$PreviewDirectory/Assets/"
 Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx|Mono|0Harmony)'
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles -NoDefaults
