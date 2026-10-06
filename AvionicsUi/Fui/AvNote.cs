@@ -39,7 +39,9 @@ namespace NOAvionics
         /// <summary>Overrides the ink until the next restyle.</summary>
         public Color Color { set => text.color = value; }
 
-        public void Set(string body, AvState tint = AvState.Inert)
+        public void Set(string body) => Set(body, AvState.Inert);
+
+        public void Set(string body, AvState tint)
         {
             string next = body ?? "";
             if (text.text != next) { text.text = next; Changed(); }
