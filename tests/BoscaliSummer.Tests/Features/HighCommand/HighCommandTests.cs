@@ -15,8 +15,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             BonusesStateWhatACommanderIsWorth();
             EconomyPaysOnlyWhatItShould();
             StaffLogKeepsItsMemoryBounded();
-            MapMarkersFollowTheFog();
-            SelectionBracketsStayOnTheMarker();
             SnapshotRulesRejectMalformedRows();
         }
 
@@ -192,96 +190,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
 
             log.Clear();
             TestAssert.That(log.Count == 0, "clear empties the ring");
-        }
-
-        /// <summary>
-        /// Retained marker-policy math obeys the roster's fog rules: ownership or confirmed
-        /// sight, live commanders and ordered tier sizes. Live map diamonds are currently
-        /// removed; these assertions do not claim that a map layer is installed.
-        /// </summary>
-        private static void MapMarkersFollowTheFog()
-        {
-            TestAssert.That(CommandMarkerPolicy.Show(true, false, false), "your own post is marked");
-            TestAssert.That(CommandMarkerPolicy.Show(true, true, false), "a known post is marked");
-            TestAssert.That(!CommandMarkerPolicy.Show(false, false, false), "an unseen enemy post is not marked");
-            TestAssert.That(!CommandMarkerPolicy.Show(false, true, true), "a dead commander is never marked");
-            TestAssert.That(!CommandMarkerPolicy.Show(true, true, true), "your own dead commander is not marked either");
-
-            // The map places icons at global metres times its own display factor. Feeding raw
-            // metres (skipping the factor) or a non-finite factor is what put every post at
-            // the wrong place; both are refused here.
-            TestAssert.That(CommandMarkerPolicy.MapPoint(1000f, -2000f, 0.011f, out float mx, out float mz) &&
-                            Math.Abs(mx - 11f) < 0.0001f && Math.Abs(mz + 22f) < 0.0001f,
-                "a post maps to global metres scaled by the map factor");
-            TestAssert.That(!CommandMarkerPolicy.MapPoint(1000f, 0f, 0f, out _, out _) &&
-                            !CommandMarkerPolicy.MapPoint(1000f, 0f, float.NaN, out _, out _) &&
-                            !CommandMarkerPolicy.MapPoint(1000f, 0f, float.PositiveInfinity, out _, out _),
-                "a map with no usable factor draws no post");
-
-            TestAssert.That(CommandMarkerPolicy.Size(CommandTier.Theater) > CommandMarkerPolicy.Size(CommandTier.Component) &&
-                            CommandMarkerPolicy.Size(CommandTier.Component) > CommandMarkerPolicy.Size(CommandTier.Base),
-                "the marker shrinks down the hierarchy");
-
-            for (float t = 0f; t < 4f; t += 0.13f)
-            {
-                float pulse = CommandMarkerPolicy.Pulse(t);
-                TestAssert.That(pulse >= 0f && pulse <= 1f, "the alert pulse stays inside its range");
-            }
-            TestAssert.That(CommandMarkerPolicy.Pulse(float.NaN) == 0f &&
-                            CommandMarkerPolicy.Pulse(float.PositiveInfinity) == 0f,
-                "a broken clock cannot pulse");
-        }
-
-        /// <summary>
-        /// The bracket a selected post wears: four corners, each an arm that opens towards
-        /// the marker, all eight rules inside the bracket box. A sign slip here puts the
-        /// bracket's bottom arms over its top ones and the reticle stops meaning anything.
-        /// </summary>
-        private static void SelectionBracketsStayOnTheMarker()
-        {
-            for (int tier = CommandTier.Theater; tier <= CommandTier.Base; tier++)
-            {
-                float size = CommandMarkerPolicy.Size(tier);
-                float bracket = CommandMarkerPolicy.ReticleBracket(size);
-                TestAssert.That(bracket > size, "the bracket sits outside the diamond");
-
-                CommandMarkerPolicy.ReticleRule[] rules = CommandMarkerPolicy.Reticle(size);
-                TestAssert.That(rules.Length == 8, "a bracket is eight rules");
-
-                int top = 0, bottom = 0, left = 0, right = 0;
-                for (int i = 0; i < rules.Length; i++)
-                {
-                    CommandMarkerPolicy.ReticleRule rule = rules[i];
-                    TestAssert.That(rule.Width > 0f && rule.Height > 0f, "no rule is degenerate");
-
-                    // A rule is one arm, not a box: 1px thick on its short side.
-                    bool horizontal = rule.Width > 1f;
-                    bool vertical = rule.Height > 1f;
-                    TestAssert.That(horizontal != vertical, "a rule is one arm, not a box");
-                    TestAssert.That((horizontal ? rule.Height : rule.Width) == 1f,
-                        "a rule is one pixel thick");
-                    TestAssert.That((horizontal ? rule.Width : rule.Height) < bracket * 0.5f,
-                        "the arms leave the middle of the bracket open");
-
-                    // Place(Rect) reads x to the right and y downward from the top-left.
-                    TestAssert.That(rule.X >= 0f && rule.X + rule.Width <= bracket + 0.001f,
-                        "a rule stays inside the bracket's width");
-                    TestAssert.That(rule.Y <= 0f && rule.Y - rule.Height >= -bracket - 0.001f,
-                        "a rule stays inside the bracket's height");
-
-                    if (horizontal && rule.Y == 0f) top++;
-                    if (horizontal && rule.Y == 1f - bracket) bottom++;
-                    if (vertical && rule.X == 0f) left++;
-                    if (vertical && rule.X == bracket - 1f) right++;
-                }
-                TestAssert.That(top == 2 && bottom == 2, "the bracket has a top pair and a bottom pair");
-                TestAssert.That(left == 2 && right == 2, "the bracket has a left column and a right column");
-            }
-
-            TestAssert.That(CommandMarkerPolicy.Reticle(float.NaN).Length == 0 &&
-                            CommandMarkerPolicy.Reticle(0f).Length == 0 &&
-                            CommandMarkerPolicy.Reticle(float.PositiveInfinity).Length == 0,
-                "a size a marker never carries draws no bracket");
         }
 
         private static void SnapshotRulesRejectMalformedRows()

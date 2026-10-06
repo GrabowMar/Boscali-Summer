@@ -128,13 +128,9 @@
     <Compile Include="..\..\modules\Command\Runtime\SectorContour.cs" Link="Features\Command\SectorContour.cs" />
     <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
     <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
-    <Compile Include="..\..\modules\Command\Domain\OperationsBoardFit.cs" Link="Features\Command\OperationsBoardFit.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
-    <Compile Include="..\..\modules\Command\Domain\StrOperationsBoard.cs" Link="Features\Command\StrOperationsBoard.cs" />
-    <Compile Include="..\..\modules\Command\Domain\RoomPlotModel.cs" Link="Features\Command\RoomPlotModel.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />
-    <Compile Include="..\..\modules\HighCommand\Domain\CommandMarkerPolicy.cs" Link="Features\HighCommand\CommandMarkerPolicy.cs" />
     <Compile Include="..\..\Core\Contracts\CommanderLogLine.cs" Link="Framework\CommanderLogLine.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommanderGenerator.cs" Link="Features\HighCommand\CommanderGenerator.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandSlot.cs" Link="Features\HighCommand\CommandSlot.cs" />

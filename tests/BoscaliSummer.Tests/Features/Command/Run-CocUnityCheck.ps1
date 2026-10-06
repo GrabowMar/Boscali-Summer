@@ -25,7 +25,6 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Domain/CommandRosterOrder.cs", `
     "$repo/modules/Command/Domain/TacticalTheaterState.cs", `
     "$repo/modules/Command/Domain/TheaterReadout.cs", `
-    "$repo/modules/Command/Domain/OperationsBoardFit.cs", `
     "$repo/modules/Command/Domain/SortieClassifier.cs", `
     "$repo/Core/Contracts/IHighCommandView.cs", `
     "$repo/Core/Contracts/CommanderLogLine.cs", `
