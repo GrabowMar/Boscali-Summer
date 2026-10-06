@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     ///
     /// It reads only the mission's own thresholds, with a tactical or strategic threshold
     /// greater than zero gating that stage. An unset threshold of zero means "no such stage"
-    /// and can never invent one, exactly like the MIS main tab's escalation ladder. Nonsense
+    /// and can never invent one (the ladder is shared with the MIS main tab: Core.Math.EscalationStage). Nonsense
     /// escalation or thresholds fall back to the conventional stage; every interval and
     /// multiplier is hard-clamped to the bounds declared here. The callers keep the existing
     /// money/XP and RewardMultiplier clamps on top of the tempo multiplier.
@@ -34,10 +34,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         internal static OperationTempoStage Stage(float current, float tactical, float strategic)
         {
             if (!Finite(current) || !Finite(tactical) || !Finite(strategic)) return OperationTempoStage.Conventional;
-            if (strategic > 0f) return current >= strategic ? OperationTempoStage.Strategic
-                : tactical > 0f && current < tactical ? OperationTempoStage.Conventional : OperationTempoStage.Tactical;
-            if (tactical > 0f) return current < tactical ? OperationTempoStage.Conventional : OperationTempoStage.Tactical;
-            return OperationTempoStage.Strategic;
+            return (OperationTempoStage)BoscaliSummer.Core.Math.EscalationStage.Of(current, tactical, strategic);
         }
 
         internal static float Interval(float current, float tactical, float strategic) =>
