@@ -22,9 +22,6 @@ namespace BoscaliSummer.Core.Game
         private static int cachedWingMemberFrame = int.MinValue;
         private static int[] cachedWingMemberIds = Array.Empty<int>();
 
-        private static bool studioResolved;
-        private static string studioUnavailableReason = "The Wing feature is not installed.";
-
         public static int AceAbilityMask(Aircraft aircraft)
         {
             if (aircraft == null || !ResolveSquad()) return 0;
@@ -120,72 +117,13 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailSquad(error); return false; }
         }
 
-        // ---- Saved-pilot studio ------------------------------------------------------
-
-        public static bool PilotStudioAvailable
-        {
-            get { ResolveStudio(); return string.IsNullOrEmpty(studioUnavailableReason); }
-        }
-
-        public static string PilotStudioUnavailableReason
-        {
-            get { ResolveStudio(); return studioUnavailableReason; }
-        }
-
-        public static int PortraitBodyCount => StudioCount(s => s.PortraitBodyCount);
-        public static int PortraitFaceCount => StudioCount(s => s.PortraitFaceCount);
-        public static int PortraitHairCount => StudioCount(s => s.PortraitHairCount);
-        public static int PortraitUniformCount => StudioCount(s => s.PortraitUniformCount);
-        public static int PortraitAccessoryCount => StudioCount(s => s.PortraitAccessoryCount);
-        public static int PortraitBackdropCount => StudioCount(s => s.PortraitBackdropCount);
-
-        public static string PortraitBodyLabel(int body)
-        {
-            if (!ResolveStudio()) return "BODY";
-            try { return squad.PortraitBodyLabel(body) ?? "BODY"; }
-            catch (Exception error) { FailStudio(error); return "BODY"; }
-        }
-
-        public static string PortraitUniformLabel(int uniform)
-        {
-            if (!ResolveStudio()) return "SUIT";
-            try { return squad.PortraitUniformLabel(uniform) ?? "SUIT"; }
-            catch (Exception error) { FailStudio(error); return "SUIT"; }
-        }
-
-        public static string PortraitAccessoryLabel(int accessory)
-        {
-            if (!ResolveStudio()) return "NONE";
-            try { return squad.PortraitAccessoryLabel(accessory) ?? "NONE"; }
-            catch (Exception error) { FailStudio(error); return "NONE"; }
-        }
-
-        public static string PortraitBackdropLabel(int backdrop)
-        {
-            if (!ResolveStudio()) return "BACKDROP";
-            try { return squad.PortraitBackdropLabel(backdrop) ?? "BACKDROP"; }
-            catch (Exception error) { FailStudio(error); return "BACKDROP"; }
-        }
-
-        public static string PersonaLabel(int persona)
-        {
-            if (!ResolveStudio()) return "PROFESSIONAL";
-            try { return squad.PersonaLabel(persona) ?? "PROFESSIONAL"; }
-            catch (Exception error) { FailStudio(error); return "PROFESSIONAL"; }
-        }
-
-        public static string RankNameForXp(int xp)
-        {
-            if (!ResolveStudio()) return "ROOKIE";
-            try { return squad.RankNameForXp(xp) ?? "ROOKIE"; }
-            catch (Exception error) { FailStudio(error); return "ROOKIE"; }
-        }
+        // ---- Saved pilots ------------------------------------------------------------
 
         /// <summary>Borrow a Wing-owned portrait; preview is updated in place. Never destroy the sprite.</summary>
         public static Sprite PilotPortraitForSelection(
             int body, int face, int hair, int uniform, int accessory, int backdrop, bool preview = false)
         {
-            if (!ResolveStudio()) return null;
+            if (!ResolveSquad()) return null;
             try { return squad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop, preview); }
             catch (Exception error)
             {
@@ -201,73 +139,22 @@ namespace BoscaliSummer.Core.Game
         public static bool TryGetCustomPilot(string callsign, out WingPilotRecord record)
         {
             record = default;
-            if (!ResolveStudio() || string.IsNullOrEmpty(callsign)) return false;
+            if (!ResolveSquad() || string.IsNullOrEmpty(callsign)) return false;
             try
             {
                 if (!squad.TryGetCustomPilot(callsign, out CustomPilotView view)) return false;
                 record = ToRecord(view);
                 return true;
             }
-            catch (Exception error) { FailStudio(error); return false; }
+            catch (Exception error) { FailSquad(error); return false; }
         }
 
-        public static bool TryListCustomPilots(out WingPilotRecord[] records)
+        /// <summary>Open the WMC SQUADRON > STUDIO page, where saved pilots are edited.</summary>
+        public static bool OpenPilotStudio()
         {
-            records = Array.Empty<WingPilotRecord>();
-            if (!ResolveStudio()) return false;
-            try
-            {
-                CustomPilotView[] raw = squad.ListCustomPilots();
-                if (raw == null || raw.Length == 0) return true;
-                var parsed = new List<WingPilotRecord>(System.Math.Min(raw.Length, 128));
-                for (int i = 0; i < raw.Length && parsed.Count < 128; i++)
-                    parsed.Add(ToRecord(raw[i]));
-                records = parsed.ToArray();
-                return true;
-            }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static bool SaveCustomPilot(WingPilotRecord record)
-        {
-            if (!ResolveStudio()) return false;
-            try { return squad.SaveCustomPilot(ToView(record)); }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static bool DeleteCustomPilot(string callsign)
-        {
-            if (!ResolveStudio()) return false;
-            try { return squad.DeleteCustomPilot(callsign); }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static bool IsPilotRecruited(string callsign)
-        {
-            if (!ResolveStudio()) return false;
-            try { return squad.IsPilotRecruited(callsign); }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static bool RecruitCustomPilot(string callsign)
-        {
-            if (!ResolveStudio()) return false;
-            try { return squad.RecruitCustomPilot(callsign); }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static bool DischargeCustomPilot(string callsign)
-        {
-            if (!ResolveStudio()) return false;
-            try { return squad.DischargeCustomPilot(callsign); }
-            catch (Exception error) { FailStudio(error); return false; }
-        }
-
-        public static int ImportAllCustomPilots()
-        {
-            if (!ResolveStudio()) return 0;
-            try { return squad.ImportAllCustomPilots(); }
-            catch (Exception error) { FailStudio(error); return 0; }
+            if (!ResolveSquad()) return false;
+            try { return squad.OpenPilotStudio(); }
+            catch (Exception error) { FailSquad(error); return false; }
         }
 
         public static bool IsWingMember(int persistentIdHash)
@@ -334,29 +221,6 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
-        private static bool ResolveStudio()
-        {
-            if (studioResolved) return string.IsNullOrEmpty(studioUnavailableReason);
-            if (!ResolveSquad()) return false;
-            studioResolved = true;
-            studioUnavailableReason = string.Empty;
-            return true;
-        }
-
-        private static int StudioCount(Func<IWingSquad, int> read)
-        {
-            if (!ResolveStudio()) return 0;
-            try { return read(squad); }
-            catch (Exception error) { FailStudio(error); return 0; }
-        }
-
-        private static void FailStudio(Exception error)
-        {
-            bool firstFailure = string.IsNullOrEmpty(studioUnavailableReason);
-            studioUnavailableReason = "Wing squad API failed; check the BepInEx log.";
-            if (firstFailure) Plugin.Logger?.LogWarning("WingLink pilot studio API disabled: " + error.Message);
-        }
-
         private static void FailSquad(Exception error)
         {
             bool firstFailure = string.IsNullOrEmpty(squadUnavailableReason);
@@ -381,25 +245,6 @@ namespace BoscaliSummer.Core.Game
             Uniform = view.Uniform,
             Accessory = view.Accessory,
             Backdrop = view.Backdrop,
-        };
-
-        private static CustomPilotView ToView(WingPilotRecord record) => new CustomPilotView
-        {
-            Name = record.Name,
-            Callsign = record.Callsign,
-            DialogueTag = record.DialogueTag,
-            Persona = record.Persona,
-            Background = record.Background,
-            Xp = record.Xp,
-            Kills = record.Kills,
-            Sorties = record.Sorties,
-            HasPortrait = record.HasPortrait,
-            Body = record.Body,
-            Face = record.Face,
-            Hair = record.Hair,
-            Uniform = record.Uniform,
-            Accessory = record.Accessory,
-            Backdrop = record.Backdrop,
         };
     }
 }

@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// "PILOT" (registry id SQD) — pilot status, shared skill board with support authorisations,
-    /// enemy ace roster, and the local pilot studio / squadron identity page. Reads encounter
+    /// enemy ace roster, and the squadron emblem page with a launcher for the Wing Command pilot studio. Reads encounter
     /// snapshots only; Wing Command owns aircraft orders, custom-pilot files and pilot
     /// generation. Emblems and the local pilot profile are client-local cosmetics.
     /// Built entirely from kit v2 (spec 2026-09-28-fui-panel-polish-design.md): one
@@ -270,7 +270,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "PILOT: your dossier. ID card, this sortie, the pick rings and every qualification lane at a glance.",
                 "SKILLS: the qualification tree, four lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
                 "ACES: your flight and the known hostile ace wings, with threat, skills and who they are hunting. Wing management stays in Wing Command.",
-                "STUDIO: write custom pilots for Wing Command, set your local profile, and design the squadron emblem. Everything stays on this machine.",
+                "STUDIO: design the squadron emblem and name, or open the Wing Command pilot studio to write custom pilots. Everything stays on this machine.",
                 "PLANE: a live dossier of the aircraft you fly. Damage, engine map, flight data, systems, stores and the worst parts.",
             };
             AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
@@ -288,7 +288,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     BuildStudioPage(studioPageFlow);
                     studioPageBuilt = true;
                 }
-                studioDirty = true;
                 studioArtDirty = true;
             }
         }

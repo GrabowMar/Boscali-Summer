@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Core.Contracts
 {
-    /// <summary>One saved pilot as the roster studio edits it: identity, service record and look.</summary>
+    /// <summary>One saved pilot as the WMC studio stores it: identity, service record and look.</summary>
     internal struct CustomPilotView
     {
         public string Name;
@@ -23,7 +23,7 @@ namespace BoscaliSummer.Core.Contracts
     }
 
     /// <summary>
-    /// The wing's squadron face for Boscali consumers (Squad ace hunts, the SQD studio,
+    /// The wing's squadron face for Boscali consumers (Squad ace hunts, the SQD pilot page,
     /// staff portraits). Wing owns personnel, portraits, adversary flights and survivor
     /// tracking; callers only read and request. Spawns and survivor recovery are
     /// host-authoritative and fail closed off-host. Borrowed portraits must never be
@@ -61,28 +61,12 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Active ace perks: bit 0 toughness, 1 countermeasures, 2 notch expert, 3 ghost.</summary>
         int AbilityMask(Aircraft aircraft);
 
-        int PortraitBodyCount { get; }
-        int PortraitFaceCount { get; }
-        int PortraitHairCount { get; }
-        int PortraitUniformCount { get; }
-        int PortraitAccessoryCount { get; }
-        int PortraitBackdropCount { get; }
-        string PortraitBodyLabel(int body);
-        string PortraitUniformLabel(int uniform);
-        string PortraitAccessoryLabel(int accessory);
-        string PortraitBackdropLabel(int backdrop);
-        string PersonaLabel(int persona);
-        string RankNameForXp(int xp);
         /// <summary>Preview reuses one mutable image; saved portraits remain cached and stable.</summary>
         Sprite PortraitForSelection(int body, int face, int hair, int uniform,
             int accessory, int backdrop, bool preview = false);
         bool TryGetCustomPilot(string callsign, out CustomPilotView record);
-        CustomPilotView[] ListCustomPilots();
-        bool SaveCustomPilot(CustomPilotView record);
-        bool DeleteCustomPilot(string callsign);
-        bool IsPilotRecruited(string callsign);
-        bool RecruitCustomPilot(string callsign);
-        bool DischargeCustomPilot(string callsign);
-        int ImportAllCustomPilots();
+
+        /// <summary>Open the WMC SQUADRON > STUDIO page (the saved-pilot editor). False when it cannot open.</summary>
+        bool OpenPilotStudio();
     }
 }
