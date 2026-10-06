@@ -60,6 +60,8 @@ namespace BoscaliSummer.Core.Config
             // The sector grid moved from a fixed dimension count to cells on the map's own
             // base grid, so the old size knob no longer means anything.
             BindAndRemove(config, "Command", "GridResolution", 32);
+            // The retired checkerboard overlay no longer reads an opacity.
+            BindAndRemove(config, "Command", "CheckerboardOpacity", 0.08f);
 
             // Offensives stopped charging one price for the staff work and the first wave
             // together: the overhead and each wave slot are priced apart now. The old keys are
