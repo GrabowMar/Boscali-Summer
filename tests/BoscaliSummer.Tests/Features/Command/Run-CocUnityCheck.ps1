@@ -10,6 +10,7 @@ Copy-AvionicsStyles $PreviewDirectory
 Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", `
     "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", `
+    "$repo/Core/Game/MfdPanelInstaller.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Coc.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Cmd.cs", `
