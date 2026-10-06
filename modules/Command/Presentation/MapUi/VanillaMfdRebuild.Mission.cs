@@ -200,7 +200,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < count; i++)
                 {
                     float v = history.Value(0, i);
-                    if (!MfdResourceHistory.Finite(v)) { run = 0; runStart = i + 1; continue; }
+                    if (!float.IsFinite(v)) { run = 0; runStart = i + 1; continue; }
                     trendBuffer[run++] = v;
                 }
                 if (run < 2)

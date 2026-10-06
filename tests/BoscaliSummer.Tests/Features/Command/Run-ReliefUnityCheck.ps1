@@ -29,6 +29,7 @@ Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(Mono|0Harmony\.dll$|H
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdTerrainRelief.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapInteractions.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdMapOrbitControls.cs", "$repo/modules/Command/Presentation/MapUi/MapSymbology.cs", "$repo/modules/Command/Presentation/MapUi/MapSymbolAtlas.cs", "$repo/modules/Command/Domain/ReliefRig.cs", "$repo/modules/Command/Domain/ReliefHoles.cs", "$PSScriptRoot/ReliefUnityStubs.cs", "$PSScriptRoot/ReliefUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/Core/Contracts/IMapProjection.cs", "$repo/Core/Contracts/IMapBoxInput.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/Core/Math/Scalar.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/AircraftTrailGraphic.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapUiManager.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Domain/ReliefLight.cs", "$repo/modules/Command/Domain/ReliefClusterPlan.cs" -Destination "$PreviewDirectory/Assets/"

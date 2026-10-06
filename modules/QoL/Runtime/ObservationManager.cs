@@ -15,9 +15,7 @@ namespace BoscaliSummer.Modules.QoL.Runtime
         private Aircraft owner;
         private FactionHQ faction;
         public string Status { get; private set; } = "No camera mark.";
-        public static ObservationManager Instance { get; private set; }
 
-        private void Awake() => Instance = this;
         public void Configure(QoLSettings config) => settings = config;
         public bool CanCapture => TryOwnship(out Aircraft aircraft) &&
             NativeCamera.TryGet(aircraft, out _, out _);
@@ -50,7 +48,7 @@ namespace BoscaliSummer.Modules.QoL.Runtime
             }
 
             float range = Mathf.Min(60000f, camera.farClipPlane);
-            if (!ObservationStore.Finite(range) || range <= 0f)
+            if (!float.IsFinite(range) || range <= 0f)
             {
                 Status = "Camera range unavailable.";
                 return false;
@@ -126,10 +124,5 @@ namespace BoscaliSummer.Modules.QoL.Runtime
 
         public void ResetForScene() => Clear();
         private void OnDisable() => Clear();
-        private void OnDestroy()
-        {
-            Clear();
-            if (Instance == this) Instance = null;
-        }
     }
 }

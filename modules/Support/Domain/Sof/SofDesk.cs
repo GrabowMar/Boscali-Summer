@@ -344,7 +344,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             TargetKind tk = TargetKind.Ground; AnchorSub sub = AnchorSub.Uplink; uint key = 0; float tx, tz; int id = 0;
             if (kind == MissionKind.Recon)
             {
-                if (!Finite(px) || !Finite(pz) || Math.Abs(px) > 2000000f || Math.Abs(pz) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
+                if (!float.IsFinite(px) || !float.IsFinite(pz) || Math.Abs(px) > 2000000f || Math.Abs(pz) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
                 tx = px; tz = pz;
             }
             else
@@ -373,7 +373,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t == null) return new SofResult(SofOutcome.NoTeam);
             SofResult gate = Gate(t, now, false);
             if (gate.Outcome != SofOutcome.None) return gate;
-            if (!Finite(x) || !Finite(z) || Math.Abs(x) > 2000000f || Math.Abs(z) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
+            if (!float.IsFinite(x) || !float.IsFinite(z) || Math.Abs(x) > 2000000f || Math.Abs(z) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
             if (t.State == TeamState.Raising || t.State == TeamState.Recovering) return new SofResult(SofOutcome.BadOrder, slot);
             ClearMission(t);
             t.DestX = x; t.DestZ = z; t.HasDest = true; t.HoldOn = false; t.LiftWaiting = false; t.Wounded = false;
@@ -446,7 +446,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             ports.LaseEnd(t.Slot, t.TargetKey);
         }
 
-        private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
 
         /// <summary>Distance to the nearest base a team can return to: a standing camp or a held building (falls back to where it was raised).</summary>
         private float HomeDistance(SofTeam t, out float bx, out float bz)

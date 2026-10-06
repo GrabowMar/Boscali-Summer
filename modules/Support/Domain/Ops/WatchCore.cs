@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public int Add(WatchDomain domain, WatchCode code, int a, int b)
         {
             if (seq == int.MaxValue) return seq;
-            rows.Add(new WatchLogRow { Seq = ++seq, Domain = domain, Code = code, A = Clamp(a), B = Clamp(b) });
+            rows.Add(new WatchLogRow { Seq = ++seq, Domain = domain, Code = code, A = (byte)Math.Clamp(a, 0, 255), B = (byte)Math.Clamp(b, 0, 255) });
             while (rows.Count > Capacity) rows.RemoveAt(0);
             return seq;
         }
@@ -53,8 +53,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         public void Clear() { rows.Clear(); seq = 0; }
-
-        private static byte Clamp(int v) => (byte)Math.Max(0, Math.Min(255, v));
     }
 
     /// <summary>The words of an OVERLORD action, one function for the host log, the sim transcripts and the faction console. Pure.</summary>
@@ -136,7 +134,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while nothing can happen).</summary>
         public void Defer(float now, float seconds)
         {
-            if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
+            if (SpaceRules.MissionTime(now) && float.IsFinite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
         }
 
         public virtual void Reset() { idle.Reset(); nextThinkAt = 0f; }

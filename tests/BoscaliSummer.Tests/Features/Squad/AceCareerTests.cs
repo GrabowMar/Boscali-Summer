@@ -104,7 +104,7 @@ namespace BoscaliSummer.Tests.Features.Squad
                 TestAssert.That(career.BonusPoints == Math.Min(AceCareer.MaximumBonus, defeats),
                     "ace bonus ledger must remain bounded during a long mission");
                 float threshold = career.Threshold(25f);
-                TestAssert.That(AceCareer.Finite(threshold) && threshold >= previousThreshold && threshold <= 125f,
+                TestAssert.That(float.IsFinite(threshold) && threshold >= previousThreshold && threshold <= 125f,
                     "required threat must increase monotonically and stop at five times the initial value");
                 TestAssert.That(AceCareer.WingSize(career.Tier) == (defeats >= 4 ? 4 : defeats >= 2 ? 3 : 2),
                     "escorts must increase at tiers three/five and never exceed four aircraft");

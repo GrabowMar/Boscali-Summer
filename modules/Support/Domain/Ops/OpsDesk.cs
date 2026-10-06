@@ -232,7 +232,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public void SetEffectEnd(OpDomain domain, float until)
         {
             OpSlot s = Slot(domain);
-            if (s.State == OpState.Done && OpsRules.Finite(until)) s.EffectEnds = Math.Max(s.EffectEnds, until);
+            if (s.State == OpState.Done && float.IsFinite(until)) s.EffectEnds = Math.Max(s.EffectEnds, until);
         }
 
         /// <summary>An ASAT left the rail or a satellite died: a ping for the victim only (the runtime decides which factions read it).</summary>

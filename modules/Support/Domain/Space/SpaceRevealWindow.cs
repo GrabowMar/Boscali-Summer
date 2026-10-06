@@ -24,10 +24,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             window = default;
             float expiresAt = now + seconds;
             if ((source != BirdKind.Optical && source != BirdKind.Radar) || !Coordinate(x) || !Coordinate(z) ||
-                !SpaceRules.Finite(radius) || radius <= 0 || radius > 100000 || !SpaceRules.MissionTime(now) ||
-                !SpaceRules.Finite(seconds) || seconds <= 0 || seconds > 300 || !SpaceRules.Finite(expiresAt) ||
-                expiresAt <= now || !SpaceRules.Finite(minimumSpeed) || minimumSpeed < 0 ||
-                !SpaceRules.Finite(maximumSpeed) || maximumSpeed < minimumSpeed) return false;
+                !float.IsFinite(radius) || radius <= 0 || radius > 100000 || !SpaceRules.MissionTime(now) ||
+                !float.IsFinite(seconds) || seconds <= 0 || seconds > 300 || !float.IsFinite(expiresAt) ||
+                expiresAt <= now || !float.IsFinite(minimumSpeed) || minimumSpeed < 0 ||
+                !float.IsFinite(maximumSpeed) || maximumSpeed < minimumSpeed) return false;
             window = new SpaceRevealWindow(source, x, z, radius, now, expiresAt, minimumSpeed, maximumSpeed);
             return true;
         }
@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             // Native Unit.speed is signed (forward component): a parked vehicle settling at -0.004 m/s is as static as one at +0.004,
             // and a reverser at -5 m/s is a mover. The band is on magnitude.
-            if (!Active(now) || !Coordinate(x) || !Coordinate(z) || !SpaceRules.Finite(speed) ||
+            if (!Active(now) || !Coordinate(x) || !Coordinate(z) || !float.IsFinite(speed) ||
                 Math.Abs(speed) < MinimumSpeed || Math.Abs(speed) > MaximumSpeed) return false;
             double dx = (double)x - X, dz = (double)z - Z;
             return dx * dx + dz * dz <= (double)Radius * Radius;
@@ -55,6 +55,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return age >= 0 && age < ObservationSeconds;
         }
 
-        private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= 10000000f;
+        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= 10000000f;
     }
 }

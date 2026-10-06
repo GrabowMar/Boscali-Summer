@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         {
             if (!GameAccess.IsServer() || query.Protocol != ProtocolVersion || sender == null ||
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) || player == null ||
-                !RateLimit(player))
+                !nextQuery.Allow(PlayerIdentity.Of(player), Time.unscaledTime, QueryInterval))
                 return;
 
             // The effort is the querying player's own faction's business; another side's is
@@ -208,11 +208,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 Y = value.Y,
                 Z = value.Z,
             };
-        }
-
-        private bool RateLimit(Player player)
-        {
-            return nextQuery.Allow(PlayerIdentity.Of(player), Time.unscaledTime, QueryInterval);
         }
 
         private void OnDestroy()

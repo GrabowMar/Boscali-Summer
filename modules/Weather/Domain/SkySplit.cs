@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -34,7 +35,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 NormalZ = nz,
                 Heading = heading,
                 Offset = WeatherMath.HashRange(layout, 5, 61, 0, -0.3f, 0.3f) * half,
-                Amount = WeatherMath.Clamp01(amount),
+                Amount = Scalar.Clamp01(amount),
                 MeanderAmplitude = WeatherMath.HashRange(layout, 5, 62, 0, 6000f, 14000f),
                 MeanderWavelength = WeatherMath.HashRange(layout, 5, 63, 0, 70000f, 130000f),
                 MeanderPhase = WeatherMath.HashRange(layout, 5, 64, 0, -3.14f, 3.14f),

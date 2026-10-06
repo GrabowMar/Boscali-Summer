@@ -31,12 +31,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             Title = string.IsNullOrEmpty(view.Title) ? "SECONDARY OBJECTIVE" : view.Title;
             Family = OperationTitles.FamilyFor(view.Title);
             Status = view.Status ?? string.Empty;
-            HasMarker = view.HasMarker && OperationMarkerCopy.Finite(view.X) && OperationMarkerCopy.Finite(view.Z);
+            HasMarker = view.HasMarker && float.IsFinite(view.X) && float.IsFinite(view.Z);
             X = HasMarker ? view.X : 0f;
             Z = HasMarker ? view.Z : 0f;
-            Radius = OperationMarkerCopy.Finite(view.Radius) && view.Radius > 0f ? view.Radius : 0f;
-            Seconds = OperationMarkerCopy.Finite(view.SecondsRemaining) ? view.SecondsRemaining : 0f;
-            Progress = OperationMarkerCopy.Finite(view.Progress) ? view.Progress : 0f;
+            Radius = float.IsFinite(view.Radius) && view.Radius > 0f ? view.Radius : 0f;
+            Seconds = float.IsFinite(view.SecondsRemaining) ? view.SecondsRemaining : 0f;
+            Progress = float.IsFinite(view.Progress) ? view.Progress : 0f;
             NextAction = view.Tasking?.NextAction ?? string.Empty;
             Blocker = view.Tasking?.Blocker ?? string.Empty;
             int phase = view.Tasking?.CurrentPhase ?? -1;
@@ -56,7 +56,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public bool Returning => OperationMarkerCopy.Returning(Status);
 
         public bool Inside(float distance) =>
-            HasMarker && Radius > 0f && OperationMarkerCopy.Finite(distance) && distance <= Radius;
+            HasMarker && Radius > 0f && float.IsFinite(distance) && distance <= Radius;
 
         public string TitleLine => OperationMarkerCopy.Title(Id, Title);
 
@@ -85,9 +85,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// </summary>
         public static float PixelsPerMetre(float viewportHeight, float fieldOfViewDegrees, float distance)
         {
-            if (!OperationMarkerCopy.Finite(viewportHeight) || viewportHeight <= 0f) return 0f;
-            if (!OperationMarkerCopy.Finite(distance) || distance <= 0f) return 0f;
-            if (!OperationMarkerCopy.Finite(fieldOfViewDegrees) || fieldOfViewDegrees <= 0f) return 0f;
+            if (!float.IsFinite(viewportHeight) || viewportHeight <= 0f) return 0f;
+            if (!float.IsFinite(distance) || distance <= 0f) return 0f;
+            if (!float.IsFinite(fieldOfViewDegrees) || fieldOfViewDegrees <= 0f) return 0f;
             double half = fieldOfViewDegrees * 0.5 * System.Math.PI / 180.0;
             double tan = System.Math.Tan(half);
             if (tan <= 0.0001) return 0f;
@@ -101,8 +101,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public static bool TryClampToBox(float x, float y, float halfWidth, float halfHeight,
             out float clampedX, out float clampedY)
         {
-            clampedX = Clamp(x, -halfWidth, halfWidth);
-            clampedY = Clamp(y, -halfHeight, halfHeight);
+            clampedX = Scalar.Clamp(x, -halfWidth, halfWidth);
+            clampedY = Scalar.Clamp(y, -halfHeight, halfHeight);
             return clampedX != x || clampedY != y;
         }
 
@@ -112,20 +112,17 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         {
             x = 0f;
             y = 0f;
-            if (!OperationMarkerCopy.Finite(dirX) || !OperationMarkerCopy.Finite(dirY)) return false;
+            if (!float.IsFinite(dirX) || !float.IsFinite(dirY)) return false;
             if (dirX == 0f && dirY == 0f) return false;
             if (halfWidth <= 0f || halfHeight <= 0f) return false;
 
             float scaleX = dirX == 0f ? float.MaxValue : halfWidth / System.Math.Abs(dirX);
             float scaleY = dirY == 0f ? float.MaxValue : halfHeight / System.Math.Abs(dirY);
             float scale = System.Math.Min(scaleX, scaleY);
-            if (!OperationMarkerCopy.Finite(scale)) return false;
+            if (!float.IsFinite(scale)) return false;
             x = dirX * scale;
             y = dirY * scale;
             return true;
         }
-
-        private static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
     }
 }

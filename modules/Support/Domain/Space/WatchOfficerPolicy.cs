@@ -136,8 +136,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case "MBT": case "IFV": case "ARTY": case "MLRS": case "TBM":
                     return WatchKind.Armour;
             }
-            if (SpaceRules.Finite(antiAir) && antiAir >= 0.5f) return WatchKind.AirDefence;
-            if (SpaceRules.Finite(antiSurface) && antiSurface >= 0.5f) return WatchKind.Armour;
+            if (float.IsFinite(antiAir) && antiAir >= 0.5f) return WatchKind.AirDefence;
+            if (float.IsFinite(antiSurface) && antiSurface >= 0.5f) return WatchKind.Armour;
             return WatchKind.Other;
         }
 
@@ -147,11 +147,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// </summary>
         public static float Score(in WatchTarget t)
         {
-            float value = SpaceRules.Finite(t.Value) && t.Value > 0.1f ? t.Value : 0.1f;
+            float value = float.IsFinite(t.Value) && t.Value > 0.1f ? t.Value : 0.1f;
             float weight = t.Kind == WatchKind.AirDefence ? 2f : t.Kind == WatchKind.Armour ? 1.5f : 1f;
             if (t.Strategic) weight *= 1.5f;
             float near = 1f;
-            if (SpaceRules.Finite(t.FrontMeters) && t.FrontMeters >= 0f)
+            if (float.IsFinite(t.FrontMeters) && t.FrontMeters >= 0f)
                 near = 1f + 0.5f * Math.Max(0f, Math.Min(1f, 1f - t.FrontMeters / NearnessMeters));
             return value * weight * near * (t.Moving ? 0.5f : 1f);
         }
@@ -187,7 +187,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private bool Usable(in WatchTarget t, float now) =>
             // A point the wire cannot carry is never posted: the pilots could not see that card.
-            t.Id > 0 && SpaceWire.Codable(t.X) && SpaceWire.Codable(t.Z) && SpaceRules.Finite(t.ExpiresAt) &&
+            t.Id > 0 && SpaceWire.Codable(t.X) && SpaceWire.Codable(t.Z) && float.IsFinite(t.ExpiresAt) &&
             t.ExpiresAt - now >= MinRevealLeft && !remembered.ContainsKey(t.Id);
 
         /// <summary>
@@ -339,7 +339,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while a human works the domain).</summary>
         public void Defer(float now, float seconds)
         {
-            if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
+            if (SpaceRules.MissionTime(now) && float.IsFinite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
         }
 
         /// <summary>A refused scan backs off thirty seconds and stamps its site, so the next scan rotates to another one.</summary>

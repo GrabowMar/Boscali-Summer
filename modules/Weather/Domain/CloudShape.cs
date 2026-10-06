@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static CloudGenus Resolve(StateParams sky)
         {
-            float smooth = WeatherMath.Clamp01(sky.LayerSmooth);
+            float smooth = Scalar.Clamp01(sky.LayerSmooth);
             // Do not shrink lobes to zero on the way to a sheet. Fade their relief instead.
             float scale = sky.PuffScale > 0f ? Math.Max(1000f, sky.PuffScale) : 1800f;
             float depth = sky.PuffDepth >= 200f ? sky.PuffDepth : Math.Max(300f, sky.LayerDepth > 0f ? sky.LayerDepth : 900f);
@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Only a deep local column carries an anvil. A shallow dry cluster under
         /// a storm shield remains rounded. Mirrored by LocalAnvil in the shader.</summary>
         public static float LocalAnvil(float depth, float anvil)
-            => WeatherMath.Clamp01(anvil) * WeatherMath.Smoothstep(2400f, 6500f, depth);
+            => Scalar.Clamp01(anvil) * WeatherMath.Smoothstep(2400f, 6500f, depth);
 
         /// <summary>Shallow cumulus rounds over; only a developed anvil pinches its stem.</summary>
         public static float LocalDome(float dome, float anvil)
@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Height within one resolved body; zero for a degenerate/empty interval.</summary>
         public static float LightingHeight(float y, float bottom, float top)
-            => top > bottom ? WeatherMath.Clamp01((y - bottom) / (top - bottom)) : 0f;
+            => top > bottom ? Scalar.Clamp01((y - bottom) / (top - bottom)) : 0f;
 
         /// <summary>
         /// Density kept at height fraction <paramref name="h"/> (0 base, 1 top).
@@ -91,10 +91,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             if (h <= 0f || h >= 1f) return 0f;
             float round = WeatherMath.Smoothstep(0.18f, 1f, h);
-            float body = 1f - round * WeatherMath.Clamp(dome, 0f, 1f);
+            float body = 1f - round * Scalar.Clamp(dome, 0f, 1f);
             float pinch = Math.Max(0f, dome - 1f) * WeatherMath.Smoothstep(0.15f, 0.55f, h);
             float cap = WeatherMath.Smoothstep(0.64f, 0.80f, h);
-            return WeatherMath.Clamp01(body - pinch + anvil * cap) *
+            return Scalar.Clamp01(body - pinch + anvil * cap) *
                 (1f - WeatherMath.Smoothstep(0.90f, 1f, h));
         }
 
@@ -103,14 +103,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// from the boundary instead, leaving a dense core. Mirrored by ShapeMass.</summary>
         public static float Mass(float mask, float profile)
         {
-            return WeatherMath.Clamp01((mask - (1f - profile) * 0.8f) * 2.6f) *
+            return Scalar.Clamp01((mask - (1f - profile) * 0.8f) * 2.6f) *
                 WeatherMath.Smoothstep(0f, 0.18f, profile);
         }
 
         /// <summary>Horizontal radius scale. 1 at the base; the anvil widens the top.</summary>
         public static float Footprint(float h, float anvil)
         {
-            float cap = WeatherMath.Smoothstep(0.58f, 0.86f, WeatherMath.Clamp01(h));
+            float cap = WeatherMath.Smoothstep(0.58f, 0.86f, Scalar.Clamp01(h));
             return 1f + anvil * cap * 1.7f;
         }
 

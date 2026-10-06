@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -106,7 +107,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal void ZoomAt(float zoom, float vx, float vy, float height)
         {
             Unproject(vx, vy, height, out float ax, out float az);
-            Zoom = Clamp(zoom, MinZoom, ZoomLimit);
+            Zoom = Scalar.Clamp(zoom, MinZoom, ZoomLimit);
             Grab(ax, height, az, vx, vy);
         }
 
@@ -115,15 +116,15 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             Project(x, height, z, out float vx, out float vy);
             Yaw = WrapAngle(Yaw + yawDelta);
-            Pitch = Clamp(Pitch + pitchDelta, MinPitch, MaxPitch);
-            Zoom = Clamp(Zoom, MinZoom, ZoomLimit);
+            Pitch = Scalar.Clamp(Pitch + pitchDelta, MinPitch, MaxPitch);
+            Zoom = Scalar.Clamp(Zoom, MinZoom, ZoomLimit);
             Grab(x, height, z, vx, vy);
         }
 
         internal void ClampFocus()
         {
-            FocusX = Clamp(FocusX, -HalfX, HalfX);
-            FocusZ = Clamp(FocusZ, -HalfZ, HalfZ);
+            FocusX = Scalar.Clamp(FocusX, -HalfX, HalfX);
+            FocusZ = Scalar.Clamp(FocusZ, -HalfZ, HalfZ);
         }
 
         internal void Reset()
@@ -146,8 +147,5 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (wrapped < 0f) wrapped += 360f;
             return wrapped - 180f;
         }
-
-        internal static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
     }
 }

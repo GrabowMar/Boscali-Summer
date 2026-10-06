@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         internal bool Due(float now)
         {
-            if (!Finite(now)) return false;
+            if (!float.IsFinite(now)) return false;
             if (Count == 0) return true;
             float elapsed = now - Time(Count - 1);
             return elapsed < 0f || elapsed > Interval * 3f || elapsed >= Interval;
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal bool Sample(float now, float funds, float warheads, float manpower, float morale)
         {
-            if (!Finite(now)) return false;
+            if (!float.IsFinite(now)) return false;
             if (Count > 0)
             {
                 float elapsed = now - Time(Count - 1);
@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return true;
         }
 
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         internal void Clear() { start = 0; Count = 0; }
     }
 }

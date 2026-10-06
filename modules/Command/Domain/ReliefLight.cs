@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -77,7 +78,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (float.IsNaN(slopeDrop)) slopeDrop = 0f;
             if (float.IsNaN(heightAboveSea)) heightAboveSea = 0f;
             if (float.IsNaN(peakHeight)) peakHeight = 1f;
-            float light = Base + Gain * Clamp(facing, -1f, 1f);
+            float light = Base + Gain * Scalar.Clamp(facing, -1f, 1f);
             light *= 1f - Math.Min(Math.Max(slopeDrop, 0f) / 40f, 1f) * .2f;
             if (land)
             {
@@ -89,8 +90,5 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (light > Maximum) return (byte)Maximum;
             return (byte)Math.Round(light);
         }
-
-        private static float Clamp(float value, float minimum, float maximum) =>
-            value < minimum ? minimum : value > maximum ? maximum : value;
     }
 }

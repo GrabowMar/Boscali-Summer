@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 for (int i = 0; i < order.Count; i++)
                 {
                     SourceUnit seed = order[i];
-                    if (seed.Class != SourceClass.SamRadar || !Finite(seed.X, seed.Z) || claimed.Contains(seed.UnitId)) continue;
+                    if (seed.Class != SourceClass.SamRadar || !float.IsFinite(seed.X) && float.IsFinite(seed.Z) || claimed.Contains(seed.UnitId)) continue;
                     claimed.Add(seed.UnitId);
                     for (int take = 1; take < SamClusterMax; take++)
                     {
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                         for (int j = 0; j < order.Count; j++)
                         {
                             SourceUnit c = order[j];
-                            if (c.Class != SourceClass.SamLauncher || claimed.Contains(c.UnitId) || !Finite(c.X, c.Z)) continue;
+                            if (c.Class != SourceClass.SamLauncher || claimed.Contains(c.UnitId) || !float.IsFinite(c.X) && float.IsFinite(c.Z)) continue;
                             double dx = (double)c.X - seed.X, dz = (double)c.Z - seed.Z, d = dx * dx + dz * dz;
                             if (d < bestD || (best < 0 && d == bestD)) { best = j; bestD = d; }
                         }
@@ -87,16 +87,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                     into.Add(new NodeSeed(NodeKind.SamC2, seed.UnitId, seed.X, seed.Z, seed.FrontDistance));
                 }
                 for (int i = 0; i < order.Count; i++)
-                    if (order[i].Class == SourceClass.Radar && Finite(order[i].X, order[i].Z))
+                    if (order[i].Class == SourceClass.Radar && float.IsFinite(order[i].X) && float.IsFinite(order[i].Z))
                         into.Add(new NodeSeed(NodeKind.Radar, order[i].UnitId, order[i].X, order[i].Z, order[i].FrontDistance));
             }
             if (points == null || points.Count > MaxPoints) return;
             for (int i = 0; i < points.Count; i++)
-                if (Finite(points[i].X, points[i].Z))
+                if (float.IsFinite(points[i].X) && float.IsFinite(points[i].Z))
                     into.Add(new NodeSeed(points[i].Kind, points[i].Key, points[i].X, points[i].Z, points[i].FrontDistance));
         }
 
-        private static bool Finite(float x, float z) => !float.IsNaN(x) && !float.IsInfinity(x) && !float.IsNaN(z) && !float.IsInfinity(z);
     }
 
     /// <summary>Small opaque node ids per faction: (kind, key) maps to the same id for the whole mission. 0 is never an id.</summary>

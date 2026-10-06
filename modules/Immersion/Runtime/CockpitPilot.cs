@@ -193,7 +193,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 object control = array.GetValue(i);
                 if (control == null || transformField.GetValue(control) as Transform != lever) continue;
                 object rangeValue = (joystick ? StickRange : ThrottleRange)?.GetValue(control);
-                if (!(rangeValue is float range) || !PilotPoseMath.Finite(range)) return;
+                if (!(rangeValue is float range) || !float.IsFinite(range)) return;
                 bool rotation = joystick || ThrottleRotation?.GetValue(control) is bool rotates && rotates;
                 bool motion = !joystick && ThrottleMotion?.GetValue(control) is bool moves && moves;
                 float maximum = 0f;

@@ -276,7 +276,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             else if (kind == EventResponseKind.Treasury)
             {
                 if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null ||
-                    !Finite(player.HQ.factionFunds)) reason = "TREASURY UNAVAILABLE";
+                    !float.IsFinite(player.HQ.factionFunds)) reason = "TREASURY UNAVAILABLE";
                 else if (player.HQ.factionFunds + 0.001f < cost) reason = "INSUFFICIENT FACTION FUNDS";
             }
             else if (kind == EventResponseKind.Contract)
@@ -351,7 +351,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 cost = EventSelector.ResponseCost(baseMultiplier);
                 if (cost <= 0) return EventResponseResult.NoEffect;
                 if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
-                if (!Finite(player.Allocation) || player.Allocation + 0.001f < cost)
+                if (!float.IsFinite(player.Allocation) || player.Allocation + 0.001f < cost)
                     return EventResponseResult.Insufficient;
                 player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
                 kind = available;
@@ -366,7 +366,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 {
                     cost = EventSelector.TreasuryCost(baseMultiplier);
                     if (cost <= 0) return EventResponseResult.NoEffect;
-                    if (!Finite(hq.factionFunds)) return EventResponseResult.TreasuryUnavailable;
+                    if (!float.IsFinite(hq.factionFunds)) return EventResponseResult.TreasuryUnavailable;
                     if (hq.factionFunds + 0.001f < cost) return EventResponseResult.InsufficientFunds;
                     hq.AddFunds(-cost);
                     kind = EventResponseKind.Treasury;
@@ -511,7 +511,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             }
 
             float now = mission.MissionTime;
-            if (!Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             // A warm restart of the same mission rewinds the clock under an unchanged
             // identity; without this the director would stay quiet until it caught up.
             if (now + 0.001f < lastMissionTime)
@@ -849,7 +849,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 Faction.ConvoyGroup group = groups[i];
                 if (group == null) continue;
                 float cost = group.GetCost();
-                if (!Finite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
+                if (!float.IsFinite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
                 if (hq.CmdGetDelaySpawnConvoy((byte)i) > 0f) continue;
                 chosen = group;
                 chosenCost = cost;
@@ -875,7 +875,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
         internal void ApplyRemote(sbyte catalogIndex, int remoteTargetHash, float start, float end,
             float effectStrength, int[] responseFactions, byte[] responseKinds)
         {
-            if (!Finite(start) || !Finite(end) || !Finite(effectStrength) ||
+            if (!float.IsFinite(start) || !float.IsFinite(end) || !float.IsFinite(effectStrength) ||
                 effectStrength < 0f || effectStrength > 2f ||
                 responseFactions == null || responseKinds == null ||
                 responseFactions.Length != responseKinds.Length ||
@@ -1028,6 +1028,5 @@ namespace BoscaliSummer.Modules.Events.Runtime
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null
                 ? HashOf(player.HQ) : 0;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

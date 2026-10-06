@@ -16,8 +16,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         {
             x = z = tangentX = tangentZ = 0f;
             if (points == null || lengths == null || traceCount <= 0 ||
-                traceCount > lengths.Length || !Finite(targetX) || !Finite(targetZ) || lane < 0 ||
-                !Finite(maximumDistance) || maximumDistance < 0f)
+                traceCount > lengths.Length || !float.IsFinite(targetX) || !float.IsFinite(targetZ) || lane < 0 ||
+                !float.IsFinite(maximumDistance) || maximumDistance < 0f)
                 return false;
 
             float best = float.MaxValue;
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                     float dx = points[i + 1].X - points[i].X;
                     float dz = points[i + 1].Z - points[i].Z;
                     float square = dx * dx + dz * dz;
-                    if (!Finite(square) || square < 1f) continue;
+                    if (!float.IsFinite(square) || square < 1f) continue;
                     float part = ((targetX - points[i].X) * dx +
                                   (targetZ - points[i].Z) * dz) / square;
                     part = Math.Max(0f, Math.Min(1f, part));
@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                     float pz = points[i].Z + part * dz;
                     float distance = (targetX - px) * (targetX - px) +
                                      (targetZ - pz) * (targetZ - pz);
-                    if (!Finite(distance) || distance >= best) continue;
+                    if (!float.IsFinite(distance) || distance >= best) continue;
                     float inverse = 1f / (float)Math.Sqrt(square);
                     best = distance;
                     x = px;
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             x += column * LaneSpacing * tangentX;
             z += column * LaneSpacing * tangentZ;
             float targetDx = x - targetX, targetDz = z - targetZ;
-            return Finite(x) && Finite(z) &&
+            return float.IsFinite(x) && float.IsFinite(z) &&
                 targetDx * targetDx + targetDz * targetDz <= maximumDistance * maximumDistance;
         }
 
@@ -67,6 +67,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         internal static int PincerAxis(int rank, int viableGroups) =>
             viableGroups < 2 ? 0 : rank == 0 ? -1 : rank == 1 ? 1 : 0;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

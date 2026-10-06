@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 min = Vector2.Min(min, new Vector2(point.x, point.y)); max = Vector2.Max(max, new Vector2(point.x, point.y));
             }
             Vector2 size = max - min + new Vector2(.08f, .08f);
-            if (!PilotPoseMath.Finite(size.x) || !PilotPoseMath.Finite(size.y) || size.x <= .01f || size.y <= .01f) return;
+            if (!float.IsFinite(size.x) || !float.IsFinite(size.y) || size.x <= .01f || size.y <= .01f) return;
             captureRect = new Vector4(min.x - .04f, min.y - .04f, size.x, size.y);
             Vector3 position = planeToWorld.MultiplyPoint3x4(new Vector3((min.x + max.x) * .5f, (min.y + max.y) * .5f, 3f));
             Quaternion rotation = Quaternion.LookRotation(-rig.Frame.forward, rig.Frame.up);

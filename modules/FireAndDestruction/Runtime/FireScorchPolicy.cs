@@ -1,3 +1,5 @@
+using BoscaliSummer.Core.Math;
+
 namespace BoscaliSummer.Fire
 {
     /// <summary>
@@ -51,9 +53,6 @@ namespace BoscaliSummer.Fire
         /// campaign cannot turn a single front into a landscape-wide scar.
         /// </summary>
         private static float ClusterGrowth(float clusterScale) =>
-            0.85f + 0.15f * Clamp(clusterScale, 1f, 3f);
-
-        private static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
+            0.85f + 0.15f * Scalar.Clamp(clusterScale, 1f, 3f);
     }
 }

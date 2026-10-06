@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {
@@ -55,14 +56,14 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
                 s.X += s.Vx * t;
                 s.Z += s.Vz * t;
             }
-            s.X = Clamp(s.X, minX, maxX);
-            s.Z = Clamp(s.Z, minZ, maxZ);
+            s.X = Scalar.Clamp(s.X, minX, maxX);
+            s.Z = Scalar.Clamp(s.Z, minZ, maxZ);
             s.Vy = 0f;
             bool field = pile != null && pile.Length >= Grid * Grid;
             for (int step = 0; step < SlideSteps; step++)
             {
-                s.X = Clamp(s.X + s.Vx * SlideDt, minX, maxX);
-                s.Z = Clamp(s.Z + s.Vz * SlideDt, minZ, maxZ);
+                s.X = Scalar.Clamp(s.X + s.Vx * SlideDt, minX, maxX);
+                s.Z = Scalar.Clamp(s.Z + s.Vz * SlideDt, minZ, maxZ);
                 if (s.X <= minX || s.X >= maxX) s.Vx = 0f;
                 if (s.Z <= minZ || s.Z >= maxZ) s.Vz = 0f;
                 s.Y = groundY + (field ? pile[Cell(s.X, s.Z, originX, originZ, span)] : 0f) + s.Thick * 0.5f;
@@ -70,8 +71,8 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
                 s.Vz *= 0.42f;
                 if (s.Vx * s.Vx + s.Vz * s.Vz < StopSpeed * StopSpeed) break;
             }
-            s.X = Clamp(s.X, minX, maxX);
-            s.Z = Clamp(s.Z, minZ, maxZ);
+            s.X = Scalar.Clamp(s.X, minX, maxX);
+            s.Z = Scalar.Clamp(s.Z, minZ, maxZ);
             float piled = field ? pile[Cell(s.X, s.Z, originX, originZ, span)] : 0f;
             s.Y = groundY + piled + s.Thick * 0.5f;
             s.Vx = 0f;
@@ -130,13 +131,6 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
                 z = homeZ + dz * scale;
             }
             return power < 1f ? 8f : (float)Math.Min(22f, 8f + power * 0.3f);
-        }
-
-        private static float Clamp(float value, float lo, float hi)
-        {
-            if (value < lo) return lo;
-            if (value > hi) return hi;
-            return value;
         }
     }
 }

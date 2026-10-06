@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal void SetObjective(FactionHQ hq, string key, GlobalPosition position, NavalRole role)
         {
             if (!Enabled || hq == null || hq.faction == null || string.IsNullOrEmpty(key) ||
-                !Finite(position.x) || !Finite(position.z)) return;
+                !float.IsFinite(position.x) || !float.IsFinite(position.z)) return;
             if (!tasks.TryGetValue(hq, out Task task))
             {
                 if (tasks.Count >= MaximumFactions)
@@ -114,7 +114,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             RoadPathfinding.RoadNetwork seaLanes = level == null ? null : level.seaLanes;
             if (seaLanes == null || !seaLanes.TryGetNearestPoint(requested,
                     out GlobalPosition snapped, out _) ||
-                !Finite(snapped.x) || !Finite(snapped.z) ||
+                !float.IsFinite(snapped.x) || !float.IsFinite(snapped.z) ||
                 FastMath.Distance(requested, snapped) > MaximumSeaLaneOffset ||
                 !NavalTask.WithinAssignment(task.Position.x, task.Position.z, snapped.x, snapped.z) ||
                 !NavalTask.WithinAssignment(here.x, here.z, snapped.x, snapped.z))
@@ -127,7 +127,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private bool Enabled => settings != null && settings.Enabled.Value && GameAccess.IsServer();
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     [HarmonyPatch(typeof(ShipAI), "ChooseTarget")]

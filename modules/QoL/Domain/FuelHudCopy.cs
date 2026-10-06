@@ -27,17 +27,16 @@ namespace BoscaliSummer.Modules.QoL.Domain
 
         public static HudTone Tone(float level)
         {
-            if (!Finite(level)) return HudTone.Info;
+            if (!float.IsFinite(level)) return HudTone.Info;
             if (level <= WarningLevel) return HudTone.Warning;
             return level <= CautionLevel ? HudTone.Caution : HudTone.Info;
         }
 
         public static float Bar(float level)
         {
-            if (!Finite(level)) return 0f;
+            if (!float.IsFinite(level)) return 0f;
             return level < 0f ? 0f : level > 1f ? 1f : level;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

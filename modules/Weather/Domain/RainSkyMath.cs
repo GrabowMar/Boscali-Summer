@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -16,7 +17,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Floor for ambient dimming so a storm never turns the cockpit black.</summary>
         public const float MinAmbientMultiplier = 0.78f;
 
-        public static float FogMultiplier(float rain) => 1f + (MaxFogMultiplier - 1f) * Clamp01(rain);
+        public static float FogMultiplier(float rain) => 1f + (MaxFogMultiplier - 1f) * Scalar.Clamp01(rain);
 
         /// <summary>
         /// Pull the fog colour toward its own luminance (less saturated) and darken it a
@@ -24,23 +25,23 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// </summary>
         public static void FogTint(float rain, ref float r, ref float g, ref float b)
         {
-            float k = Clamp01(rain);
+            float k = Scalar.Clamp01(rain);
             if (k <= 0f) return;
             float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
             float grey = 0.35f * k;
             float dark = 1f - 0.14f * k;
-            r = Clamp01((r + (lum - r) * grey) * dark);
-            g = Clamp01((g + (lum - g) * grey) * dark);
-            b = Clamp01((b + (lum - b) * grey) * dark);
+            r = Scalar.Clamp01((r + (lum - r) * grey) * dark);
+            g = Scalar.Clamp01((g + (lum - g) * grey) * dark);
+            b = Scalar.Clamp01((b + (lum - b) * grey) * dark);
         }
 
-        public static float AmbientMultiplier(float rain) => 1f - (1f - MinAmbientMultiplier) * Clamp01(rain);
+        public static float AmbientMultiplier(float rain) => 1f - (1f - MinAmbientMultiplier) * Scalar.Clamp01(rain);
 
         /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 28 %.</summary>
-        public static float ShadeAmbient(float shade) => 1f - 0.28f * Clamp01(shade);
+        public static float ShadeAmbient(float shade) => 1f - 0.28f * Scalar.Clamp01(shade);
 
         /// <summary>Extra low haze under a cloud deck: up to 35 % thicker.</summary>
-        public static float ShadeFog(float shade) => 1f + 0.35f * Clamp01(shade);
+        public static float ShadeFog(float shade) => 1f + 0.35f * Scalar.Clamp01(shade);
 
         /// <summary>
         /// True when a value read back equals the one we last wrote (float re-read noise
@@ -59,13 +60,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static void StreakColor(float fogR, float fogG, float fogB, float lightLevel,
             out float r, out float g, out float b)
         {
-            float light = Math.Max(Clamp01(lightLevel), 0.22f) * 0.55f;
+            float light = Math.Max(Scalar.Clamp01(lightLevel), 0.22f) * 0.55f;
             const float blend = 0.45f;
             r = (fogR + (0.80f - fogR) * blend) * light;
             g = (fogG + (0.86f - fogG) * blend) * light;
             b = (fogB + (0.95f - fogB) * blend) * light;
         }
-
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
     }
 }

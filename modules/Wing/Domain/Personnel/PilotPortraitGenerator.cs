@@ -115,11 +115,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
             PortraitBody body = selection.Body == PortraitBody.Female ? PortraitBody.Female : PortraitBody.Male;
             return new PortraitSelection(
                 body,
-                Clamp(selection.Face, 0, FacesPerBody - 1),
-                Clamp(selection.Hair, 0, HairCount - 1),
-                Clamp(selection.Uniform, 0, UniformCount - 1),
-                Clamp(selection.Accessory, 0, AccessoryCount - 1),
-                Clamp(selection.Backdrop, 0, BackdropCount - 1));
+                Math.Clamp(selection.Face, 0, FacesPerBody - 1),
+                Math.Clamp(selection.Hair, 0, HairCount - 1),
+                Math.Clamp(selection.Uniform, 0, UniformCount - 1),
+                Math.Clamp(selection.Accessory, 0, AccessoryCount - 1),
+                Math.Clamp(selection.Backdrop, 0, BackdropCount - 1));
         }
 
         public static ResolvedPortraitParts Resolve(PortraitSelection selection)
@@ -152,7 +152,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string UniformLabel(int uniform)
         {
-            switch (Clamp(uniform, 0, UniformCount - 1))
+            switch (Math.Clamp(uniform, 0, UniformCount - 1))
             {
                 case 1: return "BDF COMMANDER";
                 case 2: return "PALA PILOT";
@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string AccessoryLabel(int accessory)
         {
-            switch (Clamp(accessory, 0, AccessoryCount - 1))
+            switch (Math.Clamp(accessory, 0, AccessoryCount - 1))
             {
                 case 1: return "GLASSES";
                 case 2: return "COMMS HEADSET";
@@ -188,7 +188,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string BackdropLabel(int backdrop)
         {
-            switch (Clamp(backdrop, 0, BackdropCount - 1))
+            switch (Math.Clamp(backdrop, 0, BackdropCount - 1))
             {
                 case 1: return "HANGAR";
                 case 2: return "FLIGHT DECK";
@@ -301,8 +301,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return finished;
         }
 
-        private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(max, value));
-
         private static int[] HeadsetBandRows(byte[] atlas, int faceTile, int equipmentTile)
         {
             int Alpha(int tile, int x, int top) => atlas[((AtlasHeight - (tile / AtlasColumns + 1) * Height + Height - 1 - top) *
@@ -318,7 +316,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             const int join = 95;
             var rows = new int[Height];
             for (int top = 0; top < Height; top++)
-                rows[top] = top >= join ? top : Clamp((int)Math.Round(join + (top - join) *
+                rows[top] = top >= join ? top : Math.Clamp((int)Math.Round(join + (top - join) *
                     (join - bandBottom) / (double)(join - crown)), 0, Height - 1);
             rows[0] = 0;
             return rows;

@@ -329,7 +329,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     !(objective is IObjectiveWithPosition positioned) || positioned.Positions.Count == 0)
                     return;
                 GlobalPosition point = positioned.Positions[0].Position;
-                if (!Finite(point.x) || !Finite(point.z)) return;
+                if (!float.IsFinite(point.x) || !float.IsFinite(point.z)) return;
                 string key = objective.SavedObjective.UniqueName;
                 if (string.IsNullOrEmpty(key)) return;
                 for (int i = 0; i < war.Candidates.Count; i++)
@@ -356,7 +356,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     if (length < 2) break;
                     FrontlineTracePoint point = tracePoints[start + (length - 1) * part / 4];
-                    if (!Finite(point.X) || !Finite(point.Z)) continue;
+                    if (!float.IsFinite(point.X) || !float.IsFinite(point.Z)) continue;
                     int gx = Mathf.FloorToInt(point.X / LocalSectorSize);
                     int gz = Mathf.FloorToInt(point.Z / LocalSectorSize);
                     string key = "S:" + gx + ":" + gz;
@@ -403,7 +403,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GlobalPosition position;
                 if (friendly) position = unit.GlobalPosition();
                 else if (!war.HQ.TryGetKnownPosition(unit, out position)) continue;
-                if (!Finite(position.x) || !Finite(position.z)) continue;
+                if (!float.IsFinite(position.x) || !float.IsFinite(position.z)) continue;
                 for (int j = 0; j < war.Candidates.Count; j++)
                 {
                     FrontCandidate front = war.Candidates[j];
@@ -633,7 +633,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             out PriorityDirective directive, out bool offensive)
         {
             directive = default; offensive = false;
-            if (!Authoritative || !Finite(x) || !Finite(z) || hq?.faction == null ||
+            if (!Authoritative || !float.IsFinite(x) || !float.IsFinite(z) || hq?.faction == null ||
                 !wars.TryGetValue(hq.faction.factionName, out FactionWar war)) return false;
             if (war.GroupAssignments.TryGetValue(groupId, out var assigned))
             {
@@ -849,5 +849,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal bool HasSnapshotFor(string faction) =>
             wars.TryGetValue(faction, out FactionWar war) && war.HasSnapshot;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);    }
+    }
 }

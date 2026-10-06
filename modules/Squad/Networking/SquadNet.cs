@@ -115,9 +115,8 @@ namespace BoscaliSummer.Modules.Squad.Networking
         private void OnDestroy()
         { ServerHandlers.Release(); ClientHandlers.Release(); ResetScene(); }
 
-        private static string Text(string text) => NetText.Clip(text, 192);
-        private static void WriteText(NetworkWriter w, string text) => w.WriteString(Text(text));
-        private static string ReadText(NetworkReader r) => Text(r.ReadString());
+        private static void WriteText(NetworkWriter w, string text) => w.WriteString(NetText.Clip(text, 192));
+        private static string ReadText(NetworkReader r) => NetText.Clip(r.ReadString(), 192);
         private static int ReadInt(NetworkReader r, int maximum, ref bool valid)
         {
             int value = r.ReadPackedInt32();

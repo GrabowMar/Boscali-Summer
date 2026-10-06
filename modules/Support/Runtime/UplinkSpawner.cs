@@ -134,9 +134,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (parts == null || parts.Count == 0 || parts.Count > 256) return 0f;
             float total = 0f;
             for (int i = 0; i < parts.Count; i++)
-                if (parts[i] != null && !parts[i].IsDetached() && SpaceFinite(parts[i].hitPoints))
+                if (parts[i] != null && !parts[i].IsDetached() && float.IsFinite(parts[i].hitPoints))
                     total += Mathf.Max(0f, parts[i].hitPoints);
-            return SpaceFinite(total) ? total : 0f;
+            return float.IsFinite(total) ? total : 0f;
         }
 
         internal static bool Down(Unit unit, FactionHQ owner)
@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             GlobalPosition global = local.ToGlobalPosition();
             float diagonal = span.magnitude;
             float exclusion = Mathf.Clamp(500f * Mathf.Clamp(diagonal / 150000f, 0.4f, 2.5f), 250f, 1000f);
-            if (!SpaceFinite(local.x) || !SpaceFinite(local.y) || !SpaceFinite(local.z) ||
+            if (!float.IsFinite(local.x) || !float.IsFinite(local.y) || !float.IsFinite(local.z) ||
                 Math.Abs(global.x) > span.x * 0.5f - exclusion || Math.Abs(global.z) > span.y * 0.5f - exclusion) return false;
             if (FactionRegistry.airbaseLookup != null)
             {
@@ -233,6 +233,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float x = a.x - b.x, z = a.z - b.z;
             return x * x + z * z;
         }
-        private static bool SpaceFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

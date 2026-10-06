@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -19,10 +20,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Seconds until the next strike for a unit random and rain, or infinity.</summary>
         public static float NextDelay(float unit, float rain)
         {
-            float r = Clamp01(rain);
+            float r = Scalar.Clamp01(rain);
             if (r < MinRain) return float.PositiveInfinity;
             float t = (r - MinRain) / (1f - MinRain);
-            return (MaxInterval + (MinInterval - MaxInterval) * t) * (0.5f + Clamp01(unit));
+            return (MaxInterval + (MinInterval - MaxInterval) * t) * (0.5f + Scalar.Clamp01(unit));
         }
 
         /// <summary>Flash brightness t seconds after the bolt: main stroke plus restrike.</summary>
@@ -40,10 +41,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Thunder loudness for a strike distance, scaled by the master volume.</summary>
         public static float ThunderGain(float distanceM, float master) =>
-            Clamp(900f / (900f + Math.Max(0f, distanceM)), 0f, 1f) * Math.Max(0f, master);
-
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
-
-        private static float Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
+            Scalar.Clamp(900f / (900f + Math.Max(0f, distanceM)), 0f, 1f) * Math.Max(0f, master);
     }
 }

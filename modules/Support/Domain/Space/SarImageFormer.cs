@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public SarGeometry(double incidence, double rangeX, double rangeZ, double slantRange, double platformSpeed)
         {
-            Incidence = OrbitMath.Clamp(incidence, 5.0 * OrbitMath.Deg, 80.0 * OrbitMath.Deg);
+            Incidence = Math.Clamp(incidence, 5.0 * OrbitMath.Deg, 80.0 * OrbitMath.Deg);
             double length = Math.Sqrt(rangeX * rangeX + rangeZ * rangeZ);
             RangeX = length > 1e-9 ? rangeX / length : 0.0;
             RangeZ = length > 1e-9 ? rangeZ / length : 1.0;
@@ -157,7 +157,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
             for (int i = 0; i < n; i++)
             {
-                double t = OrbitMath.Clamp((db[i] - low) / (high - low), 0.0, 1.0);
+                double t = Math.Clamp((db[i] - low) / (high - low), 0.0, 1.0);
                 bytes[i] = (byte)Math.Round(Math.Pow(t, 0.9) * 255.0);
             }
             return bytes;

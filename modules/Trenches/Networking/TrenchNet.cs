@@ -283,7 +283,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
             {
                 float x = reader.ReadSingle();
                 float z = reader.ReadSingle();
-                if (!TrenchWire.Finite(x) || !TrenchWire.Finite(z)) return null;
+                if (!float.IsFinite(x) || !float.IsFinite(z)) return null;
                 trace[i] = new Vector3(x, 0f, z);
             }
             return trace;
@@ -377,7 +377,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         {
             if (trace == null) return true;
             for (int i = 0; i < trace.Length; i++)
-                if (!TrenchWire.Finite(trace[i].x) || !TrenchWire.Finite(trace[i].z)) return false;
+                if (!float.IsFinite(trace[i].x) || !float.IsFinite(trace[i].z)) return false;
             return true;
         }
 

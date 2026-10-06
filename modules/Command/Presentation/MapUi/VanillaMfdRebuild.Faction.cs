@@ -302,8 +302,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float morale = FactionResourceHistoryStore.Morale(hq);
                 float funds = hq.factionFunds;
                 int warheads = hq.GetWarheadStockpile();
-                bool manpowerKnown = MfdResourceHistory.Finite(manpower);
-                bool moraleKnown = MfdResourceHistory.Finite(morale);
+                bool manpowerKnown = float.IsFinite(manpower);
+                bool moraleKnown = float.IsFinite(morale);
 
                 resourceMetrics[0].Set(AvNum.Money(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE",
                     0f, funds < 0f ? AvState.Caution : AvState.Ready);
@@ -363,7 +363,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     for (int i = 0; i < count; i++)
                     {
                         float value = resourceHistory.Value(series, i);
-                        if (!MfdResourceHistory.Finite(value)) { run = 0; runStart = i + 1; continue; }
+                        if (!float.IsFinite(value)) { run = 0; runStart = i + 1; continue; }
                         resourceBuffer[run++] = value;
                     }
                     ResourceHistoryTile tile = history.Tiles[series];
@@ -406,7 +406,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (active == null || mission == null) return 0f;
                 float total = active.EndsAtMissionTime - active.StartedAtMissionTime;
                 float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!MfdResourceHistory.Finite(left) || !MfdResourceHistory.Finite(total)) { clock = "LIVE"; return 1f; }
+                if (!float.IsFinite(left) || !float.IsFinite(total)) { clock = "LIVE"; return 1f; }
                 clock = AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
                 return total > 0.5f ? Mathf.Clamp01(left / total) : 1f;
             }
@@ -787,7 +787,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Sprite seal = hq.faction == null ? null : hq.faction.factionColorLogo;
                 mandateFlag.Image.sprite = seal;
                 mandateFlag.Image.enabled = seal != null;
-                bool known = MfdResourceHistory.Finite(morale);
+                bool known = float.IsFinite(morale);
                 SecondaryObjectiveView contract = FeaturedContract(hq);
                 mandateHeadline.Set(known ? MandateName(morale) : "REPORT UNAVAILABLE",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
@@ -896,7 +896,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
                 if (active == null || mission == null) return "LIVE";
                 float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!MfdResourceHistory.Finite(left)) return "LIVE";
+                if (!float.IsFinite(left)) return "LIVE";
                 return AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
             }
 

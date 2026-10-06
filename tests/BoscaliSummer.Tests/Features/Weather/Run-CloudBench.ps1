@@ -20,7 +20,7 @@ if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists:
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.imageconversion":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/Core/Math/Deterministic.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs') { Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/" }

@@ -211,8 +211,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             WorldSizeX = ValidWorldSize(worldSizeX) ? worldSizeX : 100000f;
             WorldSizeY = ValidWorldSize(worldSizeY) ? worldSizeY : 100000f;
-            AlignmentX = IsFinite(alignmentX) ? alignmentX : 0f;
-            AlignmentY = IsFinite(alignmentY) ? alignmentY : 0f;
+            AlignmentX = float.IsFinite(alignmentX) ? alignmentX : 0f;
+            AlignmentY = float.IsFinite(alignmentY) ? alignmentY : 0f;
 
             int total = MaximumCells;
             holdStrength = new float[total];
@@ -238,7 +238,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// </summary>
         private void UpdateLayout(float requestedCellSize)
         {
-            float cell = IsFinite(requestedCellSize) ? Math.Max(requestedCellSize, MinimumCellSize) : DefaultCellSize;
+            float cell = float.IsFinite(requestedCellSize) ? Math.Max(requestedCellSize, MinimumCellSize) : DefaultCellSize;
             while (CellCount(cell) > MaximumCells && cell < 1000000f) cell *= 2f;
             CellSize = cell;
 
@@ -277,8 +277,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
         }
 
-        private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        private static bool ValidWorldSize(float value) => IsFinite(value) && value > 1000f && value <= 10000000f;
+        private static bool ValidWorldSize(float value) => float.IsFinite(value) && value > 1000f && value <= 10000000f;
 
         /// <summary>Starts a fresh observation snapshot while retaining control history.</summary>
         public void Clear()
@@ -336,7 +335,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
         {
             col = row = 0;
-            if (!IsFinite(worldX) || !IsFinite(worldZ) || CellSize <= 0f) return false;
+            if (!float.IsFinite(worldX) || !float.IsFinite(worldZ) || CellSize <= 0f) return false;
             double x = Math.Floor((worldX - OriginX) / CellSize);
             double z = Math.Floor((worldZ - OriginZ) / CellSize);
             col = (int)Math.Clamp(x, 0, ResolutionX - 1);
@@ -360,7 +359,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public bool TryNearestControlledEdge(float playerX, float playerZ, out float x, out float z)
         {
             x = z = 0;
-            if (!IsFinite(playerX) || !IsFinite(playerZ) || WorldSizeX < 8000 || WorldSizeY < 8000) return false;
+            if (!float.IsFinite(playerX) || !float.IsFinite(playerZ) || WorldSizeX < 8000 || WorldSizeY < 8000) return false;
             const float inset = 1200f, footprint = 900f, minimumDistance = 9000f;
             float halfX = WorldSizeX * 0.5f - inset, halfZ = WorldSizeY * 0.5f - inset;
             double best = double.MaxValue;
@@ -404,7 +403,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         public void RegisterNode(int id, string name, float worldX, float worldZ, SectorControl faction, float maxRadius, bool isAirbase)
         {
-            if (!WorldToCell(worldX, worldZ, out _, out _) || !IsFinite(maxRadius) || maxRadius < 0f ||
+            if (!WorldToCell(worldX, worldZ, out _, out _) || !float.IsFinite(maxRadius) || maxRadius < 0f ||
                 (faction != SectorControl.Friendly && faction != SectorControl.Hostile && faction != SectorControl.Neutral)) return;
             float radius = maxRadius > 0f ? Math.Clamp(maxRadius, 2000f, WorldSize) : WorldSize * 0.25f;
             for (int i = 0; i < nodes.Count; i++)
@@ -503,7 +502,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         public void AddTroopPresence(float worldX, float worldZ, float weight, bool isHostile, float influenceRadius = 12000f)
         {
-            if (!IsFinite(weight) || weight <= 0f || !IsFinite(influenceRadius) || influenceRadius < 0f ||
+            if (!float.IsFinite(weight) || weight <= 0f || !float.IsFinite(influenceRadius) || influenceRadius < 0f ||
                 !WorldToCell(worldX, worldZ, out int col, out int row)) return;
             weight = Math.Min(weight, 100f);
             float radius = Math.Min(influenceRadius, 16000f);
@@ -542,7 +541,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// </summary>
         public void EvaluateSectors(float elapsedSeconds = 0.5f)
         {
-            float elapsed = IsFinite(elapsedSeconds) ? Math.Clamp(elapsedSeconds, 0f, 300f) : 0f;
+            float elapsed = float.IsFinite(elapsedSeconds) ? Math.Clamp(elapsedSeconds, 0f, 300f) : 0f;
             int cellCount = TotalSectors;
             Array.Clear(nodeAnchors, 0, nodeAnchors.Length);
             for (int i = 0; i < nodes.Count; i++)
@@ -863,7 +862,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (((quad.Key >> 2) & 3) == (int)SectorControl.Contested)
                 {
                     float hold = holdStrength[quad.Y * ResolutionX + quad.X];
-                    float share = Math.Clamp((IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
+                    float share = Math.Clamp((float.IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
                     hash = HashStep(hash, (uint)(share * 256f));
                 }
             }
@@ -1053,7 +1052,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (texWidth < 1 || texHeight < 1 || texWidth > 1024 || texHeight > 1024)
                 throw new ArgumentOutOfRangeException(nameof(texWidth), "Tactical overlay dimensions must be 1..1024.");
-            globalOpacity = IsFinite(globalOpacity) ? Math.Clamp(globalOpacity, 0f, 1f) : 0f;
+            globalOpacity = float.IsFinite(globalOpacity) ? Math.Clamp(globalOpacity, 0f, 1f) : 0f;
             int totalPixels = texWidth * texHeight;
             if (pixelBuffer == null || pixelBuffer.Length != totalPixels || cachedTexWidth != texWidth || cachedTexHeight != texHeight)
             {
@@ -1133,7 +1132,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private int StripeRun(int index, int period)
         {
             float hold = holdStrength[index];
-            float share = Math.Clamp((IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
+            float share = Math.Clamp((float.IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
             return Math.Clamp((int)Math.Round(share * period), 1, period - 1);
         }
     }

@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>ZERO-DAY: every SAM launcher within 3 km of the node point stops launching for <paramref name="seconds"/>, through the same launch block a held SAM C2 node uses.</summary>
         internal bool AddSamNetFail(FactionHQ owner, in OpTarget target, float seconds)
         {
-            if (!TryDesk(owner, out CyberDesk desk) || !OpsRules.Finite(seconds) || seconds <= 0f) return false;
+            if (!TryDesk(owner, out CyberDesk desk) || !float.IsFinite(seconds) || seconds <= 0f) return false;
             float now = SupportManager.MissionNow();
             int id = 1000000 + (++opsEffectSerial);
             return desk.Effects.Add(new CyberEffect(EffectKind.SamBlock, EffectSource.Package, id, manager.FactionKeyOf(owner), target.Victim, target.X, target.Z, 3000f, 0u, 1f, now + seconds));

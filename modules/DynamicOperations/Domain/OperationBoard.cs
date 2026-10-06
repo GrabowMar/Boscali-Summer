@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public Operation(int id, int targetId, OperationKind kind, OperationReward reward,
             float now, int money, int xp, int chainDepth = 0)
         {
-            if (!Finite(now)) throw new ArgumentOutOfRangeException(nameof(now));
+            if (!float.IsFinite(now)) throw new ArgumentOutOfRangeException(nameof(now));
             Id = id; TargetId = targetId; Kind = kind; Reward = reward;
             ChainDepth = Math.Clamp(chainDepth, 0, OperationChains.MaximumDepth);
             Deadline = now + 300f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         public bool Accept(float now, string acceptedBy = null, ulong acceptor = 0)
         {
-            if (State != OperationState.Offered || !Finite(now) || now >= Deadline) return false;
+            if (State != OperationState.Offered || !float.IsFinite(now) || now >= Deadline) return false;
             State = OperationState.Active;
             AcceptedBy = acceptedBy ?? string.Empty;
             AcceptorId = acceptor;
@@ -80,12 +80,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         public void Cancel(float now)
         {
-            if (IsLive && Finite(now)) End(OperationState.Cancelled, now);
+            if (IsLive && float.IsFinite(now)) End(OperationState.Cancelled, now);
         }
 
         public bool BeginReturn(float now)
         {
-            if (State != OperationState.Active || Returning || !Finite(now) || now >= Deadline ||
+            if (State != OperationState.Active || Returning || !float.IsFinite(now) || now >= Deadline ||
                 !(Kind == OperationKind.Rescue || Kind == OperationKind.SortieReport) ||
                 Kind == OperationKind.SortieReport && HoldSeconds < HoldRequired) return false;
             Returning = true;
@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public void Observe(float now, float elapsed, bool valid, bool owned, bool neutralized, bool present = true, bool inserted = false,
             bool returned = false, bool serviced = false)
         {
-            if (!IsLive || !Finite(now)) return;
+            if (!IsLive || !float.IsFinite(now)) return;
             if (now >= Deadline) End(OperationState.Expired, now);
             else if (!valid || (Kind == OperationKind.Defend && !owned)) End(OperationState.Cancelled, now);
             else if (State == OperationState.Offered)
@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                 if (Kind == OperationKind.DamageAssessment && !neutralized) return;
                 if (!present) { HoldSeconds = 0f; return; }
                 // A scheduling stall cannot count minutes of unobserved defense.
-                if (Finite(elapsed) && elapsed > 0f) HoldSeconds += Math.Min(elapsed, 2f);
+                if (float.IsFinite(elapsed) && elapsed > 0f) HoldSeconds += Math.Min(elapsed, 2f);
                 if (HoldSeconds >= HoldRequired && Kind != OperationKind.SortieReport &&
                     (!(Kind == OperationKind.SupplyEscort || Kind == OperationKind.RepairCover) || serviced))
                     End(OperationState.Completed, now);
@@ -136,7 +136,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         }
 
         private void End(OperationState state, float now) { State = state; EndedAt = now; }
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     internal sealed class OperationBoard
@@ -172,7 +171,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         public void Prune(float now)
         {
-            if (!Operation.Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             for (int i = operations.Count - 1; i >= 0; i--)
                 if (!operations[i].IsLive && now - operations[i].EndedAt >= 60f)
                     operations.RemoveAt(i);

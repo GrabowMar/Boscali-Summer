@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             depthMetres = float.NaN;
             rings = -1;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(x) || !Finite(z) || !Finite(agl)) return false;
+            if (picture == null || !picture.Ready || !float.IsFinite(x) || !float.IsFinite(z) || !float.IsFinite(agl)) return false;
             RingGeometry.Coverage(picture.Rings, picture.RingCount, x, z, agl, ThreatPictureLimits.AllRingsMask,
                 out depthMetres, out rings, out _);
             return true;
@@ -139,8 +139,8 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             exposedMetres = float.NaN;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(ax) || !Finite(az) || !Finite(bx) || !Finite(bz) ||
-                !Finite(agl))
+            if (picture == null || !picture.Ready || !float.IsFinite(ax) || !float.IsFinite(az) || !float.IsFinite(bx) || !float.IsFinite(bz) ||
+                !float.IsFinite(agl))
                 return false;
             exposedMetres = RingGeometry.SegmentExposure(picture.Rings, picture.RingCount, ax, az, bx, bz, agl,
                 kindMask, out _);
@@ -170,7 +170,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             intel = AreaIntel.Unknown;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(x) || !Finite(z) || !(radius >= 0f)) return false;
+            if (picture == null || !picture.Ready || !float.IsFinite(x) || !float.IsFinite(z) || !(radius >= 0f)) return false;
             intel = AreaIntelReader.Read(picture.Known, picture.Grid, x, z, radius, Time.timeSinceLevelLoad);
             return true;
         }
@@ -301,6 +301,5 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             return unit is GroundVehicle || unit is Ship ? ObservationGrid.GroundRadius : 0f;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

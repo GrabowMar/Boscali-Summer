@@ -330,7 +330,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             catch { return false; }
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
+        private static bool Finite(Vector3 value) => float.IsFinite(value.x) && float.IsFinite(value.y) && float.IsFinite(value.z);
     }
 }

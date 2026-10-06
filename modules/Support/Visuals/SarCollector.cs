@@ -201,7 +201,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool AddApprovedContact(float relativeX, float relativeY, float relativeZ, float radialVelocity, float sigma)
         {
             if (former == null || Phase == SarPhase.Idle || Contacts >= SpaceWire.MaxContacts ||
-                !Finite(relativeX) || !Finite(relativeY) || !Finite(relativeZ) || !Finite(radialVelocity) || !Finite(sigma) || sigma <= 0f)
+                !float.IsFinite(relativeX) || !float.IsFinite(relativeY) || !float.IsFinite(relativeZ) || !float.IsFinite(radialVelocity) || !float.IsFinite(sigma) || sigma <= 0f)
                 return false;
             former.Add(relativeX, relativeY, relativeZ, sigma, radialVelocity);
             Contacts++;
@@ -215,7 +215,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         /// </summary>
         public bool AddApprovedContact(in FeedContact row)
         {
-            if (former == null || !Finite(row.X) || !Finite(row.Z) || approved.Contains(row.Id) || approved.Count >= SpaceWire.MaxContacts)
+            if (former == null || !float.IsFinite(row.X) || !float.IsFinite(row.Z) || approved.Contains(row.Id) || approved.Count >= SpaceWire.MaxContacts)
                 return false;
             var point = new GlobalPosition(row.X, 0f, row.Z);
             Vector3 local = point.ToLocalPosition();
@@ -231,7 +231,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool TryProject(in FeedContact row, out Vector2 uv)
         {
             uv = default;
-            if (former == null || !Finite(row.X) || !Finite(row.Z)) return false;
+            if (former == null || !float.IsFinite(row.X) || !float.IsFinite(row.Z)) return false;
             var point = new GlobalPosition(row.X, 0f, row.Z);
             Vector3 local = point.ToLocalPosition();
             if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
@@ -241,7 +241,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return true;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private void Cast(int index)
         {

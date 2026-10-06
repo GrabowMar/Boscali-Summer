@@ -241,7 +241,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal void FitControlReach(bool joystick, float maximumDistance)
         {
             float nativeLength = joystick == stickOnRight ? rightArmLength : leftArmLength;
-            if (!PilotPoseMath.Finite(maximumDistance) || nativeLength <= .001f) return;
+            if (!float.IsFinite(maximumDistance) || nativeLength <= .001f) return;
             // Fit the owned sleeve once to the authored full throw. Preserve glove size,
             // seat/head position and the existing small per-frame reach allowances.
             float fit = Mathf.Clamp(maximumDistance + .015f - nativeLength - GripReachAllowance - GripShoulderAllowance, 0f, GripRestAllowance);
@@ -391,14 +391,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Vector3 look = lookLocal.eulerAngles;
             float wantedPitch = Mathf.Clamp(Mathf.DeltaAngle(0, look.x), -45f, 35f);
             float wantedYaw = Mathf.Clamp(Mathf.DeltaAngle(0, look.y), -75f, 75f);
-            if (!PilotPoseMath.Finite(wantedPitch)) wantedPitch = 0f;
-            if (!PilotPoseMath.Finite(wantedYaw)) wantedYaw = 0f;
+            if (!float.IsFinite(wantedPitch)) wantedPitch = 0f;
+            if (!float.IsFinite(wantedYaw)) wantedYaw = 0f;
             headPitch = Mathf.Lerp(headPitch, wantedPitch, blend);
             headYaw = Mathf.Lerp(headYaw, wantedYaw, blend);
             if (motion)
             {
                 lean = Mathf.Lerp(lean, PilotPoseMath.TorsoDegrees(forceG.x, comfort), blend);
-                float brace = PilotPoseMath.Finite(forceG.y) ? Mathf.Clamp((forceG.y - 1f) * .2f, -.6f, 1.2f) * (comfort ? .25f : 1f) : 0f;
+                float brace = float.IsFinite(forceG.y) ? Mathf.Clamp((forceG.y - 1f) * .2f, -.6f, 1.2f) * (comfort ? .25f : 1f) : 0f;
                 pitchLean = Mathf.Lerp(pitchLean, Mathf.Clamp(PilotPoseMath.TorsoDegrees(forceG.z, comfort) + brace,
                     comfort ? -.5f : -2f, comfort ? .5f : 2f), blend);
                 Vector2 torso = Vector2.ClampMagnitude(new Vector2(pitchLean, lean), comfort ? .5f : 2f);
@@ -430,7 +430,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Vector3 reach = target - origin;
             float distance = reach.magnitude;
             if (a <= .001f || b <= .001f || distance <= .001f || distance > a + b + GripReachAllowance + GripShoulderAllowance ||
-                distance < Mathf.Abs(a - b) - GripReachAllowance || !PilotPoseMath.Finite(distance)) return;
+                distance < Mathf.Abs(a - b) - GripReachAllowance || !float.IsFinite(distance)) return;
             // A short reach of the owned shoulder covers side-stick corners without
             // moving the seat/head or increasing the existing arm-stretch allowance.
             // Native pose copying resets this displacement before every update.

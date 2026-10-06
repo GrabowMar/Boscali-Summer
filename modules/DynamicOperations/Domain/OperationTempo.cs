@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         internal static OperationTempoStage Stage(float current, float tactical, float strategic)
         {
-            if (!Finite(current) || !Finite(tactical) || !Finite(strategic)) return OperationTempoStage.Conventional;
+            if (!float.IsFinite(current) || !float.IsFinite(tactical) || !float.IsFinite(strategic)) return OperationTempoStage.Conventional;
             return (OperationTempoStage)BoscaliSummer.Core.Math.EscalationStage.Of(current, tactical, strategic);
         }
 
@@ -65,12 +65,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             return Math.Clamp(scale, MinimumReward, MaximumReward);
         }
 
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         internal static bool Finite(float current, float tactical, float strategic) =>
-            Finite(current) && Finite(tactical) && Finite(strategic);
+            float.IsFinite(current) && float.IsFinite(tactical) && float.IsFinite(strategic);
 
         /// <summary>Flatten and clamp a scale, the same way the director treats RewardMultiplier.</summary>
-        internal static float Scale(float value) => Math.Clamp(Finite(value) ? value : 1f, MinimumReward, MaximumReward);
+        internal static float Scale(float value) => Math.Clamp(float.IsFinite(value) ? value : 1f, MinimumReward, MaximumReward);
     }
 }

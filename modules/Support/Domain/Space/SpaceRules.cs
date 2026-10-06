@@ -41,7 +41,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return (s / 60).ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        internal static bool MissionTime(float value) => Finite(value) && value >= 0f;
+        internal static bool MissionTime(float value) => float.IsFinite(value) && value >= 0f;
     }
 }

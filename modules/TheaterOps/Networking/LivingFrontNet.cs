@@ -310,7 +310,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             return value == null || value.Length > max ? null : value;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static readonly MirageSerializers Seams = new MirageSerializers(
             "[TheaterOps]", " is missing; living front cannot replicate.");
@@ -451,10 +450,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 byte observedValue = r.ReadByte();
                 bool observed = observedValue == 1;
                 float age = r.ReadSingle();
-                if (string.IsNullOrEmpty(key) || label == null || status == null || !Finite(x) || !Finite(z) ||
-                    !Finite(pressure) || pressure < 0f || pressure > 1f ||
-                    !Finite(trend) || trend < -1f || trend > 1f ||
-                    !Finite(age) || age < -1f || age > 86400f || observedValue > 1) return default;
+                if (string.IsNullOrEmpty(key) || label == null || status == null || !float.IsFinite(x) || !float.IsFinite(z) ||
+                    !float.IsFinite(pressure) || pressure < 0f || pressure > 1f ||
+                    !float.IsFinite(trend) || trend < -1f || trend > 1f ||
+                    !float.IsFinite(age) || age < -1f || age > 86400f || observedValue > 1) return default;
                 value.Fronts[i] = new TheaterFrontView(key, label, x, z, status,
                     pressure, trend, observed, age);
             }
@@ -474,8 +473,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 float seconds = r.ReadSingle();
                 if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
                     label == null || brief == null || risk == null || forces == null ||
-                    !Finite(x) || !Finite(z) || !ValidKind(kind) ||
-                    !Finite(seconds) || seconds < 0f || seconds > LivingWarRules.OfferSeconds) return default;
+                    !float.IsFinite(x) || !float.IsFinite(z) || !ValidKind(kind) ||
+                    !float.IsFinite(seconds) || seconds < 0f || seconds > LivingWarRules.OfferSeconds) return default;
                 value.Proposals[i] = new TheaterProposalView(id, revision, kind, label,
                     key, x, z, brief, risk, forces, seconds);
             }
@@ -493,7 +492,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 int ground = r.ReadByte(), air = r.ReadByte(), naval = r.ReadByte();
                 if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
                     label == null || phase == null || summary == null ||
-                    !Finite(x) || !Finite(z) || !ValidKind(kind) ||
+                    !float.IsFinite(x) || !float.IsFinite(z) || !ValidKind(kind) ||
                     ground > 32 || air > 32 || naval > 32) return default;
                 value.Operation = new TheaterLiveOperationView(id, revision, kind, key,
                     label, x, z, phase, summary, ground, air, naval);

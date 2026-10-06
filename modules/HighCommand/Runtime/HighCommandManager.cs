@@ -232,7 +232,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             }
 
             float now = mission.MissionTime;
-            if (!Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             if (now < nextTick) return;
             nextTick = now + 1f;
             Tick(now);
@@ -527,7 +527,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private static float LogAge(float time, float now)
         {
             float age = now - time;
-            if (!Finite(age) || age <= 0f) return 0f;
+            if (!float.IsFinite(age) || age <= 0f) return 0f;
             return age < CommandSnapshotRules.MaximumLogAge ? age : CommandSnapshotRules.MaximumLogAge;
         }
 
@@ -614,6 +614,5 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         private static string Percent(float value) => Mathf.RoundToInt(Mathf.Clamp01(value) * 100f) + "%";
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

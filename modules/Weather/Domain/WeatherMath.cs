@@ -12,16 +12,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float Deg2Rad = (float)(Math.PI / 180.0);
         public const float Rad2Deg = (float)(180.0 / Math.PI);
 
-        public static float Clamp01(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
-
-        public static float Clamp(float x, float min, float max) => x < min ? min : x > max ? max : x;
-
         public static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
         /// <summary>Hermite smoothstep between two edges; the only easing the field uses.</summary>
         public static float Smoothstep(float edge0, float edge1, float x)
         {
-            float t = Clamp01((x - edge0) / (edge1 - edge0));
+            float t = Scalar.Clamp01((x - edge0) / (edge1 - edge0));
             return t * t * (3f - 2f * t);
         }
 
@@ -91,7 +87,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float n = ValueNoise(seed, x, y) * 0.57f
                     + ValueNoise(seed + 101u, x * 2.03f + 17.1f, y * 2.03f - 9.3f) * 0.29f
                     + ValueNoise(seed + 202u, x * 4.11f - 5.7f, y * 4.11f + 3.9f) * 0.14f;
-            return Clamp01(n);
+            return Scalar.Clamp01(n);
         }
     }
 }

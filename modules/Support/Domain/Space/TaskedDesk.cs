@@ -150,7 +150,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool SetImpact(float x, float z)
         {
-            if (Final || !SpaceRules.Finite(x) || !SpaceRules.Finite(z)) return false;
+            if (Final || !float.IsFinite(x) || !float.IsFinite(z)) return false;
             ImpactX = x; ImpactZ = z;
             return true;
         }
@@ -295,7 +295,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 float now = ports.Now;
                 if (retired || maker == 0 || maker == SpaceContacts.WatchOfficerId || nodeId <= 0 || !SpaceRules.MissionTime(now) ||
-                    !TaskedKinds.IsHostPost(action) || !SpaceRules.Finite(effort) || effort <= 0f)
+                    !TaskedKinds.IsHostPost(action) || !float.IsFinite(effort) || effort <= 0f)
                     return new TaskedResult(TaskedOutcome.Unavailable, 0, 0);
                 if (profile == null) profile = new TaskedHumanProfile(ports.Humans, now);
                 int humans = profile.Observe(ports.Humans, now);

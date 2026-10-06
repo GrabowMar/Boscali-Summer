@@ -224,7 +224,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 ClearLocal("Waiting for a running mission."); return;
             }
             float now = mission.MissionTime;
-            if (!AceCareer.Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             if (now < lastTime) { ResetForScene(); missionIdentity = current; }
             lastTime = now;
             if (GameAccess.IsServer())
@@ -320,7 +320,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         internal void RecordDamage(Unit victim, PersistentID dealer, float amount)
         {
             if (!GameAccess.IsServer() || !MissionManager.IsRunning || victim == null || victim.disabled ||
-                victim is Missile || victim is Scenery || !AceCareer.Finite(amount) || amount <= 0f) return;
+                victim is Missile || victim is Scenery || !float.IsFinite(amount) || amount <= 0f) return;
 
             Hunt aceHunt = null;
             for (int i = 0; i < hunts.Count; i++)

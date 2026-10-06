@@ -253,7 +253,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= MaximumCoordinate;
+        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= MaximumCoordinate;
         private bool RemoveReveal(int id)
         {
             confirmed.Remove(id);
@@ -262,7 +262,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool Deadline(float now, float lifetime, out float deadline)
         {
             deadline = now + lifetime;
-            return SpaceRules.Finite(deadline) && deadline > now;
+            return float.IsFinite(deadline) && deadline > now;
         }
     }
 }

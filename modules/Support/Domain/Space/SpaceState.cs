@@ -65,7 +65,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             get
             {
-                float jam = SpaceRules.Finite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
+                float jam = float.IsFinite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
                 for (int i = 0; i < health.Length; i++)
                     if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
                 return jam;
@@ -126,7 +126,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void SetUplink(int index, float nativeHealthFraction, bool isDown, float now)
         {
             if (index < 0 || index >= health.Length || !SpaceRules.MissionTime(now) ||
-                !SpaceRules.Finite(nativeHealthFraction) || nativeHealthFraction < 0f || nativeHealthFraction > 1f) return;
+                !float.IsFinite(nativeHealthFraction) || nativeHealthFraction < 0f || nativeHealthFraction > 1f) return;
             bool wasAllDown = LiveUplinkCount == 0;
             health[index] = isDown ? 0f : nativeHealthFraction;
             down[index] = isDown;
@@ -183,7 +183,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 now < birds[bird].ReservedAt || !SpaceRules.MissionTime(taskSeconds)) return false;
             float busyUntil = now + taskSeconds;
             float coolingUntil = now + SpaceRules.Cooldown(reservation.Task) * CooldownFactor;
-            return SpaceRules.Finite(busyUntil) && SpaceRules.Finite(coolingUntil);
+            return float.IsFinite(busyUntil) && float.IsFinite(coolingUntil);
         }
 
         public bool Commit(in SpaceTaskReservation reservation, float now, float taskSeconds)

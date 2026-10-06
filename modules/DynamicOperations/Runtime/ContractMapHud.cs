@@ -126,8 +126,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             float factor = map.mapDisplayFactor;
             float zoom = map.mapImage.transform.localScale.x;
-            if (!OperationMarkerCopy.Finite(factor) || factor <= 0f ||
-                !OperationMarkerCopy.Finite(zoom) || zoom <= 0f)
+            if (!float.IsFinite(factor) || factor <= 0f ||
+                !float.IsFinite(zoom) || zoom <= 0f)
             {
                 Hide();
                 return;

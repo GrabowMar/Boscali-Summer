@@ -425,19 +425,19 @@ namespace BoscaliSummer.Modules.Session.Networking
             MirageSerializers.Strict.Install<SessionHello>((Action<NetworkWriter, SessionHello>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-                w.WriteString(Bounded(v.Version, MaximumVersionLength));
+                w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
             }),
             (Func<NetworkReader, SessionHello>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SessionHello { Protocol = protocol };
-                return new SessionHello { Protocol = protocol, Version = Bounded(r.ReadString(), MaximumVersionLength) };
+                return new SessionHello { Protocol = protocol, Version = NetText.Clip(r.ReadString(), MaximumVersionLength) };
             }));
 
             MirageSerializers.Strict.Install<HostSettingsMessage>((Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-                w.WriteString(Bounded(v.Version, MaximumVersionLength));
+                w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
                 w.WriteByte(v.Flags);
                 int count = v.Keys == null || v.Values == null ? 0 : Math.Min(v.Keys.Length, v.Values.Length);
                 if (count > HostValueChunks.MaximumEntries) count = HostValueChunks.MaximumEntries;
@@ -453,7 +453,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 byte protocol = r.ReadByte();
                 var message = new HostSettingsMessage { Protocol = protocol };
                 if (protocol != ProtocolVersion) return message;
-                message.Version = Bounded(r.ReadString(), MaximumVersionLength);
+                message.Version = NetText.Clip(r.ReadString(), MaximumVersionLength);
                 message.Flags = r.ReadByte();
                 int count = r.ReadByte();
                 // An oversized or broken message is dropped whole; the handler ignores null arrays.
@@ -471,8 +471,5 @@ namespace BoscaliSummer.Modules.Session.Networking
             }));
 
         }
-
-        private static string Bounded(string value, int length) =>
-            value == null ? "" : value.Length <= length ? value : value.Substring(0, length);
     }
 }

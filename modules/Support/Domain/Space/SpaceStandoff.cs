@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float ReferenceDiagonal = 150000f, BaseMeters = 1500f, MinimumMeters = 800f, MaximumMeters = 3000f;
 
         public static float Scale(float mapDiagonal) =>
-            !SpaceRules.Finite(mapDiagonal) || mapDiagonal <= 0f ? 1f : Math.Max(.4f, Math.Min(2.5f, mapDiagonal / ReferenceDiagonal));
+            !float.IsFinite(mapDiagonal) || mapDiagonal <= 0f ? 1f : Math.Max(.4f, Math.Min(2.5f, mapDiagonal / ReferenceDiagonal));
 
         public static float Radius(float mapDiagonal) =>
             Math.Max(MinimumMeters, Math.Min(MaximumMeters, BaseMeters * Scale(mapDiagonal)));
@@ -22,8 +22,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// </summary>
         public static bool Violates(float impactX, float impactZ, float radius, float friendlyX, float friendlyZ)
         {
-            if (!SpaceRules.Finite(impactX) || !SpaceRules.Finite(impactZ) || !SpaceRules.Finite(radius) ||
-                !SpaceRules.Finite(friendlyX) || !SpaceRules.Finite(friendlyZ)) return true;
+            if (!float.IsFinite(impactX) || !float.IsFinite(impactZ) || !float.IsFinite(radius) ||
+                !float.IsFinite(friendlyX) || !float.IsFinite(friendlyZ)) return true;
             double dx = (double)friendlyX - impactX, dz = (double)friendlyZ - impactZ;
             return dx * dx + dz * dz <= (double)radius * radius;
         }

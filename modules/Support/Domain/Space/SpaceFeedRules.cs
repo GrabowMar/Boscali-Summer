@@ -161,15 +161,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!s.ValidOperator) return FeedCloseReason.InvalidOperator;
             if (requireOwnship && !s.ValidOwnship) return FeedCloseReason.InvalidOwnship;
             if (!focused) return FeedCloseReason.FocusLost;
-            if (SpaceRules.Finite(idleSeconds) && idleSeconds >= IdleSeconds) return FeedCloseReason.Idle;
+            if (float.IsFinite(idleSeconds) && idleSeconds >= IdleSeconds) return FeedCloseReason.Idle;
             return FeedCloseReason.None;
         }
 
-        private static bool TerrainOn(in CockpitThreatSnapshot s) => s.ValidOwnship && SpaceRules.Finite(s.TerrainUrgency) && s.TerrainUrgency > 0f;
+        private static bool TerrainOn(in CockpitThreatSnapshot s) => s.ValidOwnship && float.IsFinite(s.TerrainUrgency) && s.TerrainUrgency > 0f;
         private static bool MissileOn(in CockpitThreatSnapshot s) => s.ValidOwnship && s.MissileWarning;
         private static bool RwrOn(in CockpitThreatSnapshot s) => s.ValidOwnship && s.RwrSpike;
         private static bool BanditOn(in CockpitThreatSnapshot s) =>
-            s.ValidOwnship && SpaceRules.Finite(s.NearestKnownBanditMeters) && s.NearestKnownBanditMeters >= 0f && s.NearestKnownBanditMeters < BanditWarnMeters;
+            s.ValidOwnship && float.IsFinite(s.NearestKnownBanditMeters) && s.NearestKnownBanditMeters >= 0f && s.NearestKnownBanditMeters < BanditWarnMeters;
 
         /// <summary>The top critical warning: terrain, then missile, then RWR, then bandit. A ground operator has none.</summary>
         public static FeedThreat Threat(in CockpitThreatSnapshot s)
@@ -233,7 +233,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public static void CoverCrop(float areaAspect, float textureAspect, out float u0, out float v0, out float uw, out float vh)
         {
             u0 = 0f; v0 = 0f; uw = 1f; vh = 1f;
-            if (!SpaceRules.Finite(areaAspect) || !SpaceRules.Finite(textureAspect) || areaAspect <= 0.01f || textureAspect <= 0.01f) return;
+            if (!float.IsFinite(areaAspect) || !float.IsFinite(textureAspect) || areaAspect <= 0.01f || textureAspect <= 0.01f) return;
             if (areaAspect > textureAspect) { vh = textureAspect / areaAspect; v0 = (1f - vh) * 0.5f; }
             else if (areaAspect < textureAspect) { uw = areaAspect / textureAspect; u0 = (1f - uw) * 0.5f; }
         }
@@ -243,7 +243,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             areaX = (u - u0) / uw;
             areaY = (v - v0) / vh;
-            return SpaceRules.Finite(areaX) && SpaceRules.Finite(areaY) && areaX >= 0f && areaX <= 1f && areaY >= 0f && areaY <= 1f;
+            return float.IsFinite(areaX) && float.IsFinite(areaY) && areaX >= 0f && areaX <= 1f && areaY >= 0f && areaY <= 1f;
         }
 
         /// <summary>The one status line under the picture: live MARK count (a confirm at twelve answers NO CONTACT by design), uplinks, family.</summary>

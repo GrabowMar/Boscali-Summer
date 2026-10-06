@@ -838,7 +838,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (action != null && action.Id == SupportActionId.ElintSweep)
                     Status = name + " complete: " + Mathf.Max(0, message.Contacts) + " emitting radar(s) located.";
                 if (action != null && (action.Id == SupportActionId.Recon || action.Id == SupportActionId.MtiSweep) &&
-                    Finite(message.X) && Finite(message.Z))
+                    float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     RadarScanTarget = new GlobalPosition(message.X, message.Y, message.Z);
                     RadarScanContacts = Mathf.Max(0, message.Contacts);
@@ -846,7 +846,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Status = name + " accepted: imaging, " + RadarScanContacts +
                         (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
                 }
-                if (action != null && action.Id == SupportActionId.SatCamera && Finite(message.X) && Finite(message.Z))
+                if (action != null && action.Id == SupportActionId.SatCamera && float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
                     CameraSerial++;
@@ -856,9 +856,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                             action != null && action.Id == SupportActionId.Artillery ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
-                if (!Finite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
-                    !Finite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
-                    !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;
+                if (!float.IsFinite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
+                    !float.IsFinite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
+                    !float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z)) return;
                 if (eta <= 0f && action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise)) return;
                 RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action,
                     new GlobalPosition(message.X, message.Y, message.Z), message.Radius, eta, name, message.Duration);
@@ -876,7 +876,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal SupportResult Evaluate(Player player, SupportRequestMessage request)
         {
             if (player == null || player.HQ == null) return SupportResult.InvalidTarget;
-            if (!Finite(request.X) || !Finite(request.Y) || !Finite(request.Z) ||
+            if (!float.IsFinite(request.X) || !float.IsFinite(request.Y) || !float.IsFinite(request.Z) ||
                 Math.Abs(request.X) > 10000000f || Math.Abs(request.Y) > 10000000f || Math.Abs(request.Z) > 10000000f)
                 return SupportResult.InvalidTarget;
 
@@ -1167,11 +1167,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (message.X != null && message.Z != null)
                 for (int i = 0; i < legs && i < message.X.Length && i < message.Z.Length; i++)
                 {
-                    if (!Finite(message.X[i]) || !Finite(message.Z[i])) continue;
+                    if (!float.IsFinite(message.X[i]) || !float.IsFinite(message.Z[i])) continue;
                     mirror.Legs.Add(new GlobalPosition(message.X[i], 0f, message.Z[i]));
                 }
             cruiseLegs[message.RequestId] = mirror;
-            if (Finite(message.Tti) && message.Tti > 0f)
+            if (float.IsFinite(message.Tti) && message.Tti > 0f)
             {
                 SupportActionDefinition def = catalog != null ? catalog.Find(SupportActionId.Cruise) : null;
                 float linger = Math.Max(0f, known.Value.ExpiryTime - known.Value.ImpactTime);
@@ -1244,7 +1244,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>What Urban Combat may do on the ground for one faction: one position or camp.</summary>
         int IGroundForceReadiness.InsertionCamps(FactionHQ owner) => 1;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static string FactionKey(FactionHQ hq)
         {

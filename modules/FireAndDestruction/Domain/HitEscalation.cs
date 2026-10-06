@@ -1,3 +1,5 @@
+using BoscaliSummer.Core.Math;
+
 namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {
     /// <summary>
@@ -66,7 +68,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         internal static float BreachSize(float blastPower)
         {
             float size = MinBreachSize + Max(0f, blastPower) * 1.2f;
-            return Clamp(size, MinBreachSize, MaxBreachSize);
+            return Scalar.Clamp(size, MinBreachSize, MaxBreachSize);
         }
 
         /// <summary>
@@ -74,17 +76,14 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         /// clamped so sheds and hangars both leave a readable mark.
         /// </summary>
         internal static float GroundScarDiameter(float footprintX, float footprintZ) =>
-            Clamp(Max(footprintX, footprintZ) * GroundScarGrowth, MinGroundScar, MaxGroundScar);
+            Scalar.Clamp(Max(footprintX, footprintZ) * GroundScarGrowth, MinGroundScar, MaxGroundScar);
 
         /// <summary>
         /// Tree rows burn to an ash bed through the existing burn-scar pool rather than a
         /// building scar. Rows run ~113 m long, so the bed is wider than a wall scar.
         /// </summary>
         internal static float TreeRowAshDiameter(float footprintX, float footprintZ) =>
-            Clamp(Max(footprintX, footprintZ) * 0.9f, MinTreeRowAsh, MaxTreeRowAsh);
-
-        private static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
+            Scalar.Clamp(Max(footprintX, footprintZ) * 0.9f, MinTreeRowAsh, MaxTreeRowAsh);
 
         private static float Max(float a, float b) => a > b ? a : b;
     }

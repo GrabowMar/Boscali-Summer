@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Garrisons
 {
@@ -61,7 +62,7 @@ namespace BoscaliSummer.Garrisons
             float luminance = field.r * 0.299f + field.g * 0.587f + field.b * 0.114f;
             Color device = luminance > 0.52f ? new Color(0.08f, 0.08f, 0.09f) : new Color(0.93f, 0.91f, 0.82f);
             Color border = Color.Lerp(Color.black, field, 0.3f);
-            int seed = Seed(identity);
+            int seed = (int)(Deterministic.HashString(identity) & 0x7FFFFFFF);
             int pattern = ((seed >> 3) & 0x7FFFFFFF) % DeviceCount;
 
             var pixels = new Color[Width * Height];
@@ -109,14 +110,6 @@ namespace BoscaliSummer.Garrisons
                 default: // Saltire: a diagonal cross corner to corner.
                     return Mathf.Abs(u - v) < 0.13f || Mathf.Abs(u + v - 1f) < 0.13f;
             }
-        }
-
-        /// <summary>FNV-1a over ordinal characters: stable across sessions and clients.</summary>
-        private static int Seed(string identity)
-        {
-            uint hash = 2166136261u;
-            for (int i = 0; i < identity.Length; i++) hash = (hash ^ identity[i]) * 16777619u;
-            return (int)(hash & 0x7FFFFFFF);
         }
     }
 }

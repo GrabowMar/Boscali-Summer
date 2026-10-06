@@ -3,6 +3,7 @@ using System.Threading;
 using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
@@ -247,7 +248,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                             }
                             // A soft border fades the shadows out toward the cookie's edge.
                             float edge = Math.Min(Math.Min(x, Size - 1 - x), Math.Min(y, Size - 1 - y)) / 24f;
-                            float shade = 0.62f * (1f - (float)Math.Exp(-depth)) * WeatherMath.Clamp01(edge);
+                            float shade = 0.62f * (1f - (float)Math.Exp(-depth)) * Scalar.Clamp01(edge);
                             pixels[y * Size + x] = (byte)Math.Round((1f - shade) * 255f);
                         }
                     }

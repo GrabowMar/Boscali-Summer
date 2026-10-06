@@ -457,7 +457,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         break;
                 }
                 RaycastHit ground = default;
-                member.HasDestination = Finite(x) && Finite(z) &&
+                member.HasDestination = float.IsFinite(x) && float.IsFinite(z) &&
                     PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out ground) &&
                     ground.point.y >= Datum.LocalSeaY && ground.normal.y >= .55f;
                 if (member.HasDestination)
@@ -520,7 +520,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (Member member in group.Members) member.HasDestination = false;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private bool HasAuthority => GameAccess.IsServer() &&
             (LivingFrontService.Active?.Authoritative == true || priority?.Authoritative == true);

@@ -46,6 +46,5 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         public static bool ValidDefenders(int defenders) =>
             defenders >= 0 && defenders <= MaximumDefenders;
 
-        public static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

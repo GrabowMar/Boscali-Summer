@@ -17,17 +17,17 @@ namespace BoscaliSummer.Modules.Wing.Domain
             switch (field)
             {
                 case ApField.Heading:
-                    float h = Finite(spec.HeadingDeg) + dir * HeadingStep;
+                    float h = (float.IsFinite(spec.HeadingDeg) ? spec.HeadingDeg : 0f) + dir * HeadingStep;
                     spec.HeadingDeg = ((h % 360f) + 360f) % 360f;
                     break;
                 case ApField.Altitude:
-                    spec.AltitudeM = Step(Finite(spec.AltitudeM), AltitudeStep, dir, 0f, MaxAltitude);
+                    spec.AltitudeM = Step((float.IsFinite(spec.AltitudeM) ? spec.AltitudeM : 0f), AltitudeStep, dir, 0f, MaxAltitude);
                     break;
                 case ApField.VerticalSpeed:
-                    spec.VerticalSpeedMps = Step(Finite(spec.VerticalSpeedMps), VerticalSpeedStep, dir, -MaxVerticalSpeed, MaxVerticalSpeed);
+                    spec.VerticalSpeedMps = Step((float.IsFinite(spec.VerticalSpeedMps) ? spec.VerticalSpeedMps : 0f), VerticalSpeedStep, dir, -MaxVerticalSpeed, MaxVerticalSpeed);
                     break;
                 default:
-                    spec.SpeedMps = Step(Finite(spec.SpeedMps), SpeedStepKmh / 3.6f, dir, 0f, MaxSpeedKmh / 3.6f);
+                    spec.SpeedMps = Step((float.IsFinite(spec.SpeedMps) ? spec.SpeedMps : 0f), SpeedStepKmh / 3.6f, dir, 0f, MaxSpeedKmh / 3.6f);
                     break;
             }
         }
@@ -40,19 +40,18 @@ namespace BoscaliSummer.Modules.Wing.Domain
             switch (field)
             {
                 case ApField.Heading:
-                    int hdg = (int)Math.Round(Finite(spec.HeadingDeg)) % 360;
+                    int hdg = (int)Math.Round((float.IsFinite(spec.HeadingDeg) ? spec.HeadingDeg : 0f)) % 360;
                     if (hdg < 0) hdg += 360;
                     return hdg.ToString("000", CultureInfo.InvariantCulture) + "°";
                 case ApField.Altitude:
-                    return Finite(spec.AltitudeM).ToString("0", CultureInfo.InvariantCulture) + " m";
+                    return (float.IsFinite(spec.AltitudeM) ? spec.AltitudeM : 0f).ToString("0", CultureInfo.InvariantCulture) + " m";
                 case ApField.VerticalSpeed:
-                    return Finite(spec.VerticalSpeedMps).ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + " m/s";
+                    return (float.IsFinite(spec.VerticalSpeedMps) ? spec.VerticalSpeedMps : 0f).ToString("+0.0;-0.0;0.0", CultureInfo.InvariantCulture) + " m/s";
                 default:
-                    return (Finite(spec.SpeedMps) * 3.6f).ToString("0", CultureInfo.InvariantCulture) + " km/h";
+                    return ((float.IsFinite(spec.SpeedMps) ? spec.SpeedMps : 0f) * 3.6f).ToString("0", CultureInfo.InvariantCulture) + " km/h";
             }
         }
 
-        private static float Finite(float v) => float.IsNaN(v) || float.IsInfinity(v) ? 0f : v;
 
         /// <summary>A step in the direction pressed, stopped at the limit — a value already beyond it never moves back
         /// towards it against the press (review M7b-1 minor).</summary>

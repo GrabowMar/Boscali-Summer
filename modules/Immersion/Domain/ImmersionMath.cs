@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Immersion.Domain
 {
@@ -28,12 +29,12 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         }
 
         private static float FiniteClamp(float value, float limit) =>
-            float.IsNaN(value) || float.IsInfinity(value) ? 0f : Clamp(value, -limit, limit);
+            float.IsNaN(value) || float.IsInfinity(value) ? 0f : Scalar.Clamp(value, -limit, limit);
 
         public static float ExposureAudioCutoff(float positive, float negative)
         {
             if (float.IsNaN(positive) || float.IsNaN(negative)) return 22000f;
-            float exposure = Clamp(Math.Max(positive, negative * 0.85f), 0f, 1f);
+            float exposure = Scalar.Clamp(Math.Max(positive, negative * 0.85f), 0f, 1f);
             return 22000f * (float)Math.Pow(1200f / 22000f, exposure);
         }
 
@@ -49,11 +50,11 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             float load = forceY - 1f;
             // Compressed so 9 G is not three times 3 G: the neck braces.
             float pitch = Math.Sign(load) * 1.6f * (float)Math.Log(1f + Math.Abs(load)) - forceZ * 0.8f;
-            float roll = -forceX * 3.5f + Clamp(rollRateDeg / 90f, -1f, 1f) * 0.8f;
-            float yaw = Clamp(yawRateDeg / 20f, -1f, 1f) * 1.5f + Clamp(rollRateDeg / 180f, -1f, 1f) * 0.6f;
-            return (Clamp(pitch * strength, -MaxPitchDeg, MaxPitchDeg),
-                    Clamp(yaw * strength, -MaxYawDeg, MaxYawDeg),
-                    Clamp(roll * strength, -MaxRollDeg, MaxRollDeg));
+            float roll = -forceX * 3.5f + Scalar.Clamp(rollRateDeg / 90f, -1f, 1f) * 0.8f;
+            float yaw = Scalar.Clamp(yawRateDeg / 20f, -1f, 1f) * 1.5f + Scalar.Clamp(rollRateDeg / 180f, -1f, 1f) * 0.6f;
+            return (Scalar.Clamp(pitch * strength, -MaxPitchDeg, MaxPitchDeg),
+                    Scalar.Clamp(yaw * strength, -MaxYawDeg, MaxYawDeg),
+                    Scalar.Clamp(roll * strength, -MaxRollDeg, MaxRollDeg));
         }
 
         /// <summary>
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             if (dist >= 0.12f) return 0f;
             float norm = 1f - dist / 0.12f;
             float intensity = norm * norm * 0.28f * strength;
-            return Clamp(intensity, 0f, 0.5f);
+            return Scalar.Clamp(intensity, 0f, 0.5f);
         }
 
         /// <summary>
@@ -104,9 +105,9 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public static (float volume, float pitch) WindRush(float airspeedMps, float gLoad, float strength)
         {
             if (strength <= 0f || airspeedMps < 40f) return (0f, 1f);
-            float speedNorm = Clamp((airspeedMps - 40f) / 280f, 0f, 1f);
-            float gNorm = Clamp(gLoad / 8f, 0f, 0.4f);
-            float volume = Clamp((speedNorm * 0.72f + gNorm * 0.28f) * strength, 0f, 0.85f);
+            float speedNorm = Scalar.Clamp((airspeedMps - 40f) / 280f, 0f, 1f);
+            float gNorm = Scalar.Clamp(gLoad / 8f, 0f, 0.4f);
+            float volume = Scalar.Clamp((speedNorm * 0.72f + gNorm * 0.28f) * strength, 0f, 0.85f);
             float pitch = 0.85f + speedNorm * 0.5f + gNorm * 0.2f;
             return (volume, pitch);
         }
@@ -122,7 +123,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
 
             if (forceY > 4f)
             {
-                float excess = Clamp((forceY - 4f) / 5f, 0f, 1f); // 0 at 4G, 1 at 9G
+                float excess = Scalar.Clamp((forceY - 4f) / 5f, 0f, 1f); // 0 at 4G, 1 at 9G
                 float weight = excess;
                 float intensity = 0.25f + 0.45f * excess;
                 float saturation = -excess * 75f;
@@ -130,7 +131,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             }
             else if (forceY < -1f)
             {
-                float excess = Clamp((-forceY - 1f) / 3f, 0f, 1f); // 0 at -1G, 1 at -4G
+                float excess = Scalar.Clamp((-forceY - 1f) / 3f, 0f, 1f); // 0 at -1G, 1 at -4G
                 float weight = excess;
                 float intensity = 0.2f + 0.35f * excess;
                 return (weight, intensity, 0f, excess);
@@ -146,8 +147,8 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public static float SunVisibility(float sunElevationDeg, float cloudOcclusion, bool terrainBlocked)
         {
             if (terrainBlocked || sunElevationDeg <= -1f) return 0f;
-            float horizon = Clamp((sunElevationDeg + 1f) / 6f, 0f, 1f);
-            return horizon * Clamp(1f - cloudOcclusion, 0f, 1f);
+            float horizon = Scalar.Clamp((sunElevationDeg + 1f) / 6f, 0f, 1f);
+            return horizon * Scalar.Clamp(1f - cloudOcclusion, 0f, 1f);
         }
 
         /// <summary>
@@ -167,9 +168,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public static float CreakVolume(float jerkGPerSec, float thresholdGPerSec = 2.5f)
         {
             if (jerkGPerSec < thresholdGPerSec) return 0f;
-            return Clamp((jerkGPerSec - thresholdGPerSec) / 20f, 0.15f, 0.5f);
+            return Scalar.Clamp((jerkGPerSec - thresholdGPerSec) / 20f, 0.15f, 0.5f);
         }
-
-        private static float Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
     }
 }

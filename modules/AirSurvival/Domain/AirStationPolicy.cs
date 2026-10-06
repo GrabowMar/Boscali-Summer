@@ -19,16 +19,15 @@ namespace BoscaliSummer.Modules.AirSurvival.Domain
                                               out float stationX, out float stationZ)
         {
             stationX = stationZ = 0f;
-            if ((identity & 1) != 0 || !Finite(x) || !Finite(z) || !Finite(radius) ||
+            if ((identity & 1) != 0 || !float.IsFinite(x) || !float.IsFinite(z) || !float.IsFinite(radius) ||
                 radius < 0f || radius > 6000f) return false;
 
             float offset = radius * 0.35f;
             stationX = x + (((identity & 2) == 0) ? offset : -offset);
             stationZ = z + (((identity & 4) == 0) ? offset : -offset);
-            return Finite(stationX) && Finite(stationZ);
+            return float.IsFinite(stationX) && float.IsFinite(stationZ);
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     internal static class AirFlarePolicy
@@ -41,8 +40,8 @@ namespace BoscaliSummer.Modules.AirSurvival.Domain
         internal static bool ShouldPop(float distanceMeters, float closingMetersPerSecond,
             float flareProportion, bool alreadyFiring, float secondsSinceFlare)
         {
-            if (alreadyFiring || !Finite(distanceMeters) || !Finite(closingMetersPerSecond) ||
-                !Finite(flareProportion) || !Finite(secondsSinceFlare) ||
+            if (alreadyFiring || !float.IsFinite(distanceMeters) || !float.IsFinite(closingMetersPerSecond) ||
+                !float.IsFinite(flareProportion) || !float.IsFinite(secondsSinceFlare) ||
                 distanceMeters <= 0f || closingMetersPerSecond < 50f ||
                 flareProportion <= .05f || secondsSinceFlare < 3f)
                 return false;
@@ -50,6 +49,5 @@ namespace BoscaliSummer.Modules.AirSurvival.Domain
             return timeToImpact >= .15f && timeToImpact <= 3.5f;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

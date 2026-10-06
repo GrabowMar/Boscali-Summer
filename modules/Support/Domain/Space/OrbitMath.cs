@@ -16,8 +16,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public static double Radius(double altitude) => EarthRadius + Math.Max(0.0, altitude);
 
         public static double Velocity(double altitude) => Math.Sqrt(GravitationalParameter / Radius(altitude));
-
-        public static double Clamp(double value, double min, double max) =>
-            value < min ? min : value > max ? max : value;
     }
 }

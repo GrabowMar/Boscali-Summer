@@ -41,9 +41,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public void Place(float x, float y, float inverseZoom, float zoom)
         {
             root.anchoredPosition = new Vector2(x, y);
-            float scale = OperationMarkerCopy.Finite(inverseZoom) && inverseZoom > 0f ? inverseZoom : 1f;
+            float scale = float.IsFinite(inverseZoom) && inverseZoom > 0f ? inverseZoom : 1f;
             root.localScale = new Vector3(scale, scale, 1f);
-            float map = OperationMarkerCopy.Finite(zoom) && zoom > 0f ? zoom : 1f;
+            float map = float.IsFinite(zoom) && zoom > 0f ? zoom : 1f;
             ring.rectTransform.localScale = new Vector3(map, map, 1f);
         }
 

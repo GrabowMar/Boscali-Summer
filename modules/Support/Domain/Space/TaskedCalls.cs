@@ -47,18 +47,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (Id <= 0 || (!WatchOfficer && Maker == 0) || !TaskedFees.ValidProfile(HumanProfile) ||
                 !TaskedKinds.TryGet(Action, out _) || !SpaceRules.MissionTime(CreatedAt) ||
-                !SpaceRules.MissionTime(now) || now < CreatedAt || !SpaceRules.Finite(ExpiresAt) ||
+                !SpaceRules.MissionTime(now) || now < CreatedAt || !float.IsFinite(ExpiresAt) ||
                 ExpiresAt <= CreatedAt || now >= ExpiresAt || marks == null || marks.Length == 0 || shares == null) return false;
             for (int i = 0; i < marks.Length; i++)
             {
                 SpaceMark mark = marks[i];
                 if (mark.Id <= 0 || !Coordinate(mark.X) || !Coordinate(mark.Z) ||
-                    !SpaceRules.Finite(mark.ExpiresAt) || CreatedAt >= mark.ExpiresAt ||
+                    !float.IsFinite(mark.ExpiresAt) || CreatedAt >= mark.ExpiresAt ||
                     (mark.Source != BirdKind.Optical && mark.Source != BirdKind.Radar)) return false;
                 for (int j = 0; j < i; j++) if (marks[j].Id == mark.Id) return false;
             }
             for (int i = 0; i < shares.Length; i++)
-                if (shares[i].Player == 0 || !SpaceRules.Finite(shares[i].Effort) || shares[i].Effort < 0) return false;
+                if (shares[i].Player == 0 || !float.IsFinite(shares[i].Effort) || shares[i].Effort < 0) return false;
             return true;
         }
 
@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= 10000000f;
+        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= 10000000f;
     }
 
     internal readonly struct TaskedPostInfo
@@ -408,7 +408,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private static void ResetClaim(Entry entry) { entry.Status = Status.Available; entry.Claim = default; entry.Claims.Clear(); }
         private void Adjust(ulong player, float amount) { effortAdjustments.TryGetValue(player, out float existing); effortAdjustments[player] = existing + amount; }
-        private static bool Deadline(float now, float seconds, out float deadline) { deadline = now + seconds; return SpaceRules.Finite(deadline) && deadline > now; }
+        private static bool Deadline(float now, float seconds, out float deadline) { deadline = now + seconds; return float.IsFinite(deadline) && deadline > now; }
     }
 
     internal readonly struct ContributorPayout
@@ -476,7 +476,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             double total = 0;
             foreach (EffortShare share in verifiedShares)
             {
-                if (share.Player == 0 || !SpaceRules.Finite(share.Effort) || share.Effort < 0)
+                if (share.Player == 0 || !float.IsFinite(share.Effort) || share.Effort < 0)
                     return new FeeSettlement(chargedFee, Array.Empty<ContributorPayout>());
                 if (share.Effort == 0) continue;
                 int index = players.IndexOf(share.Player);

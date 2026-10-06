@@ -4,6 +4,7 @@ using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Core.Lifecycle;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
@@ -519,7 +520,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 float glideError = runwayUsage.GetGlideslopeError(aircraft, touchdownTime);
                 inputs.customAxis1 = aircraft.speed > 130f ? 0f : 0.35f - speedError * 0.1f;
                 float throttle = 0.8f - speedError * 0.05f +
-                    AutopilotLandPolicy.Clamp(0.5f - glideError * 0.1f, 0f, 1f);
+                    Scalar.Clamp(0.5f - glideError * 0.1f, 0f, 1f);
                 if (filter != null && filter.ReverseThrust && speedError > 10f) throttle = 1f;
                 throttle = Mathf.Max(throttle, 0.6f);
                 if (aircraft.speed > 130f) throttle = 0f;

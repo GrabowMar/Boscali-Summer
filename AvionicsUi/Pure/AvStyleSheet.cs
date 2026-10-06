@@ -361,7 +361,7 @@ namespace NOAvionics
                     case "opacity":
                         if (TryNumber(parts[0], out float op))
                         {
-                            style.Opacity = Clamp01(op);
+                            style.Opacity = Math.Clamp(op, 0f, 1f);
                             style.HasOpacity = true;
                         }
                         else Errors.Add("line " + line + ": opacity '" + parts[0] + "' is not a number");
@@ -385,7 +385,7 @@ namespace NOAvionics
                     case "glow":
                         if (TryNumber(parts[0], out float gl))
                         {
-                            style.Glow = Clamp01(gl);
+                            style.Glow = Math.Clamp(gl, 0f, 1f);
                             style.HasGlow = true;
                         }
                         else Errors.Add("line " + line + ": glow '" + parts[0] + "' is not a number");
@@ -501,8 +501,6 @@ namespace NOAvionics
             }
             return false;
         }
-
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
 
         private static bool TryNumber(string token, out float value) =>
             float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value);

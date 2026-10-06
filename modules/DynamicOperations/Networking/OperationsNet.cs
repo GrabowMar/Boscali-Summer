@@ -248,9 +248,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     float x = r.ReadSingle(), z = r.ReadSingle(), radius = r.ReadSingle();
                     string acceptedBy = PilotText(r.ReadString());
                     ObjectiveTasking tasking = ReadTasking(r);
-                    if (!Operation.Finite(progress) || !Operation.Finite(remaining) || progress < 0f || progress > 1f ||
+                    if (!float.IsFinite(progress) || !float.IsFinite(remaining) || progress < 0f || progress > 1f ||
                         remaining < 0f || remaining > 1200f || money < 0 || money > 100000 || xp < 0 || xp > 10000 ||
-                        !Operation.Finite(x) || !Operation.Finite(z) || !Operation.Finite(radius) || radius < 0f || radius > 1500f ||
+                        !float.IsFinite(x) || !float.IsFinite(z) || !float.IsFinite(radius) || radius < 0f || radius > 1500f ||
                         (offered && active) || (complete && (offered || active)) || (marker && !active) ||
                         !ValidTasking(tasking, offered, active, complete, marker))
                         throw new InvalidOperationException("Invalid operations snapshot values.");
@@ -306,7 +306,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             if (tasking.Family > ObjectiveFamily.Logistics || tasking.Asset > ObjectiveAsset.Site ||
                 tasking.Contact > ObjectiveContact.Lost || tasking.Lifecycle > ObjectiveLifecycle.Cancelled ||
                 tasking.Allegiance > ObjectiveAllegiance.Neutral ||
-                !Operation.Finite(tasking.ContactAgeSeconds) || tasking.ContactAgeSeconds < -1f || tasking.ContactAgeSeconds > 30f ||
+                !float.IsFinite(tasking.ContactAgeSeconds) || tasking.ContactAgeSeconds < -1f || tasking.ContactAgeSeconds > 30f ||
                 tasking.ContactAgeSeconds < 0f && tasking.ContactAgeSeconds != -1f ||
                 tasking.Phases.Length < 1 || tasking.Phases.Length > 3 ||
                 (tasking.Lifecycle == ObjectiveLifecycle.Offered) != offered ||
@@ -320,7 +320,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             {
                 ObjectivePhase phase = tasking.Phases[i];
                 if (phase == null || !ids.Add(phase.Id) || phase.Status > ObjectivePhaseStatus.Done ||
-                    !Operation.Finite(phase.Progress) || phase.Progress < 0f || phase.Progress > 1f ||
+                    !float.IsFinite(phase.Progress) || phase.Progress < 0f || phase.Progress > 1f ||
                     complete && phase.Status != ObjectivePhaseStatus.Done) return false;
                 if (phase.Status == ObjectivePhaseStatus.Current) current++;
             }

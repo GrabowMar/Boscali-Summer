@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Radio.Runtime
 {
@@ -100,7 +101,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
             float signal = TransmitPowerDbm - FreeSpaceLossDb(distanceKm) - penalty;
             float snr = signal - NoiseFloorDbm;
-            float quality = Clamp01(snr / FullScaleSnrDb);
+            float quality = Scalar.Clamp01(snr / FullScaleSnrDb);
             return new RadioReception(quality, distanceKm, horizon, penalty, signal);
         }
 
@@ -108,9 +109,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public static RadioReception OffAir => new RadioReception(0f, 0f, 0f, 0f, NoiseFloorDbm);
 
         public static float StaticFor(float quality) =>
-            Clamp01(1f - Math.Max(0f, quality) * 1.35f);
-
-        private static float Clamp01(float value) =>
-            value < 0f ? 0f : value > 1f ? 1f : value;
+            Scalar.Clamp01(1f - Math.Max(0f, quality) * 1.35f);
     }
 }

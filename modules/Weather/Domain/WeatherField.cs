@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -122,7 +123,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             HalfX = Math.Max(halfX, 1000f);
             HalfZ = Math.Max(halfZ, 1000f);
             HourOfDay = hourOfDay;
-            HazeScale = WeatherMath.Clamp(hazeScale, 0.05f, 1f);
+            HazeScale = Scalar.Clamp(hazeScale, 0.05f, 1f);
 
             TimelineState timeline = WeatherTimeline.Evaluate(key, time);
             Timeline = timeline;
@@ -155,7 +156,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float split = Split.Cover(x, z);
             float areaRain = p.AreaRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch) * split;
             float sheet = p.Overcast * split;
-            float coverBase = WeatherMath.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
+            float coverBase = Scalar.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
             point.BackgroundCover = coverBase;
 
             float windSpeed = BaseWindSpeed * p.WindFactor;
@@ -172,7 +173,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 frontRain += effect.Rain * front.Strength;
                 float cover = effect.Cover * front.Strength;
                 clearFront *= 1f - cover;
-                float underside = WeatherMath.Clamp(p.CloudBase + effect.BaseOffset, 250f, 8500f);
+                float underside = Scalar.Clamp(p.CloudBase + effect.BaseOffset, 250f, 8500f);
                 frontWeight += cover;
                 frontBaseSum += underside * cover;
                 frontTopSum += (underside + effect.Depth) * cover;
@@ -230,7 +231,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, p.Anvil);
                     // The spreading crown is lower away from the updraft. A literal flat
                     // shelf=1 across this radius made every ordinary storm a giant saucer.
-                    shelf *= 0.82f + 0.18f * WeatherMath.Clamp01(shape);
+                    shelf *= 0.82f + 0.18f * Scalar.Clamp01(shape);
                     if (shelf > column) column = shelf;
                 }
                 float cellCrown = cell.Base + (cell.Top - cell.Base) * column;
@@ -250,10 +251,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float rain = Math.Min(areaRain + frontRain + cellRain, MaxRainRate);
             point.RainRate = rain;
             point.ConvectiveShare = rain > 0.01f ? cellRain / (areaRain + frontRain + cellRain) : 0f;
-            point.Cover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearFront * clearCells * clearClusters);
-            point.FrontCover = WeatherMath.Clamp01(1f - clearFront);
-            point.ClusterCover = WeatherMath.Clamp01(1f - clearClusters);
-            point.CellCover = WeatherMath.Clamp01(1f - clearCells);
+            point.Cover = Scalar.Clamp01(1f - (1f - coverBase) * clearFront * clearCells * clearClusters);
+            point.FrontCover = Scalar.Clamp01(1f - clearFront);
+            point.ClusterCover = Scalar.Clamp01(1f - clearClusters);
+            point.CellCover = Scalar.Clamp01(1f - clearCells);
 
             if (frontWeight > 0f)
             {
@@ -265,8 +266,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             // A front may lower the rain-bearing ceiling, but a high leading shield must not
             // lift low cloud; the shield renders through FrontBase/FrontTop.
             cloudBase = WeatherMath.Lerp(cloudBase, Math.Min(cloudBase, point.FrontBase), point.FrontCover);
-            point.CloudBase = WeatherMath.Clamp(cloudBase, 250f, 3600f);
-            float stratiformCover = WeatherMath.Clamp01(1f - (1f - coverBase) * clearClusters);
+            point.CloudBase = Scalar.Clamp(cloudBase, 250f, 3600f);
+            float stratiformCover = Scalar.Clamp01(1f - (1f - coverBase) * clearClusters);
             CloudGenus genus = CloudShape.Resolve(p);
             float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, p.LayerDepth), genus.SheetBlend);
             deck = Math.Max(280f, deck);
@@ -279,16 +280,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             float haze = Math.Max(p.HazeKm * HazeScale, 0.5f);
             float extinction = 3.912f / haze + 0.25f * (float)Math.Pow(rain, 0.66);
-            point.VisibilityKm = WeatherMath.Clamp(3.912f / extinction, 0.3f, 50f);
+            point.VisibilityKm = Scalar.Clamp(3.912f / extinction, 0.3f, 50f);
 
             point.WindX = windX + outX;
             point.WindZ = windZ + outZ;
             point.WindUp = vertical;
             float outflow = (float)Math.Sqrt(outX * outX + outZ * outZ);
-            point.Turbulence = WeatherMath.Clamp01(turbulence);
+            point.Turbulence = Scalar.Clamp01(turbulence);
             point.Gust = 0.35f * windSpeed * point.Turbulence + outflow;
             point.LightningRate = lightning;
-            point.CoreDepth = WeatherMath.Clamp01(core);
+            point.CoreDepth = Scalar.Clamp01(core);
             point.Hail = hail;
 
             float frontDip = 0f;
@@ -301,7 +302,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             float diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
             point.Temperature = p.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
-            float humid = WeatherMath.Clamp01(point.Cover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
+            float humid = Scalar.Clamp01(point.Cover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
             point.Dewpoint = point.Temperature - WeatherMath.Lerp(9f, 0.5f, humid);
             return point;
         }
@@ -385,7 +386,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             uint seed = unchecked(layout ^ (uint)(slot * 73856093) ^ 0x7c15u);
             float rank = (slot + WeatherMath.Hash01(seed, 70)) / MaxCount;
             float strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, sky.Cumulus) *
-                WeatherMath.Clamp01(0.4f + 0.6f * sky.Cumulus);
+                Scalar.Clamp01(0.4f + 0.6f * sky.Cumulus);
             // Keep the tail until zero: CoverAt magnifies strength.
             if (strength <= 0f) return false;
             cloud.Slot = slot;

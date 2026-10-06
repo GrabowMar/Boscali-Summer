@@ -10,9 +10,9 @@ namespace BoscaliSummer.Modules.QoL.Runtime
         public bool Set(ObservationPoint point)
         {
             Clear();
-            if (!Finite(point.X) || !Finite(point.Y) || !Finite(point.Z) ||
-                !Finite(point.RecordedAt) || point.RecordedAt < 0f ||
-                !Finite(point.Range) || point.Range <= 0f || point.Range > 60000f ||
+            if (!float.IsFinite(point.X) || !float.IsFinite(point.Y) || !float.IsFinite(point.Z) ||
+                !float.IsFinite(point.RecordedAt) || point.RecordedAt < 0f ||
+                !float.IsFinite(point.Range) || point.Range <= 0f || point.Range > 60000f ||
                 string.IsNullOrEmpty(point.Source)) return false;
             current = point;
             return true;
@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.QoL.Runtime
             point = default;
             if (!current.HasValue) return false;
             float age = now - current.Value.RecordedAt;
-            if (!Finite(age) || age < 0f || age >= LifetimeSeconds)
+            if (!float.IsFinite(age) || age < 0f || age >= LifetimeSeconds)
             {
                 Clear();
                 return false;
@@ -33,6 +33,5 @@ namespace BoscaliSummer.Modules.QoL.Runtime
         }
 
         public void Clear() => current = null;
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }
