@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.Squad.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -36,10 +36,11 @@ namespace BoscaliSummer.Modules.Squad.Networking
         internal const byte ProtocolVersion = 3;
         private const float FastPoll = 1f, IdlePoll = 5f;
         private SquadManager manager;
-        private MessageHandler serverHandler, clientHandler;
-        private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
-        private readonly List<ulong> expired = new List<ulong>(64);
-        private float nextRegistration, nextPrune, lastQuery = -10f;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<SquadQuery>(ReceiveQuery);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<SquadSnapshot>(ReceiveSnapshot);
+        private readonly SenderThrottle nextReply = new SenderThrottle();
+        private float nextRegistration, lastQuery = -10f;
         private uint scene, token;
         private bool pending;
         private FactionHQ requestedHq;
@@ -60,14 +61,9 @@ namespace BoscaliSummer.Modules.Squad.Networking
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
-            if (server != serverHandler)
-            { serverHandler?.UnregisterHandler<SquadQuery>(); serverHandler = server; serverHandler?.RegisterHandler<SquadQuery>(ReceiveQuery, false); }
-            if (client != clientHandler)
-            { clientHandler?.UnregisterHandler<SquadSnapshot>(); clientHandler = client; clientHandler?.RegisterHandler<SquadSnapshot>(ReceiveSnapshot, false); }
-            if (now < nextPrune) return;
-            nextPrune = now + 10f; expired.Clear();
-            foreach (var entry in nextReply) if (now - entry.Value > 30f) expired.Add(entry.Key);
-            foreach (ulong id in expired) nextReply.Remove(id);
+            ServerHandlers.Swap(server);
+            ClientHandlers.Swap(client);
+            nextReply.Prune(now);
         }
 
         /// <summary>
@@ -100,8 +96,7 @@ namespace BoscaliSummer.Modules.Squad.Networking
             if (!GameAccess.IsServer() || !MissionManager.IsRunning || query.Protocol != ProtocolVersion ||
                 sender == null || !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
             ulong id = PlayerIdentity.Of(player); float now = Time.unscaledTime;
-            if (nextReply.TryGetValue(id, out float next) ? now < next : nextReply.Count >= 64) return;
-            nextReply[id] = now + 0.75f;
+            if (!nextReply.Allow(id, now, 0.75f)) return;
             SquadSnapshot snapshot = manager.Snapshot(player);
             if (query.Revision != 0 && query.Revision == snapshot.Revision)
                 snapshot = new SquadSnapshot { Protocol = ProtocolVersion, Revision = snapshot.Revision, Unchanged = true };
@@ -119,9 +114,9 @@ namespace BoscaliSummer.Modules.Squad.Networking
         }
 
         private void OnDestroy()
-        { serverHandler?.UnregisterHandler<SquadQuery>(); clientHandler?.UnregisterHandler<SquadSnapshot>(); ResetScene(); }
+        { ServerHandlers.Release(); ClientHandlers.Release(); ResetScene(); }
 
-        private static string Text(string text) => string.IsNullOrEmpty(text) ? "" : text.Substring(0, Math.Min(192, text.Length));
+        private static string Text(string text) => NetText.Clip(text, 192);
         private static void WriteText(NetworkWriter w, string text) => w.WriteString(Text(text));
         private static string ReadText(NetworkReader r) => Text(r.ReadString());
         private static int ReadInt(NetworkReader r, int maximum, ref bool valid)
@@ -138,15 +133,15 @@ namespace BoscaliSummer.Modules.Squad.Networking
         /// </summary>
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<SquadQuery>), "Write", (Action<NetworkWriter, SquadQuery>)((w, v) =>
-            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WriteUInt32(v.Revision); }));
-            Bind(typeof(Reader<SquadQuery>), "Read", (Func<NetworkReader, SquadQuery>)(r =>
+            MirageSerializers.Strict.Install<SquadQuery>((Action<NetworkWriter, SquadQuery>)((w, v) =>
+            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WriteUInt32(v.Revision); }),
+            (Func<NetworkReader, SquadQuery>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SquadQuery { Protocol = protocol };
                 return new SquadQuery { Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), Revision = r.ReadUInt32() };
             }));
-            Bind(typeof(Writer<SquadSnapshot>), "Write", (Action<NetworkWriter, SquadSnapshot>)((w, v) =>
+            MirageSerializers.Strict.Install<SquadSnapshot>((Action<NetworkWriter, SquadSnapshot>)((w, v) =>
             {
                 w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
                 w.WriteUInt32(v.Revision); w.WriteByte(v.Unchanged ? (byte)1 : (byte)0);
@@ -167,8 +162,8 @@ namespace BoscaliSummer.Modules.Squad.Networking
                     WriteText(w, wing.TargetName); w.WritePackedInt32(wing.Returns);
                     w.WritePackedInt32(wing.AbilityMask);
                 }
-            }));
-            Bind(typeof(Reader<SquadSnapshot>), "Read", (Func<NetworkReader, SquadSnapshot>)(r =>
+            }),
+            (Func<NetworkReader, SquadSnapshot>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SquadSnapshot { Protocol = protocol };
@@ -200,14 +195,6 @@ namespace BoscaliSummer.Modules.Squad.Networking
                 }
                 return v;
             }));
-            MessagePacker.RegisterMessage<SquadQuery>(); MessagePacker.RegisterMessage<SquadSnapshot>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo seam = holder.GetProperty(property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (seam == null) throw new MissingMemberException(holder.FullName, property);
-            seam.SetValue(null, value, null);
         }
     }
 }

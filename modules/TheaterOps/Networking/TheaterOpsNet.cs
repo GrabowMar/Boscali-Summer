@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -52,13 +52,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private const float ClientQueryInterval = 4f;
 
         private TheaterPriorityService service;
-        private MessageHandler serverHandler, clientHandler;
-        private readonly Dictionary<ulong, float> nextQuery = new Dictionary<ulong, float>(16);
-        private readonly List<ulong> expired = new List<ulong>(16);
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<TheaterPriorityQuery>(ReceiveQuery);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<TheaterPriorityState>(ReceiveState);
+        private readonly SenderThrottle nextQuery = new SenderThrottle(MaximumQueries);
         private readonly List<KeyValuePair<string, PriorityDirective>> buffer =
             new List<KeyValuePair<string, PriorityDirective>>(MaximumEntries);
 
-        private float nextRegistration, nextPrune, lastClientQuery, nextFactionCheck;
+        private float nextRegistration, lastClientQuery, nextFactionCheck;
         private bool queried;
         private FactionHQ queriedHq;
 
@@ -71,17 +72,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         /// <summary>Drops the transport and asks again on the next scene.</summary>
         public void ResetScene()
         {
-            serverHandler?.UnregisterHandler<TheaterPriorityQuery>();
-            clientHandler?.UnregisterHandler<TheaterPriorityState>();
-            serverHandler = null;
-            clientHandler = null;
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             queried = false;
             queriedHq = null;
             nextFactionCheck = 0f;
             nextRegistration = 0f;
             lastClientQuery = -10f;
             nextQuery.Clear();
-            expired.Clear();
         }
 
         private void Update()
@@ -94,23 +92,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
 
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<TheaterPriorityQuery>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<TheaterPriorityQuery>(ReceiveQuery, false);
-            }
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<TheaterPriorityState>();
-                clientHandler = client;
-                queried = false;
-                clientHandler?.RegisterHandler<TheaterPriorityState>(ReceiveState, false);
-            }
+            ServerHandlers.Swap(server);
+            if (ClientHandlers.Swap(client)) queried = false;
 
             // The host answers only the asker's own faction, so a client that had no faction yet
             // (the usual state at connect) or switched sides asks again once it has one.
-            if (clientHandler != null && queried && !GameAccess.IsServer() && now >= nextFactionCheck)
+            if (ClientHandlers.Current != null && queried && !GameAccess.IsServer() && now >= nextFactionCheck)
             {
                 nextFactionCheck = now + 1f;
                 GameManager.GetLocalHQ(out FactionHQ localHq);
@@ -120,7 +107,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             // One query per connection and faction. Silence is a valid answer (the host has
             // nothing set), so there is no retry storm; a reconnect re-registers the client
             // handler and asks again, and a change after that is pushed to the faction.
-            if (clientHandler != null && !queried && !GameAccess.IsServer() &&
+            if (ClientHandlers.Current != null && !queried && !GameAccess.IsServer() &&
                 now - lastClientQuery >= ClientQueryInterval)
             {
                 NetworkClient transport = NetworkManagerNuclearOption.i?.Client;
@@ -133,12 +120,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 }
             }
 
-            if (now < nextPrune) return;
-            nextPrune = now + 10f;
-            expired.Clear();
-            foreach (KeyValuePair<ulong, float> pair in nextQuery)
-                if (now - pair.Value > 30f) expired.Add(pair.Key);
-            for (int i = 0; i < expired.Count; i++) nextQuery.Remove(expired[i]);
+            nextQuery.Prune(now);
         }
 
         private const int MaximumRecipients = 64;
@@ -195,7 +177,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         {
             if (GameAccess.IsServer() || state.Protocol != ProtocolVersion) return;
 
-            string faction = Text(state.Faction, MaximumFactionLength);
+            string faction = NetText.Clip(state.Faction, MaximumFactionLength);
             if (string.IsNullOrEmpty(faction)) return;
 
             if (state.Active == 0)
@@ -205,23 +187,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             }
 
             service.ApplyRemote(
-                faction, Text(state.Key, MaximumKeyLength), Text(state.Label, MaximumLabelLength),
+                faction, NetText.Clip(state.Key, MaximumKeyLength), NetText.Clip(state.Label, MaximumLabelLength),
                 state.X, state.Y, state.Z);
         }
 
         private static TheaterPriorityState StateOf(string faction, PriorityDirective? directive)
         {
             if (!directive.HasValue)
-                return new TheaterPriorityState { Protocol = ProtocolVersion, Faction = Text(faction, MaximumFactionLength) };
+                return new TheaterPriorityState { Protocol = ProtocolVersion, Faction = NetText.Clip(faction, MaximumFactionLength) };
 
             PriorityDirective value = directive.Value;
             return new TheaterPriorityState
             {
                 Protocol = ProtocolVersion,
                 Active = 1,
-                Faction = Text(faction, MaximumFactionLength),
-                Key = Text(value.Key, MaximumKeyLength),
-                Label = Text(value.Label, MaximumLabelLength),
+                Faction = NetText.Clip(faction, MaximumFactionLength),
+                Key = NetText.Clip(value.Key, MaximumKeyLength),
+                Label = NetText.Clip(value.Label, MaximumLabelLength),
                 X = value.X,
                 Y = value.Y,
                 Z = value.Z,
@@ -230,48 +212,43 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
 
         private bool RateLimit(Player player)
         {
-            float now = Time.unscaledTime;
-            ulong id = PlayerIdentity.Of(player);
-            if (nextQuery.TryGetValue(id, out float next) && now < next) return false;
-            if (!nextQuery.ContainsKey(id) && nextQuery.Count >= MaximumQueries) return false;
-            nextQuery[id] = now + QueryInterval;
-            return true;
+            return nextQuery.Allow(PlayerIdentity.Of(player), Time.unscaledTime, QueryInterval);
         }
 
         private void OnDestroy()
         {
-            serverHandler?.UnregisterHandler<TheaterPriorityQuery>();
-            clientHandler?.UnregisterHandler<TheaterPriorityState>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
         }
 
-        internal static string Text(string value, int max) => string.IsNullOrEmpty(value) ? ""
-            : value.Length > max ? value.Substring(0, max) : value;
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[TheaterOps]", " is missing; theater priorities cannot replicate on this game build.");
 
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<TheaterPriorityQuery>), "Write", (Action<NetworkWriter, TheaterPriorityQuery>)((w, v) =>
+            Seams.Install<TheaterPriorityQuery>((Action<NetworkWriter, TheaterPriorityQuery>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-            }));
-            Bind(typeof(Reader<TheaterPriorityQuery>), "Read", (Func<NetworkReader, TheaterPriorityQuery>)(r =>
+            }),
+            (Func<NetworkReader, TheaterPriorityQuery>)(r =>
             {
                 byte protocol = r.ReadByte();
                 return new TheaterPriorityQuery { Protocol = protocol };
             }));
 
-            Bind(typeof(Writer<TheaterPriorityState>), "Write", (Action<NetworkWriter, TheaterPriorityState>)((w, v) =>
+            Seams.Install<TheaterPriorityState>((Action<NetworkWriter, TheaterPriorityState>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteByte(v.Active);
-                w.WriteString(Text(v.Faction, MaximumFactionLength));
+                w.WriteString(NetText.Clip(v.Faction, MaximumFactionLength));
                 if (v.Active == 0) return;
-                w.WriteString(Text(v.Key, MaximumKeyLength));
-                w.WriteString(Text(v.Label, MaximumLabelLength));
+                w.WriteString(NetText.Clip(v.Key, MaximumKeyLength));
+                w.WriteString(NetText.Clip(v.Label, MaximumLabelLength));
                 w.WriteSingle(v.X);
                 w.WriteSingle(v.Y);
                 w.WriteSingle(v.Z);
-            }));
-            Bind(typeof(Reader<TheaterPriorityState>), "Read", (Func<NetworkReader, TheaterPriorityState>)(r =>
+            }),
+            (Func<NetworkReader, TheaterPriorityState>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var state = new TheaterPriorityState { Protocol = protocol };
@@ -288,22 +265,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 return state;
             }));
 
-            MessagePacker.RegisterMessage<TheaterPriorityQuery>();
-            MessagePacker.RegisterMessage<TheaterPriorityState>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(
-                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError(
-                    "[TheaterOps] Mirage serializer seam " + holder.Name + "." + property +
-                    " is missing; theater priorities cannot replicate on this game build.");
-                return;
-            }
-            target.SetValue(null, value, null);
         }
     }
 }

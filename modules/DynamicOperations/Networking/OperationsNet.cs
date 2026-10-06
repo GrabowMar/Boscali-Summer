@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Modules.DynamicOperations.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -36,11 +36,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
     {
         internal const byte ProtocolVersion = 4;
         private OperationsManager manager;
-        private MessageHandler serverHandler, clientHandler;
-        private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
-        private readonly Dictionary<ulong, float> nextAction = new Dictionary<ulong, float>();
-        private readonly List<ulong> expired = new List<ulong>(64);
-        private float nextRegistration, lastQuery, nextPrune;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<OperationsQuery>(ReceiveQuery);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<OperationsSnapshot>(ReceiveSnapshot);
+        private readonly SenderThrottle nextReply = new SenderThrottle(), nextAction = new SenderThrottle(int.MaxValue);
+        private float nextRegistration, lastQuery;
         private uint scene, token;
         private FactionHQ requestedHq;
         private bool pending;
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             pendingOperationId = 0;
             requestedClient = null; requestedPeer = null;
             manager?.EndAction(string.Empty);
-            nextReply.Clear(); nextAction.Clear(); expired.Clear(); lastQuery = -10f;
+            nextReply.Clear(); nextAction.Clear(); lastQuery = -10f;
         }
 
         private void Update()
@@ -91,26 +91,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<OperationsQuery>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<OperationsQuery>(ReceiveQuery, false);
-            }
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<OperationsSnapshot>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<OperationsSnapshot>(ReceiveSnapshot, false);
-            }
-            if (now >= nextPrune)
-            {
-                nextPrune = now + 10f;
-                expired.Clear();
-                foreach (var pair in nextReply)
-                    if (now - pair.Value > 30f) expired.Add(pair.Key);
-                for (int i = 0; i < expired.Count; i++) { nextReply.Remove(expired[i]); nextAction.Remove(expired[i]); }
-            }
+            ServerHandlers.Swap(server);
+            ClientHandlers.Swap(client);
+            nextReply.Prune(now);
+            nextAction.Prune(now);
         }
 
         public void Request(int operationId = 0, bool cancel = false)
@@ -166,14 +150,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 return;
             ulong id = PlayerIdentity.Of(player);
             float now = Time.unscaledTime;
-            if (nextReply.TryGetValue(id, out float next) ? query.Action == 0 && now < next : nextReply.Count >= 64) return;
-            nextReply[id] = now + 1.5f;
+            if (!nextReply.Allow(id, now, 1.5f, enforce: query.Action == 0)) return;
             if (query.Action > 2 || query.OperationId < 0 || (query.Action != 0 && query.OperationId == 0)) return;
             string result = null;
             if (query.Action != 0)
             {
-                if (nextAction.TryGetValue(id, out float actionTime) && now < actionTime) result = "Please wait 2 seconds before another contract action.";
-                else { nextAction[id] = now + 2f; result = manager.Act(player, query.OperationId, query.Action == 2); }
+                if (!nextAction.Allow(id, now, 2f)) result = "Please wait 2 seconds before another contract action.";
+                else result = manager.Act(player, query.OperationId, query.Action == 2);
             }
             OperationsSnapshot snapshot = manager.Snapshot(player);
             if (result != null) snapshot.Status = result;
@@ -199,14 +182,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
         private void OnDestroy()
         {
-            serverHandler?.UnregisterHandler<OperationsQuery>();
-            clientHandler?.UnregisterHandler<OperationsSnapshot>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             ResetScene();
         }
 
         // Fixed card and text ceilings keep both late-join replies and parsing bounded.
-        internal static string Text(string value) => string.IsNullOrEmpty(value) ? "" :
-            value.Length > 128 ? value.Substring(0, 128) : value;
+        internal static string Text(string value) => NetText.Clip(value, 128);
         internal static string PilotText(string value)
         {
             if (string.IsNullOrEmpty(value)) return "";
@@ -222,11 +204,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<OperationsQuery>), "Write", (Action<NetworkWriter, OperationsQuery>)((w, v) =>
-            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WritePackedInt32(v.OperationId); w.WriteByte(v.Action); }));
-            Bind(typeof(Reader<OperationsQuery>), "Read", (Func<NetworkReader, OperationsQuery>)(r =>
+            MirageSerializers.Strict.Install<OperationsQuery>((Action<NetworkWriter, OperationsQuery>)((w, v) =>
+            { w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token); w.WritePackedInt32(v.OperationId); w.WriteByte(v.Action); }),
+            (Func<NetworkReader, OperationsQuery>)(r =>
                 new OperationsQuery { Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), OperationId = r.ReadPackedInt32(), Action = r.ReadByte() }));
-            Bind(typeof(Writer<OperationsSnapshot>), "Write", (Action<NetworkWriter, OperationsSnapshot>)((w, v) =>
+            MirageSerializers.Strict.Install<OperationsSnapshot>((Action<NetworkWriter, OperationsSnapshot>)((w, v) =>
             {
                 w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
                 w.WriteString(Text(v.Status));
@@ -245,8 +227,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     w.WriteString(PilotText(card.AcceptedBy));
                     WriteTasking(w, card.Tasking);
                 }
-            }));
-            Bind(typeof(Reader<OperationsSnapshot>), "Read", (Func<NetworkReader, OperationsSnapshot>)(r =>
+            }),
+            (Func<NetworkReader, OperationsSnapshot>)(r =>
             {
                 var snapshot = new OperationsSnapshot
                 { Protocol = r.ReadByte(), Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(), Status = Text(r.ReadString()) };
@@ -277,8 +259,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 }
                 return snapshot;
             }));
-            MessagePacker.RegisterMessage<OperationsQuery>();
-            MessagePacker.RegisterMessage<OperationsSnapshot>();
         }
 
         private static void WriteTasking(NetworkWriter writer, ObjectiveTasking tasking)
@@ -345,13 +325,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 if (phase.Status == ObjectivePhaseStatus.Current) current++;
             }
             return current == (active ? 1 : 0);
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.FullName, property);
-            target.SetValue(null, value, null);
         }
     }
 }

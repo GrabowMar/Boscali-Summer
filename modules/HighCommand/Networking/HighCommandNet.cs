@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.HighCommand.Domain;
 using BoscaliSummer.Modules.HighCommand.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -77,10 +77,11 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         internal const int MaximumNodes = 32;
 
         private HighCommandManager manager;
-        private MessageHandler serverHandler, clientHandler;
-        private readonly Dictionary<ulong, float> nextReply = new Dictionary<ulong, float>();
-        private readonly List<ulong> expired = new List<ulong>(64);
-        private float nextRegistration, lastQuery, nextPrune;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<HighCommandQuery>(ReceiveQuery);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<HighCommandSnapshot>(ReceiveSnapshot);
+        private readonly SenderThrottle nextReply = new SenderThrottle();
+        private float nextRegistration, lastQuery;
         private uint scene, token;
         private FactionHQ requestedHq;
         private bool pending;
@@ -94,7 +95,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         public void ResetScene()
         {
             ResetClient();
-            nextReply.Clear(); expired.Clear();
+            nextReply.Clear();
         }
 
         // Client correlation only. A listen host changing faction must keep the server's reply limits.
@@ -116,26 +117,9 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<HighCommandQuery>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<HighCommandQuery>(ReceiveQuery, false);
-            }
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<HighCommandSnapshot>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<HighCommandSnapshot>(ReceiveSnapshot, false);
-            }
-            if (now >= nextPrune)
-            {
-                nextPrune = now + 10f;
-                expired.Clear();
-                foreach (var pair in nextReply)
-                    if (now - pair.Value > 30f) expired.Add(pair.Key);
-                for (int i = 0; i < expired.Count; i++) nextReply.Remove(expired[i]);
-            }
+            ServerHandlers.Swap(server);
+            ClientHandlers.Swap(client);
+            nextReply.Prune(now);
         }
 
         /// <summary>
@@ -181,8 +165,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 return;
             ulong id = PlayerIdentity.Of(player);
             float now = Time.unscaledTime;
-            if (nextReply.TryGetValue(id, out float next) ? now < next : nextReply.Count >= 64) return;
-            nextReply[id] = now + 1.5f;
+            if (!nextReply.Allow(id, now, 1.5f)) return;
             HighCommandSnapshot snapshot = manager.Snapshot(player);
             snapshot.Scene = query.Scene;
             snapshot.Token = query.Token;
@@ -201,13 +184,10 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
 
         private void OnDestroy()
         {
-            serverHandler?.UnregisterHandler<HighCommandQuery>();
-            clientHandler?.UnregisterHandler<HighCommandSnapshot>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             ResetScene();
         }
-
-        internal static string Text(string value, int max) => string.IsNullOrEmpty(value) ? "" :
-            value.Length > max ? value.Substring(0, max) : value;
 
         /// <summary>
         /// Readers never throw: a throw inside a Mirage handler can drop the connection. A foreign
@@ -216,11 +196,11 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         /// </summary>
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<HighCommandQuery>), "Write", (Action<NetworkWriter, HighCommandQuery>)((w, v) =>
+            MirageSerializers.Strict.Install<HighCommandQuery>((Action<NetworkWriter, HighCommandQuery>)((w, v) =>
             {
                 w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
-            }));
-            Bind(typeof(Reader<HighCommandQuery>), "Read", (Func<NetworkReader, HighCommandQuery>)(r =>
+            }),
+            (Func<NetworkReader, HighCommandQuery>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new HighCommandQuery { Protocol = protocol };
@@ -230,10 +210,10 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 };
             }));
 
-            Bind(typeof(Writer<HighCommandSnapshot>), "Write", (Action<NetworkWriter, HighCommandSnapshot>)((w, v) =>
+            MirageSerializers.Strict.Install<HighCommandSnapshot>((Action<NetworkWriter, HighCommandSnapshot>)((w, v) =>
             {
                 w.WriteByte(v.Protocol); w.WritePackedUInt32(v.Scene); w.WritePackedUInt32(v.Token);
-                w.WriteString(Text(v.Status, 96)); w.WriteString(Text(v.Signal, 96));
+                w.WriteString(NetText.Clip(v.Status, 96)); w.WriteString(NetText.Clip(v.Signal, 96));
                 w.WriteSingle(v.Cohesion);
                 w.WritePackedInt32(v.Active); w.WritePackedInt32(v.Kia);
                 int count = Math.Min(MaximumNodes, v.Nodes?.Length ?? 0);
@@ -241,15 +221,15 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 for (int i = 0; i < count; i++) WriteNode(w, v.Nodes[i]);
                 WriteLog(w, v.Log);
                 WriteLog(w, v.HostileLog);
-            }));
-            Bind(typeof(Reader<HighCommandSnapshot>), "Read", (Func<NetworkReader, HighCommandSnapshot>)(r =>
+            }),
+            (Func<NetworkReader, HighCommandSnapshot>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new HighCommandSnapshot { Protocol = protocol };
                 var snapshot = new HighCommandSnapshot
                 {
                     Protocol = protocol, Scene = r.ReadPackedUInt32(), Token = r.ReadPackedUInt32(),
-                    Status = Text(r.ReadString(), 96), Signal = Text(r.ReadString(), 96),
+                    Status = NetText.Clip(r.ReadString(), 96), Signal = NetText.Clip(r.ReadString(), 96),
                     Cohesion = r.ReadSingle(),
                     Active = r.ReadPackedInt32(), Kia = r.ReadPackedInt32(),
                 };
@@ -264,8 +244,6 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 return snapshot;
             }));
 
-            MessagePacker.RegisterMessage<HighCommandQuery>();
-            MessagePacker.RegisterMessage<HighCommandSnapshot>();
         }
 
         private static void WriteNode(NetworkWriter w, CommanderWire node)
@@ -275,8 +253,8 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             w.WriteByte(node.TraitMask);
             w.WritePackedInt32(node.Seed); w.WriteSingle(node.IntelAge); w.WriteSingle(node.Weight);
             w.WriteSingle(node.X); w.WriteSingle(node.Z);
-            w.WriteString(Text(node.Name, 24)); w.WriteString(Text(node.Rank, 8));
-            w.WriteString(Text(node.Role, 24)); w.WriteString(Text(node.Location, 32));
+            w.WriteString(NetText.Clip(node.Name, 24)); w.WriteString(NetText.Clip(node.Rank, 8));
+            w.WriteString(NetText.Clip(node.Role, 24)); w.WriteString(NetText.Clip(node.Location, 32));
         }
 
         private static bool ReadNode(NetworkReader r, out CommanderWire node)
@@ -287,8 +265,8 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 Tier = r.ReadByte(), Flags = r.ReadByte(), TraitMask = r.ReadByte(),
                 Seed = r.ReadPackedInt32(), IntelAge = r.ReadSingle(), Weight = r.ReadSingle(),
                 X = r.ReadSingle(), Z = r.ReadSingle(),
-                Name = Text(r.ReadString(), 24), Rank = Text(r.ReadString(), 8),
-                Role = Text(r.ReadString(), 24), Location = Text(r.ReadString(), 32),
+                Name = NetText.Clip(r.ReadString(), 24), Rank = NetText.Clip(r.ReadString(), 8),
+                Role = NetText.Clip(r.ReadString(), 24), Location = NetText.Clip(r.ReadString(), 32),
             };
             return CommandSnapshotRules.ValidNode(node.Id, node.ParentId, node.Tier, node.Flags,
                     node.IntelAge, node.Weight, node.X, node.Z) &&
@@ -304,7 +282,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 CommanderLogWire row = rows[i];
                 w.WritePackedInt32(row.TargetId);
                 w.WriteByte(row.Tone);
-                w.WriteString(Text(row.Text, CommandSnapshotRules.MaximumLogText));
+                w.WriteString(NetText.Clip(row.Text, CommandSnapshotRules.MaximumLogText));
                 w.WriteSingle(row.Age);
             }
         }
@@ -321,20 +299,13 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 {
                     TargetId = r.ReadPackedInt32(),
                     Tone = r.ReadByte(),
-                    Text = Text(r.ReadString(), CommandSnapshotRules.MaximumLogText),
+                    Text = NetText.Clip(r.ReadString(), CommandSnapshotRules.MaximumLogText),
                     Age = r.ReadSingle(),
                 };
                 if (!CommandSnapshotRules.ValidLogRow(row.TargetId, row.Tone, row.Text, row.Age)) return false;
                 rows[i] = row;
             }
             return true;
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.FullName, property);
-            target.SetValue(null, value, null);
         }
     }
 }

@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.Events.Domain;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -71,13 +71,13 @@ namespace BoscaliSummer.Modules.Events.Networking
         private const int MaximumIntents = 64;
 
         private EventsManager manager;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
-        private readonly Dictionary<ulong, float> nextIntent = new Dictionary<ulong, float>(16);
-        private readonly List<ulong> expired = new List<ulong>(16);
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<EventIntent>(ReceiveIntent);
+        private HandlerSlot ClientHandlers => clientSlot ??=
+            HandlerSlot.Of<EventReply, ActiveEventChanged>(ReceiveReply, ReceiveChanged);
+        private readonly SenderThrottle nextIntent = new SenderThrottle(MaximumIntents);
         private float nextRegistration;
         private float nextSend;
-        private float nextPrune;
         private float pendingSince;
         private uint token;
         private bool pending;
@@ -91,15 +91,11 @@ namespace BoscaliSummer.Modules.Events.Networking
         /// <summary>Nothing is scoped to a scene, but a reset still drops a stale transport.</summary>
         public void ResetScene()
         {
-            serverHandler?.UnregisterHandler<EventIntent>();
-            clientHandler?.UnregisterHandler<EventReply>();
-            clientHandler?.UnregisterHandler<ActiveEventChanged>();
-            serverHandler = null;
-            clientHandler = null;
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             nextRegistration = 0f;
             pending = false;
             nextIntent.Clear();
-            expired.Clear();
         }
 
         private void Update()
@@ -115,20 +111,8 @@ namespace BoscaliSummer.Modules.Events.Networking
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.MessageHandler;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<EventIntent>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<EventIntent>(ReceiveIntent, false);
-            }
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<EventReply>();
-                clientHandler?.UnregisterHandler<ActiveEventChanged>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<EventReply>(ReceiveReply, false);
-                clientHandler?.RegisterHandler<ActiveEventChanged>(ReceiveChanged, false);
-            }
+            ServerHandlers.Swap(server);
+            ClientHandlers.Swap(client);
         }
 
         public void Broadcast(sbyte catalogIndex, int targetFactionHash, float start, float end,
@@ -243,34 +227,24 @@ namespace BoscaliSummer.Modules.Events.Networking
 
         private void OnDestroy()
         {
-            serverHandler?.UnregisterHandler<EventIntent>();
-            clientHandler?.UnregisterHandler<EventReply>();
-            clientHandler?.UnregisterHandler<ActiveEventChanged>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
         }
 
         /// <summary>Bounded per-player throttle; a query answer is cheap but not free.</summary>
         private bool RateLimit(Player player)
         {
             float now = Time.unscaledTime;
-            if (now >= nextPrune)
-            {
-                nextPrune = now + 10f;
-                expired.Clear();
-                foreach (var pair in nextIntent)
-                    if (now - pair.Value > 30f) expired.Add(pair.Key);
-                for (int i = 0; i < expired.Count; i++) nextIntent.Remove(expired[i]);
-            }
-
-            ulong id = PlayerIdentity.Of(player);
-            if (nextIntent.TryGetValue(id, out float next) && now < next) return false;
-            if (!nextIntent.ContainsKey(id) && nextIntent.Count >= MaximumIntents) return false;
-            nextIntent[id] = now + IntentInterval;
-            return true;
+            nextIntent.Prune(now);
+            return nextIntent.Allow(PlayerIdentity.Of(player), now, IntentInterval);
         }
+
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[Events]", " is missing; world events cannot replicate on this game build.");
 
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<ActiveEventChanged>), "Write", (Action<NetworkWriter, ActiveEventChanged>)((w, v) =>
+            Seams.Install<ActiveEventChanged>((Action<NetworkWriter, ActiveEventChanged>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteByte((byte)v.CatalogIndex);
@@ -286,8 +260,8 @@ namespace BoscaliSummer.Modules.Events.Networking
                     w.WritePackedInt32(v.FactionResponseHashes[i]);
                     w.WriteByte(v.FactionResponseKinds[i]);
                 }
-            }));
-            Bind(typeof(Reader<ActiveEventChanged>), "Read", (Func<NetworkReader, ActiveEventChanged>)(r =>
+            }),
+            (Func<NetworkReader, ActiveEventChanged>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new ActiveEventChanged { Protocol = protocol };
@@ -309,14 +283,14 @@ namespace BoscaliSummer.Modules.Events.Networking
                 return message;
             }));
 
-            Bind(typeof(Writer<EventIntent>), "Write", (Action<NetworkWriter, EventIntent>)((w, v) =>
+            Seams.Install<EventIntent>((Action<NetworkWriter, EventIntent>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WritePackedUInt32(v.Token);
                 w.WriteByte(v.Action);
                 w.WriteByte((byte)v.CatalogIndex);
-            }));
-            Bind(typeof(Reader<EventIntent>), "Read", (Func<NetworkReader, EventIntent>)(r =>
+            }),
+            (Func<NetworkReader, EventIntent>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new EventIntent { Protocol = protocol };
@@ -327,7 +301,7 @@ namespace BoscaliSummer.Modules.Events.Networking
                 return message;
             }));
 
-            Bind(typeof(Writer<EventReply>), "Write", (Action<NetworkWriter, EventReply>)((w, v) =>
+            Seams.Install<EventReply>((Action<NetworkWriter, EventReply>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WritePackedUInt32(v.Token);
@@ -335,8 +309,8 @@ namespace BoscaliSummer.Modules.Events.Networking
                 w.WriteByte(v.Result);
                 w.WriteByte(v.Kind);
                 w.WritePackedInt32(v.Cost);
-            }));
-            Bind(typeof(Reader<EventReply>), "Read", (Func<NetworkReader, EventReply>)(r =>
+            }),
+            (Func<NetworkReader, EventReply>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new EventReply { Protocol = protocol };
@@ -348,24 +322,6 @@ namespace BoscaliSummer.Modules.Events.Networking
                 message.Cost = r.ReadPackedInt32();
                 return message;
             }));
-
-            MessagePacker.RegisterMessage<ActiveEventChanged>();
-            MessagePacker.RegisterMessage<EventIntent>();
-            MessagePacker.RegisterMessage<EventReply>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(
-                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError(
-                    "[Events] Mirage serializer seam " + holder.Name + "." + property +
-                    " is missing; world events cannot replicate on this game build.");
-                return;
-            }
-            target.SetValue(null, value, null);
         }
     }
 }
