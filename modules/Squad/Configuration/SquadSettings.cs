@@ -1,5 +1,6 @@
 using System;
 using BepInEx.Configuration;
+using BoscaliSummer.Core.Config;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Squad.Configuration
@@ -16,14 +17,6 @@ namespace BoscaliSummer.Modules.Squad.Configuration
         internal Func<int, string> SpawnDebugWing;
         internal Func<string> ClearDebugWings;
         private string debugResult = "Host only. Fly an aircraft in a running mission.";
-
-        // ConfigurationManager reads these public fields by name; no plugin assembly dependency.
-        // Whether the entry is advanced is not decided here - ConfigMenu sorts the whole
-        // config file into the window's two halves in one place.
-        private sealed class ConfigurationManagerAttributes
-        {
-            public Action<ConfigEntryBase> CustomDrawer;
-        }
 
         public SquadSettings(ConfigFile config)
         {
@@ -49,6 +42,7 @@ namespace BoscaliSummer.Modules.Squad.Configuration
                 new ConfigDescription("Spawn the selected ace tier against your current aircraft, bypassing " +
                     "damage, grace and cooldown. Replaces your previous debug wings, never a normal hunt. " +
                     "Uses normal hunt rewards, chatter and music. Clear removes only your debug wings without kill rewards.",
+                    // Whether the entry is advanced is not decided here: ConfigMenu sorts the whole config file in one place.
                     null, new ConfigurationManagerAttributes { CustomDrawer = DrawDebugActions }));
         }
 

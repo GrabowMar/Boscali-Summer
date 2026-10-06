@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
@@ -55,7 +56,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         {
             string state = field switch
             {
-                MarkerField.Hold => "HOLD " + Percent(progress),
+                MarkerField.Hold => "HOLD " + AvNum.PercentWhole(progress),
                 MarkerField.Deliver => "LAND TO DELIVER",
                 _ => Finite(distanceMetres)
                     ? Distance(distanceMetres, metric) + (Finite(radius) && radius > 0f ? " TO AREA" : "")
@@ -110,21 +111,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         }
 
         /// <summary>Countdown text, or empty when no clock is running.</summary>
-        public static string Clock(float seconds)
-        {
-            if (!Finite(seconds) || seconds < 0f) return "";
-            int total = (int)Math.Ceiling(seconds);
-            if (total < 60) return "T-" + total + "s";
-            return "T-" + (total / 60) + ":" + (total % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
-
-        public static string Percent(float ratio)
-        {
-            if (!Finite(ratio)) return "—";
-            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
-            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
-                .ToString(CultureInfo.InvariantCulture) + "%";
-        }
+        public static string Clock(float seconds) => AvNum.TMinus(seconds);
 
         /// <summary>
         /// A contract returning to base is green, one whose clock is nearly out is amber,

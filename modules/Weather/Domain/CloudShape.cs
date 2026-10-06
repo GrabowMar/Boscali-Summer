@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -50,8 +51,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float EyeCloudKeep(float x, float y, float z, float eyeX, float eyeZ, float radius, float strength)
         {
             if (radius <= 0f || strength <= 0f) return 1f;
-            float dx = x - eyeX, dz = z - eyeZ;
-            float r = (float)Math.Sqrt(dx * dx + dz * dz);
+            float r = Scalar.Distance2D(x, z, eyeX, eyeZ);
             return 1f - strength * (1f - WeatherMath.Smoothstep(radius * 0.65f, radius * 0.98f, r)) *
                 WeatherMath.Smoothstep(1500f, 2300f, y);
         }

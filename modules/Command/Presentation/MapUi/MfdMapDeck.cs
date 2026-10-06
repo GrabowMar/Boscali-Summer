@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using BepInEx;
 using BoscaliSummer.Modules.Command.Configuration;
+using BoscaliSummer.Core.Util;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -650,18 +651,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 byte[] data;
                 using (var stream = File.OpenRead(selected.FullPath))
-                {
-                    if (stream.Length > 16 * 1024 * 1024) return null;
-                    data = new byte[(int)stream.Length];
-                    int read = 0;
-                    while (read < data.Length)
-                    {
-                        int count = stream.Read(data, read, data.Length - read);
-                        if (count == 0) return null;
-                        read += count;
-                    }
-                }
-                if (!SettingsChoices.SupportedImage(data)) return null;
+                    data = EmbeddedResources.ReadAll(stream, 16 * 1024 * 1024);
+                if (data == null || !SettingsChoices.SupportedImage(data)) return null;
                 tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
                 {
                     filterMode = FilterMode.Bilinear,

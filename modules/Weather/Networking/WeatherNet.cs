@@ -1,7 +1,7 @@
 using System;
-using System.Reflection;
 using BoscaliSummer.Modules.Weather.Runtime;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -18,13 +18,15 @@ namespace BoscaliSummer.Modules.Weather.Networking
         public const byte ProtocolVersion = 7;
 
         private WeatherManager manager;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
+        private HandlerSlot clientSlot;
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<WeatherSyncMessage>(ReceiveWeatherSync);
         private float nextRegistration;
         private int knownPeers;
         private float resyncAt;
         private int resyncsLeft;
         private static bool serializersInstalled;
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[Weather]", " could not be resolved; network sync will fail.");
 
         public void Configure(WeatherManager owner)
         {
@@ -34,9 +36,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
 
         public void ResetScene()
         {
-            clientHandler?.UnregisterHandler<WeatherSyncMessage>();
-            serverHandler = null;
-            clientHandler = null;
+            ClientHandlers.Release();
             nextRegistration = 0f;
             knownPeers = 0;
             resyncsLeft = 0;
@@ -51,18 +51,8 @@ namespace BoscaliSummer.Modules.Weather.Networking
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.MessageHandler;
 
-            if (server != serverHandler)
-            {
-                serverHandler = server;
-            }
             WatchPeers(server != null ? network.Server : null);
-
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<WeatherSyncMessage>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<WeatherSyncMessage>(ReceiveWeatherSync, false);
-            }
+            ClientHandlers.Swap(client);
         }
 
         // A joining peer gets the key within seconds instead of on the next 8 s refresh.
@@ -105,7 +95,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
             if (serializersInstalled) return;
             serializersInstalled = true;
 
-            Bind(typeof(Writer<WeatherSyncMessage>), "Write", (Action<NetworkWriter, WeatherSyncMessage>)((w, v) =>
+            Seams.Install<WeatherSyncMessage>((Action<NetworkWriter, WeatherSyncMessage>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteSingle(v.TargetConditions);
@@ -129,9 +119,8 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 w.WriteSingle(v.FieldAnchorX);
                 w.WriteSingle(v.FieldAnchorZ);
                 w.WriteByte(v.FieldFrontTurn);
-            }));
-
-            Bind(typeof(Reader<WeatherSyncMessage>), "Read", (Func<NetworkReader, WeatherSyncMessage>)(r =>
+            }),
+            (Func<NetworkReader, WeatherSyncMessage>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new WeatherSyncMessage { Protocol = protocol };
@@ -161,21 +150,6 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 return message;
             }));
 
-            MessagePacker.RegisterMessage<WeatherSyncMessage>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(
-                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError(
-                    "[Weather] Mirage serializer seam " + holder.Name + "." + property +
-                    " could not be resolved; network sync will fail.");
-                return;
-            }
-            target.SetValue(null, value);
         }
 
     }

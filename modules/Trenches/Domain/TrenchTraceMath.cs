@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Domain
 {
@@ -533,9 +534,7 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             {
                 float lastX = x[start + count - 1];
                 float lastZ = z[start + count - 1];
-                float dx = lastX - outX[written - 1];
-                float dz = lastZ - outZ[written - 1];
-                float endGap = (float)Math.Sqrt(dx * dx + dz * dz);
+                float endGap = Scalar.Distance2D(lastX, lastZ, outX[written - 1], outZ[written - 1]);
 
                 if (endGap > 0.4f * spacing)
                 {

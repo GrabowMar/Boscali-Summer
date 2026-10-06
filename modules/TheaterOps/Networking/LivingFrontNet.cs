@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -66,14 +66,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private readonly List<TheaterProposalView> proposals =
             new List<TheaterProposalView>(LivingWarRules.MaximumOffers);
         private readonly List<string> log = new List<string>(StaffLog.MaximumEntries);
-        private readonly Dictionary<ulong, float> nextQuery = new Dictionary<ulong, float>(16);
-        private readonly Dictionary<ulong, float> nextIntent = new Dictionary<ulong, float>(16);
+        private readonly SenderThrottle nextQuery = new SenderThrottle(MaximumPlayers);
+        private readonly SenderThrottle nextIntent = new SenderThrottle(MaximumPlayers);
         private readonly Dictionary<ulong, (int Session, FactionHQ HQ)> clientSessions =
             new Dictionary<ulong, (int, FactionHQ)>(16);
-        private readonly List<ulong> stale = new List<ulong>(16);
         private LivingFrontService owner;
-        private MessageHandler serverHandler, clientHandler;
-        private float nextRegistration, nextPrune, nextClientQuery, nextFactionCheck;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??=
+            HandlerSlot.Of<LivingFrontQuery, LivingFrontIntent>(ReceiveQuery, ReceiveIntent);
+        private HandlerSlot ClientHandlers => clientSlot ??=
+            HandlerSlot.Of<LivingFrontSnapshot, LivingFrontResult>(ReceiveSnapshot, ReceiveResult);
+        private Action<ulong> forgetSession;
+        private float nextRegistration, nextClientQuery, nextFactionCheck;
         private FactionHQ queriedHq;
         private int nextRequestId, pendingRequestId;
         private static int nextHostEpoch;
@@ -91,19 +95,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
 
         internal void ResetScene()
         {
-            serverHandler?.UnregisterHandler<LivingFrontQuery>();
-            serverHandler?.UnregisterHandler<LivingFrontIntent>();
-            clientHandler?.UnregisterHandler<LivingFrontSnapshot>();
-            clientHandler?.UnregisterHandler<LivingFrontResult>();
-            serverHandler = null;
-            clientHandler = null;
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             ClearClientState();
             owner?.ClearRemoteState();
             hostEpoch = NewHostEpoch();
             queriedHq = null;
-            nextRegistration = nextPrune = nextFactionCheck = 0f;
+            nextRegistration = nextFactionCheck = 0f;
             nextClientQuery = -10f;
-            nextQuery.Clear(); nextIntent.Clear(); stale.Clear();
+            nextQuery.Clear(); nextIntent.Clear();
             clientSessions.Clear();
             fronts.Clear(); proposals.Clear(); log.Clear();
         }
@@ -136,27 +136,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
-            if (server != serverHandler)
+            if (ServerHandlers.Swap(server))
             {
-                serverHandler?.UnregisterHandler<LivingFrontQuery>();
-                serverHandler?.UnregisterHandler<LivingFrontIntent>();
                 nextQuery.Clear(); nextIntent.Clear(); clientSessions.Clear();
                 hostEpoch = NewHostEpoch();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<LivingFrontQuery>(ReceiveQuery, false);
-                serverHandler?.RegisterHandler<LivingFrontIntent>(ReceiveIntent, false);
             }
-            if (client != clientHandler)
+            if (ClientHandlers.Swap(client))
             {
-                clientHandler?.UnregisterHandler<LivingFrontSnapshot>();
-                clientHandler?.UnregisterHandler<LivingFrontResult>();
-                clientHandler = client;
                 ClearClientState();
                 owner?.ClearRemoteState();
-                clientHandler?.RegisterHandler<LivingFrontSnapshot>(ReceiveSnapshot, false);
-                clientHandler?.RegisterHandler<LivingFrontResult>(ReceiveResult, false);
             }
-            if (clientHandler != null && !GameAccess.IsServer() && now >= nextFactionCheck)
+            if (ClientHandlers.Current != null && !GameAccess.IsServer() && now >= nextFactionCheck)
             {
                 nextFactionCheck = now + 1f;
                 GameManager.GetLocalHQ(out FactionHQ hq);
@@ -174,22 +164,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                     network.Client.Send(new LivingFrontQuery { Protocol = ProtocolVersion, Session = clientSession });
                 }
             }
-            if (now < nextPrune) return;
-            nextPrune = now + 10f;
-            Prune(nextQuery, now);
-            Prune(nextIntent, now);
-        }
-
-        private void Prune(Dictionary<ulong, float> table, float now)
-        {
-            stale.Clear();
-            foreach (KeyValuePair<ulong, float> pair in table)
-                if (now - pair.Value > 30f) stale.Add(pair.Key);
-            foreach (ulong id in stale)
-            {
-                table.Remove(id);
-                if (ReferenceEquals(table, nextQuery)) clientSessions.Remove(id);
-            }
+            nextQuery.Prune(now, forgetSession ??= id => clientSessions.Remove(id));
+            nextIntent.Prune(now);
         }
 
         internal bool SendIntent(byte kind, int id, int revision, byte posture)
@@ -240,7 +216,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             return new LivingFrontSnapshot
             {
                 Protocol = ProtocolVersion,
-                Faction = Text(faction, MaximumFaction),
+                Faction = NetText.Clip(faction, MaximumFaction),
                 Posture = (byte)posture,
                 HasSnapshot = owner.HasSnapshotFor(faction),
                 HostEpoch = hostEpoch,
@@ -255,7 +231,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         {
             if (query.Protocol != ProtocolVersion || query.Session <= 0 || owner?.Authoritative != true || sender == null ||
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) ||
-                player?.HQ?.faction == null || !Allow(nextQuery, player, QueryInterval)) return;
+                player?.HQ?.faction == null || !nextQuery.Allow(PlayerIdentity.Of(player), Time.unscaledTime, QueryInterval)) return;
             clientSessions[PlayerIdentity.Of(player)] = (query.Session, player.HQ);
             LivingFrontSnapshot snapshot = SnapshotOf(player.HQ.faction.factionName);
             snapshot.Session = query.Session;
@@ -271,7 +247,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             bool current = intent.HostEpoch == hostEpoch && intent.Session > 0 &&
                 clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) &&
                 session.Session == intent.Session && ReferenceEquals(session.HQ, player.HQ);
-            bool allowed = valid && current && Allow(nextIntent, player, IntentInterval);
+            bool allowed = valid && current && nextIntent.Allow(PlayerIdentity.Of(player), Time.unscaledTime, IntentInterval);
             bool accepted = allowed && owner.ApplyIntent(player.HQ,
                 intent.Kind, intent.Id, intent.Revision, intent.Posture);
             sender.Send(new LivingFrontResult
@@ -323,23 +299,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 snapshot.Operation, (TheaterWarPosture)snapshot.Posture, snapshot.Log);
         }
 
-        private bool Allow(Dictionary<ulong, float> table, Player player, float interval)
-        {
-            float now = Time.unscaledTime;
-            ulong id = PlayerIdentity.Of(player);
-            if (table.TryGetValue(id, out float next) && now < next) return false;
-            if (!table.ContainsKey(id) && table.Count >= MaximumPlayers) return false;
-            table[id] = now + interval;
-            return true;
-        }
-
         private static bool ValidIntent(byte kind, int id, int revision, byte posture) =>
             kind <= 2 && (kind == 2
                 ? id == 0 && revision == 0 && posture <= (byte)TheaterWarPosture.Bold
                 : id > 0 && revision > 0 && posture == 0);
-
-        private static string Text(string value, int max) => string.IsNullOrEmpty(value) ? ""
-            : value.Length > max ? value.Substring(0, max) : value;
 
         private static string ReadText(NetworkReader reader, int max)
         {
@@ -349,27 +312,28 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[TheaterOps]", " is missing; living front cannot replicate.");
+
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<LivingFrontQuery>), "Write",
+            Seams.Install<LivingFrontQuery>(
                 (Action<NetworkWriter, LivingFrontQuery>)((w, v) =>
-                { w.WriteByte(v.Protocol); w.WriteInt32(v.Session); }));
-            Bind(typeof(Reader<LivingFrontQuery>), "Read",
+                { w.WriteByte(v.Protocol); w.WriteInt32(v.Session); }),
                 (Func<NetworkReader, LivingFrontQuery>)(r =>
                 {
                     byte protocol = r.ReadByte();
                     if (protocol != ProtocolVersion) return default;
                     return new LivingFrontQuery { Protocol = protocol, Session = r.ReadInt32() };
                 }));
-            Bind(typeof(Writer<LivingFrontIntent>), "Write",
+            Seams.Install<LivingFrontIntent>(
                 (Action<NetworkWriter, LivingFrontIntent>)((w, v) =>
                 {
                     w.WriteByte(v.Protocol); w.WriteByte(v.Kind); w.WriteInt32(v.Id);
                     w.WriteInt32(v.Revision); w.WriteByte(v.Posture);
                     w.WriteInt32(v.RequestId);
                     w.WriteInt32(v.Session); w.WriteInt32(v.HostEpoch);
-                }));
-            Bind(typeof(Reader<LivingFrontIntent>), "Read",
+                }),
                 (Func<NetworkReader, LivingFrontIntent>)(r =>
                 {
                     byte protocol = r.ReadByte();
@@ -381,15 +345,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                         Session = r.ReadInt32(), HostEpoch = r.ReadInt32(),
                     };
                 }));
-            Bind(typeof(Writer<LivingFrontResult>), "Write",
+            Seams.Install<LivingFrontResult>(
                 (Action<NetworkWriter, LivingFrontResult>)((w, v) =>
                 {
-                    w.WriteByte(v.Protocol); w.WriteString(Text(v.Faction, MaximumFaction));
+                    w.WriteByte(v.Protocol); w.WriteString(NetText.Clip(v.Faction, MaximumFaction));
                     w.WriteInt32(v.RequestId); w.WriteByte(v.Accepted ? (byte)1 : (byte)0);
-                    w.WriteString(Text(v.Status, MaximumBrief));
+                    w.WriteString(NetText.Clip(v.Status, MaximumBrief));
                     w.WriteInt32(v.Session); w.WriteInt32(v.HostEpoch);
-                }));
-            Bind(typeof(Reader<LivingFrontResult>), "Read",
+                }),
                 (Func<NetworkReader, LivingFrontResult>)(r =>
                 {
                     byte protocol = r.ReadByte();
@@ -402,20 +365,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                         v.Faction.Length > MaximumFaction || string.IsNullOrEmpty(v.Status) ||
                         v.Status.Length > MaximumBrief ? default : v;
                 }));
-            Bind(typeof(Writer<LivingFrontSnapshot>), "Write",
-                (Action<NetworkWriter, LivingFrontSnapshot>)WriteSnapshot);
-            Bind(typeof(Reader<LivingFrontSnapshot>), "Read",
+            Seams.Install<LivingFrontSnapshot>(
+                (Action<NetworkWriter, LivingFrontSnapshot>)WriteSnapshot,
                 (Func<NetworkReader, LivingFrontSnapshot>)ReadSnapshot);
-            MessagePacker.RegisterMessage<LivingFrontQuery>();
-            MessagePacker.RegisterMessage<LivingFrontIntent>();
-            MessagePacker.RegisterMessage<LivingFrontResult>();
-            MessagePacker.RegisterMessage<LivingFrontSnapshot>();
         }
 
         private static void WriteSnapshot(NetworkWriter w, LivingFrontSnapshot value)
         {
             w.WriteByte(value.Protocol);
-            w.WriteString(Text(value.Faction, MaximumFaction));
+            w.WriteString(NetText.Clip(value.Faction, MaximumFaction));
             w.WriteByte(value.Posture);
             w.WriteByte(value.HasSnapshot ? (byte)1 : (byte)0);
             w.WriteInt32(value.Session); w.WriteInt32(value.HostEpoch);
@@ -424,10 +382,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             for (int i = 0; i < count; i++)
             {
                 TheaterFrontView front = value.Fronts[i];
-                w.WriteString(Text(front.Key, MaximumKey));
-                w.WriteString(Text(front.Label, MaximumLabel));
+                w.WriteString(NetText.Clip(front.Key, MaximumKey));
+                w.WriteString(NetText.Clip(front.Label, MaximumLabel));
                 w.WriteSingle(front.X); w.WriteSingle(front.Z);
-                w.WriteString(Text(front.Status, MaximumStatus));
+                w.WriteString(NetText.Clip(front.Status, MaximumStatus));
                 w.WriteSingle(front.Pressure); w.WriteSingle(front.Trend);
                 w.WriteByte(front.Observed ? (byte)1 : (byte)0);
                 w.WriteSingle(front.AgeSeconds);
@@ -438,13 +396,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             {
                 TheaterProposalView offer = value.Proposals[i];
                 w.WriteInt32(offer.Id); w.WriteInt32(offer.Revision);
-                w.WriteString(Text(offer.Kind, MaximumStatus));
-                w.WriteString(Text(offer.Label, MaximumLabel));
-                w.WriteString(Text(offer.TargetKey, MaximumKey));
+                w.WriteString(NetText.Clip(offer.Kind, MaximumStatus));
+                w.WriteString(NetText.Clip(offer.Label, MaximumLabel));
+                w.WriteString(NetText.Clip(offer.TargetKey, MaximumKey));
                 w.WriteSingle(offer.X); w.WriteSingle(offer.Z);
-                w.WriteString(Text(offer.Brief, MaximumBrief));
-                w.WriteString(Text(offer.Risk, MaximumStatus));
-                w.WriteString(Text(offer.Forces, MaximumForces));
+                w.WriteString(NetText.Clip(offer.Brief, MaximumBrief));
+                w.WriteString(NetText.Clip(offer.Risk, MaximumStatus));
+                w.WriteString(NetText.Clip(offer.Forces, MaximumForces));
                 w.WriteSingle(offer.SecondsRemaining);
             }
             TheaterLiveOperationView op = value.Operation;
@@ -452,12 +410,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (op != null)
             {
                 w.WriteInt32(op.Id); w.WriteInt32(op.Revision);
-                w.WriteString(Text(op.Kind, MaximumStatus));
-                w.WriteString(Text(op.TargetKey, MaximumKey));
-                w.WriteString(Text(op.Label, MaximumLabel));
+                w.WriteString(NetText.Clip(op.Kind, MaximumStatus));
+                w.WriteString(NetText.Clip(op.TargetKey, MaximumKey));
+                w.WriteString(NetText.Clip(op.Label, MaximumLabel));
                 w.WriteSingle(op.X); w.WriteSingle(op.Z);
-                w.WriteString(Text(op.Phase, MaximumStatus));
-                w.WriteString(Text(op.Summary, MaximumForces));
+                w.WriteString(NetText.Clip(op.Phase, MaximumStatus));
+                w.WriteString(NetText.Clip(op.Summary, MaximumForces));
                 w.WriteByte((byte)Math.Min(Math.Max(op.GroundGroups, 0), 32));
                 w.WriteByte((byte)Math.Min(Math.Max(op.AirGroups, 0), 32));
                 w.WriteByte((byte)Math.Min(Math.Max(op.NavalGroups, 0), 32));
@@ -465,7 +423,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             count = Math.Min(value.Log?.Length ?? 0, StaffLog.MaximumEntries);
             w.WriteByte((byte)count);
             for (int i = 0; i < count; i++)
-                w.WriteString(Text(value.Log[i], StaffLog.MaximumTextLength));
+                w.WriteString(NetText.Clip(value.Log[i], StaffLog.MaximumTextLength));
         }
 
         private static LivingFrontSnapshot ReadSnapshot(NetworkReader r)
@@ -552,18 +510,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         }
 
         private static bool ValidKind(string kind) => kind == "ASSAULT" || kind == "DEFEND" || kind == "RECON";
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError("[TheaterOps] Mirage serializer seam " +
-                    holder.Name + "." + property + " is missing; living front cannot replicate.");
-                return;
-            }
-            target.SetValue(null, value, null);
-        }
     }
 }

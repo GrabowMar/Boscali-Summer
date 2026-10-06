@@ -84,6 +84,7 @@
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdNewsFeed.cs" Link="Features\Command\MfdNewsFeed.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
+    <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />
@@ -98,7 +99,7 @@
     <Compile Include="..\..\modules\Radio\Runtime\RadioProgramming.cs" Link="Features\Radio\RadioProgramming.cs" />
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
     <Compile Include="..\..\modules\Squad\Domain\SnapshotRevision.cs" Link="Features\Squad\SnapshotRevision.cs" />
-    <Compile Include="..\..\modules\Radio\Presentation\PngIconHeader.cs" Link="Features\Radio\PngIconHeader.cs" />
+    <Compile Include="..\..\Core\Util\PngSprites.cs" Link="Core\PngSprites.cs" />
     <Compile Include="..\..\Core\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\Core\Contracts\IProgressionView.cs" Link="Framework\IProgressionView.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />

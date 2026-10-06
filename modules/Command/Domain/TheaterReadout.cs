@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using BoscaliSummer.Core.Contracts;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -41,13 +42,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         /// <summary>A ratio as whole percent. NaN and infinity read as an unknown dash.</summary>
-        public static string Percent(float ratio)
-        {
-            if (float.IsNaN(ratio) || float.IsInfinity(ratio)) return "—";
-            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
-            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
-                   .ToString(CultureInfo.InvariantCulture) + "%";
-        }
+        public static string Percent(float ratio) => AvNum.PercentWhole(ratio);
 
         /// <summary>A length in metres as kilometres, one decimal. The front's honest figure.</summary>
         public static string Kilometres(float metres)

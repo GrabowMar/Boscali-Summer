@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Config;
@@ -8,6 +7,7 @@ using BoscaliSummer.Modules.Session.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -85,8 +85,9 @@ namespace BoscaliSummer.Modules.Session.Networking
 
         private ConfigFile config;
         private ManualLogSource logger;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<SessionHello>(ReceiveHello);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<HostSettingsMessage>(ReceiveSettings);
         private float nextRegistration;
         private float nextHello;
         private float nextFlush;
@@ -174,20 +175,11 @@ namespace BoscaliSummer.Modules.Session.Networking
             catch { return; }
 
             MessageHandler server = network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<SessionHello>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<SessionHello>(ReceiveHello, false);
-                peers.Clear();
-            }
+            if (ServerHandlers.Swap(server)) peers.Clear();
 
             MessageHandler client = network?.Client?.MessageHandler;
-            if (client != clientHandler)
+            if (ClientHandlers.Swap(client))
             {
-                clientHandler?.UnregisterHandler<HostSettingsMessage>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<HostSettingsMessage>(ReceiveSettings, false);
                 // A new connection is a new session: forget the last host and say hello again.
                 if (ledger.Active) EndSession("changed server");
                 ResetHandshake();
@@ -421,8 +413,8 @@ namespace BoscaliSummer.Modules.Session.Networking
         {
             EndSession("unloading");
             if (config != null) config.SettingChanged -= OnSettingChanged;
-            serverHandler?.UnregisterHandler<SessionHello>();
-            clientHandler?.UnregisterHandler<HostSettingsMessage>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             peers.Clear();
         }
 
@@ -433,19 +425,19 @@ namespace BoscaliSummer.Modules.Session.Networking
             if (serializersInstalled) return;
             serializersInstalled = true;
 
-            Bind(typeof(Writer<SessionHello>), "Write", (Action<NetworkWriter, SessionHello>)((w, v) =>
+            MirageSerializers.Strict.Install<SessionHello>((Action<NetworkWriter, SessionHello>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteString(Bounded(v.Version, MaximumVersionLength));
-            }));
-            Bind(typeof(Reader<SessionHello>), "Read", (Func<NetworkReader, SessionHello>)(r =>
+            }),
+            (Func<NetworkReader, SessionHello>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SessionHello { Protocol = protocol };
                 return new SessionHello { Protocol = protocol, Version = Bounded(r.ReadString(), MaximumVersionLength) };
             }));
 
-            Bind(typeof(Writer<HostSettingsMessage>), "Write", (Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
+            MirageSerializers.Strict.Install<HostSettingsMessage>((Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteString(Bounded(v.Version, MaximumVersionLength));
@@ -458,8 +450,8 @@ namespace BoscaliSummer.Modules.Session.Networking
                     w.WriteString(v.Keys[i]);
                     w.WriteString(v.Values[i]);
                 }
-            }));
-            Bind(typeof(Reader<HostSettingsMessage>), "Read", (Func<NetworkReader, HostSettingsMessage>)(r =>
+            }),
+            (Func<NetworkReader, HostSettingsMessage>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new HostSettingsMessage { Protocol = protocol };
@@ -481,19 +473,9 @@ namespace BoscaliSummer.Modules.Session.Networking
                 return message;
             }));
 
-            MessagePacker.RegisterMessage<SessionHello>();
-            MessagePacker.RegisterMessage<HostSettingsMessage>();
         }
 
         private static string Bounded(string value, int length) =>
             value == null ? "" : value.Length <= length ? value : value.Substring(0, length);
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.Name, property);
-            target.SetValue(null, value, null);
-        }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using BoscaliSummer.Core.Contracts;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.QoL.Domain
 {
@@ -17,21 +18,13 @@ namespace BoscaliSummer.Modules.QoL.Domain
         /// <summary>At or below this the fuel line warns.</summary>
         public const float WarningLevel = 0.10f;
 
-        public static string Fuel(float level) => "FUEL " + Percent(level);
+        public static string Fuel(float level) => "FUEL " + AvNum.PercentWhole(level);
 
         /// <summary>"RTB ALPHA · 34km", or the honest unknown when no field resolved.</summary>
         public static string Divert(string fieldName, string distanceText)
         {
             if (string.IsNullOrEmpty(fieldName)) return "RTB UNKNOWN";
             return string.IsNullOrEmpty(distanceText) ? "RTB " + fieldName : "RTB " + fieldName + " · " + distanceText;
-        }
-
-        public static string Percent(float ratio)
-        {
-            if (!Finite(ratio)) return "—";
-            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
-            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
-                .ToString(CultureInfo.InvariantCulture) + "%";
         }
 
         public static HudTone Tone(float level)

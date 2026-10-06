@@ -7,6 +7,7 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.SavedMission;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.AirSurvival.Patches
 {
@@ -79,8 +80,7 @@ namespace BoscaliSummer.Modules.AirSurvival.Patches
                 for (int j = 0; j < positioned.Positions.Count && j < 4; j++)
                 {
                     GlobalPosition fix = positioned.Positions[j].Position;
-                    float dx = fix.x - from.x, dz = fix.z - from.z;
-                    float distance = (float)Math.Sqrt(dx * dx + dz * dz);
+                    float distance = Scalar.Distance2D(fix.x, fix.z, from.x, from.z);
                     if (float.IsNaN(distance) || float.IsInfinity(distance)) continue;
                     if (distance < first)
                     {

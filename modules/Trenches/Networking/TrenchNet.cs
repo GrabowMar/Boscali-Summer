@@ -1,11 +1,11 @@
 using System;
 using System.Collections;
-using System.Reflection;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -60,7 +60,9 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         private static bool serializersInstalled;
         private TrenchManager manager;
         private ManualLogSource logger;
-        private MessageHandler registeredClientHandler;
+        private HandlerSlot clientSlot;
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<TrenchGeometryMessage, TrenchStateMessage, TrenchLineRemovedMessage>(
+            ReceiveGeometry, ReceiveState, ReceiveRemoved);
         private NetworkServer subscribedServer;
         private float nextRegistrationCheck;
 
@@ -74,25 +76,14 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         public void ResetForScene()
         {
             StopAllCoroutines();
-            if (registeredClientHandler != null)
-            {
-                registeredClientHandler.UnregisterHandler<TrenchGeometryMessage>();
-                registeredClientHandler.UnregisterHandler<TrenchStateMessage>();
-                registeredClientHandler.UnregisterHandler<TrenchLineRemovedMessage>();
-                registeredClientHandler = null;
-            }
+            ClientHandlers.Release();
             nextRegistrationCheck = 0f;
         }
 
         private void OnDestroy()
         {
             if (subscribedServer != null) subscribedServer.Authenticated.RemoveListener(OnServerAuthenticated);
-            if (registeredClientHandler != null)
-            {
-                registeredClientHandler.UnregisterHandler<TrenchGeometryMessage>();
-                registeredClientHandler.UnregisterHandler<TrenchStateMessage>();
-                registeredClientHandler.UnregisterHandler<TrenchLineRemovedMessage>();
-            }
+            ClientHandlers.Release();
         }
 
         private void Update()
@@ -154,18 +145,8 @@ namespace BoscaliSummer.Modules.Trenches.Networking
             }
 
             MessageHandler handler = service.Client?.MessageHandler;
-            if (handler != registeredClientHandler)
-            {
-                registeredClientHandler?.UnregisterHandler<TrenchGeometryMessage>();
-                registeredClientHandler?.UnregisterHandler<TrenchStateMessage>();
-                registeredClientHandler?.UnregisterHandler<TrenchLineRemovedMessage>();
-                registeredClientHandler = handler;
-                registeredClientHandler?.RegisterHandler<TrenchGeometryMessage>(ReceiveGeometry, false);
-                registeredClientHandler?.RegisterHandler<TrenchStateMessage>(ReceiveState, false);
-                registeredClientHandler?.RegisterHandler<TrenchLineRemovedMessage>(ReceiveRemoved, false);
-                if (registeredClientHandler != null)
-                    logger?.LogInfo("[TRENCHES] Registered multiplayer trench handlers.");
-            }
+            if (ClientHandlers.Swap(handler) && handler != null)
+                logger?.LogInfo("[TRENCHES] Registered multiplayer trench handlers.");
         }
 
         private void OnServerAuthenticated(INetworkPlayer player)
@@ -235,29 +216,15 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         {
             if (serializersInstalled) return;
             serializersInstalled = true;
-            Bind(typeof(Writer<TrenchGeometryMessage>), "Write",
-                (Action<NetworkWriter, TrenchGeometryMessage>)WriteGeometry);
-            Bind(typeof(Reader<TrenchGeometryMessage>), "Read",
+            MirageSerializers.Strict.Install<TrenchGeometryMessage>(
+                (Action<NetworkWriter, TrenchGeometryMessage>)WriteGeometry,
                 (Func<NetworkReader, TrenchGeometryMessage>)ReadGeometry);
-            Bind(typeof(Writer<TrenchStateMessage>), "Write",
-                (Action<NetworkWriter, TrenchStateMessage>)WriteState);
-            Bind(typeof(Reader<TrenchStateMessage>), "Read",
+            MirageSerializers.Strict.Install<TrenchStateMessage>(
+                (Action<NetworkWriter, TrenchStateMessage>)WriteState,
                 (Func<NetworkReader, TrenchStateMessage>)ReadState);
-            Bind(typeof(Writer<TrenchLineRemovedMessage>), "Write",
-                (Action<NetworkWriter, TrenchLineRemovedMessage>)WriteRemoved);
-            Bind(typeof(Reader<TrenchLineRemovedMessage>), "Read",
+            MirageSerializers.Strict.Install<TrenchLineRemovedMessage>(
+                (Action<NetworkWriter, TrenchLineRemovedMessage>)WriteRemoved,
                 (Func<NetworkReader, TrenchLineRemovedMessage>)ReadRemoved);
-            MessagePacker.RegisterMessage<TrenchGeometryMessage>();
-            MessagePacker.RegisterMessage<TrenchStateMessage>();
-            MessagePacker.RegisterMessage<TrenchLineRemovedMessage>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.Name, property);
-            target.SetValue(null, value, null);
         }
 
         private static void WriteGeometry(NetworkWriter writer, TrenchGeometryMessage message)

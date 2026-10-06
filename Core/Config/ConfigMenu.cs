@@ -6,6 +6,17 @@ using UnityEngine;
 
 namespace BoscaliSummer.Core.Config
 {
+    /// <summary>ConfigurationManager reads these public fields by name; no plugin assembly dependency.</summary>
+    internal sealed class ConfigurationManagerAttributes
+    {
+        public bool? IsAdvanced;
+        public string Category;
+        public string DispName;
+        public int? Order;
+        public bool? ReadOnly;
+        public Action<ConfigEntryBase> CustomDrawer;
+    }
+
     /// <summary>
     /// What the F1 plugin-settings window shows before anyone reaches for its "Advanced
     /// settings" filter: one MODULES group of master switches, and nothing else.
@@ -28,16 +39,6 @@ namespace BoscaliSummer.Core.Config
     /// </summary>
     internal static class ConfigMenu
     {
-        /// <summary>ConfigurationManager reads these public fields by name; no plugin assembly dependency.</summary>
-        private sealed class ConfigurationManagerAttributes
-        {
-            public bool? IsAdvanced;
-            public string Category;
-            public string DispName;
-            public int? Order;
-            public bool? ReadOnly;
-        }
-
         /// <summary>The group the master switches are listed under, ahead of their own sections.</summary>
         private const string ModuleCategory = "Modules";
 

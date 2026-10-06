@@ -1,9 +1,9 @@
 using System;
-using System.Reflection;
 using BoscaliSummer.Modules.Progression.Domain;
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -80,8 +80,11 @@ namespace BoscaliSummer.Modules.Progression.Networking
         private const int MaximumSenders = 64;
 
         private ProgressionManager manager;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??=
+            HandlerSlot.Of<ProgressionSubmit, PlaneTuneRequest>(ReceiveSubmit, ReceivePlaneTune);
+        private HandlerSlot ClientHandlers => clientSlot ??=
+            HandlerSlot.Of<ProgressionSnapshot, PlaneTuneState>(ReceiveSnapshot, ReceivePlaneTuneState);
         private float nextRegistration;
         private uint scene, token;
         private ulong requestedPlayer;
@@ -90,12 +93,8 @@ namespace BoscaliSummer.Modules.Progression.Networking
             new System.Collections.Generic.Dictionary<ulong, float>();
         private readonly System.Collections.Generic.Dictionary<uint, byte> tunes =
             new System.Collections.Generic.Dictionary<uint, byte>();
-        private readonly System.Collections.Generic.Dictionary<ulong, float> nextQuery =
-            new System.Collections.Generic.Dictionary<ulong, float>();
-        private readonly System.Collections.Generic.Dictionary<ulong, float> nextIntent =
-            new System.Collections.Generic.Dictionary<ulong, float>();
-        private readonly System.Collections.Generic.List<ulong> expired = new System.Collections.Generic.List<ulong>(64);
-        private float nextPrune;
+        private readonly SenderThrottle nextQuery = new SenderThrottle(MaximumSenders);
+        private readonly SenderThrottle nextIntent = new SenderThrottle(MaximumSenders);
 
         internal void ResetScene()
         {
@@ -125,31 +124,16 @@ namespace BoscaliSummer.Modules.Progression.Networking
             nextRegistration = Time.unscaledTime + 0.5f;
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
             if (network == null) return;
-            if (network.Server != null && network.Server.Active &&
-                network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<ProgressionSubmit>();
-                serverHandler?.UnregisterHandler<PlaneTuneRequest>();
-                serverHandler = network.Server.MessageHandler;
-                serverHandler.RegisterHandler<ProgressionSubmit>(ReceiveSubmit, false);
-                serverHandler.RegisterHandler<PlaneTuneRequest>(ReceivePlaneTune, false);
-            }
-            if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<ProgressionSnapshot>();
-                clientHandler?.UnregisterHandler<PlaneTuneState>();
-                clientHandler = network.Client.MessageHandler;
-                clientHandler.RegisterHandler<ProgressionSnapshot>(ReceiveSnapshot, false);
-                clientHandler.RegisterHandler<PlaneTuneState>(ReceivePlaneTuneState, false);
-            }
+            // Unlike the other modules, a missing handler keeps the current registrations.
+            if (network.Server != null && network.Server.Active && network.Server.MessageHandler != null)
+                ServerHandlers.Swap(network.Server.MessageHandler);
+            if (network.Client?.MessageHandler != null) ClientHandlers.Swap(network.Client.MessageHandler);
         }
 
         private void OnDestroy()
         {
-            serverHandler?.UnregisterHandler<ProgressionSubmit>();
-            serverHandler?.UnregisterHandler<PlaneTuneRequest>();
-            clientHandler?.UnregisterHandler<ProgressionSnapshot>();
-            clientHandler?.UnregisterHandler<PlaneTuneState>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
         }
 
         internal void RequestPlaneTune(Aircraft aircraft, int mode)
@@ -252,25 +236,11 @@ namespace BoscaliSummer.Modules.Progression.Networking
         }
 
         /// <summary>Bounded per-player throttle; stale entries are pruned so the cap never locks out a newcomer.</summary>
-        private bool Allow(System.Collections.Generic.Dictionary<ulong, float> limits, ulong id, float interval)
+        private bool Allow(SenderThrottle limits, ulong id, float interval)
         {
             float now = Time.unscaledTime;
-            if (now >= nextPrune)
-            {
-                nextPrune = now + 10f;
-                Prune(nextQuery, now); Prune(nextIntent, now);
-            }
-            if (limits.TryGetValue(id, out float next) ? now < next : limits.Count >= MaximumSenders) return false;
-            limits[id] = now + interval;
-            return true;
-        }
-
-        private void Prune(System.Collections.Generic.Dictionary<ulong, float> limits, float now)
-        {
-            expired.Clear();
-            foreach (var pair in limits)
-                if (now - pair.Value > 30f) expired.Add(pair.Key);
-            for (int i = 0; i < expired.Count; i++) limits.Remove(expired[i]);
+            nextQuery.Prune(now); nextIntent.Prune(now);
+            return limits.Allow(id, now, interval);
         }
 
         private void ReceiveSnapshot(INetworkPlayer _, ProgressionSnapshot snapshot)
@@ -284,20 +254,22 @@ namespace BoscaliSummer.Modules.Progression.Networking
         }
 
         private static bool serializersInstalled;
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[Progression]", " is missing; perk state cannot replicate on this game build.");
 
         private static void InstallSerializers()
         {
             if (serializersInstalled) return;
             serializersInstalled = true;
-            SetWriter<ProgressionSubmit>((writer, value) =>
+            Seams.Install<ProgressionSubmit>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol);
                 writer.WriteByte(value.Perk);
                 writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token); writer.WritePackedInt32(value.Generation);
-            });
+            },
             // A foreign protocol keeps only its header: its layout may differ, and reading past the
             // end would throw inside a Mirage handler.
-            SetReader<ProgressionSubmit>(reader =>
+            reader =>
             {
                 byte protocol = reader.ReadByte();
                 if (protocol != ProtocolVersion) return new ProgressionSubmit { Protocol = protocol };
@@ -307,7 +279,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
                     Perk = reader.ReadByte(), Scene = reader.ReadPackedUInt32(), Token = reader.ReadPackedUInt32(), Generation = reader.ReadPackedInt32()
                 };
             });
-            SetWriter<ProgressionSnapshot>((writer, value) =>
+            Seams.Install<ProgressionSnapshot>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol);
                 writer.WritePackedUInt32(value.PerkMask);
@@ -319,8 +291,8 @@ namespace BoscaliSummer.Modules.Progression.Networking
                 writer.WritePackedUInt32(value.Scene); writer.WritePackedUInt32(value.Token);
                 writer.WritePackedInt32(value.ScorePerPoint); writer.WriteByte(value.MaximumPoints);
                 writer.WritePackedUInt32(value.PlaneId); writer.WriteByte(value.EngineMap);
-            });
-            SetReader<ProgressionSnapshot>(reader =>
+            },
+            reader =>
             {
                 byte protocol = reader.ReadByte();
                 if (protocol != ProtocolVersion) return new ProgressionSnapshot { Protocol = protocol };
@@ -337,22 +309,22 @@ namespace BoscaliSummer.Modules.Progression.Networking
                     PlaneId = reader.ReadPackedUInt32(), EngineMap = reader.ReadByte()
                 };
             });
-            SetWriter<PlaneTuneRequest>((writer, value) =>
+            Seams.Install<PlaneTuneRequest>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
-            });
-            SetReader<PlaneTuneRequest>(reader =>
+            },
+            reader =>
             {
                 byte protocol = reader.ReadByte();
                 if (protocol != ProtocolVersion) return new PlaneTuneRequest { Protocol = protocol };
                 return new PlaneTuneRequest { Protocol = protocol, AircraftId = reader.ReadPackedUInt32(), Mode = reader.ReadByte() };
             });
-            SetWriter<PlaneTuneState>((writer, value) =>
+            Seams.Install<PlaneTuneState>((writer, value) =>
             {
                 writer.WriteByte(value.Protocol); writer.WritePackedUInt32(value.AircraftId); writer.WriteByte(value.Mode);
                 writer.WriteByte(value.Accepted);
-            });
-            SetReader<PlaneTuneState>(reader =>
+            },
+            reader =>
             {
                 byte protocol = reader.ReadByte();
                 if (protocol != ProtocolVersion) return new PlaneTuneState { Protocol = protocol };
@@ -362,32 +334,6 @@ namespace BoscaliSummer.Modules.Progression.Networking
                     Accepted = reader.ReadByte()
                 };
             });
-            MessagePacker.RegisterMessage<ProgressionSubmit>();
-            MessagePacker.RegisterMessage<ProgressionSnapshot>();
-            MessagePacker.RegisterMessage<PlaneTuneRequest>();
-            MessagePacker.RegisterMessage<PlaneTuneState>();
-        }
-
-        // A failed install used to be swallowed by a null-conditional, leaving every message
-        // silently unable to round-trip. Report it instead.
-        private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>
-            Bind(typeof(Writer<T>), "Write", writer);
-
-        private static void SetReader<T>(Func<NetworkReader, T> reader) =>
-            Bind(typeof(Reader<T>), "Read", reader);
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(
-                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError(
-                    "[Progression] Mirage serializer seam " + holder.Name + "." + property +
-                    " is missing; perk state cannot replicate on this game build.");
-                return;
-            }
-            target.SetValue(null, value, null);
         }
     }
 }

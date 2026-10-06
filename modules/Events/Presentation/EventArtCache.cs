@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx;
+using BoscaliSummer.Core.Util;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Events.Presentation
@@ -23,11 +24,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
         internal const int MaximumDimension = 1024;
 
         private const int MaximumEntries = 64;
-
-        private static readonly byte[] Signature =
-        {
-            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
-        };
 
         private sealed class Entry
         {
@@ -215,20 +211,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 }
                 catch { /* An unreadable override must not hide bundled art. */ }
 
-                using (Stream source = typeof(EventArtCache).Assembly.GetManifestResourceStream(
-                           "BoscaliSummer.EventsArt." + key + ".png"))
-                {
-                    if (source == null || source.Length <= 0 || source.Length > MaximumFileBytes) return null;
-                    var data = new byte[(int)source.Length];
-                    int read = 0;
-                    while (read < data.Length)
-                    {
-                        int chunk = source.Read(data, read, data.Length - read);
-                        if (chunk <= 0) return null;
-                        read += chunk;
-                    }
-                    return Decode(data);
-                }
+                byte[] data = EmbeddedResources.ReadAll(
+                    typeof(EventArtCache).Assembly, "BoscaliSummer.EventsArt." + key + ".png", MaximumFileBytes);
+                return data == null ? null : Decode(data);
             }
             catch
             {
@@ -240,31 +225,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             try
             {
-                if (!IsSupported(data, out int width, out int height)) return null;
-
-                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false)
-                {
-                    name = "BoscaliEvents.Art",
-                    filterMode = FilterMode.Bilinear,
-                    wrapMode = TextureWrapMode.Clamp
-                };
-                if (!ImageConversion.LoadImage(texture, data, true) ||
-                    texture.width != width || texture.height != height)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    return null;
-                }
-
-                Sprite sprite = Sprite.Create(
-                    texture, new Rect(0f, 0f, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f), 100f);
-                if (sprite == null)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    return null;
-                }
-                sprite.name = "BoscaliEvents.ArtSprite";
-                return new Entry { Texture = texture, Sprite = sprite };
+                return PngSprites.TryLoad(data, MaximumDimension, "BoscaliEvents.Art",
+                    out Texture2D texture, out Sprite sprite) ? new Entry { Texture = texture, Sprite = sprite } : null;
             }
             catch
             {
@@ -286,35 +248,5 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 // A read-only plugins folder still renders glyphs; nothing to report.
             }
         }
-
-        private static bool IsSupported(byte[] data, out int width, out int height)
-        {
-            width = 0;
-            height = 0;
-            if (data == null || data.Length < 24 || data.Length > MaximumFileBytes) return false;
-
-            for (int i = 0; i < Signature.Length; i++)
-                if (data[i] != Signature[i]) return false;
-
-            if (data[12] != (byte)'I' || data[13] != (byte)'H' ||
-                data[14] != (byte)'D' || data[15] != (byte)'R')
-                return false;
-
-            uint rawWidth = ReadBigEndianUInt32(data, 16);
-            uint rawHeight = ReadBigEndianUInt32(data, 20);
-            if (rawWidth == 0 || rawHeight == 0 ||
-                rawWidth > MaximumDimension || rawHeight > MaximumDimension)
-                return false;
-
-            width = (int)rawWidth;
-            height = (int)rawHeight;
-            return true;
-        }
-
-        private static uint ReadBigEndianUInt32(byte[] data, int offset) =>
-            ((uint)data[offset] << 24) |
-            ((uint)data[offset + 1] << 16) |
-            ((uint)data[offset + 2] << 8) |
-            data[offset + 3];
     }
 }

@@ -8,6 +8,7 @@ using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
@@ -156,8 +157,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 }
                 CommsItem ping = pings[i];
                 PingKind kind = CommsCatalog.Pings[ping.Style];
-                float dx = ping.X - self.x, dz = ping.Z - self.z;
-                float range = Mathf.Sqrt(dx * dx + dz * dz);
+                float range = Scalar.Distance2D(ping.X, ping.Z, self.x, self.z);
                 string who = ping.Author == manager.LocalId ? "YOU" : ping.AuthorName;
                 float fade = Mathf.Clamp01((ping.Expires - now) / 5f);
                 Color colour = CommsMesh.Tone(ping.Faction == manager.LocalFaction ? kind.Tone : CommsTone.Caution);
