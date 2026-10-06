@@ -173,26 +173,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             var bezel = buttons[slot];
             var label = bezel.GetComponentInChildren<TextMeshProUGUI>(true);
-            if (label == null)
-            {
-                var tmp = bezel.GetComponentInChildren<TMP_Text>(true);
-                if (tmp is TextMeshProUGUI ugui) label = ugui;
-            }
-            var highlight = FindHighlight(bezel);
+            var highlight = MfdPanelInstaller.FindHighlight(bezel);
             if (label == null || highlight == null)
                 throw new InvalidOperationException("SET bezel label or highlight is missing.");
 
-            root = new GameObject("BoscaliSummer.SET", typeof(RectTransform));
-            var rect = (RectTransform)root.transform;
-            var source = (RectTransform)template.transform;
-            rect.SetParent(source.parent, false);
-            rect.anchorMin = source.anchorMin;
-            rect.anchorMax = source.anchorMax;
-            rect.pivot = source.pivot;
-            rect.localScale = source.localScale;
-            float height = AvLay.ResolveHeight(source.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            AvLay.ClampIntoCanvas(rect);
+            RectTransform rect = MfdPanelInstaller.MakeRoot(template, "BoscaliSummer.SET", true, false, out root, out float height);
 
             // The dock naming convention ("Content" marks a mod-built panel, vs. a stock
             // screen's "DisplayPanel") predates kit v2 and is enforced elsewhere
@@ -240,18 +225,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mode.Set(serverMode, HostAuthority());
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
             c.Footer.Set(echo ?? AmbientStatus(server, c.CurrentPage), echo != null ? AvState.Info : AvState.Inert);
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-            {
-                if (images[i] != null && images[i].gameObject != button.gameObject)
-                    return images[i];
-            }
-            return button.GetComponent<Image>();
         }
 
         /// <summary>Confirm the action on the footer for a moment. Text, not colour alone.</summary>

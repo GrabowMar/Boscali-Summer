@@ -40,10 +40,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private EventsSettings settings;
         private EventsManager events;
-        private ManualLogSource logger;
 
-        private MFDScreen screen;
-        private GameObject screenRoot;
+        // The six vanilla slots are for WMC and the claimed screens; this screen owns an appended one.
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Events, "EVN", "BoscaliEvents.Screen", preferLeft: false) { Host = true };
+        private MFDScreen screen => installer.Screen;
         private AvConsole console;
         private AvMetric[] metrics;
         private AvHelpTip costTip, resetTip, leftTip, logTip;
@@ -74,24 +75,20 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private float boundCooldown = float.NaN;
         private bool boundAimed;
         private bool boundResolved;
-        private float nextAttempt;
         private float nextRefresh;
-        private bool failed;
 
         public void Configure(EventsSettings config, EventsManager manager, ManualLogSource log)
         {
             settings = config;
             events = manager;
-            logger = log;
+            installer.Log = log;
+            installer.Builder = BuildScreen;
         }
 
         public void ResetForScene()
         {
-            MfdScreenHost.Release(MfdSlots.Events);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
+            installer.Reset();
 
-            screenRoot = null;
-            screen = null;
             console = null;
             metrics = null;
             costTip = resetTip = leftTip = logTip = null;
@@ -117,16 +114,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
             boundCooldown = float.NaN;
             boundAimed = false;
             boundResolved = false;
-            nextAttempt = 0f;
             nextRefresh = 0f;
-            failed = false;
         }
 
         private void OnDestroy() => ResetForScene();
 
         private void Update()
         {
-            if (failed || events == null || settings == null) return;
+            if (installer.Failed || events == null || settings == null) return;
             if (!settings.Enabled.Value)
             {
                 // Disabling the director mid-scene releases the hosted slot instead of
@@ -134,16 +129,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 if (screen != null) ResetForScene();
                 return;
             }
-            if (Application.isBatchMode) { failed = true; return; }
-            if (!GameAccess.MfdAvailable) { failed = true; return; }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-                return;
-            }
+            if (!installer.Tick()) return;
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
@@ -163,76 +149,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         // ---- Installation ----------------------------------------------------------------
 
-        private void TryInstall()
+        /// <summary>The screen for the bezel button (the offline harness builds through this).</summary>
+        private MFDScreen Build(MFDScreen template, Button bezel) => installer.Build(template, bezel);
+
+        private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                if (!MfdScreenHost.TryHost(MfdSlots.Events, preferLeft: false, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    // The six vanilla slots are for WMC and the claimed screens; this screen
-                    // owns an appended one, so the only failure here is a missing adapter.
-                    failed = true;
-                    logger?.LogWarning("EVN MFD unavailable: could not add a host button.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Events);
-                    return;
-                }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Events);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    ResetForScene();
-                    failed = true;
-                    logger?.LogWarning("EVN MFD unavailable: bezel changed during installation.");
-                    return;
-                }
-                logger?.LogInfo("EVN MFD installed on " + (left ? "left" : "right") +
-                                " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                ResetForScene();
-                failed = true;
-                logger?.LogError("EVN MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliEvents.Screen", typeof(RectTransform));
-            screenRoot = root;
-            var rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            var templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-            // Clamp the screen root before the console exists. Clamping console.Root afterwards baked the
-            // canvas correction into the child as a negative offset and shifted the whole page left.
-            AvLay.ClampIntoCanvas(rootRect);
-
+            // The root is clamped before the console exists. Clamping console.Root afterwards baked
+            // the canvas correction into the child as a negative offset and shifted the whole page left.
             console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENT DIRECTORATE", 2, AvTokens.PanelWidth, height);
             // Four compact tiles carry what the three header chips and two wide tiles used to say twice.
             metrics = console.Metrics("COST", "RESET", "LEFT", "LOG");
@@ -246,31 +169,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             BuildDispatchPage(console.Page(TabDispatch));
             BuildDeskPage(console.Page(TabDesk));
             console.Finish();
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = MfdSlots.Events;
-            result.displayPanel = console.Root.gameObject;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                return null;
-            }
-
-            return result;
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-            {
-                if (images[i].gameObject != button.gameObject) return images[i];
-            }
-            return button.GetComponent<Image>();
+            return console.Root;
         }
 
         // ---- Pages -------------------------------------------------------------------------

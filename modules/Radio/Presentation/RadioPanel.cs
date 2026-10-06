@@ -65,8 +65,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private const string OpenFolderTip = "Open the local music folder. OGG and WAV files only.";
         private const string RescanTip = "Rescan the local music library for new folders and tracks. This signs the receiver off and rebuilds the dial.";
 
-        private static MFDScreen screen;
-        private static GameObject screenRoot;
+        private static readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Rad, "RAD", "BoscaliRadio.Screen", preferLeft: false)
+            { Wrap = true, Builder = BuildScreen };
         private static AvConsole console;
         private static RadioManager manager;
 
@@ -103,12 +104,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static int trackPage;
         private static float nextAttempt;
         private static bool unavailableLogged;
-        private static bool gaveUp;
 
         public static void Tick(RadioManager radio)
         {
             manager = radio;
-            if (gaveUp) return;
+            if (installer.Failed) return;
             if (!GameAccess.MfdAvailable)
             {
                 if (!unavailableLogged)
@@ -119,11 +119,17 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 return;
             }
 
-            if (screen == null)
+            if (installer.Screen == null)
             {
                 if (Time.unscaledTime < nextAttempt) return;
                 nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
+                installer.Log = Plugin.Logger;
+                installer.Install();
+                if (installer.Failed)
+                {
+                    console = null;
+                    Plugin.Logger.LogWarning("Radio panel disabled. Playback remains available through config reload only.");
+                }
             }
 
             // The console's own AvTicker (a MonoBehaviour on its Root, inside
@@ -134,13 +140,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         public static void Reset()
         {
-            MfdBezel.Release(MfdSlots.Rad);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
+            installer.Reset();
             RadioStationIconCache.Clear();
             scopePart?.Dispose();
 
-            screenRoot = null;
-            screen = null;
             console = null;
             manager = null;
 
@@ -173,80 +176,20 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             stationPage = 0;
             trackPage = 0;
             nextAttempt = 0f;
-            gaveUp = false;
         }
 
-        private static void TryInstall()
+        private static RectTransform BuildScreen(RectTransform display, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
+            console = AvConsole.Build(display, MfdSlots.Rad, "RADIO", 2, AvTokens.PanelWidth, height);
+            console.Tabs((AvIcon.Radio, "RECEIVER"), (AvIcon.Music, "MUSIC"));
 
-                if (!MfdBezel.TryClaim(MfdSlots.Rad, preferLeft: false, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    Fail("no free bezel slot");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdBezel.Release(MfdSlots.Rad);
-                    return;
-                }
-
-                if (!RadioScreens.TryBuild(template, buttons[slot], "RAD", "RADIO",
-                    new[] { (AvIcon.Radio, "RECEIVER"), (AvIcon.Music, "MUSIC") }, out RadioScreen built))
-                {
-                    MfdBezel.Release(MfdSlots.Rad);
-                    Fail("bezel label or highlight missing");
-                    return;
-                }
-
-                screen = built.Screen;
-                screenRoot = built.Root;
-                console = built.Console;
-
-                BuildReceiver(console.Page(TabReceiver));
-                BuildDeck(console.Page(TabDeck));
-                console.Finish();
-                console.PageChanged += _ => { RefreshReceiver(); RefreshDeck(); };
-                RefreshReceiver();
-                RefreshDeck();
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    MfdBezel.Release(MfdSlots.Rad);
-                    UnityEngine.Object.Destroy(screenRoot);
-                    screenRoot = null;
-                    screen = null;
-                    console = null;
-                    Fail("claimed bezel changed before binding");
-                    return;
-                }
-
-                Plugin.Logger.LogInfo("Radio MFD installed on " + (left ? "left" : "right") +
-                    " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                MfdBezel.Release(MfdSlots.Rad);
-                Fail(e.Message);
-                Plugin.Logger.LogError("Radio MFD install failed: " + e);
-            }
-        }
-
-        private static void Fail(string reason)
-        {
-            gaveUp = true;
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
-            screenRoot = null;
-            screen = null;
-            console = null;
-            Plugin.Logger.LogWarning("Radio panel disabled (" + reason + "). Playback remains available through config reload only.");
+            BuildReceiver(console.Page(TabReceiver));
+            BuildDeck(console.Page(TabDeck));
+            console.Finish();
+            console.PageChanged += _ => { RefreshReceiver(); RefreshDeck(); };
+            RefreshReceiver();
+            RefreshDeck();
+            return null;
         }
 
         // ------------------------------------------------------------------------ receiver page

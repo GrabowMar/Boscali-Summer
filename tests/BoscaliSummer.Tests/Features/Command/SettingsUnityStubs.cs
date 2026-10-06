@@ -40,6 +40,13 @@ namespace BoscaliSummer.Core.Game
         public static bool MfdAvailable => false;
         public static bool HqSensorsAvailable => false;
     }
+    public static class MfdScreenHost
+    {
+        public static bool TryHost(string id, bool preferLeft, VirtualMFD mfd, out List<Button> buttons,
+            out List<MFDScreen> screens, out int slot, out bool left)
+        { buttons = null; screens = null; slot = 0; left = false; return false; }
+        public static void Release(string id) { }
+    }
     public static class MfdBezel
     {
         public static bool TryClaim(string id, bool preferLeft, VirtualMFD mfd, out List<Button> buttons,

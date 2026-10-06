@@ -25,16 +25,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private WeatherSettings settings;
         private WeatherManager weather;
-        private ManualLogSource logger;
 
-        private GameObject screenRoot;
-        private MFDScreen screen;
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Weather, "ENV", "BoscaliWeather.Screen", preferLeft: false) { Host = true };
+        private MFDScreen screen => installer.Screen;
         private AvConsole console;
         private WeatherEnvView view;
 
-        private float nextAttempt;
         private float nextRefresh;
-        private bool failed;
         private readonly float[] densityCurve = new float[13];
 
 
@@ -42,147 +40,40 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             settings = config;
             weather = manager;
-            logger = log;
+            installer.Log = log;
+            installer.Builder = BuildScreen;
         }
 
         public void ResetForScene()
         {
-            MfdScreenHost.Release(MfdSlots.Weather);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
+            installer.Reset();
 
-            screenRoot = null;
-            screen = null;
             console = null;
             view = null;
-            nextAttempt = 0f;
             nextRefresh = 0f;
-            failed = false;
         }
 
         private void OnDestroy() => ResetForScene();
 
         private void Update()
         {
-            if (failed || weather == null || settings == null) return;
+            if (installer.Failed || weather == null || settings == null) return;
             if (!settings.Enabled.Value)
             {
                 if (screen != null) ResetForScene();
                 return;
             }
-            if (Application.isBatchMode || !GameAccess.MfdAvailable)
-            {
-                failed = true;
-                return;
-            }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-            }
+            installer.Tick();
         }
 
-        private void TryInstall()
+        private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                if (!MfdScreenHost.TryHost(MfdSlots.Weather, preferLeft: false, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    failed = true;
-                    logger?.LogWarning("ENV MFD unavailable: could not add a host button.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Weather);
-                    return;
-                }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Weather);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    ResetForScene();
-                    failed = true;
-                    logger?.LogWarning("ENV MFD unavailable: bezel changed during installation.");
-                    return;
-                }
-
-                logger?.LogInfo("ENV MFD installed on " + (left ? "left" : "right") +
-                                " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                ResetForScene();
-                failed = true;
-                logger?.LogError("ENV MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliWeather.Screen", typeof(RectTransform));
-            screenRoot = root;
-            var rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            var templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            float height = AvLay.ResolveHeight(
-                templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvLay.ClampIntoCanvas(rootRect);
-
             view = new WeatherEnvView(rootRect, MfdSlots.Weather, Width, height);
             console = view.Console;
             console.PageChanged += _ => nextRefresh = 0f;
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = MfdSlots.Weather;
-            result.displayPanel = root;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                console = null;
-                view = null;
-                return null;
-            }
-
             view.Finish();
             console.Ticker.Add(-1, AvTickRate.Fast, TickRefresh);
-            return result;
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-            {
-                if (images[i].gameObject != button.gameObject) return images[i];
-            }
-            return button.GetComponent<Image>();
+            return null;
         }
 
         // ---- Refresh ---------------------------------------------------------------------
