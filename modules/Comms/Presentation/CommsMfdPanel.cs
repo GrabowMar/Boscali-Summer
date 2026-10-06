@@ -255,29 +255,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             return built;
         }
 
-        /// <summary>A wrapped, resizing line of secondary prose (replaces the v1 "hint"/"row-sub" labels).</summary>
-        private sealed class AvNote : AvPart
-        {
-            private readonly TMP_Text text;
-
-            public AvNote(RectTransform parent, string initial = "")
-            {
-                Rect = AvLay.Child(parent, "Note");
-                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, initial ?? "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public string Text
-            {
-                get => text.text;
-                set { if (text.text != (value ?? "")) text.text = value ?? ""; }
-            }
-
-            public override float Measure(float width) => Mathf.Max(AvGridTokens.RowDense, AvText.Height(text, width));
-            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
-            public override void Restyle() => text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-        }
-
         /// <summary>Hover help on a text field (the field frame raycasts; the tip bubbles up from it).</summary>
         private static void Tip(AvField field, string help) => AvHelpTip.Attach(field.Rect.gameObject, help);
 

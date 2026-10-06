@@ -1,17 +1,15 @@
-using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace BoscaliSummer.Modules.Comms.Presentation
+namespace NOAvionics
 {
     /// <summary>
-    /// A section header that also carries its controls: icon, title, caption, then a few icon keys on
-    /// the right (paging arrows, a send key). Replaces "section + pager row + button row" with one 28 px
-    /// line. Kit gap: the kit's <see cref="AvSection"/> has no trailing controls; this is the module-private
-    /// composition until the kit grows one.
+    /// A section header that also carries its controls: icon, title, caption, then up to a few icon keys on
+    /// the right (paging arrows, rescan, open folder). Replaces "section + stepper row + button row". A title
+    /// too long for the line wraps and drops the keys beneath it.
     /// </summary>
-    internal sealed class CommsHeaderPart : AvPart
+    public sealed class AvKeyHeader : AvPart
     {
         private const float ButtonW = 30f, ButtonGap = 3f;
         private readonly TMP_Text icon, title, caption;
@@ -21,13 +19,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         public AvControl this[int index] => buttons[index];
 
-        public CommsHeaderPart(RectTransform parent, AvIcon glyph, string titleText, params AvControl.Spec[] specs)
+        public AvKeyHeader(RectTransform parent, AvIcon glyph, string titleText, params AvControl.Spec[] specs)
         {
             Rect = AvLay.Child(parent, "Header " + titleText);
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
-            title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
-            AvText.Fit(title, false);
-            caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, string.Empty, TextAlignmentOptions.MidlineRight);
+            title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText, TextAlignmentOptions.MidlineLeft, true);
+            caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
             cap = AvLay.Solid(Rect, "Cap", Color.clear);
             buttons = new AvControl[specs.Length];
@@ -40,6 +37,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             if (title.text == (text ?? string.Empty)) return;
             title.text = text ?? string.Empty;
             Arrange();
+            Changed();
         }
 
         public void SetCaption(string text)
@@ -47,9 +45,21 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             if (caption.text == (text ?? string.Empty)) return;
             caption.text = text ?? string.Empty;
             Arrange();
+            Changed();
         }
 
-        public override float Measure(float width) => 28f;
+        private float TitleWidth(float width)
+        {
+            float strip = buttons.Length == 0 ? 0f : buttons.Length * (ButtonW + ButtonGap) - ButtonGap;
+            float left = width - strip;
+            float captionW = Mathf.Min(AvText.Width(caption) + 2f, Mathf.Max(0f, left - 90f));
+            return Mathf.Max(30f, left - (buttons.Length == 0 ? 0f : 8f) - captionW - 30f);
+        }
+
+        private bool TitleRow(float width) => AvText.Width(title) > TitleWidth(width);
+        private float TitleHeight(float width) => Mathf.Max(22f, AvText.Height(title, width - 22f));
+
+        public override float Measure(float width) => TitleRow(width) ? TitleHeight(width) + 28f : 28f;
 
         public override void Place(AvSlot s)
         {
@@ -65,13 +75,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             float w = placedW;
             float strip = buttons.Length == 0 ? 0f : buttons.Length * (ButtonW + ButtonGap) - ButtonGap;
             float left = w - strip;
+            bool titleRow = TitleRow(w);
+            float keyY = titleRow ? TitleHeight(w) : 0f;
             for (int i = 0; i < buttons.Length; i++)
-                AvLay.Place(buttons[i].Rect, left + i * (ButtonW + ButtonGap), 1f, ButtonW, 25f);
+                AvLay.Place(buttons[i].Rect, left + i * (ButtonW + ButtonGap), keyY + 1f, ButtonW, 25f);
             float captionW = Mathf.Min(AvText.Width(caption) + 2f, Mathf.Max(0f, left - 90f));
             float captionX = left - (buttons.Length == 0 ? 0f : 8f) - captionW;
             AvLay.Place(icon.rectTransform, 0f, 5f, 16f, 16f);
-            AvLay.Place(title.rectTransform, 22f, 0f, Mathf.Max(30f, captionX - 30f), 26f);
-            AvLay.Place(caption.rectTransform, captionX, 0f, captionW, 26f);
+            AvLay.Place(title.rectTransform, 22f, 0f, titleRow ? w - 22f : TitleWidth(w), titleRow ? keyY : 26f);
+            AvLay.Place(caption.rectTransform, captionX, keyY, captionW, 26f);
             AvLay.Place(rule.rectTransform, 0f, placedH - 1f, w, 1f);
             AvLay.Place(cap.rectTransform, 0f, placedH - 3f, 28f, 3f);
         }

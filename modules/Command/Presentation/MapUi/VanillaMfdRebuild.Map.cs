@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private ThreatMapOverlay threats;
             private MfdPagingGrid layers, overlays, hover, sizes;
             private AvControl presetAll, presetNone, presetDefaults;
-            private ProseNote detailSummary, previewCaption;
+            private AvNote detailSummary, previewCaption;
             private AvSlab overlaySlab;
             private AvMetric[] metrics;
             private int selectedPage;
@@ -257,7 +257,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 previewTiles[1] = new SymbolTile(previewFlow.Content, "GND", "GROUND");
                 previewTiles[2] = new SymbolTile(previewFlow.Content, "SHP", "SURFACE");
                 previewFlow.Row(previewTiles[0], previewTiles[1], previewTiles[2]);
-                previewCaption = new ProseNote(previewFlow.Content, "");
+                previewCaption = new AvNote(previewFlow.Content, "");
                 previewFlow.Add(previewCaption);
 
                 page.Section(AvIcon.Eye, "HOVER", "TOOLTIP");
@@ -265,7 +265,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 hover.SetGlyphs(i => HoverGlyphs[Mathf.Clamp(i, 0, HoverGlyphs.Length - 1)]);
                 AddGrid(page, hover);
 
-                detailSummary = new ProseNote(page.Content, "");
+                detailSummary = new AvNote(page.Content, "");
                 page.Add(detailSummary);
 
                 page.Section(AvIcon.Focus2, "SIZE", "SYMBOLS");

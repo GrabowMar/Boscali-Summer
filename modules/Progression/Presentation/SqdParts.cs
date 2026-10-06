@@ -57,34 +57,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     /// when its text can change its height, so a value that arrives after the first layout never
     /// spills into the part below it.
     /// </summary>
-    internal sealed class AvTextBlock : AvPart
-    {
-        private readonly TMP_Text text;
-
-        public AvTextBlock(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall)
-        {
-            Rect = AvLay.Child(parent, "Text");
-            text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-            Restyle();
-        }
-
-        public Color Color { set => text.color = value; }
-
-        public void Set(string value)
-        {
-            string v = value ?? "";
-            if (text.text == v) return;
-            text.text = v;
-            Changed();
-        }
-
-        public override float Measure(float width) => Mathf.Max(14f, AvText.Height(text, width));
-
-        public override void Place(AvSlot slot) { base.Place(slot); AvLay.Fill(text.rectTransform); }
-
-        public override void Restyle() => text.color = SqdTone.Dim;
-    }
-
     /// <summary>A small read-only stat: caption over a mono value. Used for compact tile rows.</summary>
     internal sealed class AvStatTile : AvPart
     {

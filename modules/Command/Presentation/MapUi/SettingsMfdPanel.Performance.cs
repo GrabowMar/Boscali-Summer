@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (count == 0)
             {
                 flow.Section(AvIcon.Activity, "PERFORMANCE", "UNAVAILABLE");
-                flow.Add(new NoteLine(flow.Content)).Set("NONE INSTALLED");
+                flow.Add(new AvNote(flow.Content) { MinHeight = 18f }).Set("NONE INSTALLED");
             }
             else
             {

@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         protected const float HeadH = 16f, Inset = 4f;
         protected readonly AvFrame Frame;
         protected readonly TMP_Text Head, Note;
-        protected readonly SetQuadGraphic Quads;
+        protected readonly AvQuadGraphic Quads;
         protected float AreaW, AreaH;
         private readonly float natural;
 
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvText.Fit(Note, false);
             var go = new GameObject("Quads", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
-            Quads = go.AddComponent<SetQuadGraphic>();
+            Quads = go.AddComponent<AvQuadGraphic>();
             Quads.raycastTarget = false;
             PaintFrame();
         }

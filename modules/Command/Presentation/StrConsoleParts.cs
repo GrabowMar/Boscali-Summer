@@ -94,29 +94,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
     }
 
-    internal sealed class ProseText : AvPart
-    {
-        private readonly TMP_Text text;
-
-        public ProseText(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall)
-        {
-            Rect = AvLay.Child(parent, "Prose");
-            text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-            AvLay.Fill(text.rectTransform);
-            Restyle();
-        }
-
-        public void Set(string value)
-        {
-            if (StrPaint.Put(text, value)) Changed();
-        }
-
-        public override float Measure(float width) => text.text.Length == 0 ? 0f : Mathf.Max(14f, AvText.Height(text, width));
-
-        public override void Restyle() =>
-            text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-    }
-
     /// <summary>
     /// The one empty-state card: an icon, what is missing, and what to do about it. Used instead of
     /// section headers with blank space under them.

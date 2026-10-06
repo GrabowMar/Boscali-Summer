@@ -379,33 +379,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return row;
         }
 
-        /// <summary>A single wrapped line of prose/status copy, built from kit v2 primitives (a kit gap:
-        /// there is no bare "label part" in the v2 set — every text-bearing part carries its own chrome).</summary>
-        private sealed class NoteLine : AvPart
-        {
-            private readonly TMP_Text text;
-
-            public NoteLine(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall)
-            {
-                Rect = AvLay.Child(parent, "Note");
-                text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void Set(string t) { if (text.text != (t ?? "")) text.text = t ?? ""; }
-
-            public override float Measure(float width) => Mathf.Max(18f, AvText.Height(text, width));
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
-            }
-
-            public override void Restyle() =>
-                text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-        }
-
         public void ResetForScene()
         {
             ReleaseClaim();

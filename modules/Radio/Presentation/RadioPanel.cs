@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static RadioStripPart dialStrip;
         private static BandScopePart scopePart;
         private static RadioLevelsPart levelsPart;
-        private static RadioHeaderPart presetHeader;
+        private static AvKeyHeader presetHeader;
         private static readonly AvRow[] stationRows = new AvRow[PresetRows];
         private static int presetShown = PresetRows;
 
@@ -87,8 +87,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static AvHazardBar deckBar;
         private static readonly float[] eqLevels = new float[EqBars];
         private static RadioStripPart deckStrip;
-        private static RadioHeaderPart folderHeader;
-        private static RadioHeaderPart trackHeader;
+        private static AvKeyHeader folderHeader;
+        private static AvKeyHeader trackHeader;
         private static readonly AvRow[] trackRows = new AvRow[TrackRows];
         private static AvAlert emptyAlert;
         private static bool deckHadFolders = true;
@@ -241,7 +241,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             levelsPart.Bandwidth.Help = "Wide or narrow passband. Narrow trades audio quality for less noise.";
             levelsPart.Step.Help = "Channel step, or a five-times finer tuning step.";
 
-            presetHeader = p.Add(new RadioHeaderPart(p.Content, AvIcon.ListDetails, "PRESETS",
+            presetHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.ListDetails, "PRESETS",
                 new AvControl.Spec(string.Empty, () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh),
                 new AvControl.Spec(string.Empty, () => { PreviousStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec(string.Empty, () => { NextStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
@@ -563,7 +563,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
             emptyAlert = p.Add(new AvAlert(p.Content));
 
-            folderHeader = p.Add(new RadioHeaderPart(p.Content, AvIcon.Music, "MUSIC",
+            folderHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.Music, "MUSIC",
                 new AvControl.Spec(string.Empty, () => { NudgeFolder(-1); RefreshDeck(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec(string.Empty, () => { NudgeFolder(1); RefreshDeck(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight),
                 new AvControl.Spec(string.Empty, () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh),
@@ -573,7 +573,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             folderHeader[2].Help = RescanTip;
             folderHeader[3].Help = OpenFolderTip;
 
-            trackHeader = p.Add(new RadioHeaderPart(p.Content, AvIcon.ListDetails, "TRACKS",
+            trackHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.ListDetails, "TRACKS",
                 new AvControl.Spec(string.Empty, () => { PreviousTrackPage(); RefreshDeck(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec(string.Empty, () => { NextTrackPage(); RefreshDeck(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
 

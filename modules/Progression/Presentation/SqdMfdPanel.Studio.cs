@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private float studioMessageUntil;
 
         private SqdEmptyCard studioLauncher;
-        private AvTextBlock studioMessageText;
+        private AvNote studioMessageText;
         private AvStepper studioShape, studioCharge, studioPalette, studioArt;
         private AvPortrait studioEmblem;
         private AvField studioSquadronField;
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Row(studioShape, studioCharge);
             p.Row(studioPalette, studioArt);
 
-            studioMessageText = p.Add(new AvTextBlock(p.Content, AvTextRole.ProseSmall), 1f);
+            studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f }, 1f);
             studioMessageText.Set(StudioQuietLine);
         }
 

@@ -9,34 +9,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static partial class VanillaMfdRebuild
     {
-        /// <summary>Explanatory copy under a heading: dim, wrapped, never truncated. Built from kit v2 primitives
-        /// (AvPart + AvText) because the kit has no bare "note" part — only wrapping the current console kind
-        /// (AvSection/AvAlert/AvRow) has a fixed shape.</summary>
-        private sealed class ProseNote : AvPart
-        {
-            private readonly TMP_Text text;
-
-            public ProseNote(RectTransform parent, string body)
-            {
-                Rect = AvLay.Child(parent, "Note");
-                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, body ?? "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public void Set(string body) => text.text = body ?? "";
-
-            public override float Measure(float width) => AvText.Height(text, width);
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
-            }
-
-            public override void Restyle() =>
-                text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-        }
-
         /// <summary>
         /// A row of equal-width latched buttons choosing one of a few named views. Kit v2's
         /// <see cref="AvSegmented"/> caps its group at 62% of the width, which wraps or clips

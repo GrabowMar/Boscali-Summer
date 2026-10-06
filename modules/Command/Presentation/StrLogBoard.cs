@@ -156,13 +156,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 float y = r.yMax - ContentEnd - Spacing * 0.5f;
                 while (y > r.yMin + 4f)
                 {
-                    int n = vh.currentVertCount;
-                    vh.AddVert(new Vector3(r.xMin + 10f, y), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMin + 10f, y + 1f), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMax - 10f, y + 1f), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMax - 10f, y), color, Vector2.zero);
-                    vh.AddTriangle(n, n + 1, n + 2);
-                    vh.AddTriangle(n, n + 2, n + 3);
+                    AvQuadGraphic.Emit(vh, r, 10f, r.yMax - (y + 1f), r.width - 20f, 1f, color, color, color, color);
                     y -= Spacing;
                 }
             }

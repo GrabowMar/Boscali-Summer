@@ -51,41 +51,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             t == StrTone.Alert ? AvStates.Glyph(AvState.Danger) : t == StrTone.Caution ? AvStates.Glyph(AvState.Caution) : "";
     }
 
-    /// <summary>Filled rectangles in the owner's top-left pixel space: the org chart's connector lines, one draw.</summary>
-    internal sealed class StrLineGraphic : MaskableGraphic
-    {
-        public const int MaxRects = 64;
-        private readonly Rect[] rects = new Rect[MaxRects];
-        private int count;
-
-        public void Begin() => count = 0;
-
-        public void Add(float x, float y, float w, float h)
-        {
-            if (count < MaxRects) rects[count++] = new Rect(x, y, w, h);
-        }
-
-        public void End() => SetVerticesDirty();
-
-        protected override void OnPopulateMesh(VertexHelper vh)
-        {
-            vh.Clear();
-            Rect r = rectTransform.rect;
-            for (int i = 0; i < count; i++)
-            {
-                Rect q = rects[i];
-                float x0 = r.xMin + q.x, x1 = x0 + q.width, y1 = r.yMax - q.y, y0 = y1 - q.height;
-                int c = vh.currentVertCount;
-                vh.AddVert(new Vector3(x0, y0), color, Vector4.zero);
-                vh.AddVert(new Vector3(x0, y1), color, Vector4.zero);
-                vh.AddVert(new Vector3(x1, y1), color, Vector4.zero);
-                vh.AddVert(new Vector3(x1, y0), color, Vector4.zero);
-                vh.AddTriangle(c, c + 1, c + 2);
-                vh.AddTriangle(c, c + 2, c + 3);
-            }
-        }
-    }
-
     /// <summary>
     /// The chain of command as an org chart: theatre commander on top, component commanders in columns
     /// below with a connector bus, base commanders stacked under the post they answer to on a trunk line.
@@ -110,7 +75,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private readonly Action<int> onSelect;
         private readonly Card[] cards = new Card[MaxNodes];
         private readonly StrOrgNode[] data = new StrOrgNode[MaxNodes];
-        private readonly StrLineGraphic lines;
+        private readonly AvQuadGraphic lines;
         private int count;
 
         // Layout scratch (fixed, reused; nothing allocates while laying out).
@@ -126,7 +91,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             onSelect = select;
             var go = new GameObject("Lines", typeof(RectTransform), typeof(CanvasRenderer));
             go.transform.SetParent(Rect, false);
-            lines = go.AddComponent<StrLineGraphic>();
+            lines = go.AddComponent<AvQuadGraphic>();
             lines.raycastTarget = false;
             AvLay.Fill(lines.rectTransform);
             for (int i = 0; i < MaxNodes; i++) cards[i] = MakeCard(i);

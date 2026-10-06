@@ -462,7 +462,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             /// <summary>Explanatory copy under a heading: dim, wrapped, never truncated.</summary>
-            protected static void Note(AvFlow page, string text) => page.Add(new ProseNote(page.Content, text));
+            protected static void Note(AvFlow page, string text) => page.Add(new AvNote(page.Content, text));
         }
 
         private static int CountEnabled(List<HUDOptions_ToggleButton> sources)

@@ -31,13 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void QuadV(float x, float y, float w, float h, Color top, Color bottom)
         {
             if (w <= 0f || h <= 0f) return;
-            int i = vh.currentVertCount;
-            vh.AddVert(P(x, y), top, Vector4.zero);
-            vh.AddVert(P(x + w, y), top, Vector4.zero);
-            vh.AddVert(P(x + w, y + h), bottom, Vector4.zero);
-            vh.AddVert(P(x, y + h), bottom, Vector4.zero);
-            vh.AddTriangle(i, i + 1, i + 2);
-            vh.AddTriangle(i, i + 2, i + 3);
+            AvQuadGraphic.Emit(vh, r, x, y, w, h, top, top, bottom, bottom);
         }
 
         public void Line(float x0, float y0, float x1, float y1, float width, Color c)
