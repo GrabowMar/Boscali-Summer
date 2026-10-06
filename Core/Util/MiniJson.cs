@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Util
 {
     /// <summary>Engine-free JSON reader for mod data files. Produces Dictionary (case-insensitive keys),

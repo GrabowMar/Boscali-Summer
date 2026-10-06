@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Performance.Configuration;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Performance.Runtime

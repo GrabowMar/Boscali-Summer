@@ -1,6 +1,5 @@
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
-using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Configuration;
 
 namespace BoscaliSummer.Modules.Wing.Presentation

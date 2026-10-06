@@ -2,11 +2,8 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
-using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi

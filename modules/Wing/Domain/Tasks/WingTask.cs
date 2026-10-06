@@ -1,12 +1,4 @@
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 // Data contracts between orders, the planner and the engine. Some fields are filled only by the map (M4b), the engine
 // or the tests, so the mod assembly may not assign them yet.
 #pragma warning disable CS0649

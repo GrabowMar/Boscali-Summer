@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime

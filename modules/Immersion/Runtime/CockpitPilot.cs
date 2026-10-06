@@ -5,7 +5,6 @@ using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Immersion.Domain;

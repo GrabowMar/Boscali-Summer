@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Networking;
 using NuclearOption.Networking;

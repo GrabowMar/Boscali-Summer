@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Trenches.Presentation;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Modules.Trenches.Visuals;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Contracts;
 

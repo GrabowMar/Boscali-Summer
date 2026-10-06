@@ -5,8 +5,6 @@ using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
-using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;

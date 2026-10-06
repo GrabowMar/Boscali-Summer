@@ -1,4 +1,3 @@
-using System;
 using NuclearOption.Networking;
 
 namespace BoscaliSummer.Core.Contracts

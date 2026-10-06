@@ -1,8 +1,5 @@
 using System;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Math
 {
     /// <summary>Engine-free 3D vector in Unity's axes (x right/east, y up, z forward/north; left-handed).

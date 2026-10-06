@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Events.Presentation;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Events

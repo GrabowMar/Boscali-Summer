@@ -5,7 +5,6 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using Mirage;
 using Mirage.Serialization;

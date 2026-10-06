@@ -1,8 +1,6 @@
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using Rewired;
 using TMPro;
 using UnityEngine;

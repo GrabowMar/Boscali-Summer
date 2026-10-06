@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using BoscaliSummer.Modules.Weather.Domain;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 

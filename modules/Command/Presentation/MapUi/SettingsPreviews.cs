@@ -1,10 +1,6 @@
 using NOAvionics;
-using System;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using TMPro;
 using UnityEngine;
 

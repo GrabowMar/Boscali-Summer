@@ -1,8 +1,4 @@
-using System;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Math
 {
     /// <summary>Float helpers shared by guidance and control (System.Math works in doubles).</summary>

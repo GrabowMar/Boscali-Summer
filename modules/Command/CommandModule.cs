@@ -6,8 +6,6 @@ using BoscaliSummer.Modules.Command.Presentation;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Command

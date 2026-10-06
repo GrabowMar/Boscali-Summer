@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;

@@ -6,7 +6,6 @@ using BoscaliSummer.Modules.Progression.Configuration;
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using TMPro;

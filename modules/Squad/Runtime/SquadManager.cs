@@ -6,7 +6,6 @@ using BoscaliSummer.Modules.Squad.Domain;
 using BoscaliSummer.Modules.Squad.Networking;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;

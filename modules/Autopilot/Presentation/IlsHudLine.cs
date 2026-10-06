@@ -2,7 +2,6 @@ using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Modules.Autopilot.Runtime;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
 using UnityEngine;
 

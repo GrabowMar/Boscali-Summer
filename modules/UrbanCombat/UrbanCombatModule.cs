@@ -1,7 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Garrisons;
 using BoscaliSummer.Modules.UrbanCombat.Runtime;

@@ -1,6 +1,5 @@
 using BoscaliSummer.Modules.Immersion.Runtime;
 using HarmonyLib;
-using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Patches
 {

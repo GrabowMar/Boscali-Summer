@@ -2,7 +2,6 @@ using BoscaliSummer.Modules.Support.Domain.C2;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.C2
 {

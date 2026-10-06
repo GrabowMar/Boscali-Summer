@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Modules.Autopilot.Runtime;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;

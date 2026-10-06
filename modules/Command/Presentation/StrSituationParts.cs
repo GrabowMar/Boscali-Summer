@@ -1,5 +1,4 @@
 using NOAvionics;
-using System;
 using BoscaliSummer.Modules.Command.Domain;
 using TMPro;
 using UnityEngine;

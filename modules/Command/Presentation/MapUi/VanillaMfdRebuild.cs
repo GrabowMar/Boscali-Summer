@@ -1,7 +1,6 @@
 using NOAvionics;
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Command.Presentation;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;

@@ -1,9 +1,6 @@
 using System;
 using System.Text;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Util
 {
     /// <summary>Wire protocol constants (spec M6 §2).</summary>

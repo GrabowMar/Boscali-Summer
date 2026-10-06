@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Progression.Presentation

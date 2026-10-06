@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.Weather.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Weather

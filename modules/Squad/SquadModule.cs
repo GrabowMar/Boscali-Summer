@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Squad.Patches;
 using BoscaliSummer.Modules.Squad.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 

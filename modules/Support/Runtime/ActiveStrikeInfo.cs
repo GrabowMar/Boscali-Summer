@@ -1,4 +1,3 @@
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime

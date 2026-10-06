@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.HighCommand.Patches;
 using BoscaliSummer.Modules.HighCommand.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.HighCommand

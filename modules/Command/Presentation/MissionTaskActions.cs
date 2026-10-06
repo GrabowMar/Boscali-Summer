@@ -1,6 +1,5 @@
 using System;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;

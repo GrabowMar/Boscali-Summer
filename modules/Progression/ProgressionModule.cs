@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Modules.Progression.Presentation;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Progression

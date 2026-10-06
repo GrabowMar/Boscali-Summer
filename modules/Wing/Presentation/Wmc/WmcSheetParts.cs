@@ -5,10 +5,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Core.Util;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // The "one sheet" parts SUPPLY and LOADOUT share (spec 2026-10-04 §SUPPLY × LOADOUT): dense 24–26 px rows, header bars that carry

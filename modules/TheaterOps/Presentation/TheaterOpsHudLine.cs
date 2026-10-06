@@ -1,5 +1,4 @@
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.TheaterOps.Presentation

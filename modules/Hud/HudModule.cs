@@ -3,8 +3,6 @@ using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Presentation;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Hud
 {

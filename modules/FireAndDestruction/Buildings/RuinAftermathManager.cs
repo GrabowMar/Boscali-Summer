@@ -3,9 +3,7 @@ using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using BoscaliSummer.Modules.FireAndDestruction.Domain;
 using BoscaliSummer.Modules.FireAndDestruction.Networking;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire

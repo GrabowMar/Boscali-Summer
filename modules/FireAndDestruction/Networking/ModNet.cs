@@ -4,7 +4,6 @@ using System.Reflection;
 using BoscaliSummer.Fire;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;

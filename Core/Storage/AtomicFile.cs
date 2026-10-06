@@ -1,9 +1,6 @@
 using System;
 using System.IO;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Storage
 {
     /// <summary>Whole-file writes that never leave a half-written file (critic resolution 11): the text goes to a temp file first, then

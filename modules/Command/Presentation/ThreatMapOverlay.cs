@@ -4,7 +4,6 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NOAvionics;
 using NuclearOption.Networking;

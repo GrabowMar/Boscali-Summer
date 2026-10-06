@@ -6,12 +6,9 @@ using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Modules.Trenches.Networking;
 using BoscaliSummer.Modules.Trenches.Visuals;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime

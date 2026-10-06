@@ -1,8 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Performance.Runtime;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Performance

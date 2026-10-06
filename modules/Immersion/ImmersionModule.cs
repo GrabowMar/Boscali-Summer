@@ -3,8 +3,6 @@ using BoscaliSummer.Modules.Immersion.Patches;
 using BoscaliSummer.Modules.Immersion.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Immersion
 {

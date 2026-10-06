@@ -2,9 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {

@@ -1,15 +1,11 @@
-using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Trenches.Configuration;
 using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.UI;
 

@@ -2,7 +2,6 @@ using NOAvionics;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Domain.Pure;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>A top-left, y-down drawing surface over one kit <see cref="AvQuadBuffer"/> (the kit's meshes are bottom-left, y-up):

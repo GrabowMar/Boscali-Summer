@@ -2,7 +2,6 @@ using System;
 using System.Threading;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Weather.Domain;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 using BoscaliSummer.Core.Contracts;

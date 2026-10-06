@@ -2,8 +2,6 @@ using System;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Modules.Session.Networking;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Session
 {

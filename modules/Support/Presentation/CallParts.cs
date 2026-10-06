@@ -1,9 +1,6 @@
 using NOAvionics;
-using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {

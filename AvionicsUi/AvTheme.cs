@@ -1,4 +1,3 @@
-using System;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
 

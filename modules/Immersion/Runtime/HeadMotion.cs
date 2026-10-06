@@ -1,5 +1,4 @@
 using BoscaliSummer.Modules.Immersion.Domain;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime

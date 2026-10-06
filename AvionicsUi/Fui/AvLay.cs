@@ -1,4 +1,3 @@
-using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 

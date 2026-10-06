@@ -1,9 +1,7 @@
 using NOAvionics;
 using System;
-using BoscaliSummer.Modules.Command.Domain;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {

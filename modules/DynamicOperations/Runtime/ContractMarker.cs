@@ -1,6 +1,5 @@
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Core.Game;
-using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;

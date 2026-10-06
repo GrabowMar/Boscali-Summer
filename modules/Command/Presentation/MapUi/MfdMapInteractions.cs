@@ -2,13 +2,10 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi

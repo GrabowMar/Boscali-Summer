@@ -1,6 +1,5 @@
 using BoscaliSummer.Modules.QoL.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
 using UnityEngine;
 

@@ -7,7 +7,6 @@ using BoscaliSummer.Modules.Progression.Domain;
 using BoscaliSummer.Modules.Progression.Networking;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;

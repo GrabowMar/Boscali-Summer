@@ -4,8 +4,6 @@ using BoscaliSummer.Modules.TheaterOps.Patches;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.TheaterOps
 {

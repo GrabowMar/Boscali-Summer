@@ -1,6 +1,5 @@
 using System;
 using System.Reflection;
-using BoscaliSummer.Modules.Weather.Domain;
 using BoscaliSummer.Modules.Weather.Runtime;
 using BoscaliSummer.Core.Game;
 using Mirage;

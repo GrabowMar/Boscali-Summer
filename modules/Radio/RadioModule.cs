@@ -3,8 +3,6 @@ using BoscaliSummer.Modules.Radio.Patches;
 using BoscaliSummer.Modules.Radio.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Radio
 {

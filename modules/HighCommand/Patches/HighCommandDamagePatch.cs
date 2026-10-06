@@ -1,7 +1,6 @@
 using BoscaliSummer.Modules.HighCommand.Runtime;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
-using NuclearOption.Networking;
 
 namespace BoscaliSummer.Modules.HighCommand.Patches
 {

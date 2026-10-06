@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using NuclearOption.Effects;
-using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
