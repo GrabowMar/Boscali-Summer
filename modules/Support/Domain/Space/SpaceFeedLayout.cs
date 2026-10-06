@@ -20,8 +20,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// </summary>
     internal sealed class SpaceFeedLayout
     {
-        /// <summary>Height of a C2 box header (mirrors C2Box.HeaderH; Domain cannot reference Presentation).</summary>
-        public const float BoxHeader = 20f;
         public const float StripH = 22f, WarnFullH = 36f, ToolbarH = 26f, RowH = 26f, RowPitch = 28f, ButtonsH = 30f, CardH = 38f,
             CardPitch = 40f, ArtH = 50f, CellsH = 34f, CompactCellsH = 30f, ColumnWidth = 458f, MinImageTall = 150f, MinImageShort = 100f,
             ConsoleLineH = 14f, ConsolePad = 4f, SensorChrome = 51f, TaskedFixed = 22f;

@@ -43,8 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// state class (live, warn, danger, info, inert). The word carries the state; the colour repeats it.</summary>
     internal static class WmcHeader
     {
-        /// <summary>A chip's text budget (97 px label, autosized down to 10 px).</summary>
-        public const int ChipChars = 15;
 
         public const string None = "—";
 

@@ -34,8 +34,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private const int TabWings = 2;
         private const int TabStudio = 3;
         private const int TabPlane = 4;
-
-        private const int MaximumBudgetPips = 20;
         private const int WingRowsPerPage = 2;
 
         private ProgressionManager progression;

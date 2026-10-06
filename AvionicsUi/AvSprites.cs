@@ -32,14 +32,8 @@ namespace NOAvionics
         /// <summary>Subtle 2px chamfer for a tinted card.</summary>
         public static Sprite Card => cardSprite != null ? cardSprite : (cardSprite = CreateChamferSprite("Avionics_Card", 32, 2f, 1f, 8f, fillMode: FillMode.Tinted));
 
-        /// <summary>Legacy style alias; state emphasis now comes from the shared palette.</summary>
-        public static Sprite GlowCard => Card;
-
         /// <summary>Flat tintable control, with a small chamfer shared by every button.</summary>
         public static Sprite Control => controlSprite != null ? controlSprite : (controlSprite = CreateChamferSprite("Avionics_Control", 24, 2f, 1f, 6f, fillMode: FillMode.Tinted));
-
-        /// <summary>Tintable 1px outline with transparent fill.</summary>
-        public static Sprite ControlFrame => controlFrameSprite != null ? controlFrameSprite : (controlFrameSprite = CreateChamferSprite("Avionics_ControlFrame", 24, 2f, 1f, 6f, fillMode: FillMode.None));
 
         /// <summary>Flat tintable slot for meters, sliders and inputs.</summary>
         public static Sprite Slot => slotSprite != null ? slotSprite : (slotSprite = CreateChamferSprite("Avionics_Slot", 24, 2f, 1f, 6f, fillMode: FillMode.Tinted));

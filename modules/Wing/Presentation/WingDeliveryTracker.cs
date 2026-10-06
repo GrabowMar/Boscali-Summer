@@ -20,7 +20,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             public Aircraft Shooter;
             public Unit Target;
-            public string WeaponName;
             public float ImpactTime;
             public bool Splashed;
             public float SplashUntil;
@@ -32,40 +31,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static void Reset()
         {
             active.Clear();
-        }
-
-        public static void TrackShot(Aircraft shooter, Unit target, string weaponName, float estimatedTof)
-        {
-            if (shooter == null) return;
-
-            float now = Time.timeSinceLevelLoad;
-            float impact = now + Mathf.Clamp(estimatedTof, 1f, 90f);
-
-            for (int i = 0; i < active.Count; i++)
-            {
-                if (active[i].Shooter == shooter && active[i].Target == target)
-                {
-                    active[i].WeaponName = string.IsNullOrEmpty(weaponName) ? "ORD" : weaponName.ToUpperInvariant();
-                    active[i].ImpactTime = impact;
-                    active[i].Splashed = false;
-                    return;
-                }
-            }
-
-            if (active.Count >= MaxDeliveries)
-            {
-                active.RemoveAt(0);
-            }
-
-            active.Add(new Delivery
-            {
-                Shooter = shooter,
-                Target = target,
-                WeaponName = string.IsNullOrEmpty(weaponName) ? "ORD" : weaponName.ToUpperInvariant(),
-                ImpactTime = impact,
-                Splashed = false,
-                SplashUntil = 0f,
-            });
         }
 
         public static void Tick()
@@ -98,29 +63,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     active.RemoveAt(i);
                 }
             }
-        }
-
-        /// <summary>Compact aircraft delivery status, such as weapon/time or SPLASH.</summary>
-        public static string GetDeliveryTag(Aircraft aircraft)
-        {
-            if (aircraft == null) return null;
-            float now = Time.timeSinceLevelLoad;
-
-            for (int i = active.Count - 1; i >= 0; i--)
-            {
-                Delivery d = active[i];
-                if (d.Shooter != aircraft) continue;
-
-                if (d.Splashed)
-                {
-                    return "SPLASH";
-                }
-
-                int remaining = Mathf.Max(0, Mathf.CeilToInt(d.ImpactTime - now));
-                return d.WeaponName + " " + remaining + "s";
-            }
-
-            return null;
         }
     }
 }

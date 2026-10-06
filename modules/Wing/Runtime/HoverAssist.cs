@@ -16,14 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// SetAutoHover refuses below 1 m radar altitude.</summary>
     internal static class HoverAssist
     {
-        /// <summary>Whether the aircraft supports native hover, including helicopters, tiltwings, and
-        /// vectoring jets.</summary>
-        public static bool CanHover(Aircraft aircraft)
-        {
-            if (aircraft == null) return false;
-            ControlsFilter filter = aircraft.GetControlsFilter();
-            return filter != null && filter.HasAutoHover();
-        }
 
         /// <summary>Reassert native hover configuration each frame; SetAutoHover is idempotent and native
         /// touchdown can clear it.</summary>

@@ -23,12 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public int Count => legs.Count;
         public T this[int index] => legs[index];
         public void Add(T leg) => legs.Add(leg);
-        public bool SetRepeat(bool enabled)
-        {
-            if (enabled && Count < 2) return false;
-            Repeat = enabled;
-            return true;
-        }
         public void Clear()
         {
             legs.Clear();
@@ -36,13 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             CancelSuspension();
         }
         public void CancelSuspension() => suspended = null;
-        public void Suspend(T current)
-        {
-            suspended = Count > 0 ? legs.ToArray() : new[] { current };
-            suspendedRepeat = Repeat;
-            legs.Clear();
-            Repeat = false;
-        }
         public T Restore(Predicate<T> valid, T fallback)
         {
             legs.Clear();

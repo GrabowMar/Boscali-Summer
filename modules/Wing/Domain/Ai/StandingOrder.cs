@@ -31,13 +31,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Revision++;
             return true;
         }
-
-        public bool TryComplete(int startedRevision, T next, out bool changed)
-        {
-            changed = false;
-            if (Revision != startedRevision) return false;
-            changed = Set(next);
-            return true;
-        }
     }
 }

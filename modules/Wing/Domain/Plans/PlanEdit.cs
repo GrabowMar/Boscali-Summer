@@ -24,34 +24,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float OrbitSeconds = 180f;
         public const int MaxRoutePoints = 16;
 
-        /// <summary>The step a point tool places (null for ATTACK, RE-PLACE and OFF): MOVE, ROUTE, LAND and CARGO end on arrival,
-        /// ORBIT after <see cref="OrbitSeconds"/>, CAP and SWEEP at bingo. <paramref name="alt"/> NaN: the task's own altitude;
-        /// <paramref name="radius"/> 0: the area's default.</summary>
-        public static PlanStep NewStep(PlanTool tool, float x, float z, float alt, float radius)
-        {
-            var p = new PlanStep { Points = new[] { new Waypoint { X = x, Z = z, Altitude = alt, Speed = float.NaN } } };
-            switch (tool)
-            {
-                case PlanTool.Move: p.Kind = PlanKind.Move; break;
-                case PlanTool.Route: p.Kind = PlanKind.Route; break;
-                case PlanTool.Land: p.Kind = PlanKind.Land; break;
-                case PlanTool.Cargo: p.Kind = PlanKind.Cargo; break;
-                case PlanTool.Orbit:
-                    p.Kind = PlanKind.Orbit;
-                    p.End = PlanEnd.Time;
-                    p.EndSeconds = OrbitSeconds;
-                    break;
-                case PlanTool.Cap:
-                case PlanTool.Sweep:
-                    p.Kind = tool == PlanTool.Cap ? PlanKind.Cap : PlanKind.Sweep;
-                    p.End = PlanEnd.Bingo;
-                    p.Radius = AreaGuard.Clamp(radius > 0f ? radius : tool == PlanTool.Cap ? AreaGuard.CapRadius : AreaGuard.SweepRadius);
-                    break;
-                default: return null;
-            }
-            return p;
-        }
-
         /// <summary>An ATTACK step on one target, ending when its targets are down.</summary>
         public static PlanStep Attack(uint target) =>
             new PlanStep { Kind = PlanKind.Attack, Targets = new[] { target }, End = PlanEnd.TargetsDown };
@@ -153,30 +125,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             w.X = x;
             w.Z = z;
             p.Points = new[] { w };
-        }
-
-        /// <summary>A ROUTE's next point, at the first point's altitude; false when it has <see cref="MaxRoutePoints"/>.</summary>
-        public static bool AddPoint(PlanStep p, float x, float z)
-        {
-            int n = p.Points?.Length ?? 0;
-            if (n >= MaxRoutePoints) return false;
-            var points = new Waypoint[n + 1];
-            if (n > 0) Array.Copy(p.Points, points, n);
-            points[n] = new Waypoint { X = x, Z = z, Altitude = n > 0 ? p.Points[0].Altitude : float.NaN, Speed = float.NaN };
-            p.Points = points;
-            return true;
-        }
-
-        /// <summary>One more target for an ATTACK (up to <see cref="WingOrder.MaxUnits"/>); false when it has it or is full.</summary>
-        public static bool AddTarget(PlanStep p, uint id)
-        {
-            int n = p.Targets?.Length ?? 0;
-            if (n >= WingOrder.MaxUnits || Array.IndexOf(p.Targets ?? new uint[0], id) >= 0) return false;
-            var targets = new uint[n + 1];
-            if (n > 0) Array.Copy(p.Targets, targets, n);
-            targets[n] = id;
-            p.Targets = targets;
-            return true;
         }
 
         /// <summary>Where the step leaves its element: its last point (false for ATTACK, RTB, REFIT and FORM UP).</summary>

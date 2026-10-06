@@ -69,9 +69,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Operation cards the OPERATIONS block shows at once.</summary>
         internal const int MaxOperations = 2;
 
-        /// <summary>Staff-log lines the panel shows; the room shows the full ring.</summary>
-        internal const int MaxLogLines = 3;
-
         /// <summary>Hold change that counts as movement rather than noise.</summary>
         internal const float TrendEpsilon = 0.02f;
 

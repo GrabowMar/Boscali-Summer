@@ -170,15 +170,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return y - 16f - Gap;
         }
 
-        /// <summary>The `.row` fill for a <see cref="WmcStyle"/> row key: rest, hover (`.row:hover`) or selected
-        /// (`.row:armed`).</summary>
-        public static Color RowColor(string key)
-        {
-            AvStyle style = key == "hover" ? AvStyleHost.FuiStyle("row", "hover")
-                : key == "selected" ? AvStyleHost.FuiStyle("row", "armed") : AvStyleHost.FuiStyle("row");
-            return AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert);
-        }
-
         /// <summary>Colours a rail by its normalised state word (<see cref="WmcDraw.RailColor"/>; each is a `:root` role, so
         /// nothing needs caching the way a per-class sheet lookup once did).</summary>
         public static void SetRail(Image rail, string railClass)

@@ -22,9 +22,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public const string PilotTitle = "PILOT & CREW", AirframeTitle = "AIRFRAME", FitTitle = "FIT & FUEL", BaseTitle = "LAUNCH BASE",
             InboundTitle = "INBOUND";
 
-        /// <summary>The STOCK tile's caption in the sandbox, where stock is not counted.</summary>
-        public const string SandboxStock = "SANDBOX · NOT COUNTED";
-
         /// <summary>Step 2 with nothing listed (one inert card, never a blank grid).</summary>
         public const string NotFlyingTiles = "NOT FLYING · take off to see what your faction offers.";
         public const string NoneOffered =
@@ -53,8 +50,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return WmcText.Cut(s, NameChars);
         }
 
-        public static string AirframeChip(int listed) => listed <= 0 ? "NONE LISTED" : N(listed) + " LISTED";
-
         public static string Fuel(int percent) => "FUEL " + N(percent) + "%";
 
         public static string BaseChip(int on, int total) =>
@@ -69,8 +64,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public const string EditLabel = "EDIT ›";
-
-        public static string FitButton(string fitWord) => "FIT · " + fitWord + " ›";
 
         public static string FitDetail(string fit, bool templates)
         {
@@ -114,33 +107,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float InboundProgress(InboundPhase p) => 0.1f + 0.2f * (int)p;
 
         public static string Requisition(float price) => "REQUISITION · " + Credits.Price(price);
-
-        public static string FundsCaption(bool client, bool sandbox, bool selected, float price)
-        {
-            if (client) return "YOUR ALLOCATION";
-            if (sandbox) return "SANDBOX · FREE";
-            if (!selected) return "PICK AN AIRFRAME";
-            return "NEXT CALL " + (price <= 0f ? "FREE" : Credits.Short(price) + " CR");
-        }
-
-        public static string StockCaption(string code, int stock, bool selected)
-        {
-            if (!selected) return "PICK AN AIRFRAME";
-            return WmcText.Cut(code, CodeChars) + (stock > 0 ? " IN STOCK" : " NONE LEFT");
-        }
-
-        /// <summary>SUPPLY's vitals line (spec bezel v2 §5 SUPPLY): what the FUNDS, HANGAR and STOCK tiles said, once.</summary>
-        public static string Vitals(float funds, bool client, bool sandbox, int held, int capacity, bool offline, int stock, bool selected)
-        {
-            string money = client ? "YOUR ALLOCATION" : sandbox ? SandboxFunds : "FUNDS " + Credits.Text(funds);
-            string s = money + " · " + HangarWords.Label(held, capacity, offline);
-            if (!selected || sandbox || client) return s;
-            return s + (stock > 0 ? " · STOCK " + N(stock) : " · NONE LEFT");
-        }
-
-        public const string SandboxFunds = "SANDBOX · FREE";
-
-        public static string InboundChip(int n) => N(n) + " ON THE WAY";
 
         public static string Hint(bool client, int inbound)
         {

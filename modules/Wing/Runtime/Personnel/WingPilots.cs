@@ -59,8 +59,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// disables effects without discarding earned records.</summary>
     internal static class WingPilotRoster
     {
-        /// <summary>Maximum attainable pilot rank.</summary>
-        public static readonly WingRank TopRank = WingRank.Legend;
 
         private static readonly HashSet<WingPilot> reserved = new HashSet<WingPilot>();
         private static readonly Dictionary<PersistentID, WingPilot> assigned =
@@ -287,14 +285,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (pilot.PortraitFaction == faction) return;
             pilot.PortraitFaction = faction;
             LookVersion++;
-        }
-
-        /// <summary>Release the seat, returning survivors to the free pilots with their records and marking
-        /// losses unavailable.</summary>
-        public static void Retire(WingMember member, bool survived)
-        {
-            if (member == null || ReferenceEquals(member.Aircraft, null)) return;
-            Retire(member.Aircraft.persistentID, survived);
         }
 
         /// <summary>Settle by durable aircraft ID after roster removal. Retain the seat assignment during
@@ -527,44 +517,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Award(aircraft, WingTuning.XpPerSortie, "sortie");
         }
 
-        /// <summary>Award survival of a missile targeting this aircraft.</summary>
-        public static void NoteSurvivedEngagement(Aircraft aircraft) =>
-            Award(aircraft, WingTuning.XpPerEngagement, "survived engagement");
-
-        // Rank calculations.
-
-        /// <summary>Triangular XP thresholds share one tuning value so the rank curve scales
-        /// consistently.</summary>
-        public static int XpForRank(WingRank rank) => PilotPerks.XpForRank(rank);
-
         public static WingRank RankFor(int xp) => PilotPerks.RankFor(xp);
 
         public static string RankName(WingRank rank) => PilotPerks.RankName(rank);
-
-        /// <summary>Rank bonus above Rookie, scaled by Pilot/RankEffect; disabling effects preserves pilot
-        /// records.</summary>
-        public static float SkillBonus(Aircraft aircraft)
-        {
-            if (!WingSettings.Instance.PilotProgression.Value) return 0f;
-
-            WingPilot pilot = Of(aircraft);
-            if (pilot == null) return 0f;
-
-            float effect = WingSettings.Instance != null ? WingSettings.Instance.RankEffect.Value : WingTuning.RankEffect;
-            float perRank = Mathf.Clamp(effect, 0f, 2f) * 0.06f;
-            return (int)pilot.Rank * perRank;
-        }
-
-        /// <summary>Pilot weapon-envelope scale, never below 1.</summary>
-        public static float EnvelopeScale(Aircraft aircraft) => (1f + SkillBonus(aircraft) * 0.5f) *
-            (WingSurvivalPerks.Has(aircraft, PilotPerk.Standoff) ? 1.30f : 1f);
-
-        /// <summary>Pilot shot-interval scale, never above 1.</summary>
-        public static float ReactionScale(Aircraft aircraft) => (1f - SkillBonus(aircraft) * 0.5f) *
-            (WingSurvivalPerks.Has(aircraft, PilotPerk.QuickDraw) ? 0.60f : 1f);
-
-        public static bool HasPerk(Aircraft aircraft, PilotPerk perk) => WingSurvivalPerks.Has(aircraft, perk);
-        public static bool HasPerk(WingPilot pilot, PilotPerk perk) => WingSurvivalPerks.Has(pilot, perk);
 
         // Roster presentation.
 

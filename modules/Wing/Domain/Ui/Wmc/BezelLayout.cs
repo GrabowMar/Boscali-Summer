@@ -30,17 +30,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public const int BaseRows = 3;
         public const float InboundHead = 18f, InboundRow = 22f, AdoptBand = 26f;
         public const int InboundMax = 4;
-        public const float PilotStep = StepHead + HeadGap + PilotCard + StepGap;
-        public const float AirframeStep = StepHead + HeadGap + TileRows * TileH + (TileRows - 1) * TileGap + HeadGap + TileFooter + StepGap;
-        public const float FitStep = StepHead + HeadGap + FitRow + HeadGap + FitDetail + StepGap;
-        public const float BaseStep = StepHead + HeadGap + BaseMode + HeadGap + BaseRows * BasePitch + HeadGap;
-        public const float SupplySteps = PilotStep + AirframeStep + FitStep + BaseStep;
 
         // LOADOUT (spec WMC rebuild §LOADOUT; research loadout-ui §2): a scroll viewport over the build card, airframe tiles, the
         // template bar and the HARDPOINTS table, and a LIVERY row pinned on the body's floor.
         public const float LiveryRow = 30f, LiveryPin = 6f + LiveryRow, CardH = 84f, BlockGap = 10f, SectionHead = 22f, LoadoutTileH = 44f;
         public const float LoadoutTiles = 2f * LoadoutTileH + TileGap, TemplateBar = 26f, TemplatePick = 242f, TemplateBtn = 64f, DeleteGap = 16f;
-        public const float HardpointsTop = CardH + BlockGap + SectionHead + HeadGap + LoadoutTiles + BlockGap + TemplateBar + BlockGap;
         public const float ColumnHead = 16f, HardpointHead = SectionHead + HeadGap + ColumnHead, HpRowH = 42f, HpPitch = 44f, HpPager = 26f;
         public const int HpRowsMin = 4, HpRowsMax = 8;
         public const float ColStation = 8f, ColStationW = 164f, ColStore = 176f, ColStoreW = 172f, ColMass = 352f, ColMassW = 48f;
@@ -52,72 +46,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
         // the AIRFRAME ASSIGNMENT bar pinned on the floor.
         public const float WingPinGap = 6f, AssignBar = 56f, WingPin = WingPinGap + AssignBar, SquadHead = 18f, PilotRowH = 30f, PilotPitch = 32f;
         public const float RosterFoot = 26f, DossierH = 120f, PerkCardH = 48f, PerkGap = 6f, PerksBlock = 18f + 4f + 48f + 6f + 48f, DossierGap = 8f;
-        public const float WingFixed = SquadHead + HeadGap + HeadGap + RosterFoot + DossierGap + DossierH + DossierGap + PerksBlock;
         public const int MinPilotRows = 4, MaxPilotRows = 8;
 
         public static float Body(float panelHeight) => panelHeight - Chrome;
 
-        /// <summary>FORM's plan view: as big as the body leaves after the controls (about 300 px), 136 to 220 px square.</summary>
-        public static float FormPreview(float body) => Math.Max(136f, Math.Min(220f, body - 300f));
-
         // TACTICAL (spec FUI §TACTICAL): scope, the alert card, the FLIGHT header and list (reserving the wing's size, at most
         // ListShare of the body), the sub-tabs, then the sub-page (ORDERS scrolls on a short dock).
         public const float AlertPitch = 20f, AlertPad = 2f, TacGap = 4f, FlightHead = 22f, ListShare = 0.4f;
-        public const int AlertRowsTall = 2;
         public const float GridCell = 24f, GridPitch = 26f, GridGap = 6f;
-
-        /// <summary>The list's height with every wingman in its own element (the tallest it gets).</summary>
-        public static float ListReserve(int maxWingmen)
-        {
-            int n = maxWingmen < 1 ? 1 : maxWingmen;
-            int heads = n < ElementRoster.MaxElements ? n : ElementRoster.MaxElements;
-            return heads * HeaderPitch + n * RowPitch;
-        }
-
-        /// <summary>The whole grid: six order rows, REACT and a gap.</summary>
-        public const float GridBlock = (OrderGrid.Rows + 1) * GridPitch + GridGap;
-
-        /// <summary>Two alert lines on a dock of 640 px or more, one below.</summary>
-        public static int AlertRows(float body) => body >= 640f ? AlertRowsTall : 1;
-
-        public static float AlertBlock(int rows) => rows * AlertPitch + 2f * AlertPad + TacGap;
-
-        /// <summary>The list's height: the wing's reserve, never more than <see cref="ListShare"/> of the body (it pages beyond).</summary>
-        public static float ListHeight(float body, int maxWingmen) => Math.Min(ListReserve(maxWingmen), (float)Math.Floor(body * ListShare));
-
-        /// <summary>From the body's top to the FLIGHT header.</summary>
-        public static float FlightTop(float body) => ScopeRow + ScopeGap + AlertBlock(AlertRows(body));
-
-        /// <summary>From the body's top to the sub-tabs.</summary>
-        public static float SubTabsTop(float body, int maxWingmen) => FlightTop(body) + FlightHead + ListHeight(body, maxWingmen) + TacGap;
-
-        /// <summary>From the body's top to the sub-page.</summary>
-        public static float SubPageTop(float body, int maxWingmen) => SubTabsTop(body, maxWingmen) + SubTabs + SubGap;
-
-        public static float WingView(float body) => body - WingPin;
-
-        /// <summary>Roster rows per page: as many as a tall dock shows with the dossier and PERKS (8), at least 4.</summary>
-        public static int PilotRows(float body)
-        {
-            int n = (int)Math.Floor((WingView(body) - WingFixed) / PilotPitch);
-            return n < MinPilotRows ? MinPilotRows : n > MaxPilotRows ? MaxPilotRows : n;
-        }
-
-        public static float WingContent(int rows) => WingFixed + rows * PilotPitch;
-
-        public static float PerkCardW(float content) => (content - PerkGap) / 2f;
-
-        /// <summary>LOADOUT's scroll viewport: the body less the pinned LIVERY row.</summary>
-        public static float LoadoutView(float body) => body - LiveryPin;
-
-        /// <summary>Hardpoint rows per page: as many as the tall dock shows without scrolling (6), at least 4.</summary>
-        public static int HardpointRows(float body)
-        {
-            int n = (int)Math.Floor((LoadoutView(body) - HardpointsTop - HardpointHead - (HpPager + HeadGap)) / HpPitch);
-            return n < HpRowsMin ? HpRowsMin : n > HpRowsMax ? HpRowsMax : n;
-        }
-
-        public static float LoadoutContent(int rows, bool paged) => HardpointsTop + HardpointHead + rows * HpPitch + (paged ? HpPager + HeadGap : 0f);
 
         /// <summary>The toolkit popup's height for <paramref name="entries"/> rows (seven at most: it pages beyond).</summary>
         public static float PopupHeight(int entries) =>
@@ -151,23 +87,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return Math.Max(0f, Math.Min(room, bodyH - popupH));
         }
 
-        /// <summary>SUPPLY's scroll viewport: the body less the DISPATCH pin.</summary>
-        public static float SupplyView(float body) => body - SupplyPin;
-
         /// <summary>INBOUND rows drawn (the last says "+n MORE" beyond <see cref="InboundMax"/>).</summary>
         public static int InboundRows(int inbound) => inbound <= 0 ? 0 : inbound > InboundMax ? InboundMax : inbound;
-
-        public static float InboundBlock(int inbound)
-        {
-            int rows = InboundRows(inbound);
-            return rows == 0 ? 0f : InboundHead + HeadGap + rows * InboundRow + StepGap;
-        }
-
-        public static float AdoptBlock(bool adopt) => adopt ? AdoptBand + StepGap : 0f;
-
-        /// <summary>SUPPLY's scroll content: INBOUND and ADOPT when they show, then the four steps.</summary>
-        public static float SupplyContent(int inbound, bool adopt) => InboundBlock(inbound) + AdoptBlock(adopt) + SupplySteps;
-
-        public static float TileWidth(float content) => (content - (TileCols - 1) * TileGap) / TileCols;
     }
 }

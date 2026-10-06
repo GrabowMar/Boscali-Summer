@@ -37,12 +37,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "requestedHeight", 1080 }, { "restoreWidth", originalWidth }, { "restoreHeight", originalHeight } };
         }
 
-        public static Dictionary<string, object> RestoreCapture(Dictionary<string, object> args)
-        {
-            RestoreCaptureProfile();
-            return new Dictionary<string, object> { { "ok", true } };
-        }
-
         internal static void RestoreCaptureProfile()
         {
             Find()?.SetCaptureRainVisuals(null);

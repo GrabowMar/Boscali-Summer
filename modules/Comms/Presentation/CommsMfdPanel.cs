@@ -389,14 +389,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             public override void Restyle() => text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
         }
 
-        /// <summary>Hover help on a stepper (its buttons and, by bubbling, its whole line).</summary>
-        private static void Tip(AvStepper stepper, string help)
-        {
-            AvHelpTip.Attach(stepper.Rect.gameObject, help);
-            stepper.Minus.Help = help;
-            stepper.Plus.Help = help;
-        }
-
         /// <summary>Hover help on a text field (the field frame raycasts; the tip bubbles up from it).</summary>
         private static void Tip(AvField field, string help) => AvHelpTip.Attach(field.Rect.gameObject, help);
 

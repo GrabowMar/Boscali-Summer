@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, LengthM = 15f, TakeoffSpeed = 66f;
         public static float WheelbaseMin = 2f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
-        public bool ForceAutoAimFallback;
+        
 #pragma warning restore CS0649
 
         /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter or a tiltwing can

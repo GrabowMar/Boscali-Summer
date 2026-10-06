@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private bool airbrake;
         private float idleEnergy, airbrakeOn;
 
-        public bool AirbrakeLatched => airbrake;
-
         public ControlOutput Step(in AttitudeCommand cmd, in AircraftState s, AirframeProfile p, float dt)
         {
             if (dt <= 0f) dt = 1f / 60f;

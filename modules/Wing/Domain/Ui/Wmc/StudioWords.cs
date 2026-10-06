@@ -19,11 +19,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// toasts and the empty and client states. Never "…", "†", U+25xx shapes or arrows.</summary>
     internal static class StudioWords
     {
-        public const int ButtonChars = 11;
         public const string Title = "PILOTS", StudioTitle = "STUDIO", RecordTitle = "RECORD", ServiceTitle = "SERVICE", MissionTitle = "THIS MISSION";
         public const string PerksTitle = "PERKS", AppearanceTitle = "APPEARANCE", IdentityTitle = "IDENTITY", BioTitle = "BIO";
         public const string NotSaved = "NOT SAVED · SAVE keeps this pilot for every mission";
-        public const string NotInMission = "NOT IN THIS MISSION · RECRUIT adds them now";
         public const string ClientRecord = "THE HOST KEEPS THIS MISSION'S ROSTER · your saved pilots are this machine's";
         public const string UnsavedAsk = "UNSAVED EDITS · press again to drop them";
         public const string Hint = "PILOT › or ‹ › opens a pilot; SAVE keeps identity and look for every mission. Every pilot starts a mission a ROOKIE.";
@@ -38,13 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case DraftState.Edited: rail = "warn"; return "EDITED";
                 default: rail = "inert"; return "NOT SAVED";
             }
-        }
-
-        public static string ListHead(int saved, int live)
-        {
-            if (saved <= 0 && live <= 0) return "NONE SAVED";
-            string s = N(saved) + " SAVED";
-            return live > 0 ? s + " · " + N(live) + " THIS MISSION" : s;
         }
 
         public static string Service(int missions, int sorties, int kills) =>
@@ -93,9 +84,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             "IMPORT · " + N(added) + " added, " + N(skipped) + " skipped from " + Count(files, "file", "files");
 
         public static string ExportToast(int pilots) => "EXPORT · " + Count(pilots, "pilot", "pilots") + " to Pilots/exported_pilots.json";
-
-        public static string EmptyList(int files) =>
-            "NO SAVED PILOTS · NEW makes one" + (files > 0 ? "; IMPORT reads " + Count(files, "file", "files") : "");
 
         public static string Saved(string callsign) => "Saved " + callsign;
 

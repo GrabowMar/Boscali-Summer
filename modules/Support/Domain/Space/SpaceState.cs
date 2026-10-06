@@ -48,7 +48,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public int UplinkCount => health.Length;
-        public int BirdCount => SpaceRules.BirdCount;
         public int Generation { get; private set; } = 1;
         public int LiveUplinkCount
         {
@@ -56,15 +55,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 int count = 0;
                 for (int i = 0; i < down.Length; i++) if (!down[i]) count++;
-                return count;
-            }
-        }
-        public int ReservationCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < birds.Length; i++) if (birds[i].Token != 0) count++;
                 return count;
             }
         }
@@ -132,8 +122,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             return restored;
         }
-        public bool UplinkDown(int index) => index < 0 || index >= down.Length || down[index];
-        public float UplinkHealthFraction(int index) => index < 0 || index >= health.Length ? 0f : health[index];
 
         public void SetUplink(int index, float nativeHealthFraction, bool isDown, float now)
         {

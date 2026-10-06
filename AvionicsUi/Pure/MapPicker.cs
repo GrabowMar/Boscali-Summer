@@ -10,7 +10,6 @@ namespace NOAvionics
     /// </summary>
     public static class MapPicker
     {
-        public const int ApiVersion = 1;
 
         public const int GestureLeft = 0;
         public const int GestureRight = 1;
@@ -37,19 +36,6 @@ namespace NOAvionics
                 {
                     object[] row = Row();
                     return row == null ? null : row[2] as string;
-                }
-            }
-        }
-
-        public static int Gesture
-        {
-            get
-            {
-                lock (LockKey)
-                {
-                    object[] row = Row();
-                    if (row == null || !(row[1] is int gesture)) return -1;
-                    return gesture;
                 }
             }
         }

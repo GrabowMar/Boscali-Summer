@@ -16,11 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// purchases.</summary>
     internal static class RecoverySettlementPolicy
     {
-        /// <summary>Use native Returned despawn when enabled.</summary>
-        public static bool ShouldDespawn(bool rtbReturnsToReserve) => rtbReturnsToReserve;
-
-        /// <summary>Refund only allocation actually paid for an owned purchase.</summary>
-        public static bool ShouldRefund(bool purchased, float paid) => purchased && paid > 0f;
 
         /// <summary>Native spawning replaces missing/empty weapon lists with loadouts[1]; deliberate empty
         /// fits need one entry per hardpoint.</summary>

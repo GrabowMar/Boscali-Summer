@@ -39,50 +39,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     "Countermeasure station access unavailable; panic ECM support is disabled.");
         }
 
-        /// <summary>Finds chaff or flares for the seeker, excluding jammers. Native selection sorts by
-        /// display name and may choose ECM instead of chaff because both advertise ARH/SARH support.
-        /// RadarJammerPulser drives ECM separately.</summary>
-        public static bool TryFindExpendable(CountermeasureManager manager, string seekerType,
-                                             out int index, out string reason)
-        {
-            index = -1;
-            reason = null;
-            if (!initialised) Initialise();
-            if (!Available || manager == null || string.IsNullOrEmpty(seekerType))
-            {
-                reason = "native countermeasure station list is unavailable";
-                return false;
-            }
-
-            try
-            {
-                if (!(stationsField.GetValue(manager) is IList stations))
-                {
-                    reason = "native countermeasure station list is unreadable";
-                    return false;
-                }
-
-                for (int i = 0; i < stations.Count; i++)
-                {
-                    Countermeasure countermeasure = FirstCountermeasure(stations[i]);
-                    if (countermeasure == null || countermeasure is RadarJammer) continue;
-
-                    List<string> types = countermeasure.GetThreatTypes();
-                    if (types == null || !types.Contains(seekerType)) continue;
-
-                    index = i;
-                    return true;
-                }
-
-                return false;
-            }
-            catch (Exception e)
-            {
-                reason = e.GetType().Name + " - " + e.Message;
-                return false;
-            }
-        }
-
         public static bool TryFindRadarJammer(CountermeasureManager manager, out int index,
                                               out string reason)
         {

@@ -43,13 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// empty.</summary>
         public string KeyAt(int index) =>
             index >= 0 && index < MountKeys.Count ? MountKeys[index] : null;
-
-        public void SetKeyAt(int index, string key)
-        {
-            if (index < 0) return;
-            while (MountKeys.Count <= index) MountKeys.Add(null);
-            MountKeys[index] = key;
-        }
     }
 
     /// <summary>Serializes a flat template list as airframe|id|name|key1,key2,,key4 records separated by

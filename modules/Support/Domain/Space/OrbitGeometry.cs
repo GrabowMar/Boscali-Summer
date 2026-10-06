@@ -49,8 +49,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             TimeToPass = timeToPass;
             TimeToPassEnd = timeToPassEnd;
         }
-
-        public bool InPass => Phase == OrbitPhase.InPass;
     }
 
     /// <summary>A station seen from a ground point.</summary>
@@ -76,16 +74,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public double Incidence => OrbitMath.Incidence(Elevation);
-
-        /// <summary>Compass bearing from the ground point to the station, degrees 0..360.</summary>
-        public double AzimuthDeg
-        {
-            get
-            {
-                double deg = Math.Atan2(AzimuthX, AzimuthZ) / OrbitMath.Deg;
-                return deg < 0.0 ? deg + 360.0 : deg;
-            }
-        }
 
         public static LookAngles Hidden => new LookAngles(false, -Math.PI * 0.5, 0.0, 0.0, 0.0, 1.0);
     }

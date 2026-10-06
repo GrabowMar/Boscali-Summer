@@ -114,7 +114,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public int Count => lines.Count;
         public string[] Lines(int i) => lines[i];
-        public string Theatre(int i) => theatres[i];
 
         public void Add(List<string> sortie, string theatre)
         {

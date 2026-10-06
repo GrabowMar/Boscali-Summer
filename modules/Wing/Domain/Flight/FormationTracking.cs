@@ -14,17 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Engine-free continuous formation target motion.</summary>
     internal static class FormationTracking
     {
-        public const float SlotResponseSeconds = 0.5f;
-
-        public static float QuietTurnRate(float rate, float deadband, float horizontalSpeed = 100f)
-        {
-            if (deadband <= 0f) return rate;
-            // Above the reference speed, reject the same lateral acceleration noise rather than
-            // suppressing deliberate shallow jet turns whose heading rate decreases with speed.
-            deadband *= Math.Min(1f, 100f / Math.Max(1f, horizontalSpeed));
-            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(rate) - deadband) / deadband));
-            return rate * blend * blend * (3f - 2f * blend);
-        }
 
         // Integrate constant-rate turn velocity instead of rotating velocity times duration, which
         // doubles shallow-turn lateral lead. Bound sweep to avoid predicted loops.
@@ -46,86 +35,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return ((float)(time * (vx * sinc + vz * cosc)),
                     (float)(time * vy),
                     (float)(time * (vz * sinc - vx * cosc)));
-        }
-
-        public static float WrapDegrees(float degrees)
-        {
-            float result = (degrees + 180f) % 360f;
-            return (result < 0f ? result + 360f : result) - 180f;
-        }
-
-        public static float SmoothBank(float bank, float observed, float responseSeconds, float dt) =>
-            WrapDegrees(bank + WrapDegrees(observed - bank) *
-                (1f - (float)Math.Exp(-Math.Max(0f, dt) / Math.Max(0.001f, responseSeconds))));
-
-        public static float ManeuverIntensity(float pitchRate, float rollRate, float turnRate)
-        {
-            float totalRate = (float)Math.Sqrt(pitchRate * pitchRate + rollRate * rollRate + turnRate * turnRate);
-            if (totalRate <= 0.05f) return 0f;
-            float blend = Math.Max(0f, Math.Min(1f, (totalRate - 0.05f) / 0.35f));
-            return blend * blend * (3f - 2f * blend);
-        }
-
-        // Accelerate tracking only for large manoeuvre error; retain quiet-flight filtering against
-        // stick noise.
-        public static float TrackResponse(float errorDegrees, float quietSeconds) =>
-            ManeuverResponse(errorDegrees, quietSeconds, 0.10f, 2f, 12f);
-
-        public static float ResponsiveTrackTime(float errorDegrees, float quietSeconds,
-            float maneuverIntensity = 0f, float holdBlend = 0f)
-        {
-            float baseTime = TrackResponse(errorDegrees, quietSeconds);
-            float minTime = Math.Min(quietSeconds, 0.06f);
-            float factor = Math.Max(maneuverIntensity, holdBlend * 0.75f);
-            return baseTime + (minTime - baseTime) * factor;
-        }
-
-        public static float BankResponse(float errorDegrees, float quietSeconds) =>
-            ManeuverResponse(WrapDegrees(errorDegrees), quietSeconds, 0.12f, 8f, 45f);
-
-        public static float ResponsiveBankTime(float errorDegrees, float quietSeconds,
-            float maneuverIntensity = 0f, float holdBlend = 0f)
-        {
-            float baseTime = BankResponse(errorDegrees, quietSeconds);
-            float minTime = Math.Min(quietSeconds, 0.05f);
-            float factor = Math.Max(maneuverIntensity, holdBlend * 0.85f);
-            return baseTime + (minTime - baseTime) * factor;
-        }
-
-        public static float ResponsiveSlotTime(float defaultSeconds, float holdBlend, float maneuverIntensity)
-        {
-            const float FastSlotSeconds = 0.12f;
-            float urgency = Math.Max(0f, Math.Min(1f, Math.Max(holdBlend, maneuverIntensity)));
-            return defaultSeconds + (FastSlotSeconds - defaultSeconds) * urgency;
-        }
-
-        private static float ManeuverResponse(float error, float quiet, float fast,
-            float begin, float full)
-        {
-            float blend = Math.Max(0f, Math.Min(1f, (Math.Abs(error) - begin) / (full - begin)));
-            blend = blend * blend * (3f - 2f * blend);
-            return quiet + (Math.Min(quiet, fast) - quiet) * blend;
-        }
-
-        // Weight horizontal information from normalized 3D velocity; near-vertical tracks cannot
-        // reliably indicate yaw.
-        public static float HorizontalTrackWeight(float x, float z)
-        {
-            float horizontal = (float)Math.Sqrt(x * x + z * z);
-            float blend = Math.Max(0f, Math.Min(1f, (horizontal - 0.05f) / 0.15f));
-            return blend * blend * (3f - 2f * blend);
-        }
-
-        public static float TrackTurnRate(float previousX, float previousZ,
-            float currentX, float currentZ, float dt, float maximumRate)
-        {
-            if (dt <= 0f) return 0f;
-            float confidence = Math.Min(HorizontalTrackWeight(previousX, previousZ),
-                HorizontalTrackWeight(currentX, currentZ));
-            double angle = Math.Atan2(previousZ * currentX - previousX * currentZ,
-                previousX * currentX + previousZ * currentZ);
-            float rate = (float)(angle / dt);
-            return Math.Max(-maximumRate, Math.Min(maximumRate, rate)) * confidence;
         }
 
         // Cubic Hermite capture follows current velocity at departure and future slot velocity at
@@ -154,30 +63,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             double h11 = t * t * (t - 1d);
             return ((float)(h10 * ownVx * ownScale + h01 * targetX + h11 * slotVx * slotScale),
                     (float)(h10 * ownVz * ownScale + h01 * targetZ + h11 * slotVz * slotScale));
-        }
-
-        // Exact critically damped held-target response preserving continuous position and velocity
-        // across attitude changes and geometry strides.
-        public static void DampedAxis(float position, float velocity, float target,
-            float responseSeconds, float maxSpeed, float dt, out float nextPosition, out float nextVelocity)
-        {
-            if (dt <= 0f) { nextPosition = position; nextVelocity = velocity; return; }
-            double response = Math.Max(0.001f, responseSeconds);
-            double omega = 2d / response;
-            double maxChange = Math.Max(0f, maxSpeed) * response;
-            double change = Math.Max(-maxChange, Math.Min(maxChange, position - target));
-            double effectiveTarget = position - change;
-            double c = velocity + omega * change;
-            double decay = Math.Exp(-omega * dt);
-            nextPosition = (float)(effectiveTarget + (change + c * dt) * decay);
-            nextVelocity = (float)((velocity - omega * c * dt) * decay);
-            // Returning from the fast response retains momentum from a stiffer spring. Stop at the
-            // target instead of letting that stored velocity carry the slot past the leader's move.
-            if ((target - position) * (nextPosition - target) > 0f)
-            {
-                nextPosition = target;
-                nextVelocity = 0f;
-            }
         }
     }
 }

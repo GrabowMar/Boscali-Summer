@@ -19,7 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal sealed class WhyText
     {
         public const float HoldSeconds = 1f;
-        public const int MaxChars = 60;
         public const string Free = "NOTHING LIMITS IT";
         /// <summary>Reports further apart than this (s) mean the member left formation flight (a fight, a settle, a recovery): what
         /// held before is forgotten.</summary>

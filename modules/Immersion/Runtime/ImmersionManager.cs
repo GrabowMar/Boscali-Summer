@@ -92,7 +92,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public Quaternion HeadOffset => composedOffset;
         internal HeadMotion Head => head;
-        internal SunGlare Glare => glare;
 
         public bool IsEnabled
         {

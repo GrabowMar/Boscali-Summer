@@ -56,9 +56,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return previewSprite;
         }
 
-        public static Sprite ForCustom(PortraitBody body, int face, int hair, int uniform, int accessory, int backdrop) =>
-            ForSelection(new PortraitSelection(body, face, hair, uniform, accessory, backdrop));
-
         public static Sprite For(WingPilot pilot)
         {
             if (pilot != null && pilot.HasCustomPortrait)

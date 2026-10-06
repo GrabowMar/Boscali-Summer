@@ -33,15 +33,6 @@ namespace BoscaliSummer.Modules.Visuals.Runtime
         private float nextAttempt;
         private string lastError = "";
 
-        internal void SetLogger(ManualLogSource logSource)
-        {
-            logger = logSource;
-            FxSpikeFeature.Logger = logSource;
-        }
-
-        /// <summary>How many live renderers currently carry the spike (automation readout).</summary>
-        internal int InjectedCount => injected.Count;
-
         internal void Tick(bool enabled)
         {
             if (!enabled)

@@ -28,15 +28,6 @@ namespace NOAvionics
             }
         }
 
-        public static Color HudFriendly
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.HudUnitFriendly; }
-                catch { return Friendly; }
-            }
-        }
-
         public static Color Warning
         {
             get
@@ -86,8 +77,6 @@ namespace NOAvionics
         public static Color Dim => Unity(AvTokens.TextDim);
         public static Color Disabled => Unity(AvTokens.TextMuted);
         public static Color TextInk => Unity(AvTokens.TextInk);
-        public static Color SelectLabelText(Color fill) =>
-            (fill.r * 0.2126f + fill.g * 0.7152f + fill.b * 0.0722f) > 0.35f ? TextInk : Color.white;
         public static Color Frame => Unity(AvTokens.Frame);
         public static Color Hairline => Unity(AvTokens.Hairline);
         public static Color Surface => Unity(AvTokens.Surface);

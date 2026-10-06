@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private int serial;
-
-        internal int OwnedCount => owned.Count;
         internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
 
         internal bool TryPlan(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions,

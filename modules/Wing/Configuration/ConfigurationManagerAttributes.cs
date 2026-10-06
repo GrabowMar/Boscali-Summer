@@ -29,8 +29,4 @@ internal sealed class ConfigurationManagerAttributes
 
     /// <summary>Hide the irrelevant reset button on action entries.</summary>
     public bool? HideDefaultButton;
-
-    /// <summary>Hide the key label so custom content, such as the Debug banner, can use the full
-    /// row.</summary>
-    public bool? HideSettingName;
 }

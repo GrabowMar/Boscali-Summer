@@ -154,11 +154,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             names[e] = null;
         }
 
-        public void MergeAll()
-        {
-            for (int e = 1; e < MaxElements; e++) Merge(e);
-        }
-
         private bool AllIn(int e)
         {
             foreach (uint id in picked)

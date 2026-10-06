@@ -134,31 +134,16 @@ namespace NOAvionics
         public static readonly Rgba RailDanger = new Rgba(1.000f, 0.380f, 0.400f, 1f);
         public static readonly Rgba RailInfo = new Rgba(0.500f, 0.760f, 0.850f, 1f);
         public static readonly Rgba RailInert = new Rgba(0.239f, 0.337f, 0.376f, 0.650f);
-
-        // Aliases for compatibility
-        public static Rgba PanelGround => Ground;
-        public static Rgba SurfaceCard => Surface;
-        public static Rgba BorderSubtle => Hairline;
         public static Rgba Dim => TextDim;
         public static Rgba Disabled => TextMuted;
-        public static Rgba RailEmerald => RailReady;
-        public static Rgba RailCyan => RailInfo;
-
-        /// <summary>Picks high-contrast label color (dark optical ink on bright plates, white on dark).</summary>
-        public static Rgba SelectLabelText(Rgba fill) => fill.RelativeLuminance > 0.35f ? TextInk : Rgba.White;
 
         // -------------------------------------------------------------------- spacing
         public const float Space1 = 4f;
         public const float Space2 = 8f;
-        public const float Space3 = 12f;
-        public const float Space4 = 16f;
-        public const float Space5 = 20f;
-        public const float Space6 = 24f;
 
         public const float Pad = 14f;
         public const float Gap = 8f;
         public const float RowHeight = 30f;
-        public const float TabHeight = 30f;
         public const float RowPitch = 32f;
 
         // ----------------------------------------------------------------- typography
@@ -168,30 +153,12 @@ namespace NOAvionics
         public const float FontSmall = 11f;
         public const float FontMicro = 10f;
 
-        // ----------------------------------------------------------------------- HUD
-        public const float HudValue = 20f;
-        public const float HudLabel = 15f;
-        public const float HudFloor = 12f;
-
-        public const float AlphaGrid = 0.12f;
-        public const float AlphaHairline = 0.78f;
-        public const float AlphaFrame = 0.90f;
-        public const float AlphaGlow = 0.14f;
-
         /// <summary>Device-pixel stroke width for one logical HUD unit at this screen height.</summary>
         public static float StrokeUnit(float screenHeight) =>
             Math.Max(1f, (float)Math.Round(screenHeight / 1080f));
 
-        public static readonly Rgba WingA = new Rgba(0.22f, 1f, 0.40f);
-        public static readonly Rgba WingB = new Rgba(0.30f, 0.85f, 1f);
-        public static readonly Rgba WingC = new Rgba(1f, 0.75f, 0.25f);
-        public static readonly Rgba WingD = new Rgba(1f, 0.45f, 0.85f);
-        public static readonly Rgba WingTarget = new Rgba(1f, 0.69f, 0.13f);
-        public static readonly Rgba WingDowned = new Rgba(1f, 0.22f, 0.18f);
-
         // --------------------------------------------------------------------- layout
         public const float PanelWidth = 480f;
-        public const float PanelInnerWidth = 452f; // 480 - 2 * Pad
         public const float PanelHeight = 596f;
 
         /// <summary>
@@ -204,14 +171,6 @@ namespace NOAvionics
         /// measurable parent is exactly what it always was.
         /// </summary>
         public const float PanelHeightMax = 896f;
-        public const float TitleBarHeight = 28f;
-        public const float ScreenHeaderHeight = 62f;
-        public const float ChipRailHeight = 18f;
-        public const float TabBarHeight = 34f;
-        public const float StatusStripHeight = 56f;
-
-        // --------------------------------------------------------------- button scales
-        private const float RestShade = 0.30f;
         private const float RestFrameScale = 0.80f;
 
         public const float SelectedScale = 0.34f;
@@ -228,12 +187,6 @@ namespace NOAvionics
 
         private const float DangerHoverScale = 0.26f;
         private const float DangerHoverAlpha = 0.62f;
-
-        public const float RowHoverScale = 0.28f;
-        public const float RowHoverAlpha = 0.66f;
-        public const float RowSelectedScale = 0.36f;
-        public const float RowSelectedAlpha = 0.82f;
-        public const float RowRestShade = RestShade;
 
         public static Rgba Wash(Rgba accent, float scale, float alpha) =>
             accent.Scaled(scale).WithAlpha(alpha);

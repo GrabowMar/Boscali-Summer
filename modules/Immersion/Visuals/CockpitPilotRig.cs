@@ -47,10 +47,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal bool StickOnRight => stickOnRight;
         internal Transform StickHand => stickOnRight ? rightHand : leftHand;
         internal Transform ThrottleHand => stickOnRight ? leftHand : rightHand;
-        internal Transform StickControl => stick;
-        internal Transform ThrottleControl => throttle;
-        internal Vector3 StickAnchor => stickGrip;
-        internal Vector3 ThrottleAnchor => throttleGrip;
         internal float StickRestFit => stickRestFit;
         internal float ThrottleRestFit => throttleRestFit;
         internal bool StickBound => stick != null && StickHand != null && (stickOnRight ? rightUpper != null && rightLower != null : leftUpper != null && leftLower != null);

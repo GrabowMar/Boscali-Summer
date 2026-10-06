@@ -62,8 +62,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return d > 180f ? d - 360f : d;
         }
 
-        public static float LerpAngle(float a, float b, float t) => WrapHeading(a + DeltaAngle(a, b) * t);
-
         /// <summary>
         /// Smooth 2-D value noise in [0, 1] with a quintic fade, lattice spacing 1. Deterministic
         /// per seed; continuous in both coordinates, which is what keeps rain patches from

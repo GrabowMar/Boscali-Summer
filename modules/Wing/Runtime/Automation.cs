@@ -673,17 +673,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             };
         }
 
-        /// <summary>The transport's handshake counts (spec M6 §7; spike S1 in single-player: the host greets its own client).</summary>
-        public static Dictionary<string, object> NetState(Dictionary<string, object> args) => new Dictionary<string, object>
-        {
-            { "ok", true }, { "disabled", WingNet.Disabled ? 1 : 0 }, { "greeted", WingNet.Greeted }, { "replies", WingNet.Replies },
-            { "host_greeted", WingNet.HostGreeted ? 1 : 0 }, { "in", WingNet.In }, { "out", WingNet.Out },
-            { "decode_failures", WingNet.DecodeFailures }, { "snapshots_in", WingNet.SnapshotsIn },
-            { "mirror_members", WingNet.Mirror != null ? WingNet.Mirror.Count : -1 },
-            { "mirror_stale", WingNet.Mirror == null || WingNet.Mirror.Stale(UnityEngine.Time.unscaledTime) ? 1 : 0 },
-            { "wing_members", WingService.Instance != null ? WingService.Instance.Members.Count : -1 },
-        };
-
         /// <summary>The wing's helicopters land around the anchor (spec M4 §5).</summary>
         public static Dictionary<string, object> LandHere(Dictionary<string, object> args)
         {

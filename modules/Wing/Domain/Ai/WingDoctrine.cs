@@ -83,14 +83,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// (<see cref="MemberDoctrines"/>); the others are element-wide.</summary>
     internal enum DoctrineAxis : byte { Guard, Response, Interval, Spread, Targets, Reach, Weapons, Radar }
 
-    /// <summary>Order in which a missile guard looks for a warned aircraft.</summary>
-    public enum ProtecteeRank
-    {
-        Self,
-        Leader,
-        Wingman,
-    }
-
     /// <summary>Wing-wide standing behaviour. Orders and weapon preference stay on each aircraft.</summary>
     public readonly struct WingDoctrine : IEquatable<WingDoctrine>
     {
@@ -231,16 +223,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return t.Length > 0 && char.IsLetter(t[0]);
         }
 
-        public static WingDoctrine FromLegacy(string roeName)
-        {
-            if (string.IsNullOrWhiteSpace(roeName)) return Reserve;
-            if (roeName.Equals("Free", StringComparison.OrdinalIgnoreCase)) return Sweep;
-            if (roeName.Equals("Tight", StringComparison.OrdinalIgnoreCase) ||
-                roeName.Equals("Escort", StringComparison.OrdinalIgnoreCase))
-                return Escort;
-            return Reserve;
-        }
-
         public static bool TryParse(string text, out WingDoctrine value)
         {
             value = Reserve;
@@ -276,32 +258,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (parts.Length == 8 && (!TryName(parts[6], out weapons) || !TryName(parts[7], out radar))) return false;
             value = new WingDoctrine(guard, response, interval, spread, targets, reach, weapons, radar);
             return true;
-        }
-
-        /// <summary>A Doctrine line wins. Otherwise DefaultRoe Hold, Tight, Free, or Escort.</summary>
-        public static WingDoctrine FromConfigText(string text)
-        {
-            string doctrine = null;
-            string legacy = null;
-            if (!string.IsNullOrEmpty(text))
-            {
-                string[] lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                for (int i = 0; i < lines.Length; i++)
-                {
-                    string line = lines[i].Trim();
-                    if (line.Length == 0 || line[0] == '#' || line[0] == ';') continue;
-                    int eq = line.IndexOf('=');
-                    if (eq <= 0) continue;
-                    string key = line.Substring(0, eq).Trim();
-                    string raw = line.Substring(eq + 1).Trim();
-                    if (key.Equals("Doctrine", StringComparison.OrdinalIgnoreCase)) doctrine = raw;
-                    else if (key.Equals("DefaultRoe", StringComparison.OrdinalIgnoreCase)) legacy = raw;
-                }
-            }
-
-            if (!string.IsNullOrEmpty(doctrine) && TryParse(doctrine, out WingDoctrine parsed))
-                return parsed;
-            return FromLegacy(legacy);
         }
 
         public override string ToString()

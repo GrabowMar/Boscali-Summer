@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private float lastFuel = float.NaN, rate = float.NaN, need;
 
         public bool Bingo { get; private set; }
-        public float BurnRate => rate;
         /// <summary>Fuel within <see cref="JokerMargin"/> of bingo (spec M5 §6.2); cleared by a refuel as bingo is.</summary>
         public bool Joker { get; private set; }
         /// <summary>True on the check Joker is first reached (not when the fuel went straight past bingo).</summary>

@@ -88,9 +88,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly Dictionary<ulong, Ring> players = new Dictionary<ulong, Ring>();
         private long tick;
 
-        public int PlayerCount => players.Count;
-        public int ReceiptCount(ulong player) => players.TryGetValue(player, out Ring r) ? r.Entries.Count : 0;
-
         public Lookup Find(ulong player, int epoch, int channel, in SpaceCommand command, out SpaceReply reply)
         {
             reply = default;
@@ -240,8 +237,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public SpaceCommandHost(byte protocol, ISpaceCommandPorts ports, ICyberCommandPorts cyber = null, ISofCommandPorts sof = null, IOpsCommandPorts ops = null)
         { this.protocol = protocol; this.ports = ports; this.cyber = cyber; this.sof = sof; this.ops = ops; }
-
-        public SpaceCommandLimiter Limiter => limiter;
         public SpaceReplayCache Cache => cache;
 
         /// <summary>Admission for the commands that carry no verdict (open, close, activity). False: drop silently.</summary>

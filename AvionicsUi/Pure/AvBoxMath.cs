@@ -150,8 +150,6 @@ namespace NOAvionics
 
         public IList<AvNode> Children => (IList<AvNode>)children ?? NoChildren;
 
-        public int ChildCount => children == null ? 0 : children.Count;
-
         // ------------------------------------------------------------------- building
 
         public AvNode Class(string classes)
@@ -206,12 +204,6 @@ namespace NOAvionics
         public AvNode Gaps(float px)
         {
             Gap = px;
-            return this;
-        }
-
-        public AvNode Intrinsic(float px)
-        {
-            Content = px;
             return this;
         }
 
@@ -588,12 +580,5 @@ namespace NOAvionics
 
         /// <summary>A leaf: something a widget gets drawn into.</summary>
         public static AvNode Cell(string name) => new AvNode(name, AvAxis.Column);
-
-        /// <summary>Blank space that pushes its siblings apart.</summary>
-        public static AvNode Spacer(float px) =>
-            new AvNode("spacer", AvAxis.Column).Height(px);
-
-        /// <summary>Blank space that absorbs whatever is left.</summary>
-        public static AvNode Filler() => new AvNode("filler", AvAxis.Column).Grow();
     }
 }

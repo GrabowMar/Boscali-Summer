@@ -30,12 +30,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public Vector3 ForceG => force;
         public Vector3 AnglesDeg => new Vector3(pitch, yaw, roll);
 
-        public void DebugForce(Vector3 forceG, float seconds)
-        {
-            debugForce = forceG;
-            debugUntil = Time.unscaledTime + seconds;
-        }
-
         public void Measure(Aircraft aircraft, float dt)
         {
             Discontinuity = false;

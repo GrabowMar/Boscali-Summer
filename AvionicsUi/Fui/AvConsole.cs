@@ -118,13 +118,6 @@ namespace NOAvionics
             if (titleText.text != t) titleText.text = t;
         }
 
-        private void BlinkCursor()
-        {
-            bool on = !AvFxDriver.ReducedMotion && !cursorOn;
-            if (on == cursorOn) return;
-            cursorOn = on; ShowTitle();
-        }
-
         public AvChip[] Chips(int count)
         {
             chips = new AvChip[Mathf.Clamp(count, 1, 3)];

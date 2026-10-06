@@ -57,9 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string Hint => StudioWords.Hint;
 
-        /// <summary>The pilot the studio edits (automation reads it).</summary>
-        public CustomPilotRecord Draft => draft;
-
         public DraftState State => StateOf();
 
         /// <summary>The studio in <paramref name="pageFlow"/> (a sub-page's flow, or a page's): pilot picker, NEW · CLONE · DELETE and

@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private bool primed, rerouted, relocated;
         private float stuck;
 
-        public bool Relocated => relocated;
-
         public WatchdogAction Update(Vec3 pos, bool waiting, float dt)
         {
             if (!primed || waiting || (pos - anchor).Length > ProgressMetres)

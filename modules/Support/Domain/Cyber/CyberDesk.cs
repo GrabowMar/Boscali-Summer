@@ -302,7 +302,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public NodeIdTable Ids { get; } = new NodeIdTable();
         public NodeReveal Reveal { get; } = new NodeReveal();
         public IReadOnlyList<CyberNode> Visible => visible;
-        public IReadOnlyList<EwSource> Trucks => trucks;
         /// <summary>
         /// Cross-faction trace multiplier (an enemy holding this faction's DATA CENTER node, x1.3). Effects live in the HOLDER's desk, so the runtime
         /// folds every other faction's book into this port; the desk only multiplies. Null reads as 1.

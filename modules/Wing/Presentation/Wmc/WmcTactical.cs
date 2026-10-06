@@ -58,8 +58,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Sub => sub;
 
-        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
-
         public string Hint => last != null && last.Count == 0 && !last.Client
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
             : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint

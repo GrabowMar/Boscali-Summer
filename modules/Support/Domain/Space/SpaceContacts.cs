@@ -111,8 +111,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Count => reveals.Count;
         public int Generation => retired ? 0 : stateGeneration;
         public int MarkCount => marks.Count;
-        public int PlayerCount => players.Count;
-        public int ConfirmedObservationCount => confirmed.Count;
         public int Effort(ulong player) => players.TryGetValue(player, out PlayerRecord record) ? record.Effort : 0;
 
         public bool Reveal(int id, ContactClass classification, int typeId, float x, float z, bool moving,

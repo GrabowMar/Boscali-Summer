@@ -87,38 +87,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return true;
         }
 
-        /// <summary>Arms a PLAN tool (an armed order mode goes); says why when it cannot.</summary>
-        public bool ArmTool(WmcContext c, PlanTool tool)
-        {
-            if (tool == PlanTool.Off)
-            {
-                Disarm();
-                return true;
-            }
-            if (!DynamicMap.mapMaximized || SceneSingleton<DynamicMap>.i == null)
-            {
-                WingToast.Show("Open the map to plan");
-                return false;
-            }
-            if (c == null || !c.CanOrder)
-            {
-                WingToast.Show(c != null && c.Client ? "The host plans this mission" : "Wing Command is not ready");
-                return false;
-            }
-            if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, PlanWords.ToolCue(tool, ToolLane)))
-            {
-                WingToast.Show("Another map tool is armed - cancel it first");
-                return false;
-            }
-            Mode = MapMode.Off;
-            Tool = tool;
-            heldForMove = false;
-            gesture.Clear();
-            pressed = false;
-            Publish();
-            return true;
-        }
-
         public void Disarm()
         {
             Mode = MapMode.Off;

@@ -433,30 +433,6 @@ namespace BoscaliSummer.Modules.Support.Networking
             if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveSpaceState(message.Data);
         }
 
-        /// <summary>Submits a cruise leg intent; validated and broadcast in-process on the server.</summary>
-        public void SendWaypoint(int requestId, GlobalPosition point, bool clear)
-        {
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
-            {
-                manager.ApplyWaypoint(local, requestId, point, clear);
-                return;
-            }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client == null || !client.Active)
-            {
-                manager.ReportOffline();
-                return;
-            }
-            client.Send(new CruiseWaypointMessage
-            {
-                Protocol = ProtocolVersion,
-                RequestId = requestId,
-                X = point.x,
-                Z = point.z,
-                Clear = clear
-            });
-        }
-
         public void BroadcastCruiseLegs(CruiseLegsMessage message)
         {
             if (!GameAccess.IsServer()) return;

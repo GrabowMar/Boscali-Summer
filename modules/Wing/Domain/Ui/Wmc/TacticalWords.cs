@@ -27,9 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             var f = (SnapshotFlags)flags;
             return (f & SnapshotFlags.Bingo) != 0 ? "danger" : (f & SnapshotFlags.Joker) != 0 ? "armed" : "ready";
         }
-
-        /// <summary>The ammo tape's rail class: danger at winchester, else info.</summary>
-        public static string AmmoRail(byte flags) => ((SnapshotFlags)flags & SnapshotFlags.Winchester) != 0 ? "danger" : "info";
     }
 
     /// <summary>TACTICAL v3's alert stack (spec tactical v3 §2.1): which line each row shows.</summary>

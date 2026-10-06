@@ -57,14 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public string CallsignText => value[0].text;
-
-        public string NumberText => number.text;
-
-        public string BioText => bio.text;
-
-        public string RankText => value[2].text;
-
         public void Show(IdCardFace f)
         {
             bool bioMoved = bio.text != f.Bio;

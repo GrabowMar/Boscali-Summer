@@ -109,11 +109,6 @@ namespace NOAvionics
             if (Canvas.enabled != visible) Canvas.enabled = visible;
         }
 
-        public void SetAlpha(float alpha)
-        {
-            if (!Mathf.Approximately(Group.alpha, alpha)) Group.alpha = alpha;
-        }
-
         /// <summary>Bottom-left anchored/pivoted placement, the HUD's own coordinate convention.</summary>
         public static void Place(RectTransform rt, float x, float y, float w, float h)
         {

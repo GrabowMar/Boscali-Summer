@@ -78,9 +78,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string Alert => alert;
 
-        /// <summary>The pilot the dossier shows (R7's STUDIO › opens the studio on it).</summary>
-        public WingPilot Inspected => inspected;
-
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
             flow = pageFlow;

@@ -45,24 +45,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        public static string ShortLabel(ManeuverKind kind)
-        {
-            switch (kind)
-            {
-                case ManeuverKind.BreakLeft:   return "BRK L";
-                case ManeuverKind.BreakRight:  return "BRK R";
-                case ManeuverKind.SplitS:      return "SPLIT-S";
-                case ManeuverKind.Immelmann:   return "IMMEL";
-                case ManeuverKind.BarrelRoll:  return "BARREL";
-                case ManeuverKind.AileronRoll: return "ROLL";
-                case ManeuverKind.Loop:        return "LOOP";
-                case ManeuverKind.WingWaggle:  return "WAGGLE";
-                case ManeuverKind.NotchThreat: return "NOTCH";
-                case ManeuverKind.MaskTerrain: return "MASK";
-                default:                       return kind.ToString().ToUpperInvariant();
-            }
-        }
-
         /// <summary>Rotary-compatible manoeuvres; only level breaks avoid unsupported vertical energy
         /// demands.</summary>
         public static bool RotaryCapable(ManeuverKind kind) =>
@@ -104,14 +86,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case ManeuverKind.AileronRoll: return 0.30f;
                 default:                       return 0.20f;
             }
-        }
-
-        /// <summary>Break turn sign: -1 left, +1 right, zero otherwise.</summary>
-        public static int BreakDirection(ManeuverKind kind)
-        {
-            if (kind == ManeuverKind.BreakLeft) return -1;
-            if (kind == ManeuverKind.BreakRight) return 1;
-            return 0;
         }
     }
 }

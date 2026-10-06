@@ -41,7 +41,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public SpaceMark MarkAt(int index) => marks[index];
 
         public EffortShare ShareAt(int index) => shares[index];
-        public SpaceMark[] CopyMarks() => marks == null ? Array.Empty<SpaceMark>() : (SpaceMark[])marks.Clone();
         public EffortShare[] CopyShares() => shares == null ? Array.Empty<EffortShare>() : (EffortShare[])shares.Clone();
 
         internal bool Valid(float now)
@@ -156,16 +155,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Posted { get { SyncContacts(); return posted; } }
         public int Fired { get { SyncContacts(); return fired; } }
         public int Generation { get { SyncContacts(); return retired ? 0 : sceneGeneration; } }
-        public int ConsumedTokenCount { get { SyncContacts(); return consumed.Count; } }
-
-        /// <summary>Live posts made by WATCH OFFICER OVERLORD (inside their own 600 s life).</summary>
-        public int CountWatchOfficer(float now)
-        {
-            SyncContacts();
-            int n = 0;
-            foreach (Entry entry in calls.Values) if (entry.Call.WatchOfficer && entry.Call.Valid(now)) n++;
-            return n;
-        }
 
         /// <summary>Live OVERLORD posts of one domain: SPACE, CYBER and SOF each keep their own allowance, so one domain's posts never use up another's.</summary>
         public int CountWatchOfficer(float now, TaskedDomain domain)
@@ -231,14 +220,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Add(candidate, true);
             call = candidate;
             return true;
-        }
-
-        public float EffortBalance(SpaceContacts contacts, ulong player)
-        {
-            SyncContacts();
-            if (contacts == null || player == 0 || (workOwner != null && !ReferenceEquals(workOwner, contacts))) return 0;
-            effortAdjustments.TryGetValue(player, out float adjustment);
-            return contacts.Effort(player) + adjustment;
         }
 
         public bool TryGet(int callId, out TaskedCall call)

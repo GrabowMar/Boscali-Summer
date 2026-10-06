@@ -64,8 +64,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string PickerHolds(string label) => string.IsNullOrEmpty(label) ? "EMPTY" : WmcText.Cut(label, 30) + " IS FITTED";
 
-        public const string HardpointsCaption = "TAP A STATION · STORES SAY WHY THEY ARE BLOCKED";
-
         /// <summary>The station's name and, for a pair or a multi-pylon set, how many pylons it fits ("Fuselage Pylon ×2").</summary>
         public static string StationName(string name, int pylons)
         {
@@ -97,19 +95,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return "UNARMED";
         }
 
-        /// <summary>The rounds that fly by kind, whole parts only, within 22 characters.</summary>
-        public static string RoleCaption(in FitSummary f)
-        {
-            var sb = new StringBuilder();
-            Part(sb, f.Aam, "AAM", "AAM");
-            Part(sb, f.Agm, "AGM", "AGM");
-            Part(sb, f.Bombs, "BOMB", "BOMBS");
-            Part(sb, f.Ecm, "ECM", "ECM");
-            Part(sb, f.Cargo, "CARGO", "CARGO");
-            Part(sb, f.MslDef, "MSL DEF", "MSL DEF");
-            return sb.ToString();
-        }
-
         /// <summary>What does not fly and why, whole parts within 22 characters; ALL FITTED when everything does.</summary>
         public static string StationsCaption(in FitSummary f, bool hasTemplate, int emptyHere)
         {
@@ -123,9 +108,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public static string RowMass(float kg) => kg <= 0f ? WmcText.Unknown : Math.Round(kg).ToString("N0", CultureInfo.InvariantCulture) + " kg";
-
-        public static string HardpointsNote(int stations, int blocked) =>
-            Count(stations, "STATION", "STATIONS") + (blocked > 0 ? " · " + N(blocked) + " BLOCKED" : "");
 
         /// <summary>The status strip's alert when stations hold stores this mission refuses; null when none.</summary>
         public static string EmptyHereAlert(int n) =>
@@ -145,8 +127,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             !hasTemplate ? "Pick a template to copy" : count >= TemplateNames.PerAirframe ? Limit : null;
 
         public static string DeleteWhy(bool hasTemplate) => hasTemplate ? null : "No template to delete";
-
-        public static string LiveryKey(string code) => "LIVERY · " + code;
 
         public static string Livery(string label) => WmcText.Cut(label, LiveryChars);
 

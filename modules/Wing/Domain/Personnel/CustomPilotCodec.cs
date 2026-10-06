@@ -158,94 +158,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return payload;
         }
 
-        public static string SampleJson()
-        {
-            return @"{
-  ""pilots"": [
-    {
-      ""name"": ""Alex Mercer"",
-      ""callsign"": ""GHOST"",
-      ""dialogueTag"": ""GHOST"",
-      ""persona"": ""Calm"",
-      ""background"": ""Former high-altitude interceptor pilot with hundreds of hours in supersonic patrol. Unflappable under heavy AA fire."",
-      ""xp"": 140,
-      ""kills"": 3,
-      ""sorties"": 5
-    },
-    {
-      ""name"": ""Sarah Connor"",
-      ""callsign"": ""VALKYRIE"",
-      ""dialogueTag"": ""VALKYRIE"",
-      ""persona"": ""Aggressive"",
-      ""background"": ""Aggressive close air support specialist. Prefers low-level gun passes and high-G turn fights."",
-      ""xp"": 260,
-      ""kills"": 7,
-      ""sorties"": 12
-    },
-    {
-      ""name"": ""Marcus Vance"",
-      ""callsign"": ""SPECTRE"",
-      ""dialogueTag"": ""SPECTRE"",
-      ""persona"": ""Dry"",
-      ""background"": ""Electronic warfare technician turned frontline combat pilot. Masters ECM radar masking and terrain masking."",
-      ""xp"": 50,
-      ""kills"": 1,
-      ""sorties"": 2
-    }
-  ],
-  ""chatters"": [
-    {
-      ""speakerTag"": ""GHOST"",
-      ""opening"": ""Ghost on station. Radar picture is clean."",
-      ""reply"": ""Copy Ghost. Settle into the formation."",
-      ""replyTag"": ""VALKYRIE""
-    },
-    {
-      ""speakerTag"": ""VALKYRIE"",
-      ""opening"": ""Bandits on scope. Let's make this quick."",
-      ""reply"": ""Check your spacing, Valkyrie. We engage together."",
-      ""replyTag"": ""GHOST""
-    },
-    {
-      ""speakerTag"": ""SPECTRE"",
-      ""opening"": ""Radar warning receiver is quiet. Suspiciously quiet."",
-      ""reply"": ""Enjoy the silence while it lasts, Spectre."",
-      ""replyTag"": ""VALKYRIE""
-    },
-    {
-      ""event"": ""Splash"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Splash one! Target eliminated, who's next?""
-    },
-    {
-      ""event"": ""Splash"",
-      ""speakerTag"": ""GHOST"",
-      ""text"": ""Target confirmed destroyed. Clean shot.""
-    },
-    {
-      ""event"": ""Bingo"",
-      ""speakerTag"": ""GHOST"",
-      ""text"": ""Ghost is at bingo fuel. Egressing for RTB.""
-    },
-    {
-      ""event"": ""BreakCall"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Lead, missile break break! Hard right now!""
-    },
-    {
-      ""event"": ""Damaged"",
-      ""speakerTag"": ""SPECTRE"",
-      ""text"": ""Damage to port avionics. ECM remains operational.""
-    },
-    {
-      ""event"": ""Maneuvering"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Executing {0}. Keep your eyes open, Lead!""
-    }
-  ]
-}";
-        }
-
         private static CustomPilotRecord ParsePilot(Dictionary<string, object> dict)
         {
             string callsign = MiniJson.GetString(dict, "callsign");
@@ -390,20 +302,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             sb.AppendLine();
             sb.AppendLine("}");
             return sb.ToString();
-        }
-
-        public static string EncodeSingle(CustomPilotRecord pilot)
-        {
-            if (pilot == null) return "";
-            return Encode(new[] { pilot });
-        }
-
-        public static string RemovePilot(string json, string callsign, out bool removed)
-        {
-            CustomPilotPayload payload = Decode(json);
-            removed = payload.Pilots.RemoveAll(p =>
-                string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase)) > 0;
-            return removed ? Encode(payload.Pilots, payload.Chatters) : json;
         }
 
         private static CustomChatterRecord ParseChatter(Dictionary<string, object> dict)

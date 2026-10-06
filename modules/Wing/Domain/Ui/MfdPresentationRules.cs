@@ -49,17 +49,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return Math.Min(availableWidth / width, availableHeight / height);
         }
 
-        /// <summary>Compute aspect-preserving image dimensions that fully cover the container.</summary>
-        public static (float RenderedWidth, float RenderedHeight) CalculateAspectFill(
-            float containerWidth, float containerHeight, float spriteWidth, float spriteHeight)
-        {
-            if (!PositiveFinite(containerWidth) || !PositiveFinite(containerHeight)) return (0f, 0f);
-            float sW = PositiveFinite(spriteWidth) ? spriteWidth : 1f;
-            float sH = PositiveFinite(spriteHeight) ? spriteHeight : 1f;
-            float scale = Math.Max(containerWidth / sW, containerHeight / sH);
-            return (sW * scale, sH * scale);
-        }
-
         private static bool PositiveFinite(float value) =>
             value > 0f && !float.IsInfinity(value) && !float.IsNaN(value);
     }

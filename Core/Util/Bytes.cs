@@ -48,13 +48,6 @@ namespace BoscaliSummer.Core.Util
             buffer[Length++] = v;
         }
 
-        public void U16(ushort v)
-        {
-            if (!Room(2)) return;
-            buffer[Length++] = (byte)v;
-            buffer[Length++] = (byte)(v >> 8);
-        }
-
         public void U32(uint v)
         {
             if (!Room(4)) return;
@@ -117,14 +110,6 @@ namespace BoscaliSummer.Core.Util
 
         public byte U8() => Take(1) ? buffer[at++] : (byte)0;
 
-        public ushort U16()
-        {
-            if (!Take(2)) return 0;
-            ushort v = (ushort)(buffer[at] | (buffer[at + 1] << 8));
-            at += 2;
-            return v;
-        }
-
         public uint U32()
         {
             if (!Take(4)) return 0;
@@ -132,10 +117,6 @@ namespace BoscaliSummer.Core.Util
             at += 4;
             return v;
         }
-
-        public float F32() => BitConverter.Int32BitsToSingle((int)U32());
-
-        public bool Bool() => U8() != 0;
 
         public string String()
         {

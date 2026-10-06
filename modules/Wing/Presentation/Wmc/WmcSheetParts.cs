@@ -887,10 +887,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        public string StoreText(int slot) => rows[slot].StoreFull;
-
-        public AvControl ClearButton(int slot) => rows[slot].Clear;
-
         /// <summary>How many stations, and each one's pylon count (a pair is two boxes on the map).</summary>
         public void SetStations(int n, IList<int> pylonCounts)
         {
@@ -1161,10 +1157,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public int Shown => shown;
 
         public int Page => page;
-
-        public string NameAt(int slot) => cells[slot].NameFull;
-
-        public string VerdictAt(int slot) => cells[slot].VerdictFull;
 
         /// <summary><paramref name="title"/> names the station, <paramref name="holding"/> what it holds now.</summary>
         public void SetHead(string title, string holding)

@@ -497,12 +497,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             public int Page { get; private set; }
-            public int PageSize => items.Length;
             private int Pages => Mathf.Max(1, (count + items.Length - 1) / items.Length);
             private bool Paged => Pages > 1;
-
-            /// <summary>Item index of pool slot <paramref name="slot"/> on the current page.</summary>
-            public int ItemIndex(int slot) => Page * items.Length + slot;
 
             public void SetPage(int page) => Go(page);
             public void SetCount(int n) { count = Mathf.Max(0, n); Go(Page); }

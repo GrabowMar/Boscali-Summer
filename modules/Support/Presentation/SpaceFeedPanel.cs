@@ -309,8 +309,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             Restyle();
         }
-
-        public RectTransform ImageRoot => imageRoot;
         public SpaceFeedLayout Layout => layout;
 
         /// <summary>The footer words and tone of the last paint (the ORBIT page hands them to the OPS footer; the station has its own).</summary>
@@ -647,8 +645,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
     {
         /// <summary>The flow's own top and bottom padding (pad above and below); a page's content must fit its viewport minus this.</summary>
         public const float FlowInset = 2f * AvGridTokens.Pad;
-
-        /// <summary>The width a full-width part gets in a page flow of a standard console (480 less both pads and the gutter).</summary>
-        public const float BoardWidth = AvTokens.PanelWidth - 2f * AvGridTokens.Pad - AvGridTokens.Gutter;
     }
 }

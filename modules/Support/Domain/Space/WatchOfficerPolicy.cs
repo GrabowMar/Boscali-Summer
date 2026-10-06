@@ -96,9 +96,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly WatchTarget[] picks = new WatchTarget[MaxTargets];
         private float nextThinkAt, lastHumanAt = float.NegativeInfinity, noTargetSince = float.NaN;
 
-        public int RememberedTargets => remembered.Count;
-        public int RememberedSites => scanned.Count;
-
         // ---- Idle rule ---------------------------------------------------------------------------
 
         /// <summary>

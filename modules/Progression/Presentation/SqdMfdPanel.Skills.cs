@@ -86,14 +86,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Add(detail);
         }
 
-        private int MissionScore()
-        {
-            int score = Progress.Score;
-            if (squad != null && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
-                score = Math.Max(0, score - squad.GetScoreOrigin(PlayerIdentity.Of(local)));
-            return score;
-        }
-
         private static SkillLane LaneOf(List<SkillLane> lanes, string name)
         {
             for (int i = 0; i < lanes.Count; i++)

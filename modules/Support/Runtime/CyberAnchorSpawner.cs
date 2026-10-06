@@ -38,8 +38,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
         private int serial;
-
-        internal int OwnedCount => owned.Count;
         internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
 
         /// <summary>The definition keys this mission actually resolved, for the log line and the native fixture.</summary>

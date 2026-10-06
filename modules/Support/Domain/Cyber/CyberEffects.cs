@@ -77,13 +77,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public void Clear() => effects.Clear();
 
-        public int CopyActive(float now, List<CyberEffect> into)
-        {
-            into.Clear();
-            for (int i = 0; i < effects.Count; i++) if (now < effects[i].Until) into.Add(effects[i]);
-            return into.Count;
-        }
-
         /// <summary>Cheap prefilter for the launch patch: is any launch-blocking effect active at all.</summary>
         public bool AnyLaunchBlock(float now)
         {

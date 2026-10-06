@@ -223,8 +223,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public TaskedBoard Board => board;
-        public int ReceiptCount => receipts.Count;
-        public int InFlight => inflight.Count;
         public bool Retired => retired;
         /// <summary>Raised once when a queued claim reaches its final verdict (winner, loser, failure or scene end).</summary>
         public event Action<ulong, int, TaskedResult> Resolved;

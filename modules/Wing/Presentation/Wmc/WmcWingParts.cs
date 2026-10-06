@@ -120,10 +120,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public WingRank Rank => rank;
 
-        public string KillsText => kills.text;
-
-        public string SortiesText => sorties.text;
-
         public void SetIdentity(WingRank r, string callsignText, string nameText, int killCount, int sortieCount)
         {
             rank = r;
@@ -382,14 +378,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Fit(mark, false);
             Restyle();
         }
-
-        public string TitleText => title.text;
-
-        public string LineText => line.text;
-
-        public string MarkText => mark.text;
-
-        public bool IsLocked => locked;
 
         /// <summary>Paints the badge; true when its wrapped line changed (the caller relayouts).</summary>
         public bool Set(PerkCard card, bool off)

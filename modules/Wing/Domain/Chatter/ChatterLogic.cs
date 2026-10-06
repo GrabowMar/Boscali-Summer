@@ -166,17 +166,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         private static readonly List<ChatterExchange> customAmbient = new List<ChatterExchange>();
 
-        public static void RegisterCustomAmbient(ChatterExchange exchange)
-        {
-            if (!string.IsNullOrWhiteSpace(exchange.Opening))
-                customAmbient.Add(exchange);
-        }
-
-        public static void ClearCustomAmbient()
-        {
-            customAmbient.Clear();
-        }
-
         public static int AmbientCount => ambient.Length + customAmbient.Count;
 
         public static ChatterExchange Ambient(int seed, bool repliesAllowed = true)
@@ -323,114 +312,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                         new[] { "Copy. Let's move.", "Roger that." },
                         new[] { "Understood.", "Copy." },
                         new[] { "Copy that.", "Apparently so." });
-            }
-        }
-
-        /// <summary>Let one element lead acknowledge accepted tactical numbers in a single readable
-        /// transmission.</summary>
-        public static string GroupAcknowledge(ChatterPersona persona, string order,
-                                              string others, int seed)
-        {
-            string wingmen = string.IsNullOrWhiteSpace(others) ? "everyone" : others;
-            string key = string.IsNullOrWhiteSpace(order) ? "COPY" : order.ToUpperInvariant();
-            switch (key)
-            {
-                case "FORMATION":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", on me. Forming up.", wingmen + ", close it in." },
-                        new[] { wingmen + ", tighten it up. On me.", wingmen + ", get back in here." },
-                        new[] { wingmen + ", come on in. Forming up.", wingmen + ", settle into formation." },
-                        new[] { wingmen + ", back in the box. Let's go.", wingmen + ", formation. Apparently." });
-                case "ENGAGE":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", with me. We're going in.", wingmen + ", weapons free. Engage." },
-                        new[] { wingmen + ", let's hunt.", wingmen + ", come on. We're going in." },
-                        new[] { wingmen + ", take your spacing. Engaging.", wingmen + ", with me. Weapons free." },
-                        new[] { wingmen + ", try to keep up. Engaging.", wingmen + ", let's make this quick." });
-                case "ATTACK":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", split the targets. Going in.", wingmen + ", attack pattern. Execute." },
-                        new[] { wingmen + ", pick one and hit it.", wingmen + ", we're going straight through them." },
-                        new[] { wingmen + ", sort the contacts. Engage.", wingmen + ", take your targets. Going in." },
-                        new[] { wingmen + ", choose something expensive.", wingmen + ", divide and disappoint them." });
-                case "FIREFOREFFECT":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", all weapons on the mark.", wingmen + ", in hot. Fire for effect." },
-                        new[] { wingmen + ", empty the racks on it.", wingmen + ", everything we've got. Now." },
-                        new[] { wingmen + ", mass fire on the target.", wingmen + ", commit all weapons." },
-                        new[] { wingmen + ", subtlety is cancelled.", wingmen + ", make the target disappear." });
-                case "RETURNTOBASE":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", we're heading home.", wingmen + ", form on me. RTB." },
-                        new[] { wingmen + ", let's get these birds home.", wingmen + ", race you back." },
-                        new[] { wingmen + ", turn for home. RTB.", wingmen + ", egress together." },
-                        new[] { wingmen + ", home before the paperwork finds us.", wingmen + ", we're done here." });
-                case "FALLBACK":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", break away together.", wingmen + ", disengage and open the distance." },
-                        new[] { wingmen + ", out now. We'll come back.", wingmen + ", break off before they get lucky." },
-                        new[] { wingmen + ", defensive spacing. Disengage.", wingmen + ", ease out and regroup." },
-                        new[] { wingmen + ", let's leave them wanting more.", wingmen + ", tactical departure. Now." });
-                case "ORBITHERE":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", take station. Hold here.", wingmen + ", establish the orbit." },
-                        new[] { wingmen + ", circle up. Eyes outside.", wingmen + ", hold here and stay sharp." },
-                        new[] { wingmen + ", settle into the orbit.", wingmen + ", take spacing and hold." },
-                        new[] { wingmen + ", round we go. Take station.", wingmen + ", enjoy the scenery. Hold here." });
-                case "DELIVERCARGO":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", cargo formation. Inbound.", wingmen + ", take your spacing. Begin delivery." },
-                        new[] { wingmen + ", let's put it on the mark.", wingmen + ", low and fast. Cargo in." },
-                        new[] { wingmen + ", steady spacing. Begin the run.", wingmen + ", cargo group inbound." },
-                        new[] { wingmen + ", freight service is open.", wingmen + ", deliver first, complain later." });
-                case "LANDHERE":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", landing pattern. Follow me down.", wingmen + ", set down at the mark." },
-                        new[] { wingmen + ", clear the deck. We're landing.", wingmen + ", follow me in." },
-                        new[] { wingmen + ", take interval. Beginning descent.", wingmen + ", easy on the approach." },
-                        new[] { wingmen + ", gravity has the lead.", wingmen + ", landing. Try to keep it elegant." });
-                case "MOVETOPOINT":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", waypoint received. Move out.", wingmen + ", form on me. En route." },
-                        new[] { wingmen + ", push to the point.", wingmen + ", with me. Let's move." },
-                        new[] { wingmen + ", take spacing. En route.", wingmen + ", proceed to the waypoint." },
-                        new[] { wingmen + ", another waypoint. Come along.", wingmen + ", sightseeing formation. Move." });
-                case "SEEKANDDESTROY":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", move to the search area. Engage on arrival.", wingmen + ", seek and destroy. Move out." },
-                        new[] { wingmen + ", let's go hunting.", wingmen + ", push to the area and find something." },
-                        new[] { wingmen + ", take spacing to the search area.", wingmen + ", proceed, then engage at will." },
-                        new[] { wingmen + ", go find trouble.", wingmen + ", search area first. Mayhem second." });
-                case "REFIT":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", turn for home. Refit and rejoin.", wingmen + ", back to base for refit." },
-                        new[] { wingmen + ", let's get rearmed.", wingmen + ", race you to the ground crew." },
-                        new[] { wingmen + ", return for refit in sequence.", wingmen + ", head home; we'll rejoin when ready." },
-                        new[] { wingmen + ", paperwork and rearming. Wonderful.", wingmen + ", off to see the ground crew." });
-                case "JAMTARGET":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", jammers up. Screen the target.", wingmen + ", work their radar." },
-                        new[] { wingmen + ", light the jammers.", wingmen + ", blind them for me." },
-                        new[] { wingmen + ", begin jamming. Hold station.", wingmen + ", jammers on the mark." },
-                        new[] { wingmen + ", deploy the electrons.", wingmen + ", ruin their picture together." });
-                case "MANEUVER":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", execute the manoeuvre.", wingmen + ", on my mark. Go." },
-                        new[] { wingmen + ", follow me through it.", wingmen + ", try to keep up." },
-                        new[] { wingmen + ", begin the manoeuvre.", wingmen + ", execute together." },
-                        new[] { wingmen + ", airshow formation. Go.", wingmen + ", be theatrical." });
-                case "STANDDOWN":
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", stand down. Hold over friendlies.", wingmen + ", cancel and loiter." },
-                        new[] { wingmen + ", task cancelled. Hang near friendly ground.", wingmen + ", out of the fight. Hold nearby." },
-                        new[] { wingmen + ", stand down together. Loiter.", wingmen + ", cancel orders. Hold over friendly territory." },
-                        new[] { wingmen + ", coffee break over friendly airspace.", wingmen + ", we're parked in the cheap seats." });
-                default:
-                    return Pick(persona, seed,
-                        new[] { wingmen + ", copy. Move together.", wingmen + ", acknowledge. Let's move." },
-                        new[] { wingmen + ", with me. Let's go.", wingmen + ", you heard it. Move." },
-                        new[] { wingmen + ", copy. Moving.", wingmen + ", stay together. Executing." },
-                        new[] { wingmen + ", apparently that's us. Moving.", wingmen + ", come along then." });
             }
         }
 

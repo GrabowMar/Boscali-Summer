@@ -52,9 +52,6 @@ namespace NOAvionics
             return Resolve(p, fallback);
         }
 
-        /// <summary>A player-editable override sheet under the config dir (e.g. <c>NOAvionics/rooms.avss</c>), or null when absent.</summary>
-        internal static string ReadOverride(string relative) => ReadFile(relative);
-
         private static string ReadFile(string relative)
         {
             if (configDir == null) return null;

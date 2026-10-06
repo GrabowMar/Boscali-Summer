@@ -158,9 +158,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float StandRunwayMargin = 30f;
         public static int MaxRestands = 2;
 
-        /// <summary>The stand it taxis to or stands on (−1: none, or standing where it stopped).</summary>
-        public int StandNode => standNode;
-
         /// <summary>A helicopter launched under a roof has hovered out of the hangar door.</summary>
         public bool ExitedHangar => exitedHangar;
 

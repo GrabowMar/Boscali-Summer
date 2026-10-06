@@ -71,9 +71,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal OpResult RunOpsVerb(Player player, in SpaceCommand command) =>
             ops != null ? ops.Verb(player, command) : new OpResult(OpOutcome.Unavailable);
 
-        /// <summary>The mirror's view of satellites: a client reads its own faction's dead birds from the OPERATIONS mirror.</summary>
-        internal bool OpsBirdUp(BirdKind bird) => opsMirror.BirdUp(bird);
-
         internal void ReceiveOpsState(OpsStateData data)
         {
             if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;

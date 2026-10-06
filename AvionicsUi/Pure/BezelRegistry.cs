@@ -12,7 +12,6 @@ namespace NOAvionics
     /// </summary>
     public static class BezelRegistry
     {
-        public const int ApiVersion = 1;
 
         public const string Wmc = "WMC";
         public const string Ops = "OPS";

@@ -202,8 +202,6 @@ namespace BoscaliSummer.Core.Contracts
         /// </summary>
         public string Holder { get; }
 
-        public bool IsHeld => !string.IsNullOrEmpty(Holder);
-
         /// <summary>Escrow that went back to the pool: everything committed that no wave drew.</summary>
         public float Returned => Committed > Spent ? Committed - Spent : 0f;
 

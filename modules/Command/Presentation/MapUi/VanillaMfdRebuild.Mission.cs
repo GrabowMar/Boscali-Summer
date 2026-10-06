@@ -736,25 +736,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
         }
-
-        private sealed class UnavailablePresenter : Presenter
-        {
-            public UnavailablePresenter(MFDScreen screen, VanillaMfdPanelId id) : base(screen, id) { }
-
-            protected override string Title => "COMPATIBILITY HOLD";
-            protected override (AvIcon Icon, string Label)[] TabItems { get; } = Array.Empty<(AvIcon, string)>();
-
-            protected override void BuildContent()
-            {
-                AvFlow page = CreatePage();
-                page.Section(AvIcon.AlertTriangle, "NATIVE ADAPTER UNAVAILABLE");
-                Note(page, "This game build changed the controller attached to this MFD. " +
-                           "The source panel remains intact and will be restored when the map closes.");
-            }
-
-            protected override void RefreshContent() { }
-
-            protected override string AmbientStatus() => "UPDATE COMPATIBILITY REQUIRED";
-        }
     }
 }

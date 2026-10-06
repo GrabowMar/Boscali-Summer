@@ -219,9 +219,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public int GetChannelTrackCount(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].Tracks.Length : 0;
 
-        public string GetChannelCode(int index) =>
-            index >= 0 && index < ChannelCount ? stations[index].Code : "--";
-
         public string GetChannelIconPath(int index) =>
             index >= 0 && index < ChannelCount ? stations[index].IconPath : string.Empty;
 

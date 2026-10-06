@@ -23,9 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// BEHAVIOUR holds TUNING · PLAN · TIMELINE · LOG; WING holds the roster with INSPECT, and the STUDIO.</summary>
         public static readonly string[] Labels = { "TACTICAL", "BEHAVIOUR", "SUPPLY", "LOADOUT", "WING" };
 
-        /// <summary>The first logistics tab (the group rule sits on its left edge).</summary>
-        public const int FirstLogistics = Supply;
-
         private static readonly string[][] prefixes =
         {
             // ROUTE·AP kept its plan.* ids when it moved to TACTICAL; they are matched before BEHAVIOUR's plan.*.
@@ -59,8 +56,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     if (id.StartsWith(p, StringComparison.Ordinal)) return i;
             return -1;
         }
-
-        /// <summary>The x of the rule between the flying and the logistics tabs on a <paramref name="width"/> px tab bar.</summary>
-        public static float GroupRuleX(float width, int tabs) => tabs > 0 ? width * FirstLogistics / tabs : 0f;
     }
 }

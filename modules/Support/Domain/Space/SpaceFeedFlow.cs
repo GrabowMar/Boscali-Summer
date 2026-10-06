@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        public static bool IsShot(TaskedReceiptState state) => state == TaskedReceiptState.Launched;
-
         /// <summary>The words for a receipt: PENDING and LAUNCHING are not SHOT, a refusal carries the host's own words.</summary>
         public static string Words(TaskedReceiptState state, TaskedOutcome outcome, int detail)
         {
@@ -41,8 +39,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private bool mouseTouched, mouseWas, pending;
 
         public bool Held { get; private set; }
-        /// <summary>The mouse is still disabled by this lease, waiting for its buttons to come up.</summary>
-        public bool MousePending => pending;
         /// <summary>The enabled state to give the mouse back; valid after Release/Tick/ForceRelease returned true.</summary>
         public bool RestoreMouseTo => mouseWas;
 

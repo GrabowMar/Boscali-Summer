@@ -60,8 +60,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void NextShape() => WingOrders.Run(WingOrder.Of(OrderKind.NextShape));
 
-        public static void NextFamily() => WingOrders.Run(WingOrder.Of(OrderKind.NextFamily));
-
         public static void SetSpacing(SpacingPreset preset) => WingOrders.Run(new WingOrder { Kind = OrderKind.SetSpacing, Number = (int)preset });
 
         public static void CycleSpacing()
@@ -129,8 +127,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void OrbitHere(WingScope scope) => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), scope);
 
-        public static void HoldHere() => HoldHere(default);
-
         public static void HoldHere(WingScope scope) =>
             Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), scope);
 
@@ -148,17 +144,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void MoveAhead(WingScope scope) => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), scope);
 
-        /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>
-        public static void ScoutAhead() => ScoutAhead(default);
-
         public static void ScoutAhead(WingScope scope) => Order(p =>
         {
             WingTask t = WingTask.Move(Point(p, ScoutAheadMetres, 0f));
             t.Scout = true;
             return t;
         }, scope);
-
-        public static void PatrolHere() => PatrolHere(default);
 
         public static void PatrolHere(WingScope scope) =>
             Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), scope);
@@ -287,9 +278,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 : "Picture clean.";
             return radio.Answer(speaker, "BOGEYDOPE", answer);
         }
-
-        /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
-        public static void NextDoctrine() => WingOrders.Run(WingOrder.Of(OrderKind.NextDoctrine));
 
         public static void Disengage() => Disengage(default);
 

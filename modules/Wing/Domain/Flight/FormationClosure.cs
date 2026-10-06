@@ -32,23 +32,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float LoadedMinimum(float minimumAirspeed, float bankDegrees) =>
             minimumAirspeed / (float)Math.Sqrt(Math.Max(0.25d, Math.Cos(bankDegrees * Math.PI / 180d)));
 
-        public static float PursuitSpeed(Vector2 toSlot, Vector2 ownVelocity, FormationIntercept.Plan intercept,
-            float stationSpeed, float maxSpeed, float braking, float responseSeconds, float spacing)
-        {
-            float distance = toSlot.Length();
-            if (distance < 1f || intercept.Gap.LengthSquared() < 1f) return stationSpeed;
-            float reserve = Math.Max(30f, spacing * 0.5f);
-            // Compute braking energy from actual gap, not the predicted distant aim point.
-            float closure = SafeClosure(distance - reserve, braking, responseSeconds);
-            Vector2 desired = intercept.ArrivalVelocity + Vector2.Normalize(intercept.Gap) * closure;
-            float pursuit = Math.Min(maxSpeed, desired.Length());
-            float alignment = ownVelocity.LengthSquared() > 1f
-                ? Vector2.Dot(Vector2.Normalize(ownVelocity), Vector2.Normalize(intercept.Gap)) : 0f;
-            float aligned = Math.Max(0f, Math.Min(1f, (alignment - 0.1f) / 0.55f));
-            aligned *= aligned * (3f - 2f * aligned);
-            return stationSpeed + (pursuit - stationSpeed) * FormationIntercept.LongRangeBlend(distance) * aligned;
-        }
-
         public static Controls Resolve(float throttle, float speedError, float airspeed, float minimumAirspeed,
             float distance, float closing, float spacing, float braking, float responseSeconds,
             float alignment, float bankDegrees, float radarAltitude, float verticalSpeed,

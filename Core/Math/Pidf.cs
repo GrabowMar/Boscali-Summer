@@ -28,7 +28,6 @@ namespace BoscaliSummer.Core.Math
         private bool primed;
 
         public float Output { get; private set; }
-        public float Integral => integral;
 
         public float Update(float setpoint, float measurement, float dt, float feedForward = 0f)
         {

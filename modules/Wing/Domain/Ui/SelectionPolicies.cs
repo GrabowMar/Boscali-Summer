@@ -11,20 +11,6 @@ using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>Engine-free flight and roster toggle rules.</summary>
-    internal static class SelectionTogglePolicy
-    {
-        public static bool ShouldDeselectAll(bool isAllMode, int selectedCount, int totalCount)
-        {
-            if (isAllMode) return true;
-            return totalCount > 0 && selectedCount >= totalCount;
-        }
-
-        public static bool ShouldDeselectMemberOnClick(bool isExplicitMode, int selectedCount, bool isMemberSelected)
-        {
-            return isExplicitMode && selectedCount == 1 && isMemberSelected;
-        }
-    }
 
     /// <summary>Keep tactical member interaction independent of weapon-target selection.</summary>
     internal static class MapSelectionPolicy
@@ -68,14 +54,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
 
             return (startIndex + 1) % totalCount;
-        }
-
-        /// <summary>Step selection in either direction with wraparound.</summary>
-        public static int CycleIndex(int currentIndex, int totalCount, int direction)
-        {
-            if (totalCount <= 0) return -1;
-            if (currentIndex < 0) currentIndex = 0;
-            return ((currentIndex + direction) % totalCount + totalCount) % totalCount;
         }
     }
 }

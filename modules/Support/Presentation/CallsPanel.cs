@@ -380,11 +380,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             nextRefresh = 0f;
             if (chrome != null) PaintChrome(tab, view);
         }
-
-        /// <summary>The page the harness (and tests) show: 0 CAP, 1 ORBIT.</summary>
-        internal void ShowPage(int page) => SelectTab((C2Tab)Mathf.Clamp(page + 1, 1, 5));
-
-        internal SpaceFeedPanel SpacePanel => spacePanel;
         internal BoardPage Board => boardPage;
         internal AvTicker Ticker => ticker;
         internal RectTransform ConsoleRoot => consoleRoot;

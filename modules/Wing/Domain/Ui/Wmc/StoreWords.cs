@@ -16,7 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// line.</summary>
     internal static class StoreWords
     {
-        public const int DetailChars = 15;
 
         public static string Detail(StoreVerdict v, StoreKind kind, int ammo, int rank)
         {

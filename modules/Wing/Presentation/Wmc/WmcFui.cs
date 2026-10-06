@@ -49,33 +49,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return n;
         }
 
-        /// <summary>A numbered step's head in the FUI look (SUPPLY's four steps): the digit in an info-outlined box, a glyph, the title,
-        /// a state chip with its rail on the right, and the hairline under it. Returns the chip's label; <see cref="WmcKit.SetStep"/>
-        /// writes it, as for <see cref="WmcKit.StepHeader"/>.</summary>
-        public static TMP_Text StepHeader(RectTransform p, Rect r, int n, Glyph glyph, string title, out Image rail)
-        {
-            const float box = 16f, chip = 96f;
-            Color info = AvStyleHost.FuiColor("info", AvTheme.RailInfo), hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-            var digit = new Rect(r.x, r.y - 1f, box, box);
-            WmcDraw.Panel(p, digit, AvStyleHost.FuiColor("surface-raised", AvTheme.SurfaceRaised)).raycastTarget = false;
-            WmcDraw.Outline(p, digit, info);
-            WmcDraw.Label(p, digit, n.ToString(System.Globalization.CultureInfo.InvariantCulture), AvTextRole.Head, "section-title",
-                info, TextAlignmentOptions.Center);
-            float tx = r.x + box + 6f;
-            if (glyph != Glyph.None)
-            {
-                Icon(p, new Rect(tx, r.y - 3f, IconSize, IconSize), glyph, info);
-                tx += IconSize + 5f;
-            }
-            WmcDraw.Label(p, new Rect(tx, r.y, r.x + r.width - chip - 4f - tx, r.height), title, AvTextRole.Head, "section-title", info);
-            var state = new Rect(r.x + r.width - chip, r.y, chip, r.height);
-            WmcDraw.Panel(p, state, AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert)).raycastTarget = false;
-            WmcDraw.Outline(p, state, hairline);
-            rail = WmcDraw.Rule(p, new Rect(state.x, state.y, 3f, state.height), WmcDraw.RailColor("inert"));
-            WmcDraw.Rule(p, new Rect(r.x, r.y - r.height - 2f, r.width, 1f), hairline.WithAlpha(0.6f)).raycastTarget = false;
-            return WmcKit.Text(p, new Rect(state.x + 8f, state.y, chip - 10f, state.height), "row-sub");
-        }
-
         private static Color TickColor(string cls) =>
             cls == "danger" ? AvTheme.Alert : cls == "warn" || cls == "armed" ? AvTheme.Warning : cls == "live" || cls == "ready" ? AvTheme.Accent
             : cls == "inert" || cls == "locked" ? AvTheme.RailInert : AvTheme.RailInfo;
@@ -115,19 +88,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return icon;
         }
 
-        /// <summary>A horizontal tape: track, fill, ticks every quarter and an optional caution mark at <paramref name="mark"/>.</summary>
-        public static WmcTape Tape(RectTransform p, Rect r, float mark = float.NaN)
-        {
-            Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-            WmcDraw.Panel(p, r, AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert)).raycastTarget = false;
-            WmcDraw.Outline(p, r, hairline.WithAlpha(0.5f));
-            Image fill = WmcDraw.Fill(p, new Rect(r.x + 1f, r.y - 1f, 0f, r.height - 2f), AvStyleHost.FuiColor("select", AvTheme.Accent));
-            fill.raycastTarget = false;
-            for (int k = 1; k < 4; k++) Rule(p, new Rect(r.x + r.width * k / 4f, r.y, 1f, r.height), hairline.WithAlpha(0.7f));
-            if (!float.IsNaN(mark)) Rule(p, new Rect(r.x + r.width * mark, r.y + 2f, 1f, r.height + 4f), AvStyleHost.FuiColor("caution", AvTheme.Warning));
-            return new WmcTape(fill, r.width - 2f);
-        }
-
         /// <summary>A state word in a 1 px outline over a faint wash of the state colour.</summary>
         public static WmcBadge Badge(RectTransform p, Rect r)
         {
@@ -137,16 +97,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             TMP_Text t = WmcKit.Text(p, new Rect(r.x + 2f, r.y, r.width - 4f, r.height), "row-sub", TextAlignmentOptions.Center);
             t.fontStyle = FontStyles.Bold;
             return new WmcBadge(wash, edge, t);
-        }
-
-        /// <summary>A muted key and a bold value on one line; returns the value label.</summary>
-        public static TMP_Text KeyValue(RectTransform p, Rect r, string key, float keyShare = 0.42f)
-        {
-            TMP_Text k = WmcKit.Text(p, new Rect(r.x, r.y, r.width * keyShare, r.height), "kv-key");
-            k.text = key;
-            k.color = AvTheme.Disabled;
-            return WmcKit.Text(p, new Rect(r.x + r.width * keyShare, r.y, r.width * (1f - keyShare), r.height), "kv-value",
-                TextAlignmentOptions.MidlineRight);
         }
 
         /// <summary>A state class ("live", "warn", "danger", "info", "inert", or a rail class) as a colour.</summary>
@@ -282,15 +232,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (reveal == null || target == null) return;
             AvReveal.Snap = Reduced;
             reveal.Punch((RectTransform)target.transform, PunchFrom, PunchSeconds);
-        }
-
-        /// <summary>On (bright) or off for a blink that started at <paramref name="since"/> (unscaled seconds); steady on after
-        /// <see cref="BlinkSeconds"/> or with reduced motion.</summary>
-        public static bool BlinkOn(float since, float now)
-        {
-            float t = now - since;
-            if (Reduced || t < 0f || t >= BlinkSeconds) return true;
-            return (int)(t * BlinkHz * 2f) % 2 == 0;
         }
     }
 }

@@ -34,9 +34,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static string TypeOf(Unit u) =>
             u == null ? "target" : u.definition != null ? u.definition.unitName : u.unitName;
 
-        /// <summary>Seconds after a shot during which target disappearance earns credit.</summary>
-        private const float CreditWindow = 25f;
-
         private sealed class PendingCredit
         {
             public Aircraft Shooter;
@@ -51,31 +48,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             pending.Clear();
             nextTick = 0f;
-        }
-
-        /// <summary>Record a wingman's shot at a target.</summary>
-        public static void NoteShot(Aircraft shooter, Unit target)
-        {
-            if (!WingSettings.Instance.PilotProgression.Value) return;
-            if (shooter == null || target == null || target is Missile) return;
-
-            float expires = Time.timeSinceLevelLoad + CreditWindow;
-
-            for (int i = 0; i < pending.Count; i++)
-            {
-                if (pending[i].Shooter != shooter || pending[i].Target != target) continue;
-
-                // Extend the existing claim so repeated attacks cannot award duplicate kills.
-                pending[i].ExpiresAt = expires;
-                return;
-            }
-
-            pending.Add(new PendingCredit
-            {
-                Shooter = shooter,
-                Target = target,
-                ExpiresAt = expires,
-            });
         }
 
         /// <summary>Settle shot claims periodically; target disappearance does not need a frame-rate

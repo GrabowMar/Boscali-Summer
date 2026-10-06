@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Keeps one current departure report per airframe on a rate-limited radio channel.</summary>
     internal sealed class DepartureChatter
     {
-        internal const float ChannelSpacingSeconds = 12f;
-        internal const float ReportLifetimeSeconds = 20f;
 
         private sealed class Progress
         {
@@ -41,42 +39,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             item.PendingAt = now;
         }
 
-        internal bool TryDequeue(float now, bool channelIdle, out int memberId, out DeparturePhase phase)
-        {
-            memberId = 0;
-            phase = DeparturePhase.None;
-            if (!channelIdle || now < nextTransmissionAt) return false;
-
-            Progress first = null;
-            foreach (var pair in progress)
-            {
-                Progress item = pair.Value;
-                if (item.Pending == DeparturePhase.None) continue;
-                if (now - item.PendingAt > ReportLifetimeSeconds)
-                {
-                    item.Pending = DeparturePhase.None;
-                    continue;
-                }
-                if (first != null && (item.PendingAt > first.PendingAt ||
-                    (item.PendingAt == first.PendingAt && pair.Key >= memberId))) continue;
-                first = item;
-                memberId = pair.Key;
-            }
-
-            if (first == null) return false;
-            phase = first.Pending;
-            first.Pending = DeparturePhase.None;
-            nextTransmissionAt = now + ChannelSpacingSeconds;
-            return true;
-        }
-
         internal void Silence()
         {
             foreach (Progress item in progress.Values) item.Pending = DeparturePhase.None;
         }
-
-        internal bool HasPending(int memberId, DeparturePhase phase) =>
-            progress.TryGetValue(memberId, out Progress item) && item.Pending == phase;
 
         internal void Forget(int memberId) => progress.Remove(memberId);
 

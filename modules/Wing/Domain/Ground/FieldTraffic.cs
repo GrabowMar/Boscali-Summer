@@ -187,8 +187,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return false;
         }
 
-        public bool TryGetPosition(int owner, out Vec3 pos) => positions.TryGetValue(owner, out pos);
-
         /// <summary>Where each member on the field last was.</summary>
         public Dictionary<int, Vec3> Positions => positions;
 

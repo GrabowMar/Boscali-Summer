@@ -55,9 +55,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 0.35f * ((float)Math.Sin(phase * 2.1f + MeanderPhase) -
                          (float)Math.Sin(MeanderPhase * 2.1f + MeanderPhase)));
         }
-
-        /// <summary>Seconds until the line reaches a point (negative once passed).</summary>
-        public float SecondsUntil(float x, float z) => Speed > 0.01f ? -SignedDistance(x, z) / Speed : float.PositiveInfinity;
     }
 
     /// <summary>What a front contributes at one point, before strength weighting.</summary>

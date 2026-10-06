@@ -107,15 +107,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public AvControl SupplyButton { get; }
-        public AvRow Seats => seats;
         public Transform AllTarget => allHit.transform;
         public Transform SummaryTarget => sumFrame.transform;
         public Transform HeadTarget(int e) => heads[e].Frame.transform;
         public Transform RowTarget(int r) => rows[r].Frame.transform;
         public uint IdAt(int r) => r >= 0 && r < rows.Length ? rows[r].Id : 0u;
         public bool Collapsed => collapsed;
-        public int RowsShown => shownRows;
-        public int HeadsShown => shownHeads;
         private int shownRows, shownHeads;
 
         /// <summary>Whether the full table is hidden behind its summary line; a collapsible table always draws the summary line.</summary>
@@ -452,9 +449,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             seats.Set(name, empty ? "CALL one on the WING row, or requisition on SUPPLY." : "Empty seats: requisition wingmen on SUPPLY.", "", AvState.Inert);
             SupplyButton.gameObject.SetActive(!c.Client);
         }
-
-        /// <summary>Whether a SUPPLY button shows (open seats or no wingmen, host).</summary>
-        public bool SeatsShown => seatsOn;
 
         public bool SeatsEmpty => last != null && last.Count == 0;
 

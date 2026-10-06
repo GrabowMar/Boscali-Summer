@@ -190,24 +190,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static int Experience(int amount, bool fastLearner) => amount <= 0 ? 0 :
             (int)Math.Min(int.MaxValue, fastLearner ? ((long)amount * 3 + 1) / 2 : amount);
-
-        public static float GunRangeMultiplier(bool marksman) => marksman ? 1.30f : 1.0f;
-        public static float OffBoresightMultiplier(bool snapshot) => snapshot ? 1.40f : 1.0f;
-        public static float DogfightEffort(bool leadPursuit) => leadPursuit ? 2.5f : 2.0f;
-        public static bool IsHeadOn(float closingSpeed, float dotVelocity) => closingSpeed > 350f && dotVelocity < -0.7f;
-        public static float HeadOnRangeMultiplier(bool joust) => joust ? 1.25f : 1.0f;
-        public static float CornerSpeedFloor(float cornerSpeed, bool energyFighter) => energyFighter ? cornerSpeed * 1.15f : cornerSpeed;
-        public static float HighAltitudeRangeMultiplier(float altitude, bool apexHunter) => (apexHunter && altitude >= 4000f) ? 1.40f : 1.0f;
-        public static float BombFloorScale(bool bombardier) => bombardier ? 0.70f : 1.0f;
-        public static float BombEnvelopeScale(bool bombardier) => bombardier ? 1.35f : 1.0f;
-        public static float SalvoDelayScale(bool salvoSpecialist) => salvoSpecialist ? 0.60f : 1.0f;
-        public static float SeadPriorityMultiplier(bool isRadar, bool wildWeasel) => (isRadar && wildWeasel) ? 1.50f : 1.0f;
-        public static float ClaimDurationMultiplier(bool targetMaster) => targetMaster ? 1.50f : 1.0f;
-        public static float FormationRejoinScale(bool wingmanInstinct) => wingmanInstinct ? 1.30f : 1.0f;
-        public static float CombatSpreadScale(bool underThreat, bool combatSpread) => (underThreat && combatSpread) ? 1.40f : 1.0f;
-        public static float TerrainFloorOffset(bool terrainHugger) => terrainHugger ? -25f : 0f;
-        public static float DefensiveRollAuthority(bool breakTurn) => breakTurn ? 1.50f : 1.0f;
-        public static float EarlyWarningReactionLead(bool earlyWarning) => earlyWarning ? 1.5f : 0f;
-        public static float BurnthroughJammingScale(bool burnthrough) => burnthrough ? 0.60f : 1.0f;
     }
 }

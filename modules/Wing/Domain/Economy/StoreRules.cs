@@ -59,20 +59,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return StoreVerdict.Ok;
         }
 
-        /// <summary><see cref="Check"/> plus the field: no ship-rearm store from a ship, and warheads taken from
-        /// <paramref name="warheadsLeft"/> in station order.</summary>
-        public static StoreVerdict AtField(in MountFacts m, in MissionFacts mission, bool shipField, ref int warheadsLeft)
-        {
-            StoreVerdict v = Check(m, mission);
-            if (v != StoreVerdict.Ok) return v;
-            if (m.ShipRearm && shipField) return StoreVerdict.NotFromShip;
-            if (!m.Nuclear) return StoreVerdict.Ok;
-            int need = m.Pylons * m.Ammo;
-            if (need > warheadsLeft) return StoreVerdict.Warheads;
-            warheadsLeft -= need;
-            return StoreVerdict.Ok;
-        }
-
         /// <summary>Listed in the store popup at all (the game's own menu hides these).</summary>
         public static bool Offered(StoreVerdict v) =>
             v != StoreVerdict.Disabled && v != StoreVerdict.EventOnly && v != StoreVerdict.Missing && v != StoreVerdict.NotOnStation;

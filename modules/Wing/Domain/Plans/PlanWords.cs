@@ -68,18 +68,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return Join(Join(Join(points, km), eta), Alt(p));
         }
 
-        public static string End(PlanStep p)
-        {
-            switch (p.End)
-            {
-                case PlanEnd.Time: return WmcText.Clock(p.EndSeconds);
-                case PlanEnd.Bingo: return "BINGO";
-                case PlanEnd.Winchester: return "WINCH";
-                case PlanEnd.TargetsDown: return "TGT DN";
-                default: return "ARRIVE";
-            }
-        }
-
         /// <summary>WAIT before EXECUTE; then RUN, DONE, HELD, BLOCKED, SKIP, NEXT for the step after the one running.</summary>
         public static string State(PlanRunner r, int lane, int step)
         {
@@ -95,14 +83,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     int current = r.Current(lane);
                     return r.Running && current >= 0 && (step == current || step == current + 1) ? "NEXT" : "WAIT";
             }
-        }
-
-        /// <summary>"B2 ATTACK · AFTER B1 · 2 TGT · ENDS TGT DN".</summary>
-        public static string Cue(WingPlan plan, int lane, int step)
-        {
-            PlanStep p = plan.Steps[lane][step];
-            string head = PlanRules.Name(lane, step) + " " + Kind(p.Kind);
-            return Join(Join(head + " · " + Start(plan, lane, step), Short(p)), "ENDS " + End(p));
         }
 
         /// <summary>"STRIKE NORTH · DRAFT · 7 STEPS".</summary>

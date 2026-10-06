@@ -55,9 +55,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         });
 
-        /// <summary>0 high, 1 level, 2 low, from the wing's stack in metres.</summary>
-        public static int StackIndex(float stack) => stack > 1f ? 0 : stack < -1f ? 2 : 1;
-
         /// <summary>0 BUSTER (no afterburner), 1 GATE.</summary>
         public static void Power(WmcContext c, int i) => WmcUi.Order(c, () => WingCommands.Afterburner(i == 1));
 

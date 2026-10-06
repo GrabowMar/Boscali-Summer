@@ -62,16 +62,5 @@ namespace BoscaliSummer.Modules.Command.Runtime
             weight = TacticalSectorGrid.GroundObservationWeight(defensive);
             return true;
         }
-
-        internal static bool TryGetGroundObservation(Unit unit, FactionHQ localHq, out Vector3 position, out float weight, out bool hostile)
-        {
-            position = default;
-            weight = 0f;
-            hostile = false;
-            if (localHq == null) return false;
-            if (!TryGetGroundObservation(unit, out position, out weight, out FactionHQ owner)) return false;
-            hostile = owner != localHq;
-            return true;
-        }
     }
 }

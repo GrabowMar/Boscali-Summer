@@ -26,8 +26,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public static string Label(MapMode m) => m == MapMode.Off ? "OFF" : m.ToString().ToUpperInvariant();
 
-        public static bool Consumes(MapMode mode, bool selection, bool otherOwner) => Consumes(mode != MapMode.Off, selection, otherOwner);
-
         /// <summary>An order mode or a PLAN tool armed, or a selection for MOVE.</summary>
         public static bool Consumes(bool armed, bool selection, bool otherOwner) => !otherOwner && (armed || selection);
 

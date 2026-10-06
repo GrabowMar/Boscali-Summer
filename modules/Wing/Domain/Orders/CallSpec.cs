@@ -19,7 +19,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public string Airframe, Field, Pilot, Fit;
         public float Fuel;
-
-        public bool IsSet => Airframe != null || Field != null || Pilot != null || Fit != null || Fuel != 0f;
     }
 }

@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Squad.Configuration
         private sealed class ConfigurationManagerAttributes
         {
             public Action<ConfigEntryBase> CustomDrawer;
-            public bool? HideDefaultButton = true;
         }
 
         public SquadSettings(ConfigFile config)

@@ -313,16 +313,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return Length(pax - bax * h, pay - bay * h) - halfWidth;
         }
 
-        /// <summary>A quarter ring centred on (cx, cy) that opens to the upper right.</summary>
-        private static float ArcBand(float x, float y, float cx, float cy, float radius, float halfWidth)
-        {
-            float dx = x - cx, dy = y - cy;
-            float band = Math.Abs(Length(dx, dy) - radius) - halfWidth;
-            // Clip to the upper-right quadrant; the ring ends are cut square.
-            float clip = Math.Max(-dx, -dy);
-            return Math.Max(band, clip);
-        }
-
         private static float Triangle(float x, float y, float ax, float ay, float bx, float by, float cx, float cy)
         {
             float d = Math.Min(Edge(x, y, ax, ay, bx, by), Math.Min(Edge(x, y, bx, by, cx, cy), Edge(x, y, cx, cy, ax, ay)));

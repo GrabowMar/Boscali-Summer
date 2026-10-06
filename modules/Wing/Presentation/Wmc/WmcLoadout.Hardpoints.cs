@@ -26,7 +26,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int selStation = -1, pickerPage;
         private bool hpResetPending;
         private readonly List<WingLoadoutCatalog.StoreOption> stores = new List<WingLoadoutCatalog.StoreOption>();
-        private readonly List<string> storeKeys = new List<string>();
         private readonly List<int> pylonCounts = new List<int>();
 
         private void BuildHardpoints(AvFlow f)

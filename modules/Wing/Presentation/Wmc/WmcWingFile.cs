@@ -92,8 +92,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public string CountsText => counts.text;
-
         public void SetCounts(string line)
         {
             if (counts.text == line) return;

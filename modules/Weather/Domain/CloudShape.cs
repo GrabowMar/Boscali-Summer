@@ -40,12 +40,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float SheetBlend { get; }
         public float TowerBlend => WeatherMath.Smoothstep(0.18f, 0.60f, Anvil);
         public bool Sheet => SheetBlend >= 0.999f;
-
-        /// <summary>Cumulus and stratocumulus break into puffs. A sheet, and a real anvil, stay one mass.</summary>
-        public bool CarvePuffs => !Sheet && TowerBlend < 0.999f;
-
-        /// <summary>Only cumulonimbus keeps the cell's full meteorological depth.</summary>
-        public bool CapTower => TowerBlend < 0.001f;
     }
 
     /// <summary>Vertical profile of a cloud genus. Pure, so the shadow cookie and the tests share it.</summary>

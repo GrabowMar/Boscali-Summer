@@ -70,12 +70,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public string TitleText => title.text;
-
-        public string HullText => gaugeValue[2].text;
-
-        public string MapText => mapNote.text;
-
         public void Show(AircraftFace f)
         {
             face.Title = f.Title;
@@ -228,8 +222,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Shown => shown;
 
-        public string StoreText(int i) => store[i].text;
-
         public void Show(in MemberDetail d)
         {
             int n = d.Stores == null ? 0 : Math.Min(Math.Min(d.StoreCount, d.Stores.Length), Rows);
@@ -330,10 +322,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Dossier = AvControl.Make(Rect, new AvControl.Spec("DOSSIER", open, AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
             Restyle();
         }
-
-        public string CallsignText => callsign.text;
-
-        public string SubText => sub.text;
 
         public void SetPilot(WingPilot p, string callsignText, string subText)
         {

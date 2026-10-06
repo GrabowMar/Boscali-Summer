@@ -49,9 +49,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public WmcInspect(WmcControls controls) => ids = controls;
 
-        /// <summary>The aircraft on show (automation).</summary>
-        public uint Inspected => inspected;
-
         /// <summary>The page's top (the member chips; null before <see cref="Build"/>).</summary>
         public RectTransform Anchor => chips?.Rect;
 

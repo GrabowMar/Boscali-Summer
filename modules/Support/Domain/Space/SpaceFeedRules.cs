@@ -184,9 +184,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return FeedThreat.None;
         }
 
-        public static int ThreatCount(in CockpitThreatSnapshot s) =>
-            (TerrainOn(s) ? 1 : 0) + (MissileOn(s) ? 1 : 0) + (RwrOn(s) ? 1 : 0) + (BanditOn(s) ? 1 : 0);
-
         /// <summary>
         /// Every active condition as its own word in priority order, so a lower warning is never hidden behind a higher one.
         /// Empty when nothing is active.
@@ -306,8 +303,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The TASKED section caption: how many are posted and how many do not fit the board.</summary>
         public static string CaptionOf(int posted, int capacity) =>
             posted <= 0 ? "TASKED CALLS · NONE" : posted <= capacity ? "TASKED CALLS · " + posted : "TASKED CALLS · " + posted + " (+" + (posted - capacity) + " MORE)";
-
-        public static bool CanFire(PostStatus status) => status == PostStatus.Open;
 
         public static string PostWord(PostStatus status) =>
             status == PostStatus.Stale ? "STALE" : status == PostStatus.Launching ? "LAUNCHING" : "READY";

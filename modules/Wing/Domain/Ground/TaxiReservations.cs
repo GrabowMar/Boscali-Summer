@@ -56,9 +56,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public int OwnerOfNode(int node) => nodeOwner[node];
 
-        /// <summary>The first owner on the edge (−1: free).</summary>
-        public int OwnerOfEdge(int edge) => edgeUsers[edge].Count > 0 ? edgeUsers[edge][0] : -1;
-
         /// <summary>The owner directly ahead of <paramref name="owner"/> on <paramref name="edge"/> (−1: none).</summary>
         public int Ahead(int owner, int edge)
         {

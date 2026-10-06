@@ -288,27 +288,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             return button.GetComponent<Image>();
         }
 
-        // ---- Shared state mapping ----------------------------------------------------------
-
-        /// <summary>Maps the domain's rail-category strings (TheaterReadout) onto kit v2 <see cref="AvState"/>.</summary>
-        internal static AvState RailState(string rail)
-        {
-            switch (rail)
-            {
-                case "danger": return AvState.Danger;
-                case "warn":
-                case "caution":
-                case "contested": return AvState.Caution;
-                case "ready": return AvState.Ready;
-                case "live":
-                case "info": return AvState.Info;
-                default: return AvState.Inert;
-            }
-        }
-
-        /// <summary>Prepends the state glyph (R1: status is never colour alone) to a value AvRow will show.</summary>
-        internal static string Glyphed(string text, AvState state) => AvStates.Glyph(state) + (text ?? "");
-
         // ---- SITUATION page ------------------------------------------------------------------
 
         private void BuildSaPage(AvFlow p)

@@ -361,15 +361,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return f == null || slot < 0 || slot >= f.Slots.Length ? 0 : f.Slots[slot].Element;
         }
 
-        /// <summary>Spec M5 §10.2: members of the second element flying with the wing (Buddy Attack can use).</summary>
-        public int SecondElement()
-        {
-            int n = 0;
-            foreach (WingMember m in Members)
-                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && PairOf(m) == 1) n++;
-            return n;
-        }
-
         public int ClearMySix(out int engaged)
         {
             engaged = 0;

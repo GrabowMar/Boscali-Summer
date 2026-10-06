@@ -120,27 +120,6 @@ namespace BoscaliSummer.Modules.Wing.Networking
             for (int i = 0; i < args; i++) w.F32(Args[i]);
             w.String(Text);
         }
-
-        public static bool TryDecode(ByteReader r, out WcCommand m)
-        {
-            m = default;
-            m.Seq = r.U32();
-            m.Kind = (CommandKind)r.U8();
-            int units = r.U8();
-            if (r.Failed || units > MaxUnits) return false;
-            m.Units = new uint[units];
-            for (int i = 0; i < units; i++) m.Units[i] = r.U32();
-            int points = r.U8();
-            if (r.Failed || points > MaxWaypoints) return false;
-            m.Waypoints = new WcWaypoint[points];
-            for (int i = 0; i < points; i++) m.Waypoints[i] = new WcWaypoint { X = r.F32(), Z = r.F32(), Alt = r.F32() };
-            int args = r.U8();
-            if (r.Failed || args > MaxArgs) return false;
-            m.Args = new float[args];
-            for (int i = 0; i < args; i++) m.Args[i] = r.F32();
-            m.Text = r.String();
-            return WireCodec.Done(r);
-        }
     }
 
     /// <summary>Host → client: a command's result.</summary>
@@ -156,12 +135,6 @@ namespace BoscaliSummer.Modules.Wing.Networking
             w.U32(Seq);
             w.Bool(Accepted);
             w.String(Reason);
-        }
-
-        public static bool TryDecode(ByteReader r, out WcAck m)
-        {
-            m = new WcAck { Seq = r.U32(), Accepted = r.Bool(), Reason = r.String() };
-            return WireCodec.Done(r);
         }
     }
 
@@ -242,12 +215,6 @@ namespace BoscaliSummer.Modules.Wing.Networking
             w.U8(To);
             w.U8(Reason);
             w.U8(Task);
-        }
-
-        public static bool TryDecode(ByteReader r, out WcEvent m)
-        {
-            m = new WcEvent { Time = r.F32(), Member = r.U8(), Kind = r.U8(), From = r.U8(), To = r.U8(), Reason = r.U8(), Task = r.U8() };
-            return WireCodec.Done(r);
         }
     }
 }

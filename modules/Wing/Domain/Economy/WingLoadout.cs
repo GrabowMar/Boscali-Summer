@@ -87,14 +87,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             /// <summary>The set's store for the fit summary.</summary>
             public StoreFacts Facts => new StoreFacts { HasKey = !IsEmpty, Known = Known && !IsEmpty, Kind = Kind, Mass = Mass, Ammo = Ammo };
-
-            /// <summary>Two-letter role label for the store table.</summary>
-            public string RoleTag =>
-                Cargo ? "CGO"
-                : AntiAir <= 0f && AntiSurface <= 0f ? ""
-                : AntiAir > AntiSurface * 1.5f ? "A-A"
-                : AntiSurface > AntiAir * 1.5f ? "A-G"
-                : "MLT";
         }
 
         /// <summary>Cached hardpoint data for one airframe.</summary>

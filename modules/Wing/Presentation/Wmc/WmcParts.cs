@@ -116,19 +116,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 default: return AvIcon.None;
             }
         }
-
-        /// <summary>Changes the glyph on a control made with any icon (an order cell whose meaning swaps with the helicopter grid).</summary>
-        public static void Swap(AvControl control, AvIcon icon)
-        {
-            if (control == null) return;
-            foreach (TMP_Text t in control.GetComponentsInChildren<TMP_Text>(true))
-            {
-                if (!t.gameObject.name.StartsWith("Icon ", StringComparison.Ordinal)) continue;
-                AvIcons.Set(t, icon, AvGridTokens.IconInline);
-                t.gameObject.name = "Icon " + icon;
-                return;
-            }
-        }
     }
 
     /// <summary>Several sub-pages that share one flow line (TACTICAL's ORDERS · FORMATION · ROUTE·AP): each has a nested flow that
@@ -217,9 +204,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public AvControl this[int i] => cells[i];
 
         public int Count => cells.Length;
-
-        // Count, not visibility: the base AvPart.Shown (bool) still reports the grid Rect.
-        public int ShownCount => shown;
 
         /// <summary>The first <paramref name="n"/> cells show. Returns true when that changed (the caller relayouts).</summary>
         public bool SetShownCount(int n)

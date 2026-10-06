@@ -46,29 +46,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// anti-spam use independent fixed timers.</summary>
         public static float Interval(float seconds) => seconds * IntervalScale;
 
-        // Named feature gates share the current full-mode setting.
-
-        /// <summary>Terrain clearance, turn mirroring, threat spacing, and rejoin prediction
-        /// features.</summary>
-        public static bool SmartFormation => Full;
-
-        /// <summary>Enable native target-search deconfliction, a significant host cost.</summary>
-        public static bool Deconfliction => Full && !WingFrameGate.Recovering;
-
-        /// <summary>Allow station-keeping opportunity target scans and fire.</summary>
-        public static bool OpportunityFire => Full;
-
-        /// <summary>Enable noncritical calls and ambient banter.</summary>
-        public static bool RichChatter => Full && !WingFrameGate.Recovering;
-
-        /// <summary>Expose manoeuvre commands and menu.</summary>
-        public static bool Manoeuvres => Full;
-
         /// <summary>Expose targeted pod jamming.</summary>
         public static bool Jamming => Full;
-
-        /// <summary>Formation terrain clearance in metres, or zero when disabled.</summary>
-        public static float TerrainClearance => SmartFormation ? 45f : 0f;
 
         public static string Summary() =>
             $"mode={Mode} stride={GeometryStride} intervalScale={IntervalScale:0.0}";
