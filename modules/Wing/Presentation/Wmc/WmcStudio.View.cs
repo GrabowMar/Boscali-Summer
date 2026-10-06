@@ -65,7 +65,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             cloneButton.Help = "Copy this pilot into a new draft under the next free callsign.";
             deleteButton = file[2];
             deleteButton.Help = "Delete this saved pilot (press twice). This mission keeps them.";
-            file[3].Help = "Add pilots from the Pilots folder and 0.9's folder: new callsigns only, the files are left as they are.";
+            file[3].Help = "Add pilots from the Pilots folder: new callsigns only, the files are left as they are.";
             file[4].Help = "Write every saved pilot to Pilots/exported_pilots.json.";
             file[5].Help = "Open the Pilots folder.";
             ids.Add("sq.new", file[0]);
