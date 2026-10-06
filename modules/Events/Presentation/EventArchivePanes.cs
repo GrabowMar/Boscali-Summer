@@ -30,9 +30,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
     internal sealed class ScrollPane
     {
         private readonly AvFrame frame;
-        private readonly ScrollRect scroll;
-        private readonly RectTransform viewport;
-        private readonly Scrollbar bar;
+        private readonly AvScrollView scrollView;
 
         public RectTransform Root { get; }
         public RectTransform Content { get; }
@@ -44,19 +42,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(6f));
             AvLay.Fill(frame.rectTransform);
             frame.raycastTarget = true;   // wheel input anywhere over the pane reaches its scroll rect
-            scroll = Root.gameObject.AddComponent<ScrollRect>();
-            scroll.horizontal = false;
-            scroll.movementType = ScrollRect.MovementType.Clamped;
-            scroll.scrollSensitivity = 24f;
-            viewport = AvLay.Child(Root, "Viewport");
-            viewport.gameObject.AddComponent<RectMask2D>();
-            Content = AvLay.Child(viewport, "Content");
-            scroll.viewport = viewport;
-            scroll.content = Content;
-            bar = AvConsole.MakeScrollbar(Root);
-            scroll.verticalScrollbar = bar;
-            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-            AvInput.StripNavigation(bar);
+            scrollView = new AvScrollView(Root, true);
+            Content = scrollView.Content;
             Flow = new AvFlow(Content, ticker, width);
             Restyle();
         }
@@ -64,19 +51,17 @@ namespace BoscaliSummer.Modules.Events.Presentation
         public void Place(float x, float y, float w, float h)
         {
             AvLay.Place(Root, x, y, w, h);
-            AvLay.Place(viewport, 0f, 0f, w, h);
+            scrollView.Place(w, h);
             Flow.ViewportHeight = h;   // a growing part (the dossier's poster) takes the pane's spare height
-            AvLay.Place((RectTransform)bar.transform, w - AvGridTokens.Pad - AvGridTokens.Gutter + 2f, 2f, 4f, h - 4f);
         }
 
-        public void ScrollToTop() => scroll.verticalNormalizedPosition = 1f;
+        public void ScrollToTop() => scrollView.Scroll.verticalNormalizedPosition = 1f;
 
         public void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            bar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
-            bar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
+            scrollView.Restyle();
         }
     }
 

@@ -18,8 +18,7 @@ namespace NOAvionics
         private readonly Image headerBack, idPlate;
         private readonly TMP_Text idText, titleText, pageIndex;
         private readonly RectTransform live, bodyRect, viewport;
-        private readonly ScrollRect scroll;
-        private readonly Scrollbar scrollbar;
+        private readonly AvScrollView scrollView;
         private readonly RectTransform[] pageRects;
         private readonly Canvas[] pageCanvases;
         private readonly AvFlow[] flows;
@@ -68,15 +67,8 @@ namespace NOAvionics
             AvLay.Nest(live, false);
 
             bodyRect = AvLay.Child(Root, "Body");
-            scroll = bodyRect.gameObject.AddComponent<ScrollRect>();
-            scroll.horizontal = false; scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 24f;
-            viewport = AvLay.Child(bodyRect, "Viewport");
-            viewport.gameObject.AddComponent<RectMask2D>();
-            scroll.viewport = viewport;
-            scrollbar = MakeScrollbar(bodyRect);
-            scroll.verticalScrollbar = scrollbar;
-            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-            AvInput.StripNavigation(scrollbar);
+            scrollView = new AvScrollView(bodyRect, false);
+            viewport = scrollView.Viewport;
 
             pageRects = new RectTransform[PageCount];
             pageCanvases = new Canvas[PageCount];
@@ -154,8 +146,8 @@ namespace NOAvionics
                 var ray = pageRects[i].GetComponent<GraphicRaycaster>();
                 if (ray != null) ray.enabled = on;
             }
-            scroll.content = pageRects[index];
-            scroll.verticalNormalizedPosition = 1f;
+            scrollView.Scroll.content = pageRects[index];
+            scrollView.Scroll.verticalNormalizedPosition = 1f;
             Ticker.ActivePage = index;
             if (tabs != null && tabs.Selected != index) tabs.Select(index, false);
             pageIndex.text = (index + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture) + "/" +
@@ -203,9 +195,8 @@ namespace NOAvionics
             Footer.Place(new AvSlot(0f, height - footerH, width, footerH));
             float bodyH = Mathf.Max(0f, height - footerH - y);
             AvLay.Place(bodyRect, 0f, y, width, bodyH);
-            AvLay.Place(viewport, 0f, 0f, width, bodyH);
+            scrollView.Place(width, bodyH);
             foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
-            AvLay.Place((RectTransform)scrollbar.transform, width - pad - AvGridTokens.Gutter + 2f, 2f, 4f, bodyH - 4f);
             AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
             for (int i = 0; i < PageCount; i++) { pageRects[i].anchoredPosition = Vector2.zero; }
         }
@@ -241,23 +232,7 @@ namespace NOAvionics
             pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
             serial.color = decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
-            scrollbar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
-            scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
-        }
-
-        internal static Scrollbar MakeScrollbar(RectTransform parent)
-        {
-            RectTransform bar = AvLay.Child(parent, "Scrollbar");
-            var track = bar.gameObject.AddComponent<Image>();
-            track.raycastTarget = true;
-            RectTransform area = AvLay.Child(bar, "Area"); AvLay.Fill(area);
-            RectTransform handle = AvLay.Child(area, "Handle"); AvLay.Fill(handle);
-            handle.gameObject.AddComponent<Image>();
-            var sb = bar.gameObject.AddComponent<Scrollbar>();
-            sb.direction = Scrollbar.Direction.BottomToTop;
-            sb.handleRect = handle;
-            sb.targetGraphic = handle.GetComponent<Image>();
-            return sb;
+            scrollView.Restyle();
         }
 
         private sealed class RestyleHook : AvPart
