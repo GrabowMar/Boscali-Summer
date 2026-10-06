@@ -448,9 +448,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             double elevation = Math.Atan2(los.y, horizontal);
             double azX = horizontal > 1e-6 ? los.x / horizontal : 0.0, azZ = horizontal > 1e-6 ? los.z / horizontal : 1.0;
             double slant = RadarAltitude / Math.Max(0.2, Math.Sin(elevation));
-            var look = new LookAngles(true, elevation, 0.0, slant, azX, azZ);
-            var orbit = new OrbitState(OrbitPhase.InPass, new PassPlan(0.0), RadarAltitude, 0.0, 0.0, 0.0, 0.0);
-            sar.Begin(target, look, orbit, settings.SarSceneRadius.Value, serial, now);
+            sar.Begin(target, Math.PI * 0.5 - elevation, azX, azZ, slant, RadarAltitude,
+                settings.SarSceneRadius.Value, serial, now);
             sarSerial = serial;
         }
 

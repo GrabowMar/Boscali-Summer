@@ -86,8 +86,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool Visible { get; set; } = true;
 
         /// <param name="missionNow">Mission time at the start of the collect (<c>SupportManager.MissionNow()</c>).</param>
-        public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state,
-                          double sceneHalfSize, int seed, float missionNow)
+        public void Begin(GlobalPosition target, double incidence, double azimuthX, double azimuthZ,
+                          double slantRange, double altitude, double sceneHalfSize, int seed, float missionNow)
         {
             if (Image == null)
             {
@@ -103,13 +103,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             if (Runtime.SupportTargeting.TryMapPoint(target, out Vector3 ground)) local = ground;
             centreLocal = local;
 
-            double sinInc = Math.Sin(look.Incidence), cosInc = Math.Cos(look.Incidence);
-            rangeAxis = new Vector3((float)look.AzimuthX, 0f, (float)look.AzimuthZ);
-            los = new Vector3((float)(look.AzimuthX * sinInc), (float)cosInc, (float)(look.AzimuthZ * sinInc)).normalized;
-            SlantRange = look.SlantRange;
+            double sinInc = Math.Sin(incidence), cosInc = Math.Cos(incidence);
+            rangeAxis = new Vector3((float)azimuthX, 0f, (float)azimuthZ);
+            los = new Vector3((float)(azimuthX * sinInc), (float)cosInc, (float)(azimuthZ * sinInc)).normalized;
+            SlantRange = slantRange;
 
-            var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
-                OrbitMath.Velocity(state.Altitude));
+            var geometry = new SarGeometry(incidence, azimuthX, azimuthZ, slantRange,
+                OrbitMath.Velocity(altitude));
             former = new SarImageFormer(ImageWidth, ImageHeight, sceneHalfSize, geometry, seed);
             rangeOversample = Mathf.Max(32, Mathf.RoundToInt(
                 RangeOversample * FxBus.Scales.RenderTargets));
