@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Runtime;
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Finds a free MFD bezel slot on the live <see cref="VirtualMFD"/> and binds a companion
@@ -20,12 +21,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             screens = null;
             slot = -1;
             left = preferLeft;
-            if (mfd == null || !GameAccess.MfdAvailable) return false;
+            if (mfd == null || !CoreGameAccess.MfdAvailable) return false;
 
-            List<Button> leftButtons = GameAccess.GetLeftButtons(mfd);
-            List<Button> rightButtons = GameAccess.GetRightButtons(mfd);
-            List<MFDScreen> leftScreens = GameAccess.GetLeftScreens(mfd);
-            List<MFDScreen> rightScreens = GameAccess.GetRightScreens(mfd);
+            List<Button> leftButtons = CoreGameAccess.GetLeftMfdButtons(mfd);
+            List<Button> rightButtons = CoreGameAccess.GetRightMfdButtons(mfd);
+            List<MFDScreen> leftScreens = CoreGameAccess.GetLeftMfdScreens(mfd);
+            List<MFDScreen> rightScreens = CoreGameAccess.GetRightMfdScreens(mfd);
 
             if (!BezelRegistry.TryClaim(
                 BezelRegistry.Wmc, preferLeft,
@@ -80,8 +81,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static MFDScreen FindTemplate(VirtualMFD mfd)
         {
-            return FindTemplate(GameAccess.GetLeftScreens(mfd)) ??
-                   FindTemplate(GameAccess.GetRightScreens(mfd));
+            return FindTemplate(CoreGameAccess.GetLeftMfdScreens(mfd)) ??
+                   FindTemplate(CoreGameAccess.GetRightMfdScreens(mfd));
         }
 
         public static MFDScreen FindTemplate(List<MFDScreen> screens)

@@ -9,6 +9,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · WING (the
@@ -111,7 +112,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bool visible = Visible;
             if (wasVisible && !visible) WmcNameField.BlurAny();
             wasVisible = visible;
-            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && GameAccess.MfdAvailable;
+            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && CoreGameAccess.MfdAvailable;
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
