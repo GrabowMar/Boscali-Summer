@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private readonly AircraftSensor leaderSensor = new AircraftSensor();
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
-        private int probeTick, frameIndex, nextMemberId;
+        private int probeTick, nextMemberId;
         private AirframeClass leaderClass;
         private long eventsLogged, aiTicks;
 
@@ -274,9 +274,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     return;
                 }
                 if (m.Recovery == null && !m.HasPendingRecovery) CheckBingo(m, dt);
-                if (StepTest.Fly(m, dt)) return;
                 m.Brain.Threat = ReadThreat(m);
-                ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
+                ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
                 m.Why.Update(m.Brain.Pipeline.Report, missionTime);
                 Trigger(m.Aircraft, m.Brain.Mind.Current == BehaviourId.Defend && m.Brain.LastDefence.Countermeasures);
@@ -284,7 +283,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 int slot = m.Brain.Slot;
                 Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
                     m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
-                if (WingSettings.Instance.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
             }
             catch (Exception e)
             {
@@ -715,7 +713,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 foreach (WingMember x in Members) x.Sensor.Restart();
             }
             frameTime = time;
-            frameIndex++;
             // Before any frame is built this tick (review P2 I2, I3): an emptied element forgets its lead; an element whose
             // task ended (done, failed, cancelled, or never given) goes back to A. Review P3 I2: however it emptied (merge,
             // detach elsewhere, losses), a letter handed out again starts from the wing's shape and doctrine.
@@ -988,7 +985,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                             (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing && NativeLandingBridge.Landing(m.Pilot)) ||
                             (m.Engaged && InNativeCombat(m));
                 if (!m.Released && m.Alive && ours) continue;
-                StepTest.Forget(m);
                 m.Ground?.Leave();
                 m.Recovery?.Leave();
                 RestoreRadar(m);
@@ -1218,9 +1214,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (notable || WingSettings.Instance.VerboseLogging.Value)
                     WingLog.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
                         e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
-                if (WingSettings.Instance.DevTools.Value &&
-                    (e.Kind == WingEventKind.GcasActivated || e.Kind == WingEventKind.CollisionEmergency))
-                    TelemetryRecorder.AutoDump(e.Kind.ToString(), e.Time);
             }
             eventsLogged = Events.Total;
         }

@@ -95,8 +95,6 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
-        public ConfigEntry<KeyboardShortcut> KeyDumpTelemetry { get; }
-        public ConfigEntry<KeyboardShortcut> KeyStepTest { get; }
 
         public WingConfig(ConfigFile c)
         {
@@ -231,19 +229,12 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 null, new ConfigurationManagerAttributes { Order = 31 }));
 
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
-                "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
+                "Enable developer tools: the debug overlay and the nomodkit bridge snapshot.",
                 null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 70 }));
 
             Overlay = c.Bind("Debug", "Overlay", true, new ConfigDescription(
                 "With DevTools on, draw each wingman's slot (green), tracked reference (yellow), velocity command (cyan) " +
                 "and collision bias (red).", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 69 }));
-            KeyDumpTelemetry = c.Bind("Debug", "DumpTelemetry", KeyboardShortcut.Empty, new ConfigDescription(
-                "With DevTools on, write the last 120 s of wing telemetry to v1/telemetry.", null,
-                new ConfigurationManagerAttributes { IsAdvanced = true, Order = 68 }));
-
-            KeyStepTest = c.Bind("Debug", "StepTest", KeyboardShortcut.Empty, new ConfigDescription(
-                "With DevTools on, fly wingman #2 through a 38 s step test (above 1500 m; it recovers between short stick pulses) and calibrate its airframe.",
-                null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 67 }));
 
             c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
                 "Export the latest Wing Command log events from this session beside dll " +
