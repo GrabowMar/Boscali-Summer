@@ -49,11 +49,7 @@ namespace BoscaliSummer.Core.Config
             s.Support.FlareBarrageDuration, s.Support.MaximumRange, s.Support.RequestCooldown,
             s.Support.PriceKnob, s.Support.EarnKnob,
 
-            s.TheaterOps.DirectorFactions, s.TheaterOps.FrontlineTacticsEnabled, s.TheaterOps.OperationOverheadCost,
-            s.TheaterOps.OperationWaveBudget, s.TheaterOps.OperationMusterSeconds,
-            s.TheaterOps.OperationPlanSeconds, s.TheaterOps.OperationLaunchDelaySeconds,
-            s.TheaterOps.OperationWaveSeconds, s.TheaterOps.OperationWaveRetrySeconds,
-            s.TheaterOps.OperationHoldSeconds, s.TheaterOps.OperationAssaultSeconds,
+            s.TheaterOps.FrontlineTacticsEnabled,
 
             s.Trenches.GrowthIntervalSeconds, s.Trenches.MaxTrenchPositions,
             s.Trenches.BarrageEnabled,

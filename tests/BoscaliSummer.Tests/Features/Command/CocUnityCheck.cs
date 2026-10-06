@@ -751,37 +751,6 @@ public static class CocUnityCheck
 
     // ------------------------------------------------------------------ plumbing
 
-    private sealed class OperationsStub : ITheaterOperationsView
-    {
-        public bool Available => true;
-        public bool CanCommand => true;
-        public float WaveBudget => 4f;
-        public IReadOnlyList<TheaterOperationView> Operations { get; }
-        public TheaterDirectionView Direction => new TheaterDirectionView(TheaterDirectorPosture.Defending, true, "WEST DEPOT", 2);
-        public TheaterInfluenceView Influence => new TheaterInfluenceView(.7f, false, 20f, 8f,
-            "FLIGHT LEAD", new TheaterAxisView[0]);
-        public IReadOnlyList<string> StaffLog => new[] { "STAFF FUNDED THE NORTHERN PUSH", "CONVOYS MUSTERING", "EASTERN DEFENSE HELD" };
-
-        public OperationsStub(TheaterOperationPhase phase)
-        {
-            Operations = new[]
-            {
-                new TheaterOperationView("NORTHERN LANCE", phase,
-                    phase == TheaterOperationPhase.Concluded ? TheaterOperationOutcome.ObjectiveSecured : TheaterOperationOutcome.None,
-                    phase >= TheaterOperationPhase.Launching ? "NORTH RIDGE AIRBASE" : null,
-                    .65f, 12f, 18f, phase >= TheaterOperationPhase.Assault ? 8f : 0f,
-                    240f, 90f, 4, phase >= TheaterOperationPhase.Assault ? 2 : 0, 45f, null),
-                new TheaterOperationView("EASTERN SHIELD", TheaterOperationPhase.Mustering,
-                    TheaterOperationOutcome.None, null, .3f, 8f, 10f, 0f, 0f, -1f, 2, 0, -1f, null),
-            };
-        }
-        public void Refresh() { }
-        public bool RequestStance(float stance) => false;
-        public bool RequestHold(bool hold) => false;
-        public bool RequestChest(float escrow, float reserve) => false;
-        public bool RequestAxis(string key, float weight) => false;
-    }
-
     private sealed class PriorityStub : ITheaterPriorityView
     {
         private readonly string label;

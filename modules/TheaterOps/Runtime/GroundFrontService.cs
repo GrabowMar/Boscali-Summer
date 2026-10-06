@@ -92,8 +92,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private TheaterOpsSettings settings;
         private TheaterPriorityService priority;
-        private TheaterOperationsService operations;
-        private TheaterDirectorService director;
         private ManualLogSource logger;
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
@@ -105,13 +103,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private bool warnedConflict;
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
-            TheaterOperationsService operationService, TheaterDirectorService directorService,
             ManualLogSource log)
         {
             settings = config;
             priority = priorityService;
-            operations = operationService;
-            director = directorService;
             logger = log;
         }
 
@@ -496,7 +491,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 group.Stage.ToString().ToUpperInvariant() +
                 (group.Axis < 0 ? " LEFT AXIS" : group.Axis > 0 ? " RIGHT AXIS" : "") +
                 " (" + group.Members.Count + "/" + group.Formed + ")";
-            director?.ReportBattle(group.HQ.faction.factionName, line);
             logger?.LogInfo("[THEATER OPS] " + line);
         }
 
@@ -559,8 +553,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     out directive, out offensive) && directive.IsValid;
             if (priority == null || !priority.Authoritative || hq == null || hq.faction == null ||
                 !priority.TryGetDirective(hq.faction.factionName, out directive)) return false;
-            offensive = operations != null &&
-                operations.IsLaunchedTarget(hq.faction.factionName, directive.Key);
             return directive.IsValid;
         }
 

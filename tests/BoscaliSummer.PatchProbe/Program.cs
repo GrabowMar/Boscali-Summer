@@ -932,7 +932,6 @@ foreach (string type in new[] {
 foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Runtime.TheaterPriorityService",
     "BoscaliSummer.Modules.TheaterOps.Runtime.TheaterLogisticsService",
-    "BoscaliSummer.Modules.TheaterOps.Runtime.TheaterOperationsService",
     "BoscaliSummer.Modules.TheaterOps.Runtime.GroundFrontService",
     "BoscaliSummer.Modules.TheaterOps.Runtime.LivingFrontService",
     "BoscaliSummer.Modules.TheaterOps.Runtime.NavalFrontService",
@@ -940,11 +939,8 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Networking.TheaterOpsNet",
     "BoscaliSummer.Modules.TheaterOps.Domain.PriorityTable",
     "BoscaliSummer.Modules.TheaterOps.Domain.ReinforcementGatePolicy",
-    "BoscaliSummer.Modules.TheaterOps.Domain.OffensiveTable",
-    "BoscaliSummer.Modules.TheaterOps.Domain.OffensivePlan",
     "BoscaliSummer.Core.Contracts.ITheaterPriorityView",
     "BoscaliSummer.Core.Contracts.ITheaterLogisticsView",
-    "BoscaliSummer.Core.Contracts.ITheaterOperationsView",
     "BoscaliSummer.Core.Contracts.ITheaterWarView",
     "BoscaliSummer.Core.Contracts.ITheaterAirStationView" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
@@ -998,8 +994,7 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
     ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single", "FieldSets:System.Byte", "FieldSalt:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldFrontTurn:System.Byte" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterOperationState", new[] { "Protocol:System.Byte", "Count:System.Byte", "Index:System.Byte", "Faction:System.String", "Phase:System.Byte", "Outcome:System.Byte", "Name:System.String", "Target:System.String", "Progress:System.Single", "Budget:System.Single", "Committed:System.Single", "Spent:System.Single", "Duration:System.Single", "Countdown:System.Single", "WavesPlanned:System.Int32", "WavesLaunched:System.Int32", "Holder:System.String" }) })
+    ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }) })
 {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;
     string[] actual = type.GetFields(BindingFlags.Public | BindingFlags.Instance).OrderBy(field => field.MetadataToken)
@@ -1871,12 +1866,6 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
     Type net = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.TheaterOpsNet", true)!;
     if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
         throw new InvalidOperationException("TheaterOps protocol changed without updating its probe");
-    if ((byte)net.GetField("InfluenceStance", flags)!.GetRawConstantValue()! != 0 ||
-        (byte)net.GetField("InfluenceHold", flags)!.GetRawConstantValue()! != 1 ||
-        (byte)net.GetField("InfluenceChest", flags)!.GetRawConstantValue()! != 2 ||
-        (byte)net.GetField("InfluenceAxis", flags)!.GetRawConstantValue()! != 3)
-        // Retired with RequestClearAxis; a zero-weight axis clears instead. Was: (byte)net.GetField("InfluenceClearAxis", flags)!.GetRawConstantValue()! != 4)
-        throw new InvalidOperationException("TheaterOps influence kinds changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1948,77 +1937,6 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         (byte)Get(Decode(stateType, new byte[] { 9 }), "Active") != 0)
         throw new InvalidOperationException("TheaterOps did not reject an unknown state header");
 
-    Type operationType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.TheaterOperationState", true)!;
-    object operation = Activator.CreateInstance(operationType)!;
-    Set(operation, "Protocol", (byte)3); Set(operation, "Count", (byte)2); Set(operation, "Index", (byte)1);
-    Set(operation, "Faction", "Coalition");
-    Set(operation, "Phase", (byte)4); Set(operation, "Outcome", (byte)0);
-    Set(operation, "Name", "STEEL RAIN"); Set(operation, "Target", "Northern Corridor");
-    Set(operation, "Progress", 0.5f); Set(operation, "Budget", 35f); Set(operation, "Committed", 100f);
-    Set(operation, "Spent", 65f); Set(operation, "Duration", 252f);
-    Set(operation, "Countdown", -1f); Set(operation, "WavesPlanned", 3); Set(operation, "WavesLaunched", 1);
-    Set(operation, "Holder", "IRON HAMMER");
-    Roundtrip(operationType, operation, "operation");
-
-    // The held-at-H-hour plan carries the effort's owner; the free one carries nothing.
-    object unheld = Activator.CreateInstance(operationType)!;
-    Set(unheld, "Protocol", (byte)3); Set(unheld, "Count", (byte)1); Set(unheld, "Index", (byte)0);
-    Set(unheld, "Faction", "Coalition");
-    Set(unheld, "Phase", (byte)3); Set(unheld, "Outcome", (byte)0);
-    Set(unheld, "Name", "RED TIDE"); Set(unheld, "Target", "");
-    Set(unheld, "Progress", 0f); Set(unheld, "Budget", 70f); Set(unheld, "Committed", 70f);
-    Set(unheld, "Spent", 0f); Set(unheld, "Duration", 0f);
-    Set(unheld, "Countdown", 0f); Set(unheld, "WavesPlanned", 1); Set(unheld, "WavesLaunched", 0);
-    Set(unheld, "Holder", "");
-    Roundtrip(operationType, unheld, "unheld operation");
-
-    // A board clear carries the header, the faction and the nil count.
-    object operationClear = Activator.CreateInstance(operationType)!;
-    Set(operationClear, "Protocol", (byte)3); Set(operationClear, "Count", (byte)0);
-    Set(operationClear, "Faction", "Coalition");
-    object operationClearResult = Decode(operationType, Encode(operationType, operationClear));
-    if ((byte)Get(operationClearResult, "Count") != 0 ||
-        (string)Get(operationClearResult, "Faction") != "Coalition" ||
-        Get(operationClearResult, "Name") != null || Get(operationClearResult, "Target") != null)
-        throw new InvalidOperationException("TheaterOps operation clear lost its faction or sentinel");
-
-    if ((byte)Get(Decode(operationType, new byte[] { 1 }), "Protocol") != 1 ||
-        (byte)Get(Decode(operationType, new byte[] { 1 }), "Count") != 0)
-        throw new InvalidOperationException("TheaterOps did not reject an old operation header");
-
-    Type intentType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.TheaterInfluenceIntent", true)!;
-    object intent = Activator.CreateInstance(intentType)!;
-    Set(intent, "Protocol", (byte)3); Set(intent, "Kind", (byte)3);
-    Set(intent, "Value", 1f); Set(intent, "Value2", 0f); Set(intent, "Key", "obj-north");
-    Roundtrip(intentType, intent, "influence intent");
-
-    Type directorType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.TheaterDirectorState", true)!;
-    object director = Activator.CreateInstance(directorType)!;
-    Set(director, "Protocol", (byte)3); Set(director, "Faction", "Coalition");
-    Set(director, "Stance", 0.7f); Set(director, "Hold", (byte)0);
-    Set(director, "MaxEscrow", 15f); Set(director, "Reserve", 3f); Set(director, "Setter", "VIPER-1");
-    Set(director, "AxisKey0", "obj-north"); Set(director, "AxisWeight0", 1f);
-    Set(director, "AxisKey1", "obj-south"); Set(director, "AxisWeight1", -0.5f);
-    Set(director, "AxisKey2", ""); Set(director, "AxisWeight2", 0f);
-    Set(director, "AxisKey3", ""); Set(director, "AxisWeight3", 0f);
-    Set(director, "Posture", (byte)1); Set(director, "EffortDefense", (byte)0);
-    Set(director, "DefenseLabel", ""); Set(director, "ActivePlans", (byte)2);
-    Roundtrip(directorType, director, "director state");
-
-    Type directorLogType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.TheaterDirectorLog", true)!;
-    object directorLog = Activator.CreateInstance(directorLogType)!;
-    Set(directorLog, "Protocol", (byte)3); Set(directorLog, "Faction", "Coalition");
-    Set(directorLog, "Line0", "OPENING NORTHERN CORRIDOR: 2 WAVES");
-    Set(directorLog, "Line1", "EFFORT AT OBJ-NORTH");
-    Set(directorLog, "Line2", ""); Set(directorLog, "Line3", "");
-    Set(directorLog, "Line4", ""); Set(directorLog, "Line5", "");
-    Set(directorLog, "Line6", ""); Set(directorLog, "Line7", "");
-    Roundtrip(directorLogType, directorLog, "director log");
-
-    if ((byte)Get(Decode(intentType, new byte[] { 2 }), "Protocol") != 2 ||
-        (byte)Get(Decode(intentType, new byte[] { 2 }), "Kind") != 0)
-        throw new InvalidOperationException("TheaterOps did not reject an old intent header");
-
     Type livingNet = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontNet", true)!;
     if ((byte)livingNet.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 2)
         throw new InvalidOperationException("Living Front protocol changed without updating its probe");
@@ -2051,7 +1969,7 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         ((string[])Get(livingDecoded, "Log"))[0] != "CONTACT NORTH")
         throw new InvalidOperationException("Living Front snapshot did not roundtrip");
 
-    Console.WriteLine("  TheaterOps protocol-3 serializers: query, active priority, clear sentinel, operation board, board clear, old-header rejection, influence intent, director state, director log");
+    Console.WriteLine("  TheaterOps protocol-3 serializers: query, active priority, clear sentinel, unknown-header rejection");
     Console.WriteLine("  Living Front protocol-2 serializers: faction snapshot, front, query, and validated intent roundtrip");
 }
 

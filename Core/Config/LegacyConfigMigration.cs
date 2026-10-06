@@ -67,6 +67,18 @@ namespace BoscaliSummer.Core.Config
             BindAndRemove(config, "TheaterOps", "OperationSetupCost", 60f);
             BindAndRemove(config, "TheaterOps", "OperationCommitCost", 40f);
 
+            // The legacy director and offensive planner never ran under Living Front; their knobs went.
+            BindAndRemove(config, "TheaterOps", "DirectorFactions", "PlayerFactions");
+            BindAndRemove(config, "TheaterOps", "OperationOverheadCost", 25f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveBudget", 45f);
+            BindAndRemove(config, "TheaterOps", "OperationMusterSeconds", 75f);
+            BindAndRemove(config, "TheaterOps", "OperationPlanSeconds", 45f);
+            BindAndRemove(config, "TheaterOps", "OperationLaunchDelaySeconds", 15f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveSeconds", 35f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveRetrySeconds", 8f);
+            BindAndRemove(config, "TheaterOps", "OperationHoldSeconds", 90f);
+            BindAndRemove(config, "TheaterOps", "OperationAssaultSeconds", 600f);
+
             // Support costs stopped being hand-picked constants and became vanilla-value
             // derived. The old keys are purged rather than reused: an existing config would
             // otherwise keep charging 10 and 8 allocation against a four-figure balance.

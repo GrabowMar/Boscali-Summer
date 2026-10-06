@@ -39,8 +39,8 @@ namespace BoscaliSummer.Modules.TheaterOps
             naval.Configure(context.Settings.TheaterOps);
             living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval, context.Logger);
             livingNetwork.Configure(living);
-            groundFront.Configure(context.Settings.TheaterOps, priority, null, null, context.Logger);
-            network.Configure(priority, null, null);
+            groundFront.Configure(context.Settings.TheaterOps, priority, context.Logger);
+            network.Configure(priority);
             hudLine.Configure(living);
 
             context.AddService<ITheaterPriorityView>(priority);

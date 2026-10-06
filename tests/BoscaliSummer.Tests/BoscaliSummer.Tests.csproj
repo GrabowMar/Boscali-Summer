@@ -149,14 +149,8 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\NavalTask.cs" Link="Features\TheaterOps\NavalTask.cs" />
     <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ReinforcementGate.cs" Link="Features\TheaterOps\ReinforcementGate.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\OffensivePlan.cs" Link="Features\TheaterOps\OffensivePlan.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\InfluenceState.cs" Link="Features\TheaterOps\InfluenceState.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\DirectorDecision.cs" Link="Features\TheaterOps\Domain\DirectorDecision.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\AreaResistance.cs" Link="Features\TheaterOps\Domain\AreaResistance.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\DirectorWords.cs" Link="Features\TheaterOps\DirectorWords.cs" />
-    <Compile Include="..\..\Core\Contracts\ITheaterOperationsView.cs" Link="Framework\ITheaterOperationsView.cs" />
     <Compile Include="..\..\Core\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
     <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
@@ -175,7 +169,6 @@
     <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\TheaterOpsHudCopy.cs" Link="Features\TheaterOps\TheaterOpsHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudBodies.cs" Link="Features\Weather\CloudBodies.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudMaps.cs" Link="Features\Weather\CloudMaps.cs" />
