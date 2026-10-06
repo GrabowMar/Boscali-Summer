@@ -30,8 +30,6 @@ Copy-Item -LiteralPath `
     "$repo/Core/Contracts/IHighCommandView.cs", `
     "$repo/Core/Contracts/CommanderLogLine.cs", `
     "$repo/Core/Contracts/IBaseDefenseAlarmService.cs", `
-    "$repo/Core/Contracts/ITheaterPriorityView.cs", `
-    "$repo/Core/Contracts/ITheaterLogisticsView.cs", `
     "$repo/Core/Contracts/IActiveEventsView.cs", `
     "$repo/Core/Contracts/ITheaterStrikePicture.cs", `
     "$repo/Core/Contracts/ITheaterWarView.cs", `

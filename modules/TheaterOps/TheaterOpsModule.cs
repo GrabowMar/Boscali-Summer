@@ -43,9 +43,7 @@ namespace BoscaliSummer.Modules.TheaterOps
             network.Configure(priority);
             hudLine.Configure(living);
 
-            context.AddService<ITheaterPriorityView>(priority);
             context.AddService<IEnemyIntentSource>(priority);
-            context.AddService<ITheaterLogisticsView>(logistics);
             context.AddService<ITheaterWarView>(living);
             context.AddService<ITheaterAirStationView>(living);
         }

@@ -751,45 +751,6 @@ public static class CocUnityCheck
 
     // ------------------------------------------------------------------ plumbing
 
-    private sealed class PriorityStub : ITheaterPriorityView
-    {
-        private readonly string label;
-        public PriorityStub(string priorityLabel = "WEST DEPOT") { label = priorityLabel; }
-        public bool Available => true;
-        public bool HasPriority => label != null;
-        public string PriorityLabel => label;
-        public IReadOnlyList<TheaterPriorityOption> Options => new[]
-        {
-            new TheaterPriorityOption("north", "NORTH RIDGE AIRBASE", "AIRBASE · ACTIVE", 1200f, 4200f),
-            new TheaterPriorityOption("east", "EASTERN PASS", "GROUND · ACTIVE"),
-            new TheaterPriorityOption("west", "WEST DEPOT", "DEPOT · ACTIVE"),
-        };
-        public void Refresh() { }
-    }
-
-    private sealed class LogisticsStub : ITheaterLogisticsView
-    {
-        private readonly bool emptyPool, canCommand;
-        public LogisticsStub(bool emptyPool = false, bool canCommand = true)
-        {
-            this.emptyPool = emptyPool;
-            this.canCommand = canCommand;
-        }
-        public bool Available => true;
-        public bool CanCommand => canCommand;
-        public float FactionFunds => emptyPool ? 0f : 40f;
-        public IReadOnlyList<ReinforcementOption> Reinforcements => new[]
-        {
-            new ReinforcementOption("armor", "ARMORED COLUMN", "4 × MBT  ·  2 × IFV", 5f, !emptyPool, !emptyPool, 0f),
-            new ReinforcementOption("motor", "MOTORIZED", "3 × APC  ·  2 × SPAA", 3f, !emptyPool, !emptyPool, 0f),
-            new ReinforcementOption("rocket", "ROCKET BATTERY", "2 × MLRS  ·  1 × TRUCK", 4f, false, true, 60f),
-            new ReinforcementOption("supply", "SUPPLY TRAIN", "4 × TRUCK", 2f, !emptyPool, !emptyPool, 0f),
-        };
-        public ReadinessSummary Readiness => default;
-        public void Refresh() { }
-        public bool RequestReinforcement(string key) => false;
-    }
-
     private sealed class EventsStub : IActiveEventsView
     {
         public event Action<int, float> MoraleAwarded { add { } remove { } }

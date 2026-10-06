@@ -939,8 +939,6 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Networking.TheaterOpsNet",
     "BoscaliSummer.Modules.TheaterOps.Domain.PriorityTable",
     "BoscaliSummer.Modules.TheaterOps.Domain.ReinforcementGatePolicy",
-    "BoscaliSummer.Core.Contracts.ITheaterPriorityView",
-    "BoscaliSummer.Core.Contracts.ITheaterLogisticsView",
     "BoscaliSummer.Core.Contracts.ITheaterWarView",
     "BoscaliSummer.Core.Contracts.ITheaterAirStationView" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);

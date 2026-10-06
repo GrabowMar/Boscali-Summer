@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
@@ -7,44 +6,36 @@ using BoscaliSummer.Modules.TheaterOps.Networking;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
     /// Host-authoritative main effort. It stores at most one objective per faction, rebuilt
-    /// from the faction's own active objectives, and publishes it through
-    /// <see cref="ITheaterPriorityView"/> for the STR console.
+    /// from the faction's own active objectives.
     ///
     /// <para>MissionPosition patches read this table on the host: reinforcements spawn nearer
     /// the priority, and depot-spawned ground AI enrolled in a battle group receives staged
     /// destinations from <see cref="GroundFrontService"/> through the advance query; nothing
     /// else is steered. Clients receive the table read-only over <see cref="Networking.TheaterOpsNet"/>.</para>
     /// </summary>
-    internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, ITheaterPriorityView, IEnemyIntentSource
+    internal sealed class TheaterPriorityService : MonoBehaviour, ISceneService, IEnemyIntentSource
     {
         internal static TheaterPriorityService Active { get; private set; }
 
         internal const int MaximumFactionLength = 64;
 
-        private const int MaximumOptions = 12;
         private const float AuthorityInterval = 1f;
-        private const float OptionInterval = 1f;
 
         private readonly PriorityTable table = new PriorityTable();
-        private readonly List<TheaterPriorityOption> options = new List<TheaterPriorityOption>(MaximumOptions);
 
         private TheaterOpsSettings settings;
         private TheaterOpsNet network;
         private ManualLogSource logger;
         private float nextAuthority;
-        private float nextOptions;
         private bool authoritative;
 
         internal bool Authoritative => authoritative;
-
-        public bool Available => true;
 
         public void Configure(TheaterOpsSettings config, TheaterOpsNet net, ManualLogSource log)
         {
@@ -63,10 +54,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public void ResetForScene()
         {
             table.Clear();
-            options.Clear();
             network?.ResetScene();
             nextAuthority = 0f;
-            nextOptions = 0f;
             authoritative = false;
         }
 
@@ -99,41 +88,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             return !string.IsNullOrEmpty(objectiveLabel);
         }
 
-        // ---- ITheaterPriorityView ---------------------------------------------------------
-
-        public bool HasPriority => TryGetLocalDirective(out _);
-
-        public string PriorityLabel => TryGetLocalDirective(out PriorityDirective directive)
-            ? directive.Label
-            : null;
-
-        public IReadOnlyList<TheaterPriorityOption> Options => options;
-
-        public void Refresh()
-        {
-            if (Time.unscaledTime < nextOptions) return;
-            nextOptions = Time.unscaledTime + OptionInterval;
-            RebuildOptions();
-        }
-
-        /// <summary>
-        /// The director's hand on one faction's effort. No player intent reaches here: stance,
-        /// axes and hold move it through the review, and a passed vote through the director.
-        /// </summary>
-        internal bool SetDirective(FactionHQ hq, string key)
-        {
-            if (!authoritative || string.IsNullOrEmpty(key) || hq == null || hq.faction == null) return false;
-            if (!TryResolveObjective(hq, key, out string label, out Vector3 position)) return false;
-
-            var directive = new PriorityDirective(key, label, position.x, position.y, position.z);
-            if (!table.TrySet(hq.faction.factionName, directive)) return false;
-
-            network?.BroadcastState(hq.faction.factionName, directive);
-            logger?.LogInfo("Theater priority " + label + " set for " + hq.faction.factionName + ".");
-            RebuildOptions();
-            return true;
-        }
-
         /// <summary>Host-selected frontline sector; its fix comes from the live territory field.</summary>
         internal bool SetDirectedFix(FactionHQ hq, string key, string label, float x, float z)
         {
@@ -154,7 +108,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
             network?.BroadcastState(hq.faction.factionName, null);
             logger?.LogInfo("Theater priority cleared for " + hq.faction.factionName + ".");
-            RebuildOptions();
             return true;
         }
 
@@ -177,83 +130,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (authoritative || string.IsNullOrEmpty(faction) || faction.Length > MaximumFactionLength)
                 return;
             table.TryClear(faction);
-        }
-
-        // ---- Internals --------------------------------------------------------------------
-
-        /// <summary>The local player's side, for presentation only; host logic names the faction.</summary>
-        internal bool TryGetLocalDirective(out PriorityDirective directive)
-        {
-            directive = default;
-            return GameAccess.TryGetLocalFaction(out FactionHQ hq) &&
-                   table.TryGet(hq.faction.factionName, out directive);
-        }
-
-        private void RebuildOptions()
-        {
-            options.Clear();
-            if (!GameAccess.TryGetLocalFaction(out FactionHQ hq)) return;
-
-            if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
-                return;
-
-            for (int i = 0; i < active.Count && options.Count < MaximumOptions; i++)
-            {
-                Objective objective = active[i];
-                if (objective == null || objective.SavedObjective == null) continue;
-                // Hidden objectives are not local knowledge; they are never leaked onto the board.
-                if (objective.SavedObjective.Hidden) continue;
-                if (!(objective is IObjectiveWithPosition positioned) || positioned.Positions.Count == 0)
-                    continue;
-
-                string key = objective.SavedObjective.UniqueName;
-                if (string.IsNullOrEmpty(key)) continue;
-
-                string label = string.IsNullOrEmpty(objective.SavedObjective.DisplayName)
-                    ? key
-                    : objective.SavedObjective.DisplayName;
-
-                GlobalPosition position = positioned.Positions[0].Position;
-                if (float.IsNaN(position.x) || float.IsNaN(position.z) ||
-                    float.IsInfinity(position.x) || float.IsInfinity(position.z)) continue;
-                options.Add(new TheaterPriorityOption(key, label, DetailOf(objective),
-                    position.x, position.z));
-            }
-        }
-
-        private static string DetailOf(Objective objective) =>
-            objective.SavedObjective.ObjectiveTypeEnum.ToString().ToUpperInvariant() + " · " +
-            objective.Status.ToString().ToUpperInvariant();
-
-        /// <summary>
-        /// Resolves one of the faction's active objectives to its identity, label and world
-        /// position. Shared with the offensive planner, which names the same objective list.
-        /// </summary>
-        internal static bool TryResolveObjective(
-            FactionHQ hq, string key, out string label, out Vector3 position)
-        {
-            label = null;
-            position = default;
-            if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) || active == null)
-                return false;
-
-            for (int i = 0; i < active.Count; i++)
-            {
-                Objective objective = active[i];
-                if (objective == null || objective.SavedObjective == null ||
-                    !string.Equals(objective.SavedObjective.UniqueName, key, StringComparison.Ordinal))
-                    continue;
-                if (!(objective is IObjectiveWithPosition positioned) || positioned.Positions.Count == 0)
-                    return false;
-                if (objective.SavedObjective.Hidden) return false;
-
-                label = string.IsNullOrEmpty(objective.SavedObjective.DisplayName)
-                    ? key
-                    : objective.SavedObjective.DisplayName;
-                position = positioned.Positions[0].Position.AsVector3();
-                return true;
-            }
-            return false;
         }
     }
 }
