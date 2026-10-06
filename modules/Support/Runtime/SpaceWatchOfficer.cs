@@ -18,13 +18,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal sealed class SpaceWatchOfficer
     {
         private const int MaximumFactions = 8;
-        /// <summary>
-        /// A faction with no human has no OVERLORD. Its scan would stamp the AI faction's native tracking database
-        /// (<c>RpcUpdateTrackingInfo</c>, the only way a SPACE window reveals a unit), handing the enemy AI free intel on the human
-        /// side's bases, and nothing consumes an AI faction's TASKED board in M1. The pure policy still staffs a faction of zero humans
-        /// (the offline sim runs it), so enabling this later is one flag.
-        /// </summary>
-        private const bool StaffAiOnlyFactions = false;
         private SpaceService service;
         private SupportManager manager;
         private readonly Dictionary<FactionHQ, FactionRun> runs = new Dictionary<FactionHQ, FactionRun>();
@@ -53,8 +46,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 FactionRun run = RunFor(factions[i]);
                 if (run == null || !run.Brain.Policy.Due(missionNow)) continue;
-                if (!StaffAiOnlyFactions && run.Host.Humans == 0)
+                if (run.Host.Humans == 0)
                 {
+                    // A faction with no human has no OVERLORD: its scan would stamp the AI faction's native tracking database
+                    // (RpcUpdateTrackingInfo), handing the enemy AI free intel, and nothing consumes an AI TASKED board.
+                    // The pure policy still staffs zero humans (the offline sim runs it).
                     run.Brain.Policy.Defer(missionNow, 2f); // nobody home: look again in two seconds, not every frame
                     continue;
                 }

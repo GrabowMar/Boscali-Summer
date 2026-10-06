@@ -45,12 +45,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return t;
         }
 
-        /// <summary>A wrapped block that the owning part measures with <see cref="AvText.Height"/>.</summary>
-        public static TMP_Text Block(RectTransform parent, string name, AvTextRole role)
-        {
-            return AvText.Make(parent, name, role, "", TextAlignmentOptions.TopLeft, true);
-        }
-
         /// <summary>Set text only when it changed; returns true when it did.</summary>
         public static bool Set(TMP_Text t, string value)
         {
@@ -59,7 +53,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
             t.text = v;
             return true;
         }
-
-        public static void Place(TMP_Text t, float x, float y, float w, float h) => AvLay.Place(t.rectTransform, x, y, w, h);
     }
 }

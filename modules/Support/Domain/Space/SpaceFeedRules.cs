@@ -81,13 +81,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Optical footprint at night as a share of the clear-day footprint. A tunable starting value, not a spec constant.</summary>
         public const float NightRadiusFactor = 0.35f;
 
-        /// <summary>
-        /// The game has no thermal/IR rendering path (verified 2026-10-05: no FLIR/thermal types in Assembly-CSharp, no
-        /// thermal shader names in its data; IR exists only for seekers and flares, and NightVision is a gain and tint).
-        /// So the optical bird has no night picture and refuses with words. A green tint is not thermal.
-        /// </summary>
-        public const bool NightOpticalAvailable = false;
-
         /// <summary>A footprint smaller than this is not a window worth opening.</summary>
         public const float MinimumOpticalRadius = 100f;
 
@@ -127,11 +120,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>0 sharp .. 1 fully overcast. Drives the image haze; it never changes which contacts are revealed.</summary>
         public static float Softness(in WeatherViewSample weather) => Cover(weather);
 
-        /// <summary>No sky state means no clear-sky fiction; night means no picture (see <see cref="NightOpticalAvailable"/>).</summary>
+        /// <summary>
+        /// No sky state means no clear-sky fiction; night means no picture. The game has no thermal/IR rendering path
+        /// (verified 2026-10-05: no FLIR/thermal types in Assembly-CSharp, no thermal shader names in its data; IR exists only
+        /// for seekers and flares, and NightVision is a gain and tint), so the optical bird refuses with words.
+        /// </summary>
         public static OpticalVerdict Optical(bool haveSample, in WeatherViewSample weather)
         {
             if (!haveSample) return OpticalVerdict.SkyUnknown;
-            return weather.Night && !NightOpticalAvailable ? OpticalVerdict.NightUnavailable : OpticalVerdict.Ok;
+            return weather.Night ? OpticalVerdict.NightUnavailable : OpticalVerdict.Ok;
         }
 
         public static string OpticalRefusal(OpticalVerdict verdict)
