@@ -24,48 +24,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 if (store != null) return store;
                 var errors = new List<string>();
-                try
-                {
-                    store = PlanStore.FromJson(File.Exists(FilePath) ? File.ReadAllText(FilePath) : null, errors);
-                }
-                catch (Exception e)
-                {
-                    errors.Add(e.Message);
-                    store = new PlanStore();
-                }
-                foreach (string e in errors) WingLog.Logger.LogWarning("[Plans] plans.user.json: " + e);
+                string json = WmcUserFile.Read(FilePath, errors, out _);
+                store = PlanStore.FromJson(json, errors);
                 // Review minor: a file that could not be read is kept aside before any SAVE writes a fresh one.
-                if (errors.Count > 0 && File.Exists(FilePath))
-                    try
-                    {
-                        File.Copy(FilePath, FilePath + ".bad", true);
-                        WingLog.Logger.LogWarning("[Plans] kept the unreadable plans.user.json as plans.user.json.bad");
-                    }
-                    catch (Exception e)
-                    {
-                        WingLog.Logger.LogWarning("[Plans] could not keep the unreadable plans.user.json aside: " + e.Message);
-                    }
+                WmcUserFile.Report("[Plans]", FilePath, errors, keepAside: true);
                 return store;
             }
         }
 
         /// <summary>Writes the store; false (logged) when the write failed.</summary>
-        public static bool Save()
-        {
-            try
-            {
-                Directory.CreateDirectory(WingConfig.RecordsRoot);
-                string tmp = FilePath + ".tmp";
-                File.WriteAllText(tmp, Store.ToJson());
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                File.Move(tmp, FilePath);
-                return true;
-            }
-            catch (Exception e)
-            {
-                WingLog.Logger.LogWarning("[Plans] could not save plans.user.json: " + e.Message);
-                return false;
-            }
-        }
+        public static bool Save() => WmcUserFile.Write("[Plans]", FilePath, Store.ToJson());
     }
 }
