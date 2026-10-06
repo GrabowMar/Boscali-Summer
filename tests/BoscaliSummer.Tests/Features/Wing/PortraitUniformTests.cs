@@ -10,7 +10,6 @@ namespace BoscaliSummer.Tests.Features.Wing
         {
             AtlasAndSelectors();
             AutomaticRoles();
-            LegacySelectors();
         }
 
         private static void AtlasAndSelectors()
@@ -72,21 +71,6 @@ namespace BoscaliSummer.Tests.Features.Wing
                         PilotPortraitGenerator.Select(name, PortraitRole.Pilot, faction), "invalid roles must fall back to pilot");
                 }
                 TestAssert.That(pilots.Count == 3 && commanders.Count == 2, "automatic clothing variety is unreachable");
-            }
-        }
-
-        private static void LegacySelectors()
-        {
-            for (int uniform = 0; uniform < 8; uniform++)
-            {
-                TestAssert.That(PilotPortraitGenerator.FromLegacySelection(0, 0, uniform, 0).Uniform == uniform,
-                    "old semantic uniform selectors changed meaning");
-            }
-            for (int tile = 14; tile <= 17; tile++)
-            {
-                PortraitSelection legacy = PilotPortraitGenerator.FromLegacySelection(0, 0, tile, 0);
-                TestAssert.That(legacy.Uniform == (tile - 14) % 2 && legacy.Body == (tile >= 16 ? PortraitBody.Female : PortraitBody.Male),
-                    "v1 resolved uniform tile IDs no longer migrate to their original outfit");
             }
         }
     }

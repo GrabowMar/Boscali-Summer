@@ -122,48 +122,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Clamp(selection.Backdrop, 0, BackdropCount - 1));
         }
 
-        /// <summary>Converts the v1 global-face / raw-selector representation to v2 semantic choices.</summary>
-        public static PortraitSelection FromLegacySelection(int face, int hair, int uniform, int backdrop)
-        {
-            PortraitBody body = face >= 3 ? PortraitBody.Female : PortraitBody.Male;
-            int localFace = face >= 3 ? face - 3 : face;
-
-            // v1 export accidentally wrote resolved tile IDs; recognize both that form and raw selectors.
-            int localHair;
-            if (hair >= 6 && hair <= 9)
-            {
-                body = PortraitBody.Male;
-                localHair = hair - 6 + 1;
-            }
-            else if (hair >= 10 && hair <= 13)
-            {
-                body = PortraitBody.Female;
-                localHair = hair - 10 + 1;
-            }
-            else
-            {
-                localHair = hair >= 0 && hair <= 3 ? hair + 1 : 0;
-            }
-
-            int localUniform;
-            if (uniform >= 14 && uniform <= 15)
-            {
-                body = PortraitBody.Male;
-                localUniform = uniform - 14;
-            }
-            else if (uniform >= 16 && uniform <= 17)
-            {
-                body = PortraitBody.Female;
-                localUniform = uniform - 16;
-            }
-            else
-            {
-                localUniform = uniform;
-            }
-
-            return Normalize(new PortraitSelection(body, localFace, localHair, localUniform, 0, backdrop));
-        }
-
         public static ResolvedPortraitParts Resolve(PortraitSelection selection)
         {
             selection = Normalize(selection);

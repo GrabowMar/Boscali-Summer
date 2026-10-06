@@ -456,8 +456,6 @@ internal static class Program
             bool pala = uniform == 2 || uniform == 3 || uniform == 6 || uniform == 7 || uniform == 10 || uniform == 11 || uniform == 13;
             Check(parts.AccessoryTile == (accessory == 0 ? -1 : (pala ? 55 : 48) + accessory - 1), "Faction equipment address changed.");
         }
-        PortraitSelection legacy = PilotPortraitGenerator.FromLegacySelection(4, 11, 17, 2);
-        Check(legacy == new PortraitSelection(PortraitBody.Female, 1, 2, 1, 0, 2), "Legacy resolved selectors stopped migrating.");
         PortraitSelection bounded = PilotPortraitGenerator.Normalize(new PortraitSelection((PortraitBody)99, 99, 99, 99, 99, 99));
         Check(bounded == new PortraitSelection(PortraitBody.Male, 7, 8, 13, 7, 7), "Out-of-range selectors escaped normalization.");
         Check(PilotPortraitGenerator.DefaultSelection.Accessory == 0 && PilotPortraitGenerator.AccessoryLabel(7) == "BERET",
