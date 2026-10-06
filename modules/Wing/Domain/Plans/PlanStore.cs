@@ -111,16 +111,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     {
                         PlanStep p = steps[s];
                         if (s > 0) sb.Append(',');
-                        sb.Append("{\"kind\":\"").Append(p.Kind).Append("\",\"radius\":").Append(Num(p.Radius))
-                            .Append(",\"start\":\"").Append(p.Start).Append("\",\"delay\":").Append(Num(p.Delay))
+                        sb.Append("{\"kind\":\"").Append(p.Kind).Append("\",\"radius\":").Append(MiniJson.Num(p.Radius))
+                            .Append(",\"start\":\"").Append(p.Start).Append("\",\"delay\":").Append(MiniJson.Num(p.Delay))
                             .Append(",\"afterLane\":").Append(p.AfterLane.ToString(CultureInfo.InvariantCulture))
                             .Append(",\"afterStep\":").Append(p.AfterStep.ToString(CultureInfo.InvariantCulture))
-                            .Append(",\"end\":\"").Append(p.End).Append("\",\"endSeconds\":").Append(Num(p.EndSeconds)).Append(",\"points\":[");
+                            .Append(",\"end\":\"").Append(p.End).Append("\",\"endSeconds\":").Append(MiniJson.Num(p.EndSeconds)).Append(",\"points\":[");
                         for (int k = 0; k < (p.Points?.Length ?? 0); k++)
                         {
                             Waypoint w = p.Points[k];
                             if (k > 0) sb.Append(',');
-                            sb.Append("{\"x\":").Append(Num(w.X)).Append(",\"z\":").Append(Num(w.Z)).Append(",\"alt\":").Append(Num(w.Altitude)).Append('}');
+                            sb.Append("{\"x\":").Append(MiniJson.Num(w.X)).Append(",\"z\":").Append(MiniJson.Num(w.Z)).Append(",\"alt\":").Append(MiniJson.Num(w.Altitude)).Append('}');
                         }
                         sb.Append("]}");
                     }
@@ -130,8 +130,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
             return sb.Append("]}").ToString();
         }
-
-        private static string Num(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("R", CultureInfo.InvariantCulture);
 
         /// <summary>The store in <paramref name="json"/>; each skipped plan or step, or a file that is not JSON, adds to
         /// <paramref name="errors"/>. Null or empty text (no file yet) is an empty store.</summary>

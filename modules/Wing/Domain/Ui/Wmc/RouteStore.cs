@@ -67,16 +67,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 {
                     Waypoint p = r.Points[k];
                     if (k > 0) sb.Append(',');
-                    sb.Append("{\"x\":").Append(Num(p.X)).Append(",\"z\":").Append(Num(p.Z)).Append(",\"alt\":").Append(Num(p.Altitude))
-                        .Append(",\"speed\":").Append(Num(p.Speed)).Append(",\"action\":\"").Append(p.Action).Append("\",\"seconds\":")
-                        .Append(Num(p.Seconds)).Append('}');
+                    sb.Append("{\"x\":").Append(MiniJson.Num(p.X)).Append(",\"z\":").Append(MiniJson.Num(p.Z)).Append(",\"alt\":").Append(MiniJson.Num(p.Altitude))
+                        .Append(",\"speed\":").Append(MiniJson.Num(p.Speed)).Append(",\"action\":\"").Append(p.Action).Append("\",\"seconds\":")
+                        .Append(MiniJson.Num(p.Seconds)).Append('}');
                 }
                 sb.Append("]}");
             }
             return sb.Append("]}").ToString();
         }
-
-        private static string Num(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("R", CultureInfo.InvariantCulture);
 
         /// <summary>The store in <paramref name="json"/>; each skipped route or a file that is not JSON adds to
         /// <paramref name="errors"/>. Null or empty text (no file yet) is an empty store.</summary>

@@ -36,7 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         // the AIRFRAME ASSIGNMENT bar pinned on the floor.
         public const float WingPinGap = 6f, AssignBar = 56f, WingPin = WingPinGap + AssignBar, SquadHead = 18f, PilotRowH = 30f, PilotPitch = 32f;
         public const float RosterFoot = 26f, DossierH = 120f, PerkCardH = 48f, PerkGap = 6f, PerksBlock = 18f + 4f + 48f + 6f + 48f, DossierGap = 8f;
-        public const int MinPilotRows = 4, MaxPilotRows = 8;
 
         public static float Body(float panelHeight) => panelHeight - Chrome;
 

@@ -38,6 +38,9 @@ namespace BoscaliSummer.Core.Util
                       .Replace("\t", "\\t");
         }
 
+        /// <summary>Invariant round-trip float for JSON writers; NaN and infinities are null.</summary>
+        public static string Num(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("R", CultureInfo.InvariantCulture);
+
         public static bool TryGetList(Dictionary<string, object> dict, string key, out List<object> list)
         {
             list = dict.TryGetValue(key, out object value) ? value as List<object> : null;

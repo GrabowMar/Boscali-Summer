@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -155,9 +154,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                                 speakerTag: "SPECTRE"),
         };
 
-        private static readonly List<ChatterExchange> customAmbient = new List<ChatterExchange>();
-
-        public static int AmbientCount => ambient.Length + customAmbient.Count;
+        public static int AmbientCount => ambient.Length;
 
         public static ChatterExchange Ambient(int seed, bool repliesAllowed = true)
         {
@@ -181,9 +178,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             int total = AmbientCount;
             if (total == 0) return default;
             int normalized = Index(index, total);
-            if (normalized < ambient.Length)
-                return ambient[normalized];
-            return customAmbient[normalized - ambient.Length];
+            return ambient[normalized];
         }
 
         public static string Identity(string name, string callsign)

@@ -134,7 +134,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 first = false;
                 sb.Append("{\"name\": \"").Append(MiniJson.Escape(a.Name ?? "")).Append("\", \"center\": ");
                 Write(sb, a.Center);
-                sb.Append(", \"radius\": ").Append(Num(a.Radius)).Append(", \"attached\": ").Append(a.Attached ? "true" : "false");
+                sb.Append(", \"radius\": ").Append(MiniJson.Num(a.Radius)).Append(", \"attached\": ").Append(a.Attached ? "true" : "false");
                 sb.Append(",\n   \"runways\": [");
                 for (int i = 0; i < a.Runways.Length; i++)
                 {
@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     Write(sb, r.Start);
                     sb.Append(", \"end\": ");
                     Write(sb, r.End);
-                    sb.Append(", \"width\": ").Append(Num(r.Width)).Append(", \"length\": ").Append(Num(r.Length))
+                    sb.Append(", \"width\": ").Append(MiniJson.Num(r.Width)).Append(", \"length\": ").Append(MiniJson.Num(r.Length))
                         .Append(", \"reversable\": ").Append(Bool(r.Reversable)).Append(", \"takeoff\": ").Append(Bool(r.Takeoff))
                         .Append(", \"landing\": ").Append(Bool(r.Landing)).Append(", \"arrestor\": ").Append(Bool(r.Arrestor))
                         .Append(", \"skiJump\": ").Append(Bool(r.SkiJump)).Append(", \"entryPoints\": ");
@@ -186,12 +186,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return sb.Append("\n]}\n").ToString();
         }
 
-        private static string Num(float v) => v.ToString("R", CultureInfo.InvariantCulture);
-
         private static string Bool(bool b) => b ? "true" : "false";
 
         private static void Write(StringBuilder sb, Vec3 v) =>
-            sb.Append('[').Append(Num(v.X)).Append(", ").Append(Num(v.Y)).Append(", ").Append(Num(v.Z)).Append(']');
+            sb.Append('[').Append(MiniJson.Num(v.X)).Append(", ").Append(MiniJson.Num(v.Y)).Append(", ").Append(MiniJson.Num(v.Z)).Append(']');
 
         private static void Write(StringBuilder sb, WingPose[] poses)
         {

@@ -37,9 +37,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// anti-spam use independent fixed timers.</summary>
         public static float Interval(float seconds) => seconds * IntervalScale;
 
-        /// <summary>Expose targeted pod jamming.</summary>
-        public static bool Jamming => Full;
-
         public static string Summary() =>
             $"mode={Mode} stride={GeometryStride} intervalScale={IntervalScale:0.0}";
     }
