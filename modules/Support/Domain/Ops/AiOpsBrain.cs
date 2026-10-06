@@ -23,18 +23,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// at most one plan or tap every 60 s, and at most one new plan every 30 minutes (core 7a: 2 to 3 completed operations per faction per match). It reads no enemy state, and a refusal costs it
     /// the same minute a success would.
     /// </summary>
-    internal sealed class AiOpsBrain
+    internal sealed class AiOpsBrain : WatchBrainBase
     {
         public const float ThinkSeconds = 2f, PlanSpacingSeconds = 1800f;
-        private float nextThinkAt, lastPlanAt = float.NegativeInfinity;
+        private float lastPlanAt = float.NegativeInfinity;
 
         public int Plans, Funds, Failures, AsatsPlanned;
         public AiOpsPlan Last { get; private set; }
         public OpResult LastResult { get; private set; }
 
-        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
-
-        public void Reset() { nextThinkAt = 0f; lastPlanAt = float.NegativeInfinity; Plans = Funds = Failures = AsatsPlanned = 0; Last = default; LastResult = default; }
+        public override void Reset() { base.Reset(); lastPlanAt = float.NegativeInfinity; Plans = Funds = Failures = AsatsPlanned = 0; Last = default; LastResult = default; }
 
         public AiOpsPlan Step(IAiOpsHost host, WatchPacer pacer, float now)
         {
