@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using BepInEx.Logging;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Configuration;

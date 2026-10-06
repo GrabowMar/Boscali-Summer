@@ -1,9 +1,6 @@
 using System.Collections.Generic;
-using System.Text;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using UnityEngine;

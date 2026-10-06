@@ -1,5 +1,4 @@
 using System;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Patches;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;

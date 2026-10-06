@@ -46,8 +46,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public float PitchTargetDeg { get; private set; }
         public float RollTargetDeg { get; private set; }
-        /// <summary>The nose-down pitch limit in use, as a fraction of MaxTilt (below 1 while height has priority).</summary>
-        public float TiltScale => tiltScale;
         /// <summary>The governor's collective ceiling (1 while the rotor holds its speed).</summary>
         public float CollectiveCeiling => ceiling;
         /// <summary>The collective trim (the hover estimate the loop has learned).</summary>

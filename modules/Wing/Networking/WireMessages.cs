@@ -1,6 +1,5 @@
 using System;
 
-using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Core.Util;
 namespace BoscaliSummer.Modules.Wing.Networking
 {

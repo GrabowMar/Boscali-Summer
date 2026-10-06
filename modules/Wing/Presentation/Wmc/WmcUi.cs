@@ -1,8 +1,6 @@
 using NOAvionics;
 using System;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;

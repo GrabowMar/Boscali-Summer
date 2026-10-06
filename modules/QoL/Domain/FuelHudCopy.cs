@@ -1,5 +1,3 @@
-using System;
-using System.Globalization;
 using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 

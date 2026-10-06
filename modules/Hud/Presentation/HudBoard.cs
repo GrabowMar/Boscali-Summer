@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;

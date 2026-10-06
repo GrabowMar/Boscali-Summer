@@ -8,7 +8,6 @@ using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 

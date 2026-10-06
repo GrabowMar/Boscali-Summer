@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Modules.HighCommand.Domain;
 using BoscaliSummer.Modules.HighCommand.Runtime;
 using BoscaliSummer.Core.Contracts;

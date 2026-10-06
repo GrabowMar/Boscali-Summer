@@ -54,10 +54,6 @@ namespace BoscaliSummer.Core.Util
             buffer[Length++] = (byte)(v >> 24);
         }
 
-        public void F32(float v) => U32((uint)BitConverter.SingleToInt32Bits(v));
-
-        public void Bool(bool v) => U8(v ? (byte)1 : (byte)0);
-
         /// <summary>UTF-8 with a one-byte length, at most <see cref="Protocol.MaxString"/> bytes (cut at a character
         /// boundary); null writes as empty.</summary>
         public void String(string s)

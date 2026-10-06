@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Modules.Squad.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;

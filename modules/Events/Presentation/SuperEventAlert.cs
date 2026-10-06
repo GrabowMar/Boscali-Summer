@@ -1,6 +1,5 @@
 using NOAvionics;
 using System;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;

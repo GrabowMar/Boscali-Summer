@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Radio.Configuration;
 using BoscaliSummer.Modules.Radio.Domain;
 using BoscaliSummer.Modules.Radio.Presentation;

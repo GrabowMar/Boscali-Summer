@@ -1,9 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.UI;
 using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 
 namespace BoscaliSummer.Modules.Wing.Runtime

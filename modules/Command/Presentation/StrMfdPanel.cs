@@ -9,9 +9,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {

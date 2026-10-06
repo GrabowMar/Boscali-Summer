@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using BepInEx.Logging;
 using HarmonyLib;
 
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
 namespace BoscaliSummer.Modules.Wing.Patches
 {
     /// <summary>The game methods the Wing patch classes (<c>WingModule.Patches</c>) must patch. Harmony skips

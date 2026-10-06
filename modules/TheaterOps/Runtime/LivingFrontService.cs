@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Modules.TheaterOps.Networking;

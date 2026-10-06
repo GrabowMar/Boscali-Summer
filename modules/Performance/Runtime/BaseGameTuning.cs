@@ -1,5 +1,4 @@
 using System;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Performance.Configuration;
 using BoscaliSummer.Modules.Performance.Domain;
 using BoscaliSummer.Core.Diagnostics;

@@ -9,7 +9,6 @@ using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {

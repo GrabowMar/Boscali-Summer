@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
 

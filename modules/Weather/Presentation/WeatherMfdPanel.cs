@@ -1,15 +1,12 @@
 using NOAvionics;
 using System;
-using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Weather.Domain;
 using BoscaliSummer.Modules.Weather.Runtime;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Weather.Presentation
 {

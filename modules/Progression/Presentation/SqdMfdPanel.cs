@@ -10,7 +10,6 @@ using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Progression.Presentation
 {

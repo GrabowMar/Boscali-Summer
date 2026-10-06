@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Immersion.Audio;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Immersion.Domain;

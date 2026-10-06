@@ -1,6 +1,5 @@
 using NOAvionics;
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Modules.Radio.Configuration;
 using BoscaliSummer.Modules.Radio.Runtime;
 using BoscaliSummer.Core.Game;

@@ -3,7 +3,6 @@ using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
-using BoscaliSummer.Modules.Wing.Runtime;
 using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {

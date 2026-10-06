@@ -14,7 +14,6 @@ namespace BoscaliSummer.Core.Config
         public string DispName;
         public int? Order;
         public bool? ReadOnly;
-        public Action<ConfigEntryBase> CustomDrawer;
     }
 
     /// <summary>

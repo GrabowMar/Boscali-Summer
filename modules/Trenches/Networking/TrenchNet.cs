@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Core.Lifecycle;

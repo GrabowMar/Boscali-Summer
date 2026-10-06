@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.HighCommand.Configuration;
 using BoscaliSummer.Modules.HighCommand.Domain;

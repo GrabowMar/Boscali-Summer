@@ -136,9 +136,6 @@ namespace NOAvionics
         public static readonly Rgba RailInert = new Rgba(0.239f, 0.337f, 0.376f, 0.650f);
         public static Rgba Dim => TextDim;
         public static Rgba Disabled => TextMuted;
-
-        // -------------------------------------------------------------------- spacing
-        public const float Space1 = 4f;
         public const float Space2 = 8f;
 
         public const float Pad = 14f;

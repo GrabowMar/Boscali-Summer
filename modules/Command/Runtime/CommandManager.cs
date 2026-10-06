@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Networking;
 using BoscaliSummer.Core.Contracts;

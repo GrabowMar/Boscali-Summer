@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Modules.Progression.Domain;
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;

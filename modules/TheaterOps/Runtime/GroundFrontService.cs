@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Bootstrap;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Core.Contracts;
