@@ -10,7 +10,7 @@ namespace NOAvionics
 
         public AvList(RectTransform parent, AvTicker ticker, int pageSize, Action<int, AvRow> binder)
             : base(parent, ticker, pageSize, 2f, NewRow, (item, row) => { binder?.Invoke(item, row); row.Restyle(); },
-                "List", MaxPageSize, pagerLead: 2f, startHidden: false)
+                "List", MaxPageSize, pagerLead: 2f, startHidden: false, trailingGap: true)
         {
         }
 

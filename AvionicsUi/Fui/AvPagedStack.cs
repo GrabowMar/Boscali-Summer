@@ -11,6 +11,7 @@ namespace NOAvionics
     public class AvPagedStack<T> : AvPart where T : AvPart
     {
         private readonly float gap, pagerLead;
+        private readonly bool trailingGap;
         private readonly T[] rows;   // the pooled parts (the offline harness reads this field by name)
         private readonly Action<int, T> bind;
         private readonly AvControl prev, next;
@@ -21,13 +22,16 @@ namespace NOAvionics
         /// <param name="factory">Builds pool slot <c>i</c> under the stack's rect.</param>
         /// <param name="pagerLead">Extra space between the last item and the pager line.</param>
         /// <param name="startHidden">Hide every pool slot until the first <see cref="SetCount"/> binds the page.</param>
+        /// <param name="trailingGap">Measure the gap after the last row too (the pager line then adds 4 px, not 6).</param>
         public AvPagedStack(RectTransform parent, AvTicker ticker, int pageSize, float gap,
             Func<RectTransform, int, T> factory, Action<int, T> binder,
-            string name = "PagedStack", int maxPageSize = 12, float pagerLead = 0f, bool startHidden = true)
+            string name = "PagedStack", int maxPageSize = 12, float pagerLead = 0f, bool startHidden = true,
+            bool trailingGap = false)
         {
             Rect = AvLay.Child(parent, name);
             this.gap = gap;
             this.pagerLead = pagerLead;
+            this.trailingGap = trailingGap;
             bind = binder;
             rows = new T[Mathf.Clamp(pageSize, 1, maxPageSize)];
             for (int i = 0; i < rows.Length; i++)
@@ -76,8 +80,8 @@ namespace NOAvionics
         {
             float h = 0f;
             foreach (T item in rows) if (item.Rect.gameObject.activeSelf) h += item.Measure(width) + gap;
-            if (h > 0f) h -= gap;
-            return h + (Paged ? AvGridTokens.Row + 6f : 0f);
+            if (!trailingGap && h > 0f) h -= gap;
+            return h + (Paged ? AvGridTokens.Row + (trailingGap ? 4f : 6f) : 0f);
         }
 
         public override void Place(AvSlot s)
