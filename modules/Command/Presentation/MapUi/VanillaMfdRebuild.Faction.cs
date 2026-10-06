@@ -567,7 +567,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ledgerRows = new AvGauge[ClassLabels.Length];
                 for (int i = 0; i < ledgerRows.Length; i++)
                 {
-                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i], AvGaugeShape.Ring, 56f);
+                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i]);
                     ledgerRows[i].Help = ClassLabels[i] + " in the chosen ledger view, as a share of everything that class ever fielded. " +
                                          "The bars below give the exact figures.";
                 }

@@ -214,9 +214,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 // Three rings (faction / class / platform): each shows how much of its mask is open.
                 filterMetrics = new[]
                 {
-                    new AvGauge(page.Content, "FACTION", AvGaugeShape.Ring, 56f),
-                    new AvGauge(page.Content, "CLASS", AvGaugeShape.Ring, 56f),
-                    new AvGauge(page.Content, "PLATFORM", AvGaugeShape.Ring, 56f),
+                    new AvGauge(page.Content, "FACTION"),
+                    new AvGauge(page.Content, "CLASS"),
+                    new AvGauge(page.Content, "PLATFORM"),
                 };
                 filterMetrics[0].Help = "Faction gate: how many sides are open. Every ring full means the target list follows everything.";
                 filterMetrics[1].Help = "Class gate: aircraft, missiles, ground, buildings and ships that stay in the target list.";
@@ -1129,8 +1129,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 cameraRings = new[]
                 {
-                    new AvGauge(page.Content, "RANGE KM", AvGaugeShape.Ring, 76f),
-                    new AvGauge(page.Content, "ELEV M", AvGaugeShape.Ring, 76f),
+                    new AvGauge(page.Content, "RANGE KM"),
+                    new AvGauge(page.Content, "ELEV M"),
                 };
                 cameraRings[0].Help = "Range: distance from your aircraft to the mark, full ring at 20 km.";
                 cameraRings[1].Help = "Elevation: height of the marked surface point above sea level, full ring at 3000 m.";

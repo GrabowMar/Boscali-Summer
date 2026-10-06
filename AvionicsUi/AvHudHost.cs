@@ -29,9 +29,6 @@ namespace NOAvionics
 
         public float ScaleFactor { get; private set; }
 
-        /// <summary>The safe area, converted from screen pixels into this canvas's own units.</summary>
-        public Rect Safe { get; private set; }
-
         public static AvHudHost Create(string name, Transform parent, int sortingOrder)
         {
             var root = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
@@ -100,7 +97,6 @@ namespace NOAvionics
             float scale = Mathf.Max(0.1f, Mathf.Min(w / 1920f, h / 1080f) * sizeStep);
             ScaleFactor = scale;
             Canvas.scaleFactor = scale;
-            Safe = new Rect(safeArea.x / scale, safeArea.y / scale, safeArea.width / scale, safeArea.height / scale);
             return true;
         }
 

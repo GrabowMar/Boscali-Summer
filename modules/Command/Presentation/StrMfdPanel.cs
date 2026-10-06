@@ -178,10 +178,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             threat = p.Add(new StrThreatBanner(p.Content));
 
             // Four ownership strips, followed by named force and contested-node records.
-            ringAllied = new AvGauge(p.Content, "ALLIED", AvGaugeShape.Ring, 64f);
-            ringContested = new AvGauge(p.Content, "CONTESTED", AvGaugeShape.Ring, 64f);
-            ringHostile = new AvGauge(p.Content, "HOSTILE", AvGaugeShape.Ring, 64f);
-            ringOpen = new AvGauge(p.Content, "UNCLAIMED", AvGaugeShape.Ring, 64f);
+            ringAllied = new AvGauge(p.Content, "ALLIED");
+            ringContested = new AvGauge(p.Content, "CONTESTED");
+            ringHostile = new AvGauge(p.Content, "HOSTILE");
+            ringOpen = new AvGauge(p.Content, "UNCLAIMED");
             ringAllied.Help = "ALLIED: share of the sector field held by your side.";
             ringContested.Help = "CONTESTED: share of sectors with both sides present.";
             ringHostile.Help = "HOSTILE: share of sectors held by the enemy. Red above half.";

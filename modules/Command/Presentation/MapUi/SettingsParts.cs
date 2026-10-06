@@ -33,8 +33,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             go.transform.SetParent(Rect, false);
             dial = go.AddComponent<AvGaugeGraphic>();
             dial.Shape = AvGaugeShape.Segments;
-            dial.Thickness = 7f;
-            dial.Ticks = 0;
             dial.Segments = 12;
             dial.raycastTarget = false;
             value = AvText.Make(Rect, "Value", AvTextRole.Display, "", TextAlignmentOptions.Center);
@@ -88,7 +86,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ? AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary)
                 : AvTheme.Disabled;
             dial.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
-            dial.TickColor = AvStyleHost.FuiInk("chart-axis", AvTheme.Hairline);
             Color fill = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             dial.FillColor = fill;
             dial.FillEnd = Color.Lerp(fill, Color.white, 0.25f);

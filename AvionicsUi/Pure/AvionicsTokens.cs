@@ -23,15 +23,6 @@ namespace NOAvionics
 
         public Rgba WithAlpha(float a) => new Rgba(R, G, B, a);
 
-        /// <summary>This colour scaled towards black, keeping its hue. The wash of a tint.</summary>
-        public Rgba Scaled(float factor) => new Rgba(R * factor, G * factor, B * factor, A);
-
-        public static Rgba Lerp(Rgba from, Rgba to, float t) =>
-            new Rgba(from.R + (to.R - from.R) * t,
-                     from.G + (to.G - from.G) * t,
-                     from.B + (to.B - from.B) * t,
-                     from.A + (to.A - from.A) * t);
-
         /// <summary>Composite this colour, at its own alpha, over an opaque background.</summary>
         public Rgba Over(Rgba background) =>
             new Rgba(R * A + background.R * (1f - A),
@@ -59,7 +50,6 @@ namespace NOAvionics
         }
 
         public static Rgba White => new Rgba(1f, 1f, 1f);
-        public static Rgba Shade(float alpha) => new Rgba(0f, 0f, 0f, alpha);
     }
 
     /// <summary>How a control is weighted against the others around it.</summary>
@@ -82,24 +72,6 @@ namespace NOAvionics
 
         /// <summary>Multi-state selection toggle (e.g. formation shapes, radio repeat/shuffle).</summary>
         Toggle,
-    }
-
-    /// <summary>The three colours one button state resolves to.</summary>
-    public struct AvButtonPaint
-    {
-        public Rgba Fill;
-        public Rgba Frame;
-        public Rgba Text;
-    }
-
-    /// <summary>The theme colours the palette is built out of.</summary>
-    public struct AvPaletteInputs
-    {
-        public Rgba Accent;
-        public Rgba Alert;
-        public Rgba Frame;
-        public Rgba Dim;
-        public Rgba Disabled;
     }
 
     /// <summary>
@@ -150,10 +122,6 @@ namespace NOAvionics
         public const float FontSmall = 11f;
         public const float FontMicro = 10f;
 
-        /// <summary>Device-pixel stroke width for one logical HUD unit at this screen height.</summary>
-        public static float StrokeUnit(float screenHeight) =>
-            Math.Max(1f, (float)Math.Round(screenHeight / 1080f));
-
         // --------------------------------------------------------------------- layout
         public const float PanelWidth = 480f;
         public const float PanelHeight = 596f;
@@ -168,115 +136,5 @@ namespace NOAvionics
         /// measurable parent is exactly what it always was.
         /// </summary>
         public const float PanelHeightMax = 896f;
-        private const float RestFrameScale = 0.80f;
-
-        public const float SelectedScale = 0.34f;
-        public const float SelectedAlpha = 0.80f;
-
-        private const float PressedScale = 0.52f;
-        private const float PressedAlpha = 0.90f;
-
-        private const float PrimaryRestScale = 0.19f;
-        private const float PrimaryRestAlpha = 0.66f;
-
-        private const float SubtleScale = 0.27f;
-        private const float SubtleAlpha = 0.74f;
-
-        private const float DangerHoverScale = 0.26f;
-        private const float DangerHoverAlpha = 0.62f;
-
-        public static Rgba Wash(Rgba accent, float scale, float alpha) =>
-            accent.Scaled(scale).WithAlpha(alpha);
-
-        /// <summary>
-        /// Large list/grid selections use a neutral lift with a hint of the theme accent.
-        /// Saturated fills belong to small controls, not entire pages of enabled layers.
-        /// </summary>
-        public static Rgba RowFill(Rgba accent, bool selected, bool hover = false) =>
-            (selected ? Rgba.Lerp(SurfaceRaised, Rgba.Lerp(TextDim, accent, 0.12f), hover ? 0.28f : 0.22f)
-             : hover ? Rgba.Lerp(SurfaceRaised, TextDim, 0.10f)
-             : SurfaceInert).WithAlpha(1f);
-
-        /// <summary>
-        /// Resolves button colors from current state.
-        /// Selection fills, hover only brightens.
-        /// </summary>
-        public static AvButtonPaint Paint(AvButtonStyle style, AvPaletteInputs colors,
-                                          bool enabled, bool latched, bool hover, bool pressed)
-        {
-            var paint = new AvButtonPaint();
-
-            if (!enabled)
-            {
-                paint.Fill = Rgba.Shade(0.18f);
-                paint.Frame = colors.Frame.WithAlpha(0.4f);
-                paint.Text = colors.Disabled;
-                return paint;
-            }
-
-            Rgba accent = style == AvButtonStyle.Danger ? colors.Alert : colors.Accent;
-
-            if (pressed)
-            {
-                paint.Fill = Wash(accent, PressedScale, PressedAlpha);
-                paint.Frame = Rgba.White;
-                paint.Text = Rgba.White;
-                return paint;
-            }
-
-            switch (style)
-            {
-                case AvButtonStyle.Primary:
-                    paint.Fill = latched
-                        ? Wash(accent, SelectedScale, SelectedAlpha)
-                        : Wash(accent, PrimaryRestScale, PrimaryRestAlpha);
-                    paint.Frame = hover ? Rgba.White : accent.Scaled(RestFrameScale);
-                    paint.Text = hover ? Rgba.White : Rgba.Lerp(accent, Rgba.White, 0.35f);
-                    break;
-
-                case AvButtonStyle.Quiet:
-                    paint.Fill = latched
-                        ? Wash(accent, SubtleScale, SubtleAlpha)
-                        : new Rgba(0.020f, 0.035f, 0.050f, 0.70f);
-                    paint.Frame = hover ? accent : colors.Frame;
-                    paint.Text = hover ? accent : colors.Dim;
-                    break;
-
-                case AvButtonStyle.Danger:
-                    paint.Fill = latched ? Wash(accent, SelectedScale, SelectedAlpha)
-                               : hover ? Wash(accent, DangerHoverScale, DangerHoverAlpha)
-                               : new Rgba(0.050f, 0.018f, 0.014f, 0.75f);
-                    paint.Frame = latched || hover ? accent : Wash(accent, 0.28f, 0.85f);
-                    paint.Text = latched ? Rgba.White : hover ? accent : colors.Dim;
-                    break;
-
-                case AvButtonStyle.Tab:
-                    paint.Fill = latched ? new Rgba(0.090f, 0.251f, 0.302f, 1f)
-                        : hover ? Surface
-                        : SurfaceInert;
-                    paint.Frame = hover ? accent : latched ? Frame : Hairline;
-                    paint.Text = latched ? Rgba.White : hover ? Rgba.White : colors.Dim;
-                    break;
-
-                case AvButtonStyle.Toggle:
-                    paint.Fill = latched ? new Rgba(0.090f, 0.251f, 0.302f, 1f)
-                        : hover ? Surface
-                        : SurfaceInert;
-                    paint.Frame = hover || latched ? accent : Hairline;
-                    paint.Text = hover || latched ? Rgba.White : colors.Dim;
-                    break;
-
-                default:
-                    paint.Fill = latched
-                        ? Wash(accent, SelectedScale, SelectedAlpha)
-                        : hover ? Wash(accent, 0.16f, 0.60f)
-                        : new Rgba(0.028f, 0.048f, 0.070f, 0.80f);
-                    paint.Frame = hover ? Rgba.White : latched ? accent : colors.Frame;
-                    paint.Text = hover || latched ? Rgba.White : TextPrimary;
-                    break;
-            }
-
-            return paint;
-        }
     }
 }

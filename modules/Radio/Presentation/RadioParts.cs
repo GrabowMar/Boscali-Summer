@@ -262,8 +262,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             Action squelchUp, Action mode, Action bandwidth, Action step)
         {
             Rect = AvLay.Child(parent, "Levels");
-            Volume = new AvGauge(Rect, "VOL", AvGaugeShape.Segments, Ring);
-            Squelch = new AvGauge(Rect, "SQL", AvGaugeShape.Segments, Ring);
+            Volume = new AvGauge(Rect, "VOL");
+            Squelch = new AvGauge(Rect, "SQL");
             VolumeUp = AvControl.Make(Rect, new AvControl.Spec(string.Empty, volumeUp, AvButtonStyle.Quiet, AvIcon.Plus));
             VolumeDown = AvControl.Make(Rect, new AvControl.Spec(string.Empty, volumeDown, AvButtonStyle.Quiet, AvIcon.Minus));
             SquelchUp = AvControl.Make(Rect, new AvControl.Spec(string.Empty, squelchUp, AvButtonStyle.Quiet, AvIcon.Plus));

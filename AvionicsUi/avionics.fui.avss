@@ -1,6 +1,5 @@
 /* avionics.fui.avss — kit v2 base sheet. Colour ROLES only; a palette sheet defines them.
    Override: BepInEx/config/NOAvionics/avionics.fui.avss (base) or avionics.<theme>.avss (palette). */
-:root { pad: 14; gap: 8; gutter: 8; }
 
 .console        { background: ground; border: 1 frame; }
 .header         { background: surface; border: 1 hairline; }

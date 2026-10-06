@@ -55,9 +55,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // Live frame time: three dials and a trace that grows to fill the page, so the effect of every
             // switch above can be watched here. Sampled while this page shows, four times a second.
             flow.Section(AvIcon.Activity, "FRAME TIME", "LIVE");
-            var fps = new AvGauge(flow.Content, "FPS", AvGaugeShape.Ring, 64f);
-            var last = new AvGauge(flow.Content, "FRAME", AvGaugeShape.Ring, 64f);
-            var worst = new AvGauge(flow.Content, "WORST", AvGaugeShape.Ring, 64f);
+            var fps = new AvGauge(flow.Content, "FPS");
+            var last = new AvGauge(flow.Content, "FRAME");
+            var worst = new AvGauge(flow.Content, "WORST");
             fps.Help = "FPS: frames per second averaged over the last quarter second. 55 and up is smooth.";
             last.Help = "FRAME: the latest average frame time in milliseconds. 16.7 ms is 60 fps.";
             worst.Help = "WORST: the slowest frame time in the trace below. Spikes here are stutter.";

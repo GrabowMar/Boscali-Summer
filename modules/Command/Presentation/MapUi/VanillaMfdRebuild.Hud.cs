@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         private sealed class HudHeader : AvPart
         {
-            private const float RingSlot = 84f, RingSize = 58f;
+            private const float RingSlot = 84f;
             private readonly TMP_Text name, sub;
 
             public HudHeader(RectTransform parent)
@@ -23,8 +23,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Rect = AvLay.Child(parent, "HudHeader");
                 name = AvText.Make(Rect, "Mode", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
                 sub = AvText.Make(Rect, "Sub", AvTextRole.Micro, "// HUD MODE", TextAlignmentOptions.TopLeft, true);
-                Gates = new AvGauge(Rect, "GATES", AvGaugeShape.Ring, RingSize);
-                Types = new AvGauge(Rect, "TYPES", AvGaugeShape.Ring, RingSize);
+                Gates = new AvGauge(Rect, "GATES");
+                Types = new AvGauge(Rect, "TYPES");
                 Restyle();
             }
 
@@ -226,9 +226,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 row.Controls[2].Help = "Armor: keep only LCV, AFV and MBT, and switch every other vehicle type off.";
                 vehClear.Help = "Clear: switch off every vehicle type. The HUD draws no vehicle priority marks.";
 
-                airDefRing = new AvGauge(page.Content, "AIR DEF", AvGaugeShape.Ring, 56f);
-                armorRing = new AvGauge(page.Content, "ARMOR", AvGaugeShape.Ring, 56f);
-                shownVehRing = new AvGauge(page.Content, "SHOWN", AvGaugeShape.Ring, 56f);
+                airDefRing = new AvGauge(page.Content, "AIR DEF");
+                armorRing = new AvGauge(page.Content, "ARMOR");
+                shownVehRing = new AvGauge(page.Content, "SHOWN");
                 airDefRing.Help = "Air defence coverage: how many of AAA, IR SAM, R SAM and RADAR are on (4 = full set).";
                 armorRing.Help = "Armor coverage: how many of LCV, AFV and MBT are on (3 = full set).";
                 shownVehRing.Help = "Vehicle types on the HUD priority list out of all ten.";
@@ -258,9 +258,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 row.Controls[2].Help = "Military: keep every military installation and switch civilian sites off.";
                 bldClear.Help = "Clear: switch off every building type. The HUD draws no building priority marks.";
 
-                strikeRing = new AvGauge(page.Content, "STRIKE", AvGaugeShape.Ring, 56f);
-                militaryRing = new AvGauge(page.Content, "MILITARY", AvGaugeShape.Ring, 56f);
-                civilianRing = new AvGauge(page.Content, "CIVILIANS", AvGaugeShape.Ring, 56f);
+                strikeRing = new AvGauge(page.Content, "STRIKE");
+                militaryRing = new AvGauge(page.Content, "MILITARY");
+                civilianRing = new AvGauge(page.Content, "CIVILIANS");
                 strikeRing.Help = "Strike coverage: how many of RDR, DEP, HGR and AMMO are on (4 = full set).";
                 militaryRing.Help = "Military coverage: how many of the six military building types are on.";
                 civilianRing.Help = "Civilian sites: OFF keeps civilians protected from HUD target marks; ON lets the HUD mark them.";

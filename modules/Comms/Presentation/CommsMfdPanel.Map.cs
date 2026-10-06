@@ -177,10 +177,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             marksSection = p.Section(AvIcon.Stack2, "YOUR MARKS", "OLDEST FADES FIRST");
             markRings = new[]
             {
-                new AvGauge(p.Content, "PINGS", AvGaugeShape.Ring, 56f),
-                new AvGauge(p.Content, "DRAWN", AvGaugeShape.Ring, 56f),
-                new AvGauge(p.Content, "STICKERS", AvGaugeShape.Ring, 56f),
-                new AvGauge(p.Content, "LABELS", AvGaugeShape.Ring, 56f),
+                new AvGauge(p.Content, "PINGS"),
+                new AvGauge(p.Content, "DRAWN"),
+                new AvGauge(p.Content, "STICKERS"),
+                new AvGauge(p.Content, "LABELS"),
             };
             markRings[0].Help = "Pings you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Ping) + ". A new one retires your oldest.";
             markRings[1].Help = "Pen strokes and shapes you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Stroke) + ". A new one retires your oldest.";

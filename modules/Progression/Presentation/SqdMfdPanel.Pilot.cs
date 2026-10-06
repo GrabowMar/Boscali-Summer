@@ -54,10 +54,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             sortieMission = sortieGrid.Add("MISSION SCORE");
             sortieGrid.Help = "This sortie: the airframe you fly, its condition, whether you respawn or have one life, and the mission score the pick ladder is built from.";
 
-            ringScore = new AvGauge(p.Content, "NEXT", AvGaugeShape.Segments, 64f);
-            ringBonus = new AvGauge(p.Content, "ACE", AvGaugeShape.Segments, 64f);
-            ringPicks = new AvGauge(p.Content, "EARNED", AvGaugeShape.Segments, 64f);
-            ringFree = new AvGauge(p.Content, "FREE", AvGaugeShape.Segments, 64f);
+            ringScore = new AvGauge(p.Content, "NEXT");
+            ringBonus = new AvGauge(p.Content, "ACE");
+            ringPicks = new AvGauge(p.Content, "EARNED");
+            ringFree = new AvGauge(p.Content, "FREE");
             ringScore.Help = "NEXT: mission score still needed to earn the next skill pick. The ladder fills as you approach it.";
             ringBonus.Help = "ACE: bonus score from ace kills and streaks, added to your career score (ceiling " + AceBonusCeiling + ").";
             ringPicks.Help = "EARNED: skill picks earned so far out of the maximum.";

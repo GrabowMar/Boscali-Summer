@@ -15,7 +15,6 @@ namespace BoscaliSummer.Tests.Features.Command
             MfdPanelTests.Run();
             TestLogSpace();
             AvionicsTokenTests.Run(TestAssert.That);
-            AvBoxTests.Run(TestAssert.That);
             AvGridTests.Run(TestAssert.That);
             AvStyleTests.Run(TestAssert.That);
 

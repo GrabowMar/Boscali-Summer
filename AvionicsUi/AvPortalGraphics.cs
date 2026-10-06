@@ -90,54 +90,6 @@ namespace NOAvionics
             }
         }
     }
-
-    /// <summary>Grid of cells whose brightness is a 0..1 intensity; one cell can be selected (full colour).</summary>
-    public sealed class AvHeatGraphic : MaskableGraphic
-    {
-        public int Cols = 8, Selected = -1;
-        public float CellH = 9f, Gap = 2f;
-        public Color FillColor = Color.white;
-        private float[] cells = new float[0];
-
-        public void SetCells(float[] c, int selected) { cells = c ?? new float[0]; Selected = selected; SetVerticesDirty(); }
-
-        protected override void OnPopulateMesh(VertexHelper vh)
-        {
-            vh.Clear();
-            Rect r = GetPixelAdjustedRect();
-            float cw = (r.width - Gap * (Cols - 1)) / Cols;
-            if (cells.Length == 0)
-            {
-                // No series yet: outline the slot grid so the grown region is a board, not a hole.
-                int rows = Mathf.Max(1, Mathf.RoundToInt((r.height + Gap) / Mathf.Max(1f, CellH + Gap)));
-                Color edge = FillColor;
-                edge.a *= 0.28f;
-                Color fill = FillColor;
-                fill.a *= 0.06f;
-                for (int row = 0; row < rows; row++)
-                    for (int col = 0; col < Cols; col++)
-                    {
-                        float x = r.xMin + col * (cw + Gap);
-                        float y = r.yMin + row * (CellH + Gap);
-                        var cell = new Rect(x, y, cw, CellH);
-                        AvMesh.Quad(vh, cell.xMin, cell.yMin, cell.xMax, cell.yMax, fill);
-                        if (cw > 6f && CellH > 6f) AvMesh.Outline(vh, cell, edge);
-                    }
-                return;
-            }
-            for (int i = 0; i < cells.Length; i++)
-            {
-                AvV2 o = AvPortalMath.HeatCell(i, Cols, cw, CellH, Gap, r.height);
-                float v = Mathf.Clamp01(cells[i]);
-                Color fill = FillColor, edge = FillColor;
-                fill.a *= i == Selected ? 1f : 0.14f + 0.72f * v;
-                edge.a *= i == Selected ? 1f : 0.35f + 0.65f * v;
-                var cell = new Rect(r.xMin + o.X, r.yMin + o.Y, cw, CellH);
-                AvMesh.Quad(vh, cell.xMin, cell.yMin, cell.xMax, cell.yMax, fill);
-                if (cw > 6f && CellH > 6f) AvMesh.Outline(vh, cell, edge);   // tall cells read as tactical tiles, not slabs
-            }
-        }
-    }
 }
 
 namespace NOAvionics

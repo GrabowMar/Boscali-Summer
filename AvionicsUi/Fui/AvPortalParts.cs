@@ -85,51 +85,6 @@ namespace NOAvionics
         protected override void Paint() { Graphic.FillColor = Fill(); Graphic.BaseColor = Track(); }
     }
 
-    /// <summary>Heat grid: availability, queues, status per slot. One cell can be marked selected.</summary>
-    public sealed class AvHeatGrid : AvGraphicPart<AvHeatGraphic>
-    {
-        private readonly int cols;
-        private readonly int fullRows;
-        private int rows;
-        private const float CellH = 9f, Gap = 2f;
-
-        public AvHeatGrid(RectTransform parent, string keyText, int columns, int cellCount)
-            : base(parent, "Heat", keyText, AvPortalMath.HeatRows(cellCount, columns) * (CellH + Gap) - Gap)
-        {
-            cols = columns;
-            fullRows = rows = AvPortalMath.HeatRows(cellCount, columns);
-            Graphic.Cols = cols; Graphic.CellH = CellH; Graphic.Gap = Gap;
-            Restyle();
-        }
-
-        private float[] liveCells = System.Array.Empty<float>();
-
-        /// <param name="live">When set, only the first <paramref name="live"/> cells are drawn and they
-        /// take the graphic's height. Padding past the real series would otherwise grow into empty slabs.</param>
-        public void Set(float[] cells, int selected, string text, AvState st = AvState.Ready, int live = -1)
-        {
-            if (live >= 0)
-            {
-                int n = cells == null ? 0 : Mathf.Clamp(live, 0, cells.Length);
-                if (liveCells.Length != n) liveCells = new float[n];
-                for (int i = 0; i < n; i++) liveCells[i] = cells[i];
-                // An empty board keeps its real slot count, so the outline is the instrument and not one stretched row.
-                rows = n == 0 ? fullRows : Mathf.Max(1, AvPortalMath.HeatRows(n, cols));
-                Graphic.SetCells(liveCells, selected);
-            }
-            else Graphic.SetCells(cells, selected);
-            SetText(text, st);
-        }
-        protected override void Paint() { Graphic.FillColor = Fill(); }
-
-        protected override void OnGraphicHeight(float h)
-        {
-            float cell = Mathf.Max(CellH, (h - (rows - 1) * Gap) / rows);
-            if (Mathf.Abs(cell - Graphic.CellH) < 0.1f) return;
-            Graphic.CellH = cell; Graphic.SetVerticesDirty();
-        }
-    }
-
     /// <summary>Solid tag ("slab") for a title or alert word; sized to its text, left aligned.</summary>
     public sealed class AvSlab : AvPart
     {

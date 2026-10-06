@@ -185,9 +185,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             responseDesk.SetShown(false);
 
             // The director's three rings need no section header: each ring names itself and carries its own tip.
-            directorPosture = new AvGauge(p.Content, "POSTURE", AvGaugeShape.Ring, 64f);
-            directorBases = new AvGauge(p.Content, "BASES", AvGaugeShape.Ring, 64f);
-            directorSupers = new AvGauge(p.Content, "SUPERS", AvGaugeShape.Ring, 64f);
+            directorPosture = new AvGauge(p.Content, "POSTURE");
+            directorBases = new AvGauge(p.Content, "BASES");
+            directorSupers = new AvGauge(p.Content, "SUPERS");
             directorPosture.Help = "POSTURE: how close the losing side is to the base deficit that arms a superevent. ARMED means the director may escalate at its next roll; MON means it is only watching.";
             directorBases.Help = "BASES: ground airbases held by the leading side against the losing side (leader:loser). The ring fills with the loser's share.";
             directorSupers.Help = "SUPERS: superevents fired this mission out of the most the director allows. Each superevent fires once.";

@@ -67,13 +67,6 @@ namespace NOAvionics
         public static AvPaint None => default(AvPaint);
     }
 
-    public enum AvAlign
-    {
-        Left,
-        Center,
-        Right,
-    }
-
     /// <summary>
     /// Everything one class-set resolves to. Nullable-by-flag rather than by
     /// <c>Nullable&lt;T&gt;</c> so the struct stays cheap to copy in a build loop.
@@ -87,29 +80,6 @@ namespace NOAvionics
 
         public float BorderWidth;
         public float RailWidth;
-
-        /// <summary>panel / card / control / none.</summary>
-        public string Sprite;
-
-        public bool Ticks;
-        public bool HasTicks;
-
-        public float PadLeft, PadTop, PadRight, PadBottom;
-        public bool HasPad;
-
-        public float Gap;
-        public bool HasGap;
-
-        public float FontSize;
-        public bool HasFont;
-        public bool Bold;
-
-        public float Tracking;
-        public bool Wrap;
-        public bool Tabular;
-
-        public AvAlign Align;
-        public bool HasAlign;
 
         public float Height;
         public bool HasHeight;
@@ -140,19 +110,6 @@ namespace NOAvionics
             if (over.Color.HasValue) r.Color = over.Color;
             if (over.Border.HasValue) { r.Border = over.Border; r.BorderWidth = over.BorderWidth; }
             if (over.Rail.HasValue) { r.Rail = over.Rail; r.RailWidth = over.RailWidth; }
-            if (!string.IsNullOrEmpty(over.Sprite)) r.Sprite = over.Sprite;
-            if (over.HasTicks) { r.Ticks = over.Ticks; r.HasTicks = true; }
-            if (over.HasPad)
-            {
-                r.PadLeft = over.PadLeft; r.PadTop = over.PadTop;
-                r.PadRight = over.PadRight; r.PadBottom = over.PadBottom; r.HasPad = true;
-            }
-            if (over.HasGap) { r.Gap = over.Gap; r.HasGap = true; }
-            if (over.HasFont) { r.FontSize = over.FontSize; r.Bold = over.Bold; r.HasFont = true; }
-            if (over.Tracking != 0f) r.Tracking = over.Tracking;
-            if (over.Wrap) r.Wrap = true;
-            if (over.Tabular) r.Tabular = true;
-            if (over.HasAlign) { r.Align = over.Align; r.HasAlign = true; }
             if (over.HasHeight) { r.Height = over.Height; r.HasHeight = true; }
             if (over.HasWidth) { r.Width = over.Width; r.HasWidth = true; }
             if (over.HasGrow) { r.GrowWeight = over.GrowWeight; r.HasGrow = true; }
@@ -387,42 +344,6 @@ namespace NOAvionics
                         }
                         break;
 
-                    case "sprite": style.Sprite = parts[0].ToLowerInvariant(); break;
-
-                    case "ticks":
-                        style.Ticks = IsTruthy(parts[0]);
-                        style.HasTicks = true;
-                        break;
-
-                    case "pad": ApplyPad(ref style, parts, line); break;
-
-                    case "gap":
-                        if (TryNumber(parts[0], out float g)) { style.Gap = g; style.HasGap = true; }
-                        else Errors.Add("line " + line + ": gap '" + parts[0] + "' is not a number");
-                        break;
-
-                    case "font":
-                        if (TryFont(parts[0], out float fs)) { style.FontSize = fs; style.HasFont = true; }
-                        else Errors.Add("line " + line + ": font '" + parts[0] + "' is not a size");
-                        for (int k = 1; k < parts.Length; k++)
-                            if (string.Equals(parts[k], "bold", StringComparison.OrdinalIgnoreCase))
-                                style.Bold = true;
-                        break;
-
-                    case "tracking":
-                        if (TryNumber(parts[0], out float tr)) style.Tracking = tr;
-                        break;
-
-                    case "wrap": style.Wrap = IsTruthy(parts[0]); break;
-                    case "tabular": style.Tabular = IsTruthy(parts[0]); break;
-
-                    case "align":
-                        style.Align = parts[0].ToLowerInvariant() == "right" ? AvAlign.Right
-                                    : parts[0].ToLowerInvariant() == "center" ? AvAlign.Center
-                                    : AvAlign.Left;
-                        style.HasAlign = true;
-                        break;
-
                     case "height":
                         if (TryNumber(parts[0], out float h)) { style.Height = h; style.HasHeight = true; }
                         // "height: auto" is the default, so it needs no flag.
@@ -477,30 +398,6 @@ namespace NOAvionics
             }
 
             return style;
-        }
-
-        private void ApplyPad(ref AvStyle style, string[] parts, int line)
-        {
-            var n = new float[parts.Length];
-            for (int i = 0; i < parts.Length; i++)
-            {
-                if (!TryNumber(parts[i], out n[i]))
-                {
-                    Errors.Add("line " + line + ": pad '" + parts[i] + "' is not a number");
-                    return;
-                }
-            }
-
-            switch (n.Length)
-            {
-                case 1: style.PadLeft = style.PadTop = style.PadRight = style.PadBottom = n[0]; break;
-                case 2: style.PadTop = style.PadBottom = n[0]; style.PadLeft = style.PadRight = n[1]; break;
-                case 4: style.PadTop = n[0]; style.PadRight = n[1]; style.PadBottom = n[2]; style.PadLeft = n[3]; break;
-                default:
-                    Errors.Add("line " + line + ": pad takes 1, 2 or 4 numbers");
-                    return;
-            }
-            style.HasPad = true;
         }
 
         /// <summary>Substitute <c>:root</c> variables, one level deep plus chained aliases.</summary>
@@ -610,32 +507,6 @@ namespace NOAvionics
         private static bool TryNumber(string token, out float value) =>
             float.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
-        /// <summary>A font size, or one of the named steps from the token scale.</summary>
-        private static bool TryFont(string token, out float size)
-        {
-            switch (token.ToLowerInvariant())
-            {
-                case "title": size = AvTokens.FontTitle; return true;
-                case "lead": size = AvTokens.FontLead; return true;
-                case "body": size = AvTokens.FontBody; return true;
-                case "small": size = AvTokens.FontSmall; return true;
-                case "micro": size = AvTokens.FontMicro; return true;
-                default: return TryNumber(token, out size);
-            }
-        }
-
-        private static bool IsTruthy(string token)
-        {
-            switch (token.ToLowerInvariant())
-            {
-                case "on":
-                case "true":
-                case "yes":
-                case "1": return true;
-                default: return false;
-            }
-        }
-
         // ------------------------------------------------------------------ resolution
 
         /// <summary>
@@ -692,13 +563,6 @@ namespace NOAvionics
                 if (!found) return false;
             }
             return true;
-        }
-
-        /// <summary>A <c>:root</c> variable as a number, for panel geometry read from the sheet.</summary>
-        public float Number(string name, float fallback)
-        {
-            if (vars.TryGetValue(name, out string raw) && TryNumber(raw.Trim(), out float v)) return v;
-            return fallback;
         }
 
         /// <summary>A <c>:root</c> variable as a colour.</summary>

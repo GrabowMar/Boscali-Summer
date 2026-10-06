@@ -101,7 +101,7 @@ public static class AvKitGalleryUnityCheck
         p.Add(new AvSlider(p.Content, "VOLUME", () => 1f, v => { }, () => AvNum.Percent(1)));
         var chart = p.Add(new AvLineChart(p.Content));
         chart.SetSeries(new[] { 3f, 3.1f, 2.9f, 6.5f, 5.9f, 5.2f, 6.8f }, 7, "$2.86B", "$7.32B", "$6.81B");
-        p.Row(new AvGauge(p.Content, "COVER", AvGaugeShape.Arc), new AvGauge(p.Content, "CHARGE", AvGaugeShape.Segments));
+        p.Row(new AvGauge(p.Content, "COVER"), new AvGauge(p.Content, "CHARGE"));
         p.Add(new AvField(p.Content, "Farp here, cap east…", 18, s => { }));
         p.Buttons(new AvControl.Spec("ACCEPT", () => { }, AvButtonStyle.Primary, AvIcon.CircleCheck),
                   new AvControl.Spec("CONTRACT INTELLIGENCE BRIEFING", () => { }),

@@ -160,9 +160,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 briefTiles = new[]
                 {
-                    new AvGauge(page.Content, "SCORE", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "OBJECTIVES", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "AT STAKE", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "SCORE"),
+                    new AvGauge(page.Content, "OBJECTIVES"),
+                    new AvGauge(page.Content, "AT STAKE"),
                 };
                 briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
                 briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";

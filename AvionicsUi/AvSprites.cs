@@ -8,15 +8,10 @@ namespace NOAvionics
     /// </summary>
     public static class AvSprites
     {
-        private static Sprite panelSprite;
-        private static Sprite cardSprite;
         private static Sprite controlSprite;
-        private static Sprite controlFrameSprite;
-        private static Sprite slotSprite;
         private static Sprite groundGradientSprite;
         private static Sprite displayGlassSprite;
         private static Sprite displayScreenSprite;
-        private static Sprite ledSprite;
         private static Sprite whiteSprite;
 
         /// <summary>Untinted rectangle for Image.Filled, which requires an actual sprite.</summary>
@@ -25,24 +20,11 @@ namespace NOAvionics
                 new Rect(0f, 0f, Texture2D.whiteTexture.width, Texture2D.whiteTexture.height),
                 new Vector2(0.5f, 0.5f), 100f, 0u, SpriteMeshType.FullRect));
 
-        /// <summary>Straight outer frame, matching the field log and theater wire;
-        /// the subtle lower-edge fade preserves readability over a bright map.</summary>
-        public static Sprite Panel => panelSprite != null ? panelSprite : (panelSprite = CreateChamferSprite("Avionics_Panel", 48, 0f, 1f, 10f, fillMode: FillMode.Gradient));
-
-        /// <summary>Subtle 2px chamfer for a tinted card.</summary>
-        public static Sprite Card => cardSprite != null ? cardSprite : (cardSprite = CreateChamferSprite("Avionics_Card", 32, 2f, 1f, 8f, fillMode: FillMode.Tinted));
-
         /// <summary>Flat tintable control, with a small chamfer shared by every button.</summary>
         public static Sprite Control => controlSprite != null ? controlSprite : (controlSprite = CreateChamferSprite("Avionics_Control", 24, 2f, 1f, 6f, fillMode: FillMode.Tinted));
 
-        /// <summary>Flat tintable slot for meters, sliders and inputs.</summary>
-        public static Sprite Slot => slotSprite != null ? slotSprite : (slotSprite = CreateChamferSprite("Avionics_Slot", 24, 2f, 1f, 6f, fillMode: FillMode.Tinted));
-
-        /// <summary>Radial diode indicator LED pip: hot luminous pure white core with steep photopic exponential bloom.</summary>
-        public static Sprite Led => ledSprite != null ? ledSprite : (ledSprite = CreateLedSprite("Avionics_Led", 14));
-
         /// <summary>
-        /// The same top-to-bottom fade as <see cref="Panel"/>, but flat and unframed — for
+        /// The same top-to-bottom fade as the panel sprite, but flat and unframed — for
         /// grounds drawn behind content that already has its own frame (the game's own stock
         /// map panels), where a second chamfered border would double up.
         /// </summary>
@@ -56,21 +38,6 @@ namespace NOAvionics
         /// <summary>Fine, low-contrast finish for the complete maximized MFD canvas.</summary>
         public static Sprite DisplayScreen => displayScreenSprite != null ? displayScreenSprite :
             (displayScreenSprite = CreateDisplayScreenSprite());
-
-        public static void Reset()
-        {
-            // whiteTexture belongs to Unity; only this wrapper sprite belongs to us.
-            if (whiteSprite != null) { Object.Destroy(whiteSprite); whiteSprite = null; }
-            if (panelSprite != null) { Object.Destroy(panelSprite.texture); Object.Destroy(panelSprite); panelSprite = null; }
-            if (cardSprite != null) { Object.Destroy(cardSprite.texture); Object.Destroy(cardSprite); cardSprite = null; }
-            if (controlSprite != null) { Object.Destroy(controlSprite.texture); Object.Destroy(controlSprite); controlSprite = null; }
-            if (controlFrameSprite != null) { Object.Destroy(controlFrameSprite.texture); Object.Destroy(controlFrameSprite); controlFrameSprite = null; }
-            if (slotSprite != null) { Object.Destroy(slotSprite.texture); Object.Destroy(slotSprite); slotSprite = null; }
-            if (groundGradientSprite != null) { Object.Destroy(groundGradientSprite.texture); Object.Destroy(groundGradientSprite); groundGradientSprite = null; }
-            if (displayGlassSprite != null) { Object.Destroy(displayGlassSprite.texture); Object.Destroy(displayGlassSprite); displayGlassSprite = null; }
-            if (displayScreenSprite != null) { Object.Destroy(displayScreenSprite.texture); Object.Destroy(displayScreenSprite); displayScreenSprite = null; }
-            if (ledSprite != null) { Object.Destroy(ledSprite.texture); Object.Destroy(ledSprite); ledSprite = null; }
-        }
 
         private enum FillMode { None, Gradient, Tinted }
 
@@ -156,7 +123,7 @@ namespace NOAvionics
             return sprite;
         }
 
-        /// <summary>An unframed, unsliced vertical fade — <see cref="Panel"/>'s fill without
+        /// <summary>An unframed, unsliced vertical fade — the panel sprite's fill without
         /// its chamfered border, for content that draws its own frame.</summary>
         private static Sprite CreateGradientSprite(string name, int size)
         {
@@ -280,63 +247,6 @@ namespace NOAvionics
             Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, width, height),
                 new Vector2(0.5f, 0.5f), 100f, 0u, SpriteMeshType.FullRect);
             sprite.name = texture.name;
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            return sprite;
-        }
-
-        private static Sprite CreateLedSprite(string name, int size)
-        {
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain: false)
-            {
-                name = name,
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-                hideFlags = HideFlags.HideAndDontSave,
-            };
-
-            float centre = (size - 1) * 0.5f;
-            float maxR = centre;
-            const float coreR = 2.2f;
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dx = x - centre;
-                    float dy = y - centre;
-                    float dist = Mathf.Sqrt(dx * dx + dy * dy);
-
-                    if (dist > maxR)
-                    {
-                        texture.SetPixel(x, y, Color.clear);
-                        continue;
-                    }
-
-                    float alpha;
-                    if (dist <= coreR)
-                    {
-                        alpha = 1f;
-                    }
-                    else
-                    {
-                        float t = (dist - coreR) / (maxR - coreR);
-                        alpha = Mathf.Exp(-t * 3.2f);
-                    }
-
-                    Color col = new Color(1f, 1f, 1f, alpha);
-                    texture.SetPixel(x, y, col);
-                }
-            }
-
-            texture.Apply(updateMipmaps: false, makeNoLongerReadable: true);
-            var sprite = Sprite.Create(
-                texture,
-                new Rect(0f, 0f, size, size),
-                new Vector2(0.5f, 0.5f),
-                100f,
-                0u,
-                SpriteMeshType.FullRect);
-            sprite.name = name;
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;
         }

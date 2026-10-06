@@ -4,7 +4,7 @@ namespace NOAvionics.Tests
 {
     /// <summary>
     /// Engine-free tests for the HUD kit primitives added across the HUD remake slices.
-    /// Extended in place by later tasks (geometry, tape math, leader routing, stylesheet).
+    /// Extended in place by later tasks (geometry, strokes, stylesheet).
     /// </summary>
     public static class AvHudKitTests
     {
@@ -21,10 +21,6 @@ namespace NOAvionics.Tests
             TestDashes(assert);
             TestShapes(assert);
 
-            TestTicks(assert);
-            TestFade(assert);
-            TestSegments(assert);
-            TestLeaderRouting(assert);
 
             TestHudStyle(assert);
         }
@@ -173,106 +169,6 @@ namespace NOAvionics.Tests
             assert(chevron.Count == 2, "a chevron draws 2 lines");
         }
 
-        private static void TestTicks(Action<bool, string> assert)
-        {
-            AvTick[] ticks = new AvTick[8];
-
-            int n = AvTapeMath.Ticks(ticks, 100f, 2f, 20f, 5f, 2, 0f);
-            assert(n == 5, "5 minor-step ticks fall inside the half extent");
-            float[] expectedOffsets = { -20f, -10f, 0f, 10f, 20f };
-            for (int i = 0; i < n; i++)
-                Near(assert, ticks[i].Offset, expectedOffsets[i], "tick " + i + " offset matches (v-center)*ppu");
-            int majors = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (!ticks[i].Major) continue;
-                majors++;
-                bool onExpectedMajorValue = Math.Abs(ticks[i].Value - 90f) < 1e-3f
-                    || Math.Abs(ticks[i].Value - 100f) < 1e-3f
-                    || Math.Abs(ticks[i].Value - 110f) < 1e-3f;
-                assert(onExpectedMajorValue, "a major tick lands on 90, 100 or 110");
-            }
-            assert(majors == 3, "exactly the three step-of-2 ticks are flagged major");
-
-            AvTick[] heading = new AvTick[8];
-            int hn = AvTapeMath.Ticks(heading, 2f, 1f, 10f, 5f, 2, 360f);
-            assert(hn == 4, "a heading tape produces 4 ticks inside the extent");
-            float[] expectedHeadings = { 355f, 0f, 5f, 10f };
-            for (int i = 0; i < hn; i++)
-                Near(assert, heading[i].Value, expectedHeadings[i], "heading tick " + i + " wraps into [0,360)");
-
-            AvTick[] one = new AvTick[8];
-            int nanCount = AvTapeMath.Ticks(one, float.NaN, 2f, 20f, 5f, 2, 0f);
-            assert(nanCount == 0, "a NaN center produces no ticks");
-
-            AvTick[] small = new AvTick[2];
-            int capped = AvTapeMath.Ticks(small, 100f, 2f, 20f, 5f, 2, 0f);
-            assert(capped == 2, "output is capped at the buffer length");
-        }
-
-        private static void TestFade(Action<bool, string> assert)
-        {
-            Near(assert, AvTapeMath.Fade(0f, 100f, 0.2f), 1f, "fade is 1 well inside the extent");
-            Near(assert, AvTapeMath.Fade(90f, 100f, 0.2f), 0.5f, "fade is linear through the fade band");
-            Near(assert, AvTapeMath.Fade(100f, 100f, 0.2f), 0f, "fade reaches 0 exactly at the extent");
-            Near(assert, AvTapeMath.Fade(150f, 100f, 0.2f), 0f, "fade stays 0 beyond the extent");
-        }
-
-        private static void TestSegments(Action<bool, string> assert)
-        {
-            float[] cellsFill = new float[10];
-            int used = AvSegments.Fill(0.55f, cellsFill, 10);
-            assert(used == 10, "Fill writes every cell the caller asked for");
-            for (int i = 0; i <= 4; i++)
-                Near(assert, cellsFill[i], 1f, "cell " + i + " is fully lit below the fraction");
-            Near(assert, cellsFill[5], 0.5f, "the boundary cell is partially lit");
-            for (int i = 6; i <= 9; i++)
-                Near(assert, cellsFill[i], 0f, "cell " + i + " stays unlit above the fraction");
-
-            float[] nanFill = { 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f, 1f };
-            AvSegments.Fill(float.NaN, nanFill, 10);
-            for (int i = 0; i < nanFill.Length; i++)
-                assert(nanFill[i] == 0f, "a NaN fraction zeros every cell");
-
-            Near(assert, AvSegments.CellWidth(100f, 10, 2f), 8.2f, "cell width accounts for the inter-cell gap");
-        }
-
-        private static void TestLeaderRouting(Action<bool, string> assert)
-        {
-            float[] ax = { 500f, 500f };
-            float[] ay = { 500f, 500f };
-            float[] w = { 80f, 80f };
-            float[] h = { 20f, 20f };
-            int[] sides = { 0, 0 };
-            AvLeader[] result = new AvLeader[2];
-
-            int placed = AvLeaderRouting.Route(2, ax, ay, w, h, sides, 0f, 0f, 1000f, 1000f, 20f, 30f, 2f, result);
-            assert(placed == 2, "both colliding-anchor labels find a side that fits");
-            assert(result[0].Placed && result[1].Placed, "both leaders report placed");
-            assert(!BoxesOverlap(result[0].Label, result[1].Label), "the two placed label boxes do not overlap");
-
-            float[] eax = { 990f };
-            float[] eay = { 500f };
-            float[] ew = { 80f };
-            float[] eh = { 20f };
-            int[] esides = { 1 };
-            AvLeader[] eresult = new AvLeader[1];
-            AvLeaderRouting.Route(1, eax, eay, ew, eh, esides, 0f, 0f, 1000f, 1000f, 20f, 30f, 2f, eresult);
-            assert(eresult[0].Placed, "the near-edge label still finds room");
-            assert(eresult[0].Side == -1, "it flips off the preferred side to stay inside the bounds");
-
-            AvLeader[] eresult2 = new AvLeader[1];
-            AvLeaderRouting.Route(1, eax, eay, ew, eh, esides, 0f, 0f, 1000f, 1000f, 20f, 30f, 2f, eresult2);
-            assert(eresult2[0].Side == -1, "a side persisted from a previous call is honoured as the preference");
-
-            float[] cax = new float[8], cay = new float[8], cw = new float[8], ch = new float[8];
-            int[] csides = new int[8];
-            for (int i = 0; i < 8; i++) { cax[i] = 100f * i; cay[i] = 500f; cw[i] = 10f; ch[i] = 10f; }
-            AvLeader[] cresult = new AvLeader[8];
-            int cplaced = AvLeaderRouting.Route(20, cax, cay, cw, ch, csides, 0f, 0f, 1000f, 1000f, 20f, 30f, 2f, cresult);
-            assert(cplaced <= 8, "a count beyond the array lengths is clamped, not overrun");
-        }
-
         private static void TestHudStyle(Action<bool, string> assert)
         {
             AvStyleSheet s = AvStyleSheet.Parse(
@@ -295,13 +191,7 @@ namespace NOAvionics.Tests
             AvStyleSheet merged = AvStyleSheet.Parse(".a { stroke: 1 } .a.b { stroke: 3 }");
             Near(assert, merged.Resolve("a b").StrokeWidth, 3f, "a later, more specific rule overrides the stroke width");
 
-            Near(assert, AvTokens.StrokeUnit(1080f), 1f, "StrokeUnit is 1 at 1080p");
-            Near(assert, AvTokens.StrokeUnit(2160f), 2f, "StrokeUnit is 2 at 4K");
-            Near(assert, AvTokens.StrokeUnit(720f), 1f, "StrokeUnit floors at 1 below 1080p");
         }
-
-        private static bool BoxesOverlap(AvLabelBox a, AvLabelBox b) =>
-            a.X < b.X + b.W && b.X < a.X + a.W && a.Y < b.Y + b.H && b.Y < a.Y + a.H;
 
         private static void Near(Action<bool, string> assert, float actual, float expected, string what)
         {

@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         public const float RailWidth = 150f;
         public const float Gutter = 8f;
-        public const float MapInset = 0f;
         public const float Margin = 8f;
 
         /// <summary>
@@ -66,7 +65,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             spec.Margin = Margin;
             spec.TopReserve = TopReserve;
             spec.BottomReserve = canvasSize.x >= 1600f ? WideBottomReserve : BottomReserve;
-            spec.MapInset = MapInset;
 
             AvRegions regions = AvGrid.Resolve(canvasSize.x, canvasSize.y, panelWidth, RailWidth, spec);
 
