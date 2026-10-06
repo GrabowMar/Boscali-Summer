@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using System.Reflection;
+
+using HarmonyLib;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Core.Math;
@@ -63,6 +66,29 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         /// <summary>Only into an empty queue (a native aircraft at its head already marks the runway in use), so no native
         /// aircraft ever waits behind ours; ours leaves the queue with the lock.</summary>
+        private static readonly FieldInfo TakeoffQueueField = AccessTools.Field(typeof(Airbase.Runway), "takeoffQueue");
+        private static readonly FieldInfo CrossingRunwaysField = AccessTools.Field(typeof(Airbase.Runway), "crossingRunways");
+
+        /// <summary>Whether the native takeoff queue of <paramref name="runway"/> and its crossing runways holds nobody
+        /// but <paramref name="self"/> — what the game's <c>ClearForTakeoff</c> answers, but one level deep: that call
+        /// recurses through the crossing runways and mutually crossing pairs overflow the stack (airbase_city sim
+        /// 2026-10-06: silent ntdll crash at the first lineup). Unknown layout (reflection failed): do not queue.</summary>
+        private static bool QueueEmptyFor(Airbase.Runway runway, Aircraft self)
+        {
+            if (TakeoffQueueField == null || CrossingRunwaysField == null) return false;
+            if (!QueueClear(runway, self)) return false;
+            if (CrossingRunwaysField.GetValue(runway) is List<Airbase.Runway> crossing)
+                foreach (Airbase.Runway c in crossing)
+                    if (c != null && !ReferenceEquals(c, runway) && !QueueClear(c, self)) return false;
+            return true;
+        }
+
+        private static bool QueueClear(Airbase.Runway runway, Aircraft self)
+        {
+            if (!(TakeoffQueueField.GetValue(runway) is Queue<Aircraft> queue) || queue.Count == 0) return true;
+            return queue.TryPeek(out Aircraft head) && head == self;
+        }
+
         private static void SyncTakeoffQueue(Entry e, WingService wing)
         {
             Airbase.Runway runway = RunwayOf(e);
@@ -75,7 +101,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (e.Queued != null && !e.Queued.disabled) return;
             e.Queued = null;
             Aircraft a = wing?.GroundAircraftOn(e.Traffic);
-            if (a == null || !runway.ClearForTakeoff(a, false)) return;
+            if (a == null || !QueueEmptyFor(runway, a)) return;
             runway.SetUsageDirection(e.Traffic.Reverse);
             runway.QueueTakeoff(a);
             e.Queued = a;

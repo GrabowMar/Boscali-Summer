@@ -1,0 +1,130 @@
+{
+  "name": "wing-taxi",
+  "notes": "Mechanics test (taxi/lineup/roll/liftoff), not combat survival: checks count wheels-off events, which fire before air defences can engage. Requires Trenches/TheaterOps/Events/Garrisons Enabled=false so barrages do not shell the stands; the lead anchors from far away so it survives.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 600,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "count": 2,
+        "field": "nearest"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members_early"
+    },
+    {
+      "op": "wait",
+      "seconds": 120
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Ground",
+      "store": "mid"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members"
+    },
+    {
+      "op": "wait",
+      "seconds": 120
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Ground",
+      "store": "mid2"
+    },
+    {
+      "op": "wait",
+      "seconds": 90
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.DumpFields",
+      "store": "fields"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "ground.rolled",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ground.liftoffs",
+      "min": 2
+    }
+  ]
+}

@@ -9,7 +9,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// (spec M3 §2.1).</summary>
     internal sealed class StuckWatchdog
     {
-        public static float RerouteSeconds = 20f, RelocateSeconds = 60f, ProgressMetres = 1f;
+        // Relocate at 30 s: wing-taxi sim 2026-10-06 — a jet wedged at its stand at full throttle started taking damage
+        // around 24 s and had tipped and shed parts before the 60 s rescue came.
+        public static float RerouteSeconds = 20f, RelocateSeconds = 30f, ProgressMetres = 1f;
 
         private Vec3 anchor;
         private bool primed, rerouted, relocated;

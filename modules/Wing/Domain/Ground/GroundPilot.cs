@@ -22,8 +22,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <item>LineUp: once the sequencer lets it, from the hold-short across the threshold to its row and lane, aligned
     /// over the last <see cref="LineupRunIn"/>; it releases its taxi claims once clear of the hold-short and tells the
     /// sequencer when it is past the threshold. Stopped on its slot it is lined up when within
-    /// <see cref="LineupAlignDeg"/> of the runway heading or after <see cref="AlignSettleSeconds"/> (the roll steers the
-    /// rest).</item>
+    /// <see cref="LineupAlignDeg"/> of the runway heading; stopped but off it past <see cref="AlignSettleSeconds"/> it is put
+    /// on its slot exactly (the roll cannot steer out tens of degrees).</item>
     /// <item>Roll: on the sequencer's word, full throttle along its lane to the takeoff speed; braked while a foreign
     /// aircraft is in the lane ahead.</item>
     /// <item>Aborted: not lined up within <see cref="LineUpSeconds"/>, or not at takeoff speed
@@ -79,6 +79,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A line-up that has not moved for this long is put on its slot (day-1 sims: the turn from a hold point behind
         /// and beside the runway stuck at 85 % throttle, and the member was released when the line-up time ran out).</summary>
         public static float LineUpStuckSeconds = 20f;
+        /// <summary>Line-up progress that counts as moving: less than this toward the slot in
+        /// <see cref="LineUpStuckSeconds"/> is stuck (wing-taxi sim 2026-10-06: a jet beached nose-up in the ruts crept
+        /// under 1 m/s for 120 s and timed out, never slow enough for the old stopped-speed trip).</summary>
+        public static float LineupProgressMetres = 25f;
         public static float PullAsideMetres = 45f, PullAsideSeconds = 90f;
         public static float SpoolRpm = 0.9f, SpoolCollective = 0.05f, SpoolSeconds = 30f;
 
@@ -100,7 +104,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private readonly FieldTraffic traffic;
         private readonly AirframeClass cls;
         private WingPose spawn, lastPose;
-        private float lineUpStuckSince = float.NaN;
+        private float lineUpStuckSince = float.NaN, lineUpStuckToSlot;
         private bool lineUpMoved;
         private int hangar, startNode, standNode = -1;
         private bool arriving, pulledAside;
@@ -705,9 +709,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             float toSlot = cum[lineupSlotIndex] - along;
             float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
             Vec3 dir = traffic.Runway.Direction(traffic.Reverse);
-            if (!lineUpMoved && toSlot > LineupTolerance && Math.Abs(speed) < StoppedSpeed)
+            if (!lineUpMoved && toSlot > LineupTolerance)
             {
-                if (float.IsNaN(lineUpStuckSince)) lineUpStuckSince = time;
+                if (float.IsNaN(lineUpStuckSince)) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
+                else if (lineUpStuckToSlot - toSlot > LineupProgressMetres) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
                 else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(s, p, dir, time, events, slot))
                     return new ControlOutput { Brake = 1f };
             }
@@ -716,7 +721,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             bool stoppedOnSlot = toSlot < LineupTolerance && speed < StoppedSpeed;
             if (!stoppedOnSlot) settleStart = float.NaN;
             else if (float.IsNaN(settleStart)) settleStart = time;
-            if (stoppedOnSlot && (heading < LineupAlignDeg || time - settleStart >= AlignSettleSeconds))
+            if (stoppedOnSlot && heading < LineupAlignDeg)
             {
                 if (!clearedThreshold)
                 {
@@ -727,6 +732,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Enter(GroundPhase.Roll, time);
                 return new ControlOutput { Brake = 1f };
             }
+            // Stopped on the slot but off the runway heading past the settle: put it on exactly (the roll cannot steer
+            // out tens of degrees — wing-taxi sim 2026-10-06: a 40° roll entry ground-looped 86 m off the runway).
+            if (stoppedOnSlot && time - settleStart >= AlignSettleSeconds && !lineUpMoved &&
+                PutOnSlot(s, p, dir, time, events, slot)) return new ControlOutput { Brake = 1f };
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, toSlot);
             return controller.Step(c, s, p, dt);
         }
