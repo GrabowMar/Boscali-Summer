@@ -82,19 +82,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             face.HullRail = f.HullRail;
             face.PartCount = f.PartCount;
             Array.Copy(f.Parts, face.Parts, f.PartCount);
-            WmcKit.Set(title, f.Title);
-            WmcKit.Set(sub, f.Sub);
-            WmcKit.Set(mapNote, f.MapNote);
-            WmcKit.Set(gaugeValue[0], f.FuelText);
-            WmcKit.Set(gaugeSub[0], f.FuelSub);
-            WmcKit.Set(gaugeValue[1], f.AmmoText);
-            WmcKit.Set(gaugeSub[1], f.AmmoSub);
-            WmcKit.Set(gaugeValue[2], f.HullText);
-            WmcKit.Set(gaugeSub[2], f.HullSub);
-            WmcKit.Set(value[0], f.Radar);
-            WmcKit.Set(value[1], f.Alt);
-            WmcKit.Set(value[2], f.Task);
-            WmcKit.Set(value[3], f.Target);
+            AvText.Set(title, f.Title);
+            AvText.Set(sub, f.Sub);
+            AvText.Set(mapNote, f.MapNote);
+            AvText.Set(gaugeValue[0], f.FuelText);
+            AvText.Set(gaugeSub[0], f.FuelSub);
+            AvText.Set(gaugeValue[1], f.AmmoText);
+            AvText.Set(gaugeSub[1], f.AmmoSub);
+            AvText.Set(gaugeValue[2], f.HullText);
+            AvText.Set(gaugeSub[2], f.HullSub);
+            AvText.Set(value[0], f.Radar);
+            AvText.Set(value[1], f.Alt);
+            AvText.Set(value[2], f.Task);
+            AvText.Set(value[3], f.Target);
             PlaceFills();
             Restyle();
             DrawMap();
@@ -170,23 +170,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            sub.color = WingRankColor.Dim;
-            mapNote.color = WingRankColor.Dim;
+            title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            sub.color = AvInk.Dim;
+            mapNote.color = AvInk.Dim;
             string[] rails = { face.FuelRail, face.AmmoRail, face.HullRail };
             Color trackColor = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
             for (int i = 0; i < 3; i++)
             {
-                gaugeKey[i].color = WingRankColor.Dim;
-                gaugeValue[i].color = WingRankColor.Ink;
-                gaugeSub[i].color = WingRankColor.Dim;
+                gaugeKey[i].color = AvInk.Dim;
+                gaugeValue[i].color = AvInk.Ink;
+                gaugeSub[i].color = AvInk.Dim;
                 track[i].color = trackColor;
                 fill[i].color = WmcState.Color(rails[i]);
             }
             for (int i = 0; i < 4; i++)
             {
-                valueKey[i].color = WingRankColor.Dim;
-                value[i].color = WingRankColor.Ink;
+                valueKey[i].color = AvInk.Dim;
+                value[i].color = AvInk.Ink;
             }
             DrawMap();
         }
@@ -236,9 +236,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (!on) continue;
                 StoreLine s = d.Stores[i];
                 classes[i] = s.Class;
-                WmcKit.Set(station[i], AvNum.Fixed(i + 1, 0));
-                WmcKit.Set(store[i], WmcText.Cut(s.Name, 16));
-                WmcKit.Set(count[i], s.Full > 0 && s.Ammo <= 0 ? "EMPTY" : AvNum.Fixed(s.Ammo, 0) + " / " + AvNum.Fixed(s.Full, 0));
+                AvText.Set(station[i], AvNum.Fixed(i + 1, 0));
+                AvText.Set(store[i], WmcText.Cut(s.Name, 16));
+                AvText.Set(count[i], s.Full > 0 && s.Ammo <= 0 ? "EMPTY" : AvNum.Fixed(s.Ammo, 0) + " / " + AvNum.Fixed(s.Full, 0));
             }
             none.gameObject.SetActive(n == 0);
             Restyle();
@@ -286,11 +286,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < Rows; i++)
             {
                 swatch[i].color = WmcState.Color(ClassRail(classes[i]));
-                station[i].color = WingRankColor.Dim;
-                store[i].color = WingRankColor.Ink;
-                count[i].color = WingRankColor.Ink;
+                station[i].color = AvInk.Dim;
+                store[i].color = AvInk.Ink;
+                count[i].color = AvInk.Ink;
             }
-            none.color = WingRankColor.Dim;
+            none.color = AvInk.Dim;
         }
     }
 
@@ -335,8 +335,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 portrait.sprite = p != null ? PilotPortrait.For(p) : null;
                 portrait.enabled = portrait.sprite != null;
             }
-            WmcKit.Set(callsign, callsignText);
-            WmcKit.Set(sub, subText);
+            AvText.Set(callsign, callsignText);
+            AvText.Set(sub, subText);
         }
 
         public override float Measure(float width) => H;
@@ -355,8 +355,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            callsign.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            sub.color = WingRankColor.Dim;
+            callsign.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            sub.color = AvInk.Dim;
             Dossier.Restyle();
         }
     }

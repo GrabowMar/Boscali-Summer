@@ -81,8 +81,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             headline = C2Kit.Mono(map.Body, "Headline", 12f, TextAlignmentOptions.Center, true, 2f);
             detail = C2Kit.Mono(map.Body, "Detail", 10f, TextAlignmentOptions.Center);
-            C2Kit.Place(headline, 4f, mapH * 0.5f - 22f, mapW - 8f, 18f);
-            C2Kit.Place(detail, 4f, mapH * 0.5f - 2f, mapW - 8f, 16f);
+            AvLay.Place(headline, 4f, mapH * 0.5f - 22f, mapW - 8f, 18f);
+            AvLay.Place(detail, 4f, mapH * 0.5f - 2f, mapW - 8f, 16f);
         }
 
         protected void BuildOps(RectTransform parent, float y, OpDomain domain, OpKind[] kinds, OpsBoxActions actions)
@@ -122,9 +122,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>Re-colours the shared parts and forces the next paint to redraw with the new palette.</summary>
         protected void RestyleMap()
         {
-            if (gridLines != null) foreach (Image g in gridLines) if (g != null) g.color = OpsInk.Hairline;
-            if (headline != null) headline.color = OpsInk.Muted;
-            if (detail != null) detail.color = OpsInk.Dim;
+            if (gridLines != null) foreach (Image g in gridLines) if (g != null) g.color = AvInk.Hairline;
+            if (headline != null) headline.color = AvInk.Muted;
+            if (detail != null) detail.color = AvInk.Dim;
             ops?.Restyle();
             paintedSeq = paintedOps = -1;
         }

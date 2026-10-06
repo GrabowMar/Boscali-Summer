@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -16,6 +17,7 @@ namespace NOAvionics
         }
 
         public static void Place(RectTransform t, AvSlot s) => Place(t, s.X, s.Y, s.W, s.H);
+        public static void Place(TMP_Text t, float x, float y, float w, float h) => Place(t.rectTransform, x, y, w, h);
 
         public static void Place(RectTransform t, float x, float y, float w, float h)
         {

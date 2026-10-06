@@ -159,11 +159,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
             x -= Gap;
             x -= StateW;
-            OpsText.Set(stateText, C2Kit.FitTo(stateText, stateRaw, StateW));
-            C2Kit.Place(stateText, x, 0f, StateW, h);
+            AvText.Set(stateText, C2Kit.FitTo(stateText, stateRaw, StateW));
+            AvLay.Place(stateText, x, 0f, StateW, h);
             x -= Gap + PriceW;
-            OpsText.Set(priceText, C2Kit.FitTo(priceText, priceRaw, PriceW));
-            C2Kit.Place(priceText, x, 0f, PriceW, h);
+            AvText.Set(priceText, C2Kit.FitTo(priceText, priceRaw, PriceW));
+            AvLay.Place(priceText, x, 0f, PriceW, h);
             float right = x - 6f;
 
             // Left cluster.
@@ -173,8 +173,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 AvLay.Place(pin.Rect, left, (h - 20f) * 0.5f, PinW, 20f);
                 left += PinW + 3f;
             }
-            OpsText.Set(indexText, C2Kit.FitTo(indexText, indexRaw, IndexW + 6f));
-            C2Kit.Place(indexText, left, 0f, IndexW + 6f, h);
+            AvText.Set(indexText, C2Kit.FitTo(indexText, indexRaw, IndexW + 6f));
+            AvLay.Place(indexText, left, 0f, IndexW + 6f, h);
             left += IndexW + 8f;
 
             float area = Mathf.Max(20f, right - left);
@@ -186,24 +186,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             bool chip = chipW > 0f && nameW + 6f + chipW <= area;
             if (!chip && nameW > area) name = C2Kit.FitTo(nameText, nameRaw, area);
             if (chipW > 0f && !chip) SetTip(priceRaw + " \u00B7 " + chipRaw); else SetTip(null);
-            OpsText.Set(nameText, name);
+            AvText.Set(nameText, name);
             nameW = Mathf.Min(area, C2Kit.Width(nameText, name) + 2f);
-            C2Kit.Place(nameText, left, nameY, chip ? nameW : area, nameH);
+            AvLay.Place(nameText, left, nameY, chip ? nameW : area, nameH);
             chipFrame.gameObject.SetActive(chip);
             chipText.gameObject.SetActive(chip);
             if (chip)
             {
-                OpsText.Set(chipText, chipRaw);
+                AvText.Set(chipText, chipRaw);
                 float cy = nameY + (nameH - 14f) * 0.5f;
                 AvLay.Place(chipFrame.rectTransform, left + nameW + 6f, cy, chipW, 14f);
-                C2Kit.Place(chipText, left + nameW + 6f, cy, chipW, 14f);
+                AvLay.Place(chipText, left + nameW + 6f, cy, chipW, 14f);
             }
             subText.gameObject.SetActive(subLine && subRaw.Length > 0);
             if (subLine)
             {
                 float subArea = Mathf.Max(20f, right - left);
-                OpsText.Set(subText, C2Kit.FitTo(subText, subRaw, subArea));
-                C2Kit.Place(subText, left, nameY + 18f, subArea, 14f);
+                AvText.Set(subText, C2Kit.FitTo(subText, subRaw, subArea));
+                AvLay.Place(subText, left, nameY + 18f, subArea, 14f);
             }
         }
 
@@ -225,13 +225,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void RestyleTexts()
         {
-            indexText.color = OpsInk.Muted;
-            nameText.color = Primary.Interactable || stateTone != AvState.Inert ? OpsInk.Ink : OpsInk.Muted;
-            subText.color = OpsInk.Dim;
+            indexText.color = AvInk.Muted;
+            nameText.color = Primary.Interactable || stateTone != AvState.Inert ? AvInk.Ink : AvInk.Muted;
+            subText.color = AvInk.Dim;
             priceText.color = OpsInk.Word(stateTone == AvState.Inert ? AvState.Info : stateTone);
             stateText.color = OpsInk.Word(stateTone);
             chipText.color = OpsInk.Word(chipTone);
-            chipFrame.Paint(OpsInk.Inert, OpsInk.Rail(chipTone));
+            chipFrame.Paint(AvInk.Inert, OpsInk.Rail(chipTone));
         }
 
         public override void Restyle()
@@ -239,7 +239,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(stateTone), armed ? "armed" : null);
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-            rail.color = armed ? OpsInk.Select : OpsInk.Rail(stateTone);
+            rail.color = armed ? AvInk.Select : OpsInk.Rail(stateTone);
             RestyleTexts();
             Primary.Restyle();
             Extra.Restyle();

@@ -34,12 +34,12 @@ namespace BoscaliSummer.Modules.TheaterOps
             GroundFrontService groundFront = context.AddSceneService<GroundFrontService>(50);
             Presentation.TheaterOpsHudLine hudLine = context.AddSceneService<Presentation.TheaterOpsHudLine>(51);
 
-            priority.Configure(context.Settings.TheaterOps, network, context.Logger);
-            logistics.Configure(context.Settings.TheaterOps, context.Logger);
+            priority.Configure(context.Settings.TheaterOps, network);
+            logistics.Configure(context.Settings.TheaterOps);
             naval.Configure(context.Settings.TheaterOps);
-            living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval, context.Logger);
+            living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval);
             livingNetwork.Configure(living);
-            groundFront.Configure(context.Settings.TheaterOps, priority, context.Logger);
+            groundFront.Configure(context.Settings.TheaterOps, priority);
             network.Configure(priority);
             hudLine.Configure(living);
 

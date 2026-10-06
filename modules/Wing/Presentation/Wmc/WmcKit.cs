@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             t.enableWordWrapping = false;
             t.overflowMode = TextOverflowModes.Overflow;
             Place(t.rectTransform, r);
-            t.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle(classes).Color, fallback);
+            t.color = AvStyleHost.FuiInk(classes, fallback);
             return t;
         }
 
@@ -58,12 +58,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             switch (railClass)
             {
                 case "ready":
-                case "live": return AvStyleHost.FuiColor("ready", AvTheme.RailReady);
+                case "live": return AvInk.State(AvState.Ready);
                 case "caution":
                 case "armed":
-                case "warn": return AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-                case "danger": return AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
-                case "info": return AvStyleHost.FuiColor("info", AvTheme.RailInfo);
+                case "warn": return AvInk.State(AvState.Caution);
+                case "danger": return AvInk.State(AvState.Danger);
+                case "info": return AvInk.State(AvState.Info);
                 default: return AvStyleHost.FuiColor("hairline", AvTheme.RailInert);
             }
         }
@@ -169,12 +169,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 default:
                     return AvTheme.Dim;
             }
-        }
-
-        /// <summary>Sets a label only when its text changed (TMP relays out on every assignment).</summary>
-        public static void Set(TMP_Text t, string text)
-        {
-            if (t != null && t.text != text) t.text = text;
         }
 
         /// <summary>Where <paramref name="target"/> sits inside <paramref name="root"/> (a popup opens beside its button, parented

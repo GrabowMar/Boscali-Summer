@@ -100,15 +100,15 @@ namespace NOAvionics
         {
             AvStyle m = AvStyleHost.FuiStyle("metric");
             frame.Paint(AvStyleHost.Resolve(m.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(m.Border, AvTheme.Hairline));
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-value").Color, AvTheme.TextPrimary);
+            key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
+            value.color = AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary);
             unit.color = state == AvState.Caution || state == AvState.Danger
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.Warning)
-                : AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-unit").Color, AvTheme.Dim);
+                ? AvStyleHost.FuiInk("chip " + AvStates.Class(state), AvTheme.Warning)
+                : AvStyleHost.FuiInk("metric-unit", AvTheme.Dim);
             symbol.color = unit.color.WithAlpha(0.65f);
             frame.BracketColor = unit.color.WithAlpha(0.6f);
-            gauge.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-track").Background, AvTheme.Hairline);
-            gauge.FillColor = gauge.FillEnd = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
+            gauge.Track = AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
+            gauge.FillColor = gauge.FillEnd = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             gauge.SetVerticesDirty();
         }
 

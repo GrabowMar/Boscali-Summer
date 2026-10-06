@@ -113,7 +113,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         private HighCommandSettings settings;
         private HighCommandNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private int missionGeneration;
         private float nextTick;
@@ -161,11 +160,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         // ---- Lifecycle --------------------------------------------------------------------
 
-        public void Configure(HighCommandSettings configuration, HighCommandNet transport, ManualLogSource log)
+        public void Configure(HighCommandSettings configuration, HighCommandNet transport)
         {
             settings = configuration;
             network = transport;
-            logger = log;
             wasEnabled = settings.Enabled.Value;
             Active = this;
         }
@@ -296,7 +294,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 };
                 command.Sites.AddRange(sites);
                 factions.Add(command);
-                logger?.LogInfo("[HighCommand] Staff formed for " + command.FactionName + ": " +
+                Plugin.Logger?.LogInfo("[HighCommand] Staff formed for " + command.FactionName + ": " +
                                 command.Tree.LiveCount + " posts over " + sites.Count + " bases.");
             }
         }

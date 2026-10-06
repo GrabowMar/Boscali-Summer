@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Session
         public void Install(ModuleContext context)
         {
             context.AddComponent<SessionNet>().Configure(
-                HostAuthority.Entries(context.Settings), HostAuthority.Switches(context.Settings), context.Logger);
+                HostAuthority.Entries(context.Settings), HostAuthority.Switches(context.Settings));
         }
     }
 }

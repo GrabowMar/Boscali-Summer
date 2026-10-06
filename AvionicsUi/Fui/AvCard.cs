@@ -47,9 +47,9 @@ namespace NOAvionics
         {
             AvStyle c = AvStyleHost.FuiStyle(classes);
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             frame.SetVerticesDirty();
-            if (title != null) title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
+            if (title != null) title.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
         }
     }
 }

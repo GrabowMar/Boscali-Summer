@@ -25,7 +25,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private float damage;
         private float nextSample;
         private bool tintBound;
-        internal ManualLogSource Logger { get; set; }
         public float Wetness => 0f;
         public float Frost => 0f;
         public float Scorch => damage;
@@ -104,8 +103,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 }
             }
             materials.Clear();
-            if (Logger != null && candidates.Count > 0)
-                Logger.LogInfo("[Immersion] Damage cues found " + candidates.Count + " verified opaque slots.");
+            if (Plugin.Logger != null && candidates.Count > 0)
+                Plugin.Logger.LogInfo("[Immersion] Damage cues found " + candidates.Count + " verified opaque slots.");
         }
     }
 }

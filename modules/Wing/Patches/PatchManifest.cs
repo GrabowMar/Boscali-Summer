@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Patches
 
         /// <summary>The gap-check after BoscaliMod applies <c>WingModule.Patches</c>: read back what the Wing Harmony id patched and warn on every gap.
         /// Only warns; a failed inventory check never disables the wing.</summary>
-        internal static void Verify(ManualLogSource log)
+        internal static void Verify()
         {
             try
             {
@@ -64,16 +64,16 @@ namespace BoscaliSummer.Modules.Wing.Patches
                     if (m != null) names.Add(m.DeclaringType?.Name + "." + m.Name);
                 }
                 names.Sort(StringComparer.Ordinal);
-                log.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PatchesInstalled, names.Count));
+                WingLog.Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PatchesInstalled, names.Count));
                 WingLog.Verbose($"Harmony patched {names.Count} method(s) for Wing: {string.Join(", ", names)}");
                 foreach (string want in Expected)
                 {
-                    if (!names.Contains(want)) log.LogWarning($"Expected Harmony patch missing: {want}");
+                    if (!names.Contains(want)) WingLog.Logger.LogWarning($"Expected Harmony patch missing: {want}");
                 }
             }
             catch (Exception e)
             {
-                log.LogWarning("[Patches] Wing patch inventory check failed: " + e.Message);
+                WingLog.Logger.LogWarning("[Patches] Wing patch inventory check failed: " + e.Message);
             }
         }
     }

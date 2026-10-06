@@ -43,7 +43,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private TheaterLogisticsService logistics;
         private LivingFrontNet network;
         private NavalFrontService naval;
-        private ManualLogSource logger;
         private float nextRoll;
         private int cursor;
         private string localCommandStatus = "";
@@ -92,14 +91,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
             TheaterLogisticsService logisticsService, LivingFrontNet transport,
-            NavalFrontService navalService, ManualLogSource log)
+            NavalFrontService navalService)
         {
             settings = config;
             priority = priorityService;
             logistics = logisticsService;
             network = transport;
             naval = navalService;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -545,7 +543,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!secured && !repulsed && !timedOut) return false;
             string outcome = secured ? "SECURED" : repulsed ? "REPULSED" : "STALLED";
             war.Log.Add(op.Label + " · " + outcome);
-            logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Label + " " + outcome);
+            Plugin.Logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Label + " " + outcome);
             ClearOperationDirective(war);
             naval?.ClearObjective(war.HQ, op.Key);
             war.Active = null;

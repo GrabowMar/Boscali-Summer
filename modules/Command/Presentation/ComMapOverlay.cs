@@ -17,7 +17,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private CommandSettings settings;
         private CommandManager command;
-        private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
         private GameObject overlayObj;
@@ -85,13 +84,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
             MfdMapDeck.ApplyAppearance(settings);
         }
 
-        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, ManualLogSource log, TerritoryControlView control)
+        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, TerritoryControlView control)
         {
             settings = config;
             command = manager;
             compatibilityEngine = compat;
             territory = control;
-            logger = log;
 
             float cell = settings.GridCellSizeMetres.Value;
             sectorGrid = new TacticalSectorGrid(cell > 0f ? cell : TacticalSectorGrid.DefaultCellSize, 100000f);
@@ -276,7 +274,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             initialized = true;
             nextGridUpdate = 0f;
-            logger?.LogInfo("[COM] Dynamic frontline overlay initialized (" + sectorGrid.ResolutionX + "x" +
+            Plugin.Logger?.LogInfo("[COM] Dynamic frontline overlay initialized (" + sectorGrid.ResolutionX + "x" +
                 sectorGrid.ResolutionY + " sectors of " + sectorGrid.CellSize + "m, " +
                 mapSize.x + "x" + mapSize.y + "m theater).");
         }
@@ -390,7 +388,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
             catch (Exception ex)
             {
-                logger?.LogWarning("[COM] Error updating tactical sector grid: " + ex.Message);
+                Plugin.Logger?.LogWarning("[COM] Error updating tactical sector grid: " + ex.Message);
             }
         }
 

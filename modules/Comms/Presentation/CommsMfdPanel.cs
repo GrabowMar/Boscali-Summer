@@ -48,38 +48,35 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private CommsSettings settings;
         private CommsManager comms;
-        private ManualLogSource logger;
 
-        private MFDScreen screen;
-        private GameObject screenRoot;
+        // The six vanilla slots belong to WMC and the claimed screens; EVN hosts an extra slot on the
+        // right, so COM hosts one on the left to keep the columns even.
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Comms, "COM", "BoscaliComms.Screen", preferLeft: true)
+            { Host = true, Wrap = true, Clamp = false };
+        private MFDScreen screen => installer.Screen;
         private AvConsole console;
         private AvChip[] chips;
 
-        private float nextAttempt;
         private float nextRefresh;
-        private bool failed;
         private bool viewOpen;
 
         public void Configure(CommsSettings config, CommsManager manager, ManualLogSource log)
         {
             settings = config;
             comms = manager;
-            logger = log;
+            installer.Log = log;
+            installer.Builder = BuildScreen;
         }
 
         public void ResetForScene()
         {
-            MfdScreenHost.Release(MfdSlots.Comms);
-            if (screenRoot != null) Destroy(screenRoot);
-            screenRoot = null;
-            screen = null;
+            installer.Reset();
             console = null;
             chips = null;
             if (viewOpen) AvInput.Deselect();
             viewOpen = false;
-            nextAttempt = 0f;
             nextRefresh = 0f;
-            failed = false;
             ResetMap();
             ResetTalk();
             ResetGames();
@@ -90,25 +87,13 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void Update()
         {
-            if (failed || settings == null || comms == null) return;
+            if (installer.Failed || settings == null || comms == null) return;
             if (!settings.Enabled.Value)
             {
                 if (screen != null) ResetForScene();
                 return;
             }
-            if (Application.isBatchMode || !GameAccess.MfdAvailable)
-            {
-                failed = true;
-                return;
-            }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-                return;
-            }
+            if (!installer.Tick()) return;
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
@@ -129,80 +114,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         // ---- Installation ----------------------------------------------------------------
 
-        private void TryInstall()
+        private RectTransform BuildScreen(RectTransform content, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                // The six vanilla slots belong to WMC and the claimed screens; EVN hosts an
-                // extra slot on the right, so COM hosts one on the left to keep the columns even.
-                if (!MfdScreenHost.TryHost(MfdSlots.Comms, preferLeft: true, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    failed = true;
-                    logger?.LogWarning("COM MFD unavailable: could not add a host button.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Comms);
-                    return;
-                }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdScreenHost.Release(MfdSlots.Comms);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    ResetForScene();
-                    failed = true;
-                    logger?.LogWarning("COM MFD unavailable: bezel changed during installation.");
-                    return;
-                }
-                logger?.LogInfo("COM MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                ResetForScene();
-                failed = true;
-                logger?.LogError("COM MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliComms.Screen", typeof(RectTransform));
-            screenRoot = root;
-            var rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            var templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            var content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            content.anchorMin = Vector2.zero;
-            content.anchorMax = Vector2.one;
-            content.offsetMin = Vector2.zero;
-            content.offsetMax = Vector2.zero;
-
             console = AvConsole.Build(content, "COM", "MULTIPLAYER COMMS", TabSpecs.Length, Width, height);
             chips = console.Chips(3);
             BindAudienceChip();
@@ -215,31 +128,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             BuildGamePage(console.Page(TabGame));
             BuildLogPage(console.Page(TabLog));
             console.Finish();
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = MfdSlots.Comms;
-            result.displayPanel = contentObject;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                Destroy(root);
-                return null;
-            }
-
-            screenRoot = root;
             console.SetPage(TabMap);
-            return result;
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-                if (images[i].gameObject != button.gameObject) return images[i];
-            return button.GetComponent<Image>();
+            return null;
         }
 
         // ---- Refresh -----------------------------------------------------------------------
@@ -363,29 +253,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 }
             }
             return built;
-        }
-
-        /// <summary>A wrapped, resizing line of secondary prose (replaces the v1 "hint"/"row-sub" labels).</summary>
-        private sealed class AvNote : AvPart
-        {
-            private readonly TMP_Text text;
-
-            public AvNote(RectTransform parent, string initial = "")
-            {
-                Rect = AvLay.Child(parent, "Note");
-                text = AvText.Make(Rect, "Text", AvTextRole.ProseSmall, initial ?? "", TextAlignmentOptions.TopLeft, true);
-                Restyle();
-            }
-
-            public string Text
-            {
-                get => text.text;
-                set { if (text.text != (value ?? "")) text.text = value ?? ""; }
-            }
-
-            public override float Measure(float width) => Mathf.Max(AvGridTokens.RowDense, AvText.Height(text, width));
-            public override void Place(AvSlot s) { base.Place(s); AvLay.Fill(text.rectTransform); }
-            public override void Restyle() => text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
         }
 
         /// <summary>Hover help on a text field (the field frame raycasts; the tip bubbles up from it).</summary>

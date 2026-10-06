@@ -216,7 +216,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             rail.color = WmcState.Color(AvStates.Class(state));
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             foreach (AvControl c in controls) c.Restyle();
         }
     }
@@ -274,7 +274,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            Color c = AvStyleHost.Resolve(AvStyleHost.FuiStyle(colorClass).Color, AvTheme.Dim);
+            Color c = AvStyleHost.FuiInk(colorClass, AvTheme.Dim);
             foreach (TMP_Text t in lines) t.color = c;
         }
     }

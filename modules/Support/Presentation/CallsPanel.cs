@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.15f;
 
         private readonly List<CallTile> tiles = new List<CallTile>(16);
@@ -46,8 +45,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SpaceFeedPanel spacePanel;
         private ManualLogSource logger;
 
-        private MFDScreen screen;
-        private GameObject screenRoot;
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Ops, "OPS", "BoscaliOperations.Screen", preferLeft: true);
+        private MFDScreen screen => installer.Screen;
         private RectTransform consoleRoot;
         private AvTicker ticker;
         private C2Chrome chrome;
@@ -59,13 +59,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private C2Tab tab = C2Tab.Cap;
         private int sceneGeneration;
 
-        private float nextAttempt;
         private float nextRefresh, failedUntil;
         private int factionEpoch;
         private Canvas pageCanvas;
         private int aimCellX = int.MinValue, aimCellZ;
         private string aimGrid = "";
-        private bool failed;
         private string chromeKey = "", footerKey = "";
 
         public void Configure(SupportManager supportManager, CallsController callsController, SpaceFeedController feedController = null)
@@ -73,17 +71,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
             manager = supportManager;
             calls = callsController;
             feed = feedController;
-            logger = ((ISupportHost)supportManager).Logger;
+            logger = installer.Log = ((ISupportHost)supportManager).Logger;
+            installer.Builder = BuildScreen;
             c2.Attach(manager, calls);
             feed?.AttachConsole(c2, FillChrome);
         }
 
         public void ResetForScene()
         {
-            MfdBezel.Release(MfdSlots.Ops);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
-            screenRoot = null;
-            screen = null;
+            installer.Reset();
             consoleRoot = null;
             ticker = null;
             chrome = null;
@@ -101,12 +97,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feed?.SetCompactVisible(false);
             feed?.SetBoardVisible(false);
             feed?.AttachBoard(null);
-            nextAttempt = 0f;
             nextRefresh = 0f;
             failedUntil = 0f;
             factionEpoch = c2.FactionEpoch;
             pageCanvas = null;
-            failed = false;
         }
 
         private void OnDestroy()
@@ -117,17 +111,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void Update()
         {
-            if (failed || manager == null || calls == null) return;
-            if (Application.isBatchMode) { failed = true; return; }
-            if (!GameAccess.MfdAvailable) { failed = true; return; }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-                return;
-            }
+            if (installer.Failed || manager == null || calls == null) return;
+            if (!installer.Tick()) return;
 
             if (Time.unscaledTime < failedUntil) return; // a console fault backs the page off for a moment instead of killing it
             bool visible = screen.isActive &&
@@ -159,7 +144,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             try { Refresh(); }
             catch (Exception e)
             {
-                failed = true; // a refresh fault must not throw every frame
+                installer.Failed = true; // a refresh fault must not throw every frame
                 logger?.LogError("OPS CALLS refresh failed: " + e);
             }
         }
@@ -197,91 +182,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // ---- Installation ----------------------------------------------------------------
 
-        private void TryInstall()
+        private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                if (!MfdBezel.TryClaim(MfdSlots.Ops, preferLeft: true, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    failed = true;
-                    logger?.LogWarning("OPS MFD unavailable: no free bezel slot.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdBezel.Release(MfdSlots.Ops);
-                    return;
-                }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdBezel.Release(MfdSlots.Ops);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    MfdBezel.Release(MfdSlots.Ops);
-                    if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
-                    screenRoot = null;
-                    screen = null;
-                    failed = true;
-                    logger?.LogWarning("OPS MFD unavailable: claimed bezel changed before binding.");
-                    return;
-                }
-
-                logger?.LogInfo("OPS CALLS MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                MfdBezel.Release(MfdSlots.Ops);
-                failed = true;
-                logger?.LogError("OPS MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliOperations.Screen", typeof(RectTransform));
-            screenRoot = root;
-            RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            RectTransform templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            float height = AvLay.ResolveHeight(templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvLay.ClampIntoCanvas(rootRect);
-
             BuildConsole(rootRect, height);
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = MfdSlots.Ops;
-            result.displayPanel = consoleRoot.gameObject;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                screenRoot = null;
-                consoleRoot = null;
-                return null;
-            }
-            return result;
+            return consoleRoot;
         }
 
         /// <summary>Builds the whole page into <paramref name="root"/> without an MFD (offline render harness).</summary>
@@ -332,8 +236,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
 
             CapPage capPage = cap;
-            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
-            back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame);
+            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
+            back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame);
             chromeKey = footerKey = "";
             SelectTab(C2Tab.Cap);
         }
@@ -383,15 +287,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         internal BoardPage Board => boardPage;
         internal AvTicker Ticker => ticker;
         internal RectTransform ConsoleRoot => consoleRoot;
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-                if (images[i].gameObject != button.gameObject) return images[i];
-            return button.GetComponent<Image>();
-        }
 
         // ---- Refresh and paint ------------------------------------------------------------
 

@@ -83,14 +83,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvStyle cell = AvStyleHost.FuiStyle("cell", available ? null : "disabled");
             frame.Paint(AvStyleHost.Resolve(cell.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(cell.Border, AvTheme.Hairline));
             title.color = available
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
+                ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary)
                 : AvTheme.Disabled;
             value.color = available
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-value").Color, AvTheme.TextPrimary)
+                ? AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary)
                 : AvTheme.Disabled;
-            dial.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
-            dial.TickColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-axis").Color, AvTheme.Hairline);
-            Color fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
+            dial.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
+            dial.TickColor = AvStyleHost.FuiInk("chart-axis", AvTheme.Hairline);
+            Color fill = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             dial.FillColor = fill;
             dial.FillEnd = Color.Lerp(fill, Color.white, 0.25f);
             dial.SetVerticesDirty();
@@ -187,52 +187,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public override void Restyle()
         {
             for (int i = 0; i < cells.Count; i++) cells[i].Restyle();
-        }
-    }
-
-    /// <summary>Filled rectangles (flat or gradient) in the owner's top-left pixel space: what the SET previews draw with, one draw call each.</summary>
-    internal sealed class SetQuadGraphic : MaskableGraphic
-    {
-        private struct Quad
-        {
-            public float X, Y, W, H;
-            public Color A, B;
-            public bool Horizontal;
-        }
-
-        private readonly Quad[] quads = new Quad[640];
-        private int count;
-
-        public void Begin() { count = 0; }
-
-        public void Add(float x, float y, float w, float h, Color c) => Add(x, y, w, h, c, c, false);
-
-        /// <summary>A gradient from <paramref name="a"/> (top, or left when horizontal) to <paramref name="b"/>.</summary>
-        public void Add(float x, float y, float w, float h, Color a, Color b, bool horizontal)
-        {
-            if (count >= quads.Length || w <= 0f || h <= 0f) return;
-            quads[count++] = new Quad { X = x, Y = y, W = w, H = h, A = a, B = b, Horizontal = horizontal };
-        }
-
-        public void End() => SetVerticesDirty();
-
-        protected override void OnPopulateMesh(VertexHelper vh)
-        {
-            vh.Clear();
-            Rect r = rectTransform.rect;
-            for (int i = 0; i < count; i++)
-            {
-                Quad q = quads[i];
-                float x0 = r.xMin + q.X, x1 = x0 + q.W, y1 = r.yMax - q.Y, y0 = y1 - q.H;
-                Color bl = q.Horizontal ? q.A : q.B, tl = q.A, tr = q.Horizontal ? q.B : q.A, br = q.B;
-                int c = vh.currentVertCount;
-                vh.AddVert(new Vector3(x0, y0), bl, Vector2.zero);
-                vh.AddVert(new Vector3(x0, y1), tl, Vector2.zero);
-                vh.AddVert(new Vector3(x1, y1), tr, Vector2.zero);
-                vh.AddVert(new Vector3(x1, y0), br, Vector2.zero);
-                vh.AddTriangle(c, c + 1, c + 2);
-                vh.AddTriangle(c, c + 2, c + 3);
-            }
         }
     }
 }

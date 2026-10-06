@@ -28,9 +28,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private AvControl planeNextStores;
         private int planeStorePage;
         private PlaneDamagePart planeDamage;
-        private AvTextBlock planeTuneName;
+        private AvNote planeTuneName;
         private AvSegmented planeTuneSegmented;
-        private AvTextBlock planeTuneState;
+        private AvNote planeTuneState;
         private AvControl planeApplyTune;
         private Aircraft planeTuneAircraft;
         private int planeTuneMode = -1;
@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             planeDamage = Live(new PlaneDamagePart(p.Content));
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
             AvCard engineCard = Live(new AvCard(p.Content, console.Ticker, half, "ENGINE MAP"));
-            planeTuneName = engineCard.Flow.Add(new AvTextBlock(engineCard.Flow.Content, AvTextRole.DataStrong));
+            planeTuneName = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
             planeTuneName.Set("STOCK");
             planeTuneSegmented = engineCard.Flow.Add(new AvSegmented(engineCard.Flow.Content, "MAP",
                 new[] { "STOCK", "RANGE" }, () => planeTuneMode == PlaneEngineMap.Range ? 1 : 0,
@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 new AvControl.Spec("APPLY MAP", ApplyPlaneTune, AvButtonStyle.Primary, AvIcon.CircleCheck));
             planeApplyTune = applyRow.Controls[0];
             planeApplyTune.Help = "Send the selected engine map to the host. It can only be applied while landed.";
-            planeTuneState = engineCard.Flow.Add(new AvTextBlock(engineCard.Flow.Content, AvTextRole.ProseSmall));
+            planeTuneState = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true });
             planeTuneState.Set("Enter an aircraft to select an engine map.");
             p.Row(planeDamage, engineCard);
 
@@ -399,10 +399,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 AvStyle c = AvStyleHost.FuiStyle("card raised");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
-                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
-                name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                fuelKey.color = throttleKey.color = SqdTone.Caption;
-                fuelValue.color = throttleValue.color = SqdTone.Ink;
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
+                name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                fuelKey.color = throttleKey.color = AvInk.Muted;
+                fuelValue.color = throttleValue.color = AvInk.Ink;
                 stateChip.Restyle();
                 fuelBar.Restyle();
                 throttleBar.Restyle();
@@ -459,7 +459,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 AvStyle c = AvStyleHost.FuiStyle("card inert");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-                state.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
+                state.color = AvStyleHost.FuiInk("section-caption", AvTheme.Dim);
             }
         }
     }

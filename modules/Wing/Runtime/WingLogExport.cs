@@ -15,15 +15,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static WingLogBuffer buffer;
         private static string status = "Exports mod log events only; message bodies are omitted for privacy.";
 
-        internal static void Start(ManualLogSource source)
+        internal static void Start()
         {
-            buffer = new WingLogBuffer(source, typeof(Plugin).Assembly);
-            source.LogEvent += OnLog;
+            buffer = new WingLogBuffer(WingLog.Logger, typeof(Plugin).Assembly);
+            WingLog.Logger.LogEvent += OnLog;
         }
 
-        internal static void Stop(ManualLogSource source)
+        internal static void Stop()
         {
-            source.LogEvent -= OnLog;
+            WingLog.Logger.LogEvent -= OnLog;
             buffer = null;
         }
 

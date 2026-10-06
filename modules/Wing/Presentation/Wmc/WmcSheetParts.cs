@@ -24,12 +24,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return t;
         }
 
-        public static void Set(TMP_Text t, string s)
-        {
-            s = s ?? "";
-            if (t.text != s) t.text = s;
-        }
-
         /// <summary>Sets <paramref name="full"/> and, when it is wider than <paramref name="avail"/>, cuts it a character at a time
         /// (never with an ellipsis) until it fits: a slot too small for its words cuts them, it never spills.</summary>
         public static void SetFit(TMP_Text t, string full, float avail)
@@ -45,14 +39,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        public static Color Ink => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-
-        public static Color Dim => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-
         /// <summary>A state class ("ok", "warn", "bad", "info", "inert" or a rail word) as a colour.</summary>
         public static Color Level(string level) =>
             level == "ok" ? WmcState.Color("ready") : level == "bad" ? WmcState.Color("danger") : level == "warn" ? WmcState.Color("caution")
-            : level == "info" ? WmcState.Color("info") : level == "inert" ? Dim : WmcState.Color(level);
+            : level == "info" ? WmcState.Color("info") : level == "inert" ? AvInk.Dim : WmcState.Color(level);
 
         /// <summary>A button's width from its label (the kit shrinks a long label, but not below the floor).</summary>
         public static float ChipW(string label) => Mathf.Max(44f, (label ?? "").Length * 7.2f + 14f);
@@ -133,7 +123,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             section.Restyle();
-            rule.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section").Border, AvTheme.Hairline);
+            rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
             if (controls != null) foreach (AvControl c in controls) c.Restyle();
         }
     }
@@ -346,7 +336,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void ShowEmpty(string text)
         {
             bool on = text != null;
-            if (on) WmcSheet.Set(emptyText, text);
+            if (on) AvText.Set(emptyText, text);
             if (on == empty) return;
             empty = on;
             emptyText.gameObject.SetActive(on);
@@ -387,7 +377,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? width : 400f;
             const float priceW = 66f, reasonW = 84f;
-            WmcSheet.Set(r.Code, r.CodeFull);
+            AvText.Set(r.Code, r.CodeFull);
             float codeW = Mathf.Clamp(AvText.Width(r.Code) + 4f, 46f, 90f);
             float x = 32f;
             AvLay.Place(r.Rail.rectTransform, 0f, 0f, 3f, WmcSheet.RowH);
@@ -398,7 +388,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float rw = Mathf.Clamp(AvText.Width(r.Reason) + 4f, 30f, 120f);
             AvLay.Place(r.Reason.rectTransform, right - rw, 0f, rw, WmcSheet.RowH);
             right -= rw + 8f;
-            WmcSheet.Set(r.Price, r.PriceFull);
+            AvText.Set(r.Price, r.PriceFull);
             float pw = Mathf.Clamp(AvText.Width(r.Price) + 4f, 20f, priceW + 24f);
             AvLay.Place(r.Price.rectTransform, right - pw, 0f, pw, WmcSheet.RowH);
             right -= pw + 8f;
@@ -413,10 +403,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             r.Frame.Bracket = r.Selected ? 6f : 0f;
             r.Frame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent);
             r.Frame.SetVerticesDirty();
-            r.Code.color = !r.Enabled ? AvTheme.Disabled : WmcSheet.Ink;
-            r.Name.color = WmcSheet.Dim;
-            r.Price.color = WmcSheet.Ink;
-            r.Reason.color = r.Level.Length == 0 ? WmcSheet.Dim : WmcSheet.Level(r.Level);
+            r.Code.color = !r.Enabled ? AvTheme.Disabled : AvInk.Ink;
+            r.Name.color = AvInk.Dim;
+            r.Price.color = AvInk.Ink;
+            r.Reason.color = r.Level.Length == 0 ? AvInk.Dim : WmcSheet.Level(r.Level);
             r.Icon.color = r.Selected ? Color.white : r.Enabled ? AvTheme.Friendly : AvTheme.Dim;
         }
 
@@ -424,7 +414,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (rows == null) return;
             foreach (Row r in rows) Paint(r);
-            emptyText.color = WmcSheet.Dim;
+            emptyText.color = AvInk.Dim;
         }
     }
 
@@ -511,7 +501,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             pagerRange.gameObject.SetActive(on);
             pagerPrev.Interactable = page > 0;
             pagerNext.Interactable = page < pages - 1;
-            WmcSheet.Set(pagerRange, range);
+            AvText.Set(pagerRange, range);
             if (on != paged)
             {
                 paged = on;
@@ -599,7 +589,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(s.Buttons[k].Rect, right - buttonW[k], (h - WmcSheet.CtlH) * 0.5f, buttonW[k], WmcSheet.CtlH);
                 right -= buttonW[k] + 3f;
             }
-            WmcSheet.Set(s.Num, s.NumFull);
+            AvText.Set(s.Num, s.NumFull);
             float nw = s.Num.text.Length == 0 ? 0f : Mathf.Clamp(AvText.Width(s.Num) + 4f, 20f, 90f);
             if (nw > 0f)
             {
@@ -615,11 +605,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(s.Fill.rectTransform, right - bw, (h - 4f) * 0.5f, bw * Mathf.Clamp01(s.Bar), 4f);
                 right -= bw + 6f;
             }
-            WmcSheet.Set(s.Tag, s.TagFull);
+            AvText.Set(s.Tag, s.TagFull);
             float tw = s.Tag.text.Length == 0 ? 0f : AvText.Width(s.Tag) + 4f;
             AvLay.Place(s.Tag.rectTransform, x, 0f, tw, h);
             x += tw > 0f ? tw + 8f : 0f;
-            WmcSheet.Set(s.Main, s.MainFull);
+            AvText.Set(s.Main, s.MainFull);
             float mw = Mathf.Min(AvText.Width(s.Main) + 4f, Mathf.Max(0f, (right - x) * 0.55f));
             WmcSheet.SetFit(s.Main, s.MainFull, mw);
             mw = Mathf.Max(0f, Mathf.Min(AvText.Width(s.Main) + 4f, right - x));
@@ -634,10 +624,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             WmcSheet.PaintRow(s.Frame, s.Rail, s.State, null);
             s.Tag.color = WmcState.Color(AvStates.Class(s.TagState));
-            s.Main.color = WmcSheet.Ink;
-            s.Sub.color = WmcSheet.Dim;
-            s.Num.color = s.NumState == AvState.Info ? WmcSheet.Ink : WmcState.Color(AvStates.Class(s.NumState));
-            s.Track.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-track").Background, AvTheme.Hairline);
+            s.Main.color = AvInk.Ink;
+            s.Sub.color = AvInk.Dim;
+            s.Num.color = s.NumState == AvState.Info ? AvInk.Ink : WmcState.Color(AvStates.Class(s.NumState));
+            s.Track.color = AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
             s.Fill.color = WmcState.Color(AvStates.Class(s.TagState));
         }
 
@@ -650,7 +640,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 foreach (AvControl c in s.Buttons) c.Restyle();
             }
             if (pagerPrev == null) return;
-            pagerRange.color = WmcSheet.Dim;
+            pagerRange.color = AvInk.Dim;
             pagerPrev.Restyle();
             pagerNext.Restyle();
         }
@@ -745,7 +735,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(swatch.rectTransform, tx, 6f, 26f, 14f);
                 tx += 32f;
             }
-            WmcSheet.Set(pos, posFull);
+            AvText.Set(pos, posFull);
             float pw = posFull.Length == 0 ? 0f : AvText.Width(pos) + 4f;
             float avail = Mathf.Max(0f, x + boxW - 8f - tx - (pw > 0f ? pw + 6f : 0f));
             WmcSheet.SetFit(pick, pickFull, avail);
@@ -762,8 +752,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             key.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             AvStyle r = AvStyleHost.FuiStyle("row info");
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert), r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-            pick.color = WmcSheet.Ink;
-            pos.color = WmcSheet.Dim;
+            pick.color = AvInk.Ink;
+            pos.color = AvInk.Dim;
             icon.color = AvTheme.Friendly;
             if (Prev != null)
             {
@@ -945,9 +935,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 r.StateClass = states[st];
                 r.CanClear = canClear[st];
                 r.Enabled = enabled[st];
-                WmcSheet.Set(r.Num, (st + 1).ToString());
-                WmcSheet.Set(r.Store, r.StoreFull);
-                WmcSheet.Set(r.Mass, r.MassFull);
+                AvText.Set(r.Num, (st + 1).ToString());
+                AvText.Set(r.Store, r.StoreFull);
+                AvText.Set(r.Mass, r.MassFull);
                 r.Clear.gameObject.SetActive(r.CanClear);
                 r.Clear.Interactable = true;
                 AvHit hit = r.Frame.GetComponent<AvHit>();
@@ -960,7 +950,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             range.gameObject.SetActive(paged);
             prev.Interactable = page > 0;
             next.Interactable = page < Pages - 1;
-            WmcSheet.Set(range, count == 0 ? "" : (first + 1) + "–" + Mathf.Min(count, first + RowsPerPage) + " OF " + count);
+            AvText.Set(range, count == 0 ? "" : (first + 1) + "–" + Mathf.Min(count, first + RowsPerPage) + " OF " + count);
             LayoutMap();
             Changed();
         }
@@ -1047,9 +1037,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (!on) continue;
                 AvLay.Place(box.Root, cx + spots[i].X - BoxSize * 0.5f, cy - 10f * k + spots[i].Y - BoxSize * 0.5f, BoxSize, BoxSize);
                 int st = spots[i].Station;
-                WmcSheet.Set(box.Label, (st + 1).ToString());
+                AvText.Set(box.Label, (st + 1).ToString());
                 bool sel = st == selected;
-                Color c = states[st] == "ready" ? WmcState.Color("ready") : states[st] == "caution" ? WmcState.Color("caution") : WmcSheet.Dim;
+                Color c = states[st] == "ready" ? WmcState.Color("ready") : states[st] == "caution" ? WmcState.Color("caution") : AvInk.Dim;
                 box.Frame.Fill = true;
                 box.Frame.Paint(sel ? c.WithAlpha(0.35f) : AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), sel ? WmcState.Color("caution") : c);
                 box.Frame.Stroke = sel ? 1.6f : 0.9f;
@@ -1078,9 +1068,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             r.Frame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent);
             r.Frame.SetVerticesDirty();
             if (sel) r.Rail.color = AvStyleHost.FuiColor("select", AvTheme.Accent);
-            r.Num.color = sel ? AvStyleHost.FuiColor("select", AvTheme.Accent) : WmcSheet.Dim;
-            r.Store.color = !r.Enabled ? AvTheme.Disabled : WmcSheet.Ink;
-            r.Mass.color = WmcSheet.Dim;
+            r.Num.color = sel ? AvStyleHost.FuiColor("select", AvTheme.Accent) : AvInk.Dim;
+            r.Store.color = !r.Enabled ? AvTheme.Disabled : AvInk.Ink;
+            r.Mass.color = AvInk.Dim;
             r.Clear.Restyle();
         }
 
@@ -1088,7 +1078,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (rows == null) return;
             foreach (Row r in rows) Paint(r);
-            range.color = WmcSheet.Dim;
+            range.color = AvInk.Dim;
             prev.Restyle();
             next.Restyle();
             if (mapW > 0f) LayoutMap();
@@ -1168,7 +1158,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             bodyFull = text ?? "";
             noteBody.gameObject.SetActive(text != null);
-            WmcSheet.Set(noteBody, bodyFull);
+            AvText.Set(noteBody, bodyFull);
             Changed();
         }
 
@@ -1247,7 +1237,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Fit()
         {
             float w = width > 0f ? width : 400f, arrows = total > PerPage ? 2f * 36f : 0f;
-            WmcSheet.Set(head, headFull);
+            AvText.Set(head, headFull);
             float hw = AvText.Width(head) + 4f;
             AvLay.Place(head.rectTransform, 2f, 0f, hw, HeadH);
             float nw = Mathf.Max(0f, w - arrows - hw - 14f);
@@ -1259,7 +1249,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? (width - CellGap) * 0.5f : 200f;
             AvLay.Place(c.Rail.rectTransform, 0f, 0f, 2f, CellH);
-            WmcSheet.Set(c.Mass, c.MassFull);
+            AvText.Set(c.Mass, c.MassFull);
             float mw = c.MassFull != null && c.MassFull.Length > 0 ? AvText.Width(c.Mass) + 4f : 0f;
             AvLay.Place(c.Mass.rectTransform, w - 6f - mw, 1f, mw, 18f);
             WmcSheet.SetFit(c.Name, c.NameFull, w - 20f - mw);
@@ -1275,9 +1265,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             c.Frame.Bracket = c.Selected ? 6f : 0f;
             c.Frame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent);
             c.Frame.SetVerticesDirty();
-            c.Name.color = !c.Pickable ? AvTheme.Disabled : WmcSheet.Ink;
-            c.Verdict.color = c.Level.Length == 0 ? WmcSheet.Dim : WmcSheet.Level(c.Level);
-            c.Mass.color = WmcSheet.Dim;
+            c.Name.color = !c.Pickable ? AvTheme.Disabled : AvInk.Ink;
+            c.Verdict.color = c.Level.Length == 0 ? AvInk.Dim : WmcSheet.Level(c.Level);
+            c.Mass.color = AvInk.Dim;
         }
 
         public override void Restyle()
@@ -1285,8 +1275,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (cells == null) return;
             foreach (Cell c in cells) Paint(c);
             head.color = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-            note.color = WmcSheet.Dim;
-            noteBody.color = WmcSheet.Dim;
+            note.color = AvInk.Dim;
+            noteBody.color = AvInk.Dim;
             prev.Restyle();
             next.Restyle();
         }

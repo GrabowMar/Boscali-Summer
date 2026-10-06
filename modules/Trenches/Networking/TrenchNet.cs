@@ -59,17 +59,15 @@ namespace BoscaliSummer.Modules.Trenches.Networking
 
         private static bool serializersInstalled;
         private TrenchManager manager;
-        private ManualLogSource logger;
         private HandlerSlot clientSlot;
         private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<TrenchGeometryMessage, TrenchStateMessage, TrenchLineRemovedMessage>(
             ReceiveGeometry, ReceiveState, ReceiveRemoved);
         private NetworkServer subscribedServer;
         private float nextRegistrationCheck;
 
-        internal void Configure(TrenchManager owner, ManualLogSource log)
+        internal void Configure(TrenchManager owner)
         {
             manager = owner;
-            logger = log;
             InstallSerializers();
         }
 
@@ -146,7 +144,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
 
             MessageHandler handler = service.Client?.MessageHandler;
             if (ClientHandlers.Swap(handler) && handler != null)
-                logger?.LogInfo("[TRENCHES] Registered multiplayer trench handlers.");
+                Plugin.Logger?.LogInfo("[TRENCHES] Registered multiplayer trench handlers.");
         }
 
         private void OnServerAuthenticated(INetworkPlayer player)

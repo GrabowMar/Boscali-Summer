@@ -17,9 +17,9 @@ namespace BoscaliSummer.Modules.Performance
         {
             if (Application.isBatchMode) return;
             context.AddSceneService<PerformanceMonitor>(90)
-                .Configure(context.Settings.Performance, context.Logger);
+                .Configure(context.Settings.Performance);
             context.AddSceneService<BaseGameTuning>(91)
-                .Configure(context.Settings.Performance, context.Logger);
+                .Configure(context.Settings.Performance);
             context.AddClientSetting("FRAME BUDGET", "ADAPTIVE FX",
                 "After sustained slow flight frames, halve scalable Boscali cosmetic budgets. " +
                 "Takes effect after sampling; no mission or game restart.",

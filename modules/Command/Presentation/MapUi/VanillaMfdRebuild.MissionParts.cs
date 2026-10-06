@@ -15,10 +15,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // calls Changed() whenever a setter can alter its height.
 
         private static Color StyleColor(string classes, Color fallback) =>
-            AvStyleHost.Resolve(AvStyleHost.FuiStyle(classes).Color, fallback);
+            AvStyleHost.FuiInk(classes, fallback);
 
         private static Color StateFill(AvState state) =>
-            AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
+            AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
 
         private static Color StateRail(AvState state) =>
             AvStyleHost.Resolve(AvStyleHost.FuiStyle("row " + AvStates.Class(state)).Rail, AvTheme.RailInfo);
@@ -32,9 +32,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bar.raycastTarget = false;
             return bar;
         }
-
-        private static void Put(TMP_Text text, float x, float y, float w, float h) =>
-            AvLay.Place(text.rectTransform, x, y, w, h);
 
         /// <summary>
         /// The mission hero card: mission name and clock, the lead objective (its type word, title,
@@ -107,15 +104,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (place)
                 {
                     AvLay.Place(keyIcon.rectTransform, Pad, y + 1f, 16f, 16f);
-                    Put(key, Pad + 22f, y, iw - 22f - ClockW, 18f);
-                    Put(clock, w - Pad - ClockW, y, ClockW, 18f);
+                    AvLay.Place(key, Pad + 22f, y, iw - 22f - ClockW, 18f);
+                    AvLay.Place(clock, w - Pad - ClockW, y, ClockW, 18f);
                 }
                 y += 22f;
                 float nh = AvText.Height(name, iw);
-                if (place) Put(name, Pad, y, iw, nh);
+                if (place) AvLay.Place(name, Pad, y, iw, nh);
                 y += nh + 2f;
                 float mh = meta.text.Length > 0 ? AvText.Height(meta, iw) : 0f;
-                if (place) Put(meta, Pad, y, iw, mh);
+                if (place) AvLay.Place(meta, Pad, y, iw, mh);
                 y += mh + 8f;
                 if (place) AvLay.Place(ruleTop.rectTransform, Pad, y, iw, 1f);
                 y += 9f;
@@ -125,12 +122,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (place)
                     {
                         AvLay.Place(objIcon.rectTransform, Pad, y + 1f, 16f, 16f);
-                        Put(objWord, Pad + 22f, y, iw - 22f - PctW, 18f);
-                        Put(objPct, w - Pad - PctW, y, PctW, 18f);
+                        AvLay.Place(objWord, Pad + 22f, y, iw - 22f - PctW, 18f);
+                        AvLay.Place(objPct, w - Pad - PctW, y, PctW, 18f);
                     }
                     y += 20f;
                     float th = AvText.Height(objTitle, iw);
-                    if (place) Put(objTitle, Pad, y, iw, th);
+                    if (place) AvLay.Place(objTitle, Pad, y, iw, th);
                     y += th + 6f;
                     if (place) AvLay.Place(bar.rectTransform, Pad, y, iw, 4f);
                     y += 4f + 6f;
@@ -138,8 +135,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     {
                         if (place)
                         {
-                            Put(fixKey, Pad, y, iw * 0.5f, 18f);
-                            Put(fixValue, Pad + iw * 0.5f, y, iw * 0.5f, 18f);
+                            AvLay.Place(fixKey, Pad, y, iw * 0.5f, 18f);
+                            AvLay.Place(fixValue, Pad + iw * 0.5f, y, iw * 0.5f, 18f);
                         }
                         y += 20f;
                     }
@@ -147,7 +144,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 else
                 {
                     float th = AvText.Height(objTitle, iw);
-                    if (place) Put(objTitle, Pad, y, iw, th);
+                    if (place) AvLay.Place(objTitle, Pad, y, iw, th);
                     y += th + 4f;
                 }
 
@@ -157,7 +154,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     y += 2f;
                     if (place) AvLay.Place(ruleBottom.rectTransform, Pad, y, iw, 1f);
                     y += 9f;
-                    if (place) Put(brief, Pad, y, iw, bh);
+                    if (place) AvLay.Place(brief, Pad, y, iw, bh);
                     y += bh;
                 }
                 return y + 12f;
@@ -182,21 +179,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 AvStyle card = AvStyleHost.FuiStyle("card raised");
                 frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(card.Border, AvTheme.Frame));
-                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.SetVerticesDirty();
                 Color keyColor = StyleColor("metric-key", AvTheme.RailInfo);
                 keyIcon.color = keyColor; key.color = keyColor; fixKey.color = keyColor;
                 clock.color = StyleColor("readout", AvTheme.TextPrimary);
                 name.color = StyleColor("title", AvTheme.TextPrimary);
                 meta.color = StyleColor("row-sub", AvTheme.Dim);
-                Color hairline = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section").Border, AvTheme.Hairline);
+                Color hairline = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
                 ruleTop.color = hairline; ruleBottom.color = hairline;
                 Color word = hasObjective ? StateFill(objState) : StyleColor("row-sub", AvTheme.Dim);
                 objIcon.color = word; objWord.color = word;
                 objPct.color = StyleColor("row-value " + AvStates.Class(objState), AvTheme.TextPrimary);
                 objTitle.color = hasObjective ? StyleColor("row-name", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
                 fixValue.color = StyleColor("row-value info", AvTheme.TextPrimary);
-                bar.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 bar.FillColor = bar.FillEnd = StateFill(objState);
                 bar.SetVerticesDirty();
                 brief.color = hasBrief ? StyleColor("row-sub", AvTheme.Dim) : StyleColor("section-caption", AvTheme.Disabled);
@@ -244,10 +241,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                Put(value, Pad, 8f, s.W - 2f * Pad - SideW, 32f);
-                Put(caption, Pad, 40f, s.W - 2f * Pad - SideW, 16f);
-                Put(sideKey, s.W - Pad - SideW, 12f, SideW, 16f);
-                Put(sideValue, s.W - Pad - SideW, 28f, SideW, 20f);
+                AvLay.Place(value, Pad, 8f, s.W - 2f * Pad - SideW, 32f);
+                AvLay.Place(caption, Pad, 40f, s.W - 2f * Pad - SideW, 16f);
+                AvLay.Place(sideKey, s.W - Pad - SideW, 12f, SideW, 16f);
+                AvLay.Place(sideValue, s.W - Pad - SideW, 28f, SideW, 20f);
                 AvLay.Place(segments.rectTransform, Pad, 62f, s.W - 2f * Pad, 8f);
             }
 
@@ -255,13 +252,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 AvStyle card = AvStyleHost.FuiStyle("card");
                 frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.Surface), AvStyleHost.Resolve(card.Border, AvTheme.Hairline));
-                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.SetVerticesDirty();
                 value.color = StyleColor("readout", AvTheme.TextPrimary);
                 caption.color = StyleColor("readout-unit", AvTheme.Dim);
                 sideKey.color = StyleColor("metric-key", AvTheme.RailInfo);
                 sideValue.color = StyleColor("row-value info", AvTheme.TextPrimary);
-                segments.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                segments.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 segments.FillColor = segments.FillEnd = StateFill(state);
                 segments.SetVerticesDirty();
             }
@@ -348,10 +345,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     float cx = Pad + colW * (i + 0.5f);
                     AvLay.Place(nodes[i].rectTransform, cx - Node * 0.5f, 14f, Node, Node);
                     float y = 14f + Node + 8f;
-                    Put(names[i], Pad + colW * i + 3f, y, colW - 6f, AvText.Height(names[i], colW - 6f));
+                    AvLay.Place(names[i], Pad + colW * i + 3f, y, colW - 6f, AvText.Height(names[i], colW - 6f));
                     y += nameH + 4f;
-                    Put(thresholds[i], Pad + colW * i, y, colW, 20f);
-                    Put(words[i], Pad + colW * i, y + 20f, colW, 18f);
+                    AvLay.Place(thresholds[i], Pad + colW * i, y, colW, 20f);
+                    AvLay.Place(words[i], Pad + colW * i, y + 20f, colW, 18f);
                 }
             }
 
@@ -359,7 +356,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 AvStyle card = AvStyleHost.FuiStyle("card inert");
                 frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(card.Border, AvTheme.Hairline));
-                Color hairline = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                Color hairline = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 track.color = hairline;
                 AvState leading = AvState.Ready;
                 for (int i = 0; i < 3; i++)
@@ -369,7 +366,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     bool reached = states[i] != AvState.Inert;
                     nodes[i].Paint(reached ? StateFill(states[i]) : hairline,
-                        reached ? StateFill(states[i]) : AvStyleHost.Resolve(AvStyleHost.FuiStyle("frame").Border, AvTheme.Frame));
+                        reached ? StateFill(states[i]) : AvStyleHost.FuiBorder("frame", AvTheme.Frame));
                     names[i].color = reached ? StyleColor("row-name", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
                     thresholds[i].color = reached ? StyleColor("readout", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
                     words[i].color = states[i] == AvState.Inert
@@ -442,9 +439,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float tw = TextWidth(s.W), th = AvText.Height(title, tw);
                 AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
                 AvLay.Place(icon.rectTransform, PadX, PadY - 1f, 20f, 20f);
-                Put(title, PadX + IconW, PadY, tw, th);
-                Put(sub, PadX + IconW, PadY + th + 2f, tw, sub.text.Length > 0 ? AvText.Height(sub, tw) : 0f);
-                Put(value, s.W - PadX - ValueW, PadY, ValueW, 18f);
+                AvLay.Place(title, PadX + IconW, PadY, tw, th);
+                AvLay.Place(sub, PadX + IconW, PadY + th + 2f, tw, sub.text.Length > 0 ? AvText.Height(sub, tw) : 0f);
+                AvLay.Place(value, s.W - PadX - ValueW, PadY, ValueW, 18f);
                 AvLay.Place(bar.rectTransform, PadX + IconW, s.H - BarH - 5f, s.W - PadX - IconW - PadX, BarH);
             }
 
@@ -457,100 +454,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 title.color = StyleColor("row-name", AvTheme.TextPrimary);
                 sub.color = StyleColor("row-sub", AvTheme.Dim);
                 value.color = StyleColor("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
-                bar.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 bar.FillColor = bar.FillEnd = StateFill(state == AvState.Inert ? AvState.Info : state);
                 bar.SetVerticesDirty();
-            }
-        }
-
-        /// <summary>
-        /// A paged stack of pooled checklist rows ("PREV  1-3 OF 9  NEXT"). The
-        /// pool is fixed at <c>pageSize</c> parts, rebound as the page or the roster changes.
-        /// </summary>
-        private sealed class PagedPartStack<T> : AvPart where T : AvPart
-        {
-            private readonly float gap;
-            private readonly T[] items;
-            private readonly Action<int, T> bind;
-            private readonly AvControl prev, next;
-            private readonly TMP_Text range;
-            private int count;
-
-            /// <param name="factory">Builds pool slot <c>i</c> under the stack's rect.</param>
-            public PagedPartStack(RectTransform parent, AvTicker ticker, int pageSize, float gap,
-                Func<RectTransform, int, T> factory, Action<int, T> binder)
-            {
-                Rect = AvLay.Child(parent, "PagedStack");
-                this.gap = gap;
-                bind = binder;
-                items = new T[Mathf.Clamp(pageSize, 1, 12)];
-                for (int i = 0; i < items.Length; i++)
-                {
-                    items[i] = factory(Rect, i);
-                    items[i].Parent = this;
-                    items[i].Rect.gameObject.SetActive(false);
-                    ticker?.Register(items[i]);
-                }
-                prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-                next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
-                range = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
-            }
-
-            public int Page { get; private set; }
-            private int Pages => Mathf.Max(1, (count + items.Length - 1) / items.Length);
-            private bool Paged => Pages > 1;
-
-            public void SetPage(int page) => Go(page);
-            public void SetCount(int n) { count = Mathf.Max(0, n); Go(Page); }
-
-            private void Go(int page)
-            {
-                Page = Mathf.Clamp(page, 0, Pages - 1);
-                int first = Page * items.Length;
-                for (int i = 0; i < items.Length; i++)
-                {
-                    int item = first + i;
-                    bool shown = item < count;
-                    items[i].Rect.gameObject.SetActive(shown);
-                    if (shown) bind?.Invoke(item, items[i]);
-                }
-                range.text = count == 0 ? "0 OF 0" : (first + 1) + "\u2013" + Mathf.Min(count, first + items.Length) + " OF " + count;
-                prev.Interactable = Page > 0;
-                next.Interactable = Page < Pages - 1;
-                prev.gameObject.SetActive(Paged); next.gameObject.SetActive(Paged); range.gameObject.SetActive(Paged);
-                Changed();
-            }
-
-            public override float Measure(float width)
-            {
-                float h = 0f;
-                foreach (T item in items) if (item.Rect.gameObject.activeSelf) h += item.Measure(width) + gap;
-                if (h > 0f) h -= gap;
-                return h + (Paged ? AvGridTokens.Row + 6f : 0f);
-            }
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                float y = 0f;
-                foreach (T item in items)
-                {
-                    if (!item.Rect.gameObject.activeSelf) continue;
-                    float h = item.Measure(s.W);
-                    item.Place(new AvSlot(0f, y, s.W, h));
-                    y += h + gap;
-                }
-                if (!Paged) return;
-                AvLay.Place(prev.Rect, 0f, y, 96f, AvGridTokens.Row);
-                AvLay.Place(next.Rect, s.W - 96f, y, 96f, AvGridTokens.Row);
-                AvLay.Place(range.rectTransform, 100f, y, s.W - 200f, AvGridTokens.Row);
-            }
-
-            public override void Restyle()
-            {
-                foreach (T item in items) item.Restyle();
-                prev.Restyle(); next.Restyle();
-                range.color = StyleColor("row-sub", AvTheme.Dim);
             }
         }
     }

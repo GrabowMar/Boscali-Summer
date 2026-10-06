@@ -87,14 +87,14 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            Color c = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-line").Color, AvTheme.Accent);
+            Color c = AvStyleHost.FuiInk("chart-line", AvTheme.Accent);
             line.LineColor = Color.Lerp(c, Color.white, 0.2f); line.FillTop = c.WithAlpha(0.32f); line.FillBottom = c.WithAlpha(0.015f); line.SetVerticesDirty();
             cursor.color = c;
-            grid.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-grid").Background, AvTheme.Hairline);
+            grid.color = AvStyleHost.FuiFill("chart-grid", AvTheme.Hairline);
             grid.SetVerticesDirty();
-            Color axis = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-axis").Color, AvTheme.Disabled);
+            Color axis = AvStyleHost.FuiInk("chart-axis", AvTheme.Disabled);
             max.color = min.color = wait.color = axis;
-            last.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("readout").Color, AvTheme.TextPrimary);
+            last.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
         }
 
         /// <summary>Four hairlines across the plot. UILineRenderer-class mesh, one draw, no hit target.</summary>

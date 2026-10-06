@@ -29,7 +29,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private static RadioManager active;
 
         private RadioSettings settings;
-        private ManualLogSource logger;
         private RadioLibrary localLibrary;
         private RadioStation[] stations = Array.Empty<RadioStation>();
         private RadioDial[] stationDials = Array.Empty<RadioDial>();
@@ -284,14 +283,13 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         // ------------------------------------------------------------------- lifecycle
 
-        internal void Configure(RadioSettings radioSettings, ManualLogSource log, ServiceRegistry registry)
+        internal void Configure(RadioSettings radioSettings, ServiceRegistry registry)
         {
             settings = radioSettings ?? throw new ArgumentNullException(nameof(radioSettings));
-            logger = log ?? throw new ArgumentNullException(nameof(log));
             services = registry;
             libraryPath = Path.Combine(Paths.PluginPath, "BoscaliSummer", "Music");
-            receiver = new RadioProgram(this, gameObject, "BoscaliRadio", logger);
-            deck = new RadioProgram(this, gameObject, "BoscaliDeck", logger);
+            receiver = new RadioProgram(this, gameObject, "BoscaliRadio", Plugin.Logger);
+            deck = new RadioProgram(this, gameObject, "BoscaliDeck", Plugin.Logger);
             receiver.SetCrossfade(settings.CrossfadeSeconds.Value);
             deck.SetCrossfade(DeckCrossfadeSeconds);
             fx = new RadioBroadcastFx(gameObject);
@@ -299,7 +297,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             active = this;
             if (settings.Enabled.Value && !GameManager.IsHeadless)
             {
-                RadioStarterLayout.Ensure(libraryPath, logger);
+                RadioStarterLayout.Ensure(libraryPath, Plugin.Logger);
                 ScanLibrary();
             }
         }
@@ -637,7 +635,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             try
             {
-                RadioStarterLayout.Ensure(libraryPath, logger);
+                RadioStarterLayout.Ensure(libraryPath, Plugin.Logger);
                 Application.OpenURL(new Uri(libraryPath).AbsoluteUri);
                 status = "Opened music folder";
                 deckStatus = status;
@@ -645,7 +643,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             catch (Exception e)
             {
                 status = "Could not open music folder";
-                logger.LogWarning("Radio station folder could not be opened: " + e.Message);
+                Plugin.Logger?.LogWarning("Radio station folder could not be opened: " + e.Message);
             }
         }
 
@@ -769,7 +767,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             try
             {
-                RadioStarterLayout.Ensure(libraryPath, logger);
+                RadioStarterLayout.Ensure(libraryPath, Plugin.Logger);
                 localLibrary = RadioLibrary.Scan(libraryPath);
                 BuildStations();
                 selectedChannel = Mathf.Clamp(selectedChannel, 0, Math.Max(0, ChannelCount - 1));
@@ -779,7 +777,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 status = localLibrary.TrackCount == 0
                     ? "Built-in stations ready; add OGG/WAV for more"
                     : localLibrary.TrackCount + " local track(s) ready";
-                logger.LogInfo("Radio library: " + localLibrary.TrackCount +
+                Plugin.Logger?.LogInfo("Radio library: " + localLibrary.TrackCount +
                     " local track(s) across " + ChannelCount + " station(s).");
             }
             catch (Exception e)
@@ -789,7 +787,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 stationDials = Array.Empty<RadioDial>();
                 stationStrengths = Array.Empty<float>();
                 status = "Library scan failed";
-                logger.LogWarning("Radio library scan failed: " + e.Message);
+                Plugin.Logger?.LogWarning("Radio library scan failed: " + e.Message);
             }
         }
 
@@ -806,7 +804,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                     selectedChannel = i;
             selectedTrack = 0;
             status = "Original soundtrack linked to built-in stations";
-            logger.LogInfo("Radio soundtrack adapter: " + catalog.All.Length +
+            Plugin.Logger?.LogInfo("Radio soundtrack adapter: " + catalog.All.Length +
                 " installed vanilla clip(s) available.");
         }
 
@@ -1558,7 +1556,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             catch (Exception e)
             {
-                logger.LogDebug("Could not snapshot vanilla music: " + e.Message);
+                Plugin.Logger?.LogDebug("Could not snapshot vanilla music: " + e.Message);
                 try { MusicManager.i.StopMusic(); }
                 catch { }
             }
@@ -1586,7 +1584,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             catch (Exception e)
             {
-                logger?.LogDebug("Could not silence vanilla music: " + e.Message);
+                Plugin.Logger?.LogDebug("Could not silence vanilla music: " + e.Message);
             }
         }
 
@@ -1623,7 +1621,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             catch (Exception e)
             {
-                logger?.LogDebug("Could not restore vanilla music: " + e.Message);
+                Plugin.Logger?.LogDebug("Could not restore vanilla music: " + e.Message);
             }
             finally
             {

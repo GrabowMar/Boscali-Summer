@@ -93,7 +93,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private TheaterOpsSettings settings;
         private TheaterPriorityService priority;
-        private ManualLogSource logger;
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
         private int nextScanCell;
@@ -103,12 +102,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private float nextUpdate;
         private bool warnedConflict;
 
-        internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
-            ManualLogSource log)
+        internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService)
         {
             settings = config;
             priority = priorityService;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -492,7 +489,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 group.Stage.ToString().ToUpperInvariant() +
                 (group.Axis < 0 ? " LEFT AXIS" : group.Axis > 0 ? " RIGHT AXIS" : "") +
                 " (" + group.Members.Count + "/" + group.Formed + ")";
-            logger?.LogInfo("[THEATER OPS] " + line);
+            Plugin.Logger?.LogInfo("[THEATER OPS] " + line);
         }
 
         private int PincerAxisOf(Group group)
@@ -637,7 +634,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (installed && !warnedConflict)
             {
                 warnedConflict = true;
-                logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
+                Plugin.Logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
             }
             return installed;
         }

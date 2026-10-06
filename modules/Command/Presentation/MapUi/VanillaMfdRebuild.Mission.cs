@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // OBJECTIVES page.
             private ObjectiveTallyPart tally;
             private AvSection checklistSection;
-            private PagedPartStack<ChecklistRow> checklist;
+            private AvPagedStack<ChecklistRow> checklist;
             private AvRow objectivesEmpty;
 
             // CONTRACTS page.
@@ -334,7 +334,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 tally = page.Add(new ObjectiveTallyPart(page.Content));
                 checklistSection = page.Section(AvIcon.ListDetails, "CHECKLIST");
-                checklist = page.Add(new PagedPartStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
+                checklist = page.Add(new AvPagedStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
                     (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
                 objectivesEmpty = page.Add(new AvRow(page.Content));
                 objectivesEmpty.SetShown(false);

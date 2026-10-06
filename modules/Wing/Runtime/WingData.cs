@@ -21,42 +21,42 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public static List<FormationDefinition> Formations { get; private set; } = new List<FormationDefinition>();
         public static ProfileLibrary Profiles { get; private set; } = new ProfileLibrary();
 
-        public static void Load(ManualLogSource log)
+        public static void Load()
         {
             string root = WingConfig.DataRoot;
-            Write(Path.Combine(root, "tuning.defaults.json"), Tuning.Export(Tuning.Types), log);
-            string tuning = ReadIfExists(Path.Combine(root, "tuning.user.json"), log);
+            Write(Path.Combine(root, "tuning.defaults.json"), Tuning.Export(Tuning.Types));
+            string tuning = ReadIfExists(Path.Combine(root, "tuning.user.json"));
             if (tuning != null)
-                foreach (string key in Tuning.Apply(tuning, Tuning.Types)) log.LogWarning("[Data] tuning.user.json: ignored " + key);
+                foreach (string key in Tuning.Apply(tuning, Tuning.Types)) WingLog.Logger.LogWarning("[Data] tuning.user.json: ignored " + key);
 
             var errors = new List<string>();
             List<FormationDefinition> builtIns = FormationCatalog.Parse(Embedded("WingCommand.formations.json"), errors);
-            foreach (string e in errors) log.LogError("[Data] built-in formations: " + e);
+            foreach (string e in errors) WingLog.Logger.LogError("[Data] built-in formations: " + e);
             errors.Clear();
-            string user = ReadIfExists(Path.Combine(root, "formations.user.json"), log);
+            string user = ReadIfExists(Path.Combine(root, "formations.user.json"));
             List<FormationDefinition> custom = user == null ? new List<FormationDefinition>() : FormationCatalog.Parse(user, errors);
-            foreach (string e in errors) log.LogWarning("[Data] formations.user.json: " + e);
+            foreach (string e in errors) WingLog.Logger.LogWarning("[Data] formations.user.json: " + e);
             Formations = FormationCatalog.Merge(builtIns, custom);
 
-            LoadProfiles(log);
-            log.LogInfo($"[Data] {Formations.Count} formations ({custom.Count} user); tuning and airframes from {root}");
+            LoadProfiles();
+            WingLog.Logger.LogInfo($"[Data] {Formations.Count} formations ({custom.Count} user); tuning and airframes from {root}");
         }
 
         /// <summary>(Re)build the airframe layers, e.g. after a calibration wrote a new calibrated file.</summary>
-        public static void LoadProfiles(ManualLogSource log)
+        public static void LoadProfiles()
         {
             string root = WingConfig.DataRoot;
             var profiles = new ProfileLibrary();
-            Layer(profiles, "airframes.json", Embedded("WingCommand.airframes.json"), log);
-            Layer(profiles, "airframes.calibrated.json", ReadIfExists(Path.Combine(root, "airframes.calibrated.json"), log), log);
-            Layer(profiles, "airframes.user.json", ReadIfExists(Path.Combine(root, "airframes.user.json"), log), log);
+            Layer(profiles, "airframes.json", Embedded("WingCommand.airframes.json"));
+            Layer(profiles, "airframes.calibrated.json", ReadIfExists(Path.Combine(root, "airframes.calibrated.json")));
+            Layer(profiles, "airframes.user.json", ReadIfExists(Path.Combine(root, "airframes.user.json")));
             Profiles = profiles;
         }
 
-        private static void Layer(ProfileLibrary profiles, string source, string json, ManualLogSource log)
+        private static void Layer(ProfileLibrary profiles, string source, string json)
         {
             if (json == null) return;
-            foreach (string e in profiles.AddLayer(source, json)) log.LogWarning("[Data] " + e);
+            foreach (string e in profiles.AddLayer(source, json)) WingLog.Logger.LogWarning("[Data] " + e);
         }
 
         private static string Embedded(string name)
@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
         }
 
-        private static string ReadIfExists(string path, ManualLogSource log)
+        private static string ReadIfExists(string path)
         {
             try
             {
@@ -76,12 +76,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             catch (IOException e)
             {
-                log.LogWarning($"[Data] could not read {path}: {e.Message}");
+                WingLog.Logger.LogWarning($"[Data] could not read {path}: {e.Message}");
                 return null;
             }
         }
 
-        private static void Write(string path, string text, ManualLogSource log)
+        private static void Write(string path, string text)
         {
             try
             {
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             catch (IOException e)
             {
-                log.LogWarning($"[Data] could not write {path}: {e.Message}");
+                WingLog.Logger.LogWarning($"[Data] could not write {path}: {e.Message}");
             }
         }
     }

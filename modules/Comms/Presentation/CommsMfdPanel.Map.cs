@@ -423,7 +423,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             {
                 Color stroke = selected
                     ? AvStyleHost.FuiColor("select", AvTheme.Accent)
-                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                    : AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.Paint(ink, stroke);
             }
         }

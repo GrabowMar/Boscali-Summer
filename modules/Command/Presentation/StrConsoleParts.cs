@@ -41,38 +41,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
     }
 
-    /// <summary>Colour roles the STR parts paint with, read from the live kit sheet (never literals).</summary>
+    /// <summary>Text helpers the STR parts share (colours come from <see cref="AvInk"/>).</summary>
     internal static class StrPaint
     {
-        public static Color State(AvState s)
-        {
-            switch (s)
-            {
-                case AvState.Ready: return AvStyleHost.FuiColor("ready", AvTheme.RailReady);
-                case AvState.Caution: return AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-                case AvState.Danger: return AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
-                case AvState.Info: return AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-                default: return AvStyleHost.FuiColor("inert", AvTheme.RailInert).WithAlpha(1f);
-            }
-        }
-
-        public static Color Ink => AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-        public static Color Dim => AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-        public static Color Muted => AvStyleHost.FuiColor("ink-muted", AvTheme.Disabled);
-        public static Color Hairline => AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-        public static Color Frame => AvStyleHost.FuiColor("frame", AvTheme.Frame);
-        public static Color Select => AvStyleHost.FuiColor("select", AvTheme.Accent);
-        public static Color Friendly => AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
-        public static Color Hostile => AvStyleHost.FuiColor("hostile", AvTheme.Hostile);
-        public static Color Inert => AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
-        public static Color Raised => AvStyleHost.FuiColor("surface-raised", AvTheme.SurfaceRaised);
-        public static Color Surface => AvStyleHost.FuiColor("surface", AvTheme.Surface);
-        public static Color Key => AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-
-        /// <summary>Text tone for a state word: caution/danger/ready keep their colour, the rest read dim.</summary>
-        public static Color StateText(AvState s) =>
-            s == AvState.Inert ? Muted : s == AvState.Info ? Ink : State(s);
-
         public static string Count(int n) => AvNum.Thousands(n);
 
         /// <summary>A fixed-role text child that never wraps and shrinks toward the floor instead of spilling.</summary>
@@ -83,38 +54,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Fit(t, false);
             return t;
         }
-
-        /// <summary>Set text only when it changed; returns true if it did.</summary>
-        public static bool Put(TMP_Text t, string value)
-        {
-            string v = value ?? "";
-            if (t.text == v) return false;
-            t.text = v;
-            return true;
-        }
-    }
-
-    internal sealed class ProseText : AvPart
-    {
-        private readonly TMP_Text text;
-
-        public ProseText(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall)
-        {
-            Rect = AvLay.Child(parent, "Prose");
-            text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-            AvLay.Fill(text.rectTransform);
-            Restyle();
-        }
-
-        public void Set(string value)
-        {
-            if (StrPaint.Put(text, value)) Changed();
-        }
-
-        public override float Measure(float width) => text.text.Length == 0 ? 0f : Mathf.Max(14f, AvText.Height(text, width));
-
-        public override void Restyle() =>
-            text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
     }
 
     /// <summary>
@@ -143,8 +82,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Set(string headline, string detail, AvState s = AvState.Inert)
         {
-            bool changed = StrPaint.Put(title, AvStates.Glyph(s) + (headline ?? ""));
-            changed |= StrPaint.Put(body, detail);
+            bool changed = AvText.Set(title, AvStates.Glyph(s) + (headline ?? ""));
+            changed |= AvText.Set(body, detail);
             if (s != state) { state = s; Restyle(); }
             if (changed) Changed();
         }
@@ -177,12 +116,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            frame.Paint(StrPaint.Inert, StrPaint.Hairline);
-            Color c = state == AvState.Inert ? StrPaint.Frame : StrPaint.State(state);
+            frame.Paint(AvInk.Inert, AvInk.Hairline);
+            Color c = state == AvState.Inert ? AvInk.Frame : AvInk.State(state);
             rail.color = c;
             icon.color = c;
-            title.color = state == AvState.Inert ? StrPaint.Ink : StrPaint.State(state);
-            body.color = StrPaint.Dim;
+            title.color = state == AvState.Inert ? AvInk.Ink : AvInk.State(state);
+            body.color = AvInk.Dim;
         }
     }
 
@@ -244,24 +183,24 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            Color c = StrPaint.State(state);
+            Color c = AvInk.State(state);
             for (int i = 0; i < segs.Length; i++)
             {
                 Seg seg = segs[i];
                 if (i == current)
                 {
                     seg.Frame.Paint(c.WithAlpha(0.20f), c);
-                    seg.Text.color = StrPaint.Ink;
+                    seg.Text.color = AvInk.Ink;
                 }
                 else if (i < current)
                 {
                     seg.Frame.Paint(c.WithAlpha(0.06f), c.WithAlpha(0.4f));
-                    seg.Text.color = StrPaint.Dim;
+                    seg.Text.color = AvInk.Dim;
                 }
                 else
                 {
-                    seg.Frame.Paint(StrPaint.Inert, StrPaint.Hairline);
-                    seg.Text.color = StrPaint.Muted;
+                    seg.Frame.Paint(AvInk.Inert, AvInk.Hairline);
+                    seg.Text.color = AvInk.Muted;
                 }
             }
         }
@@ -307,10 +246,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Set(string figure, string captionText, AvState s, float share = -1f)
         {
-            bool changed = StrPaint.Put(value, figure);
+            bool changed = AvText.Set(value, figure);
             caption = captionText ?? "";
             // Status is never colour alone: a tile in caution or danger prints the glyph before its key.
-            StrPaint.Put(key, AvStates.Glyph(s) + keyText);
+            AvText.Set(key, AvStates.Glyph(s) + keyText);
             bool wantBar = share >= 0f;
             if (wantBar != hasBar) { hasBar = wantBar; bar.gameObject.SetActive(wantBar); changed = true; }
             if (wantBar) bar.Value = share;
@@ -340,14 +279,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            frame.Paint(StrPaint.Inert, StrPaint.Hairline);
-            Color c = StrPaint.State(state);
+            frame.Paint(AvInk.Inert, AvInk.Hairline);
+            Color c = AvInk.State(state);
             rail.color = c;
-            icon.color = StrPaint.Key;
-            key.color = StrPaint.Key;
+            icon.color = AvInk.Key;
+            key.color = AvInk.Key;
             value.color = state == AvState.Info || state == AvState.Ready || state == AvState.Inert
-                ? StrPaint.Ink : StrPaint.State(state);
-            bar.Track = StrPaint.Hairline;
+                ? AvInk.Ink : AvInk.State(state);
+            bar.Track = AvInk.Hairline;
             bar.FillColor = bar.FillEnd = c;
             bar.SetVerticesDirty();
         }

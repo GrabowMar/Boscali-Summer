@@ -61,8 +61,8 @@ namespace NOAvionics
             AvStyle s = AvStyleHost.FuiStyle("footer " + AvStates.Class(state));
             back.color = AvStyleHost.Resolve(s.Background, AvTheme.SurfaceInert);
             text.color = AvStyleHost.Resolve(hint != null ? AvStyleHost.FuiStyle("title").Color : s.Color, AvTheme.Dim);
-            tag.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + (hint != null || state == AvState.Inert ? "ready" : AvStates.Class(state))).Background, AvTheme.Accent), Color.clear);
-            tagText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
+            tag.Paint(AvStyleHost.FuiFill("slab " + (hint != null || state == AvState.Inert ? "ready" : AvStates.Class(state)), AvTheme.Accent), Color.clear);
+            tagText.color = AvStyleHost.FuiInk("slab", Color.black);
             tagText.text = hint != null ? "TIP" : "SYS";
         }
     }

@@ -31,14 +31,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private readonly Dictionary<FactionHQ, int> lastCombatGroup = new Dictionary<FactionHQ, int>(8);
 
         private TheaterOpsSettings settings;
-        private ManualLogSource logger;
         private float nextAuthority;
         private bool authoritative;
 
-        public void Configure(TheaterOpsSettings config, ManualLogSource log)
+        public void Configure(TheaterOpsSettings config)
         {
             settings = config;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -126,7 +124,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             hq.AddFunds(-cost);
             hq.AddConvoy(group);
-            logger?.LogInfo("Reinforcement " + group.Name + " funded for " +
+            Plugin.Logger?.LogInfo("Reinforcement " + group.Name + " funded for " +
                             hq.faction.factionName + " at " + cost.ToString("F0") + ".");
         }
     }

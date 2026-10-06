@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float TaskingRefreshSeconds = 2f;
         private ISecondaryObjectivesView tasking;
         private AvControl taskRequest;
-        private NoteLine taskNote;
+        private AvNote taskNote;
         private StrNodeBoard taskList;
         private StrNote taskFill;
         private IReadOnlyList<SecondaryObjectiveView> taskCards;
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             flow.Section(AvIcon.ListDetails, "FACTION TASKING", "SECONDARY OBJECTIVES");
             // The board's status line and the refresh button share one line.
-            taskNote = new NoteLine(flow.Content);
+            taskNote = new AvNote(flow.Content) { MinHeight = 18f };
             var refresh = new AvButtons(flow.Content, new[]
             {
                 new AvControl.Spec("REFRESH BOARD", () =>
@@ -211,7 +211,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 flow.Section(group == SEffects ? AvIcon.CloudRain : group == SForces ? AvIcon.Shield : AvIcon.Flag,
                     group == SEffects ? "WORLD EFFECTS" : group == SForces ? "FORCES & ECONOMY" : "WORLD RULES", "NOT INSTALLED");
-                flow.Add(new NoteLine(flow.Content)).Set("No settings are published here. The features that own them are not running in this session.");
+                flow.Add(new AvNote(flow.Content) { MinHeight = 18f }).Set("No settings are published here. The features that own them are not running in this session.");
                 return;
             }
 

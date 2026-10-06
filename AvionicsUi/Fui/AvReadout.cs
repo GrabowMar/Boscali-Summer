@@ -51,8 +51,8 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("readout").Color, AvTheme.TextPrimary);
-            unit.color = caption.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("readout-unit").Color, AvTheme.Dim);
+            value.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
+            unit.color = caption.color = AvStyleHost.FuiInk("readout-unit", AvTheme.Dim);
         }
     }
 }

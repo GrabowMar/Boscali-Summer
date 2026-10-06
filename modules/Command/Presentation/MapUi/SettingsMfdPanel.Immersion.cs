@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (immersion == null)
             {
                 flow.Section(AvIcon.WaveSine, "COCKPIT IMMERSION", "UNAVAILABLE");
-                flow.Add(new NoteLine(flow.Content)).Set("IMMERSION MODULE NOT INSTALLED");
+                flow.Add(new AvNote(flow.Content) { MinHeight = 18f }).Set("IMMERSION MODULE NOT INSTALLED");
                 return;
             }
 

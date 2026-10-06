@@ -25,7 +25,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     internal sealed partial class SqdMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float PanelHeight = AvTokens.PanelHeight;
         private const float RefreshInterval = 0.20f;
 
         private const int TabPilot = 0;
@@ -38,10 +37,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private ProgressionManager progression;
         private ProgressionSettings settings;
         private ISquadView squad;
-        private ManualLogSource logger;
 
-        private MFDScreen screen;
-        private GameObject screenRoot;
+        // The registry owns SQD; the cockpit-facing screen name is PILOT.
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Sqd, "SQD", "BoscaliSquadron.Screen", preferLeft: true)
+            { Wrap = true, Plate = true, ShortName = "PILOT" };
+        private MFDScreen screen => installer.Screen;
         private AvConsole console;
         private AvMetric[] metrics;
 
@@ -63,9 +64,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private Sprite profilePortrait;
         private string profilePortraitKey;
 
-        private float nextAttempt;
         private float nextRefresh;
-        private bool failed;
         private bool viewOpen;
 
         public void Configure(ProgressionManager manager, ISquadView squadView,
@@ -74,17 +73,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             progression = manager;
             squad = squadView;
             settings = progressionSettings;
-            logger = log;
+            installer.Log = log;
+            installer.Builder = BuildScreen;
             emblem = EmblemDesign.Parse(settings?.Emblem?.Value, EmblemDesign.Default);
             squadronName = settings?.SquadronName?.Value ?? "BOSCALI SUMMER";
         }
 
         public void ResetForScene()
         {
-            MfdBezel.Release(MfdSlots.Sqd);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
-            screenRoot = null;
-            screen = null;
+            installer.Reset();
             console = null;
             metrics = null;
 
@@ -106,9 +103,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             hasLocalProfile = false;
             localProfileKey = null;
 
-            nextAttempt = 0f;
             nextRefresh = 0f;
-            failed = false;
             SetViewOpen(false);
         }
 
@@ -116,17 +111,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void Update()
         {
-            if (failed || progression == null) return;
-            if (Application.isBatchMode) { failed = true; return; }
-            if (!GameAccess.MfdAvailable) { failed = true; return; }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-                return;
-            }
+            if (installer.Failed || progression == null) return;
+            if (!installer.Tick()) return;
 
             bool visible = screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             SetViewOpen(visible);
@@ -148,85 +134,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         // ---- Installation ----------------------------------------------------------------
 
-        private void TryInstall()
+        private RectTransform BuildScreen(RectTransform content, float height)
         {
-            try
-            {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                if (!MfdBezel.TryClaim(MfdSlots.Sqd, preferLeft: true, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    failed = true;
-                    logger.LogWarning("SQD MFD unavailable: no free bezel slot.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null) { MfdBezel.Release(MfdSlots.Sqd); return; }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdBezel.Release(MfdSlots.Sqd);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    ResetForScene();
-                    failed = true;
-                    logger.LogWarning("SQD MFD unavailable: bezel changed during installation.");
-                    return;
-                }
-                logger.LogInfo("SQD MFD installed on " + (left ? "left" : "right") +
-                    " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                ResetForScene();
-                failed = true;
-                logger.LogError("SQD MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliSquadron.Screen", typeof(RectTransform));
-            screenRoot = root;
-            RectTransform rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            RectTransform templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            float height = AvLay.ResolveHeight(
-                templateRect.parent as RectTransform, PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvLay.ClampIntoCanvas(rootRect);
-
-            // A transparent blocker so map clicks behind the panel never bleed through; the
-            // console's own frame is a non-interactive AvFrame.
-            Image blocker = root.AddComponent<Image>();
-            blocker.color = Color.clear;
-            blocker.raycastTarget = true;
-
-            var contentObject = new GameObject("Content", typeof(RectTransform));
-            RectTransform content = contentObject.GetComponent<RectTransform>();
-            content.SetParent(rootRect, false);
-            content.anchorMin = Vector2.zero;
-            content.anchorMax = Vector2.one;
-            content.pivot = new Vector2(0.5f, 0.5f);
-            content.offsetMin = Vector2.zero;
-            content.offsetMax = Vector2.zero;
-            content.localScale = Vector3.one;
-
             console = AvConsole.Build(content, "PILOT", "SQUADRON DOSSIER", 5, Width, height);
             console.PageChanged += OnTabChanged;
             metrics = console.Metrics("SCORE", "RANK", "PICKS");
@@ -244,22 +153,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioPageFlow = console.Page(TabStudio);
             BuildPlanePage(console.Page(TabPlane));
             console.Finish();
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            // The registry still owns SQD; the cockpit-facing screen name is PILOT.
-            result.shortName = "PILOT";
-            result.displayPanel = contentObject;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                return null;
-            }
-
-            screenRoot = root;
-            return result;
+            return null;
         }
 
         /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
@@ -453,15 +347,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return profilePortrait;
         }
 
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-                if (images[i].gameObject != button.gameObject) return images[i];
-            return button.GetComponent<Image>();
-        }
-
         // ---- Board rows ------------------------------------------------------------------
 
         private sealed class SkillRow
@@ -514,8 +399,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             public void Restyle()
             {
                 bool closed = state == AvState.Inert;
-                name.color = closed ? AvTheme.Disabled : SqdTone.Ink;
-                count.color = closed ? AvTheme.Disabled : SqdTone.Ink;
+                name.color = closed ? AvTheme.Disabled : AvInk.Ink;
+                count.color = closed ? AvTheme.Disabled : AvInk.Ink;
                 status.color = closed ? AvTheme.Disabled : SqdTone.Text(state);
                 bar.Restyle();
                 bar.Set(fraction, closed ? AvTheme.RailInert : SqdTone.Rail(state));

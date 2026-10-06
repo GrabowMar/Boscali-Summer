@@ -63,14 +63,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>The hint beside the title ("SHIFT + MAP ORDER ADDS", the host-only note).</summary>
-        public void SetHint(string text) => WmcKit.Set(hint, text);
+        public void SetHint(string text) => AvText.Set(hint, text);
 
         /// <summary>Line <paramref name="i"/> (rich text), or hidden when null; the card grows by the lines in use.</summary>
         public void SetLine(int i, string text)
         {
             bool on = text != null;
             if (lines[i].gameObject.activeSelf != on) lines[i].gameObject.SetActive(on);
-            if (on) WmcKit.Set(lines[i], text);
+            if (on) AvText.Set(lines[i], text);
         }
 
         public void SetCount(int n)
@@ -85,8 +85,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("row");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             title.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            hint.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            foreach (TMP_Text t in lines) t.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            hint.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            foreach (TMP_Text t in lines) t.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             Toggle.Restyle();
             Run.Restyle();
             Clear.Restyle();

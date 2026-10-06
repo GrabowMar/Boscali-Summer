@@ -45,6 +45,18 @@ namespace NOAvionics
 
         public static AvStyle FuiStyle(string classes, string state = null) => Fui.Resolve(classes, state);
 
+        /// <summary>The text colour of a class list in the live sheet (optionally in an interaction <paramref name="state"/>), or <paramref name="fallback"/>.</summary>
+        public static Color FuiInk(string classes, Color fallback, string state = null) =>
+            Resolve(FuiStyle(classes, state).Color, fallback);
+
+        /// <summary>The fill colour of a class list in the live sheet, or <paramref name="fallback"/>.</summary>
+        public static Color FuiFill(string classes, Color fallback, string state = null) =>
+            Resolve(FuiStyle(classes, state).Background, fallback);
+
+        /// <summary>The border colour of a class list in the live sheet, or <paramref name="fallback"/>.</summary>
+        public static Color FuiBorder(string classes, Color fallback, string state = null) =>
+            Resolve(FuiStyle(classes, state).Border, fallback);
+
         /// <summary>A :root role resolved against the live game theme.</summary>
         public static Color FuiColor(string role, Color fallback)
         {

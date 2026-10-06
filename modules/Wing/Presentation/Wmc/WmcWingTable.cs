@@ -304,9 +304,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             allHit.Paint(Color.clear, Color.clear);
             Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             foreach (TMP_Text t in new[] { hAll, hName, hType, hTask, hFuel, hAmmo, hDmg }) t.color = key;
-            Color name = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             sumWing.color = sumElements.color = name;
-            sumAction.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            sumAction.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             sumAlert.color = WmcState.Color(Rail(alertState));
             foreach (Cell c in heads) Style(c);
             foreach (Cell c in rows) Style(c);
@@ -338,8 +338,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Color border = c.Selected && c.IsHead ? select : c.Hover ? AvStyleHost.FuiColor("frame", AvTheme.Frame) : Color.clear;
             c.Frame.Paint(back, border);
             c.Rail.color = rail;
-            Color name = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            Color sub = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            Color sub = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             c.Num.color = c.IsHead ? rail : sub;
             c.Name.color = c.IsHead ? name : name;
             if (!c.IsHead)
@@ -358,7 +358,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 alertWord = alert;
                 alertState = alertAs;
-                WmcKit.Set(sumAlert, alert);
+                AvText.Set(sumAlert, alert);
                 sumAlert.color = WmcState.Color(Rail(alertAs));
             }
             for (int e = 0; e < perElement.Length; e++) perElement[e] = 0;
@@ -367,9 +367,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string letters = "";
             for (int e = 0; e < perElement.Length; e++)
                 if (perElement[e] > 0) letters += (letters.Length > 0 ? " · " : "") + ElementRoster.Letter(e) + " " + perElement[e];
-            WmcKit.Set(sumWing, "WING · " + c.Count + " AC");
-            WmcKit.Set(sumElements, letters);
-            WmcKit.Set(sumAction, collapsed ? "FLIGHT LIST ›" : "HIDE LIST ‹");
+            AvText.Set(sumWing, "WING · " + c.Count + " AC");
+            AvText.Set(sumElements, letters);
+            AvText.Set(sumAction, collapsed ? "FLIGHT LIST ›" : "HIDE LIST ‹");
             allLatched = c.Scope.Kind == ScopeKind.Wing;
             hAll.color = allLatched ? AvStyleHost.FuiColor("select", AvTheme.Accent) : AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             if (collapsed)
@@ -472,12 +472,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             h.Key = key;
             string letter = ElementRoster.Letter(e);
             string title = (string.IsNullOrEmpty(name) || name == letter ? "ELEMENT " + letter : letter + " · " + Cut(name, 9)) + " · " + AvNum.Fixed(members, 0) + " AC";
-            WmcKit.Set(h.Num, letter);
-            WmcKit.Set(h.Name, title);
+            AvText.Set(h.Num, letter);
+            AvText.Set(h.Name, title);
             string task = PreviewTask != null ? PreviewTask(e) : p == null ? (e == 0 ? "FORM · on you" : WmcText.Unknown)
                 : !p.Active ? (e == 0 ? "FORM · on you" : "FORM")
                 : TaskCard.Short(p.Current, p.Leg, p.Lead != null ? p.Lead.Position : Vec3.Zero, p.Lead != null ? p.Lead.Speed : 0f);
-            WmcKit.Set(h.Task, task);
+            AvText.Set(h.Task, task);
             h.Task.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
         }
 
@@ -505,23 +505,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 v.Selected = selected;
             }
             v.Element = m.Element;
-            WmcKit.Set(v.Num, AvNum.Fixed(m.Slot + 2, 0));
+            AvText.Set(v.Num, AvNum.Fixed(m.Slot + 2, 0));
             Identity(c, m, out string callsign, out string type);
-            WmcKit.Set(v.Name, callsign);
-            WmcKit.Set(v.Type, type);
+            AvText.Set(v.Name, callsign);
+            AvText.Set(v.Type, type);
             string code = target == null ? null : target.definition != null && !string.IsNullOrEmpty(target.definition.code)
                 ? target.definition.code : target.unitName;
-            WmcKit.Set(v.Task, MemberLine.Task(m, code));
+            AvText.Set(v.Task, MemberLine.Task(m, code));
             string state = WingRows.State(m);
             v.Task.color = WmcState.Color(selected ? "live" : WmcStyle.Rail(state) == "inert" ? "info" : WmcStyle.Rail(state));
             v.Fuel = WingRows.Bar(WingRows.Fraction(m.Fuel));
             v.FuelRail = MemberLine.FuelRail(m.Flags);
             bool win = (m.Flags & (byte)SnapshotFlags.Winchester) != 0;
-            WmcKit.Set(v.Ammo, win ? "WIN" : AvNum.Fixed(Mathf.RoundToInt(WingRows.Fraction(m.Ammo) * 100f), 0) + "%");
-            v.Ammo.color = win ? WmcState.Color("danger") : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            AvText.Set(v.Ammo, win ? "WIN" : AvNum.Fixed(Mathf.RoundToInt(WingRows.Fraction(m.Ammo) * 100f), 0) + "%");
+            v.Ammo.color = win ? WmcState.Color("danger") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             bool dmg = (m.Flags & (byte)SnapshotFlags.Damaged) != 0;
-            WmcKit.Set(v.Dmg, dmg ? "DMG" : "—");
-            v.Dmg.color = dmg ? WmcState.Color("caution") : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            AvText.Set(v.Dmg, dmg ? "DMG" : "—");
+            v.Dmg.color = dmg ? WmcState.Color("caution") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Style(v);
             // The fuel fill is placed against the row's slot; a changed fraction moves it.
             if (v.FuelTrack.rectTransform.sizeDelta.x > 0f)

@@ -128,13 +128,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 AvLay.Place(rowFill[i].rectTransform, iw - Pad - 60f, ry + rowH * 0.5f - 2f, 0f, 4f);
                 rowText[i] = C2Kit.Mono(teamsBox.Body, "Row" + i, 10.5f, TextAlignmentOptions.MidlineLeft);
                 rowText[i].raycastTarget = false;
-                C2Kit.Place(rowText[i], Pad, ry, iw - 2f * Pad - 68f, rowH);
+                AvLay.Place(rowText[i], Pad, ry, iw - 2f * Pad - 68f, rowH);
             }
             float by = 2f + Slots * rowH + 4f;
             infoLine = C2Kit.Mono(teamsBox.Body, "Info", 10f, TextAlignmentOptions.MidlineLeft, true);
-            C2Kit.Place(infoLine, Pad, by, iw - 2f * Pad, full ? 18f : 14f);
+            AvLay.Place(infoLine, Pad, by, iw - 2f * Pad, full ? 18f : 14f);
             tapLine = C2Kit.Mono(teamsBox.Body, "Tap", 10f, TextAlignmentOptions.MidlineRight);
-            C2Kit.Place(tapLine, Pad, by, iw - 2f * Pad, full ? 18f : 14f);
+            AvLay.Place(tapLine, Pad, by, iw - 2f * Pad, full ? 18f : 14f);
             by += (full ? 18f : 14f) + 2f;
             float bw = Mathf.Floor((iw - 2f * Pad - 6f * 4f) / 7f), bw6 = Mathf.Floor((iw - 2f * Pad - 5f * 4f) / 6f);
             raise = Button(teamsBox.Body, "RAISE", AvButtonStyle.Primary, Pad, by, bw, () => Press(() => act.Raise?.Invoke()));
@@ -306,8 +306,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             detail.gameObject.SetActive(!active);
             if (!active)
             {
-                OpsText.Set(headline, paintedSeq == -2 ? "NO LINK" : "NO CAMP STANDING");
-                OpsText.Set(detail, paintedSeq == -2 ? "> waiting for the host SOF state" : "> no camp standing — restore one or use the CALLS below");
+                AvText.Set(headline, paintedSeq == -2 ? "NO LINK" : "NO CAMP STANDING");
+                AvText.Set(detail, paintedSeq == -2 ? "> waiting for the host SOF state" : "> no camp standing — restore one or use the CALLS below");
             }
             map.SetMeta(SofPageWords.Sub(state));
             for (int i = 0; i < targetMarks.Length; i++) { targetMarks[i].Rect.gameObject.SetActive(false); targetSelect[i].gameObject.SetActive(false); }
@@ -337,10 +337,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 campDots[i].gameObject.SetActive(true); campDots[i].color = OpsInk.Rail(tone);
                 AvLay.Place(campDots[i].rectTransform, p.X - 5f, p.Y - 5f, 10f, 10f);
                 campTags[i].gameObject.SetActive(true);
-                OpsText.Set(campTags[i], "CP" + (i + 1));
+                AvText.Set(campTags[i], "CP" + (i + 1));
                 campTags[i].color = OpsInk.Word(tone);
                 Vector2 tag = Free(p.X + 8f, p.Y - 7f, 26f, 14f);
-                C2Kit.Place(campTags[i], tag.x, tag.y, 26f, 14f);
+                AvLay.Place(campTags[i], tag.x, tag.y, 26f, 14f);
             }
             for (int i = 0; i < state.Held.Count && i < heldDots.Length; i++)
             {
@@ -349,10 +349,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 heldDots[i].gameObject.SetActive(true); heldDots[i].color = OpsInk.Rail(AvState.Info);
                 AvLay.Place(heldDots[i].rectTransform, p.X - 4f, p.Y - 4f, 8f, 8f);
                 heldTags[i].gameObject.SetActive(true);
-                OpsText.Set(heldTags[i], "H" + h.Id + " " + SpaceRules.Clock(h.Until - now));
+                AvText.Set(heldTags[i], "H" + h.Id + " " + SpaceRules.Clock(h.Until - now));
                 heldTags[i].color = OpsInk.Word(AvState.Info);
                 Vector2 tag = Free(p.X + 7f, p.Y - 7f, 54f, 14f);
-                C2Kit.Place(heldTags[i], tag.x, tag.y, 54f, 14f);
+                AvLay.Place(heldTags[i], tag.x, tag.y, 54f, 14f);
             }
             for (int i = 0; i < state.Enemies.Count && i < enemyDots.Length; i++)
             {
@@ -379,7 +379,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                     MapPoint d = projection.ToScreen(t.DestX, t.DestZ);
                     var xs = new[] { Mathf.Clamp01(p.X / mapW), Mathf.Clamp01(d.X / mapW) };
                     var ys = new[] { Mathf.Clamp01(1f - p.Y / mapH), Mathf.Clamp01(1f - d.Y / mapH) };
-                    routes[i].LineColor = slot == selectedTeam ? OpsInk.Word(AvState.Caution) : OpsInk.Hairline;
+                    routes[i].LineColor = slot == selectedTeam ? OpsInk.Word(AvState.Caution) : AvInk.Hairline;
                     routes[i].SetPoints(xs, ys, 2);
                 }
             }
@@ -398,13 +398,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 m.Help = SofWords.Target(t.Kind, t.Sub, t.Id) + (t.Exploit ? " · EXPLOIT: SOF beats CYBER (-25 % cost, x1.5 duration, +25 % odds)" : t.Resisted ? " · RESISTED: SPACE beats SOF" : "");
                 AvLay.Place(m.Rect, bx, by, 34f, 18f);
                 targetSelect[i].gameObject.SetActive(t.Id == selectedTarget);
-                targetSelect[i].color = OpsInk.Select;
+                targetSelect[i].color = AvInk.Select;
                 AvLay.Place(targetSelect[i].rectTransform, bx - 2f, by - 2f, 38f, 22f);
             }
             if (hasPick)
             {
                 MapPoint p = projection.ToScreen(pickX, pickZ);
-                pickDot.gameObject.SetActive(true); pickDot.color = OpsInk.Select;
+                pickDot.gameObject.SetActive(true); pickDot.color = AvInk.Select;
                 AvLay.Place(pickDot.rectTransform, p.X - 5f, p.Y - 5f, 10f, 10f);
             }
         }
@@ -429,18 +429,18 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 rowBack[i].gameObject.SetActive(has); rowFill[i].gameObject.SetActive(has);
                 if (!has)
                 {
-                    OpsText.Set(rowText[i], i == 0 ? (active ? "NO TEAM · RAISE ONE AT THE CAMP" : "SOF OFFLINE") : "");
-                    rowText[i].color = OpsInk.Muted;
+                    AvText.Set(rowText[i], i == 0 ? (active ? "NO TEAM · RAISE ONE AT THE CAMP" : "SOF OFFLINE") : "");
+                    rowText[i].color = AvInk.Muted;
                     continue;
                 }
                 bool sel = t.Slot == selectedTeam;
                 rowButtons[i].Latched = sel;
                 int slot = t.Slot;
                 rowButtons[i].Help = "Select team " + SofRules.Callsign(slot) + ". Odds " + t.Odds + " % · ammo " + t.Ammo + (t.Wounded ? " · WIA" : "");
-                OpsText.Set(rowText[i], C2Kit.FitTo(rowText[i], SofPageWords.TeamLine(t, now), width - 2f - 2f * Pad - 68f));
+                AvText.Set(rowText[i], C2Kit.FitTo(rowText[i], SofPageWords.TeamLine(t, now), width - 2f - 2f * Pad - 68f));
                 AvState tone = t.State == TeamState.Pinned || t.State == TeamState.Lost ? AvState.Danger : t.Exposure >= 70 ? AvState.Caution : AvState.Ready;
-                rowText[i].color = t.State == TeamState.Lost ? OpsInk.Dim : sel ? OpsInk.Ink : OpsInk.Muted;
-                rowBack[i].color = OpsInk.Inert;
+                rowText[i].color = t.State == TeamState.Lost ? AvInk.Dim : sel ? AvInk.Ink : AvInk.Muted;
+                rowBack[i].color = AvInk.Inert;
                 rowFill[i].color = OpsInk.Rail(tone);
                 Vector2 size = rowFill[i].rectTransform.sizeDelta;
                 rowFill[i].rectTransform.sizeDelta = new Vector2(60f * Mathf.Clamp01(t.Exposure / 100f), size.y);
@@ -466,7 +466,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             seize.Interactable = ready && hasTarget && SofRules.Valid(MissionKind.Seize, tgt.Kind, tgt.Sub);
             tap.Interactable = ready && hasTarget && SofRules.Valid(MissionKind.Tap, tgt.Kind, tgt.Sub);
             pick.Interactable = active;
-            if (!active) { OpsText.Set(infoLine, "SOF OFFLINE"); infoLine.color = OpsInk.Dim; OpsText.Set(tapLine, ""); return; }
+            if (!active) { AvText.Set(infoLine, "SOF OFFLINE"); infoLine.color = AvInk.Dim; AvText.Set(tapLine, ""); return; }
             if (hasTarget)
             {
                 MissionKind kind = tgt.Kind == TargetKind.Ground ? MissionKind.Lase : tgt.Kind == TargetKind.Building ? MissionKind.Seize : tgt.Kind == TargetKind.Relay ? MissionKind.Tap : MissionKind.Sabotage;
@@ -475,24 +475,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 int odds = SofRules.Odds(have ? cur.Exposure : 0f, 0, have && (cur.Carried || cur.Insert == Insertion.Helicopter), tgt.Exploit, ring);
                 string text = SofWords.Target(tgt.Kind, tgt.Sub, tgt.Id) + " · " + SofWords.Kind(kind) + " " + SofRules.CostOf(kind, tgt.Exploit) + " CR" +
                     (kind == MissionKind.Lase ? " · NO ROLL" : " · ~" + odds + " %") + (tgt.Exploit ? " · EXPLOIT" : tgt.Resisted ? " · RESISTED" : "");
-                OpsText.Set(infoLine, C2Kit.FitTo(infoLine, text, width - 2f - 2f * Pad));
-                infoLine.color = OpsInk.Ink;
+                AvText.Set(infoLine, C2Kit.FitTo(infoLine, text, width - 2f - 2f * Pad));
+                infoLine.color = AvInk.Ink;
             }
             else if (hasPick)
             {
-                OpsText.Set(infoLine, "POINT " + TheaterGrid.Kilometres(pickX, pickZ) + " · RECON 25 CR OR DIVERT");
-                infoLine.color = OpsInk.Ink;
+                AvText.Set(infoLine, "POINT " + TheaterGrid.Kilometres(pickX, pickZ) + " · RECON 25 CR OR DIVERT");
+                infoLine.color = AvInk.Ink;
             }
-            else { OpsText.Set(infoLine, "SELECT A TARGET ON THE MAP, OR PICK A POINT"); infoLine.color = OpsInk.Dim; }
+            else { AvText.Set(infoLine, "SELECT A TARGET ON THE MAP, OR PICK A POINT"); infoLine.color = AvInk.Dim; }
             bool tapped = state.TapUntil > now;
-            OpsText.Set(tapLine, tapped && full ? "TAP · " + state.TapIntrusions + " ENEMY INTRUSIONS · " + SpaceRules.Clock(state.TapUntil - now) : "");
+            AvText.Set(tapLine, tapped && full ? "TAP · " + state.TapIntrusions + " ENEMY INTRUSIONS · " + SpaceRules.Clock(state.TapUntil - now) : "");
             tapLine.color = OpsInk.Word(AvState.Info);
         }
 
         public void Restyle()
         {
             RestyleMap();
-            for (int i = 0; i < Slots; i++) { rowBack[i].color = OpsInk.Inert; rowButtons[i]?.Restyle(); teamMarks[i]?.Restyle(); }
+            for (int i = 0; i < Slots; i++) { rowBack[i].color = AvInk.Inert; rowButtons[i]?.Restyle(); teamMarks[i]?.Restyle(); }
             for (int i = 0; i < targetMarks.Length; i++) targetMarks[i]?.Restyle();
             foreach (AvControl c in new[] { raise, push, hold, divert, exfil, lift, stop, recon, lase, sabot, seize, tap, pick }) c?.Restyle();
         }

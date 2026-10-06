@@ -85,15 +85,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 ghost[i].raycastTarget = false;
                 AvLay.Place(ghost[i].rectTransform, 1f, 1f + i * (rowH + 2f), width - 4f, rowH);
                 ghostText[i] = C2Kit.Mono(board.Body, "GhostText" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
-                C2Kit.Place(ghostText[i], 14f, 1f + i * (rowH + 2f), width - 28f, rowH);
-                OpsText.Set(ghostText[i], "OPEN SLOT");
+                AvLay.Place(ghostText[i], 14f, 1f + i * (rowH + 2f), width - 28f, rowH);
+                AvText.Set(ghostText[i], "OPEN SLOT");
                 ghost[i].gameObject.SetActive(false);
                 ghostText[i].gameObject.SetActive(false);
             }
             for (int i = 0; i < howTo.Length; i++)
             {
                 howTo[i] = C2Kit.Mono(board.Body, "HowTo" + i, 10.5f, TextAlignmentOptions.MidlineLeft);
-                C2Kit.Place(howTo[i], 10f, Mathf.Floor((boardBody - howTo.Length * 20f) * 0.5f) + i * 20f, width - 24f, 18f);
+                AvLay.Place(howTo[i], 10f, Mathf.Floor((boardBody - howTo.Length * 20f) * 0.5f) + i * 20f, width - 24f, 18f);
                 howTo[i].gameObject.SetActive(false);
             }
 
@@ -105,8 +105,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 notices.Place(new AvSlot(0f, height - gap - noticeH, width, noticeH));
                 quietWord = C2Kit.Mono(notices.Body, "QuietWord", 12f, TextAlignmentOptions.MidlineLeft, true, 1f);
                 quietSub = C2Kit.Mono(notices.Body, "QuietSub", 10f, TextAlignmentOptions.MidlineLeft);
-                C2Kit.Place(quietWord, 8f, 3f, width - 130f, 18f);
-                C2Kit.Place(quietSub, 8f, 21f, width - 130f, 16f);
+                AvLay.Place(quietWord, 8f, 3f, width - 130f, 18f);
+                AvLay.Place(quietSub, 8f, 21f, width - 130f, 16f);
                 quietButton = AvControl.Make(notices.Body, new AvControl.Spec("QUIET", () => this.toggleQuiet?.Invoke(), AvButtonStyle.Default, AvIcon.X));
                 quietButton.SingleLine();
                 AvLay.Place(quietButton.Rect, width - 2f - 8f - 104f, 7f, 104f, 26f);
@@ -160,7 +160,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             for (int i = 0; i < howTo.Length; i++)
             {
                 howTo[i].gameObject.SetActive(none);
-                if (none) OpsText.Set(howTo[i], C2Kit.FitTo(howTo[i], HowTo[i], width - 24f));
+                if (none) AvText.Set(howTo[i], C2Kit.FitTo(howTo[i], HowTo[i], width - 24f));
             }
             RestyleEmpty();
         }
@@ -170,8 +170,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (quietButton == null || (quietKnown && quiet == quietShown)) return;
             quietKnown = true;
             quietShown = quiet;
-            OpsText.Set(quietWord, C2Kit.FitTo(quietWord, C2Board.QuietWord(quiet), width - 130f));
-            OpsText.Set(quietSub, C2Kit.FitTo(quietSub, quiet ? "POSTS + INTENT SILENT · WARNINGS STAY AUDIBLE" : "A NEW POST OR INTENT SHOWS A LINE AND A CHIME", width - 130f));
+            AvText.Set(quietWord, C2Kit.FitTo(quietWord, C2Board.QuietWord(quiet), width - 130f));
+            AvText.Set(quietSub, C2Kit.FitTo(quietSub, quiet ? "POSTS + INTENT SILENT · WARNINGS STAY AUDIBLE" : "A NEW POST OR INTENT SHOWS A LINE AND A CHIME", width - 130f));
             quietButton.Label = C2Board.QuietButton(quiet);
             quietButton.SetIcon(quiet ? AvIcon.CircleCheck : AvIcon.X);
             quietButton.Latched = quiet;
@@ -181,20 +181,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void RestyleEmpty()
         {
-            for (int i = 0; i < howTo.Length; i++) if (howTo[i] != null) howTo[i].color = OpsInk.Muted;
+            for (int i = 0; i < howTo.Length; i++) if (howTo[i] != null) howTo[i].color = AvInk.Muted;
             if (ghost != null)
                 for (int i = 0; i < ghost.Length; i++)
                 {
-                    if (ghost[i] != null) ghost[i].color = OpsInk.Inert;
-                    if (ghostText[i] != null) ghostText[i].color = OpsInk.Dim;
+                    if (ghost[i] != null) ghost[i].color = AvInk.Inert;
+                    if (ghostText[i] != null) ghostText[i].color = AvInk.Dim;
                 }
         }
 
         public void Restyle()
         {
             RestyleEmpty();
-            if (quietWord != null) quietWord.color = quietShown ? OpsInk.Word(AvState.Caution) : OpsInk.Ink;
-            if (quietSub != null) quietSub.color = OpsInk.Dim;
+            if (quietWord != null) quietWord.color = quietShown ? OpsInk.Word(AvState.Caution) : AvInk.Ink;
+            if (quietSub != null) quietSub.color = AvInk.Dim;
             quietButton?.Restyle();
         }
     }

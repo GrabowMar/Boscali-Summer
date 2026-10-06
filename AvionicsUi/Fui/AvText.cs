@@ -39,6 +39,15 @@ namespace NOAvionics
             if (t != null) t.fontSize = Mathf.Max(AvTokens.FontMicro, size);
         }
 
+        /// <summary>Sets <paramref name="t"/>'s text only when it changed (TMP relays out on every assignment); true when it did.</summary>
+        public static bool Set(TMP_Text t, string value)
+        {
+            string v = value ?? "";
+            if (t == null || t.text == v) return false;
+            t.text = v;
+            return true;
+        }
+
         public static float Height(TMP_Text t, float width) =>
             t == null ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, Mathf.Max(1f, width), 0f).y);
 

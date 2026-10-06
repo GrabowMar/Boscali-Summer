@@ -86,7 +86,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             (a, b) => a.DistanceSquared.CompareTo(b.DistanceSquared);
 
         private CommandSettings settings;
-        private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
         private GameObject root;
@@ -125,10 +124,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             nextRefresh = 0f;
         }
 
-        public void Configure(CommandSettings config, ManualLogSource log)
+        public void Configure(CommandSettings config)
         {
             settings = config;
-            logger = log;
         }
 
         public void ResetForScene()
@@ -203,7 +201,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (theater.x <= 1f || theater.y <= 1f)
             {
                 theater = new Vector2(FallbackTheaterMetres, FallbackTheaterMetres);
-                logger?.LogWarning("[COM] Threat heat could not resolve the theater span; " +
+                Plugin.Logger?.LogWarning("[COM] Threat heat could not resolve the theater span; " +
                     "falling back to " + FallbackTheaterMetres + "m.");
             }
 
@@ -231,7 +229,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             SetShown(true);
             initialized = true;
-            logger?.LogInfo("[COM] Threat heat overlay initialized (" + width + "x" + height +
+            Plugin.Logger?.LogInfo("[COM] Threat heat overlay initialized (" + width + "x" + height +
                 " field over a " + Mathf.RoundToInt(theater.x) + "x" + Mathf.RoundToInt(theater.y) +
                 "m theater, " + MaxEmitters + " emitters maximum).");
         }

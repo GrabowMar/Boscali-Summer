@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Hud
         public void Install(ModuleContext context)
         {
             HudBoard board = context.AddSceneService<HudBoard>(80);
-            board.Configure(context.Settings.Hud, context.Logger);
+            board.Configure(context.Settings.Hud);
             context.AddService<IHudBoard>(board);
             context.Logger.LogInfo("Hud: TargetCamera=" + BoscaliSummer.Core.Game.NativeCamera.Available);
         }

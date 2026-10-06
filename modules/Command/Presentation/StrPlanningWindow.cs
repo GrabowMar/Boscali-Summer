@@ -287,8 +287,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 Rect = AvLay.Child(parent, "TheaterMap");
                 AvFrame frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
                 AvLay.Fill(frame.rectTransform);
-                frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
-                            AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
+                frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
+                            AvStyleHost.FuiBorder("card", AvTheme.Hairline));
 
                 terrain = Image("Terrain");
                 control = RawImg();
@@ -346,11 +346,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 RectTransform box = AvLay.Child(Rect, "Pin " + tag);
                 AvFrame back = AvFrame.Add(box, "Frame", AvChamfer.Diagonal(3f));
                 AvLay.Fill(back.rectTransform);
-                back.Paint(StrPaint.Raised, color);
+                back.Paint(AvInk.Raised, color);
                 TMP_Text text = AvText.Make(box, "Tag " + tag, AvTextRole.DataStrong, tag, TextAlignmentOptions.Center);
                 AvText.Fit(text, false);
                 AvLay.Fill(text.rectTransform, 1f);
-                text.color = StrPaint.Ink;
+                text.color = AvInk.Ink;
                 box.gameObject.SetActive(false);
                 return text;
             }

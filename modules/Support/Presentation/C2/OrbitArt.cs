@@ -99,11 +99,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public override void Restyle()
         {
             if (limb == null) return;
-            limb.LineColor = OpsInk.Dim;
+            limb.LineColor = AvInk.Dim;
             limb.Thickness = 1.6f;
-            for (int i = 0; i < orbits.Length; i++) orbits[i].LineColor = OpsInk.Hairline;
+            for (int i = 0; i < orbits.Length; i++) orbits[i].LineColor = AvInk.Hairline;
             for (int i = 0; i < markers.Length; i++)
-                markers[i].color = tones[i] == AvState.Inert ? OpsInk.Muted : OpsInk.Rail(tones[i]);
+                markers[i].color = tones[i] == AvState.Inert ? AvInk.Muted : OpsInk.Rail(tones[i]);
             limb.SetVerticesDirty();
             foreach (AvLineGraphic o in orbits) o.SetVerticesDirty();
         }

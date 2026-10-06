@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Intel
         {
             // Resets before TheaterOps (50), whose director reads the picture.
             ThreatPictureService picture = context.AddSceneService<ThreatPictureService>(49);
-            picture.Configure(context.Settings.Intel, context.Logger);
+            picture.Configure(context.Settings.Intel);
             context.AddService<IThreatPicture>(picture);
             context.Logger.LogInfo("Intel: threat picture installed (PreWarIntel=" +
                                    context.Settings.Intel.PreWarIntel.Value + ").");

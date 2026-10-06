@@ -62,11 +62,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public static Color Of(WingRank r) =>
             r == WingRank.Legend ? WmcState.Color("warn") : r == WingRank.Ace ? WmcState.Color("live")
-            : r == WingRank.Veteran ? WmcState.Color("info") : r == WingRank.Wingman ? Ink : Dim;
-
-        public static Color Ink => AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-
-        public static Color Dim => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            : r == WingRank.Veteran ? WmcState.Color("info") : r == WingRank.Wingman ? AvInk.Ink : AvInk.Dim;
     }
 
     /// <summary>One pilot on the roster table: rank insignia (drawn chevrons), callsign, name, kills, sorties and the status tag (word and
@@ -116,10 +112,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void SetIdentity(WingRank r, string callsignText, string nameText, int killCount, int sortieCount)
         {
             rank = r;
-            WmcKit.Set(callsign, callsignText);
-            WmcKit.Set(name, nameText);
-            WmcKit.Set(kills, AvNum.Fixed(killCount, 0));
-            WmcKit.Set(sorties, AvNum.Fixed(sortieCount, 0));
+            AvText.Set(callsign, callsignText);
+            AvText.Set(name, nameText);
+            AvText.Set(kills, AvNum.Fixed(killCount, 0));
+            AvText.Set(sorties, AvNum.Fixed(sortieCount, 0));
             DrawRank();
         }
 
@@ -168,10 +164,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = WmcState.Color(railClass);
-            callsign.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            name.color = WingRankColor.Dim;
-            kills.color = WingRankColor.Ink;
-            sorties.color = WingRankColor.Dim;
+            callsign.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            name.color = AvInk.Dim;
+            kills.color = AvInk.Ink;
+            sorties.color = AvInk.Dim;
             state.Restyle();
             DrawRank();
         }
@@ -259,7 +255,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            foreach (TMP_Text h in heads) h.color = WingRankColor.Dim;
+            foreach (TMP_Text h in heads) h.color = AvInk.Dim;
             foreach (WingPilotRow r in rows) r.Restyle();
             empty.Restyle();
         }
@@ -300,7 +296,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (newPage == page && newPages == pages) return;
             page = newPage;
             pages = newPages;
-            WmcKit.Set(label, Pages.Label(page, pages));
+            AvText.Set(label, Pages.Label(page, pages));
             Apply();
         }
 
@@ -336,7 +332,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            label.color = WingRankColor.Dim;
+            label.color = AvInk.Dim;
             prev.Restyle();
             next.Restyle();
             Recruit.Restyle();
@@ -363,7 +359,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame.raycastTarget = true;
             AvHelpTip.Attach(frame.gameObject, "");
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
-            badge = AvIcons.Make(Rect, AvIcon.Lock, 14f, WingRankColor.Dim);
+            badge = AvIcons.Make(Rect, AvIcon.Lock, 14f, AvInk.Dim);
             title = AvText.Make(Rect, "Title", AvTextRole.Label);
             AvText.Fit(title, false);
             line = AvText.Make(Rect, "Line", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
@@ -376,10 +372,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public bool Set(PerkCard card, bool off)
         {
             bool grew = line.text != card.Line;
-            WmcKit.Set(title, card.Title);
+            AvText.Set(title, card.Title);
             // The not-active word is the mark; an active perk keeps its line.
-            WmcKit.Set(line, card.Inactive ? "" : PerkCards.Badge(card.Line, 46));
-            WmcKit.Set(mark, card.Inactive ? "NOT ACTIVE IN 1.0" : off && card.Owned ? "PROGRESSION OFF" : "");
+            AvText.Set(line, card.Inactive ? "" : PerkCards.Badge(card.Line, 46));
+            AvText.Set(mark, card.Inactive ? "NOT ACTIVE IN 1.0" : off && card.Owned ? "PROGRESSION OFF" : "");
             AvIcons.Set(badge, card.Locked ? AvIcon.Lock : AvIcon.Star, 14f);
             locked = card.Locked;
             inactive = card.Inactive || off;
@@ -418,9 +414,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = WmcState.Color(railClass);
-            badge.color = locked ? WingRankColor.Dim : inactive ? WmcState.Color("warn") : WmcState.Color("live");
-            title.color = locked ? WingRankColor.Dim : WingRankColor.Ink;
-            line.color = WingRankColor.Dim;
+            badge.color = locked ? AvInk.Dim : inactive ? WmcState.Color("warn") : WmcState.Color("live");
+            title.color = locked ? AvInk.Dim : AvInk.Ink;
+            line.color = AvInk.Dim;
             mark.color = WmcState.Color("warn");
         }
     }
@@ -460,8 +456,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public bool SetText(string nameText, string slotText)
         {
             bool grew = slot.text != slotText;
-            WmcKit.Set(name, nameText);
-            WmcKit.Set(slot, slotText);
+            AvText.Set(name, nameText);
+            AvText.Set(slot, slotText);
             return grew;
         }
 
@@ -499,8 +495,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             rail.color = WmcState.Color(railClass);
             key.color = WmcState.Color("info");
-            name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            slot.color = WingRankColor.Dim;
+            name.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            slot.color = AvInk.Dim;
         }
     }
 

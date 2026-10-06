@@ -20,7 +20,7 @@ namespace NOAvionics
         private readonly Image frost;
         private readonly GameObject host;
         private bool glassy = true;
-        private readonly Scrollbar scrollbar;
+        private readonly AvScrollView scrollView;
         private bool visible;
         private readonly Vector3[] corners = new Vector3[4];
 
@@ -93,24 +93,14 @@ namespace NOAvionics
             var drag = titleBack.gameObject.AddComponent<DragHandle>(); drag.Target = Root; titleBack.raycastTarget = true;
 
             RectTransform body = AvLay.Child(Root, "Body");
-            var scroll = body.gameObject.AddComponent<ScrollRect>();
-            scroll.horizontal = false; scroll.movementType = ScrollRect.MovementType.Clamped; scroll.scrollSensitivity = 24f;
-            RectTransform viewport = AvLay.Child(body, "Viewport"); viewport.gameObject.AddComponent<RectMask2D>();
-            RectTransform content = AvLay.Child(viewport, "Content");
-            scroll.viewport = viewport; scroll.content = content;
-            Scrollbar bar = AvConsole.MakeScrollbar(body);
-            scroll.verticalScrollbar = bar;
-            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
-            AvInput.StripNavigation(bar);
-            Body = new AvFlow(content, Ticker, w);
+            scrollView = new AvScrollView(body, true);
+            Body = new AvFlow(scrollView.Content, Ticker, w);
             Footer = new AvFooter(Root);
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
             float footerH = AvGridTokens.Footer;
             AvLay.Place(body, 0f, TitleH, w, h - TitleH - footerH);
-            AvLay.Place(viewport, 0f, 0f, w, h - TitleH - footerH);
-            AvLay.Place((RectTransform)bar.transform, w - AvGridTokens.Pad - AvGridTokens.Gutter + 2f, 2f, 4f, h - TitleH - footerH - 4f);
-            scrollbar = bar;
+            scrollView.Place(w, h - TitleH - footerH);
             Footer.Place(new AvSlot(0f, h - footerH, w, footerH));
             Ticker.Add(-1, AvTickRate.Fast, UpdateBlur);
             Ticker.Register(new Hook(this));
@@ -159,12 +149,8 @@ namespace NOAvionics
         {
             AvStyle w = AvStyleHost.FuiStyle("window");
             frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(glassy ? 0.82f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
-            if (scrollbar != null)
-            {
-                scrollbar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
-                scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
-            }
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            scrollView?.Restyle();
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             AvStyle t = AvStyleHost.FuiStyle("window-title");
             titleBack.color = AvStyleHost.Resolve(t.Background, AvTheme.SurfaceRaised);
             titleText.color = AvStyleHost.Resolve(t.Color, AvTheme.TextPrimary);

@@ -198,9 +198,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 birdKey[i] = C2Kit.Mono(Rect, "BirdKey" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
                 birdState[i] = C2Kit.Mono(Rect, "BirdState" + i, 12f, TextAlignmentOptions.MidlineRight, true);
                 birdTele[i] = C2Kit.Mono(Rect, "BirdTele" + i, 10f, TextAlignmentOptions.MidlineLeft);
-                C2Kit.Place(birdKey[i], cell.X + 8f, cell.Y + 2f, cell.W * 0.5f - 8f, 13f);
-                C2Kit.Place(birdState[i], cell.X + cell.W * 0.5f, cell.Y + 1f, cell.W * 0.5f - 8f, 16f);
-                C2Kit.Place(birdTele[i], cell.X + 8f, cell.Y + cell.H - 13f, cell.W - 12f, 12f);
+                AvLay.Place(birdKey[i], cell.X + 8f, cell.Y + 2f, cell.W * 0.5f - 8f, 13f);
+                AvLay.Place(birdState[i], cell.X + cell.W * 0.5f, cell.Y + 1f, cell.W * 0.5f - 8f, 16f);
+                AvLay.Place(birdTele[i], cell.X + 8f, cell.Y + cell.H - 13f, cell.W - 12f, 12f);
                 birdKey[i].text = C2Orbit.BirdName(Birds[i]);
                 birdTele[i].text = C2Orbit.Telemetry(Birds[i]); // cosmetic
                 if (i > 0)
@@ -244,7 +244,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             statusBack.raycastTarget = false;
             AvLay.Place(statusBack.rectTransform, 0f, im.H - 16f, im.W, 16f);
             statusText = C2Kit.Mono(imageRoot, "Status", 10f, TextAlignmentOptions.MidlineLeft);
-            C2Kit.Place(statusText, 6f, im.H - 16f, im.W - 12f, 16f);
+            AvLay.Place(statusText, 6f, im.H - 16f, im.W - 12f, 16f);
             for (int i = 0; i < brackets.Length; i++) brackets[i] = new Bracket(imageRoot, i, id => Do(() => this.actions.SelectEntry(id)));
 
             // ---- Track file ----
@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             noContactsText = C2Kit.Mono(Rect, "NoContacts", 10.5f, TextAlignmentOptions.MidlineLeft, true);
             noContactsText.richText = false;
             FeedBox r0 = layout.TrackRow(0);
-            C2Kit.Place(noContactsText, r0.X + 8f, r0.Y, r0.W - 16f, SpaceFeedLayout.RowH * 2f);
+            AvLay.Place(noContactsText, r0.X + 8f, r0.Y, r0.W - 16f, SpaceFeedLayout.RowH * 2f);
             noContactsText.enableWordWrapping = true;
             noContactsText.alignment = TextAlignmentOptions.TopLeft;
             noContactsText.gameObject.SetActive(false);
@@ -298,7 +298,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             noTaskedText = C2Kit.Mono(Rect, "NoTasked", 10.5f, TextAlignmentOptions.MidlineLeft);
             FeedBox t0 = layout.CardRow(0);
-            C2Kit.Place(noTaskedText, t0.X + 8f, t0.Y, t0.W - 16f, SpaceFeedLayout.CardH);
+            AvLay.Place(noTaskedText, t0.X + 8f, t0.Y, t0.W - 16f, SpaceFeedLayout.CardH);
 
             // ---- Host console (station only) ----
             if (layout.ConsoleLines > 0)
@@ -381,8 +381,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             {
                 FeedBirdView b = view.Birds[i];
                 string word = string.IsNullOrEmpty(b.State) ? "—" : b.State;
-                if (OpsText.Set(birdState[i], word) || birdState[i].color != OpsInk.Word(b.Tone))
-                    birdState[i].color = b.Tone == AvState.Inert ? OpsInk.Muted : OpsInk.Word(b.Tone);
+                if (AvText.Set(birdState[i], word) || birdState[i].color != OpsInk.Word(b.Tone))
+                    birdState[i].color = b.Tone == AvState.Inert ? AvInk.Muted : OpsInk.Word(b.Tone);
             }
             art?.SetStates(view.Birds[0].Tone, view.Birds[1].Tone, view.Birds[2].Tone);
         }
@@ -391,7 +391,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             bool show = view.Image != null && view.ImageKind != FeedImageKind.None && view.Refusal.Length == 0;
             if (picture.enabled != show) picture.enabled = show;
-            OpsText.Set(refusalText, show ? "" : view.Refusal);
+            AvText.Set(refusalText, show ? "" : view.Refusal);
             refusalText.color = OpsInk.Word(AvState.Caution);
             if (!show)
             {
@@ -424,7 +424,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             SetEnabled(prevButton, !none && view.Page > 0);
             SetEnabled(nextButton, !none && view.Page + 1 < view.Pages);
             if (noContactsText.gameObject.activeSelf != none) noContactsText.gameObject.SetActive(none);
-            OpsText.Set(noContactsText, view.NoContacts);
+            AvText.Set(noContactsText, view.NoContacts);
             noContactsText.color = OpsInk.Word(view.NoContactsTone == AvState.Inert ? AvState.Info : view.NoContactsTone);
             for (int i = 0; i < trackRows.Length; i++)
             {
@@ -454,7 +454,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             string empty = "NO TASKED CALL · POSTED CALLS APPEAR HERE";
             if (noTaskedText.gameObject.activeSelf != none) noTaskedText.gameObject.SetActive(none);
             SetText(noTaskedText, ref noTaskedRaw, none ? empty : "", layout.CardRow(0).W - 16f);
-            noTaskedText.color = OpsInk.Muted;
+            noTaskedText.color = AvInk.Muted;
             for (int i = 0; i < cardRows.Length; i++)
             {
                 FeedCardView c = i < view.CardCount ? view.Cards[i] : default;
@@ -493,7 +493,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             string v = value ?? "";
             if (v == raw && text.text.Length > 0 == (v.Length > 0)) return;
             raw = v;
-            OpsText.Set(text, C2Kit.FitTo(text, v, room));
+            AvText.Set(text, C2Kit.FitTo(text, v, room));
         }
 
         // ---- Theme -----------------------------------------------------------------------------------------------
@@ -505,14 +505,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             RestyleStatus();
             imageBack.color = new Color(0.02f, 0.03f, 0.03f, 1f);
             foreach (AvPart p in parts) p.Restyle();
-            constFrame?.Paint(OpsInk.Inert, OpsInk.Hairline);
-            foreach (TMP_Text t in birdKey) if (t != null) t.color = OpsInk.Muted;
-            foreach (TMP_Text t in birdTele) if (t != null) t.color = OpsInk.Dim;
-            foreach (Image r in cellRule) if (r != null) r.color = OpsInk.Hairline;
+            constFrame?.Paint(AvInk.Inert, AvInk.Hairline);
+            foreach (TMP_Text t in birdKey) if (t != null) t.color = AvInk.Muted;
+            foreach (TMP_Text t in birdTele) if (t != null) t.color = AvInk.Dim;
+            foreach (Image r in cellRule) if (r != null) r.color = AvInk.Hairline;
             if (art != null) art.Restyle();
             foreach (AvControl c in new[] { opticalButton, radarButton, zoomButton, fullButton, prevButton, nextButton, confirmButton, sendButton })
                 c?.Restyle();
-            if (noTaskedText != null) noTaskedText.color = OpsInk.Muted;
+            if (noTaskedText != null) noTaskedText.color = AvInk.Muted;
             if (brackets != null) foreach (Bracket b in brackets) b?.Restyle();
         }
 
@@ -523,7 +523,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Color back = AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert);
             threatBack.color = threatTone == AvState.Danger ? Color.Lerp(back, OpsInk.Rail(AvState.Danger), 0.22f) : back;
             threatRail.color = OpsInk.Rail(threatTone);
-            threatText.color = threatTone == AvState.Inert ? OpsInk.Dim : OpsInk.Word(threatTone);
+            threatText.color = threatTone == AvState.Inert ? AvInk.Dim : OpsInk.Word(threatTone);
         }
 
         private void RestyleStatus()
@@ -607,19 +607,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
                 id = b.Id; selected = b.Selected; marked = b.Marked; cls = b.Class;
                 AvLay.Place(root, x - Hit * 0.5f, y - Hit * 0.5f, Hit, Hit);
-                OpsText.Set(label, b.Label);
+                AvText.Set(label, b.Label);
                 Restyle();
             }
 
             public void Restyle()
             {
                 if (outline == null) return;
-                Color ink = selected ? OpsInk.Select : marked ? OpsInk.Rail(AvState.Ready) : ClassInk(cls);
+                Color ink = selected ? AvInk.Select : marked ? OpsInk.Rail(AvState.Ready) : ClassInk(cls);
                 outline.StrokeColor = ink;
                 outline.BracketColor = ink;
                 outline.Stroke = selected || marked ? 2.2f : 1.4f;
                 outline.SetVerticesDirty();
-                label.color = selected ? OpsInk.Select : OpsInk.Ink;
+                label.color = selected ? AvInk.Select : AvInk.Ink;
             }
         }
 

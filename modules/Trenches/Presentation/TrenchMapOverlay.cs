@@ -20,7 +20,6 @@ namespace BoscaliSummer.Modules.Trenches.Presentation
     {
         private TrenchesSettings settings;
         private TrenchManager trenchManager;
-        private ManualLogSource logger;
 
         private DynamicMap dynamicMap;
         private GameObject layerObject;
@@ -33,11 +32,10 @@ namespace BoscaliSummer.Modules.Trenches.Presentation
         private bool lastProjectionActive;
         private int lastProjectionRevision;
 
-        public void Configure(TrenchesSettings config, TrenchManager manager, ManualLogSource log)
+        public void Configure(TrenchesSettings config, TrenchManager manager)
         {
             settings = config;
             trenchManager = manager;
-            logger = log;
 
             if (trenchManager != null)
             {
@@ -163,7 +161,7 @@ namespace BoscaliSummer.Modules.Trenches.Presentation
             initialized = true;
             isMapMaximized = DynamicMap.mapMaximized;
             layerObject.SetActive(isMapMaximized);
-            logger?.LogInfo("[TRENCHES] Tactical map overlay initialized.");
+            Plugin.Logger?.LogInfo("[TRENCHES] Tactical map overlay initialized.");
         }
     }
 

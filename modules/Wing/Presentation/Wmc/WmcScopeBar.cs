@@ -71,8 +71,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle row = AvStyleHost.FuiStyle("row");
             frame.Paint(AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert),
                 row.Border.HasValue ? AvStyleHost.Resolve(row.Border, Color.clear) : Color.clear);
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            scopeText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            scopeText.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             allChip.Restyle();
             foreach (AvControl c in elementChips) c.Restyle();
         }
@@ -104,7 +104,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 scopeKey = k;
                 scopeLabelShown = c.ScopeLabel;
-                WmcKit.Set(scopeText, WmcWords.ScopeText(c.ScopeLabel, inScope));
+                AvText.Set(scopeText, WmcWords.ScopeText(c.ScopeLabel, inScope));
             }
             allChip.Latched = c.Scope.Kind == ScopeKind.Wing;
 

@@ -62,7 +62,7 @@ namespace NOAvionics
             frame.Paint(AvStyleHost.Resolve(a.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(a.Border, AvTheme.Warning));
             Color c = AvStyleHost.Resolve(a.Rail, AvTheme.Warning);
             rail.color = c; icon.color = c; title.color = c;
-            body.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            body.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
         }
     }
 }

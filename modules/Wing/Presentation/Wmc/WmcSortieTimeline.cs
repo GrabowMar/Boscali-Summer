@@ -189,10 +189,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             frame.SetVerticesDirty();
-            Color dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            Color ink = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            Color ink = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (TMP_Text t in axis) t.color = dim;
             empty.color = dim;
             nowLabel.color = ink;
