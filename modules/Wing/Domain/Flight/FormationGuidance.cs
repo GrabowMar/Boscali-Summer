@@ -43,6 +43,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return new HorizontalCommand(Vector2.Lerp(forward * lookAhead + correction,
                 pursuit, acquisition), correction, limit);
         }
-        private static float Clamp(float value, float low, float high) => Math.Max(low, Math.Min(high, value));
     }
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Numerics;
 
+using BoscaliSummer.Core.Math;
+
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Shared receding-horizon rendezvous for steering and speed demand.</summary>
@@ -65,8 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         internal static float LongRangeBlend(float distance)
         {
-            float t = Math.Max(0f, Math.Min(1f, (distance - 600f) / 1800f));
-            return t * t * (3f - 2f * t);
+            return Scalar.SmoothStep(600f, 2400f, distance);
         }
 
         private static Vector2 Rotate(Vector2 v, float angle)
