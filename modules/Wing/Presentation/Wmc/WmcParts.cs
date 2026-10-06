@@ -49,67 +49,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static Color Color(string cls) => WmcDraw.RailColor(cls);
     }
 
-    /// <summary>The WMC's hand-drawn <see cref="Glyph"/>s as the nearest kit v2 <see cref="AvIcon"/> (the only icons that exist).</summary>
-    internal static class WmcIcons
-    {
-        public static AvIcon Of(Glyph g)
-        {
-            switch (g)
-            {
-                case Glyph.Attack: return AvIcon.Target;
-                case Glyph.MyTarget: return AvIcon.Focus2;
-                case Glyph.Splash: return AvIcon.Flame;
-                case Glyph.Engage: return AvIcon.Bolt;
-                case Glyph.Disengage: return AvIcon.ArrowBackUp;
-                case Glyph.ClearSix: return AvIcon.Eye;
-                case Glyph.Ecm: return AvIcon.Antenna;
-                case Glyph.FormUp: return AvIcon.UsersGroup;
-                case Glyph.Move: return AvIcon.ArrowUpRight;
-                case Glyph.Orbit: return AvIcon.CurrentLocation;
-                case Glyph.Hold: return AvIcon.PlayerPause;
-                case Glyph.Patrol: return AvIcon.ChartArrows;
-                case Glyph.Cap: return AvIcon.Shield;
-                case Glyph.Sweep: return AvIcon.Radar2;
-                case Glyph.Scout: return AvIcon.Map2;
-                case Glyph.Escort: return AvIcon.ShieldLock;
-                case Glyph.Rtb: return AvIcon.ArrowLeft;
-                case Glyph.Refit: return AvIcon.Gauge;
-                case Glyph.Land: return AvIcon.ArrowDown;
-                case Glyph.Cargo: return AvIcon.Stack2;
-                case Glyph.TakeOff: return AvIcon.ArrowUp;
-                case Glyph.Rescue: return AvIcon.Heart;
-                case Glyph.Detach: return AvIcon.Unlink;
-                case Glyph.Call: return AvIcon.Plus;
-                case Glyph.Bogey: return AvIcon.Radio;
-                case Glyph.Dismiss: return AvIcon.X;
-                case Glyph.React: return AvIcon.Bolt;
-                case Glyph.Missile: return AvIcon.AlertTriangle;
-                case Glyph.Warn: return AvIcon.AlertCircle;
-                case Glyph.Fuel: return AvIcon.Gauge;
-                case Glyph.Ammo: return AvIcon.Database;
-                case Glyph.Lost: return AvIcon.Skull;
-                case Glyph.Behind: return AvIcon.Eye;
-                case Glyph.Plane: return AvIcon.Plane;
-                case Glyph.Threat: return AvIcon.Radar2;
-                case Glyph.Pool: return AvIcon.Stack2;
-                case Glyph.Formation: return AvIcon.LayersSubtract;
-                case Glyph.Route: return AvIcon.MapPin;
-                case Glyph.Pilot: return AvIcon.User;
-                case Glyph.Gear: return AvIcon.Settings;
-                case Glyph.Base: return AvIcon.BuildingBank;
-                case Glyph.Pylon: return AvIcon.Stack2;
-                case Glyph.Check: return AvIcon.CircleCheck;
-                case Glyph.Info: return AvIcon.InfoCircle;
-                case Glyph.Record: return AvIcon.Circle;
-                case Glyph.Plan: return AvIcon.ListDetails;
-                case Glyph.Tuning: return AvIcon.AdjustmentsHorizontal;
-                case Glyph.Posture: return AvIcon.Shield;
-                case Glyph.Clear: return AvIcon.CircleCheck;
-                default: return AvIcon.None;
-            }
-        }
-    }
-
     /// <summary>Several sub-pages that share one flow line (TACTICAL's ORDERS · FORMATION · ROUTE·AP): each has a nested flow that
     /// lays out exactly as a page's; only the current one takes space, so the hidden ones cost no height.</summary>
     internal sealed class WmcSubPages : AvPart

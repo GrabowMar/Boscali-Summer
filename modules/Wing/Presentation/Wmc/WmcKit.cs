@@ -9,25 +9,15 @@ using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Kit v2 drawing primitives for the WMC's Rect/top-left, y-down-negative layout convention (phase A: the tab
-    /// files that call into <see cref="WmcKit"/>/<see cref="WmcUi"/>/<see cref="WmcFui"/> still pass absolute Rects; phase B
-    /// converts them to <see cref="AvFlow"/>). Every visual here is built from <see cref="AvFrame"/>/<see cref="AvText"/>/
-    /// <see cref="AvStyleHost"/> — never the retired v1 primitives.</summary>
+    /// <summary>Kit v2 drawing primitives for the WMC's Rect/top-left, y-down-negative layout convention, built from
+    /// <see cref="AvFrame"/>/<see cref="AvText"/>/<see cref="AvStyleHost"/>.</summary>
     internal static class WmcDraw
     {
-        /// <summary>WMC Rects are top-left, y growing downward as a <em>negative</em> anchoredPosition.y (v1's Place helper
-        /// convention); kit v2's <see cref="AvLay.Place(RectTransform,float,float,float,float)"/> negates y itself, so this
+        /// <summary>WMC Rects are top-left, y growing downward as a <em>negative</em> anchoredPosition.y; kit v2's <see cref="AvLay.Place(RectTransform,float,float,float,float)"/> negates y itself, so this
         /// flips it back once, here, instead of at every call site.</summary>
         public static void Place(RectTransform t, Rect r) => AvLay.Place(t, r.x, -r.y, r.width, r.height);
 
-        public static RectTransform Container(RectTransform parent, string name, Rect r)
-        {
-            RectTransform t = AvLay.Child(parent, name);
-            Place(t, r);
-            return t;
-        }
-
-        /// <summary>A flat fill, no border (v1's Panel helper).</summary>
+        /// <summary>A flat fill, no border.</summary>
         public static AvFrame Panel(RectTransform parent, Rect r, Color fill)
         {
             AvFrame f = AvFrame.Add(parent, "Panel", default);
@@ -37,7 +27,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return f;
         }
 
-        /// <summary>A 1 px stroke, no fill (v1's Outline helper, one mesh instead of four rules).</summary>
+        /// <summary>A 1 px stroke, no fill.</summary>
         public static AvFrame Outline(RectTransform parent, Rect r, Color color)
         {
             AvFrame f = AvFrame.Add(parent, "Outline", default);
@@ -46,34 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             f.Paint(Color.clear, color);
             f.raycastTarget = false;
             return f;
-        }
-
-        /// <summary>A thin filled line (a hairline, a tick, a spine): a plain Image, not a mesh frame.</summary>
-        public static Image Rule(RectTransform parent, Rect r, Color color)
-        {
-            Image img = AvLay.Solid(parent, "Rule", color);
-            Place(img.rectTransform, r);
-            return img;
-        }
-
-        /// <summary>A card fill + border resolved from the fui stylesheet class (e.g. "card", "card inert", "row"), falling
-        /// back to the given colours when the class has no rule.</summary>
-        public static AvFrame Box(RectTransform parent, Rect r, string classes, Color fallbackFill, Color fallbackBorder, string state = null)
-        {
-            AvStyle s = AvStyleHost.FuiStyle(classes, state);
-            AvFrame f = AvFrame.Add(parent, "Box", default);
-            Place(f.rectTransform, r);
-            f.Paint(AvStyleHost.Resolve(s.Background, fallbackFill), s.Border.HasValue ? AvStyleHost.Resolve(s.Border, fallbackBorder) : Color.clear);
-            f.raycastTarget = false;
-            return f;
-        }
-
-        /// <summary>A flat, borderless fill as a plain <see cref="Image"/> (not an <see cref="AvFrame"/> mesh).</summary>
-        public static Image Fill(RectTransform parent, Rect r, Color color)
-        {
-            Image img = AvLay.Solid(parent, "Fill", color);
-            Place(img.rectTransform, r);
-            return img;
         }
 
         /// <summary>A single-line, non-wrapping label at a Rect, sized/cased by <paramref name="role"/> and coloured from
@@ -168,7 +130,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static TMP_Text Text(RectTransform parent, Rect r, string classes, TextAlignmentOptions? align = null) =>
             WmcDraw.Label(parent, r, "", RoleFor(classes), classes, ColorFor(classes), align ?? TextAlignmentOptions.MidlineLeft);
 
-        /// <summary>The nearest kit v2 type role for a legacy WmcKit/WmcFui class name (sizes come only from
+        /// <summary>The nearest kit v2 type role for a legacy WmcKit class name (sizes come only from
         /// <see cref="AvTextRole"/>, never a literal font size).</summary>
         internal static AvTextRole RoleFor(string classes)
         {

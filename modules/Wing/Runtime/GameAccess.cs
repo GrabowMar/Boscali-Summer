@@ -8,21 +8,15 @@ using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
-    /// <summary>Wing-owned private game access (landing destinations, hangar spawns) plus
-    /// the wing's view of the shared seams: the radial wheel, its wedges and the MFD
-    /// resolve once in Infrastructure GameAccess, and this class only re-exposes them so
-    /// wing call sites keep their shape. Local application policy blocks publicizer
-    /// tasks. Resolve at startup and disable unavailable integrations instead of
-    /// throwing each frame.</summary>
+    /// <summary>Wing-owned private game access (landing destinations, hangar spawns) plus whether the shared radial seams
+    /// resolved. The wheel, its wedges and the MFD resolve once in Core GameAccess. Local application policy blocks
+    /// publicizer tasks. Resolve at startup and disable unavailable integrations instead of throwing each frame.</summary>
     internal static partial class GameAccess
     {
         /// <summary>Whether the native radial wheel and wedge seams resolved.</summary>
         public static bool Available { get; private set; }
 
         public static string UnavailableReason { get; private set; }
-
-        /// <summary>Whether native MFD internals resolved for the WMC screen.</summary>
-        public static bool MfdAvailable => CoreGameAccess.MfdAvailable;
 
         // Read the native landing state's chosen airbase; a guessed nearest base may differ from the
         // actual destination.
@@ -99,26 +93,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return member;
         }
 
-        // Radial accessors (shared seam).
-
-        public static RadialMenuAction[] GetActionsMain(RadialMenuMain menu) =>
-            CoreGameAccess.GetRadialActions(menu);
-
-        public static void SetActionsMain(RadialMenuMain menu, RadialMenuAction[] value) =>
-            CoreGameAccess.SetRadialActions(menu, value);
-
-        public static Aircraft GetMenuAircraft(RadialMenuMain menu) =>
-            CoreGameAccess.GetRadialAircraft(menu);
-
-        public static void SetupMain(RadialMenuMain menu) => CoreGameAccess.InvokeRadialSetupMain(menu);
-
-        // MFD accessors (shared seam).
-
-        public static List<Button> GetLeftButtons(VirtualMFD mfd) => CoreGameAccess.GetLeftMfdButtons(mfd);
-        public static List<Button> GetRightButtons(VirtualMFD mfd) => CoreGameAccess.GetRightMfdButtons(mfd);
-        public static List<MFDScreen> GetLeftScreens(VirtualMFD mfd) => CoreGameAccess.GetLeftMfdScreens(mfd);
-        public static List<MFDScreen> GetRightScreens(VirtualMFD mfd) => CoreGameAccess.GetRightMfdScreens(mfd);
-
         // Landing accessors.
 
         /// <summary>The field the game's jet landing state picked (null: none or unreadable).</summary>
@@ -147,21 +121,5 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             try { return hangarSpawnedObjectRef(hangar); }
             catch { return null; }
         }
-
-        // Radial action accessors (shared seam).
-
-        public static void SetActionType(RadialMenuAction action, RadialMenuAction.ActionType type) =>
-            CoreGameAccess.SetRadialActionType(action, type);
-
-        public static Image GetIconImage(RadialMenuAction action) =>
-            CoreGameAccess.GetRadialIconImage(action);
-
-        public static void SetIconSprite(RadialMenuAction action, Sprite sprite) =>
-            CoreGameAccess.SetRadialIconSprite(action, sprite);
-
-        /// <summary>Copy native sprites and colours; newly created actions otherwise have null sprites and
-        /// transparent colours.</summary>
-        public static void CopyAppearance(RadialMenuAction target, RadialMenuAction template) =>
-            CoreGameAccess.CopyRadialAppearance(target, template);
     }
 }

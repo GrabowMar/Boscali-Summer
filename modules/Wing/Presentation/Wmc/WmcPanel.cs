@@ -9,6 +9,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · WING (the
@@ -111,7 +112,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bool visible = Visible;
             if (wasVisible && !visible) WmcNameField.BlurAny();
             wasVisible = visible;
-            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && GameAccess.MfdAvailable;
+            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && CoreGameAccess.MfdAvailable;
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
@@ -126,7 +127,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 TryInstall();
                 return;
             }
-            MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
             context.Map.Update(context, Visible);
             overlay.Tick(context, Visible);
@@ -205,7 +205,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Reset()
         {
             WmcNameField.BlurAny();
-            MfdPresentation.Reset();
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
@@ -257,7 +256,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     BezelRegistry.Release(BezelRegistry.Wmc);
                     return;
                 }
-                screen = Build(template, buttons[slot], out float height);
+                screen = Build(template, buttons[slot], out _);
                 if (screen == null)
                 {
                     BezelRegistry.Release(BezelRegistry.Wmc);
@@ -270,8 +269,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     return;
                 }
                 bezelButton = buttons[slot];
-                MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
-                    new Vector2(AvTokens.PanelWidth, height), buttons[slot], left);
                 WingLog.Verbose("[WMC] installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1));
             }
             catch (Exception e)
@@ -341,8 +338,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float top = AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f + AvGridTokens.Tab + 4f;
             bodyRect = new Rect(0f, 0f, AvTokens.PanelWidth, Mathf.Max(40f, height - top - AvGridTokens.Footer));
 
-            // TACTICAL is a kit v2 flow page. The rest are LEGACY (phase B2 converts them): their Rect-based build is hosted in one
-            // fixed-height part of their flow, and their v1 buttons register in controls.Legacy.
+            // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
             tactical = new WmcTactical(controls);
             plan = new WmcPlan(controls);
             supply = new WmcSupply(controls);

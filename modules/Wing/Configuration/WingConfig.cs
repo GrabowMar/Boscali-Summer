@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 
@@ -16,16 +15,12 @@ namespace BoscaliSummer.Modules.Wing.Configuration
     internal enum HighlightMode { Off, Wing, WingAndTargets }
 
     /// <summary>Wing Command 1.0 settings, owned by Boscali Summer's shared config file.
-    /// The first launch after the merge imports a standalone 1.0 file's values once
-    /// (0.9 values never migrate, per the 1.0 rule) and archives it beside itself.
     /// Data files (formations, profiles, roster) live under <see cref="DataRoot"/>.
     /// The Avionics keys are gone on purpose: Command owns that section and its
     /// bridge applies it; a second bind would share one entry and fight it.</summary>
     internal sealed class WingConfig
     {
         internal const int SchemaVersion = 1;
-        private const string SchemaMarker = "SchemaVersion = 1";
-        private const string LegacyConfigName = "com.marci.wingcommand.cfg";
 
         internal static string DataRoot => Path.Combine(Paths.ConfigPath, "WingCommand", "v1");
 
@@ -100,15 +95,8 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
-        public ConfigEntry<KeyboardShortcut> KeyDumpTelemetry { get; }
-        public ConfigEntry<KeyboardShortcut> KeyStepTest { get; }
 
-        public WingConfig(ConfigFile c) : this(c, false)
-        {
-            ImportLegacyOneOh(c, this);
-        }
-
-        private WingConfig(ConfigFile c, bool legacyKeys)
+        public WingConfig(ConfigFile c)
         {
             c.Bind("Meta", "SchemaVersion", SchemaVersion, new ConfigDescription(
                 "Settings schema written by Wing Command. Do not edit.", null,
@@ -193,10 +181,10 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));
             // Renamed from OffsetX/OffsetY: the shared file already has Hud/OffsetX as an int,
             // and a same-key re-bind with another type throws.
-            HudX = c.Bind("Hud", legacyKeys ? "OffsetX" : "WingOffsetX", 0f, new ConfigDescription(
+            HudX = c.Bind("Hud", "WingOffsetX", 0f, new ConfigDescription(
                 "Move the wing strip right (+) or left (-), in HUD pixels.", new AcceptableValueRange<float>(-1500f, 1500f),
                 new ConfigurationManagerAttributes { Order = 79 }));
-            HudY = c.Bind("Hud", legacyKeys ? "OffsetY" : "WingOffsetY", 0f, new ConfigDescription(
+            HudY = c.Bind("Hud", "WingOffsetY", 0f, new ConfigDescription(
                 "Move the wing strip up (+) or down (-), in HUD pixels.", new AcceptableValueRange<float>(-1000f, 1000f),
                 new ConfigurationManagerAttributes { Order = 78 }));
             ShowWmc = c.Bind("Wmc", "Show", true, new ConfigDescription(
@@ -241,19 +229,12 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 null, new ConfigurationManagerAttributes { Order = 31 }));
 
             DevTools = c.Bind("Debug", "DevTools", false, new ConfigDescription(
-                "Enable developer tools: debug overlay, telemetry recorder, step tests and calibration.",
+                "Enable developer tools: the debug overlay and the nomodkit bridge snapshot.",
                 null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 70 }));
 
             Overlay = c.Bind("Debug", "Overlay", true, new ConfigDescription(
                 "With DevTools on, draw each wingman's slot (green), tracked reference (yellow), velocity command (cyan) " +
                 "and collision bias (red).", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 69 }));
-            KeyDumpTelemetry = c.Bind("Debug", "DumpTelemetry", KeyboardShortcut.Empty, new ConfigDescription(
-                "With DevTools on, write the last 120 s of wing telemetry to v1/telemetry.", null,
-                new ConfigurationManagerAttributes { IsAdvanced = true, Order = 68 }));
-
-            KeyStepTest = c.Bind("Debug", "StepTest", KeyboardShortcut.Empty, new ConfigDescription(
-                "With DevTools on, fly wingman #2 through a 38 s step test (above 1500 m; it recovers between short stick pulses) and calibrate its airframe.",
-                null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 67 }));
 
             c.Bind("Debug", "ExportLogs", false, new ConfigDescription(
                 "Export the latest Wing Command log events from this session beside dll " +
@@ -268,7 +249,7 @@ namespace BoscaliSummer.Modules.Wing.Configuration
 
             // Renamed from VerboseLogging: the shared file already has that key, and a
             // second bind would silently share one entry between two features.
-            VerboseLogging = c.Bind("Debug", legacyKeys ? "VerboseLogging" : "WingVerboseLogging", false, new ConfigDescription(
+            VerboseLogging = c.Bind("Debug", "WingVerboseLogging", false, new ConfigDescription(
                 "Log decisions, state transitions and flight diagnostics. Applies immediately.",
                 null, new ConfigurationManagerAttributes { DispName = "Debug action logging", Order = 60 }));
 
@@ -278,65 +259,5 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         private static ConfigEntry<KeyboardShortcut> Key(ConfigFile c, string name, string what, int order) =>
             c.Bind("Keys", name, KeyboardShortcut.Empty, new ConfigDescription(what + " Unbound by default.", null,
                 new ConfigurationManagerAttributes { Order = order }));
-
-        /// <summary>First-launch migration from a standalone Wing Command 1.0 file beside
-        /// ours: bind its values through the legacy key names, copy them over, and archive
-        /// the legacy file so it is never read twice. Anything unexpected fails closed to
-        /// the 1.0 defaults above; the shared file is never archived.</summary>
-        private static void ImportLegacyOneOh(ConfigFile live, WingConfig target)
-        {
-            string directory;
-            try { directory = Path.GetDirectoryName(live.ConfigFilePath); }
-            catch { return; }
-            if (string.IsNullOrEmpty(directory)) return;
-            string legacyPath = Path.Combine(directory, LegacyConfigName);
-            if (!File.Exists(legacyPath)) return;
-            try
-            {
-                if (File.ReadAllText(legacyPath).IndexOf(SchemaMarker, StringComparison.Ordinal) < 0) return;
-            }
-            catch { return; }
-            WingConfig legacy;
-            try { legacy = new WingConfig(new ConfigFile(legacyPath, false), true); }
-            catch { return; }
-            CopyEntries(legacy, target);
-            try
-            {
-                string archived = legacyPath + ".migrated.bak";
-                if (File.Exists(archived)) File.Delete(archived);
-                File.Move(legacyPath, archived);
-            }
-            catch
-            {
-                // The archive failed; the values are already ours, so a re-import next
-                // launch copies the same values again.
-            }
-        }
-
-        private static void CopyEntries(WingConfig from, WingConfig to)
-        {
-            foreach (PropertyInfo property in typeof(WingConfig).GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!typeof(ConfigEntryBase).IsAssignableFrom(property.PropertyType)) continue;
-                try
-                {
-                    var source = (ConfigEntryBase)property.GetValue(from, null);
-                    var entry = (ConfigEntryBase)property.GetValue(to, null);
-                    if (source != null && entry != null && source.SettingType == entry.SettingType)
-                        entry.BoxedValue = source.BoxedValue;
-                }
-                catch { /* one stale value never blocks the rest */ }
-            }
-            if (from.Hotas == null || to.Hotas == null) return;
-            for (int i = 0; i < from.Hotas.Length && i < to.Hotas.Length; i++)
-            {
-                try
-                {
-                    if (from.Hotas[i].Value != null && to.Hotas[i].Value != null)
-                        to.Hotas[i].Value.Value = from.Hotas[i].Value.Value;
-                }
-                catch { /* one stale value never blocks the rest */ }
-            }
-        }
     }
 }

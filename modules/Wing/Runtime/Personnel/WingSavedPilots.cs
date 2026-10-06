@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Storage;
 using BoscaliSummer.Core.Game;
@@ -118,17 +120,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return false;
         }
 
-        /// <summary>IMPORT: pilots from <see cref="Folder"/> and 0.9's <c>config/WingCommand/Pilots</c>, only callsigns not saved yet and
+        /// <summary>IMPORT: pilots from <see cref="Folder"/>, only callsigns not saved yet and
         /// not flying this mission unsaved, each with an empty service record. Source files are never touched.</summary>
         public static void Import(out int added, out int skipped, out int files)
         {
-            var incoming = new List<CustomPilotRecord>();
-            files = 0;
-            foreach (string dir in new[] { Folder, WingCustomPilots.LegacyDirectory })
-            {
-                incoming.AddRange(WingCustomPilots.LoadFolder(dir, out int n));
-                files += n;
-            }
+            List<CustomPilotRecord> incoming = LoadFolder(Folder, out files);
             SavedPilotStore s = Store;
             string backup = s.ToJson();
             s.Import(incoming, c => LiveUnsaved(c, null), out added, out skipped);
@@ -141,7 +137,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (added > 0) WingPilotRoster.Touch();
         }
 
-        /// <summary>EXPORT: every saved pilot to <c>Pilots/exported_pilots.json</c> (IMPORT and 0.9 both read it).</summary>
+        /// <summary>EXPORT: every saved pilot to <c>Pilots/exported_pilots.json</c> (IMPORT reads it).</summary>
         public static bool Export(out int pilots)
         {
             pilots = Store.Records.Count;
@@ -178,7 +174,49 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Load();
         }
 
-        public static void OpenFolder() => WingCustomPilots.OpenFolder(Folder);
+        /// <summary>The pilots in every readable top-level JSON file of <paramref name="dir"/> (read only); <paramref name="files"/> counts the files.</summary>
+        private static List<CustomPilotRecord> LoadFolder(string dir, out int files)
+        {
+            var pilots = new List<CustomPilotRecord>();
+            files = 0;
+            try
+            {
+                if (!Directory.Exists(dir)) return pilots;
+                foreach (string file in Directory.GetFiles(dir, "*.json", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        pilots.AddRange(CustomPilotCodec.Decode(File.ReadAllText(file)).Pilots);
+                        files++;
+                    }
+                    catch (Exception e)
+                    {
+                        WingLog.Logger.LogWarning("[Pilots] could not read " + Path.GetFileName(file) + ": " + e.Message);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                WingLog.Logger.LogWarning("[Pilots] could not list " + dir + ": " + e.Message);
+            }
+            return pilots;
+        }
+
+        /// <summary>Shows <see cref="Folder"/> in the file browser (created when missing).</summary>
+        public static void OpenFolder()
+        {
+            try
+            {
+                Directory.CreateDirectory(Folder);
+                Process.Start(new ProcessStartInfo { FileName = Folder, UseShellExecute = true });
+                WingToast.Show("Opened the Pilots folder");
+            }
+            catch (Exception e)
+            {
+                WingLog.Logger.LogWarning("[Pilots] could not open the folder: " + e.Message);
+                WingToast.Show("Pilots folder: " + Folder);
+            }
+        }
 
         /// <summary>A callsign flying this mission unsaved (other than <paramref name="self"/>): a save or import must not take it.</summary>
         private static bool LiveUnsaved(string callsign, WingPilot self)

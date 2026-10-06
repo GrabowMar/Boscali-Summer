@@ -1,5 +1,6 @@
 using System;
 
+using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal enum FormationRecoveryMode { Station, SlowLeader, Overshoot }
@@ -34,14 +35,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 responseTime += dt;
                 if (accel > 0.5f && accel < WingTuning.MaxCredibleAccel)
                 {
-                    ResponseSeconds += (Clamp(responseTime, 0.25f, 2f) - ResponseSeconds) * 0.15f;
+                    ResponseSeconds += (Scalar.Clamp(responseTime, 0.25f, 2f) - ResponseSeconds) * 0.15f;
                     awaitingResponse = false;
                 }
                 if (responseTime > 2f) awaitingResponse = false;
             }
             if (throttle < 0.1f && stableThrottle > 2f && accel < -0.2f && accel > -8f)
             {
-                float observed = Clamp(-accel * 0.8f, 0.5f, 6f);
+                float observed = Scalar.Clamp(-accel * 0.8f, 0.5f, 6f);
                 // Learn weaker braking faster because underestimating stopping distance is the
                 // dangerous error.
                 float tau = observed < Braking ? 1f : 8f;
@@ -51,7 +52,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public static float Move(float current, float target, float maximumChange) =>
-            current + Clamp(target - current, -Math.Max(0f, maximumChange), Math.Max(0f, maximumChange));
-        private static float Clamp(float value, float low, float high) => Math.Max(low, Math.Min(high, value));
+            current + Scalar.Clamp(target - current, -Math.Max(0f, maximumChange), Math.Max(0f, maximumChange));
     }
 }

@@ -9,6 +9,7 @@ using BoscaliSummer.Modules.Wing.Runtime;
 // Harmony calls prefixes and postfixes by reflection.
 #pragma warning disable IDE0051
 
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Adds a Wing Command slice to the game's radial wheel.
@@ -52,7 +53,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         internal static bool EnsureRootInjected(RadialMenuMain menu, bool openingRoot = false)
         {
             if (menu == null || inSubmenu) { Trace(openingRoot, "menu null or in submenu"); return false; }
-            RadialMenuAction[] current = GameAccess.GetActionsMain(menu);
+            RadialMenuAction[] current = CoreGameAccess.GetRadialActions(menu);
             if (current == null) { Trace(openingRoot, "actionsMain is null"); return false; }
 
             // Capture the baseline only at OpenMenu's root boundary; SetupMain also rebuilds other mods' submenus.
@@ -70,7 +71,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             var grown = new RadialMenuAction[current.Length + 1];
             current.CopyTo(grown, 0);
             grown[grown.Length - 1] = rootEntry;
-            GameAccess.SetActionsMain(menu, grown);
+            CoreGameAccess.SetRadialActions(menu, grown);
             baselineWheel = grown;
             Trace(openingRoot, "injected, wheel now " + grown.Length + " entries");
             return true;
@@ -99,7 +100,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (rootEntry != null && mainMenu != null) return;
 
             // Existing native actions are the appearance templates.
-            RadialMenuAction[] templates = GameAccess.GetActionsMain(menu);
+            RadialMenuAction[] templates = CoreGameAccess.GetRadialActions(menu);
             Func<int, RadialMenuAction> template = i =>
                 templates != null && templates.Length > 0 ? templates[i % templates.Length] : null;
 
@@ -166,7 +167,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (string.IsNullOrEmpty(key)) return;
             try
             {
-                GameAccess.SetIconSprite(action, IconFactory.Get(key));
+                CoreGameAccess.SetRadialIconSprite(action, IconFactory.Get(key));
             }
             catch (Exception e)
             {
@@ -186,23 +187,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             RadialMenuMain menu = SceneSingleton<RadialMenuMain>.i;
             if (menu == null || actions == null) return;
             // Stock AllowedOnAircraft dereferences the cached aircraft, so SetupMain needs it.
-            if (GameAccess.GetMenuAircraft(menu) == null) return;
+            if (CoreGameAccess.GetRadialAircraft(menu) == null) return;
             if (stockActions == null && !submenu) return;
-            if (submenu && !inSubmenu) stockActions = GameAccess.GetActionsMain(menu);
+            if (submenu && !inSubmenu) stockActions = CoreGameAccess.GetRadialActions(menu);
 
-            GameAccess.SetActionsMain(menu, (RadialMenuAction[])actions.Clone());
+            CoreGameAccess.SetRadialActions(menu, (RadialMenuAction[])actions.Clone());
             inSubmenu = submenu;
             lastInUseTime = Time.unscaledTime;
             try
             {
-                GameAccess.SetupMain(menu);
+                CoreGameAccess.InvokeRadialSetupMain(menu);
             }
             catch (Exception e)
             {
                 WingLog.Logger.LogError("Radial page rebuild failed, restoring the stock wheel: " + e);
-                GameAccess.SetActionsMain(menu, stockActions);
+                CoreGameAccess.SetRadialActions(menu, stockActions);
                 inSubmenu = false;
-                try { GameAccess.SetupMain(menu); } catch { /* leave the wheel as it is */ }
+                try { CoreGameAccess.InvokeRadialSetupMain(menu); } catch { /* leave the wheel as it is */ }
             }
         }
 
@@ -287,7 +288,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (!GameAccess.Available) { ReportInactive("OpenMenu"); return; }
             try
             {
-                if (WingRadialMenu.EnsureRootInjected(__instance, openingRoot: true)) GameAccess.SetupMain(__instance);
+                if (WingRadialMenu.EnsureRootInjected(__instance, openingRoot: true)) CoreGameAccess.InvokeRadialSetupMain(__instance);
             }
             catch (Exception e)
             {
