@@ -7,7 +7,7 @@ param(
     [switch]$UseUrp
 )
 $ErrorActionPreference = "Stop"
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
 if ($AssetName -notin @("terrain2_map", "terrain_naval_map")) { throw "Unsupported test map: $AssetName" }
 if (-not $MapImage) { $MapImage = Join-Path $env:TEMP "BoscaliMapSources/$AssetName.png" }
 if (-not (Test-Path -LiteralPath $MapImage)) { throw "Real game map image missing: $MapImage" }
@@ -21,11 +21,9 @@ $env:BOSCALI_STYLE_PREVIEW = $styleAsset
 $env:BOSCALI_ASSET_NAME = $AssetName
 $env:BOSCALI_MAP_WIDTH = if ($AssetName -eq "terrain_naval_map") { "163840" } else { "81920" }
 $env:BOSCALI_RELIEF_URP = if ($UseUrp) { "1" } else { "0" }
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
-Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.audio":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}'
+New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.physics":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.audio":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}' -Folders 'NOAvionics'
 # Match production's native field accessor rather than stubbing Harmony reflection.
-Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' -Filter '*.dll' | Where-Object { $_.Name -match '^(Mono|0Harmony\.dll$|HarmonyXInterop)' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
+Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(Mono|0Harmony\.dll$|HarmonyXInterop)'
 # The relief view and the context menu draw on kit v2 (AvFrame, AvText, AvControl, AvStyleHost ...), so the harness compiles the real kit sources
 # instead of the old v1 kit/AvTheme stubs, like Run-RailUnityCheck.ps1 does.
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
@@ -35,15 +33,8 @@ Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/AircraftTrailGr
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapUiManager.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Domain/ReliefLight.cs", "$repo/modules/Command/Domain/ReliefClusterPlan.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
-Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
-if ($AtlasStyles) { Get-ChildItem -LiteralPath (Join-Path $AtlasStyles 'NOAvionics') -Filter '*.avss' | Copy-Item -Destination (Join-Path $PreviewDirectory 'NOAvionics') -Force }
-$arguments = @('-batchmode', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'ReliefUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
-if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
-$process.WaitForExit()
+Copy-AvionicsStyles $PreviewDirectory $AtlasStyles
+$process = Invoke-UnityCheck $Unity $PreviewDirectory 'ReliefUnityCheck.Run' -Flags '-batchmode'
 Write-Output "Results and render: $PreviewDirectory"
-if (Test-Path "$PreviewDirectory/result.txt") { Get-Content "$PreviewDirectory/result.txt" }
-else { Get-Content "$PreviewDirectory/check.log" -Tail 60 }
-if ($process.ExitCode -ne 0) { throw "Unity relief check failed: $($process.ExitCode)" }
-
-if (-not (Test-Path -LiteralPath "$PreviewDirectory/result.txt") -or (Get-Content -LiteralPath "$PreviewDirectory/result.txt" -Raw) -notmatch '\APASS:') { throw "Unity exited without a successful result: $PreviewDirectory" }
+Show-UnityCheckResult $PreviewDirectory
+Assert-UnityResult $PreviewDirectory $process -ExitMessage "Unity relief check failed: $($process.ExitCode)"
