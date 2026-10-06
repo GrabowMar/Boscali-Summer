@@ -175,7 +175,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void Subscriptions()
         {
-            var subs = new OpsSubscriptions();
+            var subs = new FactionSubscriptions<OpsStateData>();
             OpsStateData s = Full();
             OpsStateData first = subs.Next(7, 1, s, 500f, 10f);
             TestAssert.That(first != null && first.Seq == 1, "a new member gets a full state");

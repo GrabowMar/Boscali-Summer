@@ -164,7 +164,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void Subscriptions()
         {
-            var subs = new SofSubscriptions();
+            var subs = new FactionSubscriptions<SofStateData>();
             SofStateData a = Full();
             SofStateData first = subs.Next(11, 1, a, 100f, 10f);
             TestAssert.That(first != null && first.Seq == 1, "a new member gets a fresh full state");

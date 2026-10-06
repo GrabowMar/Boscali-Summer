@@ -28,12 +28,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly SpaceCommandHost commands;
         private readonly SpaceSubscriptions subs;
         private readonly SpaceFeedState scratch = new SpaceFeedState();
-        private readonly CyberSubscriptions cyberSubs = new CyberSubscriptions();
-        private readonly CyberStateData cyberScratch = new CyberStateData();
-        private readonly SofSubscriptions sofSubs = new SofSubscriptions();
-        private readonly SofStateData sofScratch = new SofStateData();
-        private readonly OpsSubscriptions opsSubs = new OpsSubscriptions();
-        private readonly OpsStateData opsScratch = new OpsStateData();
+        private readonly StateFeed<CyberStateData> cyberFeed;
+        private readonly StateFeed<SofStateData> sofFeed;
+        private readonly StateFeed<OpsStateData> opsFeed;
+        private readonly IStateFeed[] feeds;
         private int cyberRound;
         private readonly HashSet<ulong> rosterIds = new HashSet<ulong>();
         private readonly List<SpaceContact> reveals = new List<SpaceContact>(SpaceContacts.MaxReveals);
@@ -49,6 +47,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             this.manager = manager; this.space = space; this.net = net;
             commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this, this, this, this);
             subs = new SpaceSubscriptions(SupportNet.ProtocolVersion);
+            // CYBER switched off: nothing is built and no CyberStateMessage is sent (a client simply stays on its NO LINK words).
+            cyberFeed = new StateFeed<CyberStateData>(this, "Cyber",
+                () => manager.Cyber != null && manager.Settings != null && manager.Settings.CyberEnabled.Value,
+                (p, d) => manager.Cyber.FillState(p, d, cyberRound), // the faction view is built once per poll round
+                (p, d) => net.SendFactionState(p, d, manager.CyberFeed, new CyberStateMessage { Data = d }));
+            sofFeed = new StateFeed<SofStateData>(this, "Sof", () => manager.Sof != null,
+                (p, d) => manager.Sof.FillState(p, d),
+                (p, d) => net.SendFactionState(p, d, manager.SofFeed, new SofStateMessage { Data = d }));
+            opsFeed = new StateFeed<OpsStateData>(this, "Ops", () => manager.Ops != null,
+                (p, d) => manager.Ops.FillState(p, d),
+                (p, d) => net.SendFactionState(p, d, manager.OpsFeed, new OpsStateMessage { Data = d }));
+            feeds = new IStateFeed[] { cyberFeed, sofFeed, opsFeed };
             Salt = NewSalt();
         }
 
@@ -70,9 +80,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             commands.ResetForScene();
             subs.Clear();
-            cyberSubs.Clear();
-            sofSubs.Clear();
-            opsSubs.Clear();
+            for (int i = 0; i < feeds.Length; i++) feeds[i].Clear();
             nextPoll = 0f;
             Salt = NewSalt();
         }
@@ -109,15 +117,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         break;
                     case SpaceCommandKind.CyberSync:
                         // A client that lost its CYBER mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
-                        if (commands.Admit(id, wall)) cyberSubs.Resync(id);
+                        if (commands.Admit(id, wall)) cyberFeed.Subs.Resync(id);
                         break;
                     case SpaceCommandKind.SofSync:
                         // A client that lost its SOF mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
-                        if (commands.Admit(id, wall)) sofSubs.Resync(id);
+                        if (commands.Admit(id, wall)) sofFeed.Subs.Resync(id);
                         break;
                     case SpaceCommandKind.OpSync:
                         // A client that lost its OPERATIONS mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
-                        if (commands.Admit(id, wall)) opsSubs.Resync(id);
+                        if (commands.Admit(id, wall)) opsFeed.Subs.Resync(id);
                         break;
                     default:
                         if (commands.Handle(id, command, space != null ? space.Generation : 0, wall, out SpaceReply reply))
@@ -163,83 +171,61 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 // GetPlayers hands out a shared list that nested calls refill: poll a private copy.
                 roster.Clear();
                 for (int i = 0; i < players.Count && roster.Count < roster.Capacity; i++) roster.Add(players[i]);
-                for (int i = 0; i < roster.Count; i++) { Poll(roster[i], now, wall); PollCyber(roster[i], now, wall); PollSof(roster[i], now, wall); PollOps(roster[i], now, wall); }
+                for (int i = 0; i < roster.Count; i++)
+                {
+                    Poll(roster[i], now, wall);
+                    for (int k = 0; k < feeds.Length; k++) feeds[k].Poll(roster[i], now, wall);
+                }
             }
             subs.EndRound();
-            cyberSubs.Prune(rosterIds);
-            sofSubs.Prune(rosterIds);
-            opsSubs.Prune(rosterIds);
+            for (int i = 0; i < feeds.Length; i++) feeds[i].Prune(rosterIds);
         }
 
-        /// <summary>The faction's CYBER state to one member: change-only, one message per two seconds at most, always the full state.</summary>
-        private void PollCyber(Player player, float now, float wall)
+        private interface IStateFeed
         {
-            // CYBER switched off: nothing is built and no CyberStateMessage is sent (a client simply stays on its NO LINK words).
-            if (player == null || player.HQ == null || manager.Cyber == null || manager.Settings == null || !manager.Settings.CyberEnabled.Value) return;
-            ulong id = PlayerIdentity.Of(player);
-            if (id == PlayerIdentity.None) return;
-            rosterIds.Add(id);
-            try
+            void Poll(Player player, float now, float wall);
+            void Clear();
+            void Prune(HashSet<ulong> keep);
+        }
+
+        /// <summary>One faction state (CYBER, SOF or OPERATIONS) to one member: change-only, one message per two seconds at most, always the full state.</summary>
+        private sealed class StateFeed<T> : IStateFeed where T : FactionStateData<T>, new()
+        {
+            public readonly FactionSubscriptions<T> Subs = new FactionSubscriptions<T>();
+            private readonly T scratch = new T();
+            private readonly SpaceNetHost host;
+            private readonly string tag;
+            private readonly Func<bool> ready;
+            private readonly Action<Player, T> fill, send;
+
+            public StateFeed(SpaceNetHost host, string tag, Func<bool> ready, Action<Player, T> fill, Action<Player, T> send)
             {
-                cyberScratch.Protocol = SupportNet.ProtocolVersion;
-                manager.Cyber.FillState(player, cyberScratch, cyberRound); // the faction view is built once per poll round
-                CyberStateData send = cyberSubs.Next(id, manager.FactionKeyOf(player.HQ), cyberScratch, now, wall);
-                if (send != null) net.SendCyberState(player, send);
+                this.host = host; this.tag = tag; this.ready = ready; this.fill = fill; this.send = send;
             }
-            catch (Exception e)
+
+            public void Clear() => Subs.Clear();
+            public void Prune(HashSet<ulong> keep) => Subs.Prune(keep);
+
+            public void Poll(Player player, float now, float wall)
             {
-                if (Time.unscaledTime >= nextWarning)
+                if (player == null || player.HQ == null || !ready()) return;
+                ulong id = PlayerIdentity.Of(player);
+                if (id == PlayerIdentity.None) return;
+                host.rosterIds.Add(id);
+                try
                 {
-                    nextWarning = Time.unscaledTime + 10f;
-                    Plugin.Logger?.LogWarning("[Support.Cyber] Mirror send failed: " + e.Message);
+                    scratch.Protocol = SupportNet.ProtocolVersion;
+                    fill(player, scratch);
+                    T next = Subs.Next(id, host.manager.FactionKeyOf(player.HQ), scratch, now, wall);
+                    if (next != null) send(player, next);
                 }
-            }
-        }
-
-        /// <summary>The faction's SOF state to one member: change-only, one message per two seconds at most, always the full state.</summary>
-        private void PollSof(Player player, float now, float wall)
-        {
-            if (player == null || player.HQ == null || manager.Sof == null) return;
-            ulong id = PlayerIdentity.Of(player);
-            if (id == PlayerIdentity.None) return;
-            rosterIds.Add(id);
-            try
-            {
-                sofScratch.Protocol = SupportNet.ProtocolVersion;
-                manager.Sof.FillState(player, sofScratch);
-                SofStateData send = sofSubs.Next(id, manager.FactionKeyOf(player.HQ), sofScratch, now, wall);
-                if (send != null) net.SendSofState(player, send);
-            }
-            catch (Exception e)
-            {
-                if (Time.unscaledTime >= nextWarning)
+                catch (Exception e)
                 {
-                    nextWarning = Time.unscaledTime + 10f;
-                    Plugin.Logger?.LogWarning("[Support.Sof] Mirror send failed: " + e.Message);
-                }
-            }
-        }
-
-        /// <summary>The viewer's OPERATIONS view to one member: change-only, one message per two seconds at most, always the full state.</summary>
-        private void PollOps(Player player, float now, float wall)
-        {
-            if (player == null || player.HQ == null || manager.Ops == null) return;
-            ulong id = PlayerIdentity.Of(player);
-            if (id == PlayerIdentity.None) return;
-            rosterIds.Add(id);
-            try
-            {
-                opsScratch.Protocol = SupportNet.ProtocolVersion;
-                manager.Ops.FillState(player, opsScratch);
-                OpsStateData send = opsSubs.Next(id, manager.FactionKeyOf(player.HQ), opsScratch, now, wall);
-                if (send != null) net.SendOpsState(player, send);
-            }
-            catch (Exception e)
-            {
-                if (Time.unscaledTime >= nextWarning)
-                {
-                    nextWarning = Time.unscaledTime + 10f;
-                    Plugin.Logger?.LogWarning("[Support.Ops] Mirror send failed: " + e.Message);
+                    if (Time.unscaledTime >= host.nextWarning)
+                    {
+                        host.nextWarning = Time.unscaledTime + 10f;
+                        Plugin.Logger?.LogWarning("[Support." + tag + "] Mirror send failed: " + e.Message);
+                    }
                 }
             }
         }

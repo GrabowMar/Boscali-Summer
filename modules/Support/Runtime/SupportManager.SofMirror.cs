@@ -1,7 +1,6 @@
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
-using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
@@ -12,33 +11,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal sealed partial class SupportManager
     {
         private readonly SofMirror sofMirror = new SofMirror();
-        private bool sofWanted;
-        private float nextSofSync;
+        private MirrorFeed<SofStateData> sofFeed;
 
         /// <summary>The local player's faction SOF view as the host last told it (own faction only).</summary>
         internal SofMirror SofMirror => sofMirror;
 
-        internal void ReceiveSofState(SofStateData data)
-        {
-            if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;
-            sofMirror.Apply(data, SupportNet.ProtocolVersion, MissionNow());
-        }
-
-        /// <summary>The SOF page (or an armed AIM: TEAM call) is on screen: keep asking the host for a state until one arrives (and again after a lost link).</summary>
-        internal void SetSofWanted(bool wanted)
-        {
-            if (wanted && !sofWanted) nextSofSync = 0f;
-            sofWanted = wanted;
-        }
-
-        private void UpdateSofMirror()
-        {
-            if (network == null || !sofWanted || sofMirror.Known) return;
-            float t = Time.unscaledTime;
-            if (t < nextSofSync) return;
-            nextSofSync = t + 2f;
-            network.RequestSpace(new SpaceCommand(SupportNet.ProtocolVersion, SpaceCommandKind.SofSync, 0));
-        }
+        /// <summary>The SOF page (or an armed AIM: TEAM call) is on screen: while it is, the feed asks the host for a state.</summary>
+        internal MirrorFeed<SofStateData> SofFeed => sofFeed ?? (sofFeed = new MirrorFeed<SofStateData>(sofMirror, SpaceCommandKind.SofSync));
 
         /// <summary>RAISE a team at a standing camp. Returns the request id (0 when not sent).</summary>
         internal int SofRaise() => SendSpace(SpaceCommandKind.SofRaise, 0, null);

@@ -16,8 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private OpsService ops;
         private readonly OpsMirror opsMirror = new OpsMirror();
-        private bool opsWanted;
-        private float nextOpsSync;
+        private MirrorFeed<OpsStateData> opsFeed;
 
         internal OpsService Ops => ops;
         internal void AttachOps(OpsService service) => ops = service;
@@ -70,28 +69,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal OpResult RunOpsVerb(Player player, in SpaceCommand command) =>
             ops != null ? ops.Verb(player, command) : new OpResult(OpOutcome.Unavailable);
 
-        internal void ReceiveOpsState(OpsStateData data)
-        {
-            if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;
-            opsMirror.Apply(data, SupportNet.ProtocolVersion, MissionNow());
-        }
-
-        /// <summary>The NET or SOF page is on screen: keep asking the host for a state until one arrives (and again after a lost link).</summary>
-        internal void SetOpsWanted(bool wanted)
-        {
-            if (wanted && !opsWanted) nextOpsSync = 0f;
-            opsWanted = wanted;
-        }
-
-        private void UpdateOpsMirror()
-        {
-            Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
-            if (network == null || !opsWanted || opsMirror.Known) return;
-            float t = Time.unscaledTime;
-            if (t < nextOpsSync) return;
-            nextOpsSync = t + 2f;
-            network.RequestSpace(new SpaceCommand(SupportNet.ProtocolVersion, SpaceCommandKind.OpSync, 0));
-        }
+        /// <summary>The NET or SOF page is on screen: while it is, the feed asks the host for a state.</summary>
+        internal MirrorFeed<OpsStateData> OpsFeed => opsFeed ?? (opsFeed = new MirrorFeed<OpsStateData>(opsMirror, SpaceCommandKind.OpSync));
 
         /// <summary>FUND tap: 25 CR (<paramref name="large"/> false) or 50 CR. Returns the request id (0 when not sent).</summary>
         internal int OpsFund(OpDomain domain, bool large) => SendSpace(SpaceCommandKind.OpFund, (int)domain | (large ? 2 : 0), null);

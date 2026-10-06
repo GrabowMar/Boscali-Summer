@@ -27,6 +27,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
     internal interface ISpaceWriter { void WriteByte(byte value); }
 
+    /// <summary>A writer that only counts: the exact encoded size of a message, for the one-buffer budget.</summary>
+    internal sealed class ByteCounter : ISpaceWriter
+    {
+        public int Bytes;
+        public void WriteByte(byte value) => Bytes++;
+    }
+
     internal interface ISpaceReader
     {
         /// <summary>Bytes left in the message. Readers bound every array by this before allocating.</summary>
@@ -481,16 +488,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>True when the wire can carry this coordinate (finite, inside +-838 km). Hosts filter rows with this.</summary>
         public static bool Codable(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= CoordinateLimit;
 
-        private sealed class CountingWriter : ISpaceWriter
-        {
-            public int Bytes;
-            public void WriteByte(byte value) => Bytes++;
-        }
-
         /// <summary>Exact encoded size of a state message, for the one-buffer budget.</summary>
         public static int StateSize(SpaceStateData s)
         {
-            var counter = new CountingWriter();
+            var counter = new ByteCounter();
             WriteState(counter, s);
             return counter.Bytes;
         }

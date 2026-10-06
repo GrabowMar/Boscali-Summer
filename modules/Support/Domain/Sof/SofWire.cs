@@ -59,12 +59,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     /// One faction's SOF state, always a full snapshot (never a delta). Members of the owning faction only. Own teams, own camps, revealed targets, held
     /// buildings and revealed enemy teams (a position only). Times are host mission seconds; on the wire an expiry is the quantized seconds left from <see cref="Now"/>.
     /// </summary>
-    internal sealed class SofStateData
+    internal sealed class SofStateData : FactionStateData<SofStateData>
     {
-        public byte Protocol;
         public bool Active;
-        public int Seq;
-        public float Now;
         public byte TeamCap, TapIntrusions;
         public float TapUntil;
         public readonly List<SofCampRow> Camps = new List<SofCampRow>();
@@ -74,7 +71,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public readonly List<SofEnemyRow> Enemies = new List<SofEnemyRow>();
         public readonly List<SofEventRow> Events = new List<SofEventRow>();
 
-        public SofStateData Clone()
+        public override SofStateData Clone()
         {
             var c = new SofStateData { Protocol = Protocol, Active = Active, Seq = Seq, Now = Now, TeamCap = TeamCap, TapIntrusions = TapIntrusions, TapUntil = TapUntil };
             c.Camps.AddRange(Camps); c.Teams.AddRange(Teams); c.Targets.AddRange(Targets); c.Held.AddRange(Held); c.Enemies.AddRange(Enemies); c.Events.AddRange(Events);
@@ -82,7 +79,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
-        public bool SameAs(SofStateData o)
+        public override bool SameAs(SofStateData o)
         {
             if (o == null || Active != o.Active || TeamCap != o.TeamCap || TapIntrusions != o.TapIntrusions || !SpaceMirror.SameExpiry(TapUntil, o.TapUntil) ||
                 Camps.Count != o.Camps.Count || Teams.Count != o.Teams.Count || Targets.Count != o.Targets.Count || Held.Count != o.Held.Count ||
@@ -253,45 +250,29 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         private static SofStateData Bad() => new SofStateData();
 
-        private sealed class Counter : ISpaceWriter
-        {
-            public int Bytes;
-            public void WriteByte(byte value) => Bytes++;
-        }
-
         public static int StateSize(SofStateData s)
         {
-            var c = new Counter();
+            var c = new ByteCounter();
             WriteState(c, s);
             return c.Bytes;
         }
     }
 
-    /// <summary>The client's copy of its own faction's SOF state. Full snapshots only: anything not newer than the last one on this link is dropped.</summary>
-    internal sealed class SofMirror
+    /// <summary>The client's copy of its own faction's SOF state (see <see cref="FactionMirror{T}"/>).</summary>
+    internal sealed class SofMirror : FactionMirror<SofStateData>
     {
-        public SofStateData State { get; private set; } = new SofStateData();
-        public bool Known { get; private set; }
-        public int Seq { get; private set; }
-        public int Floor { get; private set; }
+        protected override bool Bounds(SofStateData d) =>
+            d.Camps.Count <= SofWire.MaxCamps && d.Teams.Count <= SofWire.MaxTeams && d.Targets.Count <= SofWire.MaxTargets && d.Held.Count <= SofWire.MaxHeld &&
+            d.Enemies.Count <= SofWire.MaxEnemies && d.Events.Count <= SofWire.MaxEvents;
 
-        public void Reset() { State = new SofStateData(); Known = false; Seq = 0; }
-
-        public void ResetLink() { Reset(); Floor = 0; }
-
-        public bool Apply(SofStateData d, byte protocol, float clientNow)
+        protected override SofStateData Shift(SofStateData d, float offset, float clientNow)
         {
-            if (d == null || d.Protocol != protocol || d.Seq <= 0 || d.Seq <= Floor || !SpaceRules.MissionTime(clientNow)) return false;
-            if (d.Camps.Count > SofWire.MaxCamps || d.Teams.Count > SofWire.MaxTeams || d.Targets.Count > SofWire.MaxTargets || d.Held.Count > SofWire.MaxHeld ||
-                d.Enemies.Count > SofWire.MaxEnemies || d.Events.Count > SofWire.MaxEvents) return false;
-            float offset = clientNow - d.Now;
             SofStateData copy = d.Clone();
             copy.Now = clientNow;
             if (copy.TapUntil > 0f) copy.TapUntil += offset;
             for (int i = 0; i < copy.Teams.Count; i++) { SofTeamRow t = copy.Teams[i]; if (t.EndsAt > 0f) t.EndsAt += offset; copy.Teams[i] = t; }
             for (int i = 0; i < copy.Held.Count; i++) { SofHeldRow h = copy.Held[i]; if (h.Until > 0f) h.Until += offset; copy.Held[i] = h; }
-            State = copy; Known = true; Seq = d.Seq; Floor = d.Seq;
-            return true;
+            return copy;
         }
 
         /// <summary>The point a lasing team holds (the AIM: TEAM source for any CALL). False when no team lases.</summary>
@@ -302,51 +283,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             for (int i = 0; i < State.Teams.Count; i++)
                 if (State.Teams[i].Lasing && State.Teams[i].State == TeamState.OnSite) { callsign = SofRules.Callsign(State.Teams[i].Slot); x = State.Teams[i].TargetX; z = State.Teams[i].TargetZ; return true; }
             return false;
-        }
-    }
-
-    /// <summary>Host side: per-member send gating (change-only, at most one message per 2 s, a fresh full on a new member or an explicit sync).</summary>
-    internal sealed class SofSubscriptions
-    {
-        public const int MaxSubscribers = SpaceContacts.MaxPlayers;
-        public const float MinGapSeconds = 2f;
-
-        private sealed class Sub { public int Faction = int.MinValue; public float NextAt; public SofStateData Last; public bool Force = true; }
-        private readonly Dictionary<ulong, Sub> subs = new Dictionary<ulong, Sub>();
-        private readonly List<ulong> removed = new List<ulong>();
-        private int seq;
-
-        public int Count => subs.Count;
-
-        public void Clear() { subs.Clear(); removed.Clear(); }
-
-        public void Resync(ulong player) { if (subs.TryGetValue(player, out Sub s)) { s.Force = true; s.NextAt = 0f; } }
-
-        public void Prune(HashSet<ulong> keep)
-        {
-            removed.Clear();
-            foreach (var pair in subs) if (keep == null || !keep.Contains(pair.Key)) removed.Add(pair.Key);
-            for (int i = 0; i < removed.Count; i++) subs.Remove(removed[i]);
-            removed.Clear();
-        }
-
-        public SofStateData Next(ulong player, int faction, SofStateData current, float now, float wall)
-        {
-            if (player == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall) || seq == int.MaxValue) return null;
-            if (!subs.TryGetValue(player, out Sub s))
-            {
-                if (subs.Count >= MaxSubscribers) return null;
-                subs[player] = s = new Sub();
-            }
-            if (s.Faction != faction) { s.Faction = faction; s.Force = true; s.Last = null; }
-            if (!s.Force && wall < s.NextAt) return null;
-            if (!s.Force && s.Last != null && s.Last.SameAs(current)) return null;
-            current.Seq = ++seq;
-            current.Now = now;
-            s.Last = current.Clone();
-            s.Force = false;
-            s.NextAt = wall + MinGapSeconds;
-            return current;
         }
     }
 

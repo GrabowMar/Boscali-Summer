@@ -365,56 +365,26 @@ namespace BoscaliSummer.Modules.Support.Networking
             player.Owner?.Send(new SpaceStateMessage { Data = data });
         }
 
-        /// <summary>Server to one faction member. The caller selects members by their faction; nothing is broadcast.</summary>
-        internal void SendCyberState(Player player, CyberStateData data)
+        /// <summary>
+        /// Server to one faction member (CYBER, SOF, OPERATIONS): the caller selects members by their faction and builds the view per member; nothing is broadcast.
+        /// The host's own player is handed the data in-process (the mirror copies what it keeps).
+        /// </summary>
+        internal void SendFactionState<TData, TMsg>(Player player, TData data, MirrorFeed<TData> feed, TMsg message) where TData : FactionStateData<TData>, new()
         {
             if (player == null || data == null) return;
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
             {
-                manager.ReceiveCyberState(data); // the mirror copies what it keeps
+                feed.Receive(data);
                 return;
             }
-            player.Owner?.Send(new CyberStateMessage { Data = data });
+            player.Owner?.Send(message);
         }
 
-        /// <summary>Server to one faction member. The caller selects members by their faction; nothing is broadcast.</summary>
-        internal void SendSofState(Player player, SofStateData data)
-        {
-            if (player == null || data == null) return;
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
-            {
-                manager.ReceiveSofState(data); // the mirror copies what it keeps
-                return;
-            }
-            player.Owner?.Send(new SofStateMessage { Data = data });
-        }
+        private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage message) => manager.OpsFeed.Receive(message.Data);
 
-        /// <summary>Server to one member. The caller builds the view per member (own faction's rows, the enemies' pings, everyone's flights); nothing is broadcast.</summary>
-        internal void SendOpsState(Player player, OpsStateData data)
-        {
-            if (player == null || data == null) return;
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
-            {
-                manager.ReceiveOpsState(data); // the mirror copies what it keeps
-                return;
-            }
-            player.Owner?.Send(new OpsStateMessage { Data = data });
-        }
+        private void ReceiveSofState(INetworkPlayer _, SofStateMessage message) => manager.SofFeed.Receive(message.Data);
 
-        private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage message)
-        {
-            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveOpsState(message.Data);
-        }
-
-        private void ReceiveSofState(INetworkPlayer _, SofStateMessage message)
-        {
-            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveSofState(message.Data);
-        }
-
-        private void ReceiveCyberState(INetworkPlayer _, CyberStateMessage message)
-        {
-            if (message.Data != null && message.Data.Protocol == ProtocolVersion) manager.ReceiveCyberState(message.Data);
-        }
+        private void ReceiveCyberState(INetworkPlayer _, CyberStateMessage message) => manager.CyberFeed.Receive(message.Data);
 
         private void ReceiveSpaceCommand(INetworkPlayer sender, SpaceCommandMessage message)
         {
@@ -630,58 +600,14 @@ namespace BoscaliSummer.Modules.Support.Networking
                 catch (Exception) { return default; }
                 finally { WireIn.R = null; }
             });
-            SetWriter<SpaceStateMessage>((w, v) =>
-            {
-                WireOut.W = w;
-                try { SpaceWire.WriteState(WireOut, v.Data ?? new SpaceStateData { Protocol = ProtocolVersion }); }
-                finally { WireOut.W = null; }
-            });
-            SetReader<SpaceStateMessage>(r =>
-            {
-                WireIn.R = r;
-                try { return new SpaceStateMessage { Data = SpaceWire.ReadState(WireIn, ProtocolVersion) }; }
-                catch (Exception) { return default; }
-                finally { WireIn.R = null; }
-            });
-            SetWriter<CyberStateMessage>((w, v) =>
-            {
-                WireOut.W = w;
-                try { CyberWire.WriteState(WireOut, v.Data ?? new CyberStateData { Protocol = ProtocolVersion }); }
-                finally { WireOut.W = null; }
-            });
-            SetReader<CyberStateMessage>(r =>
-            {
-                WireIn.R = r;
-                try { return new CyberStateMessage { Data = CyberWire.ReadState(WireIn, ProtocolVersion) }; }
-                catch (Exception) { return default; }
-                finally { WireIn.R = null; }
-            });
-            SetWriter<SofStateMessage>((w, v) =>
-            {
-                WireOut.W = w;
-                try { SofWire.WriteState(WireOut, v.Data ?? new SofStateData { Protocol = ProtocolVersion }); }
-                finally { WireOut.W = null; }
-            });
-            SetReader<SofStateMessage>(r =>
-            {
-                WireIn.R = r;
-                try { return new SofStateMessage { Data = SofWire.ReadState(WireIn, ProtocolVersion) }; }
-                catch (Exception) { return default; }
-                finally { WireIn.R = null; }
-            });
-            SetWriter<OpsStateMessage>((w, v) =>
-            {
-                WireOut.W = w;
-                try { OpsWire.WriteState(WireOut, v.Data ?? new OpsStateData { Protocol = ProtocolVersion }); }
-                finally { WireOut.W = null; }
-            });
-            SetReader<OpsStateMessage>(r =>
-            {
-                WireIn.R = r;
-                try { return new OpsStateMessage { Data = OpsWire.ReadState(WireIn, ProtocolVersion) }; }
-                catch (Exception) { return default; }
-                finally { WireIn.R = null; }
-            });
+            SetStateCodec<SpaceStateMessage, SpaceStateData>(v => v.Data, d => new SpaceStateMessage { Data = d }, () => new SpaceStateData { Protocol = ProtocolVersion },
+                SpaceWire.WriteState, SpaceWire.ReadState);
+            SetStateCodec<CyberStateMessage, CyberStateData>(v => v.Data, d => new CyberStateMessage { Data = d }, () => new CyberStateData { Protocol = ProtocolVersion },
+                CyberWire.WriteState, CyberWire.ReadState);
+            SetStateCodec<SofStateMessage, SofStateData>(v => v.Data, d => new SofStateMessage { Data = d }, () => new SofStateData { Protocol = ProtocolVersion },
+                SofWire.WriteState, SofWire.ReadState);
+            SetStateCodec<OpsStateMessage, OpsStateData>(v => v.Data, d => new OpsStateMessage { Data = d }, () => new OpsStateData { Protocol = ProtocolVersion },
+                OpsWire.WriteState, OpsWire.ReadState);
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
             MessagePacker.RegisterMessage<CreditStateMessage>();
@@ -717,6 +643,25 @@ namespace BoscaliSummer.Modules.Support.Networking
 
         private static readonly WireWriter WireOut = new WireWriter();
         private static readonly WireReader WireIn = new WireReader();
+
+        // The four state messages (SPACE, CYBER, SOF, OPS) are one codec: an inert value stands in for a null write, and a malformed read is inert, never a crash.
+        private static void SetStateCodec<TMsg, TData>(Func<TMsg, TData> data, Func<TData, TMsg> wrap, Func<TData> inert,
+                                                       Action<ISpaceWriter, TData> write, Func<ISpaceReader, byte, TData> read) where TData : class
+        {
+            SetWriter<TMsg>((w, v) =>
+            {
+                WireOut.W = w;
+                try { write(WireOut, data(v) ?? inert()); }
+                finally { WireOut.W = null; }
+            });
+            SetReader<TMsg>(r =>
+            {
+                WireIn.R = r;
+                try { return wrap(read(WireIn, ProtocolVersion)); }
+                catch (Exception) { return default; }
+                finally { WireIn.R = null; }
+            });
+        }
 
         private static void SetWriter<T>(Action<NetworkWriter, T> writer) =>
             Bind(typeof(Writer<T>), "Write", writer);

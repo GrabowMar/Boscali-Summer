@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             sofPage = null;
             spacePanel = null;
             tab = C2Tab.Cap;
-            manager?.SetCyberWanted(false);
+            manager?.CyberFeed.Want(false);
             sceneGeneration++;
             c2.Clear();
             chromeKey = footerKey = "";
@@ -371,9 +371,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void SelectTab(C2Tab next)
         {
             tab = next;
-            manager?.SetCyberWanted(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
-            manager?.SetSofWanted(next == C2Tab.Sof); // likewise the SOF page for the SOF mirror
-            manager?.SetOpsWanted(next == C2Tab.Net || next == C2Tab.Sof); // and both for the OPERATIONS mirror (their OPERATION box)
+            manager?.CyberFeed.Want(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
+            manager?.SofFeed.Want(next == C2Tab.Sof); // likewise the SOF page for the SOF mirror
+            manager?.OpsFeed.Want(next == C2Tab.Net || next == C2Tab.Sof); // and both for the OPERATIONS mirror (their OPERATION box)
             for (int i = 0; i < pages.Length; i++)
                 if (pages[i] != null) pages[i].gameObject.SetActive(i == (int)next - 1);
             chromeKey = footerKey = "";
