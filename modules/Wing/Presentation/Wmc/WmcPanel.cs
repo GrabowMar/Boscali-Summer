@@ -341,8 +341,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float top = AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f + AvGridTokens.Tab + 4f;
             bodyRect = new Rect(0f, 0f, AvTokens.PanelWidth, Mathf.Max(40f, height - top - AvGridTokens.Footer));
 
-            // TACTICAL is a kit v2 flow page. The rest are LEGACY (phase B2 converts them): their Rect-based build is hosted in one
-            // fixed-height part of their flow, and their v1 buttons register in controls.Legacy.
+            // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
             tactical = new WmcTactical(controls);
             plan = new WmcPlan(controls);
             supply = new WmcSupply(controls);

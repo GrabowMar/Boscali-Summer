@@ -122,57 +122,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>Layout helpers the WMC tabs share.</summary>
     internal static class WmcUi
     {
-        public const float Row = AvTokens.RowHeight, Gap = AvTokens.Space1, TitleHeight = 18f;
-
-        /// <summary>A page's spine (its full content height) and the inner rect its content hangs in, right of the spine
-        /// (the synced shell has no outer padding; Boscali's panels lay out the same way).</summary>
-        public const float SpineInset = 14f, SpineWidth = 3f;
-
-        public static Rect Page(RectTransform page, Rect body, float contentHeight)
-        {
-            WmcDraw.Rule(page, new Rect(body.x, body.y, SpineWidth, Mathf.Max(body.height, contentHeight)),
-                AvStyleHost.FuiColor("select", AvTheme.Accent)).raycastTarget = false;
-            return new Rect(body.x + SpineInset, body.y, body.width - SpineInset - AvTokens.Space2, body.height);
-        }
-
-        /// <summary>A track and its fill; <see cref="SetBar"/> sizes the fill.</summary>
-        public static Image Bar(RectTransform parent, Rect area)
-        {
-            WmcDraw.Panel(parent, area, AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert)).raycastTarget = false;
-            Image fill = WmcDraw.Fill(parent, new Rect(area.x, area.y, 0f, area.height), AvStyleHost.FuiColor("friendly", AvTheme.Friendly));
-            fill.raycastTarget = false;
-            return fill;
-        }
-
-        public static void SetBar(Image fill, float width, float fraction, Color color)
-        {
-            RectTransform rt = fill.rectTransform;
-            rt.sizeDelta = new Vector2(float.IsNaN(fraction) ? 0f : width * Mathf.Clamp01(fraction), rt.sizeDelta.y);
-            fill.color = color;
-        }
-
-
-        /// <summary>A section head (spine tick + section-title, optional note); returns the y below it.</summary>
-        public static float Head(RectTransform parent, Rect body, float y, string title, string note = null)
-        {
-            WmcDraw.Rule(parent, new Rect(body.x - SpineInset, y - 8f, 9f, 1f), AvStyleHost.FuiColor("select", AvTheme.Accent)).raycastTarget = false;
-            WmcDraw.Label(parent, new Rect(body.x, y, body.width, 16f), title, AvTextRole.Head, "section-title", AvTheme.RailInfo);
-            if (!string.IsNullOrEmpty(note))
-                WmcDraw.Label(parent, new Rect(body.x, y, body.width, 16f), note, AvTextRole.Head, "section-title-note",
-                    AvTheme.RailInfo, TextAlignmentOptions.MidlineRight);
-            return y - 16f - Gap;
-        }
-
-        /// <summary>Colours a rail by its normalised state word (<see cref="WmcDraw.RailColor"/>; each is a `:root` role, so
-        /// nothing needs caching the way a per-class sheet lookup once did).</summary>
-        public static void SetRail(Image rail, string railClass)
-        {
-            if (rail == null) return;
-            // Pages speak in chip states (live, warn); the roles are ready / caution / danger / info / inert (review of R4b).
-            Color c = WmcDraw.RailColor(WmcStyle.RailOf(railClass));
-            if (rail.color != c) rail.color = c;
-        }
-
         /// <summary>The row-value colour of a level class ("ok", "warn", "bad", "").</summary>
         public static Color LevelColor(string level) =>
             level == "bad" ? AvTheme.RailDanger : level == "warn" ? AvTheme.RailCaution : level == "ok" ? AvTheme.RailReady
