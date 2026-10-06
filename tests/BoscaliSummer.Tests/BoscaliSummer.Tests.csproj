@@ -64,7 +64,6 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractSelection.cs" Link="Features\DynamicOperations\ContractSelection.cs" />
-    <Compile Include="..\..\modules\Campaign\Domain\MissionInstallPlan.cs" Link="Features\Campaign\MissionInstallPlan.cs" />
     <Compile Include="..\..\Core\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Core\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
     <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />

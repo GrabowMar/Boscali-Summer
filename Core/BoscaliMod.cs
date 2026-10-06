@@ -99,9 +99,7 @@ namespace BoscaliSummer.Core
         }
 
         /// <summary>
-        /// The startup roster. Registration order is display order on the SET pages. Modules
-        /// missing here are compiled but never installed (Campaign and Visuals);
-        /// add a gated line here to bring one back.
+        /// The startup roster. Registration order is display order on the SET pages.
         /// </summary>
         private static IModule[] Compose(ModConfiguration settings)
         {

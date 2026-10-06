@@ -592,7 +592,6 @@ string[] featureTypes =
     ,"BoscaliSummer.Modules.TheaterOps.TheaterOpsModule"
     ,"BoscaliSummer.Modules.AirSurvival.AirSurvivalModule"
     ,"BoscaliSummer.Modules.Events.EventsModule"
-    ,"BoscaliSummer.Modules.Campaign.CampaignModule"
     ,"BoscaliSummer.Modules.Trenches.TrenchesModule"
     ,"BoscaliSummer.Modules.Hud.HudModule"
     ,"BoscaliSummer.Modules.Comms.CommsModule"
