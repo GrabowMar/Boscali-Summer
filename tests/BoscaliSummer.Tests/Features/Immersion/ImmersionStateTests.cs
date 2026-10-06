@@ -7,8 +7,6 @@ namespace BoscaliSummer.Tests.Features.Immersion
     {
         public static void Run()
         {
-            TestAssert.That(ImmersionMath.GAudioCutoffFrequency(1f, true) == 22000f,
-                "Ordinary flight does not muffle native audio.");
             TestAssert.That(ImmersionMath.ExposureAudioCutoff(0f, 0f) == 22000f &&
                 ImmersionMath.ExposureAudioCutoff(float.NaN, 0f) == 22000f,
                 "Neutral and invalid exposure bypass filtering.");

@@ -7,13 +7,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         internal static float Input(float value) => Finite(value) ? Math.Max(-1f, Math.Min(1f, value)) : 0f;
 
-        internal static float ElbowDegrees(float upperM, float lowerM, float targetDistanceM)
-        {
-            if (!Finite(upperM) || !Finite(lowerM) || !Finite(targetDistanceM) || upperM <= .001f || lowerM <= .001f) return 0f;
-            double cosine = (upperM * upperM + lowerM * lowerM - targetDistanceM * targetDistanceM) / (2.0 * upperM * lowerM);
-            return (float)Math.Min(175.0, 180.0 - Math.Acos(Math.Max(-1.0, Math.Min(1.0, cosine))) * 180.0 / Math.PI);
-        }
-
         internal static float Smoothing(float dt, float rate) =>
             Finite(dt) && Finite(rate) && dt > 0f && dt <= .25f && rate > 0f ? (float)(1.0 - Math.Exp(-Math.Min(dt, .05f) * rate)) : 0f;
 

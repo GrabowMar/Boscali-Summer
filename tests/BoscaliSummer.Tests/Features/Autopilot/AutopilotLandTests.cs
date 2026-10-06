@@ -35,15 +35,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 AutopilotLandPolicy.AdjustedLandingSpeed(float.NaN, 1000f, 30f) == 30f,
                 "Unknown mass falls back to the book landing speed");
 
-            TestAssert.That(AutopilotLandPolicy.ApproachThrottle(100f, 100f, 0.9f) == 0.5f,
-                "On-speed approach holds half throttle");
-            TestAssert.That(AutopilotLandPolicy.ApproachThrottle(0f, 200f, 0.9f) == 0.9f,
-                "Slow approach clamps to cruise throttle");
-            TestAssert.That(AutopilotLandPolicy.ApproachThrottle(300f, 100f, 0.9f) == 0f,
-                "Fast approach clamps to idle");
-            TestAssert.That(AutopilotLandPolicy.ApproachThrottle(float.NaN, 100f, 0.9f) == 0f,
-                "Invalid speed fails closed to idle");
-
             TestAssert.That(AutopilotLandPolicy.BrakeRamp(0f) == 0f &&
                 AutopilotLandPolicy.BrakeRamp(10f) == 1f &&
                 AutopilotLandPolicy.BrakeRamp(-1f) == 0f &&

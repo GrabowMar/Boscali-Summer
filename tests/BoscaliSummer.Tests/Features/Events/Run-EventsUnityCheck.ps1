@@ -14,9 +14,9 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi/Fui" -Filter '*.cs' | Copy-Item -De
 Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.fui.avss", "$repo/AvionicsUi/avionics.steel.avss", "$repo/AvionicsUi/avionics.ace.avss", "$repo/AvionicsUi/avionics.phosphor.avss", "$repo/AvionicsUi/avionics.fieldops.avss", "$repo/AvionicsUi/avionics.amber.avss", "$repo/AvionicsUi/avionics.glass.avss", "$repo/AvionicsUi/avionics.nightops.avss" -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/"
 Copy-Item -LiteralPath "$repo/modules/Events/Assets/event_atlas.png" -Destination "$PreviewDirectory/BepInEx/plugins/BoscaliSummer/Events/"
-# The module's own presentation (no alert / plane HUD / tone), its pure domain, settings and the two shared files it reads.
+# The module's own presentation (no alert / tone), its pure domain, settings and the two shared files it reads.
 Get-ChildItem -LiteralPath "$repo/modules/Events/Presentation" -Filter '*.cs' |
-    Where-Object { $_.Name -notin @('SuperEventAlert.cs', 'SuperEventPlaneHud.cs', 'EventAlertTone.cs') } |
+    Where-Object { $_.Name -notin @('SuperEventAlert.cs', 'EventAlertTone.cs') } |
     Copy-Item -Destination "$PreviewDirectory/Assets/"
 Get-ChildItem -LiteralPath "$repo/modules/Events/Domain" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Events/Configuration/EventsSettings.cs", "$repo/Core/Contracts/IActiveEventsView.cs", "$repo/Core/Math/Deterministic.cs", "$repo/Core/Game/MfdPanelInstaller.cs", "$PSScriptRoot/EventsUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/EventsUnityStubs.cs" -Destination "$PreviewDirectory/Assets/"

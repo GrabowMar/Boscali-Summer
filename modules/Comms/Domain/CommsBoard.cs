@@ -191,14 +191,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             return null;
         }
 
-        public int CountBy(ulong author, CommsItemKind kind)
-        {
-            int count = 0;
-            for (int i = 0; i < items.Count; i++)
-                if (items[i].Author == author && items[i].Kind == kind) count++;
-            return count;
-        }
-
         public int CountOf(CommsItemKind kind)
         {
             int count = 0;

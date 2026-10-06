@@ -47,7 +47,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const float RootSpanDeg = 360f;
         public const float SubLevelSpanDeg = 150f;
         public const float RingThresholdDeg = 305f;
-        public const float SelectorDegPerSec = 270f;
 
         /// <summary>ACE base radius (0.17 UI units) expressed in 1080p pixels.</summary>
         public const float BaseRadiusPx = 190f;
@@ -103,11 +102,5 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return closest;
         }
 
-        public static float AdvanceSelector(float degrees, float deltaSeconds)
-        {
-            if (deltaSeconds <= 0f) return degrees;
-            double next = degrees + (SelectorDegPerSec * deltaSeconds);
-            return (float)(next - (Math.Floor(next / 360.0) * 360.0));
-        }
     }
 }

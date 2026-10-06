@@ -7,14 +7,9 @@ namespace BoscaliSummer.Tests.Features.Immersion
     {
         public static void Run()
         {
-            TestAssert.That(Math.Abs(PilotPoseMath.ElbowDegrees(1, 1, (float)Math.Sqrt(2)) - 90) < .001f,
-                "A reachable arm uses a right angle for equal limbs and sqrt-two reach.");
-            TestAssert.That(PilotPoseMath.ElbowDegrees(1, 1, 100) >= 0 && PilotPoseMath.ElbowDegrees(1, 1, 0) <= 175,
-                "Unreachable and folded arms remain bounded.");
             foreach (float bad in new[] { float.NaN, float.PositiveInfinity, float.NegativeInfinity })
             {
-                TestAssert.That(PilotPoseMath.ElbowDegrees(bad, 1, 1) == 0 &&
-                    PilotPoseMath.Smoothing(bad, 8) == 0 && PilotPoseMath.TorsoDegrees(bad, false) == 0,
+                TestAssert.That(PilotPoseMath.Smoothing(bad, 8) == 0 && PilotPoseMath.TorsoDegrees(bad, false) == 0,
                     "Invalid measurements produce finite neutral values.");
             }
             for (int i = -100; i <= 100; i++)

@@ -174,13 +174,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             Sort();
         }
 
-        public int RankOf(ulong player)
-        {
-            for (int i = 0; i < rows.Count; i++)
-                if (rows[i].Player == player) return i + 1;
-            return 0;
-        }
-
         public int PointsOf(ulong player)
         {
             for (int i = 0; i < rows.Count; i++)

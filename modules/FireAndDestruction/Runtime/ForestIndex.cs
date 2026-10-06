@@ -99,6 +99,7 @@ namespace BoscaliSummer.Fire
         }
 #endif
 
+#if NET8_0_OR_GREATER
         internal void BuildFromPoints(IReadOnlyList<Vector2> pointList, float requestedCellSize)
         {
             Ready = false;
@@ -126,6 +127,7 @@ namespace BoscaliSummer.Fire
 
             IndexSortedKeys(keys, totalCount);
         }
+#endif
 
         private void IndexSortedKeys(long[] keys, int count)
         {

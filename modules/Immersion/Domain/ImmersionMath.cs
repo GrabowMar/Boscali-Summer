@@ -170,32 +170,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             return Clamp((jerkGPerSec - thresholdGPerSec) / 20f, 0.15f, 0.5f);
         }
 
-        /// <summary>
-        /// Cutoff frequency (Hz) for the pilot's auditory narrowing under G-load.
-        /// When outside the cockpit, returns 22000 Hz (full bandwidth).
-        /// In cockpit, high positive G (> 4G) drains blood from the head, muffling high frequencies down to ~800 Hz.
-        /// Negative G (&lt; -1G, redout) exerts venous pressure, rolling off to ~1200 Hz.
-        /// </summary>
-        public static float GAudioCutoffFrequency(float forceY, bool cockpit)
-        {
-            if (!cockpit) return 22000f;
-
-            const float baseCutoff = 22000f;
-
-            if (forceY > 4f)
-            {
-                float excess = Clamp((forceY - 4f) / 5f, 0f, 1f);
-                return baseCutoff * (float)Math.Pow(800f / baseCutoff, excess);
-            }
-            else if (forceY < -1f)
-            {
-                float redout = Clamp((-forceY - 1f) / 3f, 0f, 1f);
-                return baseCutoff * (float)Math.Pow(1200f / baseCutoff, redout);
-            }
-
-            return baseCutoff;
-        }
-
         private static float Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
     }
 }

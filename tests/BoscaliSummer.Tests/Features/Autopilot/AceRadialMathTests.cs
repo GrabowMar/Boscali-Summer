@@ -15,7 +15,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             FanBecomesRingAtThreshold();
             SubLevelSqueezesIntoSpan();
             RadiusWidensAsStepNarrows();
-            ExpandScaleAndSelector();
+            ExpandScale();
             ClosestPointWithinThreshold();
             CollectDropsHiddenAndPrunesEmptyBranches();
             CollectHonoursNodeBudget();
@@ -69,12 +69,10 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             Near(AceRadialMath.RadiusFactor(180f), 0.5f, "radius factor floors at 0.5");
         }
 
-        private static void ExpandScaleAndSelector()
+        private static void ExpandScale()
         {
             Near(AceRadialMath.ExpandScale(0f), 0.3f, "new level starts at 30%");
             Near(AceRadialMath.ExpandScale(2f), 1f, "new level settles at full size");
-            Near(AceRadialMath.AdvanceSelector(0f, 1f), 270f, "selector turns 270 degrees per second");
-            Near(AceRadialMath.AdvanceSelector(0f, 2f), 180f, "selector angle wraps at 360");
         }
 
         private static void ClosestPointWithinThreshold()

@@ -71,7 +71,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private float targetAlpha;
         private float layoutWidth;
         private float layoutOffset;
-        private int planeNotifiedSerial;
         private bool failed;
 
         public void Configure(EventsSettings config, EventsManager manager)
@@ -95,7 +94,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             compactTitle = compactImpact = compactClock = null;
             onAir = null;
             shownSerial = 0;
-            planeNotifiedSerial = 0;
             lastOrderSecond = -1;
             openedAt = closeAt = collapseAt = duration = targetAlpha = 0f;
             failed = false;
@@ -115,11 +113,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             else
             {
                 bool super = events.Current != null && events.Current.IsSuper;
-                if (super && events.SuperSerial != planeNotifiedSerial)
-                {
-                    planeNotifiedSerial = events.SuperSerial;
-                    SuperEventPlaneHud.OnSuperEvent(events.Current);
-                }
                 if (super && events.SuperSerial != shownSerial && DynamicMap.mapMaximized)
                 {
                     shownSerial = events.SuperSerial;

@@ -26,12 +26,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return (float)Math.Sqrt(mass / maxWeight) * landingSpeed;
         }
 
-        public static float ApproachThrottle(float speed, float targetSpeed, float cruiseThrottle)
-        {
-            if (float.IsNaN(speed) || float.IsNaN(targetSpeed) || float.IsNaN(cruiseThrottle)) return 0f;
-            return Clamp(0.5f - (speed - targetSpeed) * 0.1f, 0f, cruiseThrottle);
-        }
-
         public static float BrakeRamp(float secondsOnGround)
         {
             if (float.IsNaN(secondsOnGround)) return 0f;
