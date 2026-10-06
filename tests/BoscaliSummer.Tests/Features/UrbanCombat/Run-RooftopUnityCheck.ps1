@@ -4,11 +4,8 @@ param(
     [switch]$BuildPlayer
 )
 $ErrorActionPreference = "Stop"
-if (Test-Path -LiteralPath "$PreviewDirectory/results.txt") { Remove-Item -LiteralPath "$PreviewDirectory/results.txt" }
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages" | Out-Null
-Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.modules.physics":"1.0.0","com.unity.modules.imgui":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}'
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.modules.physics":"1.0.0","com.unity.modules.imgui":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}'
 Copy-Item -LiteralPath "$PSScriptRoot/RooftopUnityCheck.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/UrbanCombat/Runtime/RooftopPlacement.cs", "$repo/modules/UrbanCombat/Runtime/GarrisonComposition.cs", "$repo/Core/Math/Deterministic.cs", "$repo/modules/UrbanCombat/Runtime/GarrisonMarkerInfo.cs", "$repo/modules/UrbanCombat/Runtime/StrongpointHitPolicy.cs", "$repo/modules/UrbanCombat/Runtime/NestRegistry.cs", "$repo/modules/UrbanCombat/Visuals/OccupiedBuildingMarking.cs", "$repo/modules/UrbanCombat/Visuals/FactionBannerTexture.cs", "$repo/modules/UrbanCombat/Visuals/GarrisonVisual.cs" -Destination "$PreviewDirectory/Assets/"
 $entryPoint = if ($BuildPlayer) { "RooftopUnityCheck.BuildPlayer" } else { "RooftopUnityCheck.Run" }
@@ -16,9 +13,8 @@ $entryPoint = if ($BuildPlayer) { "RooftopUnityCheck.BuildPlayer" } else { "Roof
 # (headless servers must not build it), so the editor check runs windowed but hidden,
 # like the presentation check; only the player build itself stays headless.
 $headless = @(if ($BuildPlayer) { "-batchmode" })
-$arguments = $headless + @("-disable-assembly-updater", "-projectPath", ('"' + $PreviewDirectory + '"'), "-executeMethod", $entryPoint, "-logFile", ('"' + "$PreviewDirectory/check.log" + '"'))
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WindowStyle Hidden -PassThru
-if (-not $process.WaitForExit(15 * 60 * 1000)) { $process.Kill(); throw "Rooftop Unity check timed out after 15 minutes: $PreviewDirectory" }
+$process = Invoke-UnityCheck $Unity $PreviewDirectory $entryPoint -Flags ($headless + '-disable-assembly-updater') -Result 'results.txt' -InheritWorkingDirectory `
+    -TimeoutSeconds (15 * 60) -TimeoutMessage "Rooftop Unity check timed out after 15 minutes: $PreviewDirectory"
 Write-Output "Unity exit: $($process.ExitCode)"
 Write-Output "Results, renders and log: $PreviewDirectory"
 if (Test-Path -LiteralPath "$PreviewDirectory/results.txt") { Get-Content -LiteralPath "$PreviewDirectory/results.txt" }

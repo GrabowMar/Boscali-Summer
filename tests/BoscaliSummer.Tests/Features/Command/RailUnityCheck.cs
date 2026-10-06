@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Standalone render/geometry check for the control rail and the vector glyphs.
@@ -40,20 +41,9 @@ public static class RailUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
 
-            var setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            var parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("RailCheck.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            SetExecutablePath("RailCheck.exe");
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
@@ -131,7 +121,7 @@ public static class RailUnityCheck
         canvas.renderMode = RenderMode.WorldSpace;
         ((RectTransform)root.transform).sizeDelta = new Vector2(480f, 100f);
 
-        var camera = CreateCamera(new Vector3(0f, 0f, -10f), 100f, new Color(.03f, .06f, .05f));
+        var camera = OrthoCamera("Camera", 100f, new Color(.03f, .06f, .05f));
         for (int i = 0; i < Kinds.Length; i++)
         {
             var go = new GameObject("Glyph_" + Kinds[i], typeof(RectTransform), typeof(MfdGlyph));
@@ -258,7 +248,7 @@ public static class RailUnityCheck
         if (MfdRail.TryGetRail(out RectTransform rail))
         {
             Check(rail.rect.width >= 150f, "the built rail must match the resolved column");
-            var camera = CreateCamera(Vector3.zero, 470f, new Color(.08f, .13f, .16f));
+            var camera = OrthoCamera("Camera", 470f, new Color(.08f, .13f, .16f), Vector3.zero);
             float top = rail.anchoredPosition.y + rail.rect.height * 0.5f;
             camera.transform.position = new Vector3(rail.anchoredPosition.x, top - 8f - 462f, -10f);
             Render(canvas, camera, 152, 940, "RAIL.png");
@@ -334,36 +324,12 @@ public static class RailUnityCheck
 
     // ------------------------------------------------------------------- plumbing
 
-    private static Camera CreateCamera(Vector3 position, float size, Color background)
-    {
-        var camera = new GameObject("Camera", typeof(Camera)).GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = size;
-        camera.transform.position = position;
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = background;
-        return camera;
-    }
-
     private static void Render(Canvas canvas, Camera camera, int width, int height, string file)
     {
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in canvas.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
 
-        var target = new RenderTexture(width, height, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-
-        var image = new Texture2D(width, height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
-        image.Apply();
-        File.WriteAllBytes(file, image.EncodeToPNG());
-
-        RenderTexture.active = null;
-        camera.targetTexture = null;
-        Object.DestroyImmediate(target);
-        Object.DestroyImmediate(image);
+        CapturePng(camera, width, height, file);
     }
 
     private static void Check(bool condition, string message)

@@ -12,6 +12,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>Production presentation builders with deterministic display fixtures; no game session.</summary>
 public static class PresentationUnityCheck
@@ -44,13 +45,7 @@ public static class PresentationUnityCheck
                 return;
             }
 
-            MethodInfo setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            ParameterInfo[] pathParameters = setPaths.GetParameters();
-            var pathArguments = new object[pathParameters.Length];
-            pathArguments[0] = Path.GetFullPath("PresentationPreview.exe");
-            for (int i = 1; i < pathArguments.Length; i++)
-                pathArguments[i] = pathParameters[i].HasDefaultValue ? pathParameters[i].DefaultValue : null;
-            setPaths.Invoke(null, pathArguments);
+            SetExecutablePath("PresentationPreview.exe");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvBundle.ResetForTests();
             AvBundle.Load(Debug.Log);
@@ -673,23 +668,9 @@ public static class PresentationUnityCheck
         foreach (AvReveal reveal in canvas.GetComponentsInChildren<AvReveal>(true)) reveal.Finish();
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in canvas.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
-        var cameraObject = new GameObject("Capture", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = height * .5f;
-        camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.backgroundColor = AvTheme.SurfaceInert;
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        var target = new RenderTexture((int)width * 2, (int)height * 2, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
-        image.Apply();
-        File.WriteAllBytes(Path.GetFullPath(file), image.EncodeToPNG());
-        RenderTexture.active = null;
-        Object.DestroyImmediate(image); Object.DestroyImmediate(cameraObject); Object.DestroyImmediate(target);
+        Camera camera = OrthoCamera("Capture", height * .5f, AvTheme.SurfaceInert);
+        CapturePng(camera, (int)width * 2, (int)height * 2, Path.GetFullPath(file));
+        Object.DestroyImmediate(camera.gameObject);
         captures++;
     }
 
@@ -698,11 +679,6 @@ public static class PresentationUnityCheck
         Activator.CreateInstance(TypeOf(type), new ConfigFile(Path.GetFullPath(file), false));
     private static object Get(object target, string field) => target.GetType().GetField(field, All)?.GetValue(target);
     private static object GetStatic(Type type, string field) => type.GetField(field, All)?.GetValue(null);
-    private static void Set(object target, string field, object value) => target.GetType().GetField(field, All).SetValue(target, value);
-    private static object Call(object target, string method, params object[] args) =>
-        target.GetType().GetMethod(method, All).Invoke(target, args);
-    private static object CallStatic(Type type, string method, params object[] args) =>
-        type.GetMethod(method, All).Invoke(null, args);
     private static void Text(object target, string field, string value)
     {
         TMP_Text label = target == null ? null : target.GetType().GetField(field, All)?.GetValue(target) as TMP_Text;

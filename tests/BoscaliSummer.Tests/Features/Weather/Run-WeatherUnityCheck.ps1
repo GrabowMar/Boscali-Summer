@@ -1,15 +1,11 @@
 param([string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe', [switch]$RainBench,
     [string]$EvidenceDir = '')
 $ErrorActionPreference = 'Stop'
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$fixture = if ($EvidenceDir) { [IO.Path]::GetFullPath($EvidenceDir) } else {
-    Join-Path $env:TEMP ('BoscaliWeatherCheck-' + [guid]::NewGuid().ToString('N'))
-}
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+$fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliWeatherCheck-'
 if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists: $fixture" }
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
-New-Item -ItemType Directory -Force "$fixture/Assets/Resources", "$fixture/Assets/Code", "$fixture/Packages", "$fixture/ProjectSettings" | Out-Null
-Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022.3.62f3'
-Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
+New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
     Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs') } |
     Copy-Item -Destination "$fixture/Assets/Code/"
@@ -35,13 +31,11 @@ SubShader { Tags {"RenderType"="Opaque"} Pass { Color (0.5,0.5,0.5,1) } }
 }
 '@
 Write-Output "Weather fixture: $fixture"
-Get-ChildItem "$fixture/Assets" -Recurse -File | Get-FileHash |
-    Select-Object Hash, Path | Export-Csv "$fixture/input-manifest.csv" -NoTypeInformation
+Export-UnityCheckHashes "$fixture/input-manifest.csv" (Get-ChildItem "$fixture/Assets" -Recurse -File)
 $entry = if ($RainBench) { 'RainBench.Build' } else { 'WeatherUnityCheck.Build' }
-$editor = Start-Process $Unity -ArgumentList @('-batchmode','-projectPath',('"'+$fixture+'"'),'-executeMethod',$entry,'-logFile',('"'+"$fixture/build.log"+'"')) -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-$editor.WaitForExit()
+$editor = Invoke-UnityCheck $Unity $fixture $entry -Flags '-batchmode' -LogName 'build.log'
 if ($editor.ExitCode -ne 0 -or -not (Test-Path "$fixture/Player/WeatherCheck.exe")) { throw "Player build failed: $fixture/build.log" }
-$player = Start-Process "$fixture/Player/WeatherCheck.exe" -ArgumentList @('-batchmode','-screen-width','320','-screen-height','240','-logFile',('"'+"$fixture/player.log"+'"')) -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-if (-not $player.WaitForExit(120000)) { $player.Kill(); throw "Fixture timeout: $fixture/player.log" }
+$player = Invoke-UnityPlayer "$fixture/Player/WeatherCheck.exe" @('-batchmode', '-screen-width', '320', '-screen-height', '240', '-logFile', ('"' + "$fixture/player.log" + '"')) $fixture `
+    -TimeoutSeconds 120 -TimeoutMessage "Fixture timeout: $fixture/player.log"
 Get-Content "$fixture/result.txt"
 if ($player.ExitCode -ne 0) { throw "Weather fixture failed: $fixture/player.log" }

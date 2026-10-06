@@ -17,6 +17,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 public static class SettingsUnityCheck
 {
@@ -27,19 +28,8 @@ public static class SettingsUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            var setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            var parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("SettingsCheck.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            if (!EnsureTmpEssentials(Run)) return;
+            SetExecutablePath("SettingsCheck.exe");
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
@@ -490,18 +480,7 @@ public static class SettingsUnityCheck
         Canvas.ForceUpdateCanvases();
         foreach (var text in canvas.GetComponentsInChildren<TMP_Text>()) text.ForceMeshUpdate();
         Gate(canvas, height + "/" + tag);
-        var target = new RenderTexture(480, height, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-        var image = new Texture2D(480, height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0, 0, 480, height), 0, 0);
-        image.Apply();
-        File.WriteAllBytes("SET-" + height + "-" + tag + ".png", image.EncodeToPNG());
-        RenderTexture.active = null;
-        camera.targetTexture = null;
-        Object.DestroyImmediate(target);
-        Object.DestroyImmediate(image);
+        CapturePng(camera, 480, height, "SET-" + height + "-" + tag + ".png");
     }
 
     /// <summary>

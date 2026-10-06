@@ -3,12 +3,10 @@ param(
     [string]$PreviewDirectory = (Join-Path $env:TEMP ("BoscaliCocCheck-" + [guid]::NewGuid().ToString("N")))
 )
 $ErrorActionPreference = "Stop"
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
-Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}'
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}' -Folders 'NOAvionics'
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Object { $_.Name -notlike '*Tests.cs' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
+Copy-AvionicsStyles $PreviewDirectory
 Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", `
     "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", `
@@ -35,17 +33,11 @@ Copy-Item -LiteralPath `
     "$repo/Core/Contracts/ITerritoryIngress.cs", `
     "$repo/Core/Contracts/IThreatPicture.cs", `
     "$PSScriptRoot/SettingsUnityStubs.cs", `
-    "$PSScriptRoot/CocUnityCheck.cs" `
+    "$PSScriptRoot/CocUnityCheck.cs", $UnityCheckHarness `
     -Destination "$PreviewDirectory/Assets/"
-Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' -Filter '*.dll' | Where-Object { $_.Name -match '^(BepInEx|Mono|0Harmony)' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
-if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }
+Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx|Mono|0Harmony)'
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
-$arguments = @('-batchmode', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', 'CocUnityCheck.Run', '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
-$process.WaitForExit()
+$process = Invoke-UnityCheck $Unity $PreviewDirectory 'CocUnityCheck.Run' -Flags '-batchmode'
 Write-Output "Results and renders: $PreviewDirectory"
-if (Test-Path "$PreviewDirectory/result.txt") { Get-Content "$PreviewDirectory/result.txt" }
-else { Get-Content "$PreviewDirectory/check.log" -Tail 80 }
-if ($process.ExitCode -ne 0) { throw "Unity COC check failed: $($process.ExitCode)" }
-
-if (-not (Test-Path -LiteralPath "$PreviewDirectory/result.txt") -or (Get-Content -LiteralPath "$PreviewDirectory/result.txt" -Raw) -notmatch '\APASS:') { throw "Unity exited without a successful result: $PreviewDirectory" }
+Show-UnityCheckResult $PreviewDirectory -LogTail 80
+Assert-UnityResult $PreviewDirectory $process -ExitMessage "Unity COC check failed: $($process.ExitCode)" -FailMessage "Unity exited without a successful result: $PreviewDirectory"

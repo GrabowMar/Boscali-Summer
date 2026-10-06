@@ -4,15 +4,11 @@ param(
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
-$fixture = if ($EvidenceDir) { [IO.Path]::GetFullPath($EvidenceDir) } else {
-    Join-Path $env:TEMP ('BoscaliCloudDensity-' + [guid]::NewGuid().ToString('N'))
-}
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+$fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliCloudDensity-'
 if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists: $fixture" }
 if (-not $PrepareOnly -and -not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
-New-Item -ItemType Directory -Force "$fixture/Assets/Resources", "$fixture/Assets/Code", "$fixture/Packages", "$fixture/ProjectSettings" | Out-Null
-Set-Content "$fixture/ProjectSettings/ProjectVersion.txt" 'm_EditorVersion: 2022.3.62f3'
-Set-Content "$fixture/Packages/manifest.json" '{"dependencies":{"com.unity.modules.imageconversion":"1.0.0"}}'
+New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.imageconversion":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Math/Deterministic.cs" "$fixture/Assets/Code/"
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs') {
@@ -27,20 +23,17 @@ $template = Get-Content -LiteralPath "$PSScriptRoot/CloudDensityProbe.shader.txt
 $shader = $template.Replace('/*__WEATHER_DENSITY_INCLUDE__*/', $includes[0].Groups[1].Value)
 Set-Content -LiteralPath "$fixture/Assets/Resources/CloudDensityProbe.shader" -Value $shader -NoNewline -Encoding UTF8
 Copy-Item -LiteralPath $sourcePath -Destination "$fixture/input-FlightCloud.shader"
-Get-ChildItem "$fixture/Assets" -Recurse -File | Get-FileHash |
-    Select-Object Hash, Path | Export-Csv "$fixture/input-manifest.csv" -NoTypeInformation
-Get-FileHash -LiteralPath "$fixture/input-FlightCloud.shader" |
-    Select-Object Hash, Path | Export-Csv "$fixture/production-shader-manifest.csv" -NoTypeInformation
+Export-UnityCheckHashes "$fixture/input-manifest.csv" (Get-ChildItem "$fixture/Assets" -Recurse -File)
+Export-UnityCheckHashes "$fixture/production-shader-manifest.csv" (Get-Item -LiteralPath "$fixture/input-FlightCloud.shader")
 Write-Output "Density fixture: $fixture"
 if ($PrepareOnly) { Write-Output 'Prepared source only; no editor/player launched'; return }
-$editor = Start-Process $Unity -ArgumentList @('-batchmode','-projectPath',('"'+$fixture+'"'),'-executeMethod','WeatherCloudDensityCheck.Build','-logFile',('"'+"$fixture/build.log"+'"')) -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-$editor.WaitForExit()
+$editor = Invoke-UnityCheck $Unity $fixture 'WeatherCloudDensityCheck.Build' -Flags '-batchmode' -LogName 'build.log'
 if ($editor.ExitCode -ne 0 -or -not (Test-Path "$fixture/Player/WeatherCloudDensityCheck.exe")) {
     if (Test-Path "$fixture/build-result.txt") { Get-Content "$fixture/build-result.txt" }
     throw "Density fixture build failed: $fixture/build.log"
 }
-$player = Start-Process "$fixture/Player/WeatherCloudDensityCheck.exe" -ArgumentList @('-batchmode','-screen-width','640','-screen-height','360','-logFile',('"'+"$fixture/player.log"+'"')) -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-if (-not $player.WaitForExit(180000)) { $player.Kill(); throw "Density fixture timeout: $fixture/player.log" }
+$player = Invoke-UnityPlayer "$fixture/Player/WeatherCloudDensityCheck.exe" @('-batchmode', '-screen-width', '640', '-screen-height', '360', '-logFile', ('"' + "$fixture/player.log" + '"')) $fixture `
+    -TimeoutSeconds 180 -TimeoutMessage "Density fixture timeout: $fixture/player.log"
 $result = Get-Content "$fixture/result.txt" -Raw
 Write-Output $result
 if ($player.ExitCode -ne 0 -or $result -match '(?m)^FAIL ' -or $result -notmatch 'PASS density' -or

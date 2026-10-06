@@ -5,16 +5,12 @@ param(
     [string]$SourceSnapshot = ''
 )
 $ErrorActionPreference = 'Stop'
-$repo = (Resolve-Path (Join-Path $PSScriptRoot '../../../..')).Path
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
-$fixture = if ($EvidenceDir) { [IO.Path]::GetFullPath($EvidenceDir) } else {
-    Join-Path $env:TEMP ('BoscaliPilotCheck-' + [guid]::NewGuid().ToString('N'))
-}
+$fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliPilotCheck-'
 if (Test-Path -LiteralPath "$fixture/Assets/Assembly-CSharp.dll") { throw 'Use an isolated pilot fixture without game runtime initializers.' }
-New-Item -ItemType Directory -Force -Path "$fixture/Assets/Resources", "$fixture/Assets/Code", "$fixture/Packages", "$fixture/ProjectSettings" | Out-Null
 $editorVersion = if ($Unity -like '*62f3*') { '2022.3.62f3' } else { '2022.3.62f2' }
-Set-Content -LiteralPath "$fixture/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVersion"
-Set-Content -LiteralPath "$fixture/Packages/manifest.json" -Value '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}'
+New-UnityCheckProject $fixture '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code' -EditorVersion $editorVersion
 # Compile unmodified production source with test-only native type stubs. Do not import
 # the game assembly or its Burst/Input bootstrap. Source hashes identify the closure.
 foreach ($source in @('modules/Immersion/Visuals/CockpitPilotRig.cs', 'modules/Immersion/Domain/PilotPoseMath.cs',
@@ -61,24 +57,16 @@ foreach ($oldResult in 'build-result.txt', 'result.txt') {
     if (Test-Path -LiteralPath $oldPath) { Remove-Item -LiteralPath $oldPath }
 }
 Write-Output "Pilot URP fixture: $fixture"
-$arguments = @('-batchmode', '-projectPath', ('"' + $fixture + '"'), '-executeMethod', 'PilotUnityCheck.Build', '-logFile', ('"' + "$fixture/build.log" + '"'))
-$editor = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-$deadline = [DateTime]::UtcNow.AddMinutes(12)
-while (-not $editor.WaitForExit(1000)) {
-    if ([DateTime]::UtcNow -ge $deadline) { $editor.Kill(); $editor.WaitForExit(); throw "Pilot fixture build timed out: $fixture/build.log" }
-}
+$editor = Invoke-UnityCheck $Unity $fixture 'PilotUnityCheck.Build' -Flags '-batchmode' -LogName 'build.log' -Result 'build-result.txt' `
+    -TimeoutSeconds (12 * 60) -TimeoutMessage "Pilot fixture build timed out: $fixture/build.log"
 if ($editor.ExitCode -ne 0 -or -not (Test-Path -LiteralPath "$fixture/Player/PilotCheck.exe") -or
     -not (Test-Path -LiteralPath "$fixture/build-result.txt") -or
     -not (Select-String -LiteralPath "$fixture/build-result.txt" -Pattern '^PASS ' -Quiet)) {
     if (Test-Path -LiteralPath "$fixture/build-result.txt") { Get-Content -LiteralPath "$fixture/build-result.txt" }
     throw "Pilot URP build failed ($($editor.ExitCode)): $fixture/build.log"
 }
-$arguments = @('-batchmode', '-screen-width', '1920', '-screen-height', '1080', '-logFile', ('"' + "$fixture/player.log" + '"'))
-$player = Start-Process -FilePath "$fixture/Player/PilotCheck.exe" -ArgumentList $arguments -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-$deadline = [DateTime]::UtcNow.AddMinutes(4)
-while (-not $player.WaitForExit(1000)) {
-    if ([DateTime]::UtcNow -ge $deadline) { $player.Kill(); $player.WaitForExit(); throw "Pilot fixture timed out: $fixture/player.log" }
-}
+$player = Invoke-UnityPlayer "$fixture/Player/PilotCheck.exe" @('-batchmode', '-screen-width', '1920', '-screen-height', '1080', '-logFile', ('"' + "$fixture/player.log" + '"')) $fixture `
+    -TimeoutSeconds (4 * 60) -TimeoutMessage "Pilot fixture timed out: $fixture/player.log"
 $resultPath = Join-Path $fixture 'result.txt'
 if (Test-Path -LiteralPath $resultPath) { Get-Content -LiteralPath $resultPath }
 Write-Output "Evidence: $fixture"

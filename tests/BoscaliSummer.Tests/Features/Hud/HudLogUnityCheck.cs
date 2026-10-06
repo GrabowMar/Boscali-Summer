@@ -12,6 +12,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Production presenters, synthetic native dock/font, telemetry and message traffic.
 // No native asset, live input or game-state adapter claim.
@@ -41,17 +42,8 @@ public static class HudLogUnityCheck
     public static void Run()
     {
         try {
-            if (Shader.Find("TextMeshPro/Distance Field") == null) {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            var p = paths.GetParameters(); var args = new object[p.Length];
-            args[0] = Path.GetFullPath("HudLogCheck.exe");
-            for (int i = 1; i < args.Length; i++) args[i] = p[i].HasDefaultValue ? p[i].DefaultValue : null;
-            paths.Invoke(null, args);
+            if (!EnsureTmpEssentials(Run)) return;
+            SetExecutablePath("HudLogCheck.exe");
             AvBundle.Load(Debug.Log); Check(AvBundle.Available && AvIcons.Available, "Production UI assets loaded.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
@@ -257,13 +249,9 @@ public static class HudLogUnityCheck
             Check(label.textInfo.characterCount > 0, "Visible text has geometry: " + label.text);
         }
         Vector2 size=((RectTransform)canvas.transform).rect.size;
-        var go=new GameObject("Camera",typeof(Camera)); var camera=go.GetComponent<Camera>();
-        camera.orthographic=true; camera.orthographicSize=size.y/2; camera.transform.position=new Vector3(0,0,-10);
-        camera.clearFlags=CameraClearFlags.SolidColor; camera.backgroundColor=new Color(.08f,.12f,.15f);
-        var rt=new RenderTexture((int)size.x,(int)size.y,24); camera.targetTexture=rt; camera.Render(); RenderTexture.active=rt;
-        var png=new Texture2D(rt.width,rt.height,TextureFormat.RGB24,false); png.ReadPixels(new Rect(0,0,rt.width,rt.height),0,0); png.Apply();
-        File.WriteAllBytes(path,png.EncodeToPNG()); RenderTexture.active=null; camera.targetTexture=null;
-        Object.DestroyImmediate(png); Object.DestroyImmediate(rt); Object.DestroyImmediate(go); captures++;
+        var camera = OrthoCamera("Camera", size.y / 2, new Color(.08f, .12f, .15f));
+        CapturePng(camera, (int)size.x, (int)size.y, path);
+        Object.DestroyImmediate(camera.gameObject); captures++;
     }
     private static void Check(bool okay,string message) { assertions++; if(!okay) throw new Exception(message); }
 }
