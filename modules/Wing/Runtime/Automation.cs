@@ -106,6 +106,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 { "relocated", wing.Events.CountOf(WingEventKind.Relocated) },
                 { "rerouted", wing.Events.CountOf(WingEventKind.Rerouted) },
                 { "rolled", wing.Events.CountOf(WingEventKind.Rolling) },
+                { "liftoffs", wing.Events.CountOf(WingEventKind.Airborne) },
                 { "aborted", wing.Events.CountOf(WingEventKind.DepartureAborted) },
                 { "landed", wing.Events.CountOf(WingEventKind.Landed) },
                 { "landing_failed", wing.Events.CountOf(WingEventKind.LandingFailed) },

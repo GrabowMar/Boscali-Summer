@@ -370,6 +370,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             else m.Ground.RoofOverhead = Physics.Raycast(a.transform.position + Vector3.up * 3f, Vector3.up, 30f);
             Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.GroundSpawned });
+            Vec3 at = a.GlobalPosition().ToVec3();
+            WingLog.Verbose($"[Ground] #{m.Number} adopted at ({at.X:0}, {at.Z:0}) y {at.Y:0.0}: " + StopDiagnostics(a));
             return true;
         }
 
@@ -1073,7 +1075,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private void LogLongStop(WingMember m)
         {
             GroundPhase phase = m.Ground.Phase;
-            bool taxiing = phase == GroundPhase.TaxiOut || phase == GroundPhase.HoldShort || phase == GroundPhase.TaxiIn;
+            bool taxiing = phase == GroundPhase.TaxiOut || phase == GroundPhase.HoldShort || phase == GroundPhase.TaxiIn ||
+                phase == GroundPhase.LineUp || phase == GroundPhase.Roll;
             if (!taxiing || m.Last.Speed > 0.5f)
             {
                 m.StoppedSince = float.NaN;
@@ -1096,22 +1099,37 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// give, whether the body can move, and who flies it (a native state still driving the inputs would show here).</summary>
         private static string StopDiagnostics(Aircraft a)
         {
-            float thrust = 0f, max = 0f, rpm = -1f;
+            float thrust = 0f, max = 0f, rpm = -1f, thrustN = 0f, maxN = 0f;
             int n = 0;
-            foreach (IEngine e in a.engines)
+            // engineStates, not engines: turbines register in engineStates on enable (a.engines stays empty). Jets report thrust, props power.
+            if (a.engineStates != null) foreach (IEngine e in a.engineStates)
             {
                 if (e == null) continue;
-                thrust += e.GetThrust();
-                max += e.GetMaxThrust();
+                if (e is IPowerSource ps) { thrust += ps.GetPower(); max += ps.GetMaxPower(); }
+                thrustN += e.GetThrust(); maxN += e.GetMaxThrust();
+
                 if (rpm < 0f) rpm = e.GetRPMRatio();
                 n++;
+            }
+            string etype = "none";
+            if (a.engineStates != null) foreach (IEngine e in a.engineStates) { if (e != null) { etype = e.GetType().Name; break; } }
+            float fuel = 0f, cap = 0f; int tanks = 0;
+            if (a.GetFuelTanks() != null) foreach (FuelTank t in a.GetFuelTanks()) { if (t == null) continue; tanks++; fuel += t.fuelMass; cap += t.GetCapacity(); }
+            int gears = 0, gearsOff = 0;
+            if (a.partLookup != null) foreach (UnitPart part in a.partLookup)
+            {
+                if (part == null) continue;
+                LandingGear lg = part.GetComponentInChildren<LandingGear>();
+                if (lg == null) continue;
+                gears++;
+                if (!lg.enabled) gearsOff++;
             }
             Rigidbody rb = a.rb;
             Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
             ControlInputs i = a.GetInputs();
-            return $"engines {n} thrust {thrust:0} of {max:0} N rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
+            return $"engines {n} power {thrust:0} of {max:0} rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
                    $"v {(rb != null ? rb.velocity.magnitude : -1f):0.00} m/s mass {(rb != null ? rb.mass : -1f):0}; state {(p != null ? p.GetCurrentState() : "none")}; " +
-                   $"inputs {i}";
+                   $"inputs {i} etype {etype} fuel {fuel:0}/{cap:0} tanks {tanks} ign {a.Ignition} thr {thrustN:0}/{maxN:0}N gears {gears}({gearsOff} off)";
         }
 
         public static float GroundTraceSeconds = 10f;
