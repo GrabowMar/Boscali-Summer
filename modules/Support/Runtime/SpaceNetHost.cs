@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// message. Replies and state go only to members of the faction that owns the data, and every faction member hears the
     /// small headline (family, uplinks, live MARKs) so client prices and the sky match the host without opening the feed.
     /// </summary>
-    internal sealed class SpaceNetHost : ISpaceCommandPorts, ICyberCommandPorts, ISofCommandPorts, IOpsCommandPorts
+    internal sealed class SpaceNetHost
     {
         private const float PollWallSeconds = .25f;
 
@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public SpaceNetHost(SupportManager manager, SpaceService space, SupportNet net)
         {
             this.manager = manager; this.space = space; this.net = net;
-            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this, this, this, this);
+            commands = new SpaceCommandHost(SupportNet.ProtocolVersion, this);
             subs = new SpaceSubscriptions(SupportNet.ProtocolVersion);
             // CYBER switched off: nothing is built and no CyberStateMessage is sent (a client simply stays on its NO LINK words).
             cyberFeed = new StateFeed<CyberStateData>(this, "Cyber",
@@ -257,7 +257,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        // ---- ISpaceCommandPorts (host decisions; the sender is `current`) -----------------------
+        // ---- Host decisions for SpaceCommandHost (the sender is `current`) -----------------------
 
         public float Now => SupportManager.MissionNow();
 
@@ -303,18 +303,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return owner != null && space.TryHolder(owner, callId, out ulong pilot) ? manager.PlayerLabel(owner, pilot) : "";
         }
 
-        // ---- ICyberCommandPorts ---------------------------------------------------------------------
+        // ---- CYBER ---------------------------------------------------------------------
 
         public CyberResult Cyber(ulong player, SpaceCommandKind kind, int target) =>
             Is(player) ? manager.RunCyberVerb(current, kind == SpaceCommandKind.CyberHop ? CyberVerb.Hop : kind == SpaceCommandKind.CyberBurn ? CyberVerb.Burn : CyberVerb.Drop, target)
                 : new CyberResult(CyberOutcome.Unavailable);
 
-        // ---- ISofCommandPorts -----------------------------------------------------------------------
+        // ---- SOF -----------------------------------------------------------------------
 
         public SofResult Sof(ulong player, in SpaceCommand command) =>
             Is(player) ? manager.RunSofVerb(current, command) : new SofResult(SofOutcome.Unavailable);
 
-        // ---- IOpsCommandPorts -----------------------------------------------------------------------
+        // ---- OPERATIONS -----------------------------------------------------------------------
 
         public OpResult Ops(ulong player, in SpaceCommand command) =>
             Is(player) ? manager.RunOpsVerb(current, command) : new OpResult(OpOutcome.Unavailable);
