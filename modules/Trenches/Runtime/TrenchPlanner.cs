@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Trenches.Domain;
 using BoscaliSummer.Core.Contracts;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime
 {
@@ -113,8 +114,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 traceZ[i] = points[pointOffset + i].Z;
                 if (i > 0)
                 {
-                    float dx = traceX[i] - traceX[i - 1], dz = traceZ[i] - traceZ[i - 1];
-                    traceLength += (float)Math.Sqrt(dx * dx + dz * dz);
+                    traceLength += Scalar.Distance2D(traceX[i], traceZ[i], traceX[i - 1], traceZ[i - 1]);
                 }
                 traceArc[i] = traceLength;
             }

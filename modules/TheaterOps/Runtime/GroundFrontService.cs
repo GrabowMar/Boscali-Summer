@@ -11,6 +11,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
@@ -349,7 +350,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (!group.HasFront) { ClearDestinations(group); return; }
                 group.CenterX += group.Axis * PincerFlankMeters * group.TangentX;
                 group.CenterZ += group.Axis * PincerFlankMeters * group.TangentZ;
-                if (DistanceSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
+                if (Scalar.Distance2DSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
                     AssignmentRadius * AssignmentRadius) { ClearDestinations(group); return; }
 
                 float nx = -group.TangentZ, nz = group.TangentX;
@@ -387,7 +388,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GroundVehicle lead = group.Members[0].Vehicle;
                 bool contact = lead != null && group.HQ.TryGetNearestGroundEnemy(
                     lead.GlobalPosition(), out TrackingInfo tracked) && tracked != null &&
-                    DistanceSquared(lead.GlobalPosition().x, lead.GlobalPosition().z,
+                    Scalar.Distance2DSquared(lead.GlobalPosition().x, lead.GlobalPosition().z,
                         tracked.lastKnownPosition.x, tracked.lastKnownPosition.z) <
                     ContactMeters * ContactMeters;
                 if (contact)
@@ -419,7 +420,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                                   LaneOffset(member.Lane) * group.TangentX;
                         float z = group.CenterZ + group.FriendlyZ * depth +
                                   LaneOffset(member.Lane) * group.TangentZ;
-                        if (DistanceSquared(here.x, here.z, x, z) < 300f * 300f) ready++;
+                        if (Scalar.Distance2DSquared(here.x, here.z, x, z) < 300f * 300f) ready++;
                     }
                     if (group.Stage == Stage.Rally && group.Sealed &&
                         FrontlineTactics.ShouldAdvance(ready, group.Members.Count, now - group.StageSince))
@@ -521,12 +522,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static void ClearDestinations(Group group)
         {
             foreach (Member member in group.Members) member.HasDestination = false;
-        }
-
-        private static float DistanceSquared(float ax, float az, float bx, float bz)
-        {
-            float dx = ax - bx, dz = az - bz;
-            return dx * dx + dz * dz;
         }
 
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

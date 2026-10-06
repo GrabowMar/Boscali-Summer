@@ -13,6 +13,19 @@ namespace BoscaliSummer.Core.Math
         public static float Lerp(float a, float b, float t) => a + (b - a) * t;
         public static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
 
+        /// <summary>Ground-plane distance between two points (x, z), as float as the inline sqrt it replaces.</summary>
+        public static float Distance2D(float ax, float az, float bx, float bz)
+        {
+            float dx = ax - bx, dz = az - bz;
+            return (float)System.Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        public static float Distance2DSquared(float ax, float az, float bx, float bz)
+        {
+            float dx = ax - bx, dz = az - bz;
+            return dx * dx + dz * dz;
+        }
+
         public static float SmoothStep(float edge0, float edge1, float x)
         {
             if (edge1 == edge0) return x < edge0 ? 0f : 1f;

@@ -10,6 +10,7 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime
 {
@@ -797,9 +798,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 TrenchLine candidate = lines[i];
                 if (candidate == null || candidate.Overrun || candidate.DefenderCount <= 0) continue;
                 if (candidate.OwnerHq == null || shooter.OwnerHq == null || candidate.OwnerHq == shooter.OwnerHq) continue;
-                float dx = candidate.Center.x - shooter.Center.x;
-                float dz = candidate.Center.z - shooter.Center.z;
-                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                float d = Scalar.Distance2D(candidate.Center.x, candidate.Center.z, shooter.Center.x, shooter.Center.z);
                 if (!TrenchTraceMath.InBarrageRange(d) || d >= distance) continue;
                 distance = d;
                 enemy = candidate;

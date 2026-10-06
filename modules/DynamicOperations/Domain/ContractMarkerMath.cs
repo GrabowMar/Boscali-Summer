@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
@@ -75,11 +76,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     /// </summary>
     internal static class ContractMarkerMath
     {
-        public static float Distance(float ax, float az, float bx, float bz)
-        {
-            float dx = ax - bx, dz = az - bz;
-            return (float)System.Math.Sqrt(dx * dx + dz * dz);
-        }
+        public static float Distance(float ax, float az, float bx, float bz) => Scalar.Distance2D(ax, az, bx, bz);
 
         /// <summary>
         /// How many canvas units one metre covers at this distance, for a vertical field of

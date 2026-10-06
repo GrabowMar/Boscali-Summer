@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 #if !NET8_0_OR_GREATER
 using UnityEngine;
 #endif
@@ -681,8 +682,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         TacticalNode node = nodes[n];
                         if (node.Faction == SectorControl.Neutral) continue;
-                        float dx = x - node.X, dz = z - node.Z;
-                        float influence = node.MaxRadius / (node.MaxRadius + (float)Math.Sqrt(dx * dx + dz * dz));
+                        float influence = node.MaxRadius / (node.MaxRadius + Scalar.Distance2D(x, z, node.X, node.Z));
                         if (node.Faction == SectorControl.Friendly) friendlyInfluence = Math.Max(friendlyInfluence, influence);
                         else hostileInfluence = Math.Max(hostileInfluence, influence);
                     }
