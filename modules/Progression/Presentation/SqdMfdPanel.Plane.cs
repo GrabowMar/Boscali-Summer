@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             planeDamage = Live(new PlaneDamagePart(p.Content));
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
             AvCard engineCard = Live(new AvCard(p.Content, console.Ticker, half, "ENGINE MAP"));
-            planeTuneName = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f });
+            planeTuneName = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
             planeTuneName.Set("STOCK");
             planeTuneSegmented = engineCard.Flow.Add(new AvSegmented(engineCard.Flow.Content, "MAP",
                 new[] { "STOCK", "RANGE" }, () => planeTuneMode == PlaneEngineMap.Range ? 1 : 0,
@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 new AvControl.Spec("APPLY MAP", ApplyPlaneTune, AvButtonStyle.Primary, AvIcon.CircleCheck));
             planeApplyTune = applyRow.Controls[0];
             planeApplyTune.Help = "Send the selected engine map to the host. It can only be applied while landed.";
-            planeTuneState = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.ProseSmall) { MinHeight = 14f });
+            planeTuneState = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true });
             planeTuneState.Set("Enter an aircraft to select an engine map.");
             p.Row(planeDamage, engineCard);
 

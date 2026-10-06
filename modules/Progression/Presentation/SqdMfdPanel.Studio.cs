@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Row(studioShape, studioCharge);
             p.Row(studioPalette, studioArt);
 
-            studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f }, 1f);
+            studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true }, 1f);
             studioMessageText.Set(StudioQuietLine);
         }
 

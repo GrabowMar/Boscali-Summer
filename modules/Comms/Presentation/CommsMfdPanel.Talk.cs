@@ -196,7 +196,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
             pollTips = p.Add(new AvNote(p.Content,
                 "HOW POLLS WORK · anyone on the audience can vote once and change their mind until it closes. " +
-                "The asker or the host can close early; the result is posted to the log. One open poll per player.") { MinHeight = AvGridTokens.RowDense });
+                "The asker or the host can close early; the result is posted to the log. One open poll per player.") { MinHeight = AvGridTokens.RowDense, StretchText = true });
         }
 
         private void AskCustom()

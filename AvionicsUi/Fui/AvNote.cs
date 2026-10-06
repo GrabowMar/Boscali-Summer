@@ -20,6 +20,9 @@ namespace NOAvionics
         /// <summary>An empty note measures zero and leaves no gap in its flow.</summary>
         public bool CollapseEmpty;
 
+        /// <summary>Stretch the text to the note's rect (centre pivot) instead of placing it top-left; the same box, a different transform.</summary>
+        public bool StretchText;
+
         public AvNote(RectTransform parent, AvTextRole role = AvTextRole.ProseSmall, bool emphasize = false)
         {
             this.emphasize = emphasize;
@@ -54,7 +57,8 @@ namespace NOAvionics
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
+            if (StretchText) AvLay.Fill(text.rectTransform);
+            else AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
         }
 
         public override void Restyle()

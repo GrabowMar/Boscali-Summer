@@ -74,9 +74,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             skillBranches.AddRange(skillBoard.Branches);
 
             AvCard detail = new AvCard(p.Content, console.Ticker, p.Inner, null, true, "raised");
-            skillStripTitle = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Head) { MinHeight = 14f });
-            skillStripEffect = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f });
-            skillStripDetail = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Prose) { MinHeight = 14f });
+            skillStripTitle = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Head) { MinHeight = 14f, StretchText = true });
+            skillStripEffect = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
+            skillStripDetail = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Prose) { MinHeight = 14f, StretchText = true });
             AvButtons buttons = detail.Flow.Buttons(
                 new AvControl.Spec("UNLOCK SELECTED", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
             skillConfirmButton = buttons.Controls[0];
