@@ -33,19 +33,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// and the SOF CALL rows (JTAC LASE / UNLASE, FORTIFY bound exactly as the CAP page binds them). Painted only from the faction mirror (<see cref="CapView.Sof"/>): the page
     /// never reads a game object. PICK arms the existing support map gesture (a right-click on the maximised map) and offers SEND TEAM HERE for the nearest revealed target or a point.
     /// </summary>
-    internal sealed class SofPage
+    internal sealed class SofPage : C2MapPage
     {
         private const float Gap = 6f, Pad = 8f, ButtonH = 24f;
         private const int Targets = SofWire.MaxTargets, Slots = SofRules.MaxTeams;
-        private readonly float width;
-        private readonly bool full;
-        private readonly Action<AvPart> register;
         private readonly SofPageActions act;
-        private readonly C2ConsoleView console;
-        private readonly OpsBox ops;
-        private readonly C2Box map, teamsBox, callsBox;
-        private readonly float mapW, mapH, rowH;
-        private readonly Image[] gridLines;
+        private readonly C2Box teamsBox;
+        private readonly float rowH;
         private readonly AvLineGraphic[] routes = new AvLineGraphic[Slots];
         private readonly AvControl[] targetMarks = new AvControl[Targets];
         private readonly int[] targetIds = new int[Targets];
@@ -54,21 +48,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Image[] campDots = new Image[CampRules.MaxCamps], heldDots = new Image[SofWire.MaxHeld], enemyDots = new Image[SofWire.MaxEnemies];
         private readonly TMP_Text[] campTags = new TMP_Text[CampRules.MaxCamps], heldTags = new TMP_Text[SofWire.MaxHeld];
         private readonly Image pickDot;
-        private readonly TMP_Text headline, detail, infoLine, tapLine;
+        private readonly TMP_Text infoLine, tapLine;
         private readonly AvControl[] rowButtons = new AvControl[Slots];
         private readonly TMP_Text[] rowText = new TMP_Text[Slots];
         private readonly Image[] rowBack = new Image[Slots], rowFill = new Image[Slots];
         private readonly AvControl raise, push, hold, divert, exfil, lift, stop, recon, lase, sabot, seize, tap, pick;
-        private readonly List<C2Row> rows = new List<C2Row>(3);
-        private readonly List<SupportActionId> ids = new List<SupportActionId>(3);
-        private readonly List<Action> pinActions = new List<Action>(3);
-        private readonly List<CapPage.RowMemo> memos = new List<CapPage.RowMemo>(3);
-        private readonly CyberMapProjection projection = new CyberMapProjection();
-        private readonly List<MapPoint> fit = new List<MapPoint>(48);
-        private readonly List<Rect> placed = new List<Rect>(40);
         private SofStateData state;
-        private int selectedTeam = -1, selectedTarget, paintedSeq = -1, paintedSecond = -1, paintedSelTeam = -2, paintedSelTarget = -1, paintedOps = -1;
-        private float pickX, pickZ, nextPress;
+        private int selectedTeam = -1, selectedTarget, paintedSelTeam = -2, paintedSelTarget = -1;
+        private float pickX, pickZ;
         private bool hasPick;
         private string standing = "SELECT A TEAM, THEN A TARGET · PICK ARMS A MAP CLICK";
 
@@ -76,36 +63,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         public string Words { get; private set; }
 
         public SofPage(RectTransform parent, float width, float height, CallsController calls, Action<AvPart> register, SofPageActions actions)
+            : base(width, height, register, ButtonH, CallFamily.Sof)
         {
-            this.width = width;
-            this.register = register ?? (_ => { });
             act = actions ?? new SofPageActions();
-            full = height >= 560f;
             Words = standing;
-            for (int i = 0; i < CallSheet.Rows.Count; i++) if (CallSheet.Rows[i].Family == CallFamily.Sof) ids.Add(CallSheet.Rows[i].Id);
 
             float gap = full ? Gap : 4f;
             int consoleLines = full ? 4 : 2;
             float consoleH = C2ConsoleView.HeightFor(consoleLines);
             rowH = full ? 18f : 15f;
             float callRowH = full ? 40f : 26f;
-            float callsBody = ids.Count * (callRowH + 2f) + 2f;
+            float callsBody = CallsBody(callRowH);
             float teamsBody = Slots * rowH + 6f + 2f * (ButtonH + 4f) + (full ? 18f : 14f);
             float fixedH = gap + consoleH + gap + (C2Box.HeaderH + teamsBody) + gap + OpsBox.HeightFor(full) + gap + (C2Box.HeaderH + callsBody) + gap + C2Box.HeaderH + 2f;
             float mapBody = Mathf.Max(100f, height - fixedH);
-            mapW = width - 2f; mapH = mapBody - 2f;
 
             float y = gap;
-            console = Make(new C2ConsoleView(parent, consoleLines));
-            console.Place(new AvSlot(0f, y, width, consoleH));
+            BuildConsole(parent, consoleLines, y, consoleH);
             y += consoleH + gap;
 
-            map = Make(new C2Box(parent, "AO MAP"));
-            map.BodyHeight = mapBody;
-            map.SetMeta("NO CAMP STANDING");
-            map.Place(new AvSlot(0f, y, width, C2Box.HeaderH + mapBody));
+            BuildMap(parent, "AO MAP", "NO CAMP STANDING", y, mapBody);
             y += C2Box.HeaderH + mapBody + gap;
-            gridLines = BuildGrid(map.Body);
             for (int i = 0; i < routes.Length; i++) routes[i] = Line(map.Body, "Route" + i, 1.4f);
             for (int i = 0; i < campDots.Length; i++) { campDots[i] = Dot(map.Body, "Camp" + i); campTags[i] = Tag(map.Body, "CampTag" + i); }
             for (int i = 0; i < heldDots.Length; i++) { heldDots[i] = Dot(map.Body, "Held" + i); heldTags[i] = Tag(map.Body, "HeldTag" + i); }
@@ -114,9 +92,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             for (int i = 0; i < targetMarks.Length; i++)
             {
                 int slot = i;
-                targetSelect[i] = AvLay.Solid(map.Body, "Select" + i, Color.clear);
-                targetSelect[i].raycastTarget = false;
-                targetSelect[i].gameObject.SetActive(false);
+                targetSelect[i] = Dot(map.Body, "Select" + i);
                 targetMarks[i] = AvControl.Make(map.Body, new AvControl.Spec("", () => PickTarget(targetIds[slot]), AvButtonStyle.Quiet));
                 targetMarks[i].SingleLine();
                 targetMarks[i].Rect.gameObject.SetActive(false);
@@ -128,10 +104,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 teamMarks[i].SingleLine();
                 teamMarks[i].Rect.gameObject.SetActive(false);
             }
-            headline = C2Kit.Mono(map.Body, "Headline", 12f, TextAlignmentOptions.Center, true, 2f);
-            detail = C2Kit.Mono(map.Body, "Detail", 10f, TextAlignmentOptions.Center);
-            C2Kit.Place(headline, 4f, mapH * 0.5f - 22f, mapW - 8f, 18f);
-            C2Kit.Place(detail, 4f, mapH * 0.5f - 2f, mapW - 8f, 16f);
+            BuildHeadline();
 
             teamsBox = Make(new C2Box(parent, "TEAMS & MISSIONS"));
             teamsBox.BodyHeight = teamsBody;
@@ -191,82 +164,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             tap.Help = "NETWORK TAP the selected relay or data center: 60 s on site, then your intrusions trace 30 % slower for 10 minutes and enemy intrusions are counted. 40 CR.";
             pick.Help = "PICK: right-click the maximised map to choose a point. The nearest revealed target is selected; with none, RECON or DIVERT the point.";
 
-            ops = new OpsBox(parent, width, full, OpDomain.Sof, new[] { OpKind.Fob }, act.Ops, register);
-            ops.Place(new AvSlot(0f, y, width, OpsBox.HeightFor(full)));
+            BuildOps(parent, y, OpDomain.Sof, new[] { OpKind.Fob }, act.Ops);
             y += OpsBox.HeightFor(full) + gap;
 
-            callsBox = Make(new C2Box(parent, "SOF CALLS"));
-            callsBox.BodyHeight = callsBody;
-            callsBox.SetMeta("LIVE · SAME AUTHORITY AS CAP");
-            callsBox.Place(new AvSlot(0f, y, width, C2Box.HeaderH + callsBody));
-            for (int i = 0; i < ids.Count; i++)
-            {
-                C2Row row = Make(new C2Row(callsBox.Body, callRowH, full));
-                row.Place(new AvSlot(1f, 1f + i * (callRowH + 2f), width - 4f, callRowH));
-                pinActions.Add(CapPage.Bind(row, calls, ids[i]));
-                rows.Add(row);
-                memos.Add(default);
-            }
+            BuildCalls(parent, "SOF CALLS", y, callRowH, calls);
             Restyle();
-        }
-
-        private T Make<T>(T part) where T : AvPart
-        {
-            register(part);
-            return part;
-        }
-
-        private AvControl Button(RectTransform parent, string label, AvButtonStyle style, float x, float y, float w, Action click)
-        {
-            AvControl c = AvControl.Make(parent, new AvControl.Spec(label, click, style));
-            c.SingleLine();
-            AvLay.Place(c.Rect, x, y, w, ButtonH);
-            return c;
-        }
-
-        private static AvLineGraphic Line(RectTransform body, string name, float thickness)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
-            go.transform.SetParent(body, false);
-            var g = go.AddComponent<AvLineGraphic>();
-            g.raycastTarget = false;
-            g.FillUnder = false;
-            g.Thickness = thickness;
-            AvLay.Fill(g.rectTransform);
-            g.SetPoints(null, null, 0);
-            return g;
-        }
-
-        private static Image Dot(RectTransform body, string name)
-        {
-            Image img = AvLay.Solid(body, name, Color.clear);
-            img.raycastTarget = false;
-            img.gameObject.SetActive(false);
-            return img;
-        }
-
-        private static TMP_Text Tag(RectTransform body, string name)
-        {
-            TMP_Text t = C2Kit.Mono(body, name, 10f, TextAlignmentOptions.MidlineLeft, true);
-            t.gameObject.SetActive(false);
-            return t;
-        }
-
-        private Image[] BuildGrid(RectTransform body)
-        {
-            const float Cell = 40f;
-            var list = new List<Image>(40);
-            for (float x = Cell; x < mapW - 2f; x += Cell) list.Add(GridLine(body, x, 0f, 1f, mapH));
-            for (float yy = Cell; yy < mapH - 2f; yy += Cell) list.Add(GridLine(body, 0f, yy, mapW, 1f));
-            return list.ToArray();
-        }
-
-        private static Image GridLine(RectTransform body, float x, float y, float w, float h)
-        {
-            Image img = AvLay.Solid(body, "Grid", Color.clear);
-            img.raycastTarget = false;
-            AvLay.Place(img.rectTransform, x, y, w, h);
-            return img;
         }
 
         // ---- Selection and presses ------------------------------------------------------------------------
@@ -274,14 +176,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void PickTeam(int slot) { selectedTeam = selectedTeam == slot ? -1 : slot; paintedSelTeam = -2; }
 
         private void PickTarget(int id) { selectedTarget = selectedTarget == id ? 0 : id; hasPick = hasPick && selectedTarget == 0; paintedSelTarget = -1; }
-
-        /// <summary>A press is a request, never an effect: the host judges it. A 0.35 s debounce keeps a double click from sending twice.</summary>
-        private void Press(Action send)
-        {
-            if (Time.unscaledTime < nextPress) return;
-            nextPress = Time.unscaledTime + 0.35f;
-            send?.Invoke();
-        }
 
         private void Order(TeamVerb verb) { if (selectedTeam >= 0) act.Order?.Invoke(selectedTeam, verb); }
 
@@ -348,7 +242,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (selectedTeam >= 0 && (state == null || !HasTeam(selectedTeam))) selectedTeam = -1;
             if (selectedTeam < 0 && state != null) selectedTeam = FirstTeam();
             if (selectedTarget != 0 && !TryTarget(selectedTarget, out _)) selectedTarget = 0;
-            int opsSeq = v.OpsKnown && v.Ops != null ? v.Ops.Seq : -2;
+            int opsSeq = OpsSeq(v);
             if (seq != paintedSeq || selectedTeam != paintedSelTeam || selectedTarget != paintedSelTarget || second != paintedSecond || opsSeq != paintedOps)
             {
                 paintedSeq = seq; paintedSelTeam = selectedTeam; paintedSelTarget = selectedTarget; paintedSecond = second; paintedOps = opsSeq;
@@ -514,9 +408,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
         }
 
-        /// <summary>Greedy label declutter (see <see cref="MapDeclutter"/>): the nearest free spot inside the map, so two map labels never share pixels.</summary>
-        private Vector2 Free(float x, float y, float w, float h) => MapDeclutter.Free(placed, x, y, w, h, mapW, mapH);
-
         private bool TeamRow(int slot, out SofTeamRow row)
         {
             row = default;
@@ -597,33 +488,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             tapLine.color = OpsInk.Word(AvState.Info);
         }
 
-        private void PaintCalls(CapView v)
-        {
-            for (int i = 0; i < rows.Count; i++)
-            {
-                CallTile tile = default;
-                bool found = false;
-                for (int k = 0; k < v.Tiles.Count && !found; k++)
-                    if (v.Tiles[k].Id == ids[i]) { tile = v.Tiles[k]; found = true; }
-                if (!found) continue;
-                bool pinned = CapPage.IsPinned(v, ids[i]);
-                CapPage.RowMemo memo = memos[i];
-                bool changed = memo.Changed(tile, pinned);
-                memos[i] = memo;
-                if (changed) CapPage.PaintRow(rows[i], tile, CapPage.IndexOf(ids[i]), pinned, pinActions[i]);
-            }
-        }
-
         public void Restyle()
         {
-            foreach (Image g in gridLines) if (g != null) g.color = OpsInk.Hairline;
-            if (headline != null) headline.color = OpsInk.Muted;
-            if (detail != null) detail.color = OpsInk.Dim;
+            RestyleMap();
             for (int i = 0; i < Slots; i++) { rowBack[i].color = OpsInk.Inert; rowButtons[i]?.Restyle(); teamMarks[i]?.Restyle(); }
             for (int i = 0; i < targetMarks.Length; i++) targetMarks[i]?.Restyle();
             foreach (AvControl c in new[] { raise, push, hold, divert, exfil, lift, stop, recon, lase, sabot, seize, tap, pick }) c?.Restyle();
-            ops?.Restyle();
-            paintedSeq = paintedOps = -1; // repaint with the new palette
         }
     }
 }

@@ -18,19 +18,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// bound exactly as the CAP page binds them). Painted only from the faction mirror (<see cref="CapView.Cyber"/>): the page never reads a game object and every
     /// press goes through the three actions it is given. HOLD is a state, not a verb: a node stays held until it is burned or dropped.
     /// </summary>
-    internal sealed class CyberNetPage
+    internal sealed class CyberNetPage : C2MapPage
     {
         private const float Gap = 6f, Pad = 8f, ButtonH = 26f;
         private const int Marks = CyberWire.MaxNodes, Lines = 24, Notes = 4;
-        private readonly float width;
-        private readonly bool full;
-        private readonly Action<AvPart> register;
         private readonly Action<int> hop, burn, drop;
-        private readonly C2ConsoleView console;
-        private readonly OpsBox ops;
-        private readonly C2Box map, intrusion, anchors, callsBox;
-        private readonly float mapW, mapH;
-        private readonly Image[] gridLines;
+        private readonly C2Box intrusion, anchors;
         private readonly AvLineGraphic[] edges = new AvLineGraphic[Lines];
         private readonly AvLineGraphic[] reach = new AvLineGraphic[AnchorRules.MaxTrucks];
         private readonly AvControl[] marks = new AvControl[Marks];
@@ -38,17 +31,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private readonly Image[] markSelect = new Image[Marks];
         private readonly Image[] anchorDots = new Image[CyberWire.MaxAnchors];
         private readonly TMP_Text[] anchorTags = new TMP_Text[CyberWire.MaxAnchors];
-        private readonly TMP_Text headline, detail, targetLine, traceText, heldLine, hintLine;
+        private readonly TMP_Text targetLine, traceText, heldLine, hintLine;
         private readonly Image hopBack, hopFill, traceBack, traceFill;
         private readonly AvControl hopButton, burnButton, dropButton;
         private readonly TMP_Text[] anchorRows = new TMP_Text[Notes];
-        private readonly List<C2Row> rows = new List<C2Row>(2);
-        private readonly List<SupportActionId> ids = new List<SupportActionId>(2);
-        private readonly List<Action> pinActions = new List<Action>(2);
-        private readonly List<CapPage.RowMemo> memos = new List<CapPage.RowMemo>(2);
-        private readonly CyberMapProjection projection = new CyberMapProjection();
-        private readonly List<MapPoint> fit = new List<MapPoint>(32);
-        private readonly List<Rect> placed = new List<Rect>(48);
         private readonly List<EwSource> sources = new List<EwSource>(2);
         private readonly List<CyberNode> graphNodes = new List<CyberNode>(CyberWire.MaxNodes);
         private readonly List<CyberEdge> graphEdges = new List<CyberEdge>(CyberGraph.MaxEdges);
@@ -58,8 +44,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private const int CirclePoints = 64;
         private readonly float[] circleX = new float[CirclePoints + 1], circleY = new float[CirclePoints + 1];
         private readonly float[] edgeX = new float[2], edgeY = new float[2];
-        private int paintedSeq = -1, paintedSelected = -1, paintedSecond = -1, paintedOps = -1;
-        private float nextPress;
+        private int paintedSelected = -1;
         private bool hasOwn;
 
         /// <summary>The footer words of this page: the standing hint, replaced by the CYBER verdict or a refusal.</summary>
@@ -67,60 +52,43 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public CyberNetPage(RectTransform parent, float width, float height, CallsController calls, Action<AvPart> register,
             Action<int> hop, Action<int> burn, Action<int> drop, OpsBoxActions opsActions = null)
+            : base(width, height, register, ButtonH, CallFamily.Cyber)
         {
-            this.width = width;
-            this.register = register ?? (_ => { });
             this.hop = hop; this.burn = burn; this.drop = drop;
-            full = height >= 560f;
-            for (int i = 0; i < CallSheet.Rows.Count; i++) if (CallSheet.Rows[i].Family == CallFamily.Cyber) ids.Add(CallSheet.Rows[i].Id);
 
             float gap = full ? Gap : 4f;
             int consoleLines = full ? 4 : 2;
             float consoleH = C2ConsoleView.HeightFor(consoleLines);
             float rowH = full ? 40f : 26f;
-            float callsBody = ids.Count * (rowH + 2f) + 2f;
+            float callsBody = CallsBody(rowH);
             float intrusionBody = full ? 124f : 96f;
             float anchorsBody = full ? Notes * 16f + 8f : 0f;
             float fixedH = gap + consoleH + gap + (C2Box.HeaderH + intrusionBody) + gap + OpsBox.HeightFor(full) + gap + (full ? C2Box.HeaderH + anchorsBody + gap : 0f) +
                 (C2Box.HeaderH + callsBody) + gap + C2Box.HeaderH + 2f;
             float mapBody = Mathf.Max(110f, height - fixedH);
-            mapW = width - 2f; mapH = mapBody - 2f;
 
             float y = gap;
-            console = Make(new C2ConsoleView(parent, consoleLines));
-            console.Place(new AvSlot(0f, y, width, consoleH));
+            BuildConsole(parent, consoleLines, y, consoleH);
             y += consoleH + gap;
 
-            map = Make(new C2Box(parent, "INTRUSION MAP"));
-            map.BodyHeight = mapBody;
-            map.SetMeta("NO EW ASSETS ONLINE");
-            map.Place(new AvSlot(0f, y, width, C2Box.HeaderH + mapBody));
+            BuildMap(parent, "INTRUSION MAP", "NO EW ASSETS ONLINE", y, mapBody);
             y += C2Box.HeaderH + mapBody + gap;
-            gridLines = BuildGrid(map.Body);
             for (int i = 0; i < reach.Length; i++) reach[i] = Line(map.Body, "Reach" + i, 1.2f);
             for (int i = 0; i < edges.Length; i++) edges[i] = Line(map.Body, "Edge" + i, 1.4f);
             for (int i = 0; i < anchorDots.Length; i++)
             {
-                anchorDots[i] = AvLay.Solid(map.Body, "Anchor" + i, Color.clear);
-                anchorDots[i].raycastTarget = false;
-                anchorTags[i] = C2Kit.Mono(map.Body, "AnchorTag" + i, 10f, TextAlignmentOptions.MidlineLeft, true);
-                anchorDots[i].gameObject.SetActive(false);
-                anchorTags[i].gameObject.SetActive(false);
+                anchorDots[i] = Dot(map.Body, "Anchor" + i);
+                anchorTags[i] = Tag(map.Body, "AnchorTag" + i);
             }
             for (int i = 0; i < marks.Length; i++)
             {
                 int slot = i;
-                markSelect[i] = AvLay.Solid(map.Body, "Select" + i, Color.clear);
-                markSelect[i].raycastTarget = false;
-                markSelect[i].gameObject.SetActive(false);
+                markSelect[i] = Dot(map.Body, "Select" + i);
                 marks[i] = AvControl.Make(map.Body, new AvControl.Spec("", () => Pick(markIds[slot]), AvButtonStyle.Quiet));
                 marks[i].SingleLine();
                 marks[i].Rect.gameObject.SetActive(false);
             }
-            headline = C2Kit.Mono(map.Body, "Headline", 12f, TextAlignmentOptions.Center, true, 2f);
-            detail = C2Kit.Mono(map.Body, "Detail", 10f, TextAlignmentOptions.Center);
-            C2Kit.Place(headline, 4f, mapH * 0.5f - 22f, mapW - 8f, 18f);
-            C2Kit.Place(detail, 4f, mapH * 0.5f - 2f, mapW - 8f, 16f);
+            BuildHeadline();
 
             intrusion = Make(new C2Box(parent, "ACTIVE INTRUSION"));
             intrusion.BodyHeight = intrusionBody;
@@ -155,8 +123,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             burnButton.Help = "Release the held node and post its BURN package on the TASKED board for any pilot to fire.";
             dropButton.Help = "Release the selected node, or the whole intrusion when none is selected. No package.";
 
-            ops = new OpsBox(parent, width, full, OpDomain.Cyber, new[] { OpKind.Asat, OpKind.ZeroDay }, opsActions, register);
-            ops.Place(new AvSlot(0f, y, width, OpsBox.HeightFor(full)));
+            BuildOps(parent, y, OpDomain.Cyber, new[] { OpKind.Asat, OpKind.ZeroDay }, opsActions);
             y += OpsBox.HeightFor(full) + gap;
 
             if (full)
@@ -173,76 +140,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 }
             }
 
-            callsBox = Make(new C2Box(parent, "CYBER CALLS"));
-            callsBox.BodyHeight = callsBody;
-            callsBox.SetMeta("LIVE · SAME AUTHORITY AS CAP");
-            callsBox.Place(new AvSlot(0f, y, width, C2Box.HeaderH + callsBody));
-            for (int i = 0; i < ids.Count; i++)
-            {
-                C2Row row = Make(new C2Row(callsBox.Body, rowH, full));
-                row.Place(new AvSlot(1f, 1f + i * (rowH + 2f), width - 4f, rowH));
-                pinActions.Add(CapPage.Bind(row, calls, ids[i]));
-                rows.Add(row);
-                memos.Add(default);
-            }
+            BuildCalls(parent, "CYBER CALLS", y, rowH, calls);
             Restyle();
-        }
-
-        private T Make<T>(T part) where T : AvPart
-        {
-            register(part);
-            return part;
-        }
-
-        private AvControl Button(RectTransform parent, string label, AvButtonStyle style, float x, float y, float w, Action click)
-        {
-            AvControl c = AvControl.Make(parent, new AvControl.Spec(label, click, style));
-            c.SingleLine();
-            AvLay.Place(c.Rect, x, y, w, ButtonH);
-            return c;
-        }
-
-        private static AvLineGraphic Line(RectTransform body, string name, float thickness)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
-            go.transform.SetParent(body, false);
-            var g = go.AddComponent<AvLineGraphic>();
-            g.raycastTarget = false;
-            g.FillUnder = false;
-            g.Thickness = thickness;
-            AvLay.Fill(g.rectTransform);
-            g.SetPoints(null, null, 0);
-            return g;
-        }
-
-        private Image[] BuildGrid(RectTransform body)
-        {
-            const float Cell = 40f;
-            var list = new List<Image>(40);
-            for (float x = Cell; x < mapW - 2f; x += Cell) list.Add(GridLine(body, x, 0f, 1f, mapH));
-            for (float yy = Cell; yy < mapH - 2f; yy += Cell) list.Add(GridLine(body, 0f, yy, mapW, 1f));
-            return list.ToArray();
-        }
-
-        private static Image GridLine(RectTransform body, float x, float y, float w, float h)
-        {
-            Image img = AvLay.Solid(body, "Grid", Color.clear);
-            img.raycastTarget = false;
-            AvLay.Place(img.rectTransform, x, y, w, h);
-            return img;
         }
 
         // ---- Selection and presses -------------------------------------------------------------------------------
 
         private void Pick(int nodeId) { selected = selected == nodeId ? 0 : nodeId; paintedSelected = -1; }
-
-        /// <summary>A press is a request, never an effect: the host judges it. A 0.35 s debounce keeps a double click from sending twice.</summary>
-        private void Press(Action send)
-        {
-            if (Time.unscaledTime < nextPress) return;
-            nextPress = Time.unscaledTime + 0.35f;
-            send?.Invoke();
-        }
 
         private int Target(bool needHeld) => needHeld ? (selected > 0 && IsHeldHere(selected) ? selected : ownHeldLast) : selected;
 
@@ -259,7 +163,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             float now = SupportManager.MissionNow();
             int second = Mathf.FloorToInt(now);
             int seq = s != null ? s.Seq : -2;
-            int opsSeq = v.OpsKnown && v.Ops != null ? v.Ops.Seq : -2;
+            int opsSeq = OpsSeq(v);
             if (seq != paintedSeq || selected != paintedSelected || second != paintedSecond || opsSeq != paintedOps)
             {
                 paintedSeq = seq; paintedSelected = selected; paintedSecond = second; paintedOps = opsSeq;
@@ -340,7 +244,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 anchorTags[slot].gameObject.SetActive(true);
                 OpsText.Set(anchorTags[slot], tag);
                 anchorTags[slot].color = OpsInk.Word(tone);
-                Vector2 tagAt = MapDeclutter.Free(placed, Mathf.Min(mapW - 26f, p.X + 7f), p.Y - 7f, 26f, 14f, mapW, mapH);
+                Vector2 tagAt = Free(Mathf.Min(mapW - 26f, p.X + 7f), p.Y - 7f, 26f, 14f);
                 C2Kit.Place(anchorTags[slot], tagAt.x, tagAt.y, 26f, 14f);
                 if (truck && a.Health != AnchorHealth.Down && truckOrdinal <= reach.Length)
                 {
@@ -356,7 +260,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 CyberNodeRow n = s.Nodes[i];
                 graphNodes.Add(new CyberNode(n.Id, n.Kind, n.X, n.Z, 0u, 0f, 0));
                 MapPoint p = projection.ToScreen(n.X, n.Z);
-                Vector2 markAt = MapDeclutter.Free(placed, p.X - 17f, p.Y - 9f, 34f, 18f, mapW, mapH);
+                Vector2 markAt = Free(p.X - 17f, p.Y - 9f, 34f, 18f);
                 float bx = markAt.x, by = markAt.y;
                 markIds[i] = n.Id;
                 AvControl m = marks[i];
@@ -501,33 +405,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
         }
 
-        private void PaintCalls(CapView v)
-        {
-            for (int i = 0; i < rows.Count; i++)
-            {
-                CallTile tile = default;
-                bool found = false;
-                for (int k = 0; k < v.Tiles.Count && !found; k++)
-                    if (v.Tiles[k].Id == ids[i]) { tile = v.Tiles[k]; found = true; }
-                if (!found) continue;
-                bool pinned = CapPage.IsPinned(v, ids[i]);
-                CapPage.RowMemo memo = memos[i];
-                bool changed = memo.Changed(tile, pinned);
-                memos[i] = memo;
-                if (changed) CapPage.PaintRow(rows[i], tile, CapPage.IndexOf(ids[i]), pinned, pinActions[i]);
-            }
-        }
-
         public void Restyle()
         {
-            foreach (Image g in gridLines) if (g != null) g.color = OpsInk.Hairline;
-            if (headline != null) headline.color = OpsInk.Muted;
-            if (detail != null) detail.color = OpsInk.Dim;
+            RestyleMap();
             hopBack.color = OpsInk.Inert; traceBack.color = OpsInk.Inert;
             for (int i = 0; i < marks.Length; i++) marks[i]?.Restyle();
             hopButton?.Restyle(); burnButton?.Restyle(); dropButton?.Restyle();
-            ops?.Restyle();
-            paintedSeq = paintedOps = -1; // repaint with the new palette
         }
     }
 }
