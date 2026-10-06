@@ -93,9 +93,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // this panel is even installed. The console's own row values re-read the config
             // on their own next Slow tick, so no "dirty" flag is needed for those.
             string section = args.ChangedSetting.Definition.Section;
-            if (section != "Command" && section != "Hud" && section != "Avionics" &&
-                section != "Weather" && section != "Garrisons" && section != "Performance" &&
-                section != "Immersion") return;
             if (section != "Command") return;
             switch (args.ChangedSetting.Definition.Key)
             {

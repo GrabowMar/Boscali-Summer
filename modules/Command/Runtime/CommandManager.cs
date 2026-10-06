@@ -97,7 +97,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             TheaterState.NeutralSectorCount = grid.NeutralSectorCount;
             TheaterState.TerritoryControlRatio = grid.TerritoryControlRatio;
             TheaterState.ActiveClashesCount = grid.ActiveClashesCount;
-            TheaterState.TotalNodesCount = grid.TotalNodesCount;
             TheaterState.FrontlineSegmentCount = grid.FrontlineSegmentCount;
             TheaterState.FrontlineLengthMetres = grid.FrontlineLengthMetres;
 

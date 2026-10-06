@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public int ContestedSectorCount;
         public int NeutralSectorCount;
         public int ActiveClashesCount;
-        public int TotalNodesCount;
 
         /// <summary>Interpolated front stretches where friendly and hostile control meet.</summary>
         public int FrontlineSegmentCount;
@@ -69,7 +68,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             ContestedSectorCount = 0;
             NeutralSectorCount = 0;
             ActiveClashesCount = 0;
-            TotalNodesCount = 0;
             FrontlineSegmentCount = 0;
             FrontlineLengthMetres = 0f;
 

@@ -313,7 +313,6 @@ public static class CocUnityCheck
             ContestedSectorCount = 236,
             HostileSectorCount = 3277,
             NeutralSectorCount = 240,
-            TotalNodesCount = 132,
             FrontlineSegmentCount = 41,
             FrontlineLengthMetres = 112700f,
             TerritoryControlRatio = .49f,

@@ -102,27 +102,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         /// <summary>
-        /// How a DEFCON level reads as a rail state, so severity is carried by position on
-        /// the scale rather than by a colour the caller picked.
-        /// </summary>
-        public static string DefconRail(int level)
-        {
-            if (level <= 1) return "danger";
-            if (level == 2) return "contested";
-            if (level == 3) return "armed";
-            return "ready";
-        }
-
-        /// <summary>
-        /// A node's rail: who holds it, and whether that hold is currently being argued with.
-        /// </summary>
-        public static string NodeRail(bool friendly, bool contested)
-        {
-            if (contested) return "contested";
-            return friendly ? "ready" : "hostile";
-        }
-
-        /// <summary>
         /// Pressure as a word, for rows whose figure column already carries the number.
         /// Below the noise floor it is not pressure, it is a rounding artefact, and calling
         /// it pressure would overstate what is known.
@@ -133,18 +112,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (captureProgress < 0.05f) return "HOLDING";
             if (captureProgress >= 0.75f) return "FALLING";
             return "UNDER PRESSURE";
-        }
-
-        /// <summary>
-        /// A duration as clock time, minutes and seconds. A battle report says how long the
-        /// push ran, and "7m" cannot say whether a fight lasted 7:02 or 7:58.
-        /// </summary>
-        public static string Clock(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "—";
-            int total = (int)Math.Round(Math.Max(0f, seconds), MidpointRounding.AwayFromZero);
-            return (total / 60).ToString(CultureInfo.InvariantCulture) + ":" +
-                   (total % 60).ToString("00", CultureInfo.InvariantCulture);
         }
     }
 }

@@ -101,7 +101,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
+        private bool CustomEnabled() => ImageEnabled();
 
         private int BackgroundIndex() =>
             Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(settings.DeckGrid.Value,

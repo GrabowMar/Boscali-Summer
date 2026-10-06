@@ -21,7 +21,6 @@ namespace BoscaliSummer.Tests.Features.Command
             SharesSurviveAnEmptyBoard();
             PercentRefusesToInventPrecision();
             KilometresReadsAsDistance();
-            RailsSeparateHoldingFromLosing();
             PressureStateDoesNotOverstateNoise();
             RosterDrawsTheChainOfCommand();
             RosterSurvivesAMissingParent();
@@ -203,22 +202,6 @@ namespace BoscaliSummer.Tests.Features.Command
                 "an unknown ratio reads as a dash, never as 0%");
             TestAssert.That(TheaterReadout.Percent(float.PositiveInfinity) == "—",
                 "an infinite ratio reads as a dash");
-        }
-
-        private static void RailsSeparateHoldingFromLosing()
-        {
-            TestAssert.That(TheaterReadout.NodeRail(true, false) == "ready",
-                "quiet friendly ground is nominal");
-            TestAssert.That(TheaterReadout.NodeRail(true, true) == "contested",
-                "friendly ground under pressure is contested, not merely ours");
-            TestAssert.That(TheaterReadout.NodeRail(false, false) == "hostile",
-                "quiet enemy ground is hostile");
-
-            // DEFCON runs the other way: 1 is worst. The rail has to follow the meaning,
-            // not the number.
-            TestAssert.That(TheaterReadout.DefconRail(1) == "danger", "DEFCON 1 is the alarm");
-            TestAssert.That(TheaterReadout.DefconRail(4) == "ready", "DEFCON 4 is nominal");
-            TestAssert.That(TheaterReadout.DefconRail(0) == "danger", "below the scale is still the alarm");
         }
 
         private static void KnownAirDefenceReadsHonestly()
