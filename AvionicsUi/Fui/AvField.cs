@@ -48,7 +48,7 @@ namespace NOAvionics
             frame.Paint(AvStyleHost.Resolve(f.Background.HasValue ? f.Background : b.Background, AvTheme.Surface),
                         AvStyleHost.Resolve(f.Border, AvTheme.Hairline));
             text.color = AvStyleHost.Resolve(b.Color, AvTheme.TextPrimary);
-            hint.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("field-hint").Color, AvTheme.Disabled);
+            hint.color = AvStyleHost.FuiInk("field-hint", AvTheme.Disabled);
         }
 
         private sealed class ReleaseOnDisable : MonoBehaviour

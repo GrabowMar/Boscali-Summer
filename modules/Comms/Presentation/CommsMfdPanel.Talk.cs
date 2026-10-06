@@ -349,7 +349,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             public override void Restyle()
             {
                 vote.Restyle();
-                track.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                track.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 track.SetVerticesDirty();
             }
         }

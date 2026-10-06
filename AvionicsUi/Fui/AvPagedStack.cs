@@ -103,7 +103,7 @@ namespace NOAvionics
         {
             foreach (T item in items) item.Restyle();
             prev.Restyle(); next.Restyle();
-            range.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            range.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
         }
     }
 }

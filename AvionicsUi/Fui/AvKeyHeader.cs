@@ -90,10 +90,10 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-title").Color, AvTheme.RailInfo);
-            icon.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-icon").Color, AvTheme.RailInfo);
-            caption.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Disabled);
-            rule.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section").Border, AvTheme.Hairline);
+            title.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+            icon.color = AvStyleHost.FuiInk("section-icon", AvTheme.RailInfo);
+            caption.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
+            rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
             cap.color = title.color;
             foreach (AvControl b in buttons) b.Restyle();
         }

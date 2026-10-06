@@ -68,12 +68,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             face.Number = f.Number;
             face.Bio = f.Bio;
             face.Portrait = f.Portrait;
-            WmcKit.Set(number, f.Number);
-            WmcKit.Set(value[0], f.Callsign.Length > 0 ? "\"" + f.Callsign + "\"" : WmcText.Unknown);
-            WmcKit.Set(value[1], f.Name.Length > 0 ? f.Name.ToUpperInvariant() : WmcText.Unknown);
-            WmcKit.Set(value[2], f.RankWord);
-            WmcKit.Set(value[3], f.Radio);
-            WmcKit.Set(bio, f.Bio);
+            AvText.Set(number, f.Number);
+            AvText.Set(value[0], f.Callsign.Length > 0 ? "\"" + f.Callsign + "\"" : WmcText.Unknown);
+            AvText.Set(value[1], f.Name.Length > 0 ? f.Name.ToUpperInvariant() : WmcText.Unknown);
+            AvText.Set(value[2], f.RankWord);
+            AvText.Set(value[3], f.Radio);
+            AvText.Set(bio, f.Bio);
             portrait.sprite = f.Portrait;
             portrait.enabled = f.Portrait != null;
             PersonnelFile.Pattern(f.Callsign, f.Name, bars);
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ink.Rect(PadX, HeadH - 2f, width - 2f * PadX, 1f, AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
             float py = HeadH + 4f;
             ink.Rank(FieldsX + KeyW + 8f, py + 2 * Pitch + RowH * 0.5f, 14f, face.Rank, WingRankColor.Of(face.Rank));
-            ink.Barcode(FieldsX, py + 4 * Pitch + 2f, 12f, bars, bars.Length, 1.6f, WingRankColor.Dim);
+            ink.Barcode(FieldsX, py + 4 * Pitch + 2f, 12f, bars, bars.Length, 1.6f, AvInk.Dim);
             art.Commit();
         }
 
@@ -131,14 +131,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("card");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             portraitBox.Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            subtitle.color = WingRankColor.Dim;
-            number.color = WingRankColor.Dim;
-            bio.color = WingRankColor.Dim;
+            title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            subtitle.color = AvInk.Dim;
+            number.color = AvInk.Dim;
+            bio.color = AvInk.Dim;
             for (int i = 0; i < 4; i++)
             {
-                key[i].color = WingRankColor.Dim;
-                value[i].color = WingRankColor.Ink;
+                key[i].color = AvInk.Dim;
+                value[i].color = AvInk.Ink;
             }
             Draw();
         }

@@ -57,9 +57,9 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            label.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value").Color, AvTheme.TextPrimary);
-            track.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+            label.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            value.color = AvStyleHost.FuiInk("row-value", AvTheme.TextPrimary);
+            track.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
             track.FillColor = track.FillEnd = AvStyleHost.FuiColor("select", AvTheme.Accent);
             track.SetVerticesDirty();
         }

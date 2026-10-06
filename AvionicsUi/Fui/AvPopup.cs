@@ -169,8 +169,8 @@ namespace NOAvionics
                 AvStyle s = AvStyleHost.FuiStyle("row", state);
                 frame.Paint(AvStyleHost.Resolve(s.Background, AvTheme.SurfaceInert),
                     s.Border.HasValue ? AvStyleHost.Resolve(s.Border, Color.clear) : Color.clear);
-                text.color = !entry.Enabled ? AvTheme.Disabled : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-                detail.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                text.color = !entry.Enabled ? AvTheme.Disabled : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+                detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             }
         }
     }

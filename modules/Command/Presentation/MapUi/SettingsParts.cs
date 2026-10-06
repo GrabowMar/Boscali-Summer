@@ -83,14 +83,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvStyle cell = AvStyleHost.FuiStyle("cell", available ? null : "disabled");
             frame.Paint(AvStyleHost.Resolve(cell.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(cell.Border, AvTheme.Hairline));
             title.color = available
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
+                ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary)
                 : AvTheme.Disabled;
             value.color = available
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-value").Color, AvTheme.TextPrimary)
+                ? AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary)
                 : AvTheme.Disabled;
-            dial.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
-            dial.TickColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-axis").Color, AvTheme.Hairline);
-            Color fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
+            dial.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
+            dial.TickColor = AvStyleHost.FuiInk("chart-axis", AvTheme.Hairline);
+            Color fill = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             dial.FillColor = fill;
             dial.FillEnd = Color.Lerp(fill, Color.white, 0.25f);
             dial.SetVerticesDirty();

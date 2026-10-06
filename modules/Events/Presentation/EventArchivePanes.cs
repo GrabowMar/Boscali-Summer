@@ -75,8 +75,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            bar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
-            bar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
+            bar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
+            bar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
         }
     }
 

@@ -420,22 +420,22 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                 Color tone = SqdTone.Rail(state);
                 rail.color = tone;
-                wing.color = SqdTone.Ink;
+                wing.color = AvInk.Ink;
                 symbol.color = tone;
-                ace.color = SqdTone.Ink;
-                skill.color = SqdTone.Dim;
+                ace.color = AvInk.Ink;
+                skill.color = AvInk.Dim;
                 status.color = SqdTone.Text(state);
                 threatWord.color = SqdTone.Text(state);
                 for (int i = 0; i < pips.Length; i++)
                     pips[i].color = i < threat && state != AvState.Inert ? tone : AvTheme.Hairline;
-                members.color = SqdTone.Ink;
+                members.color = AvInk.Ink;
                 aliveBar.Restyle();
                 aliveBar.Set(aliveFraction, tone);
-                target.color = state == AvState.Danger ? SqdTone.Text(AvState.Danger) : SqdTone.Dim;
-                noSkills.color = SqdTone.Caption;
+                target.color = state == AvState.Danger ? SqdTone.Text(AvState.Danger) : AvInk.Dim;
+                noSkills.color = AvInk.Muted;
                 for (int i = 0; i < badgeText.Length; i++)
                 {
-                    badgeText[i].color = SqdTone.Ink;
+                    badgeText[i].color = AvInk.Ink;
                     badgeFrames[i].Paint(tone.WithAlpha(.14f), tone.WithAlpha(.6f));
                 }
                 crest.Restyle();

@@ -131,8 +131,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 {
                     cellKey[i] = C2Kit.Mono(buttonsParent, "CellKey" + i, 10f, TextAlignmentOptions.MidlineLeft, false, 2f);
                     cellValue[i] = C2Kit.Mono(buttonsParent, "CellValue" + i, 12f, TextAlignmentOptions.MidlineLeft, true);
-                    C2Kit.Place(cellKey[i], CellX(i), 2f, CellW(i) - 4f, 12f);
-                    C2Kit.Place(cellValue[i], CellX(i), 14f, CellW(i) - 4f, 18f);
+                    AvLay.Place(cellKey[i], CellX(i), 2f, CellW(i) - 4f, 12f);
+                    AvLay.Place(cellValue[i], CellX(i), 14f, CellW(i) - 4f, 18f);
                 }
                 // FRIENDLY says HOST: the host checks friendly proximity when the CALL fires; the full words ride the hover tip.
                 Image friendlyHit = AvLay.Solid(buttonsParent, "FriendlyTip", Color.clear);
@@ -341,8 +341,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             string line = armedNow ? "ARMED · " + armedTile.Label + " · AIM " + aimSrc + " · " + armedTile.CostText
                 : v.Pending ? "ORDER PENDING · AWAITING HOST" : "STANDING BY · R-CLICK MAP TO AIM";
             float room = width - 14f - (armedNow ? 64f + 4f + 84f + 8f : 0f);
-            OpsText.Set(stripText, C2Kit.FitTo(stripText, line, room));
-            C2Kit.Place(stripText, 10f, 0f, room, StripH);
+            AvText.Set(stripText, C2Kit.FitTo(stripText, line, room));
+            AvLay.Place(stripText, 10f, 0f, room, StripH);
             RestyleStrip();
         }
 
@@ -350,8 +350,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             for (int i = 0; i < 4 && i < cells.Length; i++)
             {
-                OpsText.Set(cellKey[i], C2Kit.FitTo(cellKey[i], cells[i].key, CellW(i) - 4f));
-                OpsText.Set(cellValue[i], C2Kit.FitTo(cellValue[i], cells[i].value, CellW(i) - 4f));
+                AvText.Set(cellKey[i], C2Kit.FitTo(cellKey[i], cells[i].key, CellW(i) - 4f));
+                AvText.Set(cellValue[i], C2Kit.FitTo(cellValue[i], cells[i].value, CellW(i) - 4f));
             }
         }
 
@@ -426,8 +426,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public void Restyle()
         {
-            foreach (TMP_Text t in cellKey) if (t != null) t.color = OpsInk.Muted;
-            foreach (TMP_Text t in cellValue) if (t != null) t.color = OpsInk.Ink;
+            foreach (TMP_Text t in cellKey) if (t != null) t.color = AvInk.Muted;
+            foreach (TMP_Text t in cellValue) if (t != null) t.color = AvInk.Ink;
             foreach (AvControl f in favourites) if (f != null) f.Restyle();
             execute?.Restyle();
             abort?.Restyle();
@@ -440,7 +440,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(stripTone), armedNow ? "armed" : null);
             stripFrame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
-            stripRail.color = armedNow ? OpsInk.Select : OpsInk.Rail(stripTone);
+            stripRail.color = armedNow ? AvInk.Select : OpsInk.Rail(stripTone);
             stripText.color = OpsInk.Word(stripTone);
         }
     }

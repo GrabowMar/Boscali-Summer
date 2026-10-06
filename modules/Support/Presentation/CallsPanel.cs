@@ -236,8 +236,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
 
             CapPage capPage = cap;
-            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
-            back.Paint(AvStyleHost.FuiColor("ground", Color.black), OpsInk.Frame);
+            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
+            back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame);
             chromeKey = footerKey = "";
             SelectTab(C2Tab.Cap);
         }

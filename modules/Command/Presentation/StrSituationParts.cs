@@ -55,8 +55,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             int clamped = Mathf.Clamp(level, 1, 5);
             AvState s = StateFor(clamped);
-            bool changed = StrPaint.Put(number, clamped.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            changed |= StrPaint.Put(word, AvStates.Glyph(s) + WordFor(clamped));
+            bool changed = AvText.Set(number, clamped.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            changed |= AvText.Set(word, AvStates.Glyph(s) + WordFor(clamped));
             // The staff's sentence lives on hover; the panel body keeps only the number, the word and the ladder.
             string tip = "DEFCON " + clamped + ": " + assessmentText;
             AvHelpTip.Attach(frame.gameObject, string.IsNullOrEmpty(countsText) ? tip : tip + " · " + countsText);
@@ -80,12 +80,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            Color c = StrPaint.State(state);
-            frame.Paint(StrPaint.Raised, c.WithAlpha(0.7f));
+            Color c = AvInk.State(state);
+            frame.Paint(AvInk.Raised, c.WithAlpha(0.7f));
             rail.color = c;
-            keyText.color = StrPaint.Dim;
-            number.color = state == AvState.Ready ? StrPaint.Ink : c;
-            word.color = state == AvState.Ready ? StrPaint.Ink : c;
+            keyText.color = AvInk.Dim;
+            number.color = state == AvState.Ready ? AvInk.Ink : c;
+            word.color = state == AvState.Ready ? AvInk.Ink : c;
             ladder.Restyle();
         }
     }
@@ -138,16 +138,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public int Rows => columns.Length;
 
-        public void SetCaption(string text) => StrPaint.Put(caption, text);
+        public void SetCaption(string text) => AvText.Set(caption, text);
 
         /// <summary>Bind one column; <paramref name="share01"/> is the fraction of observed sorties.</summary>
         public void Set(int row, string code, string task, int n, float share01)
         {
             Column c = columns[row];
-            StrPaint.Put(c.Code, code);
-            StrPaint.Put(c.Count, StrPaint.Count(n));
+            AvText.Set(c.Code, code);
+            AvText.Set(c.Count, StrPaint.Count(n));
             string share = TheaterReadout.Percent(share01);
-            StrPaint.Put(c.Share, share);
+            AvText.Set(c.Share, share);
             c.Bar.Value = share01;
             AvHelpTip.Attach(c.Frame.gameObject,
                 task + ": " + n + (n == 1 ? " sortie" : " sorties") + ", " + share + " of the friendly AI air tasking observed.");
@@ -183,22 +183,22 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            head.color = StrPaint.Muted;
-            caption.color = StrPaint.Dim;
+            head.color = AvInk.Muted;
+            caption.color = AvInk.Dim;
             for (int i = 0; i < columns.Length; i++) StyleColumn(i);
         }
 
         private void StyleColumn(int i)
         {
             Column c = columns[i];
-            Color key = StrPaint.Key;
+            Color key = AvInk.Key;
             bool busy = i == hot;
             bool idle = c.Count.text == "0" || c.Count.text.Length == 0;
-            c.Frame.Paint(busy ? key.WithAlpha(0.32f) : StrPaint.Inert, busy ? key : StrPaint.Hairline);
-            c.Code.color = idle ? StrPaint.Muted : StrPaint.Ink;
-            c.Count.color = idle ? StrPaint.Muted : StrPaint.Ink;
-            c.Share.color = StrPaint.Dim;
-            c.Bar.Track = StrPaint.Hairline;
+            c.Frame.Paint(busy ? key.WithAlpha(0.32f) : AvInk.Inert, busy ? key : AvInk.Hairline);
+            c.Code.color = idle ? AvInk.Muted : AvInk.Ink;
+            c.Count.color = idle ? AvInk.Muted : AvInk.Ink;
+            c.Share.color = AvInk.Dim;
+            c.Bar.Track = AvInk.Hairline;
             c.Bar.FillColor = c.Bar.FillEnd = busy ? key : key.WithAlpha(0.7f);
             c.Bar.SetVerticesDirty();
         }

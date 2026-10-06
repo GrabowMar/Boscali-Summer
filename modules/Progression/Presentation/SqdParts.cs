@@ -25,18 +25,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         public static Color Text(AvState state)
         {
             if (state == AvState.Info)
-                return AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip info").Color, AvTheme.RailInfo);
-            return AvStyleHost.Resolve(AvStyleHost.FuiStyle(
-                state == AvState.Inert ? "row-value" : "row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary);
+                return AvStyleHost.FuiInk("chip info", AvTheme.RailInfo);
+            return AvStyleHost.FuiInk(state == AvState.Inert ? "row-value" : "row-value " + AvStates.Class(state), AvTheme.TextPrimary);
         }
 
         public static Color Select =>
-            AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell", "on").Border, AvTheme.Selected);
-
-        public static Color Ink => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-        public static Color Dim => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-        public static Color Key => AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-title").Color, AvTheme.RailInfo);
-        public static Color Caption => AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Disabled);
+            AvStyleHost.FuiBorder("cell", AvTheme.Selected, "on");
 
         /// <summary>Tabler glyph that says the state without colour.</summary>
         public static AvIcon Glyph(AvState state)
@@ -92,9 +86,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         public override void Restyle()
         {
-            frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Background, AvTheme.SurfaceInert),
-                AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Border, AvTheme.Hairline));
-            caption.color = SqdTone.Caption;
+            frame.Paint(AvStyleHost.FuiFill("card inert", AvTheme.SurfaceInert),
+                AvStyleHost.FuiBorder("card inert", AvTheme.Hairline));
+            caption.color = AvInk.Muted;
             value.color = SqdTone.Text(state);
         }
     }
@@ -162,9 +156,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         public override void Restyle()
         {
-            frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Background, AvTheme.SurfaceInert),
-                AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Border, AvTheme.Hairline));
-            fallback.color = SqdTone.Caption;
+            frame.Paint(AvStyleHost.FuiFill("card inert", AvTheme.SurfaceInert),
+                AvStyleHost.FuiBorder("card inert", AvTheme.Hairline));
+            fallback.color = AvInk.Muted;
         }
     }
 
@@ -248,7 +242,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), Color.clear);
             bar.color = AvTheme.RailInfo;
-            text.color = SqdTone.Ink;
+            text.color = AvInk.Ink;
         }
     }
 
@@ -313,9 +307,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            icon.color = SqdTone.Caption;
-            title.color = SqdTone.Ink;
-            hint.color = SqdTone.Dim;
+            icon.color = AvInk.Muted;
+            title.color = AvInk.Ink;
+            hint.color = AvInk.Dim;
             action?.Restyle();
         }
     }
@@ -397,7 +391,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             foreach (Image rule in rules) rule.color = AvTheme.Hairline;
             for (int i = 0; i < keys.Count; i++)
             {
-                keys[i].color = SqdTone.Caption;
+                keys[i].color = AvInk.Muted;
                 values[i].color = SqdTone.Text(states[i]);
             }
         }
@@ -513,10 +507,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-            title.color = SqdTone.Ink;
-            sub.color = SqdTone.Dim;
+            title.color = AvInk.Ink;
+            sub.color = AvInk.Dim;
             value.color = SqdTone.Text(state);
-            valueSub.color = SqdTone.Dim;
+            valueSub.color = AvInk.Dim;
             meter.Restyle();
             thumb?.Restyle();
         }
@@ -627,12 +621,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void RestyleLane(int l)
         {
-            names[l].color = closed[l] ? AvTheme.Disabled : SqdTone.Ink;
-            counts[l].color = closed[l] ? AvTheme.Disabled : SqdTone.Dim;
+            names[l].color = closed[l] ? AvTheme.Disabled : AvInk.Ink;
+            counts[l].color = closed[l] ? AvTheme.Disabled : AvInk.Dim;
             for (int g = 0; g < grades; g++)
             {
-                pips[l][g].color = held[l][g] ? SqdTone.Key : closed[l] ? SqdTone.Caption.WithAlpha(.15f) : SqdTone.Caption.WithAlpha(.3f);
-                gradeNames[l][g].color = held[l][g] ? SqdTone.Ink : SqdTone.Dim;
+                pips[l][g].color = held[l][g] ? AvInk.Key : closed[l] ? AvInk.Muted.WithAlpha(.15f) : AvInk.Muted.WithAlpha(.3f);
+                gradeNames[l][g].color = held[l][g] ? AvInk.Ink : AvInk.Dim;
             }
         }
 

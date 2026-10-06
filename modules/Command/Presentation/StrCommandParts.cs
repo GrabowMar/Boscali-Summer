@@ -24,12 +24,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             switch (t)
             {
-                case StrTone.Allied: return StrPaint.State(AvState.Ready);
-                case StrTone.Hostile: return StrPaint.Hostile;
-                case StrTone.Alert: return StrPaint.State(AvState.Danger);
-                case StrTone.Caution: return StrPaint.State(AvState.Caution);
-                case StrTone.Info: return StrPaint.State(AvState.Info);
-                default: return StrPaint.State(AvState.Inert);
+                case StrTone.Allied: return AvInk.State(AvState.Ready);
+                case StrTone.Hostile: return AvInk.Hostile;
+                case StrTone.Alert: return AvInk.State(AvState.Danger);
+                case StrTone.Caution: return AvInk.State(AvState.Caution);
+                case StrTone.Info: return AvInk.State(AvState.Info);
+                default: return AvInk.State(AvState.Inert);
             }
         }
 
@@ -38,12 +38,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             switch (t)
             {
-                case StrTone.Alert: return StrPaint.State(AvState.Danger);
-                case StrTone.Caution: return StrPaint.State(AvState.Caution);
-                case StrTone.Hostile: return Color.Lerp(StrPaint.Hostile, StrPaint.Ink, 0.5f);
-                case StrTone.Allied: return StrPaint.State(AvState.Ready);
-                case StrTone.Info: return StrPaint.State(AvState.Info);
-                default: return StrPaint.Muted;
+                case StrTone.Alert: return AvInk.State(AvState.Danger);
+                case StrTone.Caution: return AvInk.State(AvState.Caution);
+                case StrTone.Hostile: return Color.Lerp(AvInk.Hostile, AvInk.Ink, 0.5f);
+                case StrTone.Allied: return AvInk.State(AvState.Ready);
+                case StrTone.Info: return AvInk.State(AvState.Info);
+                default: return AvInk.Muted;
             }
         }
 
@@ -132,10 +132,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 data[i] = nodes[i];
                 Card c = cards[i];
                 c.Root.gameObject.SetActive(true);
-                StrPaint.Put(c.Name, nodes[i].Name);
-                StrPaint.Put(c.Sub, nodes[i].Role ?? "");
-                StrPaint.Put(c.Rank, nodes[i].Rank ?? "");
-                StrPaint.Put(c.Status, StrTones.Glyph(nodes[i].Tone) + nodes[i].Status);
+                AvText.Set(c.Name, nodes[i].Name);
+                AvText.Set(c.Sub, nodes[i].Role ?? "");
+                AvText.Set(c.Rank, nodes[i].Rank ?? "");
+                AvText.Set(c.Status, StrTones.Glyph(nodes[i].Tone) + nodes[i].Status);
                 c.Tip.Text = nodes[i].Help;
                 StyleCard(i);
             }
@@ -308,19 +308,19 @@ namespace BoscaliSummer.Modules.Command.Presentation
             StrOrgNode n = data[i];
             Color tone = StrTones.Rail(n.Tone);
             bool dead = n.Tone == StrTone.Kia;
-            Color stroke = n.Selected ? StrPaint.Select : c.Hover ? StrPaint.Frame : StrPaint.Hairline;
-            c.Frame.Paint(n.Selected || c.Hover ? StrPaint.Raised : StrPaint.Inert, stroke);
-            c.Rail.color = n.Selected ? StrPaint.Select : tone;
+            Color stroke = n.Selected ? AvInk.Select : c.Hover ? AvInk.Frame : AvInk.Hairline;
+            c.Frame.Paint(n.Selected || c.Hover ? AvInk.Raised : AvInk.Inert, stroke);
+            c.Rail.color = n.Selected ? AvInk.Select : tone;
             bool quiet = dead || n.Tone == StrTone.Unconfirmed;
-            c.Name.color = quiet ? StrPaint.Dim : StrPaint.Ink;
-            c.Sub.color = quiet ? StrPaint.Muted : StrPaint.Dim;
-            c.Rank.color = quiet ? StrPaint.Muted : StrPaint.Key;
+            c.Name.color = quiet ? AvInk.Dim : AvInk.Ink;
+            c.Sub.color = quiet ? AvInk.Muted : AvInk.Dim;
+            c.Rank.color = quiet ? AvInk.Muted : AvInk.Key;
             c.Status.color = StrTones.Text(n.Tone);
         }
 
         public override void Restyle()
         {
-            lines.color = StrPaint.Frame.WithAlpha(0.75f);
+            lines.color = AvInk.Frame.WithAlpha(0.75f);
             lines.SetVerticesDirty();
             for (int i = 0; i < count; i++) StyleCard(i);
         }
@@ -409,14 +409,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Show(Data d)
         {
-            bool changed = StrPaint.Put(name, d.Name);
-            changed |= StrPaint.Put(role, string.IsNullOrEmpty(d.Rank) ? d.Role : string.IsNullOrEmpty(d.Role) ? d.Rank : d.Rank + " · " + d.Role);
-            changed |= StrPaint.Put(status, StrTones.Glyph(d.Tone) + d.Status);
-            StrPaint.Put(fieldValues[0], d.Station);
-            StrPaint.Put(fieldValues[1], d.Share);
-            StrPaint.Put(fieldValues[2], d.Intel);
+            bool changed = AvText.Set(name, d.Name);
+            changed |= AvText.Set(role, string.IsNullOrEmpty(d.Rank) ? d.Role : string.IsNullOrEmpty(d.Role) ? d.Rank : d.Rank + " · " + d.Role);
+            changed |= AvText.Set(status, StrTones.Glyph(d.Tone) + d.Status);
+            AvText.Set(fieldValues[0], d.Station);
+            AvText.Set(fieldValues[1], d.Share);
+            AvText.Set(fieldValues[2], d.Intel);
             shareBar.Value = d.Sealed ? 0f : d.Share01;
-            changed |= StrPaint.Put(bio, d.Bio);
+            changed |= AvText.Set(bio, d.Bio);
 
             int n = d.TraitLabels == null ? 0 : Mathf.Clamp(d.TraitCount, 0, (int)MaxTraits);
             bool none = n == 0;
@@ -433,18 +433,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 if (!on) continue;
                 if (none)
                 {
-                    StrPaint.Put(traitLabel[i], d.Sealed ? "NO RECORD" : "NO NOTABLE TRAITS");
-                    StrPaint.Put(traitPay[i], "");
+                    AvText.Set(traitLabel[i], d.Sealed ? "NO RECORD" : "NO NOTABLE TRAITS");
+                    AvText.Set(traitPay[i], "");
                 }
                 else
                 {
-                    StrPaint.Put(traitLabel[i], d.TraitLabels[i]);
-                    StrPaint.Put(traitPay[i], d.TraitPays != null ? d.TraitPays[i] : "");
+                    AvText.Set(traitLabel[i], d.TraitLabels[i]);
+                    AvText.Set(traitPay[i], d.TraitPays != null ? d.TraitPays[i] : "");
                 }
-                traitLabel[i].color = none ? StrPaint.Muted : StrPaint.Ink;
+                traitLabel[i].color = none ? AvInk.Muted : AvInk.Ink;
                 bool penalty = d.TraitPenalty != null && d.TraitPenalty[i];
-                traitPay[i].color = string.IsNullOrEmpty(traitPay[i].text) ? StrPaint.Muted
-                    : penalty ? StrPaint.State(AvState.Caution) : StrPaint.State(AvState.Ready);
+                traitPay[i].color = string.IsNullOrEmpty(traitPay[i].text) ? AvInk.Muted
+                    : penalty ? AvInk.State(AvState.Caution) : AvInk.State(AvState.Ready);
             }
 
             bool hasPortrait = d.Portrait != null && !d.Sealed;
@@ -515,31 +515,31 @@ namespace BoscaliSummer.Modules.Command.Presentation
         public override void Restyle()
         {
             Color rail_ = StrTones.Rail(tone);
-            frame.Paint(StrPaint.Raised, StrPaint.Frame.WithAlpha(0.8f));
-            frame.BracketColor = StrPaint.Frame;
+            frame.Paint(AvInk.Raised, AvInk.Frame.WithAlpha(0.8f));
+            frame.BracketColor = AvInk.Frame;
             frame.SetVerticesDirty();
             rail.color = rail_;
-            portraitFrame.Paint(StrPaint.Inert, rail_.WithAlpha(0.8f));
-            portraitIcon.color = StrPaint.Muted;
-            name.color = StrPaint.Ink;
-            role.color = StrPaint.Dim;
+            portraitFrame.Paint(AvInk.Inert, rail_.WithAlpha(0.8f));
+            portraitIcon.color = AvInk.Muted;
+            name.color = AvInk.Ink;
+            role.color = AvInk.Dim;
             statusFrame.Paint(rail_.WithAlpha(0.16f), rail_.WithAlpha(0.7f));
-            status.color = tone == StrTone.Unconfirmed || tone == StrTone.Kia ? StrPaint.Dim : StrPaint.Ink;
-            rule.color = StrPaint.Hairline;
+            status.color = tone == StrTone.Unconfirmed || tone == StrTone.Kia ? AvInk.Dim : AvInk.Ink;
+            rule.color = AvInk.Hairline;
             for (int i = 0; i < 3; i++)
             {
-                fieldKeys[i].color = StrPaint.Muted;
-                fieldValues[i].color = StrPaint.Ink;
+                fieldKeys[i].color = AvInk.Muted;
+                fieldValues[i].color = AvInk.Ink;
             }
-            shareBar.Track = StrPaint.Hairline;
-            shareBar.FillColor = shareBar.FillEnd = StrPaint.Key;
+            shareBar.Track = AvInk.Hairline;
+            shareBar.FillColor = shareBar.FillEnd = AvInk.Key;
             shareBar.SetVerticesDirty();
             for (int i = 0; i < traitLabel.Length; i++)
             {
-                traitLabel[i].color = noTraits ? StrPaint.Muted : StrPaint.Ink;
-                traitRule[i].color = StrPaint.Hairline.WithAlpha(0.6f);
+                traitLabel[i].color = noTraits ? AvInk.Muted : AvInk.Ink;
+                traitRule[i].color = AvInk.Hairline.WithAlpha(0.6f);
             }
-            bio.color = StrPaint.Dim;
+            bio.color = AvInk.Dim;
         }
     }
 

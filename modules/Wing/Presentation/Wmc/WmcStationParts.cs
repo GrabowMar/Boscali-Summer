@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Show(StationData d, string note)
         {
             data = d;
-            WmcKit.Set(empty, d == null || d.Shape == null ? note ?? "" : "");
+            AvText.Set(empty, d == null || d.Shape == null ? note ?? "" : "");
             Draw();
         }
 
@@ -141,7 +141,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float w = width, h = CardH;
             Color hair = AvStyleHost.FuiColor("hairline", AvTheme.Hairline), frame = AvStyleHost.FuiColor("frame", AvTheme.Frame);
             Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo), caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary), dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary), dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             for (int i = 0; i < StationData.Max; i++)
             {
                 if (slotWords[i].gameObject.activeSelf) slotWords[i].gameObject.SetActive(false);
@@ -150,8 +150,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (d == null || d.Shape == null)
             {
                 leaderWord.gameObject.SetActive(false);
-                WmcKit.Set(caption, "");
-                WmcKit.Set(scaleWord, "");
+                AvText.Set(caption, "");
+                AvText.Set(scaleWord, "");
                 vector.Commit();
                 return;
             }
@@ -175,11 +175,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Rgba gridC = Rg(hair).WithAlpha(0.4f);
             for (float x = cx % step; x < w; x += step) AvStrokes.Line(b, x, 0f, x, h, 0.7f, gridC);
             for (float y = (h - cy) % step; y < h; y += step) AvStrokes.Line(b, 0f, y, w, y, 0.7f, gridC);
-            WmcKit.Set(caption, "HDG " + AvNum.Fixed(Mathf.Repeat(d.HeadingDeg, 360f), 0).PadLeft(3, '0') + "   GRID " + AvNum.Fixed(stepM, 0) + " M");
+            AvText.Set(caption, "HDG " + AvNum.Fixed(Mathf.Repeat(d.HeadingDeg, 360f), 0).PadLeft(3, '0') + "   GRID " + AvNum.Fixed(stepM, 0) + " M");
             float bar = Math.Max(d.Spacing, stepM);
             float barPx = bar / mpp;
             AvStrokes.Line(b, w - 10f - barPx, 22f, w - 10f, 22f, 1.2f, Rg(dim));
-            WmcKit.Set(scaleWord, AvNum.Fixed(bar, 0) + " m");
+            AvText.Set(scaleWord, AvNum.Fixed(bar, 0) + " m");
             scaleWord.rectTransform.anchoredPosition = new Vector2(w - 10f - 78f, -(h - 21f - 8f));
             // Slots.
             int slots = d.Shape.Slots.Length;
@@ -197,7 +197,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (mi >= 0) AvStrokes.Ring(b, sx, h - sy, Ring, 28, 0.9f, Rg(out_ ? caution : key).WithAlpha(0.55f));
                 TMP_Text sw = slotWords[i];
                 sw.gameObject.SetActive(true);
-                WmcKit.Set(sw, "S" + (i + 1));
+                AvText.Set(sw, "S" + (i + 1));
                 sw.color = dim;
                 AvLay.Place(sw.rectTransform, Mathf.Min(sx + 15f, w - 34f), Mathf.Max(0f, sy - 22f), 30f, 18f);
             }
@@ -219,14 +219,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     AvStrokes.Chevron(b, lx, h - ly, 12f, 90f, 1.6f, Rg(c));
                     TMP_Text lw = liveWords[m];
                     lw.gameObject.SetActive(true);
-                    WmcKit.Set(lw, d.Who[m] + (outSlot ? " " + StationBoard.ErrorText(d.ErrorM[m]) : ""));
+                    AvText.Set(lw, d.Who[m] + (outSlot ? " " + StationBoard.ErrorText(d.ErrorM[m]) : ""));
                     lw.color = outSlot ? caution : ink;
                     AvLay.Place(lw.rectTransform, Mathf.Clamp(lx + 9f, 0f, w - 112f), Mathf.Clamp(ly + 4f, 0f, h - 18f), 110f, 18f);
                 }
             // The leader.
             AvStrokes.Fill(b, cx - 4f, h - cy - 4f, 8f, 8f, Rg(ink));
             leaderWord.gameObject.SetActive(true);
-            WmcKit.Set(leaderWord, "YOU");
+            AvText.Set(leaderWord, "YOU");
             leaderWord.color = ink;
             AvLay.Place(leaderWord.rectTransform, cx + 8f, cy - 20f, 40f, 18f);
             vector.Commit();
@@ -246,9 +246,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             card.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            card.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            card.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             card.SetVerticesDirty();
-            Color dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             caption.color = scaleWord.color = empty.color = dim;
             if (data != null) Draw();
         }
@@ -356,16 +356,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 var phase = (StationPhase)d.Phase[i];
                 string rail = phase == StationPhase.InSlot ? "ready" : phase == StationPhase.Behind ? "danger" : "caution";
                 Color c = WmcState.Color(rail);
-                WmcKit.Set(r.Who, d.Who[i]);
-                WmcKit.Set(r.Slot, "SLOT " + (d.Slot[i] + 1));
-                WmcKit.Set(r.Err, StationBoard.ErrorText(d.ErrorM[i]));
-                WmcKit.Set(r.Closure, StationBoard.Signed(d.Closure[i]) + " m/s");
-                WmcKit.Set(r.Word, StationMath.Word(phase));
+                AvText.Set(r.Who, d.Who[i]);
+                AvText.Set(r.Slot, "SLOT " + (d.Slot[i] + 1));
+                AvText.Set(r.Err, StationBoard.ErrorText(d.ErrorM[i]));
+                AvText.Set(r.Closure, StationBoard.Signed(d.Closure[i]) + " m/s");
+                AvText.Set(r.Word, StationMath.Word(phase));
                 r.Rail.color = c;
                 r.Fill.color = c;
                 r.Word.color = phase == StationPhase.InSlot ? key : c;
-                r.Closure.color = d.Closure[i] < 0 && phase != StationPhase.InSlot ? WmcState.Color("caution") : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-                r.Err.color = phase == StationPhase.InSlot ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary) : c;
+                r.Closure.color = d.Closure[i] < 0 && phase != StationPhase.InSlot ? WmcState.Color("caution") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+                r.Err.color = phase == StationPhase.InSlot ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : c;
                 // The bar is the slot error against a 150 m scale (past it, full).
                 fill[i] = Mathf.Clamp01(d.ErrorM[i] / 150f);
             }
@@ -385,14 +385,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle row = AvStyleHost.FuiStyle("row");
             Color back = AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert);
             Color track = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.8f);
-            Color name = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (Row r in rows)
             {
                 r.Frame.Paint(back, Color.clear);
                 r.Track.color = track;
-                r.Who.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                r.Who.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 r.Slot.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-                r.Closure.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                r.Closure.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 r.Err.color = name;
             }
         }
@@ -440,7 +440,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public bool Set(int i, FormationDefinition shape, string name, bool latched)
         {
             shapes[i] = shape;
-            WmcKit.Set(names[i], name);
+            AvText.Set(names[i], name);
             cells[i].Latched = latched;
             Draw(i);
             return true;
@@ -495,7 +495,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < cells.Length; i++)
             {
                 cells[i].Restyle();
-                names[i].color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+                names[i].color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
                 if (shapes[i] != null) Draw(i);
             }
         }
@@ -576,12 +576,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (!on) continue;
                 float x = x0 + w * Mathf.Clamp01((metres[i] - min) / (max - min));
                 AvLay.Place(ticks[i].rectTransform, x - 0.5f, TrackY + 6f, 1f, TrackH - 12f);
-                WmcKit.Set(words[i], AvNum.Fixed(metres[i], 0));
+                AvText.Set(words[i], AvNum.Fixed(metres[i], 0));
                 AvLay.Place(words[i].rectTransform, Mathf.Clamp(x - 20f, x0 - 8f, x1 - 32f), TrackY + TrackH + 1f, 40f, 18f);
             }
             float tx = x0 + w * Mathf.Clamp01((now - min) / (max - min));
             AvLay.Place(thumb.rectTransform, tx - 2f, TrackY - 3f, 4f, TrackH + 6f);
-            WmcKit.Set(value, AvNum.Fixed(now, 0) + " M");
+            AvText.Set(value, AvNum.Fixed(now, 0) + " M");
             AvLay.Place(value.rectTransform, x0, TrackY, w, TrackH);
             // The value sits on the track's middle; move it off the thumb by putting it on the side with more room.
             value.alignment = tx < x0 + w * 0.5f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
@@ -593,13 +593,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("row");
             track.Paint(AvStyleHost.FuiColor("ground", AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             thumb.color = AvStyleHost.FuiColor("select", AvTheme.Accent);
-            Color frame = AvStyleHost.FuiColor("frame", AvTheme.Frame), dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color frame = AvStyleHost.FuiColor("frame", AvTheme.Frame), dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             for (int i = 0; i < ticks.Length; i++)
             {
                 ticks[i].color = frame;
                 words[i].color = dim;
             }
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            value.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             minus.Restyle();
             plus.Restyle();
         }

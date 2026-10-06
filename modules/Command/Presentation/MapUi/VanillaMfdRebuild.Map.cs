@@ -352,7 +352,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public override void Restyle()
                 {
-                    label.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
+                    label.color = AvStyleHost.FuiInk("section-caption", AvTheme.Dim);
                     plate.color = mark.color = SideTint(side);
                 }
             }
@@ -411,9 +411,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 public override void Restyle()
                 {
-                    frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
-                                AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
-                    Color ink = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
+                                AvStyleHost.FuiBorder("card", AvTheme.Hairline));
+                    Color ink = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                     for (int i = 0; i < Entries.Length; i++)
                     {
                         labels[i].color = ink;
@@ -492,9 +492,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public override void Restyle()
                 {
-                    frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
-                                AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
-                    Color ink = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
+                                AvStyleHost.FuiBorder("card", AvTheme.Hairline));
+                    Color ink = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                     foreach (TMP_Text t in labels) t.color = ink;
                 }
             }

@@ -399,8 +399,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             public void Restyle()
             {
                 bool closed = state == AvState.Inert;
-                name.color = closed ? AvTheme.Disabled : SqdTone.Ink;
-                count.color = closed ? AvTheme.Disabled : SqdTone.Ink;
+                name.color = closed ? AvTheme.Disabled : AvInk.Ink;
+                count.color = closed ? AvTheme.Disabled : AvInk.Ink;
                 status.color = closed ? AvTheme.Disabled : SqdTone.Text(state);
                 bar.Restyle();
                 bar.Set(fraction, closed ? AvTheme.RailInert : SqdTone.Rail(state));

@@ -350,7 +350,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 Color fill = AvStyleHost.Resolve(inert.Background, AvTheme.SurfaceInert);
                 Color stroke = AvTheme.Hairline;
                 Color accent = AvTheme.RailInert;
-                Color ink = SqdTone.Ink;
+                Color ink = AvInk.Ink;
                 switch (state)
                 {
                     case SkillNodeState.Held:
@@ -361,11 +361,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     case SkillNodeState.Open:
                         accent = AvTheme.RailInfo;
                         stroke = accent.WithAlpha(.7f);
-                        if (hover) fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row", "hover").Background, fill);
+                        if (hover) fill = AvStyleHost.FuiFill("row", fill, "hover");
                         break;
                     case SkillNodeState.Selected:
                         accent = SqdTone.Select;
-                        fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell", "on").Background, accent.WithAlpha(.16f));
+                        fill = AvStyleHost.FuiFill("cell", accent.WithAlpha(.16f), "on");
                         stroke = accent;
                         break;
                     default:
@@ -490,9 +490,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 for (int i = 0; i < legendWords.Length; i++)
                 {
                     legendIcons[i].color = tones[i];
-                    legendWords[i].color = SqdTone.Dim;
+                    legendWords[i].color = AvInk.Dim;
                 }
-                foreach (TMP_Text tier in tierLabels) tier.color = SqdTone.Caption;
+                foreach (TMP_Text tier in tierLabels) tier.color = AvInk.Muted;
                 foreach (SkillBranchRow branch in Branches) branch.Restyle();
             }
         }

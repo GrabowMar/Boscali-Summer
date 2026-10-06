@@ -45,7 +45,7 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            label.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            label.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (AvControl o in options) o.Restyle();
         }
     }

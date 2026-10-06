@@ -54,14 +54,14 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
+            key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
             frame.Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
             frame.BracketColor = AvStyleHost.FuiColor("ink-muted", AvTheme.Dim).WithAlpha(0.5f);
             frame.SetVerticesDirty();
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-value").Color, AvTheme.TextPrimary);
-            dial.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
-            dial.TickColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("chart-axis").Color, AvTheme.Hairline);
-            Color fill = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(state)).Background, AvTheme.Accent);
+            value.color = AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary);
+            dial.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
+            dial.TickColor = AvStyleHost.FuiInk("chart-axis", AvTheme.Hairline);
+            Color fill = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
             dial.FillColor = fill; dial.FillEnd = Color.Lerp(fill, Color.white, 0.25f);
             dial.SetVerticesDirty();
         }

@@ -399,10 +399,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 AvStyle c = AvStyleHost.FuiStyle("card raised");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
-                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
-                name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                fuelKey.color = throttleKey.color = SqdTone.Caption;
-                fuelValue.color = throttleValue.color = SqdTone.Ink;
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
+                name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                fuelKey.color = throttleKey.color = AvInk.Muted;
+                fuelValue.color = throttleValue.color = AvInk.Ink;
                 stateChip.Restyle();
                 fuelBar.Restyle();
                 throttleBar.Restyle();
@@ -459,7 +459,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 AvStyle c = AvStyleHost.FuiStyle("card inert");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-                state.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Dim);
+                state.color = AvStyleHost.FuiInk("section-caption", AvTheme.Dim);
             }
         }
     }

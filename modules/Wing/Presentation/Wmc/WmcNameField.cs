@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            if (key != null) key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            if (key != null) key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             inner.Restyle();
             Button?.Restyle();
         }

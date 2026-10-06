@@ -178,8 +178,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             float w = width;
             AvLay.Place(bannerBack.rectTransform, 0f, 0f, w, BannerH);
-            C2Kit.Place(bannerText, PadX, 0f, w - 2f * PadX, BannerH);
-            OpsText.Set(bannerText, C2Kit.FitTo(bannerText, bannerRaw, w - 2f * PadX));
+            AvLay.Place(bannerText, PadX, 0f, w - 2f * PadX, BannerH);
+            AvText.Set(bannerText, C2Kit.FitTo(bannerText, bannerRaw, w - 2f * PadX));
         }
 
         private void LayoutHeader()
@@ -191,10 +191,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(plateText.rectTransform, PadX, 6f + dy, 28f, 24f);
 
             string ledgerText = credit.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            OpsText.Set(ledgerValue, ledgerText);
+            AvText.Set(ledgerValue, ledgerText);
             float ledgerX = w - PadX - LedgerW;
-            C2Kit.Place(ledgerValue, ledgerX, 1f + dy, LedgerW, 21f);
-            C2Kit.Place(ledgerKey, ledgerX - 10f, 22f + dy, LedgerW + 10f, 12f);
+            AvLay.Place(ledgerValue, ledgerX, 1f + dy, LedgerW, 21f);
+            AvLay.Place(ledgerKey, ledgerX - 10f, 22f + dy, LedgerW + 10f, 12f);
 
             bool alert = alertRaw.Length > 0;
             float titleX = PadX + 28f + 8f, right = ledgerX - 8f;
@@ -204,18 +204,18 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (alert)
             {
                 float room = Mathf.Max(60f, Mathf.Min(170f, (right - titleX) * 0.55f));
-                OpsText.Set(alertText, C2Kit.FitTo(alertText, alertRaw, room - 12f));
+                AvText.Set(alertText, C2Kit.FitTo(alertText, alertRaw, room - 12f));
                 alertW = Mathf.Min(room, C2Kit.Width(alertText, alertText.text) + 14f);
                 float ax = right - alertW;
                 AvLay.Place(alertBack.rectTransform, ax, 8f + dy, alertW, 20f);
-                C2Kit.Place(alertText, ax, 8f + dy, alertW, 20f);
+                AvLay.Place(alertText, ax, 8f + dy, alertW, 20f);
                 alertW += 6f;
             }
             float textW = Mathf.Max(20f, right - titleX - alertW);
-            OpsText.Set(title, C2Kit.FitTo(title, titleRaw, textW));
-            OpsText.Set(sub, C2Kit.FitTo(sub, subRaw, textW));
-            C2Kit.Place(title, titleX, 1f + dy, textW, 20f);
-            C2Kit.Place(sub, titleX, 21f + dy, textW, 13f);
+            AvText.Set(title, C2Kit.FitTo(title, titleRaw, textW));
+            AvText.Set(sub, C2Kit.FitTo(sub, subRaw, textW));
+            AvLay.Place(title, titleX, 1f + dy, textW, 20f);
+            AvLay.Place(sub, titleX, 21f + dy, textW, 13f);
         }
 
         private void RebuildSession(float w)
@@ -240,8 +240,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 string op = C2Kit.FitTo(sessionLeft, opRaw, Mathf.Max(24f, budget));
                 sessionLeft.text = "OPR " + op + tail;
                 float leftW = Mathf.Min(avail, C2Kit.Width(sessionLeft, sessionLeft.text));
-                C2Kit.Place(sessionLeft, PadX, 0f, leftW + 2f, SessionH - 1f);
-                C2Kit.Place(sessionRight, PadX + leftW + 6f, 0f, Mathf.Max(10f, avail - leftW - 6f), SessionH - 1f);
+                AvLay.Place(sessionLeft, PadX, 0f, leftW + 2f, SessionH - 1f);
+                AvLay.Place(sessionRight, PadX + leftW + 6f, 0f, Mathf.Max(10f, avail - leftW - 6f), SessionH - 1f);
                 return;
             }
         }
@@ -277,17 +277,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvStyle h = AvStyleHost.FuiStyle("header");
             headerBack.Paint(AvStyleHost.Resolve(h.Background, AvTheme.Surface), AvStyleHost.Resolve(h.Border, AvTheme.Hairline));
             AvStyle id = AvStyleHost.FuiStyle("id-plate");
-            plate.Paint(AvStyleHost.Resolve(id.Background, AvTheme.SurfaceRaised), OpsInk.Key);
-            plateText.color = OpsInk.Key;
-            title.color = OpsInk.Ink;
-            sub.color = OpsInk.Dim;
-            ledgerValue.color = OpsInk.Ink;
-            ledgerKey.color = OpsInk.Muted;
+            plate.Paint(AvStyleHost.Resolve(id.Background, AvTheme.SurfaceRaised), AvInk.Key);
+            plateText.color = AvInk.Key;
+            title.color = AvInk.Ink;
+            sub.color = AvInk.Dim;
+            ledgerValue.color = AvInk.Ink;
+            ledgerKey.color = AvInk.Muted;
             alertBack.color = C2Kit.SlabFill(AvState.Danger);
             alertText.color = C2Kit.SlabInk;
-            sessionLeft.color = OpsInk.Dim;
-            sessionRight.color = OpsInk.Dim;
-            sessionRule.color = OpsInk.Hairline;
+            sessionLeft.color = AvInk.Dim;
+            sessionRight.color = AvInk.Dim;
+            sessionRule.color = AvInk.Hairline;
             foreach (AvControl t in tabs) t.Restyle();
             if (tabs[0] != null && (width > 0f)) { RebuildSession(width); PaintBoardEdge(); }
         }

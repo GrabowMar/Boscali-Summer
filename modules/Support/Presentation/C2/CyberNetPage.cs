@@ -97,21 +97,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             y += C2Box.HeaderH + intrusionBody + gap;
             float iw = width - 2f;
             targetLine = C2Kit.Mono(intrusion.Body, "Target", 11f, TextAlignmentOptions.MidlineLeft, true, 1f);
-            C2Kit.Place(targetLine, Pad, 3f, iw - 2f * Pad, 16f);
+            AvLay.Place(targetLine, Pad, 3f, iw - 2f * Pad, 16f);
             hopBack = AvLay.Solid(intrusion.Body, "HopBack", Color.clear);
             hopFill = AvLay.Solid(intrusion.Body, "HopFill", Color.clear);
             AvLay.Place(hopBack.rectTransform, Pad, 21f, iw - 2f * Pad, 6f);
             AvLay.Place(hopFill.rectTransform, Pad, 21f, 0f, 6f);
             traceText = C2Kit.Mono(intrusion.Body, "TraceText", 10f, TextAlignmentOptions.MidlineLeft, true, 1f);
-            C2Kit.Place(traceText, Pad, 30f, iw - 2f * Pad, 14f);
+            AvLay.Place(traceText, Pad, 30f, iw - 2f * Pad, 14f);
             traceBack = AvLay.Solid(intrusion.Body, "TraceBack", Color.clear);
             traceFill = AvLay.Solid(intrusion.Body, "TraceFill", Color.clear);
             AvLay.Place(traceBack.rectTransform, Pad, 45f, iw - 2f * Pad, 8f);
             AvLay.Place(traceFill.rectTransform, Pad, 45f, 0f, 8f);
             heldLine = C2Kit.Mono(intrusion.Body, "Held", 10f, TextAlignmentOptions.MidlineLeft);
-            C2Kit.Place(heldLine, Pad, 57f, iw - 2f * Pad, 14f);
+            AvLay.Place(heldLine, Pad, 57f, iw - 2f * Pad, 14f);
             hintLine = C2Kit.Mono(intrusion.Body, "Hint", 10f, TextAlignmentOptions.MidlineLeft);
-            C2Kit.Place(hintLine, Pad, 71f, iw - 2f * Pad, 14f);
+            AvLay.Place(hintLine, Pad, 71f, iw - 2f * Pad, 14f);
             // The compact 596 page has no room for the held list and the hint: the held list rides the trace line and the hint is the footer's.
             heldLine.gameObject.SetActive(full);
             hintLine.gameObject.SetActive(full);
@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 for (int i = 0; i < anchorRows.Length; i++)
                 {
                     anchorRows[i] = C2Kit.Mono(anchors.Body, "AnchorRow" + i, 10.5f, TextAlignmentOptions.MidlineLeft);
-                    C2Kit.Place(anchorRows[i], Pad, 4f + i * 16f, iw - 2f * Pad, 16f);
+                    AvLay.Place(anchorRows[i], Pad, 4f + i * 16f, iw - 2f * Pad, 16f);
                 }
             }
 
@@ -205,8 +205,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             detail.gameObject.SetActive(headline.gameObject.activeSelf);
             if (headline.gameObject.activeSelf)
             {
-                OpsText.Set(headline, s == null ? "NO LINK" : "NO EW ASSETS ONLINE");
-                OpsText.Set(detail, s == null ? "> waiting for the host CYBER state" : "> no EW truck standing — restore one or use the CALLS below");
+                AvText.Set(headline, s == null ? "NO LINK" : "NO EW ASSETS ONLINE");
+                AvText.Set(detail, s == null ? "> waiting for the host CYBER state" : "> no EW truck standing — restore one or use the CALLS below");
             }
             map.SetMeta(CyberNetWords.Sub(s));
             for (int i = 0; i < marks.Length; i++) { marks[i].Rect.gameObject.SetActive(false); markSelect[i].gameObject.SetActive(false); }
@@ -242,10 +242,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 anchorDots[slot].color = OpsInk.Rail(tone);
                 AvLay.Place(anchorDots[slot].rectTransform, p.X - 4f, p.Y - 4f, 8f, 8f);
                 anchorTags[slot].gameObject.SetActive(true);
-                OpsText.Set(anchorTags[slot], tag);
+                AvText.Set(anchorTags[slot], tag);
                 anchorTags[slot].color = OpsInk.Word(tone);
                 Vector2 tagAt = Free(Mathf.Min(mapW - 26f, p.X + 7f), p.Y - 7f, 26f, 14f);
-                C2Kit.Place(anchorTags[slot], tagAt.x, tagAt.y, 26f, 14f);
+                AvLay.Place(anchorTags[slot], tagAt.x, tagAt.y, 26f, 14f);
                 if (truck && a.Health != AnchorHealth.Down && truckOrdinal <= reach.Length)
                 {
                     sources.Add(new EwSource(truckOrdinal - 1, a.X, a.Z, AnchorRules.Reach(a.Health)));
@@ -271,7 +271,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 m.Help = CyberNetWords.Node(n.Kind, n.Id) + (n.Held ? " · HELD" : n.Hopping ? " · HOP IN PROGRESS" : "") + (n.Exploit ? " · EXPLOIT: CYBER beats SPACE (-25 % hop time and cost, x1.5 package duration)" : "");
                 AvLay.Place(m.Rect, bx, by, 34f, 18f);
                 markSelect[i].gameObject.SetActive(selected == n.Id);
-                markSelect[i].color = OpsInk.Select;
+                markSelect[i].color = AvInk.Select;
                 AvLay.Place(markSelect[i].rectTransform, bx - 2f, by - 2f, 38f, 22f);
             }
             CyberGraph.Edges(sources, graphNodes, heldIds, graphEdges);
@@ -282,7 +282,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 bool chain = e.From > 0;
                 edgeX[0] = Mathf.Clamp01(a.X / mapW); edgeX[1] = Mathf.Clamp01(b.X / mapW);
                 edgeY[0] = Mathf.Clamp01(1f - a.Y / mapH); edgeY[1] = Mathf.Clamp01(1f - b.Y / mapH);
-                edges[i].LineColor = chain ? OpsInk.Word(AvState.Caution) : OpsInk.Hairline;
+                edges[i].LineColor = chain ? OpsInk.Word(AvState.Caution) : AvInk.Hairline;
                 edges[i].SetPoints(edgeX, edgeY, 2);
             }
             foreach (CyberIntrusionRow x in s.Intrusions)
@@ -325,7 +325,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 circleX[i] = Mathf.Clamp01((center.X + radius * Mathf.Cos(a)) / mapW);
                 circleY[i] = Mathf.Clamp01(1f - (center.Y + radius * Mathf.Sin(a)) / mapH);
             }
-            g.LineColor = OpsInk.Hairline;
+            g.LineColor = AvInk.Hairline;
             g.SetPoints(circleX, circleY, N + 1);
         }
 
@@ -343,16 +343,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             hopButton.Label = have ? "HOP DEEPER" : "HOP";
             if (!have)
             {
-                OpsText.Set(targetLine, active ? "NO INTRUSION · SELECT A NODE, THEN HOP" : "CYBER OFFLINE");
-                OpsText.Set(traceText, active ? "TRACE 0 % · CAP " + s.IntrusionCap + " INTRUSIONS · " + s.HeldTotal + "/" + CyberRules.MaxHeldPerFaction + " NODES" : "TRACE 0 %");
-                OpsText.Set(heldLine, active ? "HELD: NONE" : "");
-                OpsText.Set(hintLine, active ? "A + ON A NODE = EXPLOIT: CYBER BEATS SPACE (CHEAPER, FASTER, LONGER)" : "");
+                AvText.Set(targetLine, active ? "NO INTRUSION · SELECT A NODE, THEN HOP" : "CYBER OFFLINE");
+                AvText.Set(traceText, active ? "TRACE 0 % · CAP " + s.IntrusionCap + " INTRUSIONS · " + s.HeldTotal + "/" + CyberRules.MaxHeldPerFaction + " NODES" : "TRACE 0 %");
+                AvText.Set(heldLine, active ? "HELD: NONE" : "");
+                AvText.Set(hintLine, active ? "A + ON A NODE = EXPLOIT: CYBER BEATS SPACE (CHEAPER, FASTER, LONGER)" : "");
                 SetBar(hopFill, hopBack, 0f, AvState.Ready, iw());
                 SetBar(traceFill, traceBack, 0f, AvState.Ready, iw());
                 TintTexts(AvState.Inert);
                 return;
             }
-            OpsText.Set(targetLine, CyberNetWords.IntrusionLine(mine, s, now));
+            AvText.Set(targetLine, CyberNetWords.IntrusionLine(mine, s, now));
             int tone = CyberNetWords.TraceTone(mine.Trace);
             AvState traceState = tone == 2 ? AvState.Danger : tone == 1 ? AvState.Caution : AvState.Ready;
             string traceWords = "TRACE " + mine.Trace + " %" + (tone == 2 ? " · BURN OR DROP NOW" : "");
@@ -360,9 +360,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (mine.Held != null)
                 for (int i = 0; i < mine.Held.Length; i++)
                     foreach (CyberNodeRow n in s.Nodes) if (n.Id == mine.Held[i]) held += (held.Length > 0 ? " · " : "") + CyberNetWords.Code(n.Kind) + " #" + n.Id;
-            OpsText.Set(heldLine, "HELD: " + (held.Length > 0 ? held : "NONE YET"));
-            OpsText.Set(hintLine, "HOLD EFFECTS RUN WHILE HELD · UPKEEP " + CyberRules.Upkeep(mine.Held != null ? mine.Held.Length : 0, s.DataCenterUp) + " CR PER 10 S");
-            OpsText.Set(traceText, full ? traceWords : C2Kit.FitTo(traceText, traceWords + " · " + (held.Length > 0 ? held : "NOTHING HELD YET"), iw()));
+            AvText.Set(heldLine, "HELD: " + (held.Length > 0 ? held : "NONE YET"));
+            AvText.Set(hintLine, "HOLD EFFECTS RUN WHILE HELD · UPKEEP " + CyberRules.Upkeep(mine.Held != null ? mine.Held.Length : 0, s.DataCenterUp) + " CR PER 10 S");
+            AvText.Set(traceText, full ? traceWords : C2Kit.FitTo(traceText, traceWords + " · " + (held.Length > 0 ? held : "NOTHING HELD YET"), iw()));
             SetBar(hopFill, hopBack, CyberNetWords.HopProgress(mine, now), AvState.Info, iw());
             SetBar(traceFill, traceBack, mine.Trace / 100f, traceState, iw());
             TintTexts(traceState);
@@ -373,17 +373,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private static void SetBar(Image fill, Image back, float fraction, AvState tone, float w)
         {
             fill.color = OpsInk.Rail(tone);
-            back.color = OpsInk.Inert;
+            back.color = AvInk.Inert;
             Vector2 size = fill.rectTransform.sizeDelta;
             fill.rectTransform.sizeDelta = new Vector2(Mathf.Max(0f, w * Mathf.Clamp01(fraction)), size.y);
         }
 
         private void TintTexts(AvState traceState)
         {
-            targetLine.color = OpsInk.Ink;
-            traceText.color = traceState == AvState.Inert ? OpsInk.Dim : OpsInk.Word(traceState);
-            heldLine.color = OpsInk.Muted;
-            hintLine.color = OpsInk.Dim;
+            targetLine.color = AvInk.Ink;
+            traceText.color = traceState == AvState.Inert ? AvInk.Dim : OpsInk.Word(traceState);
+            heldLine.color = AvInk.Muted;
+            hintLine.color = AvInk.Dim;
         }
 
         private void PaintAnchors(CyberStateData s, float now)
@@ -395,20 +395,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 {
                     if (row >= anchorRows.Length) break;
                     int ordinal = a.Kind == AnchorKind.EwTruck ? truck++ : center++;
-                    OpsText.Set(anchorRows[row], C2Kit.FitTo(anchorRows[row], CyberNetWords.AnchorLine(a, ordinal, now), width - 2f - 2f * Pad));
+                    AvText.Set(anchorRows[row], C2Kit.FitTo(anchorRows[row], CyberNetWords.AnchorLine(a, ordinal, now), width - 2f - 2f * Pad));
                     anchorRows[row].color = OpsInk.Word(a.Health == AnchorHealth.Live ? AvState.Ready : a.Health == AnchorHealth.Damaged ? AvState.Caution : AvState.Danger);
                     row++;
                 }
             for (int i = 0; i < anchorRows.Length; i++)
             {
-                if (i >= row) { OpsText.Set(anchorRows[i], i == 0 ? "NO EW TRUCK OR DATA CENTER STANDING" : ""); anchorRows[i].color = OpsInk.Muted; }
+                if (i >= row) { AvText.Set(anchorRows[i], i == 0 ? "NO EW TRUCK OR DATA CENTER STANDING" : ""); anchorRows[i].color = AvInk.Muted; }
             }
         }
 
         public void Restyle()
         {
             RestyleMap();
-            hopBack.color = OpsInk.Inert; traceBack.color = OpsInk.Inert;
+            hopBack.color = AvInk.Inert; traceBack.color = AvInk.Inert;
             for (int i = 0; i < marks.Length; i++) marks[i]?.Restyle();
             hopButton?.Restyle(); burnButton?.Restyle(); dropButton?.Restyle();
         }

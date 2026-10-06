@@ -53,13 +53,13 @@ namespace NOAvionics
             if (st != State) { State = st; Restyle(); }
         }
 
-        protected Color Fill() => AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-fill " + AvStates.Class(State)).Background, AvTheme.Accent);
-        protected Color Track() => AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-track").Background, AvTheme.Hairline);
+        protected Color Fill() => AvStyleHost.FuiFill("metric-fill " + AvStates.Class(State), AvTheme.Accent);
+        protected Color Track() => AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
 
         public override void Restyle()
         {
-            Key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
-            Value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle(State == AvState.Ready || State == AvState.Info || State == AvState.Inert ? "metric-value" : "chip " + AvStates.Class(State)).Color, AvTheme.TextPrimary);
+            Key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
+            Value.color = AvStyleHost.FuiInk(State == AvState.Ready || State == AvState.Info || State == AvState.Inert ? "metric-value" : "chip " + AvStates.Class(State), AvTheme.TextPrimary);
             Paint();
             Graphic.SetVerticesDirty();
         }
@@ -165,8 +165,8 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            back.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + AvStates.Class(state)).Background, AvTheme.Accent), Color.clear);
-            text.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
+            back.Paint(AvStyleHost.FuiFill("slab " + AvStates.Class(state), AvTheme.Accent), Color.clear);
+            text.color = AvStyleHost.FuiInk("slab", Color.black);
         }
     }
 }

@@ -25,10 +25,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private float plotHeight = 142f, placedWidth;
         internal MissionTaskPlot Plot { get; }
 
-        private static Color Ink => AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-        private static Color Dim => AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-        private static Color Key => AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-        private static Color Amber => AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
+        private static Color Ink => AvInk.Ink;
+        private static Color Dim => AvInk.Dim;
+        private static Color Key => AvInk.Key;
+        private static Color Amber => AvInk.State(AvState.Caution);
 
         internal MissionTaskPart(RectTransform parent, bool expanded = false)
         {
@@ -140,9 +140,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             placedWidth=s.W;
             float left=expanded?s.W*.61f:s.W,right=s.W-left-16f;
             float y=0f;
-            Put(family,0,y,left-130f,20); Put(state,left-126f,y,126f,20); state.alignment=TextAlignmentOptions.TopRight;
-            float th=AvText.Height(title,left); Put(title,0,24,left,th);
-            float ih=AvText.Height(identity,left); Put(identity,0,28+th,left,ih);
+            AvLay.Place(family,0,y,left-130f,20); AvLay.Place(state,left-126f,y,126f,20); state.alignment=TextAlignmentOptions.TopRight;
+            float th=AvText.Height(title,left); AvLay.Place(title,0,24,left,th);
+            float ih=AvText.Height(identity,left); AvLay.Place(identity,0,28+th,left,ih);
             y=IdentityHeight(left);
             // Cockpit order and gates precede the plot; the desk retains B's plot dominance.
             if(!expanded) { PlaceOrder(left,y); y+=OrderHeight(left)+12; PlaceGates(left,y); y+=GateHeight(left)+12; }
@@ -163,7 +163,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if(phases.Length>0)
             {
                 AvLay.Place(disclose.Rect,0,y,s.W,28);y+=36;
-                if(showRules)Put(rules,0,y,s.W,AvText.Height(rules,s.W));
+                if(showRules)AvLay.Place(rules,0,y,s.W,AvText.Height(rules,s.W));
             }
         }
 
@@ -183,8 +183,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void PlaceOrder(float w,float y)
         {
             float h=OrderHeight(w);AvLay.Place(order,0,y,w,h);
-            Put(number,12,12,48,44);Put(orderHead,76,8,w-88,18);
-            float nh=AvText.Height(nextAction,w-88);Put(nextAction,76,32,w-88,nh);Put(condition,76,38+nh,w-88,AvText.Height(condition,w-88));
+            AvLay.Place(number,12,12,48,44);AvLay.Place(orderHead,76,8,w-88,18);
+            float nh=AvText.Height(nextAction,w-88);AvLay.Place(nextAction,76,32,w-88,nh);AvLay.Place(condition,76,38+nh,w-88,AvText.Height(condition,w-88));
         }
         private void PlaceGates(float w,float y)
         {
@@ -198,18 +198,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 AvStrokes.Ring(b,cx,cy,10,32,phases[i].Status==ObjectivePhaseStatus.Current?1.5f:.8f,new Rgba(c.r,c.g,c.b,c.a));
                 if(fresh&&phases[i].Status==ObjectivePhaseStatus.Current&&phases[i].Progress>0)
                     AvStrokes.Arc(b,cx,cy,12f,90f,90f+360f*Mathf.Clamp01(phases[i].Progress),32,1f,new Rgba(c.r,c.g,c.b,c.a));
-                Put(gateNumbers[i],cx-12,6,24,24);Put(gateTitles[i],cw*i+4,34,cw-8,AvText.Height(gateTitles[i],cw-8));Put(gateStates[i],cw*i+4,h-20,cw-8,18);
+                AvLay.Place(gateNumbers[i],cx-12,6,24,24);AvLay.Place(gateTitles[i],cw*i+4,34,cw-8,AvText.Height(gateTitles[i],cw-8));AvLay.Place(gateStates[i],cw*i+4,h-20,cw-8,18);
                 gateNumbers[i].color=gateTitles[i].color=gateStates[i].color=c;
             }
             gateVectors.Commit();
         }
         private void PlaceAsset(float x,float y,float w)
         {
-            asset.gameObject.SetActive(true);AvLay.Place(asset,x,y,w,AssetHeight(w));Put(assetHead,12,8,w-24,18);
-            float nameH=AvText.Height(assetName,w-24);Put(assetName,12,34,w-24,nameH);
+            asset.gameObject.SetActive(true);AvLay.Place(asset,x,y,w,AssetHeight(w));AvLay.Place(assetHead,12,8,w-24,18);
+            float nameH=AvText.Height(assetName,w-24);AvLay.Place(assetName,12,34,w-24,nameH);
             // AvVector uses bottom-left coordinates; place its parent without changing that pivot.
             AvLay.Place(assetArt,12,42+nameH,w-24,76);
-            Put(contact,12,122+nameH,w-24,AvText.Height(contact,w-24));
+            AvLay.Place(contact,12,122+nameH,w-24,AvText.Height(contact,w-24));
             PaintAsset();
         }
         private void PaintAsset()
@@ -219,7 +219,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             MissionTaskGraphics.DrawAsset(assetVector,entry?.Tasking?.Asset??ObjectiveAsset.Unknown,entry?.Tasking?.Family??ObjectiveFamily.Unknown,Mathf.Min(width,210),76,fresh?Key:Dim);
         }
         private static void PlaceTextCard(RectTransform card,TMP_Text head,TMP_Text text,float x,float y,float w,float h)
-        {card.gameObject.SetActive(true);AvLay.Place(card,x,y,w,h);Put(head,12,8,w-24,22);Put(text,12,36,w-24,AvText.Height(text,w-24));}
+        {card.gameObject.SetActive(true);AvLay.Place(card,x,y,w,h);AvLay.Place(head,12,8,w-24,22);AvLay.Place(text,12,36,w-24,AvText.Height(text,w-24));}
 
         public override void Restyle()
         {
@@ -241,7 +241,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {var t=AvText.Make(p,name,role,"",alignment,wrap);t.raycastTarget=false;if(!wrap)AvText.Fit(t,false);return t;}
         private static RectTransform Card(RectTransform parent,string name,bool active=false)
         {var b=AvLay.Child(parent,name);var f=AvFrame.Add(b,"Group frame",AvChamfer.Diagonal(8));AvLay.Fill(f.rectTransform);f.Bracket=6;f.raycastTarget=false;return b;}
-        private static void Put(TMP_Text t,float x,float y,float w,float h)=>AvLay.Place(t.rectTransform,x,y,w,h);
         internal static string Clean(string value)=>MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(value??""));
         internal static string Family(ObjectiveFamily value)=>value==ObjectiveFamily.AirCover?"AIR COVER":value==ObjectiveFamily.Unknown?"SIDE MISSION":value.ToString().ToUpperInvariant();
         private static string Asset(ObjectiveAsset value)=>value==ObjectiveAsset.GroundVehicle?"GROUND VEHICLE":value==ObjectiveAsset.Unknown?"TYPE UNKNOWN":value.ToString().ToUpperInvariant();

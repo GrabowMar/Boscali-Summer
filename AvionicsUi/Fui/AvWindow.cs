@@ -161,10 +161,10 @@ namespace NOAvionics
             frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(glassy ? 0.82f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
             if (scrollbar != null)
             {
-                scrollbar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
-                scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
+                scrollbar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
+                scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
             }
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             AvStyle t = AvStyleHost.FuiStyle("window-title");
             titleBack.color = AvStyleHost.Resolve(t.Background, AvTheme.SurfaceRaised);
             titleText.color = AvStyleHost.Resolve(t.Color, AvTheme.TextPrimary);

@@ -163,18 +163,18 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         public override void Restyle()
         {
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("readout").Color, AvTheme.TextPrimary);
-            unit.color = mode.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("readout-unit").Color, AvTheme.Dim);
-            station.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            programme.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            track.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
+            value.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
+            unit.color = mode.color = AvStyleHost.FuiInk("readout-unit", AvTheme.Dim);
+            station.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            programme.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            track.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
             RestyleSlab();
         }
 
         private void RestyleSlab()
         {
-            slabBack.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + AvStates.Class(slabState)).Background, AvTheme.Accent);
-            slabText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
+            slabBack.color = AvStyleHost.FuiFill("slab " + AvStates.Class(slabState), AvTheme.Accent);
+            slabText.color = AvStyleHost.FuiInk("slab", Color.black);
         }
     }
 
@@ -240,8 +240,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         public override void Restyle()
         {
-            detail.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            bar.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+            detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
             gate.color = AvStyleHost.FuiColor("caution", AvTheme.Warning);
             bar.SetVerticesDirty();
         }

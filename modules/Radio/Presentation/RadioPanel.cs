@@ -931,8 +931,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
             public override void Restyle()
             {
-                key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
-                note.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("section-caption").Color, AvTheme.Disabled);
+                key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
+                note.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
             }
 
             private void SetNote(string text)

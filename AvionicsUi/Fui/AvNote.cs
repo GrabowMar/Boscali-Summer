@@ -58,10 +58,10 @@ namespace NOAvionics
         public override void Restyle()
         {
             text.color = state != AvState.Inert
-                ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary)
+                ? AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary)
                 : emphasize
-                    ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
-                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary)
+                    : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
         }
     }
 }

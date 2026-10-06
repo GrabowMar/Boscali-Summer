@@ -95,18 +95,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Set(string kindText, string name, string phase, string summaryText, int ground, int air, int naval)
         {
-            bool changed = StrPaint.Put(kind, "ACT · " + kindText);
-            changed |= StrPaint.Put(label, name);
-            changed |= StrPaint.Put(summary, string.IsNullOrEmpty(summaryText) ? "AIM UNAVAILABLE" : summaryText);
+            bool changed = AvText.Set(kind, "ACT · " + kindText);
+            changed |= AvText.Set(label, name);
+            changed |= AvText.Set(summary, string.IsNullOrEmpty(summaryText) ? "AIM UNAVAILABLE" : summaryText);
             AvHelpTip.Attach(frame.gameObject, string.IsNullOrEmpty(summaryText)
                 ? "Live operation. The phase strip shows how far it has come."
                 : summaryText + " The phase strip shows how far the operation has come.");
             AvState s = PhaseState(phase);
-            changed |= StrPaint.Put(phaseText, AvStates.Glyph(s) + (phase ?? ""));
+            changed |= AvText.Set(phaseText, AvStates.Glyph(s) + (phase ?? ""));
             strip.Set(PhaseIndex(phase), s);
             int[] counts = { ground, air, naval };
             for (int i = 0; i < forces.Length; i++)
-                StrPaint.Put(forces[i].Number, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
+                AvText.Set(forces[i].Number, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
             if (s != state) state = s;
             Restyle();
             if (changed) Changed();
@@ -145,24 +145,24 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            Color c = StrPaint.State(state);
-            frame.Paint(StrPaint.Raised, c.WithAlpha(0.6f));
+            Color c = AvInk.State(state);
+            frame.Paint(AvInk.Raised, c.WithAlpha(0.6f));
             frame.BracketColor = c;
             frame.SetVerticesDirty();
             rail.color = c;
-            kind.color = StrPaint.Key;
-            label.color = StrPaint.Ink;
-            summary.color = StrPaint.Dim;
+            kind.color = AvInk.Key;
+            label.color = AvInk.Ink;
+            summary.color = AvInk.Dim;
             phaseFrame.Paint(c.WithAlpha(0.2f), c.WithAlpha(0.8f));
-            phaseText.color = StrPaint.Ink;
+            phaseText.color = AvInk.Ink;
             strip.Restyle();
             for (int i = 0; i < forces.Length; i++)
             {
                 bool none = forces[i].Number.text == "0";
                 forces[i].Frame.Paint(Color.clear, Color.clear);
-                forces[i].Symbol.color = none ? StrPaint.Muted : c.WithAlpha(0.8f);
-                forces[i].Number.color = none ? StrPaint.Muted : StrPaint.Ink;
-                forces[i].Name.color = StrPaint.Muted;
+                forces[i].Symbol.color = none ? AvInk.Muted : c.WithAlpha(0.8f);
+                forces[i].Number.color = none ? AvInk.Muted : AvInk.Ink;
+                forces[i].Name.color = AvInk.Muted;
             }
         }
     }
@@ -254,14 +254,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bool changed = !wasOn;
             c.Id = id;
             c.Revision = revision;
-            changed |= StrPaint.Put(c.Kind, "O" + (i + 1) + " · " + kind + (i == 0 ? " · AUTO DEFAULT" : ""));
-            changed |= StrPaint.Put(c.Label, label);
-            changed |= StrPaint.Put(c.Brief, "AIM · " + (string.IsNullOrEmpty(brief) ? "UNAVAILABLE" : brief));
-            changed |= StrPaint.Put(c.Forces, "NEARBY · " + (string.IsNullOrEmpty(forces) ? "UNKNOWN" : forces));
-            changed |= StrPaint.Put(c.Countdown, seconds < 0 ? "—" : seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
+            changed |= AvText.Set(c.Kind, "O" + (i + 1) + " · " + kind + (i == 0 ? " · AUTO DEFAULT" : ""));
+            changed |= AvText.Set(c.Label, label);
+            changed |= AvText.Set(c.Brief, "AIM · " + (string.IsNullOrEmpty(brief) ? "UNAVAILABLE" : brief));
+            changed |= AvText.Set(c.Forces, "NEARBY · " + (string.IsNullOrEmpty(forces) ? "UNKNOWN" : forces));
+            changed |= AvText.Set(c.Countdown, seconds < 0 ? "—" : seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
             AvState rs = RiskStateOf(risk);
             string riskWord = AvStates.Glyph(rs) + "RISK " + (risk ?? "");
-            changed |= StrPaint.Put(c.Risk, riskWord);
+            changed |= AvText.Set(c.Risk, riskWord);
             c.RiskState = rs;
             if (c.Live != pickable) { c.Live = pickable; changed = true; }
             c.Hit.Interactable = pickable;
@@ -314,18 +314,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void Style(int i)
         {
             Card c = cards[i];
-            Color select = StrPaint.Select, rail = StrPaint.State(AvState.Ready), risk = StrPaint.State(c.RiskState);
+            Color select = AvInk.Select, rail = AvInk.State(AvState.Ready), risk = AvInk.State(c.RiskState);
             bool lit = c.Hover && c.Live;
-            c.Frame.Paint(lit ? StrPaint.Raised : StrPaint.Inert, lit ? select : StrPaint.Hairline);
-            c.Rail.color = c.Live ? rail : StrPaint.State(AvState.Inert);
-            c.Kind.color = StrPaint.Key;
-            c.Countdown.color = StrPaint.Ink;
-            c.Label.color = StrPaint.Ink;
-            c.Forces.color = StrPaint.Dim;
-            c.Brief.color = StrPaint.Dim;
-            c.Chevron.color = lit ? select : StrPaint.Dim;
+            c.Frame.Paint(lit ? AvInk.Raised : AvInk.Inert, lit ? select : AvInk.Hairline);
+            c.Rail.color = c.Live ? rail : AvInk.State(AvState.Inert);
+            c.Kind.color = AvInk.Key;
+            c.Countdown.color = AvInk.Ink;
+            c.Label.color = AvInk.Ink;
+            c.Forces.color = AvInk.Dim;
+            c.Brief.color = AvInk.Dim;
+            c.Chevron.color = lit ? select : AvInk.Dim;
             c.RiskFrame.Paint(risk.WithAlpha(0.18f), risk.WithAlpha(0.75f));
-            c.Risk.color = StrPaint.Ink;
+            c.Risk.color = AvInk.Ink;
         }
 
         public override void Restyle()
@@ -372,11 +372,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             public void Set(string label, string text, float pressure01, bool isObserved, AvState newState, string help)
             {
-                StrPaint.Put(name, label);
-                StrPaint.Put(status, text);
+                AvText.Set(name, label);
+                AvText.Set(status, text);
                 observed = isObserved;
                 state = newState;
-                StrPaint.Put(percent, isObserved ? TheaterReadout.Percent(pressure01) : "—");
+                AvText.Set(percent, isObserved ? TheaterReadout.Percent(pressure01) : "—");
                 bar.Value = isObserved ? pressure01 : 0f;
                 bar.gameObject.SetActive(isObserved);
                 tip.Text = help;
@@ -398,13 +398,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             public override void Restyle()
             {
-                Color c = StrPaint.State(state);
-                frame.Paint(StrPaint.Inert, Color.clear);
+                Color c = AvInk.State(state);
+                frame.Paint(AvInk.Inert, Color.clear);
                 rail.color = c;
-                name.color = observed ? StrPaint.Ink : StrPaint.Dim;
-                status.color = StrPaint.Dim;
-                percent.color = observed ? StrPaint.StateText(state) : StrPaint.Muted;
-                bar.Track = StrPaint.Hairline;
+                name.color = observed ? AvInk.Ink : AvInk.Dim;
+                status.color = AvInk.Dim;
+                percent.color = observed ? AvInk.StateText(state) : AvInk.Muted;
+                bar.Track = AvInk.Hairline;
                 bar.FillColor = bar.FillEnd = c;
                 bar.SetVerticesDirty();
             }

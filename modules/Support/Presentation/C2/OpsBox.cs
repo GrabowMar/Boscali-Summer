@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         private void Layout() => AvLay.Place(frame.rectTransform, 0f, 0f, width, height);
 
-        public override void Restyle() => frame.Paint(OpsInk.Inert, OpsInk.Hairline);
+        public override void Restyle() => frame.Paint(AvInk.Inert, AvInk.Hairline);
     }
 
     /// <summary>
@@ -118,10 +118,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             float bw, by;
             if (full)
             {
-                C2Kit.Place(nameText, Pad, top, iw - 2f * Pad - 130f, 16f);
-                C2Kit.Place(stateText, iw - Pad - 130f, top, 130f, 16f);
+                AvLay.Place(nameText, Pad, top, iw - 2f * Pad - 130f, 16f);
+                AvLay.Place(stateText, iw - Pad - 130f, top, 130f, 16f);
                 AvLay.Place(barBack.rectTransform, Pad, 20f, iw - 2f * Pad, 6f);
-                C2Kit.Place(detailText, Pad, 28f, iw - 2f * Pad, 14f);
+                AvLay.Place(detailText, Pad, 28f, iw - 2f * Pad, 14f);
 
                 bw = Mathf.Floor((iw - 2f * Pad - 3f * 6f) / 4f);
                 by = BodyFull - ButtonH - 4f;
@@ -131,8 +131,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 // One row: the state words on the left, four buttons on the right, a hairline bar along the bottom edge.
                 bw = 66f;
                 float textW = iw - 2f * Pad - 4f * bw - 3f * 4f - 6f;
-                C2Kit.Place(nameText, Pad, 0f, textW, StripH - 4f);
-                C2Kit.Place(stateText, Pad, 0f, 0f, 0f);
+                AvLay.Place(nameText, Pad, 0f, textW, StripH - 4f);
+                AvLay.Place(stateText, Pad, 0f, 0f, 0f);
                 AvLay.Place(barBack.rectTransform, Pad, StripH - 5f, textW, 3f);
                 stateText.gameObject.SetActive(false);
                 detailText.gameObject.SetActive(false);
@@ -234,9 +234,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             if (!online)
             {
                 string off = !known ? "OPERATIONS · WAITING FOR THE HOST" : "OPERATIONS OFFLINE · NO " + (domain == OpDomain.Cyber ? "DATA CENTER" : "CAMP");
-                OpsText.Set(nameText, C2Kit.FitTo(nameText, off, full ? innerW - 130f : CompactTextWidth));
-                OpsText.Set(stateText, ""); OpsText.Set(detailText, "");
-                nameText.color = OpsInk.Dim;
+                AvText.Set(nameText, C2Kit.FitTo(nameText, off, full ? innerW - 130f : CompactTextWidth));
+                AvText.Set(stateText, ""); AvText.Set(detailText, "");
+                nameText.color = AvInk.Dim;
                 SetBar(0, 0, AvState.Inert);
                 SetButtons("", "", "", "", false, false, false, false);
                 return;
@@ -247,21 +247,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             string stateWord = hasRow ? OpsWords.State(row.State, row.EndsAt - now) : "IDLE";
             if (full)
             {
-                OpsText.Set(nameText, C2Kit.FitTo(nameText, hasRow ? OpsWords.Name(row.Kind) : "OPERATION · " + OpsWords.Name(IdleKind), innerW - 130f));
-                OpsText.Set(stateText, stateWord);
+                AvText.Set(nameText, C2Kit.FitTo(nameText, hasRow ? OpsWords.Name(row.Kind) : "OPERATION · " + OpsWords.Name(IdleKind), innerW - 130f));
+                AvText.Set(stateText, stateWord);
                 stateText.color = OpsInk.Word(tone);
                 string detail = hasRow ? OpsPageWords.Detail(row, now) : choices.Count == 0 ? OpsWords.NeedTarget(IdleKind) : "READY · GOAL SCALES WITH YOUR HUMANS · PICK A TARGET, START, THEN FUND";
-                OpsText.Set(detailText, C2Kit.FitTo(detailText, detail, innerW));
-                detailText.color = hasRow && row.Paused ? OpsInk.Word(AvState.Caution) : hasRow ? OpsInk.Ink : OpsInk.Muted;
+                AvText.Set(detailText, C2Kit.FitTo(detailText, detail, innerW));
+                detailText.color = hasRow && row.Paused ? OpsInk.Word(AvState.Caution) : hasRow ? AvInk.Ink : AvInk.Muted;
 
-                nameText.color = hasRow ? OpsInk.Ink : OpsInk.Muted;
+                nameText.color = hasRow ? AvInk.Ink : AvInk.Muted;
             }
             else
             {
                 string word = hasRow ? OpsWords.Short(row.Kind) + " · " + stateWord + (row.State == OpState.Funding || row.State == OpState.NeedsFunding || row.State == OpState.Broken ? " " + row.Percent + " %" : "")
                     : "OPERATION · " + (choices.Count == 0 ? "NEEDS TARGET" : "IDLE");
-                OpsText.Set(nameText, C2Kit.FitTo(nameText, word, CompactTextWidth));
-                nameText.color = hasRow ? OpsInk.Word(tone) : OpsInk.Muted;
+                AvText.Set(nameText, C2Kit.FitTo(nameText, word, CompactTextWidth));
+                nameText.color = hasRow ? OpsInk.Word(tone) : AvInk.Muted;
             }
             SetBar(hasRow ? row.Percent : 0, hasRow ? row.WorkPercent : 0, tone);
 
@@ -315,7 +315,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         {
             float bw = full ? width - 2f - 2f * Pad : CompactTextWidth;
             float y = full ? 20f : StripH - 5f, h = full ? 6f : 3f;
-            barBack.color = OpsInk.Inert;
+            barBack.color = AvInk.Inert;
             barFill.color = OpsInk.Rail(tone);
             workFill.color = OpsInk.Word(AvState.Info);
             AvLay.Place(barBack.rectTransform, Pad, y, bw, h);

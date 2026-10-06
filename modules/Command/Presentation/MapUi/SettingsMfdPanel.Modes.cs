@@ -162,10 +162,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 pilot.Restyle();
                 server.Restyle();
-                scope.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                scope.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 role.color = hostShown
                     ? AvStyleHost.FuiColor("ready", AvTheme.RailReady)
-                    : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             }
         }
     }

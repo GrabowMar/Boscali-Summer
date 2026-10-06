@@ -121,8 +121,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            counts.color = WingRankColor.Dim;
+            title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            counts.color = AvInk.Dim;
             rule.color = AvStyleHost.FuiColor("hairline", AvTheme.Hairline).WithAlpha(0.6f);
         }
     }
@@ -233,13 +233,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             face.Dim = f.Dim;
             face.RibbonCount = f.RibbonCount;
             Array.Copy(f.Rack, face.Rack, f.Rack.Length);
-            WmcKit.Set(tab, f.Tab);
-            WmcKit.Set(callsign, f.Callsign);
-            WmcKit.Set(name, f.Name);
-            WmcKit.Set(rankLine, f.RankLine);
-            WmcKit.Set(stats, f.Stats);
-            WmcKit.Set(radio, f.Radio);
-            WmcKit.Set(ribbonCaption, f.RibbonCount > 0 ? AvNum.Fixed(f.RibbonCount, 0) + (f.RibbonCount == 1 ? " RIBBON" : " RIBBONS") : "NO RIBBONS");
+            AvText.Set(tab, f.Tab);
+            AvText.Set(callsign, f.Callsign);
+            AvText.Set(name, f.Name);
+            AvText.Set(rankLine, f.RankLine);
+            AvText.Set(stats, f.Stats);
+            AvText.Set(radio, f.Radio);
+            AvText.Set(ribbonCaption, f.RibbonCount > 0 ? AvNum.Fixed(f.RibbonCount, 0) + (f.RibbonCount == 1 ? " RIBBON" : " RIBBONS") : "NO RIBBONS");
             AvHelpTip.Attach(ribbonHit.gameObject, f.RibbonHelp);
             stamp.Set(f.Stamp, f.Rail);
             stamp.SetShown(f.Stamp != WmcText.Unknown);
@@ -293,7 +293,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < letters.Length; i++)
             {
                 bool lit = i == (int)face.Rank;
-                ink.Rank(TextX + i * cell + 8f, 97f, 12f, (WingRank)i, lit ? WingRankColor.Of((WingRank)i) : WingRankColor.Dim);
+                ink.Rank(TextX + i * cell + 8f, 97f, 12f, (WingRank)i, lit ? WingRankColor.Of((WingRank)i) : AvInk.Dim);
             }
             // The rack: one small ribbon per earned ribbon, in the order Ribbons.For gives them (the words are in the help).
             float x = TextX;
@@ -310,7 +310,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static void RibbonArt(RibbonId id, out Color field, out Color stripe)
         {
             Color danger = WmcState.Color("danger"), info = WmcState.Color("info"), warn = WmcState.Color("warn"), live = WmcState.Color("live");
-            Color ink = WingRankColor.Ink, dark = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
+            Color ink = AvInk.Ink, dark = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
             switch (id)
             {
                 case RibbonId.Kills5: field = danger; stripe = ink; break;
@@ -328,18 +328,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             tab.color = WmcState.Color("info");
             portraitBox.Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            callsign.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            name.color = WingRankColor.Dim;
-            rankLine.color = WingRankColor.Dim;
-            stats.color = WingRankColor.Ink;
-            radio.color = WingRankColor.Dim;
-            ribbonCaption.color = WingRankColor.Dim;
+            callsign.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            name.color = AvInk.Dim;
+            rankLine.color = AvInk.Dim;
+            stats.color = AvInk.Ink;
+            radio.color = AvInk.Dim;
+            ribbonCaption.color = AvInk.Dim;
             track.color = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
-            fill.color = face.Dim ? WingRankColor.Dim : AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
+            fill.color = face.Dim ? AvInk.Dim : AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
             Color hairline = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
             foreach (Image t in ticks) t.color = hairline;
             for (int i = 0; i < letters.Length; i++)
-                letters[i].color = i == (int)face.Rank ? WingRankColor.Of((WingRank)i) : WingRankColor.Dim;
+                letters[i].color = i == (int)face.Rank ? WingRankColor.Of((WingRank)i) : AvInk.Dim;
             stamp.Restyle();
         }
     }

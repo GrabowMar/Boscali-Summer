@@ -121,9 +121,9 @@ namespace NOAvionics
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-            name.color = !interactable ? AvTheme.Disabled : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            sub.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            value.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary);
+            name.color = !interactable ? AvTheme.Disabled : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            sub.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            value.color = AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
             foreach (AvControl c in trailing) c.Restyle();
         }
     }

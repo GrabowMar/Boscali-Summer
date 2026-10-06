@@ -188,9 +188,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvStyle c = AvStyleHost.FuiStyle("cell", st);
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                 title.color = AvStyleHost.Resolve(c.Color, AvTheme.TextPrimary);
-                sub.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell-sub").Color, AvTheme.Dim);
-                stateWord.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell-state", on ? "on" : null).Color, AvTheme.Disabled);
-                led.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("cell-led", on ? "on" : null).Background, AvTheme.RailInert);
+                sub.color = AvStyleHost.FuiInk("cell-sub", AvTheme.Dim);
+                stateWord.color = AvStyleHost.FuiInk("cell-state", AvTheme.Disabled, on ? "on" : null);
+                led.color = AvStyleHost.FuiFill("cell-led", AvTheme.RailInert, on ? "on" : null);
                 icon.color = interactable ? Color.white : AvTheme.Disabled;
                 if (glyph != null) glyph.color = !interactable ? AvTheme.Disabled : on ? AvStyleHost.Resolve(c.Color, AvTheme.TextPrimary) : AvTheme.Dim;
             }

@@ -52,8 +52,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public override void Restyle()
             {
-                name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                sub.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                sub.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 Gates.Restyle();
                 Types.Restyle();
             }

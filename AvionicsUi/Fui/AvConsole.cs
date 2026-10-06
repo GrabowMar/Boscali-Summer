@@ -237,12 +237,12 @@ namespace NOAvionics
             AvStyle p = AvStyleHost.FuiStyle("id-plate");
             idPlate.color = AvStyleHost.Resolve(p.Background, AvTheme.SurfaceRaised);
             idText.color = AvStyleHost.Resolve(p.Color, AvTheme.TextPrimary);
-            titleText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-            pageIndex.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("page-index").Color, AvTheme.Dim);
-            serial.color = decor.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("decor").Background, AvTheme.Hairline);
-            serial.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("decor").Color, AvTheme.Disabled);
-            scrollbar.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar").Background, AvTheme.Hairline);
-            scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("scrollbar-thumb").Background, AvTheme.Frame);
+            titleText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+            pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
+            serial.color = decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
+            serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
+            scrollbar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
+            scrollbar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
         }
 
         internal static Scrollbar MakeScrollbar(RectTransform parent)

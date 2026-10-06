@@ -7,11 +7,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// <summary>Passive, bounded asset identification art. Silhouettes identify a class, never a specific vehicle model.</summary>
     internal static class MissionTaskGraphics
     {
-        internal static Color Ink => AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-        internal static Color Dim => AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-        internal static Color Key => AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-        internal static Color Amber => AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-        internal static Color Ground => AvStyleHost.FuiColor("ground", AvTheme.Ground);
+        internal static Color Ink => AvInk.Ink;
+        internal static Color Dim => AvInk.Dim;
+        internal static Color Key => AvInk.Key;
+        internal static Color Amber => AvInk.State(AvState.Caution);
+        internal static Color Ground => AvInk.Ground;
         internal static Rgba RgbaOf(Color c) => new Rgba(c.r, c.g, c.b, c.a);
 
         internal static void DrawAsset(AvVector v, ObjectiveAsset asset, ObjectiveFamily family,
