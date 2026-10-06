@@ -18,7 +18,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> DeckOpacity { get; }
         public ConfigEntry<bool> DeckGrid { get; }
         public ConfigEntry<bool> CheckerboardOverlay { get; }
-        public ConfigEntry<float> CheckerboardOpacity { get; }
 
         public ConfigEntry<bool> BackgroundImage { get; }
         public ConfigEntry<int> BackgroundImagePreset { get; }
@@ -123,11 +122,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             CheckerboardOverlay = config.Bind("Command", "CheckerboardOverlay", false,
                 "Retired checkerboard flag, retained for config compatibility. Renders as matte.");
-
-            CheckerboardOpacity = config.Bind("Command", "CheckerboardOpacity", 0.08f,
-                new ConfigDescription(
-                    "Retired checkerboard opacity, retained for config compatibility.",
-                    new AcceptableValueRange<float>(0.02f, 0.40f)));
 
             BackgroundImage = config.Bind("Command", "BackgroundImage", false,
                 "Display a local custom wallpaper when BackgroundImagePreset is 3.");

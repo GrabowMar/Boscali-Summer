@@ -1,9 +1,7 @@
 using NOAvionics;
 using System;
-using BoscaliSummer.Modules.Command.Domain;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
@@ -102,7 +100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         public override void Restyle()
         {
             for (int i = 0; i < rows.Length; i++) rows[i].Restyle();
-            range.color = StrPaint.Dim;
+            range.color = AvInk.Dim;
             prev.Restyle();
             next.Restyle();
         }

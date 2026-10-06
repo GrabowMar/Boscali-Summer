@@ -10,6 +10,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Offline visual check for the interaction menu's presentation: drives
@@ -25,13 +26,7 @@ public static class InteractionMenuUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
 
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons must load.");
@@ -195,16 +190,9 @@ public static class InteractionMenuUnityCheck
         Vector3[] corners = new Vector3[4]; focus.GetWorldCorners(corners);
         int width = Mathf.CeilToInt(focus.rect.width);
         int height = Mathf.CeilToInt(focus.rect.height);
-        var camera = new GameObject("Render camera").AddComponent<Camera>();
-        camera.orthographic = true; camera.orthographicSize = height / 2f;
-        camera.transform.position = (corners[0] + corners[2]) * .5f + new Vector3(0, 0, -10);
-        camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = new Color(.12f, .16f, .2f);
-        var target = new RenderTexture(pixelWidth, pixelHeight, 24); camera.targetTexture = target;
-        camera.Render(); RenderTexture.active = target;
-        var image = new Texture2D(pixelWidth, pixelHeight, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0, 0, pixelWidth, pixelHeight), 0, 0); image.Apply();
-        File.WriteAllBytes(path, image.EncodeToPNG()); RenderTexture.active = null;
-        Object.DestroyImmediate(camera.gameObject); Object.DestroyImmediate(target); Object.DestroyImmediate(image);
+        var camera = OrthoCamera("Render camera", height / 2f, new Color(.12f, .16f, .2f), (corners[0] + corners[2]) * .5f + new Vector3(0, 0, -10));
+        CapturePng(camera, pixelWidth, pixelHeight, path);
+        Object.DestroyImmediate(camera.gameObject);
         canvas.renderMode = originalMode;
     }
 }

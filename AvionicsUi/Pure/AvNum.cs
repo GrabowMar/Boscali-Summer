@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 
 namespace NOAvionics
 {
@@ -71,6 +72,30 @@ namespace NOAvionics
             return h > 0
                 ? h + ":" + Two(m) + ":" + Two(sec)
                 : m + ":" + Two(sec);
+        }
+
+        /// <summary>
+        /// A ratio clamped to 0..1 as whole percent, halves rounded away from zero; a non-finite ratio reads as
+        /// an em dash (the mods' unknown mark, unlike <see cref="Percent"/>'s "--%").
+        /// </summary>
+        public static string PercentWhole(float ratio)
+        {
+            if (float.IsNaN(ratio) || float.IsInfinity(ratio)) return "\u2014";
+            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
+            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero)).ToString(CultureInfo.InvariantCulture) + "%";
+        }
+
+        /// <summary>
+        /// "T-45s" under a minute, "T-5:00" from a minute up, rounded up; empty when no clock is running (negative
+        /// or non-finite). Unlike <see cref="Clock"/> it counts down, so it rounds up.
+        /// </summary>
+        public static string TMinus(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) return "";
+            int total = (int)Math.Ceiling(seconds);
+            if (total < 60) return "T-" + total.ToString(CultureInfo.InvariantCulture) + "s";
+            return "T-" + (total / 60).ToString(CultureInfo.InvariantCulture) + ":" +
+                (total % 60).ToString("00", CultureInfo.InvariantCulture);
         }
 
         public static string Seconds(double s, int decimals = 1) => Fixed(s, decimals) + " s";

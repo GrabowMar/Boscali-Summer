@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public readonly float WarnAt, LaunchAt, ImpactAt;
         public RodSchedule(float warnAt, float launchAt, float impactAt) { WarnAt = warnAt; LaunchAt = launchAt; ImpactAt = impactAt; }
         public float LeadSeconds => ImpactAt - WarnAt;
-        public bool Valid => SpaceRules.MissionTime(WarnAt) && SpaceRules.Finite(LaunchAt) && SpaceRules.Finite(ImpactAt);
+        public bool Valid => SpaceRules.MissionTime(WarnAt) && float.IsFinite(LaunchAt) && float.IsFinite(ImpactAt);
     }
 
     /// <summary>
@@ -30,11 +30,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float FlightMarginSeconds = 1f;
 
         public static float Dwell(float flightSeconds) =>
-            !SpaceRules.Finite(flightSeconds) || flightSeconds <= 0f ? WarningSeconds : Math.Max(0f, WarningSeconds - flightSeconds);
+            !float.IsFinite(flightSeconds) || flightSeconds <= 0f ? WarningSeconds : Math.Max(0f, WarningSeconds - flightSeconds);
 
         public static RodSchedule Plan(float now, float flightSeconds)
         {
-            float estimate = !SpaceRules.Finite(flightSeconds) || flightSeconds <= 0f ? 0f : flightSeconds;
+            float estimate = !float.IsFinite(flightSeconds) || flightSeconds <= 0f ? 0f : flightSeconds;
             float flight = Math.Max(0f, estimate - FlightMarginSeconds);
             float launch = now + Dwell(flight);
             return new RodSchedule(now, launch, launch + flight);
@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool Record(float seconds)
         {
-            if (!SpaceRules.Finite(seconds) || seconds < ShortestPlausible || seconds > LongestPlausible) return false;
+            if (!float.IsFinite(seconds) || seconds < ShortestPlausible || seconds > LongestPlausible) return false;
             samples[next] = seconds;
             next = (next + 1) % Window;
             if (Count < Window) Count++;

@@ -66,6 +66,10 @@ namespace BoscaliSummer.Core.Game
     }
     internal static class MfdBezel
     {
+        public static bool TryClaim(string id, bool preferLeft, VirtualMFD mfd, out List<Button> buttons,
+            out List<MFDScreen> screens, out int slot, out bool left)
+        { buttons = null; screens = null; slot = 0; left = false; return false; }
+        public static void Release(string id) { }
         public static MFDScreen FindTemplate(List<MFDScreen> screens) => null;
         public static MFDScreen FindTemplate(VirtualMFD mfd) => null;
         public static bool Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens, int slot, bool left, MFDScreen screen) => false;

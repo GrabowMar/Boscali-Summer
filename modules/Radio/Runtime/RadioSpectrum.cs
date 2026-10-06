@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Radio.Runtime
 {
@@ -50,7 +51,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 if (kilohertz < minKilohertz || kilohertz > maxKilohertz) continue;
 
                 int centre = (int)Math.Round((kilohertz - minKilohertz) / span * (bins - 1));
-                float amplitude = Clamp01(signals[i].Strength);
+                float amplitude = Scalar.Clamp01(signals[i].Strength);
                 for (int offset = -SkirtBins; offset <= SkirtBins; offset++)
                 {
                     int bin = centre + offset;
@@ -87,7 +88,5 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 return (hash & 0xFFFFu) / 65536f;
             }
         }
-
-        private static float Clamp01(float value) => value < 0f ? 0f : value > 1f ? 1f : value;
     }
 }

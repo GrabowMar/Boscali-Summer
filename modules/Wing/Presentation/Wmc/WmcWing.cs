@@ -1,17 +1,9 @@
 using NOAvionics;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>SQUADRON (spec bezel v2 §5; WING renamed so "wing" keeps meaning the aircraft), in three sub-pages on kit v2 (the 2026-10-05
@@ -77,9 +69,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public string Hint => sub == SubStudio ? studioPage.Hint : hint;
 
         public string Alert => alert;
-
-        /// <summary>The pilot the dossier shows (R7's STUDIO › opens the studio on it).</summary>
-        public WingPilot Inspected => inspected;
 
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
@@ -181,8 +170,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private PilotStatus StatusOf(WingPilot p, out int n) => WmcPilots.StatusOf(p, wing, out n);
-
-        private WingMember MemberOf(WingPilot p) => WmcPilots.MemberOf(p, wing);
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 

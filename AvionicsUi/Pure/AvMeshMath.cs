@@ -24,7 +24,7 @@ namespace NOAvionics
         public static AvV2[] ChamferPolygon(float x0, float y0, float x1, float y1, AvChamfer c)
         {
             float w = x1 - x0, h = y1 - y0, lim = Math.Max(0f, Math.Min(w, h) * 0.5f);
-            float tl = Clamp(c.TL, lim), tr = Clamp(c.TR, lim), br = Clamp(c.BR, lim), bl = Clamp(c.BL, lim);
+            float tl = Math.Clamp(c.TL, 0f, lim), tr = Math.Clamp(c.TR, 0f, lim), br = Math.Clamp(c.BR, 0f, lim), bl = Math.Clamp(c.BL, 0f, lim);
             return new[]
             {
                 new AvV2(x0, y1 - tl), new AvV2(x0 + tl, y1),   // top-left
@@ -59,7 +59,5 @@ namespace NOAvionics
             double a = degrees * Math.PI / 180.0;
             return new AvV2(cx + (float)Math.Cos(a) * r, cy + (float)Math.Sin(a) * r);
         }
-
-        private static float Clamp(float v, float max) => v < 0 ? 0 : v > max ? max : v;
     }
 }

@@ -1183,7 +1183,9 @@ Shader "Boscali/FlightCloud"
             gVert = 0.0;
             gHeroOnly = false;
             float opacity = 1.0 - transmittance;
-            cloudDistance = opacity > 0.01 ? weightedDistance / opacity : CLOUD_FAR_LIMIT;
+            // Visible wisps need their real depth too: the composite displays opacity
+            // above 0.002, so its reprojection cannot use the empty-ray far fallback.
+            cloudDistance = opacity > 0.002 ? weightedDistance / opacity : CLOUD_FAR_LIMIT;
             float air = AirTransmittance(cloudDistance, ro.y, ro.y + ray.y * cloudDistance);
             // Opacity-weighted cloud depth puts airlight in front of the visible
             // cloud surface, with one atmospheric integral per pixel.

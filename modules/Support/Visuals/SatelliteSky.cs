@@ -1,7 +1,5 @@
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
-using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.Rendering;

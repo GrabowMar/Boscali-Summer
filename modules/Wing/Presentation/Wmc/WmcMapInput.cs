@@ -6,13 +6,7 @@ using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 // Harmony calls prefixes by reflection.
 #pragma warning disable IDE0051
 
@@ -83,38 +77,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             gesture.Clear();
             pressed = false;
             targets.Clear();
-            Publish();
-            return true;
-        }
-
-        /// <summary>Arms a PLAN tool (an armed order mode goes); says why when it cannot.</summary>
-        public bool ArmTool(WmcContext c, PlanTool tool)
-        {
-            if (tool == PlanTool.Off)
-            {
-                Disarm();
-                return true;
-            }
-            if (!DynamicMap.mapMaximized || SceneSingleton<DynamicMap>.i == null)
-            {
-                WingToast.Show("Open the map to plan");
-                return false;
-            }
-            if (c == null || !c.CanOrder)
-            {
-                WingToast.Show(c != null && c.Client ? "The host plans this mission" : "Wing Command is not ready");
-                return false;
-            }
-            if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, PlanWords.ToolCue(tool, ToolLane)))
-            {
-                WingToast.Show("Another map tool is armed - cancel it first");
-                return false;
-            }
-            Mode = MapMode.Off;
-            Tool = tool;
-            heldForMove = false;
-            gesture.Clear();
-            pressed = false;
             Publish();
             return true;
         }

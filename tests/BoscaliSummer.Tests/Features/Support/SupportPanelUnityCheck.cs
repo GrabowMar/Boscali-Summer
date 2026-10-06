@@ -14,6 +14,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Current production C2 CAP builder and painter with pure model fixtures. Verifies both supported
@@ -31,24 +32,13 @@ public static partial class SupportPanelUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
             Application.logMessageReceived += (message, _, type) => {
                 if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert) engineError = true;
                 if (type == LogType.Warning && message.Contains("font asset") && message.Contains("was not found"))
                     Fail("Shipped font or fallback is missing a displayed glyph: " + message);
             };
-            MethodInfo setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            ParameterInfo[] parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("SupportPreview.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            SetExecutablePath("SupportPreview.exe");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvBundle.ResetForTests();
             Check(File.Exists("avionics-ui.bundle"), "The layout check needs the actual shipped font/icon bundle.");
@@ -190,25 +180,9 @@ public static partial class SupportPanelUnityCheck
 
     private static void Capture(float height, string file)
     {
-        var cameraObject = new GameObject("Capture", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = height * .5f;
-        camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.backgroundColor = AvStyleHost.FuiColor("ground", Color.black);
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        var target = new RenderTexture((int)AvTokens.PanelWidth * 2, (int)height * 2, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
-        image.Apply();
-        File.WriteAllBytes(Path.GetFullPath(file), image.EncodeToPNG());
-        RenderTexture.active = null;
-        Object.DestroyImmediate(image);
-        Object.DestroyImmediate(cameraObject);
-        Object.DestroyImmediate(target);
+        Camera camera = OrthoCamera("Capture", height * .5f, AvStyleHost.FuiColor("ground", Color.black));
+        CapturePng(camera, (int)AvTokens.PanelWidth * 2, (int)height * 2, Path.GetFullPath(file));
+        Object.DestroyImmediate(camera.gameObject);
     }
 }
 #endif

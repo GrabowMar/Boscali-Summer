@@ -1,7 +1,6 @@
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NOAvionics;
 using NuclearOption.Networking;

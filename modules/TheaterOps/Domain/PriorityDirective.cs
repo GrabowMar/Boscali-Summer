@@ -29,14 +29,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         }
 
         public bool IsValid =>
-            !string.IsNullOrEmpty(Key) && Finite(X) && Finite(Y) && Finite(Z);
+            !string.IsNullOrEmpty(Key) && float.IsFinite(X) && float.IsFinite(Y) && float.IsFinite(Z);
 
         private static string Bound(string value, int length) =>
             string.IsNullOrEmpty(value) ? value
             : value.Length <= length ? value
             : value.Substring(0, length);
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 
     /// <summary>

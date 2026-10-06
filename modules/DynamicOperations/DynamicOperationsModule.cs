@@ -3,7 +3,6 @@ using BoscaliSummer.Modules.DynamicOperations.Networking;
 using BoscaliSummer.Modules.DynamicOperations.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.DynamicOperations
@@ -19,7 +18,7 @@ namespace BoscaliSummer.Modules.DynamicOperations
             OperationsManager manager = context.AddSceneService<OperationsManager>(51);
             OperationsNet network = context.AddComponent<OperationsNet>();
             network.Configure(manager);
-            manager.Configure(context.Settings.DynamicOperations, network, context.Logger);
+            manager.Configure(context.Settings.DynamicOperations, network);
             context.AddService<ISecondaryObjectivesView>(manager);
             context.AddService<IOperationOutcomeSource>(manager);
             context.AddSceneService<ContractHud>(52).Configure(manager);

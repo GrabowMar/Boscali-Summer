@@ -6,15 +6,8 @@ param(
     [switch]$RadioOnly
 )
 $ErrorActionPreference = "Stop"
-function Get-PreviewHash([string]$Path) {
-    $stream = [IO.File]::OpenRead($Path)
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '') }
-    finally { $stream.Dispose(); $sha.Dispose() }
-}
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
-$gameManaged = 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/NuclearOption_Data/Managed'
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets/Harness", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages", "$PreviewDirectory/NOAvionics" | Out-Null
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+New-UnityCheckProject $PreviewDirectory $UnityCheckManifest.MfdFull -Folders 'Assets/Harness', 'NOAvionics'
 if ($RadioOnly) {
     # Old nomod Radio projects compiled copied presenters/kit sources. Keep those
     # generated references outside Assets so this fixture resolves production DLL types.
@@ -32,7 +25,7 @@ if ($RadioOnly) {
         $referenceDirectory = [IO.Path]::GetFullPath((Join-Path $previewResolved ('legacy-source-reference/' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fff'))))
         if (-not $referenceDirectory.StartsWith($previewPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Legacy source archive escaped the isolated project' }
         New-Item -ItemType Directory -Path $referenceDirectory -Force | Out-Null
-        $legacySources | ForEach-Object { [pscustomobject]@{ Path=$_.FullName; SHA256=Get-PreviewHash $_.FullName } } |
+        $legacySources | ForEach-Object { [pscustomobject]@{ Path=$_.FullName; SHA256=(Get-FileHash -LiteralPath $_.FullName).Hash } } |
             Export-Csv -LiteralPath "$referenceDirectory/source-attribution.csv" -NoTypeInformation
         foreach ($legacySource in $legacySources) {
             Move-Item -LiteralPath $legacySource.FullName -Destination (Join-Path $referenceDirectory $legacySource.Name)
@@ -44,33 +37,18 @@ if ($RadioOnly) {
     }
 }
 $keepFrozenStyles = $AtlasStyles -and [IO.Path]::GetFullPath($AtlasStyles) -eq [IO.Path]::GetFullPath($PreviewDirectory)
-if (-not $keepFrozenStyles) {
-    Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter 'avionics.*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
-    if ($AtlasStyles) { Get-ChildItem -LiteralPath (Join-Path $AtlasStyles 'NOAvionics') -Filter '*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/" -Force }
-}
-Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value 'm_EditorVersion: 2022.3.62f3'
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imgui":"1.0.0"}}'
-Get-ChildItem -LiteralPath $gameManaged -Filter '*.dll' | Where-Object {
-    $_.Name -notmatch '^(System|Mono|Microsoft|UnityEngine|UnityEditor|mscorlib|netstandard|Unity.TextMeshPro|Accessibility|Novell)'
-} | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Get-ChildItem -LiteralPath 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' -Filter '*.dll' | Where-Object { $_.Name -match '^(BepInEx.dll$|Mono|0Harmony.dll$|HarmonyXInterop)' } | Copy-Item -Destination "$PreviewDirectory/Assets/"
+if (-not $keepFrozenStyles) { Copy-AvionicsStyles $PreviewDirectory $AtlasStyles }
+Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
 if (-not $ProductionDll) { $ProductionDll = "$repo/bin/Release/netstandard2.1/BoscaliSummer.dll" }
 if ((Resolve-Path -LiteralPath $ProductionDll).Path -ne [IO.Path]::GetFullPath("$PreviewDirectory/Assets/BoscaliSummer.dll")) {
     Copy-Item -LiteralPath $ProductionDll -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
 }
-Copy-Item -LiteralPath "$PSScriptRoot/WingRadioUnityCheck.cs", "$PSScriptRoot/BoscaliWingRadioPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
-Set-Content -LiteralPath "$PreviewDirectory/production-dll.sha256" -Value (Get-PreviewHash "$PreviewDirectory/Assets/BoscaliSummer.dll")
+Copy-Item -LiteralPath "$PSScriptRoot/WingRadioUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/BoscaliWingRadioPreview.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Set-Content -LiteralPath "$PreviewDirectory/production-dll.sha256" -Value (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll").Hash
 Set-Content -LiteralPath "$PreviewDirectory/preview-mode.txt" -Value $(if ($RadioOnly) { 'RadioOnly' } else { 'WingRadioHistorical' })
-@((Get-Item -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll"), (Get-Item -LiteralPath "$PreviewDirectory/preview-mode.txt"), (Get-ChildItem -LiteralPath "$PreviewDirectory/NOAvionics" -Filter '*.avss'), (Get-ChildItem -LiteralPath "$PreviewDirectory/Assets/Harness" -File)) |
-    ForEach-Object { $_ } | ForEach-Object { [pscustomobject]@{ Hash = Get-PreviewHash $_.FullName; Path = $_.FullName } } |
-    Export-Csv -LiteralPath "$PreviewDirectory/input-manifest.csv" -NoTypeInformation
+Export-UnityCheckHashes "$PreviewDirectory/input-manifest.csv" (@((Get-Item -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll"), (Get-Item -LiteralPath "$PreviewDirectory/preview-mode.txt"), (Get-ChildItem -LiteralPath "$PreviewDirectory/NOAvionics" -Filter '*.avss'), (Get-ChildItem -LiteralPath "$PreviewDirectory/Assets/Harness" -File)) | ForEach-Object { $_ })
 $executeMethod = if ($RadioOnly) { 'WingRadioUnityCheck.RunRadioOnly' } else { 'WingRadioUnityCheck.Run' }
-$arguments = @('-batchmode', '-disable-assembly-updater', '-projectPath', ('"' + $PreviewDirectory + '"'), '-executeMethod', $executeMethod, '-logFile', ('"' + "$PreviewDirectory/check.log" + '"'))
-if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
-$process.WaitForExit()
+$process = Invoke-UnityCheck $Unity $PreviewDirectory $executeMethod
 Write-Output "Results and renders: $PreviewDirectory"
-if (Test-Path "$PreviewDirectory/result.txt") { Get-Content "$PreviewDirectory/result.txt" }
-else { Get-Content "$PreviewDirectory/check.log" -Tail 80 }
-if ($process.ExitCode -ne 0) { throw "Unity Wing/Radio check failed: $($process.ExitCode)" }
-if (-not (Test-Path -LiteralPath "$PreviewDirectory/result.txt") -or (Get-Content -LiteralPath "$PreviewDirectory/result.txt" -Raw) -notmatch '\APASS:') { throw "Unity exited without a successful result: $PreviewDirectory" }
+Show-UnityCheckResult $PreviewDirectory -LogTail 80
+Assert-UnityResult $PreviewDirectory $process -ExitMessage "Unity Wing/Radio check failed: $($process.ExitCode)"

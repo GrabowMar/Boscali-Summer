@@ -1,8 +1,4 @@
-using System;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Math
 {
     /// <summary>International Standard Atmosphere density (troposphere lapse, isothermal stratosphere),
@@ -23,8 +19,5 @@ namespace BoscaliSummer.Core.Math
             }
             return TropopauseDensity * (float)System.Math.Exp(-(altitude - TropopauseAltitude) / StratosphereScaleHeight);
         }
-
-        public static float DynamicPressure(float altitude, float airspeed) =>
-            0.5f * Density(altitude) * airspeed * airspeed;
     }
 }

@@ -3,13 +3,8 @@ using System.Collections.Generic;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     internal enum ApCommand : byte { Level, Heading, Altitude, VerticalSpeed, Speed, Off }
@@ -60,8 +55,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void NextShape() => WingOrders.Run(WingOrder.Of(OrderKind.NextShape));
 
-        public static void NextFamily() => WingOrders.Run(WingOrder.Of(OrderKind.NextFamily));
-
         public static void SetSpacing(SpacingPreset preset) => WingOrders.Run(new WingOrder { Kind = OrderKind.SetSpacing, Number = (int)preset });
 
         public static void CycleSpacing()
@@ -83,24 +76,28 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void Dismiss() => WingOrders.Run(WingOrder.Of(OrderKind.Dismiss));
 
-        /// <summary>Escort the player's selected friendly unit (aircraft, vehicle or ship), else the nearest friendly
-        /// aircraft ahead within 5 km (spec M2 §6).</summary>
-        public static void EscortTarget()
+        /// <summary>The grid orders TACTICAL's grid and the call ladder run the same way. Detach and Dismiss differ per caller and stay at the call sites.</summary>
+        public static void RunGrid(GridOrder order, WingScope scope)
         {
-            if (!Ready(out WingService w)) return;
-            Aircraft player = w.Player;
-            if (player == null)
+            switch (order)
             {
-                WingToast.Show("Not flying");
-                return;
+                case GridOrder.Splash: Splash(scope); break;
+                case GridOrder.Engage: Engage(scope); break;
+                case GridOrder.MyTarget: AttackTarget(scope); break;
+                case GridOrder.Scout: ScoutAhead(scope); break;
+                case GridOrder.Break: Disengage(scope); break;
+                case GridOrder.ClearSix: ClearMySix(); break;
+                case GridOrder.FormUp: FormUp(scope); break;
+                case GridOrder.Patrol: PatrolHere(scope); break;
+                case GridOrder.Escort: EscortMe(); break;
+                case GridOrder.Call: Call(1); break;
+                case GridOrder.Bogey: BogeyDope(); break;
+                case GridOrder.Rtb: Rtb(scope); break;
+                case GridOrder.Refit: Refit(scope); break;
+                case GridOrder.TakeOff: TakeOff(scope); break;
+                case GridOrder.Rescue: Rescue(scope); break;
+                case GridOrder.Ecm: WingOrders.Run(WingOrder.Of(OrderKind.Ecm, scope)); break;
             }
-            Unit target = SelectedFriendly(player, w) ?? NearestFriendlyAhead(player, w);
-            if (target == null)
-            {
-                WingToast.Show("No friendly to escort");
-                return;
-            }
-            WingOrders.Run(new WingOrder { Kind = OrderKind.EscortTarget, Units = new[] { target.persistentID.Id } });
         }
 
         /// <summary>Takes command of the selected friendly aircraft, else the nearest one ahead (spec M3 §5).</summary>
@@ -129,8 +126,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void OrbitHere(WingScope scope) => Order(p => WingTask.Orbit(Point(p, 0f, 0f)), scope);
 
-        public static void HoldHere() => HoldHere(default);
-
         public static void HoldHere(WingScope scope) =>
             Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), scope);
 
@@ -148,17 +143,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void MoveAhead(WingScope scope) => Order(p => WingTask.Move(Point(p, MoveAheadMetres, 0f)), scope);
 
-        /// <summary>Spec M7 §2.4: Move 20 km ahead, reporting ground contacts on the way and while orbiting there.</summary>
-        public static void ScoutAhead() => ScoutAhead(default);
-
         public static void ScoutAhead(WingScope scope) => Order(p =>
         {
             WingTask t = WingTask.Move(Point(p, ScoutAheadMetres, 0f));
             t.Scout = true;
             return t;
         }, scope);
-
-        public static void PatrolHere() => PatrolHere(default);
 
         public static void PatrolHere(WingScope scope) =>
             Order(p => WingTask.Patrol(false, Point(p, -PatrolHalfMetres, 0f), Point(p, PatrolHalfMetres, 0f)), scope);
@@ -287,9 +277,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 : "Picture clean.";
             return radio.Answer(speaker, "BOGEYDOPE", answer);
         }
-
-        /// <summary>Reserve → Escort → Sweep: what members shoot at while holding formation (spec M5 §8).</summary>
-        public static void NextDoctrine() => WingOrders.Run(WingOrder.Of(OrderKind.NextDoctrine));
 
         public static void Disengage() => Disengage(default);
 

@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             for (int i = 0; i < count && i < cards.Length; i++)
             {
                 ContractCard card = cards[i];
-                float distance = card.HasMarker && OperationMarkerCopy.Finite(selfX) && OperationMarkerCopy.Finite(selfZ)
+                float distance = card.HasMarker && float.IsFinite(selfX) && float.IsFinite(selfZ)
                     ? ContractMarkerMath.Distance(selfX, selfZ, card.X, card.Z)
                     : float.NaN;
                 if (card.Id != selectedId && !Visible(card, distance)) continue;
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public static bool Visible(ContractCard card, float distance)
         {
             if (!card.HasMarker) return true;
-            if (!OperationMarkerCopy.Finite(distance)) return true;
+            if (!float.IsFinite(distance)) return true;
             return distance <= OperationMarkerCopy.VicinityBand(card.Radius);
         }
 
@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         private static int Group(ContractCard card, float distance)
         {
             if (!card.HasMarker) return 2;
-            if (!OperationMarkerCopy.Finite(distance)) return 2;
+            if (!float.IsFinite(distance)) return 2;
             return distance <= card.Radius ? 0 : 1;
         }
     }

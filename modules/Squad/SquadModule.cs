@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Squad.Patches;
 using BoscaliSummer.Modules.Squad.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 
@@ -20,7 +19,7 @@ namespace BoscaliSummer.Modules.Squad
         {
             SquadManager manager = context.AddSceneService<SquadManager>(44);
             SquadNet network = context.AddComponent<SquadNet>();
-            manager.Configure(context.Settings.Squad, network, context.Logger, context.Services); network.Configure(manager);
+            manager.Configure(context.Settings.Squad, network, context.Services); network.Configure(manager);
             context.AddService<ISquadView>(manager);
             context.AddService<IAircraftTaskExclusion>(manager);
             context.Logger.LogInfo("[Squad] Wing Command API: " + (WingLink.SquadAvailable ? "ready" : WingLink.SquadUnavailableReason));

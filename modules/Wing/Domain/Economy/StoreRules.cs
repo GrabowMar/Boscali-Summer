@@ -1,12 +1,3 @@
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Why a store can or cannot fly from a station (the game's WeaponChecker rules, in its order).</summary>
@@ -56,20 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     if (mission.Rank < mission.StrategicMinRank) return StoreVerdict.NuclearRank;
                 }
             }
-            return StoreVerdict.Ok;
-        }
-
-        /// <summary><see cref="Check"/> plus the field: no ship-rearm store from a ship, and warheads taken from
-        /// <paramref name="warheadsLeft"/> in station order.</summary>
-        public static StoreVerdict AtField(in MountFacts m, in MissionFacts mission, bool shipField, ref int warheadsLeft)
-        {
-            StoreVerdict v = Check(m, mission);
-            if (v != StoreVerdict.Ok) return v;
-            if (m.ShipRearm && shipField) return StoreVerdict.NotFromShip;
-            if (!m.Nuclear) return StoreVerdict.Ok;
-            int need = m.Pylons * m.Ammo;
-            if (need > warheadsLeft) return StoreVerdict.Warheads;
-            warheadsLeft -= need;
             return StoreVerdict.Ok;
         }
 

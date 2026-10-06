@@ -5,14 +5,7 @@ using HarmonyLib;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Moves a stuck aircraft to a pose on the ground (raised by its spawn offset), once (spec M3 §2.1): every rigidbody of the aircraft keeps its offset
@@ -50,7 +43,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             target += Vector3.up * (a.definition != null ? a.definition.spawnOffset.y : 0f);
             Vector3 fwd = to.Fwd.Horizontal.SqrLength > 1e-4f ? to.Fwd.Horizontal.Normalized.ToUnity() : root.forward;
             Quaternion rest = Quaternion.LookRotation(fwd, Vector3.up) * Quaternion.Euler(a.definition != null ? a.definition.restRotation : Vector3.zero);
-            Quaternion turn = rest * Quaternion.Inverse(root.rotation);
+            // The attitude truth is the cockpit body the sensor reads: a tipped fuselage keeps its bank on a level root
+            // (wing-taxi sim 2026-10-06: a −129° jet kept its bank through two root-relative moves). Turn the assembly by
+            // the delta that levels the cockpit; the root goes to the rest attitude exactly below.
+            Transform attitude = a.cockpit != null && a.cockpit.xform != null ? a.cockpit.xform : root;
+            Quaternion turn = rest * Quaternion.Inverse(attitude.rotation);
             Vector3 origin = root.position;
             // Review (ground): on the host an aircraft flies complex physics — every part with mass is unparented with its own
             // Rigidbody, held to its neighbours by FixedJoints (Aircraft.SetComplexPhysics -> AeroPart.CreateRB SetParent(null),
@@ -82,7 +79,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 // An unparented part's transform goes with its body now (the joints are solved from both).
                 if (!rb.transform.IsChildOf(root)) rb.transform.SetPositionAndRotation(p, r);
             }
-            root.SetPositionAndRotation(target, turn * root.rotation);
+            root.SetPositionAndRotation(target, rest);
             a.velocityPrev = Vector3.zero;
             if (a.pilots != null)
                 foreach (Pilot pilot in a.pilots)

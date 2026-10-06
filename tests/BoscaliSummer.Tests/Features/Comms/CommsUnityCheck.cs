@@ -10,11 +10,11 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Production COM builders and refresh methods over synthetic mirrored state. No network or game scene runs.
 public static class CommsUnityCheck
 {
-    private const BindingFlags All = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
     private const string Ns = "BoscaliSummer.Modules.Comms.";
     private static readonly Assembly Asm = typeof(AvConsole).Assembly;
     private static readonly List<string> Failures = new List<string>();
@@ -22,29 +22,12 @@ public static class CommsUnityCheck
 
     public static void Run()
     {
-        if (Shader.Find("TextMeshPro/Distance Field") == null)
-        {
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-            UnityEditor.AssetDatabase.importPackageCompleted += _ => UnityEditor.EditorApplication.delayCall += Run;
-            UnityEditor.AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-            return;
-        }
+        if (!EnsureTmpEssentials(Run)) return;
         try
         {
             Directory.CreateDirectory("com");
-            MethodInfo setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            ParameterInfo[] pathParameters = setPaths.GetParameters();
-            var pathArguments = new object[pathParameters.Length];
-            pathArguments[0] = Path.GetFullPath("CommsPreview.exe");
-            for (int i = 1; i < pathArguments.Length; i++)
-                pathArguments[i] = pathParameters[i].HasDefaultValue ? pathParameters[i].DefaultValue : null;
-            setPaths.Invoke(null, pathArguments);
-            AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            Shader.SetGlobalFloat("_NOA_Now", 1e6f);
-            AvBundle.ResetForTests();
-            AvBundle.Load(Debug.Log);
-            if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons did not load.");
-            AvFxDriver.Configure(AvFxTier.Off, false);
+            SetExecutablePath("CommsPreview.exe");
+            InitAvionics();
             new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
             foreach (AvThemeId theme in (AvThemeId[])Enum.GetValues(typeof(AvThemeId)))
             {
@@ -54,17 +37,13 @@ public static class CommsUnityCheck
             }
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
-        File.WriteAllText("result.txt", Failures.Count == 0
+        Finish(Failures.Count == 0
             ? "PASS: COM " + textChecks + " text checks, " + audienceChecks + " audience interaction checks, " + captures + " captures"
-            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures));
-        UnityEditor.EditorApplication.Exit(Failures.Count == 0 ? 0 : 1);
+            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures), Failures.Count == 0);
     }
 
     private static Type T(string name) => Asm.GetType(Ns + name, true);
     private static object New(string name) => Activator.CreateInstance(T(name), true);
-    private static object Get(object o, string name) => o.GetType().GetField(name, All)?.GetValue(o) ?? o.GetType().GetProperty(name, All).GetValue(o);
-    private static void Set(object o, string name, object value) => o.GetType().GetField(name, All).SetValue(o, value);
-    private static object Call(object o, string name, params object[] args) => o.GetType().GetMethod(name, All).Invoke(o, args);
     private static object Record(string name, params object[] fields)
     {
         object o = New("Domain." + name);
@@ -191,14 +170,7 @@ public static class CommsUnityCheck
 
     private static void Capture(Camera cam, RenderTexture rt, string path)
     {
-        cam.Render();
-        RenderTexture.active = rt;
-        var tex = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
-        tex.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0);
-        tex.Apply();
-        File.WriteAllBytes(path, tex.EncodeToPNG());
-        Object.DestroyImmediate(tex);
-        RenderTexture.active = null;
+        CapturePng(cam, rt, path);
         captures++;
     }
     private static void Gate(AvConsole con, string where)

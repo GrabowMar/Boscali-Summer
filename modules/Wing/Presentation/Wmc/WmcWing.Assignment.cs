@@ -4,13 +4,6 @@ using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // WING's ASSIGNED line (in the personnel file card): where the dossier's pilot is (the airframe it flies, is queued in or last
@@ -38,7 +31,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingPilot p = client ? null : inspected;
             int at = IndexOf(p);
             PilotStatus s = at >= 0 ? status[at] : PilotStatus.Free;
-            WingMember m = p != null && s == PilotStatus.Flying ? MemberOf(p) : null;
+            WingMember m = p != null && s == PilotStatus.Flying ? WmcPilots.MemberOf(p, wing) : null;
             int row = m != null ? WingRows.IndexOf(last.Rows, last.Count, m.Aircraft.persistentID.Id) : -1;
             InboundRow launch = default;
             bool isInbound = (s == PilotStatus.Flying || s == PilotStatus.Inbound) && FindLaunch(p, out launch);

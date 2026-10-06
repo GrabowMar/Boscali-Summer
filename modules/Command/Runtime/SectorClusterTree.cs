@@ -1,4 +1,3 @@
-using System;
 
 namespace BoscaliSummer.Modules.Command.Runtime
 {

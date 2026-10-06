@@ -1,12 +1,3 @@
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Why a member left the wing (spec WMC rebuild R3; the LOST alert, the log and the radio): released or home

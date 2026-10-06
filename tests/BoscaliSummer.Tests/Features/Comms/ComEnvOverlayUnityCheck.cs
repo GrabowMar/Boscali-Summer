@@ -12,12 +12,12 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Production floating console and projected markers. The host flag is patched only in this
 // editor fixture; no mission, native input capture, weather command or transport is exercised.
 public static class ComEnvOverlayUnityCheck
 {
-    private const BindingFlags All = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
     private static readonly Assembly Asm = typeof(AvConsole).Assembly;
     private static readonly List<string> Failures = new List<string>();
     private static int checks, captures;
@@ -27,27 +27,13 @@ public static class ComEnvOverlayUnityCheck
 
     public static void Run()
     {
-        if (Shader.Find("TextMeshPro/Distance Field") == null)
-        {
-            var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-            UnityEditor.AssetDatabase.importPackageCompleted += _ => UnityEditor.EditorApplication.delayCall += Run;
-            UnityEditor.AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-            return;
-        }
+        if (!EnsureTmpEssentials(Run)) return;
         var harmony = new Harmony("boscalisummer.tests.com-env-overlays");
         try
         {
             Directory.CreateDirectory("renders");
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            ParameterInfo[] pp = paths.GetParameters();
-            var pa = new object[pp.Length]; pa[0] = Path.GetFullPath("OverlayPreview.exe");
-            for (int i = 1; i < pp.Length; i++) pa[i] = pp[i].HasDefaultValue ? pp[i].DefaultValue : null;
-            paths.Invoke(null, pa);
-            AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            Shader.SetGlobalFloat("_NOA_Now", 1e6f);
-            AvBundle.ResetForTests(); AvBundle.Load(Debug.Log);
-            if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons did not load.");
-            AvFxDriver.Configure(AvFxTier.Off, false);
+            SetExecutablePath("OverlayPreview.exe");
+            InitAvionics();
             new GameObject("Events", typeof(UnityEngine.EventSystems.EventSystem));
             // Rendering UI does not run the weather effects. Their owned property blocks are
             // precreated outside MonoBehaviour field initialization for this editor-only owner.
@@ -72,10 +58,9 @@ public static class ComEnvOverlayUnityCheck
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
         finally { harmony.UnpatchSelf(); }
-        File.WriteAllText("result.txt", Failures.Count == 0
+        Finish(Failures.Count == 0
             ? "PASS: COMENV OVERLAYS " + checks + " checks, " + captures + " captures"
-            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures));
-        UnityEditor.EditorApplication.Exit(Failures.Count == 0 ? 0 : 1);
+            : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures), Failures.Count == 0);
     }
 
     private static bool HostPrefix(ref bool __result) { __result = isHost; return false; }
@@ -93,9 +78,6 @@ public static class ComEnvOverlayUnityCheck
         }
     }
     private static Type T(string name) => Asm.GetType("BoscaliSummer." + name, true);
-    private static object Get(object o, string name) => o.GetType().GetField(name, All)?.GetValue(o) ?? o.GetType().GetProperty(name, All).GetValue(o);
-    private static void Set(object o, string name, object value) => o.GetType().GetField(name, All).SetValue(o, value);
-    private static object Call(object o, string name, params object[] args) => o.GetType().GetMethod(name, All).Invoke(o, args);
     private static object Settings(string module) => Activator.CreateInstance(T("Modules." + module + ".Configuration." + module + "Settings"), All,
         null, new object[] { new ConfigFile(Path.GetFullPath(module + "-overlay.cfg"), false) }, null);
     private static void Check(bool okay, string error) { checks++; if (!okay) Failures.Add(error); }
@@ -321,11 +303,7 @@ public static class ComEnvOverlayUnityCheck
     }
     private static void Capture(Camera camera, RenderTexture rt, string name)
     {
-        camera.Render(); RenderTexture previous = RenderTexture.active; RenderTexture.active = rt;
-        var image = new Texture2D(rt.width, rt.height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0, 0, rt.width, rt.height), 0, 0); image.Apply();
-        File.WriteAllBytes("renders/" + name + ".png", image.EncodeToPNG()); captures++;
-        RenderTexture.active = previous; Object.DestroyImmediate(image);
+        CapturePng(camera, rt, "renders/" + name + ".png"); captures++;
     }
 }
 #endif

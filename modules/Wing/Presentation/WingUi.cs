@@ -5,15 +5,6 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The wing's own canvases (the takeover offer, the flight HUD strip) drawn from kit v2 primitives. Rects are top-left with
@@ -33,8 +24,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static Color Dim => AvTheme.Dim;
         public static Color FrameColor => AvTheme.Frame;
         public static Color TextPrimary => AvTheme.Unity(AvTokens.TextPrimary);
-
-        public static void Place(RectTransform target, Rect rect) => AvLay.Place(target, rect.x, -rect.y, rect.width, rect.height);
 
         public static void Stretch(RectTransform target) => AvLay.Fill(target);
 
@@ -59,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             label.characterSpacing = 0f;
             label.color = color;
             label.overflowMode = TextOverflowModes.Ellipsis;
-            Place(label.rectTransform, rect);
+            WmcDraw.Place(label.rectTransform, rect);
             return label;
         }
 
@@ -67,7 +56,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static AvFrame Panel(RectTransform parent, Rect rect, Color color)
         {
             AvFrame f = AvFrame.Add(parent, "Panel", AvChamfer.Diagonal(4f));
-            Place(f.rectTransform, rect);
+            WmcDraw.Place(f.rectTransform, rect);
             f.Paint(color, Color.clear);
             return f;
         }
@@ -76,7 +65,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static Image Rule(RectTransform parent, Rect rect, Color color)
         {
             Image img = AvLay.Solid(parent, "Rule", color);
-            Place(img.rectTransform, rect);
+            WmcDraw.Place(img.rectTransform, rect);
             return img;
         }
 
@@ -86,7 +75,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static Image HitButton(RectTransform parent, Rect rect, Action onClick)
         {
             Image hit = AvLay.Solid(parent, "HitTarget", Color.clear);
-            Place(hit.rectTransform, rect);
+            WmcDraw.Place(hit.rectTransform, rect);
             AvHit.On(hit).Click = e => { if (e.button == PointerEventData.InputButton.Left) onClick?.Invoke(); };
             return hit;
         }
@@ -94,7 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static AvControl Button(RectTransform parent, string text, Rect rect, Action onClick)
         {
             AvControl b = AvControl.Make(parent, new AvControl.Spec(text, onClick));
-            Place(b.Rect, rect);
+            WmcDraw.Place(b.Rect, rect);
             return b;
         }
     }

@@ -4,13 +4,7 @@ using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL's wing table and its scope (spec 2026-10-04 §4.2): ALL, an element row and a member row set who orders go to

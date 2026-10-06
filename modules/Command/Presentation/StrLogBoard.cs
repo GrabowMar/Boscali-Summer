@@ -69,8 +69,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (count >= lines.Length) return;
             Line l = lines[count];
             l.Root.gameObject.SetActive(true);
-            StrPaint.Put(l.Stamp, stamp);
-            StrPaint.Put(l.Text, AvStates.Glyph(state) + (text ?? ""));
+            AvText.Set(l.Stamp, stamp);
+            AvText.Set(l.Text, AvStates.Glyph(state) + (text ?? ""));
             l.State = state;
             l.Live = clickable;
             l.Hit.Interactable = clickable;
@@ -129,17 +129,17 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void Style(int i)
         {
             Line l = lines[i];
-            l.Frame.Paint(l.Hover && l.Live ? StrPaint.Raised : StrPaint.Inert, l.Hover && l.Live ? StrPaint.Frame : Color.clear);
-            l.Rail.color = l.State == AvState.Inert ? StrPaint.State(AvState.Inert) : StrPaint.State(l.State);
-            l.Stamp.color = StrPaint.Muted;
-            l.Text.color = l.State == AvState.Inert ? StrPaint.Dim : StrPaint.Ink;
+            l.Frame.Paint(l.Hover && l.Live ? AvInk.Raised : AvInk.Inert, l.Hover && l.Live ? AvInk.Frame : Color.clear);
+            l.Rail.color = l.State == AvState.Inert ? AvInk.State(AvState.Inert) : AvInk.State(l.State);
+            l.Stamp.color = AvInk.Muted;
+            l.Text.color = l.State == AvState.Inert ? AvInk.Dim : AvInk.Ink;
         }
 
         public override void Restyle()
         {
             for (int i = 0; i < lines.Length; i++) Style(i);
             if (rules == null) return;
-            rules.color = StrPaint.Hairline;
+            rules.color = AvInk.Hairline;
             rules.SetVerticesDirty();
         }
 
@@ -156,13 +156,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 float y = r.yMax - ContentEnd - Spacing * 0.5f;
                 while (y > r.yMin + 4f)
                 {
-                    int n = vh.currentVertCount;
-                    vh.AddVert(new Vector3(r.xMin + 10f, y), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMin + 10f, y + 1f), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMax - 10f, y + 1f), color, Vector2.zero);
-                    vh.AddVert(new Vector3(r.xMax - 10f, y), color, Vector2.zero);
-                    vh.AddTriangle(n, n + 1, n + 2);
-                    vh.AddTriangle(n, n + 2, n + 3);
+                    AvQuadGraphic.Emit(vh, r, 10f, r.yMax - (y + 1f), r.width - 20f, 1f, color, color, color, color);
                     y -= Spacing;
                 }
             }

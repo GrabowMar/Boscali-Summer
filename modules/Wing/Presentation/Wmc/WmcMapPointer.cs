@@ -4,14 +4,6 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>What the cursor is over on the maximized map (the 0.9 map layer's rule, spec WMC program §5): a point inside

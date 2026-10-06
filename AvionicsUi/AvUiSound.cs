@@ -13,7 +13,6 @@ namespace NOAvionics
         private static readonly AudioClip[] clips = new AudioClip[7];
         private static readonly float[] gains = { 0f, .15f, .15f, .18f, .13f, .20f, .17f };
         private static AudioSource source;
-        private static float lastHover = -1f;
         private static float lastAction = -1f;
 
         /// <summary>Independent UI level; zero mutes every cue.</summary>
@@ -24,16 +23,8 @@ namespace NOAvionics
             if (Volume <= 0f || cue == AvUiCue.Hover) return;
             if (!Ensure()) return;
             float now = Time.unscaledTime;
-            if (cue == AvUiCue.Hover)
-            {
-                if (now - lastHover < .09f || now - lastAction < .06f) return;
-                lastHover = now;
-            }
-            else
-            {
-                if (now - lastAction < .025f) return;
-                lastAction = now;
-            }
+            if (now - lastAction < .025f) return;
+            lastAction = now;
             source.pitch = 1f;
             source.PlayOneShot(clips[(int)cue], gains[(int)cue] * Mathf.Clamp01(Volume));
         }
@@ -50,7 +41,7 @@ namespace NOAvionics
                 if (clips[i] != null) Object.Destroy(clips[i]);
                 clips[i] = null;
             }
-            lastHover = lastAction = -1f;
+            lastAction = -1f;
         }
 
         private static bool Ensure()

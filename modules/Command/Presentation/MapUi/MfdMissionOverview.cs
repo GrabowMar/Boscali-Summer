@@ -13,12 +13,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal static class MfdMissionOverview
     {
-        public static int Stage(float current, float tactical, float strategic)
-        {
-            if (strategic > 0f) return current >= strategic ? 2 : tactical > 0f && current < tactical ? 0 : 1;
-            if (tactical > 0f) return current < tactical ? 0 : 1;
-            return 2;
-        }
+        public static int Stage(float current, float tactical, float strategic) =>
+            BoscaliSummer.Core.Math.EscalationStage.Of(current, tactical, strategic);
 
         /// <summary>The rungs in order, as the ladder names them.</summary>
         public static string StageName(int stage) =>

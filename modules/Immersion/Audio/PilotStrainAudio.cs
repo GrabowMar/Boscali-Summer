@@ -1,5 +1,4 @@
 using System.Threading;
-using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.Audio;

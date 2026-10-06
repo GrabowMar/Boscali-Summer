@@ -85,20 +85,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             string title = C2Kit.FitTo(titleText, titleRaw, w - 2f * Pad);
             float titleW = Mathf.Min(w - 2f * Pad, C2Kit.Width(titleText, title) + 2f);
             float metaW = Mathf.Max(0f, w - 2f * Pad - titleW - 12f - metaInset);
-            OpsText.Set(titleText, title);
-            OpsText.Set(metaText, C2Kit.FitTo(metaText, metaRaw, metaW));
-            C2Kit.Place(titleText, Pad, 0f, titleW, HeaderH);
-            C2Kit.Place(metaText, w - Pad - metaInset - metaW, 0f, metaW, HeaderH);
+            AvText.Set(titleText, title);
+            AvText.Set(metaText, C2Kit.FitTo(metaText, metaRaw, metaW));
+            AvLay.Place(titleText, Pad, 0f, titleW, HeaderH);
+            AvLay.Place(metaText, w - Pad - metaInset - metaW, 0f, metaW, HeaderH);
             AvLay.Place(body, 1f, HeaderH + 1f, w - 2f, Mathf.Max(0f, bodyHeight - 2f));
         }
 
         public override void Restyle()
         {
-            frame.Paint(OpsInk.Inert, OpsInk.Hairline);
-            headerBack.color = OpsInk.Sunken;
-            rule.color = OpsInk.Hairline;
-            titleText.color = OpsInk.Key;
-            metaText.color = OpsInk.Dim;
+            frame.Paint(AvInk.Inert, AvInk.Hairline);
+            headerBack.color = AvInk.Surface;
+            rule.color = AvInk.Hairline;
+            titleText.color = AvInk.Key;
+            metaText.color = AvInk.Dim;
         }
     }
 }

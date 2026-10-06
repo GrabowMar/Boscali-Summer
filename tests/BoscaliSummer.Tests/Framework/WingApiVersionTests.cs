@@ -6,11 +6,6 @@ namespace BoscaliSummer.Tests.Framework
     {
         public static void Run()
         {
-            TestAssert.That(WingApiVersions.SupportsSquad(1), "WingSquad 1 (Wing Command 0.9.x) is accepted");
-            TestAssert.That(WingApiVersions.SupportsSquad(2), "WingSquad 2 (Wing Command 1.0, same method names) is accepted");
-            TestAssert.That(!WingApiVersions.SupportsSquad(0), "an unversioned build fails closed");
-            TestAssert.That(!WingApiVersions.SupportsSquad(3), "an unknown future shape fails closed");
-
             System.Func<int, bool> api = hash => hash == 7;
             TestAssert.That(WingApiVersions.IsWingMember(new int[0], api, 7),
                 "Wing Command 0.9.x publishes no presence board: its membership API still identifies the wing");

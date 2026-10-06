@@ -331,18 +331,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             switch (cell.Order)
             {
-                case GridOrder.Splash: WingCommands.Splash(scope); break;
-                case GridOrder.Engage: WingCommands.Engage(scope); break;
-                case GridOrder.MyTarget: WingCommands.AttackTarget(scope); break;
-                case GridOrder.Scout: WingCommands.ScoutAhead(scope); break;
-                case GridOrder.Break: WingCommands.Disengage(scope); break;
-                case GridOrder.ClearSix: WingCommands.ClearMySix(); break;
-                case GridOrder.FormUp: WingCommands.FormUp(scope); break;
-                case GridOrder.Patrol: WingCommands.PatrolHere(scope); break;
-                case GridOrder.Escort: WingCommands.EscortMe(); break;
                 case GridOrder.Detach: WingToast.Show("Select the wingmen to detach"); break;
-                case GridOrder.Call: WingCommands.Call(1); break;
-                case GridOrder.Bogey: WingCommands.BogeyDope(); break;
                 case GridOrder.Dismiss:
                     if (!dismissGate.Press("dismiss", Time.unscaledTime))
                     {
@@ -351,11 +340,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     }
                     WingCommands.Dismiss();
                     break;
-                case GridOrder.Rtb: WingCommands.Rtb(scope); break;
-                case GridOrder.Refit: WingCommands.Refit(scope); break;
-                case GridOrder.TakeOff: WingCommands.TakeOff(scope); break;
-                case GridOrder.Rescue: WingCommands.Rescue(scope); break;
-                case GridOrder.Ecm: WingOrders.Run(WingOrder.Of(OrderKind.Ecm, scope)); break;
+                default: WingCommands.RunGrid(cell.Order, scope); break;
             }
         }
 

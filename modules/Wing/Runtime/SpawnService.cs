@@ -4,14 +4,9 @@ using NuclearOption.SavedMission;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Air-starts wingmen (spec §8, M2 §7), host only. Any class but VTOL (the game gives a VTOL no AI state).
@@ -526,7 +521,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Loadout loadout, float fuel, LiveryKey livery)
         {
             if (!ServiceSpots.Pick(traffic, SpotTaken(traffic), out ServiceSpot spot)) return null;
-            Vec3 pos = spot.WingPose.Pos + Vec3.Up * definition.spawnOffset.y;
+            Vec3 at = spot.WingPose.Pos;
+            // Service points float above the pavement (2.3 m at airstrip_city2 spot 0): rest on the surface nearest the
+            // point's height — never the first from above, which under a roof is the roof (as SafeRelocate does).
+            Vector3 local = at.ToLocal();
+            RaycastHit[] hits = Physics.RaycastAll(local + Vector3.up * SafeRelocate.SurfaceProbeHeight, Vector3.down,
+                                                   2f * SafeRelocate.SurfaceProbeHeight);
+            float[] ys = new float[hits.Length];
+            int n = 0;
+            foreach (RaycastHit hit in hits)
+                if (hit.collider != null) ys[n++] = hit.point.GlobalY();
+            float surfaceY = SurfacePick.Closest(at.Y, ys, n, SafeRelocate.SurfaceProbeHeight);
+            Vec3 pos = new Vec3(at.X, surfaceY + definition.spawnOffset.y, at.Z);
             Quaternion rotation = Quaternion.LookRotation(spot.WingPose.Fwd.Horizontal.Normalized.ToUnity()) * Quaternion.Euler(definition.restRotation);
             Aircraft a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, livery, pos.ToGlobal(),
                 rotation, Vector3.zero, null, hq, "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),

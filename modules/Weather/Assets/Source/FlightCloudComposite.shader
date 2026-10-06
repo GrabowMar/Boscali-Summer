@@ -169,7 +169,7 @@ Shader "Boscali/FlightCloudComposite"
                 // A checker sample may hit the aircraft while this half-resolution pixel
                 // sees sky. Reconstruct only from fresh samples on the same side of depth.
                 float4 upsampled = 0.0, low = 1e5, high = -1e5;
-                float total = 0.0, distanceSum = 0.0;
+                float total = 0.0, distanceSum = 0.0, distanceWeight = 0.0;
                 [unroll]
                 for (int y = -1; y <= 1; y++)
                 {
@@ -188,7 +188,11 @@ Shader "Boscali/FlightCloudComposite"
                         float2 offset = sampleBlock * 2.0 + _CloudChecker.xy - texel;
                         float w = exp(-dot(offset, offset) * 0.275) / (0.02 + difference);
                         upsampled += n * w;
-                        distanceSum += data.g * w;
+                        // Empty rays carry a far fallback, not a cloud point. Weight
+                        // depth by visible opacity so sky cannot drag edge parallax away.
+                        float cloudWeight = n.a > 0.002 ? n.a * w : 0.0;
+                        distanceSum += data.g * cloudWeight;
+                        distanceWeight += cloudWeight;
                         total += w;
                         low = min(low, n);
                         high = max(high, n);
@@ -196,7 +200,7 @@ Shader "Boscali/FlightCloudComposite"
                 }
                 upsampled /= max(1e-5, total);
                 if (total <= 1e-5) return Resolved(0.0, sceneDepth, sceneDepth);
-                float distance = distanceSum / total;
+                float distance = distanceWeight > 1e-5 ? distanceSum / distanceWeight : freshData.g;
                 if (fresh) { upsampled = freshVal; distance = freshData.g; }
                 float cloudDepth = distance / viewLength;
                 // No history (first frame, a cut, a zoom): fresh texels are sharp, the rest
@@ -242,6 +246,9 @@ Shader "Boscali/FlightCloudComposite"
                 // nearby volume. Reduce history when translation is large relative to it.
                 // Distant skies keep the same temporal savings and accumulation.
                 float motion = max(saturate(length(_CloudCamDelta.xyz) / max(4.0, distance * 0.08)), _CloudCamDelta.w);
+                // Repeated bilinear history resampling softens moving features. Refresh in
+                // proportion to their movement on this target, retaining accumulation at rest.
+                motion = max(motion, 0.5 * saturate(length((previous - uv) * _CloudLowResSize.xy)));
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);

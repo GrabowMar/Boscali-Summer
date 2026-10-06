@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Comms.Domain
 {
@@ -98,9 +99,8 @@ namespace BoscaliSummer.Modules.Comms.Domain
             float hx = StrokeCodec.Restore(HiddenX), hz = StrokeCodec.Restore(HiddenZ);
             for (int i = 0; i < Guesses.Count; i++)
             {
-                float dx = StrokeCodec.Restore(Guesses[i].X) - hx;
-                float dz = StrokeCodec.Restore(Guesses[i].Z) - hz;
-                placings.Add(new HuntPlacing { Guess = Guesses[i], Metres = (float)Math.Sqrt(dx * dx + dz * dz) });
+                placings.Add(new HuntPlacing { Guess = Guesses[i],
+                    Metres = Scalar.Distance2D(StrokeCodec.Restore(Guesses[i].X), StrokeCodec.Restore(Guesses[i].Z), hx, hz) });
             }
             // Stable on ties: whoever clicked first keeps the better place.
             placings.Sort((a, b) =>
@@ -172,13 +172,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             if (table != null)
                 for (int i = 0; i < table.Count && rows.Count < MaxRows; i++) rows.Add(table[i]);
             Sort();
-        }
-
-        public int RankOf(ulong player)
-        {
-            for (int i = 0; i < rows.Count; i++)
-                if (rows[i].Player == player) return i + 1;
-            return 0;
         }
 
         public int PointsOf(ulong player)

@@ -4,17 +4,12 @@ using System.Collections.Generic;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
-using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
@@ -51,7 +46,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private CommandSettings settings;
         private CommandManager command;
         private ComMapOverlay overlay;
-        private ManualLogSource logger;
         private IBaseDefenseAlarmService baseAlarm;
         private IHighCommandView highCommand;
         private ITheaterWarView theaterWar;
@@ -59,16 +53,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         // ---- Screen ----------------------------------------------------------------------
 
-        private MFDScreen screen;
-        private GameObject screenRoot;
+        private readonly MfdPanelInstaller installer =
+            new MfdPanelInstaller(MfdSlots.Str, "STR", "BoscaliStrategic.Screen", preferLeft: true);
+        private MFDScreen screen => installer.Screen;
         private AvConsole console;
         private AvMetric[] metrics;
         private AvFlow cocPage;
         private bool cocBuilt;
 
-        private float nextAttempt;
         private float nextRefresh;
-        private bool failed;
 
         // ---- SITUATION page ----------------------------------------------------------------
 
@@ -97,16 +90,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             settings = config;
             command = manager;
             overlay = mapOverlay;
-            logger = log;
+            installer.Log = log;
+            installer.Builder = BuildScreen;
         }
 
         public void ResetForScene()
         {
-            MfdBezel.Release(MfdSlots.Str);
-            if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
+            installer.Reset();
 
-            screenRoot = null;
-            screen = null;
             console = null;
             metrics = null;
             baseAlarm = null;
@@ -132,26 +123,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             ResetCoc();
             ResetCmd();
 
-            nextAttempt = 0f;
             nextRefresh = 0f;
-            failed = false;
         }
 
         private void OnDestroy() => ResetForScene();
 
         private void Update()
         {
-            if (failed || command == null || settings == null || !settings.Enabled.Value) return;
-            if (Application.isBatchMode) { failed = true; return; }
-            if (!GameAccess.MfdAvailable) { failed = true; return; }
-
-            if (screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                TryInstall();
-                return;
-            }
+            if (installer.Failed || command == null || settings == null || !settings.Enabled.Value) return;
+            if (!installer.Tick()) return;
 
             // A closed screen costs nothing. The old theater tab refreshed on every page,
             // including the ones that were not showing it.
@@ -163,80 +143,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         // ---- Installation ----------------------------------------------------------------
 
-        private void TryInstall()
+        private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
-            try
-            {
-                VirtualMFD mfd =
-                    SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
-                if (mfd == null) return;
-
-                if (!MfdBezel.TryClaim(MfdSlots.Str, preferLeft: true, mfd,
-                    out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left))
-                {
-                    // No slot is a crowded bezel, not a broken mod: OPS still installs.
-                    failed = true;
-                    logger?.LogWarning("STR MFD unavailable: no free bezel slot.");
-                    return;
-                }
-
-                MFDScreen template = MfdBezel.FindTemplate(screens) ?? MfdBezel.FindTemplate(mfd);
-                if (template == null)
-                {
-                    MfdBezel.Release(MfdSlots.Str);
-                    return;
-                }
-
-                screen = Build(template, buttons[slot]);
-                if (screen == null)
-                {
-                    MfdBezel.Release(MfdSlots.Str);
-                    failed = true;
-                    return;
-                }
-
-                if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
-                {
-                    MfdBezel.Release(MfdSlots.Str);
-                    if (screenRoot != null) UnityEngine.Object.Destroy(screenRoot);
-                    screenRoot = null;
-                    screen = null;
-                    failed = true;
-                    logger?.LogWarning("STR MFD unavailable: claimed bezel changed before binding.");
-                    return;
-                }
-                logger?.LogInfo("STR MFD installed on " + (left ? "left" : "right") +
-                                " bezel slot " + (slot + 1) + ".");
-            }
-            catch (Exception e)
-            {
-                MfdBezel.Release(MfdSlots.Str);
-                failed = true;
-                logger?.LogError("STR MFD install failed: " + e);
-            }
-        }
-
-        private MFDScreen Build(MFDScreen template, Button bezel)
-        {
-            var root = new GameObject("BoscaliStrategic.Screen", typeof(RectTransform));
-            var rootRect = root.GetComponent<RectTransform>();
-            rootRect.SetParent(template.transform.parent, false);
-
-            var templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-
-            // Position is deliberately not copied; see the same note on the OPS screen.
-            // VirtualMFD.showPos is zero and MFDScreen.ShowScreen assigns it straight to
-            // localPosition, so a screen is placed by its parent and anchors.
-            float height = AvLay.ResolveHeight(
-                templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(Width, height);
-            AvLay.ClampIntoCanvas(rootRect);
-
             ModuleServices.TryGet(out baseAlarm);
             ModuleServices.TryGet(out highCommand);
             ModuleServices.TryGet(out theaterWar);
@@ -259,55 +167,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             cocPage = console.Page(TabCoc);
             BuildCmdPage(console.Page(TabCmd));
             console.Finish();
-
-            MFDScreen result = root.AddComponent<MFDScreen>();
-            result.shortName = "STR";
-            result.displayPanel = console.Root.gameObject;
-            result.aircraftOnly = false;
-            result.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            result.highlight = FindHighlight(bezel);
-            if (result.label == null || result.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                return null;
-            }
-
-            screenRoot = root;
             console.SetPage(TabSa);
-            return result;
+            return console.Root;
         }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            Image[] images = button.GetComponentsInChildren<Image>(true);
-            for (int i = 0; i < images.Length; i++)
-            {
-                if (images[i].gameObject != button.gameObject) return images[i];
-            }
-            return button.GetComponent<Image>();
-        }
-
-        // ---- Shared state mapping ----------------------------------------------------------
-
-        /// <summary>Maps the domain's rail-category strings (TheaterReadout) onto kit v2 <see cref="AvState"/>.</summary>
-        internal static AvState RailState(string rail)
-        {
-            switch (rail)
-            {
-                case "danger": return AvState.Danger;
-                case "warn":
-                case "caution":
-                case "contested": return AvState.Caution;
-                case "ready": return AvState.Ready;
-                case "live":
-                case "info": return AvState.Info;
-                default: return AvState.Inert;
-            }
-        }
-
-        /// <summary>Prepends the state glyph (R1: status is never colour alone) to a value AvRow will show.</summary>
-        internal static string Glyphed(string text, AvState state) => AvStates.Glyph(state) + (text ?? "");
 
         // ---- SITUATION page ------------------------------------------------------------------
 
@@ -316,10 +178,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             threat = p.Add(new StrThreatBanner(p.Content));
 
             // Four ownership strips, followed by named force and contested-node records.
-            ringAllied = new AvGauge(p.Content, "ALLIED", AvGaugeShape.Ring, 64f);
-            ringContested = new AvGauge(p.Content, "CONTESTED", AvGaugeShape.Ring, 64f);
-            ringHostile = new AvGauge(p.Content, "HOSTILE", AvGaugeShape.Ring, 64f);
-            ringOpen = new AvGauge(p.Content, "UNCLAIMED", AvGaugeShape.Ring, 64f);
+            ringAllied = new AvGauge(p.Content, "ALLIED");
+            ringContested = new AvGauge(p.Content, "CONTESTED");
+            ringHostile = new AvGauge(p.Content, "HOSTILE");
+            ringOpen = new AvGauge(p.Content, "UNCLAIMED");
             ringAllied.Help = "ALLIED: share of the sector field held by your side.";
             ringContested.Help = "CONTESTED: share of sectors with both sides present.";
             ringHostile.Help = "HOSTILE: share of sectors held by the enemy. Red above half.";

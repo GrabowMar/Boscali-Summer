@@ -4,7 +4,6 @@ using System.Reflection;
 using BoscaliSummer.Fire;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -167,9 +166,9 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
 
         private void ReceiveFire(INetworkPlayer player, FireIgnitedMessage message)
         {
-            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
-                !Finite(message.RemainingLifetime) || message.RemainingLifetime <= 0f ||
-                !Finite(message.ClusterScale) || message.ClusterScale <= 0f)
+            if (!float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z) ||
+                !float.IsFinite(message.RemainingLifetime) || message.RemainingLifetime <= 0f ||
+                !float.IsFinite(message.ClusterScale) || message.ClusterScale <= 0f)
                 return;
             ImpactFireManager.Instance?.ReceiveIgnition(
                 new GlobalPosition(message.X, message.Y, message.Z),
@@ -178,10 +177,10 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
 
         private void ReceiveRuin(INetworkPlayer player, RuinCreatedMessage message)
         {
-            if (!Finite(message.X) || !Finite(message.Y) || !Finite(message.Z) ||
-                !Finite(message.HalfX) || !Finite(message.HalfZ) ||
+            if (!float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z) ||
+                !float.IsFinite(message.HalfX) || !float.IsFinite(message.HalfZ) ||
                 message.HalfX <= 0f || message.HalfZ <= 0f ||
-                !Finite(message.AgeSeconds) || message.AgeSeconds < 0f)
+                !float.IsFinite(message.AgeSeconds) || message.AgeSeconds < 0f)
                 return;
             RuinAftermathManager.Instance?.RegisterRuin(
                 new GlobalPosition(message.X, message.Y, message.Z),
@@ -259,6 +258,5 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
             AgeSeconds = ageSeconds
         };
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

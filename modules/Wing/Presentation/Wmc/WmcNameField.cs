@@ -5,14 +5,6 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The bezel's one text field (LOADOUT's NAME, STUDIO's CALLSIGN / NAME / BIO; critique C18): a kit v2 <see cref="AvField"/>
@@ -104,7 +96,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            if (key != null) key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            if (key != null) key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             inner.Restyle();
             Button?.Restyle();
         }

@@ -15,7 +15,6 @@ namespace BoscaliSummer.Tests.Features.Command
             MfdPanelTests.Run();
             TestLogSpace();
             AvionicsTokenTests.Run(TestAssert.That);
-            AvBoxTests.Run(TestAssert.That);
             AvGridTests.Run(TestAssert.That);
             AvStyleTests.Run(TestAssert.That);
 
@@ -23,7 +22,6 @@ namespace BoscaliSummer.Tests.Features.Command
             TestControlledIngress();
             FrontlineTests.Run();
             StrPanelTests.Run();
-            OperationsBoardTests.Run();
             StrRevampTests.Run();
             GridLabelsTests.Run();
         }

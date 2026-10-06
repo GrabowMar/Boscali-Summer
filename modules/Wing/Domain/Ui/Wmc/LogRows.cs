@@ -1,15 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal struct LogRow
@@ -109,7 +101,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static string Because(TransitionReason r) => r == TransitionReason.None ? "" : " (" + Words(r.ToString()) + ")";
 
         /// <summary>"NoTarget" → "no target".</summary>
-        private static string Words(string pascal)
+        internal static string Words(string pascal)
         {
             var sb = new StringBuilder(pascal.Length + 4);
             for (int i = 0; i < pascal.Length; i++)

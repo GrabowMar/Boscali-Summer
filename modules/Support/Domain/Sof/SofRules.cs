@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float WoundedSeconds = 60f, LaseMaxSeconds = 300f, MaxAdvanceSeconds = 5f, ArrivalMetres = 40f;
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
         public const float HeldSeconds = 600f, HeldObserveRadius = 3000f, HeldRetakeMetres = 300f, HeldRetakeSeconds = 60f, HeldRevealPulseSeconds = 20f;
-        public const float TapTraceFactor = 0.7f, RingBoostMetres = 12000f;
+        public const float RingBoostMetres = 12000f;
         public const float LiftPickupMetres = 150f, LiftDropMetres = 300f, LiftDwellSeconds = 10f, LiftMinPayMetres = 2000f;
         public const int LiftPay = 40, ExtractionPay = 40, CoverPay = 25;
         public const int BaseOdds = 70, MinOdds = 10, MaxOdds = 95;
@@ -194,13 +194,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             string name = kind == TargetKind.Ground ? "GROUND CONTACT" : kind == TargetKind.Building ? "BUILDING" : kind == TargetKind.Relay ? "RELAY" :
                 sub == AnchorSub.Uplink ? "UPLINK" : sub == AnchorSub.EwTruck ? "EW TRUCK" : sub == AnchorSub.DataCenter ? "DATA CENTER" : "CAMP";
             return name + " #" + id.ToString(CultureInfo.InvariantCulture);
-        }
-
-        public static string Clock(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
-            int s = (int)Math.Ceiling(seconds);
-            return (s / 60).ToString(CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture);
         }
     }
 }

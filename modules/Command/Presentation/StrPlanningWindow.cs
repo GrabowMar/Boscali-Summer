@@ -1,7 +1,5 @@
 using NOAvionics;
-using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using TMPro;
 using UnityEngine;
@@ -31,9 +29,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private StrFrontBoard fronts;
         private StrNote frontsNote;
         private AvSegmented postureControl;
-        private AvSection logSection;
-        private StrLogBoard staffLog;
-        private StrNote staffLogNote;
         private TheaterMapPart map;
         private ITheaterWarView war;
         private ComMapOverlay overlay;
@@ -157,18 +152,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
             proposals = opStack.Add(new StrProposalDeck(body.Content, MaxProposals, Pick));
             proposalNote = opStack.Add(new StrNote(body.Content, AvIcon.ListDetails));
             frontsSection = new AvSection(body.Content, AvIcon.MapPin, "FRONTS");
-            logSection = new AvSection(body.Content, AvIcon.ListDetails, "STAFF LOG", "NEWEST FIRST");
             picture.Add(frontsSection);
             fronts = picture.Add(new StrFrontBoard(body.Content, FrontPageSize, BindFront));
             frontsNote = picture.Add(new StrNote(body.Content, AvIcon.MapPin));
             picture.Add(postureControl);
             picture.Add(postureNote);
             // Full staff traffic remains on STR; the room footer carries the latest report.
-            staffLog = new StrLogBoard(body.Content, 8, null, 1);
-            staffLogNote = new StrNote(body.Content, AvIcon.ListDetails);
-            logSection.SetShown(false);
-            staffLog.Rect.gameObject.SetActive(false);
-            staffLogNote.Rect.gameObject.SetActive(false);
             body.Row(picture, opStack);
 
             AvControl closeButton = window.CloseControl;
@@ -229,15 +218,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 ready ? StrMfdPanel.PostureBrief(selectedPosture) : "Awaiting the host's faction report.", ready ? AvState.Info : AvState.Inert);
 
             IReadOnlyList<string> log = ready ? war.StaffLog : null;
-            int lines = log == null ? 0 : Mathf.Min(log.Count, staffLog.Capacity);
-            staffLog.Begin();
-            for (int i = 0; i < lines; i++)
-                staffLog.Add((i + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture), log[i],
-                    AvState.Info, false, "Staff log entry " + (i + 1) + ", newest first.");
-            staffLog.End();
-            staffLog.SetShown(false);
-            staffLogNote.SetShown(false);
-            if (lines == 0) staffLogNote.Set(ready ? "NO STAFF TRAFFIC" : "STAFF OFFLINE", "");
+            int lines = log == null ? 0 : log.Count;
             window.Footer.Set(!ready ? "Staff log · awaiting host report." : lines > 0 ? "Staff log · " + log[0] : "Staff log · no recent report.");
 
             map.Refresh(active, proposalList, frontList);
@@ -289,8 +270,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 Rect = AvLay.Child(parent, "TheaterMap");
                 AvFrame frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
                 AvLay.Fill(frame.rectTransform);
-                frame.Paint(AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Background, AvTheme.SurfaceInert),
-                            AvStyleHost.Resolve(AvStyleHost.FuiStyle("card").Border, AvTheme.Hairline));
+                frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
+                            AvStyleHost.FuiBorder("card", AvTheme.Hairline));
 
                 terrain = Image("Terrain");
                 control = RawImg();
@@ -348,11 +329,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 RectTransform box = AvLay.Child(Rect, "Pin " + tag);
                 AvFrame back = AvFrame.Add(box, "Frame", AvChamfer.Diagonal(3f));
                 AvLay.Fill(back.rectTransform);
-                back.Paint(StrPaint.Raised, color);
+                back.Paint(AvInk.Raised, color);
                 TMP_Text text = AvText.Make(box, "Tag " + tag, AvTextRole.DataStrong, tag, TextAlignmentOptions.Center);
                 AvText.Fit(text, false);
                 AvLay.Fill(text.rectTransform, 1f);
-                text.color = StrPaint.Ink;
+                text.color = AvInk.Ink;
                 box.gameObject.SetActive(false);
                 return text;
             }

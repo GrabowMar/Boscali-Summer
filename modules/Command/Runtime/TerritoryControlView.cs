@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Runtime

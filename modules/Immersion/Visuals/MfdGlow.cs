@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
 
@@ -13,7 +12,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Aircraft bound;
         private int bindAttempts;
         private float nextBind;
-        internal ManualLogSource Logger { get; set; }
         public int PanelCount => panels.Count;
         public float Boost { get; private set; } = 1f;
 
@@ -73,8 +71,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 }
             }
             materials.Clear();
-            if (Logger != null && panels.Count > 0 && bindAttempts == 2)
-                Logger.LogInfo("[Immersion] Night glow bound " + panels.Count + " verified display slots.");
+            if (Plugin.Logger != null && panels.Count > 0 && bindAttempts == 2)
+                Plugin.Logger.LogInfo("[Immersion] Night glow bound " + panels.Count + " verified display slots.");
         }
     }
 }

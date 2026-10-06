@@ -40,10 +40,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         /// <summary>Solid slab colours (same tokens as <see cref="AvSlab"/>): filled tag, dark ink.</summary>
         internal static Color SlabBack(AvState state) =>
-            AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + AvStates.Class(state)).Background,
-                AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo));
+            AvStyleHost.FuiFill("slab " + AvStates.Class(state), AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo));
 
-        internal static Color SlabInk() => AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
+        internal static Color SlabInk() => AvStyleHost.FuiInk("slab", Color.black);
 
         /// <summary>The rect of <paramref name="source"/> (in uv space) that fills a w x h plate without stretching.</summary>
         internal static Rect CropUv(Rect source, float w, float h)

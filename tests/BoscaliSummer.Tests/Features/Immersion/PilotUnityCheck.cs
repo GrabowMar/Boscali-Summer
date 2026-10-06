@@ -6,6 +6,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using BoscaliSummer.Modules.Immersion.Visuals;
+using BoscaliSummer.Modules.Immersion.Runtime;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Modules.Weather.Visuals;
 using UnityEngine;
@@ -16,8 +17,8 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 #endif
 
-// Unmodified Unity-only production helpers in a real URP player. This synthetic
-// sixteen-bone pilot does not establish native aircraft fit or live acceptance.
+// Unmodified production runtime and helpers in a real URP player, using narrow
+// native type stubs and exported aircraft geometry. This does not establish live acceptance.
 public sealed class PilotUnityCheck : MonoBehaviour
 {
     private readonly StringBuilder log = new StringBuilder();
@@ -123,6 +124,8 @@ public sealed class PilotUnityCheck : MonoBehaviour
         foreign = CameraAt("Foreign camera", foreignTarget, 1);
         foreign.cullingMask = -1;
         CreateSource();
+        IEnumerator runtimeChecks = CheckRuntimeControlOwner();
+        while (runtimeChecks.MoveNext()) yield return runtimeChecks.Current;
         rig = new CockpitPilotRig();
         AnimatorCullingMode borrowedCulling = animator.cullingMode;
         Check(rig.Bind(source, animator, shader, eye), "Native-shaped sixteen-bone rig binds");
@@ -251,6 +254,10 @@ public sealed class PilotUnityCheck : MonoBehaviour
         IEnumerator improvedChecks = CheckNativeHeadAndMaterial(shader);
         while (improvedChecks.MoveNext()) yield return improvedChecks.Current;
         CheckAttackHeloGrip(shader);
+        CheckVortexRuntimeGrip();
+        CheckRightThrottleRuntimeRoles();
+        CheckLongCyclicRestFit(true);
+        CheckLongCyclicRestFit(false);
         log.AppendLine("Boundary: synthetic URP source closure; game camera stack, native fit, rain ordering and live performance remain unverified.");
     }
 
@@ -745,11 +752,445 @@ public sealed class PilotUnityCheck : MonoBehaviour
         rig.Release();
     }
 
+    private IEnumerator CheckRuntimeControlOwner()
+    {
+        var aircraftNode = new GameObject("Runtime aircraft fixture"); owned.Add(aircraftNode);
+        var aircraft = aircraftNode.AddComponent<Aircraft>();
+        var partNode = new GameObject("Native cockpit UnitPart"); owned.Add(partNode);
+        partNode.transform.SetParent(aircraftNode.transform, false);
+        aircraft.cockpit = partNode.AddComponent<AeroPart>();
+        var controlsNode = new GameObject("cockpit_int Cockpit control owner"); owned.Add(controlsNode);
+        controlsNode.transform.SetParent(partNode.transform, false);
+        var cockpit = controlsNode.AddComponent<Cockpit>();
+        var stick = new GameObject("Native runtime stick"); owned.Add(stick);
+        stick.transform.SetParent(controlsNode.transform, false);
+        stick.transform.position = source.bones[9].position - new Vector3(.02f,.08f,-.085f);
+        var mesh = new Mesh { name = "Unreadable runtime stick bounds" }; owned.Add(mesh);
+        Bounds bounds = new Bounds(Vector3.zero, new Vector3(.04f,.2f,.04f));
+        mesh.vertices = new[] { bounds.min, bounds.max }; mesh.bounds = bounds; mesh.UploadMeshData(true);
+        stick.AddComponent<MeshFilter>().sharedMesh = mesh;
+        controlsNode.SetActive(false);
+        cockpit.SetFixtureControls(null, null);
+        var pilot = aircraftNode.AddComponent<Pilot>(); pilot.SetFixtureSource(source, animator);
+        aircraft.pilots = new[] { pilot };
+        var runtime = aircraftNode.AddComponent<CockpitPilot>(); runtime.enabled = false;
+        var fixtureLog = new BepInEx.Logging.ManualLogSource();
+        runtime.Configure(new BoscaliSummer.Modules.Immersion.Configuration.ImmersionSettings(), fixtureLog);
+        var type = typeof(CockpitPilot);
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        type.GetField("aircraft", flags).SetValue(runtime, aircraft);
+        type.GetField("pilot", flags).SetValue(runtime, pilot);
+        type.GetField("camera", flags).SetValue(runtime, eye);
+        Check(typeof(Aircraft).GetField("cockpit").FieldType == typeof(UnitPart) && aircraft.cockpit.GetComponent<Cockpit>() == null &&
+            aircraft.cockpit.GetComponentInChildren<Cockpit>(true) == cockpit,
+            "Native runtime fixture separates Aircraft.cockpit UnitPart from its child Cockpit control owner");
+        Check((bool)type.GetMethod("Bind", flags).Invoke(runtime, null), "Unmodified runtime Bind creates the owned pilot rig");
+        try { type.GetMethod("BindControls", flags).Invoke(runtime, null); }
+        catch (TargetInvocationException error)
+        {
+            Exception cause = error.InnerException ?? error;
+            log.AppendLine("Runtime binding exception: " + cause);
+            throw new Exception("Production BindControls must reflect joystick arrays on the Cockpit component, not Aircraft.cockpit UnitPart", cause);
+        }
+        var runtimeRig = (CockpitPilotRig)type.GetField("rig", flags).GetValue(runtime);
+        Check(!runtimeRig.StickBound, "Runtime missing control arrays fail closed while an inactive Cockpit owner is present");
+        cockpit.SetFixtureControls(stick.transform, null);
+        type.GetMethod("BindControls", flags).Invoke(runtime, null);
+        type.GetMethod("BindControls", flags).Invoke(runtime, null);
+        Check(runtimeRig.StickBound, "Production runtime binding resolves the child Cockpit's typed joystick array");
+        int statusLogs = 0;
+        foreach (string message in fixtureLog.Messages) if (message.Contains("Cockpit pilot controls")) statusLogs++;
+        Check(statusLogs == 2, "Runtime control status logs once per changed state and never on unchanged retries");
+        runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        Check(runtimeRig.StickGripError < .0005f, "Production runtime binding reaches its actual cached moving stick target");
+        Destroy(cockpit); yield return null;
+        var replacementStick = new GameObject("Replacement native runtime stick"); owned.Add(replacementStick);
+        replacementStick.transform.SetParent(controlsNode.transform, false);
+        replacementStick.transform.position = stick.transform.position + new Vector3(.01f,.01f,-.02f);
+        replacementStick.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var replacementOwner = controlsNode.AddComponent<Cockpit>();
+        replacementOwner.SetFixtureControls(replacementStick.transform, null);
+        runtimeRig.CopySeatedPose();
+        type.GetMethod("BindControls", flags).Invoke(runtime, null);
+        runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        Check(type.GetField("controls", flags).GetValue(runtime) == replacementOwner && runtimeRig.StickBound && runtimeRig.StickGripError < .0005f,
+            "Destroyed Cockpit owner resolves a replacement component and control anchor");
+        Vector3 palm = replacementStick.transform.TransformPoint(new Vector3(0,.08f,0));
+        Check(Vector3.Distance(runtimeRig.Bone("hand_R").position + runtimeRig.Bone("hand_R").rotation * new Vector3(0,.085f,.02f), palm) < .0005f,
+            "Replacement owner rebinds the new stick rather than a surviving stale transform");
+        runtime.ResetForScene();
+        Check(type.GetField("controls", flags).GetValue(runtime) == null && !runtimeRig.Valid,
+            "Scene reset releases the cached native Cockpit owner and visual rig");
+        Destroy(replacementOwner); yield return null;
+        var sameObjectOwner = partNode.AddComponent<Cockpit>(); sameObjectOwner.SetFixtureControls(stick.transform, null);
+        type.GetField("aircraft", flags).SetValue(runtime, aircraft);
+        type.GetField("pilot", flags).SetValue(runtime, pilot);
+        type.GetField("camera", flags).SetValue(runtime, eye);
+        Check((bool)type.GetMethod("Bind", flags).Invoke(runtime, null), "Runtime pilot respawns after scene reset");
+        type.GetMethod("BindControls", flags).Invoke(runtime, null);
+        Check(runtimeRig.StickBound && type.GetField("controls", flags).GetValue(runtime) == sameObjectOwner,
+            "Respawn resolves a same-GameObject Cockpit owner as used by native attack-helicopter layouts");
+        runtime.ResetForScene();
+    }
+
     private static float WristTwist(Quaternion actual, Quaternion native, Vector3 forearmAxis)
     {
         Quaternion relative = actual * Quaternion.Inverse(native);
         float axial = Vector3.Dot(new Vector3(relative.x, relative.y, relative.z), forearmAxis);
         return Mathf.Abs(Mathf.DeltaAngle(0, 2f * Mathf.Atan2(axial, relative.w) * Mathf.Rad2Deg));
+    }
+
+    private void CheckVortexRuntimeGrip()
+    {
+        // Held native SmallFighter1 seated clip plus exact cockpit control hierarchy,
+        // exported by nomodkit. The throttle array owns a remote pivot, whose child
+        // mesh is offset and tilted; testing a mesh directly would miss this contract.
+        CreateSource();
+        SetFixtureBone(1, new Vector3(0,.224592401f,4.467244683f),
+            new Vector3(0,.360214817f,.932869255f), new Vector3(0,.932869199f,-.360214796f));
+        SetFixtureBone(7, new Vector3(.155818590f,.516220281f,4.354636587f),
+            new Vector3(-.147736096f,-.124773352f,.981124375f), new Vector3(.572078769f,-.819997785f,-.018139648f));
+        SetFixtureBone(8, new Vector3(.296197424f,.315006173f,4.350185386f),
+            new Vector3(-.563795248f,.272054971f,.779820374f), new Vector3(-.283033700f,-.950660572f,.127027826f));
+        source.bones[9].SetPositionAndRotation(new Vector3(.236869944f,.115735649f,4.376812036f),
+            new Quaternion(-.331738935f,.006241687f,.857169832f,.393916309f));
+        SetFixtureBone(4, new Vector3(-.155813934f,.516220263f,4.354636538f),
+            new Vector3(-.002665683f,-.199577608f,.979878379f), new Vector3(-.455142525f,-.872261946f,-.178896963f));
+        SetFixtureBone(5, new Vector3(-.267498570f,.302181330f,4.310738113f),
+            new Vector3(.142536188f,.260418898f,.954916302f), new Vector3(.238632494f,-.945349835f,.222190451f));
+        SetFixtureBone(6, new Vector3(-.217478158f,.104024097f,4.357312053f),
+            new Vector3(.142536118f,.260418728f,.954916297f), new Vector3(.749968775f,-.658020054f,.067506623f));
+        var nativePositions = new Vector3[source.bones.Length];
+        var nativeRotations = new Quaternion[source.bones.Length];
+        for (int i = 0; i < source.bones.Length; i++)
+        { nativePositions[i] = source.bones[i].localPosition; nativeRotations[i] = source.bones[i].localRotation; }
+        float rightReach = Vector3.Distance(source.bones[7].position, source.bones[8].position) + Vector3.Distance(source.bones[8].position, source.bones[9].position);
+        float leftReach = Vector3.Distance(source.bones[4].position, source.bones[5].position) + Vector3.Distance(source.bones[5].position, source.bones[6].position);
+        Check(Mathf.Abs(rightReach - .454996341f) < .00001f && Mathf.Abs(leftReach - .454996303f) < .00001f,
+            "Vortex held native arm lengths agree with the independent geometry export");
+        var aircraftNode = new GameObject("Vortex runtime aircraft fixture"); owned.Add(aircraftNode);
+        var aircraft = aircraftNode.AddComponent<Aircraft>();
+        var part = new GameObject("Vortex cockpit AeroPart"); owned.Add(part);
+        part.transform.SetParent(aircraftNode.transform, false);
+        part.transform.position = new Vector3(0,.051269010f,4.633470058f);
+        aircraft.cockpit = part.AddComponent<AeroPart>();
+        var controlsNode = new GameObject("Vortex cockpit_int"); owned.Add(controlsNode);
+        controlsNode.transform.SetParent(part.transform, false);
+        var cockpit = controlsNode.AddComponent<Cockpit>();
+        var stick = new GameObject("Vortex joystick"); owned.Add(stick);
+        stick.transform.SetParent(controlsNode.transform, false);
+        stick.transform.position = new Vector3(.419f,.127869010f,4.800270066f);
+        Bounds stickBounds = new Bounds(new Vector3(-.004799949f,.060218185f,.021563722f),
+            new Vector3(.091679573f,.281508654f,.126109317f));
+        AddUnreadableHandle(stick, stickBounds);
+        var throttle = new GameObject("Vortex throttlePivot"); owned.Add(throttle);
+        throttle.transform.SetParent(controlsNode.transform, false);
+        throttle.transform.position = new Vector3(0,-2.377730891f,4.846470058f);
+        var handle = new GameObject("Vortex throttle mesh"); owned.Add(handle);
+        handle.transform.SetParent(throttle.transform, false);
+        handle.transform.position = new Vector3(-.425599992f,.048469022f,4.624270052f);
+        handle.transform.rotation = Quaternion.LookRotation(new Vector3(0,.132256514f,.991215525f),
+            new Vector3(0,.991215525f,-.132256514f));
+        Bounds throttleBounds = new Bounds(new Vector3(.064165331f,.145554304f,.014782991f),
+            new Vector3(.234516039f,.296171725f,.220157146f));
+        AddUnreadableHandle(handle, throttleBounds);
+        cockpit.SetFixtureControls(stick.transform, throttle.transform);
+        controlsNode.SetActive(false);
+        var pilot = aircraftNode.AddComponent<Pilot>(); pilot.SetFixtureSource(source, animator);
+        aircraft.pilots = new[] { pilot };
+        var runtime = aircraftNode.AddComponent<CockpitPilot>(); runtime.enabled = false;
+        runtime.Configure(new BoscaliSummer.Modules.Immersion.Configuration.ImmersionSettings(), new BepInEx.Logging.ManualLogSource());
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var type = typeof(CockpitPilot);
+        MethodInfo bind = type.GetMethod("Bind", flags), bindControls = type.GetMethod("BindControls", flags);
+        var runtimeRig = (CockpitPilotRig)type.GetField("rig", flags).GetValue(runtime);
+        Vector3 stickPalm = stickBounds.center; stickPalm.y += stickBounds.extents.y * .8f;
+        Vector3 throttlePalm = throttleBounds.center; throttlePalm.y += throttleBounds.extents.y * .8f;
+        Vector3 palmOffset = new Vector3(0,.085f,.02f);
+        Vector3[] forces = { new Vector3(100,100,100), new Vector3(-100,100,-100),
+            new Vector3(100,-100,-100), new Vector3(-100,-100,100) };
+        float contactError = 0, shoulderTravel = 0, segmentExtension = 0, torsoAngle = 0, torsoTravel = 0, headTravel = 0;
+        int poses = 0;
+        for (int bindPitch = -10; bindPitch <= 10; bindPitch += 10)
+            for (int bindRoll = -10; bindRoll <= 10; bindRoll += 10)
+                for (int bindThrottle = 0; bindThrottle <= 4; bindThrottle++)
+                {
+                    runtime.ResetForScene();
+                    stick.transform.rotation = Quaternion.Euler(bindPitch,0,bindRoll);
+                    throttle.transform.rotation = Quaternion.Euler(1.5f * bindThrottle,0,0);
+                    type.GetField("aircraft", flags).SetValue(runtime, aircraft);
+                    type.GetField("pilot", flags).SetValue(runtime, pilot);
+                    type.GetField("camera", flags).SetValue(runtime, eye);
+                    Check((bool)bind.Invoke(runtime, null), "Production runtime creates Vortex rig at initial stick " + bindPitch + "/" + bindRoll + " throttle " + bindThrottle);
+                    bindControls.Invoke(runtime, null);
+                    Check(runtimeRig.StickBound && runtimeRig.ThrottleBound, "Vortex runtime binds typed private stick/throttle arrays at all initial throws");
+                    Transform chest = runtimeRig.Chest, head = runtimeRig.Head;
+                    Transform rightUpper = runtimeRig.Bone("upperarm_R"), rightLower = runtimeRig.Bone("forearm_R"), rightHand = runtimeRig.Bone("hand_R");
+                    Transform leftUpper = runtimeRig.Bone("upperarm_L"), leftLower = runtimeRig.Bone("forearm_L"), leftHand = runtimeRig.Bone("hand_L");
+                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+                    Check(Vector3.Distance(chest.position, source.bones[1].position) < .00001f &&
+                        Quaternion.Angle(chest.rotation, source.bones[1].rotation) < .05f &&
+                        Vector3.Distance(head.position, source.bones[3].position) < .00001f,
+                        "Vortex hand fitting preserves the native head and torso alignment with body motion disabled");
+                    for (int pitch = -10; pitch <= 10; pitch += 10)
+                        for (int roll = -10; roll <= 10; roll += 10)
+                        {
+                            stick.transform.rotation = Quaternion.Euler(pitch,0,roll);
+                            for (int force = 0; force < forces.Length; force++)
+                                for (int frame = 0; frame < 45; frame++)
+                                {
+                                    throttle.transform.rotation = Quaternion.Euler(6f * (frame % 11) / 10f,0,0);
+                                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[force],Quaternion.identity,1f/60,true,false);
+                                    float rightError = Vector3.Distance(rightHand.position + rightHand.rotation * palmOffset, stick.transform.TransformPoint(stickPalm));
+                                    float leftError = Vector3.Distance(leftHand.position + leftHand.rotation * palmOffset, handle.transform.TransformPoint(throttlePalm));
+                                    contactError = Mathf.Max(contactError, Mathf.Max(rightError, leftError));
+                                    shoulderTravel = Mathf.Max(shoulderTravel, Mathf.Max(
+                                        Vector3.Distance(rightUpper.position, rightUpper.parent.TransformPoint(nativePositions[7])),
+                                        Vector3.Distance(leftUpper.position, leftUpper.parent.TransformPoint(nativePositions[4]))));
+                                    segmentExtension = Mathf.Max(segmentExtension, Mathf.Max(
+                                        Vector3.Distance(rightUpper.position,rightLower.position) + Vector3.Distance(rightLower.position,rightHand.position) - rightReach,
+                                        Vector3.Distance(leftUpper.position,leftLower.position) + Vector3.Distance(leftLower.position,leftHand.position) - leftReach));
+                                    torsoAngle = Mathf.Max(torsoAngle, Quaternion.Angle(chest.rotation, source.bones[1].rotation));
+                                    torsoTravel = Mathf.Max(torsoTravel, Vector3.Distance(chest.position, source.bones[1].position));
+                                    headTravel = Mathf.Max(headTravel, Vector3.Distance(head.position, chest.TransformPoint(source.bones[2].localPosition +
+                                        source.bones[2].localRotation * Vector3.Scale(source.bones[3].localPosition, source.bones[2].localScale))));
+                                    poses++;
+                                }
+                        }
+                }
+        Check(!float.IsNaN(contactError) && !float.IsInfinity(contactError) && contactError < .0005f,
+            "Vortex both palms stay attached through all nine initial and operating stick throws, five throttle bindings and eleven moving throttle levels");
+        Check(shoulderTravel > .02f && shoulderTravel <= CockpitPilotRig.GripShoulderAllowance + .00001f,
+            "Vortex owned shoulder reach stays within fifty millimetres and resets on every copied pose");
+        Check(segmentExtension <= CockpitPilotRig.GripReachAllowance + .0011f,
+            "Vortex upper arm and forearm together stay within the existing eighty millimetre visual fit allowance");
+        Check(torsoAngle <= 2.05f && torsoTravel <= .00301f && headTravel < .00001f,
+            "Vortex grip fitting adds no whole-body shift beyond the existing two-degree bracing and three-millimetre breathing");
+        for (int i = 0; i < source.bones.Length; i++)
+            Check(source.bones[i].localPosition == nativePositions[i] && source.bones[i].localRotation == nativeRotations[i],
+                "Vortex weld leaves native bone untouched: " + source.bones[i].name);
+        for (int frame = 0; frame < 120; frame++)
+        {
+            stick.transform.rotation = Quaternion.Euler(10,0,-10); throttle.transform.rotation = Quaternion.Euler(6,0,0);
+            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false);
+        }
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int frame = 0; frame < 120; frame++)
+        {
+            stick.transform.rotation = Quaternion.Euler(10,0,-10); throttle.transform.rotation = Quaternion.Euler(6,0,0);
+            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false);
+        }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Check(allocated == 0, "Vortex active two-hand contact and owned shoulder reach allocate no managed memory after warm-up");
+        log.AppendLine("Vortex runtime geometry: " + poses + " braced poses; palm error=" + (contactError * 1000).ToString("F4") +
+            " mm; shoulder travel=" + (shoulderTravel * 1000).ToString("F4") + " mm; segment extension=" +
+            (segmentExtension * 1000).ToString("F4") + " mm; torso=" + torsoAngle.ToString("F4") +
+            " degrees/" + (torsoTravel * 1000).ToString("F4") + " mm; warmed allocations=" + allocated + " bytes");
+        log.AppendLine("Runtime boundary: actual Bind/BindControls and rig Pose executed against native-shaped stubs; Application.isBatchMode excludes the live LateUpdate scheduler.");
+        runtime.ResetForScene();
+    }
+
+    private void SetFixtureBone(int index, Vector3 position, Vector3 forward, Vector3 up)
+    {
+        source.bones[index].SetPositionAndRotation(position, Quaternion.LookRotation(forward, up));
+    }
+
+    private void CheckRightThrottleRuntimeRoles()
+    {
+        CreateSource();
+        Quaternion frameRotation = Quaternion.Euler(12,112,-8);
+        Vector3 framePosition = new Vector3(-2,3,5);
+        sourceRoot.transform.SetPositionAndRotation(framePosition, frameRotation);
+        var nativePositions = new Vector3[source.bones.Length];
+        var nativeRotations = new Quaternion[source.bones.Length];
+        for (int i = 0; i < source.bones.Length; i++)
+        { nativePositions[i] = source.bones[i].localPosition; nativeRotations[i] = source.bones[i].localRotation; }
+        var node = new GameObject("Right-throttle native runtime fixture"); owned.Add(node);
+        node.transform.SetPositionAndRotation(framePosition,frameRotation);
+        var aircraft = node.AddComponent<Aircraft>(); aircraft.cockpit = node.AddComponent<AeroPart>();
+        var controlNode = new GameObject("Right-throttle Cockpit owner"); owned.Add(controlNode);
+        controlNode.transform.SetParent(node.transform,false);
+        var cockpit = controlNode.AddComponent<Cockpit>();
+        var stick = new GameObject("Left joystick"); owned.Add(stick);
+        stick.transform.SetParent(controlNode.transform,false);
+        stick.transform.position = source.bones[6].position + frameRotation * new Vector3(.02f,-.08f,.085f);
+        Bounds bounds = new Bounds(Vector3.zero,new Vector3(.04f,.2f,.04f));
+        AddUnreadableHandle(stick,bounds);
+        var throttle = new GameObject("Right centre-console throttle"); owned.Add(throttle);
+        throttle.transform.SetParent(controlNode.transform,false);
+        throttle.transform.position = source.bones[9].position + frameRotation * new Vector3(.03f,-.08f,.1f);
+        AddUnreadableHandle(throttle,bounds);
+        var pilot = node.AddComponent<Pilot>(); pilot.SetFixtureSource(source,animator); aircraft.pilots = new[] { pilot };
+        var runtime = node.AddComponent<CockpitPilot>(); runtime.enabled = false;
+        runtime.Configure(new BoscaliSummer.Modules.Immersion.Configuration.ImmersionSettings(),new BepInEx.Logging.ManualLogSource());
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var type = typeof(CockpitPilot);
+        type.GetField("aircraft",flags).SetValue(runtime,aircraft);
+        type.GetField("pilot",flags).SetValue(runtime,pilot);
+        type.GetField("camera",flags).SetValue(runtime,eye);
+        Check((bool)type.GetMethod("Bind",flags).Invoke(runtime,null), "Production runtime creates a rotated right-throttle cockpit rig");
+        var runtimeRig = (CockpitPilotRig)type.GetField("rig",flags).GetValue(runtime);
+        cockpit.SetFixtureControls(stick.transform,null);
+        type.GetMethod("BindControls",flags).Invoke(runtime,null);
+        Check(runtimeRig.StickOnRight, "Missing throttle initially retains the default right-stick role");
+        cockpit.SetFixtureControls(stick.transform,throttle.transform);
+        type.GetMethod("BindControls",flags).Invoke(runtime,null);
+        Check(!runtimeRig.StickOnRight && runtimeRig.StickHand == runtimeRig.Bone("hand_L") &&
+            runtimeRig.ThrottleHand == runtimeRig.Bone("hand_R") && runtimeRig.StickBound && runtimeRig.ThrottleBound,
+            "Delayed right-side throttle changes runtime roles to left-stick/right-throttle in cockpit coordinates");
+        float contactError = 0, thumbError = 0;
+        Vector3 localPalm = new Vector3(0,.08f,0), palmOffset = new Vector3(0,.085f,.02f);
+        for (int pitch = -10; pitch <= 10; pitch += 10)
+            for (int roll = -10; roll <= 10; roll += 10)
+                for (int level = 0; level < 3; level++)
+                {
+                    stick.transform.localRotation = Quaternion.Euler(pitch,0,roll);
+                    throttle.transform.localRotation = Quaternion.Euler(level * 3f,0,0);
+                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,Vector3.up,Quaternion.identity,1f/60,false,true);
+                    contactError = Mathf.Max(contactError,Mathf.Max(
+                        Vector3.Distance(runtimeRig.StickHand.position + runtimeRig.StickHand.rotation * palmOffset,stick.transform.TransformPoint(localPalm)),
+                        Vector3.Distance(runtimeRig.ThrottleHand.position + runtimeRig.ThrottleHand.rotation * palmOffset,throttle.transform.TransformPoint(localPalm))));
+                    thumbError = Mathf.Max(thumbError,Vector3.Angle(runtimeRig.StickHand.up,stick.transform.forward));
+                }
+        Check(contactError < .0005f && thumbError < .05f,
+            "Mirrored left joystick palm and thumb orientation follow all moving throws while the right hand holds throttle");
+        Vector3 force = new Vector3(100,100,100);
+        for (int frame = 0; frame < 120; frame++)
+        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,Quaternion.identity,1f/60,true,false); }
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int frame = 0; frame < 120; frame++)
+        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,Quaternion.identity,1f/60,true,false); }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Check(allocated == 0 && runtimeRig.StickGripError < .0005f && runtimeRig.ThrottleGripError < .0005f,
+            "Active left-stick/right-throttle contact allocates no managed memory after warm-up");
+        for (int i = 0; i < source.bones.Length; i++)
+            Check(source.bones[i].localPosition == nativePositions[i] && source.bones[i].localRotation == nativeRotations[i],
+                "Mirrored control roles leave native bone untouched: " + source.bones[i].name);
+        log.AppendLine("Right-throttle runtime roles: palm error=" + (contactError * 1000).ToString("F4") +
+            " mm; mirrored thumb error=" + thumbError.ToString("F4") + " degrees; warmed allocations=" + allocated + " bytes");
+        runtime.ResetForScene();
+    }
+
+    private void AddUnreadableHandle(GameObject node, Bounds bounds)
+    {
+        var mesh = new Mesh { name = node.name + " unreadable native bounds" }; owned.Add(mesh);
+        mesh.vertices = new[] { bounds.min, bounds.max }; mesh.bounds = bounds; mesh.UploadMeshData(true);
+        node.AddComponent<MeshFilter>().sharedMesh = mesh;
+    }
+
+    private void CheckLongCyclicRestFit(bool ibis)
+    {
+        // Actual native-game before snapshots, expressed in the neutral cyclic's
+        // coordinate system to remove floating-origin rounding. Preserve the live
+        // native joint orientations as well as its short .455 m shoulder/wrist reach.
+        CreateSource();
+        int[] indices = { 1,4,5,6,7,8,9 };
+        Vector3[] positions = ibis ? new[] {
+            new Vector3(-.040279627f,.772173153f,-.647290508f), new Vector3(-.195853465f,1.077397744f,-.715449171f),
+            new Vector3(-.289976004f,.926671604f,-.546201277f), new Vector3(-.220919401f,.848311657f,-.364502791f),
+            new Vector3(.115778897f,1.077151953f,-.715441311f), new Vector3(.243091477f,.929823564f,-.566112215f),
+            new Vector3(.177269989f,.876623683f,-.374307980f)
+        } : new[] {
+            new Vector3(-.008370047f,.610776536f,-.437269905f), new Vector3(-.164547469f,.911944370f,-.520387389f),
+            new Vector3(-.258361530f,.769614199f,-.343914145f), new Vector3(-.189138336f,.700499104f,-.158500698f),
+            new Vector3(.147084796f,.912307759f,-.520440801f), new Vector3(.274697234f,.772814773f,-.364016298f),
+            new Vector3(.208994719f,.729064476f,-.169820906f)
+        };
+        Quaternion[] rotations = ibis ? new[] {
+            new Quaternion(-.109610094f,.000043058f,-.000390459f,.993974584f), new Quaternion(.042532544f,.373269944f,.897391640f,.231406083f),
+            new Quaternion(.100933320f,.543361775f,.822635626f,-.133570483f), new Quaternion(.260977666f,.487155136f,.743375762f,-.376779785f),
+            new Quaternion(-.044852757f,-.354258760f,-.893414661f,.272578805f), new Quaternion(.153752591f,-.605244577f,-.776698316f,-.082333879f),
+            new Quaternion(.330077842f,-.530103591f,-.715141886f,-.314023699f)
+        } : new[] {
+            new Quaternion(-.134232565f,-.000013051f,.000588745f,.990949682f), new Quaternion(.036468721f,.395471111f,.888079888f,.231488109f),
+            new Quaternion(.103733817f,.563690943f,.808766690f,-.131864540f), new Quaternion(.269812011f,.505677484f,.730677390f,-.370947856f),
+            new Quaternion(-.051308268f,-.376338545f,-.884081999f,.272278866f), new Quaternion(.156292668f,-.624179056f,-.761535496f,-.077696821f),
+            new Quaternion(.338241002f,-.547375735f,-.702099730f,-.305006227f)
+        };
+        for (int i = 0; i < indices.Length; i++) source.bones[indices[i]].SetPositionAndRotation(positions[i],rotations[i]);
+        Vector3[] nativePositions = new Vector3[source.bones.Length]; Quaternion[] nativeRotations = new Quaternion[source.bones.Length];
+        for (int i = 0; i < source.bones.Length; i++)
+        { nativePositions[i] = source.bones[i].localPosition; nativeRotations[i] = source.bones[i].localRotation; }
+        string family = ibis ? "Ibis" : "Tarantula", meshName = ibis ? "utilityHelo1_joystick" : "quadVTOL1_joystick";
+        int vertices = ibis ? 1467 : 1436; float range = ibis ? 7 : 12;
+        Bounds bounds = ibis ? new Bounds(new Vector3(.001507429f,.434294134f,-.081080824f),
+            new Vector3(.107664883f,.869155585f,.220203459f)) : new Bounds(new Vector3(-.002129912f,.400960700f,.054747425f),
+            new Vector3(.107664935f,.848514156f,.225058356f));
+        Vector3 expectedPalm = ibis ? new Vector3(-.011583f,.768872f,-.138844f) : new Vector3(-.015220f,.725218f,-.005443f);
+        var node = new GameObject(family + " live-geometry runtime fixture"); owned.Add(node);
+        var aircraft = node.AddComponent<Aircraft>(); aircraft.cockpit = node.AddComponent<AeroPart>();
+        var controlNode = new GameObject(family + " Cockpit owner"); owned.Add(controlNode); controlNode.transform.SetParent(node.transform,false);
+        var cockpit = controlNode.AddComponent<Cockpit>();
+        var stick = new GameObject(family + " curved cyclic"); owned.Add(stick); stick.transform.SetParent(controlNode.transform,false);
+        var mesh = new Mesh { name = meshName }; owned.Add(mesh);
+        var nativeVertexContract = new Vector3[vertices]; nativeVertexContract[0] = bounds.min; nativeVertexContract[1] = bounds.max;
+        mesh.vertices = nativeVertexContract; mesh.bounds = bounds; mesh.UploadMeshData(true);
+        stick.AddComponent<MeshFilter>().sharedMesh = mesh;
+        Check(Vector3.Distance(CockpitPilotRig.GripPoint(mesh),expectedPalm) < .00001f,
+            family + " authored cyclic head point accepts its unreadable native mesh signature");
+        var wrongMesh = new Mesh { name = meshName }; owned.Add(wrongMesh);
+        wrongMesh.vertices = new[] { bounds.min,bounds.max }; wrongMesh.bounds = bounds; wrongMesh.UploadMeshData(true);
+        Vector3 fallback = bounds.center; fallback.y = Mathf.Lerp(bounds.center.y,bounds.max.y,.8f);
+        Check(CockpitPilotRig.GripPoint(wrongMesh) == fallback,
+            family + " head calibration rejects a matching name with the wrong vertex count");
+        var throttle = new GameObject(family + " compact left collective fixture"); owned.Add(throttle);
+        throttle.transform.SetParent(controlNode.transform,false); throttle.transform.position = source.bones[6].position + new Vector3(-.02f,0,.1f);
+        AddUnreadableHandle(throttle,new Bounds(Vector3.zero,new Vector3(.04f,.2f,.04f)));
+        cockpit.SetFixtureControls(stick.transform,throttle.transform,range,6,true,false);
+        var pilot = node.AddComponent<Pilot>(); pilot.SetFixtureSource(source,animator); aircraft.pilots = new[] { pilot };
+        var runtime = node.AddComponent<CockpitPilot>(); runtime.enabled = false;
+        runtime.Configure(new BoscaliSummer.Modules.Immersion.Configuration.ImmersionSettings(),new BepInEx.Logging.ManualLogSource());
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic; var type = typeof(CockpitPilot);
+        type.GetField("aircraft",flags).SetValue(runtime,aircraft); type.GetField("pilot",flags).SetValue(runtime,pilot); type.GetField("camera",flags).SetValue(runtime,eye);
+        Check((bool)type.GetMethod("Bind",flags).Invoke(runtime,null), family + " actual live seated source binds through the unmodified runtime");
+        Vector3 cameraPosition = eye.transform.position; Quaternion cameraRotation = eye.transform.rotation;
+        type.GetMethod("BindControls",flags).Invoke(runtime,null);
+        var fitted = (CockpitPilotRig)type.GetField("rig",flags).GetValue(runtime);
+        Check(fitted.StickOnRight && fitted.StickBound && fitted.ThrottleBound, family + " full authored cyclic throw is bound with a cached owned rest fit");
+        float extra = fitted.StickRestFit;
+        Check(extra > .08f && extra <= CockpitPilotRig.GripRestAllowance && fitted.ThrottleRestFit == 0,
+            family + " calibrated rest fit is bounded and belongs only to the long-cyclic arm");
+        Transform upper = fitted.Bone("upperarm_R"), lower = fitted.Bone("forearm_R"), hand = fitted.StickHand;
+        float nativeReach = Vector3.Distance(source.bones[7].position,source.bones[8].position) + Vector3.Distance(source.bones[8].position,source.bones[9].position);
+        fitted.CopySeatedPose();
+        Check(Mathf.Abs(Vector3.Distance(upper.position,lower.position) + Vector3.Distance(lower.position,hand.position) - nativeReach - extra) < .00001f &&
+            Vector3.Distance(fitted.Head.position,source.bones[3].position) < .00001f && Vector3.Distance(fitted.Chest.position,source.bones[1].position) < .00001f,
+            family + " fixed rest fit changes only proportional arm joint offsets and preserves seat/head/chest");
+        Vector3 fittedLower = lower.localPosition, fittedHand = hand.localPosition;
+        for (int i = 0; i < 120; i++) fitted.CopySeatedPose();
+        Check(lower.localPosition == fittedLower && hand.localPosition == fittedHand && fitted.StickRestFit == extra,
+            family + " repeated native pose copying never accumulates cached rest-fit offsets");
+        Vector3[] forces = { new Vector3(100,100,100),new Vector3(-100,100,-100),new Vector3(100,-100,-100),new Vector3(-100,-100,100) };
+        float error = 0, shoulderShift = 0, extension = 0;
+        for (int pitch = -1; pitch <= 1; pitch++) for (int roll = -1; roll <= 1; roll++)
+            for (int force = 0; force < forces.Length; force++) for (int frame = 0; frame < 90; frame++)
+            {
+                stick.transform.localRotation = Quaternion.Euler(pitch * range,0,-roll * range);
+                throttle.transform.localRotation = Quaternion.Euler(6f * (frame % 11) / 10,0,0);
+                fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[force],Quaternion.identity,1f/60,true,false);
+                error = Mathf.Max(error,Vector3.Distance(hand.position + hand.rotation * new Vector3(0,.085f,.02f),stick.transform.TransformPoint(expectedPalm)));
+                shoulderShift = Mathf.Max(shoulderShift,Vector3.Distance(upper.position,upper.parent.TransformPoint(nativePositions[7])));
+                extension = Mathf.Max(extension,Vector3.Distance(upper.position,lower.position) + Vector3.Distance(lower.position,hand.position) - nativeReach - extra);
+            }
+        Check(error < .0005f && shoulderShift <= CockpitPilotRig.GripShoulderAllowance + .00001f && extension <= CockpitPilotRig.GripReachAllowance + .0011f,
+            family + " all authored cyclic corners retain physical contact under G with the original fifty/eighty-millimetre per-frame bounds");
+        Check(fitted.StickRestFit == extra && eye.transform.position == cameraPosition && eye.transform.rotation == cameraRotation,
+            family + " cached rest fit and native camera remain unchanged throughout moving controls and bracing");
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int frame = 0; frame < 120; frame++)
+        { fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false); }
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Check(allocated == 0, family + " cached rest-fit copying with both active hands allocates zero managed bytes after warm-up");
+        for (int i = 0; i < source.bones.Length; i++)
+            Check(source.bones[i].localPosition == nativePositions[i] && source.bones[i].localRotation == nativeRotations[i],
+                family + " rest calibration leaves native bone untouched: " + source.bones[i].name);
+        fitted.SetControls(null,null); fitted.CopySeatedPose();
+        Check(fitted.StickRestFit == 0 && fitted.ThrottleRestFit == 0 && lower.localPosition == source.bones[8].localPosition && hand.localPosition == source.bones[9].localPosition,
+            family + " missing/replaced control owner releases cached rest fitting back to native owned pose");
+        log.AppendLine(family + " actual cyclic geometry: cached fit=" + (extra * 1000).ToString("F4") + " mm; full-throw G palm error=" +
+            (error * 1000).ToString("F4") + " mm; shoulder=" + (shoulderShift * 1000).ToString("F4") +
+            " mm; per-frame extension=" + (extension * 1000).ToString("F4") + " mm; warmed allocations=" + allocated + " bytes");
+        runtime.ResetForScene();
     }
 
     private void CheckDelayedGripBinding(Transform cockpit)

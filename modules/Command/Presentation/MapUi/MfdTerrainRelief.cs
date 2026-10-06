@@ -2,11 +2,11 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using BepInEx;
 using HarmonyLib;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Util;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -714,15 +714,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     bundled ? typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(
                         mapAssetName == NavalMap ? NavalStyleResource : StyleResource) : null)
                 {
-                    if (stream == null || stream.Length <= 0 || stream.Length > 8 * 1024 * 1024) return;
-                    var bytes = new byte[stream.Length];
-                    int read = 0;
-                    while (read < bytes.Length)
-                    {
-                        int count = stream.Read(bytes, read, bytes.Length - read);
-                        if (count <= 0) return;
-                        read += count;
-                    }
+                    byte[] bytes = EmbeddedResources.ReadAll(stream, 8 * 1024 * 1024);
+                    if (bytes == null) return;
                     var loaded = new Texture2D(2, 2, TextureFormat.RGB24, false);
                     if (!loaded.LoadImage(bytes, true) || loaded.width > 4096 || loaded.height > 4096)
                     { Object.Destroy(loaded); return; }

@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Events.Presentation;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Events
@@ -26,7 +25,7 @@ namespace BoscaliSummer.Modules.Events
         {
             EventsNet network = context.AddComponent<EventsNet>();
             EventsManager manager = context.AddSceneService<EventsManager>(62);
-            manager.Configure(context.Settings.Events, network, context.Logger);
+            manager.Configure(context.Settings.Events, network);
             network.Configure(manager);
             context.AddService<IActiveEventsView>(manager);
 
@@ -34,7 +33,7 @@ namespace BoscaliSummer.Modules.Events
             panel.Configure(context.Settings.Events, manager, context.Logger);
 
             SuperEventAlert alert = context.AddSceneService<SuperEventAlert>(67);
-            alert.Configure(context.Settings.Events, manager, context.Logger);
+            alert.Configure(context.Settings.Events, manager);
 
             // How hard events bite, and whether the scripted ones fire at all. The calm
             // period between them is rotation pacing, set once in the config file.

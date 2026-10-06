@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Show(RouteData d, string emptyWord)
         {
             data = d;
-            WmcKit.Set(empty, d == null || d.Count == 0 ? emptyWord ?? "" : "");
+            AvText.Set(empty, d == null || d.Count == 0 ? emptyWord ?? "" : "");
             Draw();
         }
 
@@ -89,13 +89,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             RouteData d = data;
             float w = width, h = CardH;
             Color hair = AvStyleHost.FuiColor("hairline", AvTheme.Hairline), key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary), dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary), dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Color caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution), select = AvStyleHost.FuiColor("select", AvTheme.Accent);
             foreach (TMP_Text t in numbers)
                 if (t.gameObject.activeSelf) t.gameObject.SetActive(false);
             if (d == null || d.Count == 0)
             {
-                WmcKit.Set(caption, "");
+                AvText.Set(caption, "");
                 vector.Commit();
                 return;
             }
@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (gz0 < 0f) gz0 += step;
             for (float x = gx0; x < w; x += step) AvStrokes.Line(b, x, 0f, x, h, 0.7f, gridC);
             for (float y = gz0; y < h; y += step) AvStrokes.Line(b, 0f, y, w, y, 0.7f, gridC);
-            WmcKit.Set(caption, "N ↑   " + AvNum.Fixed(stepKm, 0) + " KM GRID");
+            AvText.Set(caption, "N ↑   " + AvNum.Fixed(stepKm, 0) + " KM GRID");
             float prevX = d.HaveFrom ? d.FromX * scale + ox : 0f, prevY = d.HaveFrom ? d.FromZ * scale + oz : 0f;
             bool havePrev = d.HaveFrom;
             for (int i = 0; i < d.Count; i++)
@@ -171,9 +171,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             card.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            card.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            card.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             card.SetVerticesDirty();
-            caption.color = empty.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            caption.color = empty.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             if (data != null) Draw();
         }
     }
@@ -301,13 +301,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 SetShown(rows[i], i < n);
                 if (i >= n) continue;
                 Row r = rows[i];
-                WmcKit.Set(r.No, (i + 1).ToString());
-                WmcKit.Set(r.Brg, d.Brg[i]);
-                WmcKit.Set(r.Dist, d.Dist[i]);
-                WmcKit.Set(r.Alt, d.Alt[i]);
-                WmcKit.Set(r.Spd, d.Spd[i]);
-                WmcKit.Set(r.At, d.At[i]);
-                WmcKit.Set(r.Eta, d.Eta[i]);
+                AvText.Set(r.No, (i + 1).ToString());
+                AvText.Set(r.Brg, d.Brg[i]);
+                AvText.Set(r.Dist, d.Dist[i]);
+                AvText.Set(r.Alt, d.Alt[i]);
+                AvText.Set(r.Spd, d.Spd[i]);
+                AvText.Set(r.At, d.At[i]);
+                AvText.Set(r.Eta, d.Eta[i]);
                 r.State = i == d.Selected ? 3 : d.Current >= 0 && i == d.Current ? 2 : d.Current >= 0 && i < d.Current ? 1 : 0;
                 Paint(r);
             }
@@ -320,10 +320,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void Paint(Row r)
         {
-            Color inert = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row").Background, AvTheme.SurfaceInert);
+            Color inert = AvStyleHost.FuiFill("row", AvTheme.SurfaceInert);
             Color select = AvStyleHost.FuiColor("select", AvTheme.Accent), ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             Color hair = AvStyleHost.FuiColor("hairline", AvTheme.Hairline), key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            Color dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Color back = r.State == 3 ? Color.Lerp(inert, select, 0.18f) : r.Hover ? Color.Lerp(inert, Color.white, 0.07f) : inert;
             r.Frame.Paint(back, Color.clear);
             r.Rail.color = r.State == 3 ? select : r.State == 2 ? ink : hair;

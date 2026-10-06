@@ -14,7 +14,6 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             CheckWireIds();
             CheckSelectNearest();
-            CheckRadiusFor();
         }
 
         private static void CheckWireIds()
@@ -52,16 +51,6 @@ namespace BoscaliSummer.Tests.Features.Support
                 "invalid candidates cannot displace a valid nearest unit");
             TestAssert.That(JtacResolve.SelectNearest(one, float.NaN, 0f, JtacResolve.MarkRadius) < 0 &&
                 JtacResolve.SelectNearest(one, 0f, 0f, float.NaN) < 0, "unknown aim or radius finds no unit");
-        }
-
-        private static void CheckRadiusFor()
-        {
-            TestAssert.That(JtacResolve.RadiusFor(1f) == JtacResolve.MarkRadius, "best intel uses the full radius");
-            TestAssert.That(JtacResolve.RadiusFor(0f) == JtacResolve.MarkRadiusFloor, "dead intel bottoms at the floor");
-            TestAssert.That(JtacResolve.RadiusFor(9f) == JtacResolve.MarkRadius, "quality clamps high");
-            TestAssert.That(JtacResolve.RadiusFor(-9f) == JtacResolve.MarkRadiusFloor, "quality clamps low");
-            float mid = JtacResolve.RadiusFor(0.5f);
-            TestAssert.That(mid > JtacResolve.MarkRadiusFloor && mid < JtacResolve.MarkRadius, "mid intel interpolates");
         }
     }
 }

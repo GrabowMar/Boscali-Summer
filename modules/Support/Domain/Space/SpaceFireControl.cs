@@ -13,20 +13,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float StandardCep = 120f, OpticalRadius = 25f, SarRadius = 30f;
         private const float LargestUnitSample = .99999994f;
 
-        public static SpaceImpact Sample(float x, float z, bool confirmedMark, bool sarOnly,
-            float angleSample, float radiusSample)
-        {
-            if (!TrySample(x, z, confirmedMark, sarOnly, angleSample, radiusSample, out SpaceImpact impact))
-                throw new ArgumentOutOfRangeException("inputs", "Finite global coordinates and finite scatter samples are required.");
-            return impact;
-        }
-
         /// <summary>Only the host's immutable confirmed MARK provenance may select the optical/SAR disk.</summary>
         public static bool TrySample(float x, float z, bool confirmedMark, bool sarOnly,
             float angleSample, float radiusSample, out SpaceImpact impact)
         {
             impact = default;
-            if (!Coordinate(x) || !Coordinate(z) || !SpaceRules.Finite(angleSample) || !SpaceRules.Finite(radiusSample)) return false;
+            if (!Coordinate(x) || !Coordinate(z) || !float.IsFinite(angleSample) || !float.IsFinite(radiusSample)) return false;
             double angle = UnitSample(angleSample) * 2d * Math.PI;
             double sample = UnitSample(radiusSample);
             double maximum = sarOnly ? SarRadius : OpticalRadius;
@@ -63,6 +55,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         private static float UnitSample(float value) => Math.Max(0, Math.Min(LargestUnitSample, value));
-        private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= 10000000f;
+        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= 10000000f;
     }
 }

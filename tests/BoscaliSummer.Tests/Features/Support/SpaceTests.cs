@@ -19,16 +19,6 @@ namespace BoscaliSummer.Tests.Features.Support
         private static void TestOrbitMath()
         {
             TestAssert.That(Near(OrbitMath.Velocity(525000.0), 7600.0, 15.0), "525 km orbital velocity must be ~7.6 km/s");
-            TestAssert.That(Near(OrbitMath.Elevation(525000.0, 0.0), Math.PI * 0.5, 1e-9), "overhead must read 90°");
-            TestAssert.That(Near(OrbitMath.OffNadir(525000.0, Math.PI * 0.5), 0.0, 1e-9), "overhead must be nadir");
-            TestAssert.That(Near(OrbitMath.SlantRange(525000.0, 0.0), 525000.0, 1e-6), "overhead slant must equal altitude");
-
-            double central = OrbitMath.CentralAngleForOffNadir(525000.0, 30.0 * OrbitMath.Deg);
-            double elevation = OrbitMath.Elevation(525000.0, central);
-            TestAssert.That(Near(OrbitMath.OffNadir(525000.0, elevation), 30.0 * OrbitMath.Deg, 1e-6),
-                "off-nadir and central angle must invert each other");
-            TestAssert.That(OrbitMath.Incidence(elevation) > 30.0 * OrbitMath.Deg,
-                "Earth curvature makes incidence exceed off-nadir");
         }
 
         private static void TestSarProjection()

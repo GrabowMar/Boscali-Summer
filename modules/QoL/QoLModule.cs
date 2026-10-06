@@ -4,8 +4,6 @@ using BoscaliSummer.Modules.QoL.Runtime;
 using BoscaliSummer.Modules.QoL.Presentation;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.QoL
 {

@@ -1,5 +1,4 @@
 using BoscaliSummer.Modules.Immersion.Domain;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
@@ -29,12 +28,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public Quaternion Offset { get; private set; } = Quaternion.identity;
         public Vector3 ForceG => force;
         public Vector3 AnglesDeg => new Vector3(pitch, yaw, roll);
-
-        public void DebugForce(Vector3 forceG, float seconds)
-        {
-            debugForce = forceG;
-            debugUntil = Time.unscaledTime + seconds;
-        }
 
         public void Measure(Aircraft aircraft, float dt)
         {

@@ -3,9 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Util
 {
     /// <summary>Engine-free JSON reader for mod data files. Produces Dictionary (case-insensitive keys),
@@ -40,6 +37,9 @@ namespace BoscaliSummer.Core.Util
                       .Replace("\r", "\\r")
                       .Replace("\t", "\\t");
         }
+
+        /// <summary>Invariant round-trip float for JSON writers; NaN and infinities are null.</summary>
+        public static string Num(float v) => float.IsNaN(v) || float.IsInfinity(v) ? "null" : v.ToString("R", CultureInfo.InvariantCulture);
 
         public static bool TryGetList(Dictionary<string, object> dict, string key, out List<object> list)
         {

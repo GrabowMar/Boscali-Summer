@@ -76,8 +76,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void SetFace(int k, string label, GridInput input)
         {
             Cells[k].Label = label;
-            WmcKit.Set(keys[k], k < ChordResolver.OrderKeys.Length ? ChordResolver.OrderKeys[k].ToString() : "");
-            WmcKit.Set(marks[k], input == GridInput.Point ? "PT" : input == GridInput.Target ? "TGT" : input == GridInput.Area ? "AREA" : "");
+            AvText.Set(keys[k], k < ChordResolver.OrderKeys.Length ? ChordResolver.OrderKeys[k].ToString() : "");
+            AvText.Set(marks[k], input == GridInput.Point ? "PT" : input == GridInput.Target ? "TGT" : input == GridInput.Area ? "AREA" : "");
             rails[k].color = WmcState.Color(OrderGrid.RowRail(k / OrderGrid.Columns));
         }
 
@@ -90,15 +90,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 leds[k].gameObject.SetActive(on);
                 ledText[k].gameObject.SetActive(on);
             }
-            if (on) WmcKit.Set(ledText[k], letters);
+            if (on) AvText.Set(ledText[k], letters);
         }
 
         /// <summary>The reason a key is off, in a word or two ("HOST", "NO AC", "SOON"); empty when it is pressable.</summary>
-        public void SetWhy(int k, string word) => WmcKit.Set(whys[k], word ?? "");
+        public void SetWhy(int k, string word) => AvText.Set(whys[k], word ?? "");
 
         public override void Restyle()
         {
-            Color hint = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            Color hint = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo), caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
             Color ink = AvStyleHost.FuiColor("ground", AvTheme.TextInk);
             for (int k = 0; k < Count; k++)

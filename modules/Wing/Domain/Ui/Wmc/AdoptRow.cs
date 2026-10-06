@@ -1,15 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>SUPPLY's ADOPT row (critique C4: taking command of friendly AI selected on the map is ADOPT; RECRUIT means

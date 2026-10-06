@@ -1,18 +1,16 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Modules.TheaterOps.Networking;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using NuclearOption.SavedMission;
 using NuclearOption.SavedMission.Objectives;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
@@ -44,7 +42,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private TheaterLogisticsService logistics;
         private LivingFrontNet network;
         private NavalFrontService naval;
-        private ManualLogSource logger;
         private float nextRoll;
         private int cursor;
         private string localCommandStatus = "";
@@ -93,14 +90,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
             TheaterLogisticsService logisticsService, LivingFrontNet transport,
-            NavalFrontService navalService, ManualLogSource log)
+            NavalFrontService navalService)
         {
             settings = config;
             priority = priorityService;
             logistics = logisticsService;
             network = transport;
             naval = navalService;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -241,7 +237,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (unit == null || unit.disabled || !ReferenceEquals(unit.NetworkHQ, war.HQ))
                     continue;
                 GlobalPosition point = unit.GlobalPosition();
-                if (DistanceSquared(point.x, point.z, op.X, op.Z) >
+                if (Scalar.Distance2DSquared(point.x, point.z, op.X, op.Z) >
                     PresenceRadius * PresenceRadius) continue;
                 if (unit is Aircraft) op.AirGroups++;
                 else if (unit is Ship) op.NavalGroups++;
@@ -333,7 +329,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     !(objective is IObjectiveWithPosition positioned) || positioned.Positions.Count == 0)
                     return;
                 GlobalPosition point = positioned.Positions[0].Position;
-                if (!Finite(point.x) || !Finite(point.z)) return;
+                if (!float.IsFinite(point.x) || !float.IsFinite(point.z)) return;
                 string key = objective.SavedObjective.UniqueName;
                 if (string.IsNullOrEmpty(key)) return;
                 for (int i = 0; i < war.Candidates.Count; i++)
@@ -360,7 +356,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     if (length < 2) break;
                     FrontlineTracePoint point = tracePoints[start + (length - 1) * part / 4];
-                    if (!Finite(point.X) || !Finite(point.Z)) continue;
+                    if (!float.IsFinite(point.X) || !float.IsFinite(point.Z)) continue;
                     int gx = Mathf.FloorToInt(point.X / LocalSectorSize);
                     int gz = Mathf.FloorToInt(point.Z / LocalSectorSize);
                     string key = "S:" + gx + ":" + gz;
@@ -368,7 +364,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     for (int i = 0; i < war.Candidates.Count; i++)
                         if (war.Candidates[i].Key == key ||
                             (!war.Candidates[i].Objective &&
-                             DistanceSquared(war.Candidates[i].X, war.Candidates[i].Z,
+                             Scalar.Distance2DSquared(war.Candidates[i].X, war.Candidates[i].Z,
                                 point.X, point.Z) < 2000f * 2000f)) { duplicate = true; break; }
                     if (duplicate) continue;
                     war.Candidates.Add(new FrontCandidate
@@ -407,11 +403,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GlobalPosition position;
                 if (friendly) position = unit.GlobalPosition();
                 else if (!war.HQ.TryGetKnownPosition(unit, out position)) continue;
-                if (!Finite(position.x) || !Finite(position.z)) continue;
+                if (!float.IsFinite(position.x) || !float.IsFinite(position.z)) continue;
                 for (int j = 0; j < war.Candidates.Count; j++)
                 {
                     FrontCandidate front = war.Candidates[j];
-                    if (DistanceSquared(position.x, position.z, front.X, front.Z) >
+                    if (Scalar.Distance2DSquared(position.x, position.z, front.X, front.Z) >
                         PresenceRadius * PresenceRadius) continue;
                     if (friendly) front.Friendly++; else front.Hostile++;
                 }
@@ -434,7 +430,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     airbase == null || airbase.AttachedAirbase || airbase.UnitDestroyed()) continue;
                 Transform center = airbase.center != null ? airbase.center : airbase.transform;
                 GlobalPosition position = center.GlobalPosition();
-                float distance = DistanceSquared(x, z, position.x, position.z);
+                float distance = Scalar.Distance2DSquared(x, z, position.x, position.z);
                 if (distance > nearest) continue;
                 nearest = distance;
                 owned = ReferenceEquals(airbase.CurrentHQ, hq);
@@ -478,7 +474,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     front = war.Reads[i];
                     return LivingWarRules.Score(front, war.Posture, out string kind) > 0f &&
-                        kind == offer.Kind && DistanceSquared(offer.X, offer.Z, front.X, front.Z) <= 1f;
+                        kind == offer.Kind && Scalar.Distance2DSquared(offer.X, offer.Z, front.X, front.Z) <= 1f;
                 }
             return false;
         }
@@ -546,7 +542,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!secured && !repulsed && !timedOut) return false;
             string outcome = secured ? "SECURED" : repulsed ? "REPULSED" : "STALLED";
             war.Log.Add(op.Label + " · " + outcome);
-            logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Label + " " + outcome);
+            Plugin.Logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Label + " " + outcome);
             ClearOperationDirective(war);
             naval?.ClearObjective(war.HQ, op.Key);
             war.Active = null;
@@ -637,12 +633,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             out PriorityDirective directive, out bool offensive)
         {
             directive = default; offensive = false;
-            if (!Authoritative || !Finite(x) || !Finite(z) || hq?.faction == null ||
+            if (!Authoritative || !float.IsFinite(x) || !float.IsFinite(z) || hq?.faction == null ||
                 !wars.TryGetValue(hq.faction.factionName, out FactionWar war)) return false;
             if (war.GroupAssignments.TryGetValue(groupId, out var assigned))
             {
                 if (war.Active != null && war.Active.Key == assigned.Key &&
-                    DistanceSquared(x, z, war.Active.X, war.Active.Z) <= AssignmentRadius * AssignmentRadius)
+                    Scalar.Distance2DSquared(x, z, war.Active.X, war.Active.Z) <= AssignmentRadius * AssignmentRadius)
                 {
                     Operation active = war.Active;
                     directive = new PriorityDirective(active.Key, active.Label, active.X, 0f, active.Z);
@@ -652,7 +648,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 for (int i = 0; i < war.Fronts.Count; i++)
                 {
                     TheaterFrontView held = war.Fronts[i];
-                    if (held.Key != assigned.Key || DistanceSquared(x, z, held.X, held.Z) >
+                    if (held.Key != assigned.Key || Scalar.Distance2DSquared(x, z, held.X, held.Z) >
                         AssignmentRadius * AssignmentRadius) continue;
                     directive = new PriorityDirective(held.Key, held.Label, held.X, 0f, held.Z);
                     return true;
@@ -669,7 +665,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (war.Active != null && groupId % 3 == 0)
             {
                 Operation op = war.Active;
-                float distance = DistanceSquared(x, z, op.X, op.Z);
+                float distance = Scalar.Distance2DSquared(x, z, op.X, op.Z);
                 if (distance <= nearest)
                 {
                     nearest = distance; key = op.Key; label = op.Label;
@@ -680,7 +676,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 for (int i = 0; i < war.Fronts.Count; i++)
                 {
                     TheaterFrontView front = war.Fronts[i];
-                    float distance = DistanceSquared(x, z, front.X, front.Z);
+                    float distance = Scalar.Distance2DSquared(x, z, front.X, front.Z);
                     if (distance > nearest) continue;
                     nearest = distance; key = front.Key; label = front.Label;
                     targetX = front.X; targetZ = front.Z;
@@ -853,11 +849,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal bool HasSnapshotFor(string faction) =>
             wars.TryGetValue(faction, out FactionWar war) && war.HasSnapshot;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        private static float DistanceSquared(float ax, float az, float bx, float bz)
-        {
-            float dx = ax - bx, dz = az - bz;
-            return dx * dx + dz * dz;
-        }
     }
 }

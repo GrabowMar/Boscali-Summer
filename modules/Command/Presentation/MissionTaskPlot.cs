@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             worldZ = worldSizeZ;
             selfX = ownshipX;
             selfZ = ownshipZ;
-            heading = Finite(headingDegrees) ? headingDegrees : 0f;
+            heading = float.IsFinite(headingDegrees) ? headingDegrees : 0f;
             Redraw();
         }
 
@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null && !aircraft.disabled && !aircraft.HasEjected())
             {
                 Vector3 global = aircraft.transform.position.ToGlobalPosition().AsVector3();
-                if (Finite(global.x) && Finite(global.z)) { selfX = global.x; selfZ = global.z; }
+                if (float.IsFinite(global.x) && float.IsFinite(global.z)) { selfX = global.x; selfZ = global.z; }
                 heading = aircraft.transform.eulerAngles.y;
             }
         }
@@ -195,7 +195,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Rect targetBox = default;
             if (plotted)
             {
-                float radius = Finite(entry.Radius) && entry.Radius > 0f ? entry.Radius*w/cropWidth : 0f;
+                float radius = float.IsFinite(entry.Radius) && entry.Radius > 0f ? entry.Radius*w/cropWidth : 0f;
                 // Clip the actual operating area through the viewport; never clamp its physical radius.
                 if (radius > 1f && radius < Mathf.Max(w, h)*2f)
                 {
@@ -271,7 +271,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (!plotted) return entry != null && entry.IsOffered ? "OFFER / NO PERMITTED FIX" : "NO PERMITTED TASK FIX";
             string quality = lastKnown ? "LAST KNOWN" : entry.Tasking?.Contact == ObjectiveContact.Fixed ? "FIXED POSITION" : "KNOWN POSITION";
             float age = entry.Tasking?.ContactAgeSeconds ?? float.NaN;
-            if (Finite(age) && age >= 0f && entry.Tasking?.Contact != ObjectiveContact.Fixed)
+            if (float.IsFinite(age) && age >= 0f && entry.Tasking?.Contact != ObjectiveContact.Fixed)
                 quality += " / AT REPORT " + Math.Ceiling(age).ToString("0") + "s";
             if (ownship)
             {
@@ -286,8 +286,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             float cx = contact ? entry.X : ownship ? selfX : 0f;
             float cz = contact ? entry.Z : ownship ? selfZ : 0f;
-            float neededX = contact ? Mathf.Max(8000f, Finite(entry.Radius) ? entry.Radius*3f : 0f) : worldX;
-            float neededZ = contact ? Mathf.Max(8000f, Finite(entry.Radius) ? entry.Radius*3f : 0f) : worldZ;
+            float neededX = contact ? Mathf.Max(8000f, float.IsFinite(entry.Radius) ? entry.Radius*3f : 0f) : worldX;
+            float neededZ = contact ? Mathf.Max(8000f, float.IsFinite(entry.Radius) ? entry.Radius*3f : 0f) : worldZ;
             if (contact && ownship)
             {
                 cx = (entry.X+selfX)*.5f;
@@ -356,11 +356,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             return position.x >= 0f && position.y >= 0f && position.x <= w && position.y <= h;
         }
 
-        private bool InTheater(float x, float z) => Finite(x) && Finite(z) &&
+        private bool InTheater(float x, float z) => float.IsFinite(x) && float.IsFinite(z) &&
             Mathf.Abs(x) <= worldX*.5f && Mathf.Abs(z) <= worldZ*.5f;
 
-        private static bool Finite(float n) => !float.IsNaN(n) && !float.IsInfinity(n);
-        private static bool ValidSpan(float n) => Finite(n) && n > 1000f && n <= 10000000f;
+        private static bool ValidSpan(float n) => float.IsFinite(n) && n > 1000f && n <= 10000000f;
 
         private static Image Image(RectTransform parent, string name)
         {

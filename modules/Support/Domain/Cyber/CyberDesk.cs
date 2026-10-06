@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
@@ -36,7 +37,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case CyberOutcome.HeldCap: return "NEGATIVE: " + CyberRules.MaxHeldPerFaction + " NODES HELD — BURN OR DROP ONE";
                 case CyberOutcome.TruckDown: return "NEGATIVE: EW TRUCK DOWN — NO REACH UNTIL IT IS RESTORED";
                 case CyberOutcome.TruckLocked: return "NEGATIVE: EW TRUCK TRACED — LOCKED " + Math.Max(0, detail) + " S";
-                case CyberOutcome.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + Math.Max(0, detail) + " CR";
+                case CyberOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: Math.Max(0, detail));
                 case CyberOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case CyberOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case CyberOutcome.BoardFull: return "NEGATIVE: BOARD FULL — FIRE A POST OR DROP THE NODE";
@@ -302,7 +303,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public NodeIdTable Ids { get; } = new NodeIdTable();
         public NodeReveal Reveal { get; } = new NodeReveal();
         public IReadOnlyList<CyberNode> Visible => visible;
-        public IReadOnlyList<EwSource> Trucks => trucks;
         /// <summary>
         /// Cross-faction trace multiplier (an enemy holding this faction's DATA CENTER node, x1.3). Effects live in the HOLDER's desk, so the runtime
         /// folds every other faction's book into this port; the desk only multiplies. Null reads as 1.

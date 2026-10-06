@@ -519,7 +519,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Near(state.CooldownFactor, 1f, "no jam, healthy uplink");
             state.JamFactor = 1.5f;
             Near(state.CooldownFactor, 1.5f, "BIRD JAM +50 %");
-            TestAssert.That(state.TryStart(BirdTask.Scan, 0f, 21f), "a scan starts");
+            TestAssert.That(state.TryReserve(BirdTask.Scan, 0f, out SpaceTaskReservation reservation) && state.Commit(reservation, 0f, 21f), "a scan starts");
             Near(state.CooldownRemaining(BirdTask.Scan, 0f), 135f, "the 90 s scan cooldown becomes 135 s");
             state.SetUplink(0, 0.4f, false, 10f);
             Near(state.CooldownFactor, 1.25f * 1.5f, "damaged and jammed stack");

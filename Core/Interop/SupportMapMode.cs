@@ -11,7 +11,6 @@ namespace BoscaliSummer.Interop
     /// </summary>
     public static class SupportMapMode
     {
-        public static int ApiVersion => 1;
 
         /// <summary>Whether a support action is armed for a map click right now.</summary>
         public static bool GestureArmed { get; internal set; }

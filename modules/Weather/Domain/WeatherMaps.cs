@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float threshold = 1f - cover;
             return WeatherMath.Smoothstep(threshold - Softness, threshold + Softness, detail) * WeatherMath.Smoothstep(0f, 0.15f, cover);
         }
-
-        public static byte ToByte(float density) => (byte)(WeatherMath.Clamp01(density) * 255f + 0.5f);
     }
 
     /// <summary>The radar colour ladder, in words as well as levels.</summary>

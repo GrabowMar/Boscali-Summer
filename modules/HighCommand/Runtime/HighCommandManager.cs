@@ -1,13 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.HighCommand.Configuration;
 using BoscaliSummer.Modules.HighCommand.Domain;
 using BoscaliSummer.Modules.HighCommand.Networking;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -114,7 +112,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         private HighCommandSettings settings;
         private HighCommandNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private int missionGeneration;
         private float nextTick;
@@ -162,11 +159,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         // ---- Lifecycle --------------------------------------------------------------------
 
-        public void Configure(HighCommandSettings configuration, HighCommandNet transport, ManualLogSource log)
+        public void Configure(HighCommandSettings configuration, HighCommandNet transport)
         {
             settings = configuration;
             network = transport;
-            logger = log;
             wasEnabled = settings.Enabled.Value;
             Active = this;
         }
@@ -236,7 +232,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             }
 
             float now = mission.MissionTime;
-            if (!Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             if (now < nextTick) return;
             nextTick = now + 1f;
             Tick(now);
@@ -297,7 +293,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 };
                 command.Sites.AddRange(sites);
                 factions.Add(command);
-                logger?.LogInfo("[HighCommand] Staff formed for " + command.FactionName + ": " +
+                Plugin.Logger?.LogInfo("[HighCommand] Staff formed for " + command.FactionName + ": " +
                                 command.Tree.LiveCount + " posts over " + sites.Count + " bases.");
             }
         }
@@ -531,7 +527,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private static float LogAge(float time, float now)
         {
             float age = now - time;
-            if (!Finite(age) || age <= 0f) return 0f;
+            if (!float.IsFinite(age) || age <= 0f) return 0f;
             return age < CommandSnapshotRules.MaximumLogAge ? age : CommandSnapshotRules.MaximumLogAge;
         }
 
@@ -618,6 +614,5 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         private static string Percent(float value) => Mathf.RoundToInt(Mathf.Clamp01(value) * 100f) + "%";
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

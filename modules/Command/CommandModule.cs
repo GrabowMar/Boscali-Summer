@@ -6,8 +6,6 @@ using BoscaliSummer.Modules.Command.Presentation;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Command
@@ -69,9 +67,9 @@ namespace BoscaliSummer.Modules.Command
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);
             context.AddService<ITerritoryIngress>(territory);
-            manager.Configure(context.Logger, moraleNet);
-            overlay.Configure(context.Settings.Command, manager, compat, context.Logger, territory);
-            threats.Configure(context.Settings.Command, context.Logger);
+            manager.Configure(moraleNet);
+            overlay.Configure(context.Settings.Command, manager, compat, territory);
+            threats.Configure(context.Settings.Command);
             strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
         }
     }

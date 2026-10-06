@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public bool Observe(ulong id, int aircraft, ActivityControls controls, float now)
         {
-            if (!controls.Finite || !Finite(now)) return false;
+            if (!controls.Finite || !float.IsFinite(now)) return false;
             Entry entry = Get(id);
             if (entry == null) return false;
             if (!entry.HasControls || entry.Aircraft != aircraft)
@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public void Record(ulong id, float now)
         {
-            if (!Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             Entry entry = Get(id);
             if (entry != null) entry.LastInput = now;
         }
@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         /// <summary>Host receipt stamp only. Wall time bounds transport abuse; activity expires on mission time.</summary>
         public bool Pulse(ulong id, float now, float wallTime)
         {
-            if (!Finite(now) || !Finite(wallTime)) return false;
+            if (!float.IsFinite(now) || !float.IsFinite(wallTime)) return false;
             Entry entry = Get(id);
             if (entry == null || wallTime - entry.LastPulse < 1f) return false;
             entry.LastPulse = wallTime;
@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         }
 
         public bool IsActive(ulong id, bool airborne, float now) =>
-            airborne || (Finite(now) && entries.TryGetValue(id, out Entry entry) &&
+            airborne || (float.IsFinite(now) && entries.TryGetValue(id, out Entry entry) &&
                 now >= entry.LastInput && now - entry.LastInput <= RecentSeconds);
 
         public void Prune(HashSet<ulong> present)
@@ -92,6 +92,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         }
 
         public void Clear() { entries.Clear(); gone.Clear(); }
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

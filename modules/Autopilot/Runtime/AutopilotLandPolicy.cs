@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
@@ -26,23 +27,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return (float)Math.Sqrt(mass / maxWeight) * landingSpeed;
         }
 
-        public static float ApproachThrottle(float speed, float targetSpeed, float cruiseThrottle)
-        {
-            if (float.IsNaN(speed) || float.IsNaN(targetSpeed) || float.IsNaN(cruiseThrottle)) return 0f;
-            return Clamp(0.5f - (speed - targetSpeed) * 0.1f, 0f, cruiseThrottle);
-        }
-
         public static float BrakeRamp(float secondsOnGround)
         {
             if (float.IsNaN(secondsOnGround)) return 0f;
-            return Clamp(secondsOnGround * 2f, 0f, 1f);
+            return Scalar.Clamp(secondsOnGround * 2f, 0f, 1f);
         }
 
         public static bool Stopped(float speed, float radarAlt) =>
             !float.IsNaN(speed) && !float.IsNaN(radarAlt) &&
             speed < StopSpeed && radarAlt < StopAltitude;
-
-        public static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
     }
 }

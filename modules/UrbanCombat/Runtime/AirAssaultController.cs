@@ -4,9 +4,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons

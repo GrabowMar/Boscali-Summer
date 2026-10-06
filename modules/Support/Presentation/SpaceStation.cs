@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (!headerSame) chrome.SetLedger(c.Credit);
                 chrome.SetSession(c.Callsign, c.Session, c.KeyRot, c.Uplinks, c.UplinkTone, c.Space, c.Link);
             }
-            string slab = view.WordsTone == AvState.Danger ? "NEG" : view.WordsTone == AvState.Caution ? "WARN" : view.WordsTone == AvState.Ready ? "READY" : "INT";
+            string slab = C2Kit.SlabWord(view.WordsTone);
             footer.Set(slab, view.WordsTone, view.Words); // early-outs when the slab, the tone and the words are unchanged
         }
     }

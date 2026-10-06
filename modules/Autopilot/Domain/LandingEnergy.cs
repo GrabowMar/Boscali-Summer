@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Autopilot.Domain
 {
@@ -32,14 +33,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
             float stall = landSpeed * StallMul(carrier, flare, radarAlt);
             if (speed < stall && radarAlt > 3f)
-                return new Result(Clamp(Math.Max(cruise, 0.75f), 0.55f, 1f), 0f);
+                return new Result(Scalar.Clamp(Math.Max(cruise, 0.75f), 0.55f, 1f), 0f);
 
             float err = speed - targetSpeed;
             if (err > 40f && radarAlt > 8f) return new Result(0f, 1f);
 
-            float throttle = Clamp(0.5f - err * 0.1f, 0f, cruise);
+            float throttle = Scalar.Clamp(0.5f - err * 0.1f, 0f, cruise);
             if (flare) throttle = Math.Min(throttle, carrier ? 0.28f : 0.4f);
-            float brake = err > 8f ? Clamp((err - 8f) * 0.04f, 0f, 0.6f) : 0f;
+            float brake = err > 8f ? Scalar.Clamp((err - 8f) * 0.04f, 0f, 0.6f) : 0f;
             float damage = Clamp01(severity);
             if (damage > 0f) throttle *= 1f - 0.25f * damage;
             return new Result(throttle, brake);
@@ -57,9 +58,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (carrier) return flare || radarAlt < 55f ? 0.82f : 0.95f;
             return flare || radarAlt < 120f ? 0.9f : 1.05f;
         }
-
-        private static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
 
         private static float Clamp01(float value) =>
             float.IsNaN(value) ? 0f : value < 0f ? 0f : value > 1f ? 1f : value;

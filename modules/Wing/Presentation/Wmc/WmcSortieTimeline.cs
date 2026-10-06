@@ -5,14 +5,6 @@ using UnityEngine;
 using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>One mark of the SORTIE timeline: a solid bar, a bar with a dashed edge (the plan), or a diamond (an event). One mesh each;
@@ -197,10 +189,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             frame.SetVerticesDirty();
-            Color dim = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            Color ink = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            Color ink = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (TMP_Text t in axis) t.color = dim;
             empty.color = dim;
             nowLabel.color = ink;

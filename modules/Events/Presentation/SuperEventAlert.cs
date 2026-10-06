@@ -1,12 +1,9 @@
 using NOAvionics;
 using System;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
-using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -39,7 +36,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private EventsSettings settings;
         private EventsManager events;
-        private ManualLogSource logger;
         private ActiveEventView activeView;
 
         private GameObject root;
@@ -75,14 +71,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private float targetAlpha;
         private float layoutWidth;
         private float layoutOffset;
-        private int planeNotifiedSerial;
         private bool failed;
 
-        public void Configure(EventsSettings config, EventsManager manager, ManualLogSource log)
+        public void Configure(EventsSettings config, EventsManager manager)
         {
             settings = config;
             events = manager;
-            logger = log;
         }
 
         public void ResetForScene()
@@ -100,7 +94,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             compactTitle = compactImpact = compactClock = null;
             onAir = null;
             shownSerial = 0;
-            planeNotifiedSerial = 0;
             lastOrderSecond = -1;
             openedAt = closeAt = collapseAt = duration = targetAlpha = 0f;
             failed = false;
@@ -120,11 +113,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             else
             {
                 bool super = events.Current != null && events.Current.IsSuper;
-                if (super && events.SuperSerial != planeNotifiedSerial)
-                {
-                    planeNotifiedSerial = events.SuperSerial;
-                    SuperEventPlaneHud.OnSuperEvent(events.Current);
-                }
                 if (super && events.SuperSerial != shownSerial && DynamicMap.mapMaximized)
                 {
                     shownSerial = events.SuperSerial;
@@ -185,7 +173,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             expandedFx?.Play(AvFxKind.Dissolve, 0.8f, 6f);
             UpdateNextOrder(MissionTime());
             tone?.Play();
-            logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
+            Plugin.Logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
         }
 
         private void Dismiss()
@@ -251,7 +239,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 failed = true;
                 if (root != null) UnityEngine.Object.Destroy(root);
                 root = null;
-                logger?.LogError("Superevent dispatch unavailable: " + e);
+                Plugin.Logger?.LogError("Superevent dispatch unavailable: " + e);
                 return false;
             }
         }

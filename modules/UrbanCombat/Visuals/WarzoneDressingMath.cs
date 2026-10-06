@@ -13,7 +13,6 @@ namespace BoscaliSummer.Garrisons
         public const int MaxClusters = 48;
         public const float MinRadius = 8f;
         public const float MaxRadius = 20f;
-        public const int VariantBarricade = 0;
         public const int VariantChicane = 1;
         public const int VariantBurntCar = 2;
         public const int VariantCount = 3;

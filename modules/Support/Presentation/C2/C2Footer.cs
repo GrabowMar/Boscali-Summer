@@ -87,12 +87,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvLay.Place(back.rectTransform, 0f, 0f, width, Height);
             AvLay.Place(rule.rectTransform, 0f, 0f, width, 1f);
             AvLay.Place(slab.rectTransform, 4f, 4f, SlabW, 16f);
-            C2Kit.Place(slabText, 4f, 4f, SlabW, 16f);
-            OpsText.Set(slabText, C2Kit.FitTo(slabText, hint != null ? "TIP" : slabRaw, SlabW - 4f));
+            AvLay.Place(slabText, 4f, 4f, SlabW, 16f);
+            AvText.Set(slabText, C2Kit.FitTo(slabText, hint != null ? "TIP" : slabRaw, SlabW - 4f));
             float x = 4f + SlabW + 8f, w = width - x - 8f - (abortShown ? AbortW + 4f : 0f);
             if (abort != null) AvLay.Place(abort.Rect, width - 4f - AbortW, 3f, AbortW, 18f);
-            OpsText.Set(words, C2Kit.FitTo(words, hint ?? wordsRaw, w));
-            C2Kit.Place(words, x, 0f, w, Height);
+            AvText.Set(words, C2Kit.FitTo(words, hint ?? wordsRaw, w));
+            AvLay.Place(words, x, 0f, w, Height);
         }
 
         public override void Restyle()
@@ -100,12 +100,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             AvState shown = hint != null ? AvState.Inert : tone;
             AvStyle f = AvStyleHost.FuiStyle("footer " + AvStates.Class(shown));
             back.color = AvStyleHost.Resolve(f.Background, AvTheme.SurfaceInert);
-            rule.color = OpsInk.Hairline;
+            rule.color = AvInk.Hairline;
             slab.color = C2Kit.SlabFill(shown == AvState.Inert ? AvState.Ready : shown);
             slabText.color = C2Kit.SlabInk;
             abort?.Restyle();
-            words.color = hint != null ? OpsInk.Ink
-                : tone == AvState.Inert || tone == AvState.Ready || tone == AvState.Info ? OpsInk.Dim : OpsInk.Word(tone);
+            words.color = hint != null ? AvInk.Ink
+                : tone == AvState.Inert || tone == AvState.Ready || tone == AvState.Info ? AvInk.Dim : OpsInk.Word(tone);
         }
     }
 }

@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons

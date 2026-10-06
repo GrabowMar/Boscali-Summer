@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.C2;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
@@ -35,7 +33,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportManager manager;
         private CallsController calls;
         private SupportSettings settings;
-        private ManualLogSource logger;
 
         private readonly FeedDraft draft = new FeedDraft();
         private readonly SpaceFeedView view = new SpaceFeedView();
@@ -70,12 +67,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool WindowOpen => window != null && window.IsOpen;
         public FeedDraft Draft => draft;
 
-        public void Configure(SupportManager manager, CallsController calls, SupportSettings settings, ManualLogSource logger)
+        public void Configure(SupportManager manager, CallsController calls, SupportSettings settings)
         {
             this.manager = manager;
             this.calls = calls;
             this.settings = settings;
-            this.logger = logger;
             if (manager != null) manager.SpaceReplied += OnReply;
         }
 
@@ -201,7 +197,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void FailFeed(Exception e, float wall)
         {
             failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
-            logger?.LogError("SPACE feed refresh failed: " + e);
+            Plugin.Logger?.LogError("SPACE feed refresh failed: " + e);
             compactVisible = false;
             CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
         }
@@ -449,9 +445,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             double elevation = Math.Atan2(los.y, horizontal);
             double azX = horizontal > 1e-6 ? los.x / horizontal : 0.0, azZ = horizontal > 1e-6 ? los.z / horizontal : 1.0;
             double slant = RadarAltitude / Math.Max(0.2, Math.Sin(elevation));
-            var look = new LookAngles(true, elevation, 0.0, slant, azX, azZ);
-            var orbit = new OrbitState(OrbitPhase.InPass, new PassPlan(0.0), RadarAltitude, 0.0, 0.0, 0.0, 0.0);
-            sar.Begin(target, look, orbit, settings.SarSceneRadius.Value, serial, now);
+            sar.Begin(target, Math.PI * 0.5 - elevation, azX, azZ, slant, RadarAltitude,
+                settings.SarSceneRadius.Value, serial, now);
             sarSerial = serial;
         }
 

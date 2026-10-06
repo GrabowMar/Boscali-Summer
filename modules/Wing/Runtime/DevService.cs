@@ -2,30 +2,18 @@ using System.Globalization;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
-    /// <summary>Dev tools behind <c>Debug/DevTools</c>: the overlay, the telemetry dump hotkey and the bridge
-    /// snapshot (2 Hz).</summary>
+    /// <summary>Dev tools behind <c>Debug/DevTools</c>: the overlay and the bridge snapshot (2 Hz).</summary>
     internal sealed class DevService : IWingService
     {
         public string Name => "Dev";
         private float nextBridge;
 
-        public void Activate() => TelemetryRecorder.Clear();
+        public void Activate() { }
 
-        public void Deactivate()
-        {
-            DebugOverlay.Hide();
-            TelemetryRecorder.Clear();
-        }
+        public void Deactivate() => DebugOverlay.Hide();
 
         public void FixedTick(float dt)
         {
@@ -42,8 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingService wing = WingService.Instance;
             if (s.Overlay.Value) DebugOverlay.Draw(wing);
             else DebugOverlay.Hide();
-            if (s.KeyDumpTelemetry.Value.MainKey != KeyCode.None && s.KeyDumpTelemetry.Value.IsDown()) TelemetryRecorder.Dump("manual");
-            if (s.KeyStepTest.Value.MainKey != KeyCode.None && s.KeyStepTest.Value.IsDown()) StepTest.Start(wing);
             if (Time.unscaledTime >= nextBridge)
             {
                 nextBridge = Time.unscaledTime + 0.5f;

@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -54,7 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             float half = Math.Max(halfX, halfZ);
             int count = 0;
-            float conv = WeatherMath.Clamp01(convection.Convective);
+            float conv = Scalar.Clamp01(convection.Convective);
 
             // A squall line on the upwind horizon, its shelf facing the theater.
             float shelf = Forced(forced, SquallLineSet, WeatherMath.Smoothstep(0.45f, 0.9f, conv));

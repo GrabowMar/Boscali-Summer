@@ -1,6 +1,7 @@
 using System.Reflection;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 using HarmonyLib;
 using NOAvionics;
 using NuclearOption.UIStyleSystem;
@@ -145,7 +146,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             border.raycastTarget = false;
             border.color = new Color(0f, 0f, 0f, 0f); // filled with the tone colour per Present()
 
-            header = BuildLabel("Header", TextAlignmentOptions.MidlineLeft);
+            header = HudText.Make(root, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft);
             header.rectTransform.anchorMin = new Vector2(0f, 1f);
             header.rectTransform.anchorMax = new Vector2(1f, 1f);
             header.rectTransform.pivot = new Vector2(0f, 1f);
@@ -157,19 +158,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             header.fontSize = HeaderFontSize;
 
             for (int i = 0; i < rows.Length; i++) rows[i] = BuildRow(i);
-        }
-
-        private TextMeshProUGUI BuildLabel(string name, TextAlignmentOptions alignment)
-        {
-            var labelObject = new GameObject(name, typeof(RectTransform));
-            labelObject.transform.SetParent(root, false);
-            TextMeshProUGUI label = labelObject.AddComponent<TextMeshProUGUI>();
-            label.font = font;
-            label.fontSharedMaterial = fontMaterial;
-            label.alignment = alignment;
-            label.enableWordWrapping = false;
-            label.raycastTarget = false;
-            return label;
         }
 
         private Row BuildRow(int index)
@@ -194,32 +182,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Image glyph = glyphObject.GetComponent<Image>();
             glyph.raycastTarget = false;
 
-            var textObject = new GameObject("Text", typeof(RectTransform));
-            RectTransform textRect = (RectTransform)textObject.transform;
-            textRect.SetParent(rowRect, false);
+            TextMeshProUGUI text = HudText.Make(rowRect, "Text", font, fontMaterial, TextAlignmentOptions.MidlineLeft,
+                RowFontSize, TextOverflowModes.Ellipsis);
+            RectTransform textRect = text.rectTransform;
             textRect.anchorMin = new Vector2(0f, 0f);
             textRect.anchorMax = new Vector2(1f, 1f);
             textRect.offsetMin = new Vector2(RowPad * 2f + GlyphSize, 1f);
             textRect.offsetMax = new Vector2(-RowPad, -1f);
-            TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
-            text.font = font;
-            text.fontSharedMaterial = fontMaterial;
-            text.fontSize = RowFontSize;
-            text.alignment = TextAlignmentOptions.MidlineLeft;
-            text.enableWordWrapping = false;
-            text.overflowMode = TextOverflowModes.Ellipsis;
-            text.raycastTarget = false;
 
-            var detailObject = new GameObject("Detail", typeof(RectTransform));
-            detailObject.transform.SetParent(rowRect, false);
-            TextMeshProUGUI detail = detailObject.AddComponent<TextMeshProUGUI>();
-            detail.font = font;
-            detail.fontSharedMaterial = fontMaterial;
-            detail.fontSize = DetailFontSize;
-            detail.alignment = TextAlignmentOptions.MidlineLeft;
-            detail.enableWordWrapping = false;
-            detail.overflowMode = TextOverflowModes.Ellipsis;
-            detail.raycastTarget = false;
+            TextMeshProUGUI detail = HudText.Make(rowRect, "Detail", font, fontMaterial, TextAlignmentOptions.MidlineLeft,
+                DetailFontSize, TextOverflowModes.Ellipsis);
             detail.gameObject.SetActive(false);
 
             var barObject = new GameObject("Bar", typeof(RectTransform), typeof(Image));

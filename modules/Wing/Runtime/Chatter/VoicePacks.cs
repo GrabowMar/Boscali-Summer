@@ -6,14 +6,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Spec M7 §5: Yappinator-format voice packs for wingman calls. The packs named in Radio/VoicePacks are found

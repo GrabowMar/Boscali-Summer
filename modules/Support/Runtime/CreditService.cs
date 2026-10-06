@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Networking;
 using NuclearOption.Networking;
@@ -58,13 +57,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             this.network = network;
             Tasked = new TaskedWallets(Ledger, Fund, OperatorIncome) { Changed = Mirror };
         }
-
-        /// <summary>
-        /// Pays a verified contributor by identity (disconnected is fine; switched or frozen is refused). The receipt
-        /// conserves <paramref name="amount"/>: only <c>Unapplied</c> is still owed to the earned faction's HQ FUND.
-        /// </summary>
-        public ContributorCreditReceipt EarnContributor(ulong playerId, int earnedFaction, float amount, float missionNow) =>
-            Tasked.EarnContributor(playerId, earnedFaction, amount, missionNow);
 
         private void Mirror(ulong id)
         {

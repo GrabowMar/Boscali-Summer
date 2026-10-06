@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
@@ -27,6 +26,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal enum ProbableClass : byte { Unknown = 0, Hostile = 1, Neutral = 2, Friendly = 3 }
 
     internal interface ISpaceWriter { void WriteByte(byte value); }
+
+    /// <summary>A writer that only counts: the exact encoded size of a message, for the one-buffer budget.</summary>
+    internal sealed class ByteCounter : ISpaceWriter
+    {
+        public int Bytes;
+        public void WriteByte(byte value) => Bytes++;
+    }
 
     internal interface ISpaceReader
     {
@@ -480,18 +486,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static SpaceStateData Bad() => new SpaceStateData();
 
         /// <summary>True when the wire can carry this coordinate (finite, inside +-838 km). Hosts filter rows with this.</summary>
-        public static bool Codable(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= CoordinateLimit;
-
-        private sealed class CountingWriter : ISpaceWriter
-        {
-            public int Bytes;
-            public void WriteByte(byte value) => Bytes++;
-        }
+        public static bool Codable(float value) => float.IsFinite(value) && Math.Abs(value) <= CoordinateLimit;
 
         /// <summary>Exact encoded size of a state message, for the one-buffer budget.</summary>
         public static int StateSize(SpaceStateData s)
         {
-            var counter = new CountingWriter();
+            var counter = new ByteCounter();
             WriteState(counter, s);
             return counter.Bytes;
         }
@@ -542,7 +542,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         internal static void WriteCoordinate(ISpaceWriter w, float value)
         {
             // A value the wire cannot carry is written as the invalid marker so the reader refuses the whole message.
-            int v = SpaceRules.Finite(value) && Math.Abs(value) <= CoordinateLimit ? (int)Math.Round(value * 10d) : InvalidCoordinate;
+            int v = float.IsFinite(value) && Math.Abs(value) <= CoordinateLimit ? (int)Math.Round(value * 10d) : InvalidCoordinate;
             w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); w.WriteByte((byte)(v >> 16));
         }
 
@@ -559,7 +559,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private static void WriteExpiry1(ISpaceWriter w, float expires, float now)
         {
-            double left = SpaceRules.Finite(expires) && SpaceRules.Finite(now) ? Math.Round((expires - now) * 10d) : 0d;
+            double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 10d) : 0d;
             w.WriteByte((byte)Math.Max(0d, Math.Min(MaxContactDeciseconds, left)));
         }
 
@@ -573,7 +573,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         internal static void WriteExpiry(ISpaceWriter w, float expires, float now)
         {
-            double left = SpaceRules.Finite(expires) && SpaceRules.Finite(now) ? Math.Round((expires - now) * 10d) : 0d;
+            double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 10d) : 0d;
             int ds = (int)Math.Max(0d, Math.Min(MaxExpiryDeciseconds, left));
             w.WriteByte((byte)ds); w.WriteByte((byte)(ds >> 8));
         }

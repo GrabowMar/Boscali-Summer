@@ -49,6 +49,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         /// <summary>Seconds a SAM NET FAIL lasts: 3 minutes, halved when an enemy EW truck stands within 18 km of the cluster.</summary>
         public static float ZeroDayEffectSeconds(bool truckNear) => truckNear ? ZeroDayHalvedSeconds : ZeroDaySeconds;
 
-        public static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
     }
 }

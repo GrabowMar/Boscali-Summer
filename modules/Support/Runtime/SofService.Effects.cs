@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Game;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Sof;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime

@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.DynamicOperations.Configuration;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Modules.DynamicOperations.Networking;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
@@ -67,7 +64,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly OperationRewards rewards = new OperationRewards();
         private DynamicOperationsSettings settings;
         private OperationsNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private float nextTick, previousTime, lastSnapshot;
         private int nextId;
@@ -117,10 +113,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         internal void EndAction(string result)
         { IsActionPending = false; PendingObjectiveId = 0; pendingCancel = false; ActionResult = result ?? string.Empty; }
 
-        public void Configure(DynamicOperationsSettings configuration, OperationsNet transport, ManualLogSource log)
+        public void Configure(DynamicOperationsSettings configuration, OperationsNet transport)
         {
-            settings = configuration; network = transport; logger = log;
-            rewards.Configure(log);
+            settings = configuration; network = transport;
             wasEnabled = settings.Enabled.Value;
             Active = this;
         }
@@ -186,7 +181,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return;
             }
             float now = mission.MissionTime;
-            if (!Operation.Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             if (now < previousTime) { ResetForScene(); missionIdentity = current; }
             if (now < nextTick) return;
             float elapsed = Math.Max(0f, now - previousTime);
@@ -272,7 +267,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             bool validTempo = mission != null &&
                 OperationTempo.Finite(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold);
-            if (!validTempo) logger.LogWarning("[Operations] Nonfinite escalation fields; conventional tempo used for this cycle.");
+            if (!validTempo) Plugin.Logger?.LogWarning("[Operations] Nonfinite escalation fields; conventional tempo used for this cycle.");
             float scale = validTempo
                 ? OperationTempo.RewardScale(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold)
                 : OperationTempo.ConventionalReward;
@@ -363,7 +358,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     !(unit is GroundVehicle || unit is Building) || unit.definition == null) continue;
                 TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
                 float age = tracking == null ? float.NaN : Time.timeSinceLevelLoad - tracking.lastSpottedTime;
-                if (tracking == null || !Operation.Finite(age) || age < 0f || age > 30f ||
+                if (tracking == null || !float.IsFinite(age) || age < 0f || age > 30f ||
                     !hq.IsTargetBeingTracked(unit)) continue;
                 Vector3 known = tracking.lastKnownPosition.AsVector3();
                 if (!Finite(known)) continue;
@@ -403,7 +398,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             int targetId = shellId != 0 ? shellId : unit != null ? unit.GetInstanceID() : airbase.GetInstanceID();
             float multiplier = settings.RewardMultiplier.Value;
-            if (!Operation.Finite(multiplier)) multiplier = 1f;
+            if (!float.IsFinite(multiplier)) multiplier = 1f;
             multiplier = Mathf.Clamp(multiplier, 0.25f, 4f);
             float scale = multiplier * OperationTempo.Scale(tempoScale);
             if (ModuleServices.TryGet(out IFactionMoraleView morale) &&
@@ -457,7 +452,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 bool completer = op.AcceptorId == 0 || PlayerIdentity.Of(player) == op.AcceptorId;
                 float share = ContractShares.Share(completer, crew, teamShare);
                 try { hq.RewardPlayer(player, null, ContractShares.Scaled(op.Money, share), ContractShares.Scaled(op.Xp, share), FactionHQ.RewardType.None); credited++; }
-                catch (Exception ex) { failures++; logger.LogWarning("[Operations] Award failed: " + ex.Message); }
+                catch (Exception ex) { failures++; Plugin.Logger?.LogWarning("[Operations] Award failed: " + ex.Message); }
             }
             string deployment = "";
             try
@@ -469,7 +464,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             catch (Exception ex)
             {
                 deployment = "Special deployment failed.";
-                logger.LogWarning("[Operations] " + deployment + " " + ex.Message);
+                Plugin.Logger?.LogWarning("[Operations] " + deployment + " " + ex.Message);
             }
             string split = credited > 1 && op.AcceptorId != 0
                 ? "Completer " + (string.IsNullOrEmpty(op.AcceptedBy) ? "its pilot" : op.AcceptedBy) + " takes the full reward, the rest the team share. "
@@ -477,7 +472,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             target.Outcome = (failures > 0 ? "Payment incomplete; see host log. " :
                 credited == 0 ? "No connected faction players to credit. " : "Faction players credited (money after tax). " + split) + deployment;
             target.Outcome = OperationsNet.Text(target.Outcome);
-            logger.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
+            Plugin.Logger?.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
             SeedFollowOn(board, op);
         }
 
@@ -516,7 +511,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private static bool Usable(Airbase airbase) => airbase != null && !airbase.disabled &&
             !airbase.AttachedAirbase && airbase.center != null;
-        private static bool Finite(Vector3 position) => Operation.Finite(position.x) && Operation.Finite(position.y) && Operation.Finite(position.z);
+        private static bool Finite(Vector3 position) => float.IsFinite(position.x) && float.IsFinite(position.y) && float.IsFinite(position.z);
 
         private static Player FirstPlayer(FactionHQ hq)
         {
@@ -591,7 +586,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
             if (tracking == null) return false;
             float age = Time.timeSinceLevelLoad - tracking.lastSpottedTime;
-            if (!Operation.Finite(age) || age < 0f || age > 30f) return false;
+            if (!float.IsFinite(age) || age < 0f || age > 30f) return false;
             position = tracking.lastKnownPosition.AsVector3();
             return Finite(position);
         }
@@ -612,7 +607,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void OnLanded(int factionId, float x, float z, int shellId)
         {
-            if (!GameAccess.IsServer() || !Operation.Finite(x) || !Operation.Finite(z)) return;
+            if (!GameAccess.IsServer() || !float.IsFinite(x) || !float.IsFinite(z)) return;
             foreach (var pair in boards)
             {
                 if (pair.Key == null || pair.Key.GetInstanceID() != factionId) continue;
@@ -631,7 +626,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             if (!GameAccess.IsServer() || !MissionManager.IsRunning || unit == null || args.jammingUnit == null ||
                 settings?.Enabled.Value != true || !ReferenceEquals(missionIdentity, MissionManager.CurrentMission) ||
-                args.jammingUnit.NetworkHQ == null || !Operation.Finite(args.jamAmount) || args.jamAmount <= 0f) return;
+                args.jammingUnit.NetworkHQ == null || !float.IsFinite(args.jamAmount) || args.jamAmount <= 0f) return;
             RememberJammer(unit, args.jammingUnit);
             if (!boards.TryGetValue(args.jammingUnit.NetworkHQ, out FactionBoard board)) return;
             foreach (Target target in board.Targets)
@@ -713,7 +708,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     if (tracking != null)
                     {
                         float observedAge = Time.timeSinceLevelLoad - tracking.lastSpottedTime;
-                        if (Operation.Finite(observedAge) && observedAge >= 0f && observedAge <= 30f)
+                        if (float.IsFinite(observedAge) && observedAge >= 0f && observedAge <= 30f)
                         { age = observedAge; if (age > 2f) contact = ObjectiveContact.LastKnown; }
                     }
                 }

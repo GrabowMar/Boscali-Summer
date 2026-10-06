@@ -1,14 +1,6 @@
 using System.Globalization;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The wing's vitals for the header chips: the minimum fuel and ammo, and the first member (by slot order in the rows)
@@ -43,8 +35,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// state class (live, warn, danger, info, inert). The word carries the state; the colour repeats it.</summary>
     internal static class WmcHeader
     {
-        /// <summary>A chip's text budget (97 px label, autosized down to 10 px).</summary>
-        public const int ChipChars = 15;
 
         public const string None = "—";
 

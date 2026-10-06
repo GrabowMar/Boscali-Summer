@@ -1,16 +1,8 @@
 using NOAvionics;
 using System.Collections.Generic;
-using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL › ORDERS' two blocks (spec FUI §TACTICAL; 0.9's situation panes) on kit v2: THREATS — the side's tracked
@@ -140,7 +132,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 {
                     if (m.Released || !m.Alive || (object)m.Aircraft == null) continue;
                     int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
-                    if (i < 0 || !InScope(c, c.Rows[i])) continue;
+                    if (i < 0 || !c.InScope(c.Rows[i])) continue;
                     WmcDetail.Stores(m, ref storeScratch);
                     for (int st = 0; st < storeScratch.StoreCount; st++) FlightPool.Add(ref totals, storeScratch.Stores[st]);
                     only = m;

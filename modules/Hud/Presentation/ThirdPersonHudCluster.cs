@@ -1,5 +1,6 @@
 using NOAvionics;
 using System.Reflection;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using HarmonyLib;
 using NuclearOption.UIStyleSystem;
@@ -115,13 +116,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             backing.raycastTarget = false;
             backing.color = new Color(0f, 0f, 0f, 0.35f);
 
-            TextMeshProUGUI value = BuildText(rect, "Value", TextAlignmentOptions.Center, 22f);
+            TextMeshProUGUI value = HudText.Make(rect, "Value", font, fontMaterial, TextAlignmentOptions.Center, 22f);
             value.rectTransform.anchorMin = new Vector2(0f, 0.4f);
             value.rectTransform.anchorMax = new Vector2(1f, 1f);
             value.rectTransform.offsetMin = Vector2.zero;
             value.rectTransform.offsetMax = Vector2.zero;
 
-            TextMeshProUGUI sub = BuildText(rect, "SubLine", TextAlignmentOptions.Center, 13f);
+            TextMeshProUGUI sub = HudText.Make(rect, "SubLine", font, fontMaterial, TextAlignmentOptions.Center, 13f);
             sub.rectTransform.anchorMin = new Vector2(0f, 0f);
             sub.rectTransform.anchorMax = new Vector2(1f, 0.4f);
             sub.rectTransform.offsetMin = Vector2.zero;
@@ -148,20 +149,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new Box { Root = rect, Backing = backing, Value = value, SubLine = sub, Bar = bar, LastValue = float.NaN, LastSub = float.NaN };
         }
 
-        private TextMeshProUGUI BuildText(Transform parent, string name, TextAlignmentOptions alignment, float size)
-        {
-            var textObject = new GameObject(name, typeof(RectTransform));
-            textObject.transform.SetParent(parent, false);
-            TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
-            text.font = font;
-            text.fontSharedMaterial = fontMaterial;
-            text.fontSize = size;
-            text.alignment = alignment;
-            text.enableWordWrapping = false;
-            text.raycastTarget = false;
-            return text;
-        }
-
         private TargetCardWidgets BuildTargetCard()
         {
             var cardObject = new GameObject("TargetCard", typeof(RectTransform), typeof(Image));
@@ -185,7 +172,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             border.raycastTarget = false;
             border.color = new Color(1f, 1f, 1f, 0f); // tinted per theme in Present()
 
-            TextMeshProUGUI header = BuildText(rect, "Header", TextAlignmentOptions.MidlineLeft, 12f);
+            TextMeshProUGUI header = HudText.Make(rect, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 12f);
             header.rectTransform.anchorMin = new Vector2(0f, 1f);
             header.rectTransform.anchorMax = new Vector2(1f, 1f);
             header.rectTransform.pivot = new Vector2(0f, 1f);

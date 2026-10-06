@@ -1,14 +1,5 @@
 using System.Collections.Generic;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal enum TaxiPriority : byte { TaxiIn = 0, Departing = 1, Landing = 2 }
@@ -55,9 +46,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public int OwnerOfNode(int node) => nodeOwner[node];
-
-        /// <summary>The first owner on the edge (−1: free).</summary>
-        public int OwnerOfEdge(int edge) => edgeUsers[edge].Count > 0 ? edgeUsers[edge][0] : -1;
 
         /// <summary>The owner directly ahead of <paramref name="owner"/> on <paramref name="edge"/> (−1: none).</summary>
         public int Ahead(int owner, int edge)

@@ -105,8 +105,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Set(int i, string name, string detail, bool filled, bool on, bool edited)
         {
             Slot s = slots[i];
-            WmcKit.Set(s.Name, filled ? name + (on && edited ? " *" : "") : "—");
-            WmcKit.Set(s.Detail, detail);
+            AvText.Set(s.Name, filled ? name + (on && edited ? " *" : "") : "—");
+            AvText.Set(s.Detail, detail);
             if (s.On == on && s.Edited == edited && s.Filled == filled) return;
             s.On = on;
             s.Edited = edited;
@@ -124,8 +124,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.Frame.Paint(back, border);
             s.Rail.color = s.On ? (s.Edited ? caution : accent) : Color.clear;
             s.Hint.color = key;
-            s.Name.color = s.Filled ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary) : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            s.Detail.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            s.Name.color = s.Filled ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            s.Detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
         }
 
         public override void Restyle()
@@ -245,7 +245,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void SetStatus(string text, bool isEdited)
         {
-            WmcKit.Set(status, text);
+            AvText.Set(status, text);
             if (edited == isEdited) return;
             edited = isEdited;
             Restyle();
@@ -256,7 +256,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.FuiColor("ground", AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             title.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            status.color = edited ? AvStyleHost.FuiColor("caution", AvTheme.RailCaution) : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            status.color = edited ? AvStyleHost.FuiColor("caution", AvTheme.RailCaution) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Reset.Restyle();
             Save.Restyle();
             Edit.Restyle();

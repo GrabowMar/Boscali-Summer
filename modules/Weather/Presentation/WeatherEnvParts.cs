@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public static Color Role(string role) => AvStyleHost.FuiColor(role, Color.white);
         public static Color State(AvState s) => Role(AvStates.Class(s));
         public static Color Alpha(Color c, float a) { c.a = a; return c; }
-        public static Color Track() => AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+        public static Color Track() => AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
     }
 
     /// <summary>Top-down drawing surface over a <see cref="VertexHelper"/>: (0,0) is the rect's top-left, y grows downward.</summary>
@@ -31,13 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void QuadV(float x, float y, float w, float h, Color top, Color bottom)
         {
             if (w <= 0f || h <= 0f) return;
-            int i = vh.currentVertCount;
-            vh.AddVert(P(x, y), top, Vector4.zero);
-            vh.AddVert(P(x + w, y), top, Vector4.zero);
-            vh.AddVert(P(x + w, y + h), bottom, Vector4.zero);
-            vh.AddVert(P(x, y + h), bottom, Vector4.zero);
-            vh.AddTriangle(i, i + 1, i + 2);
-            vh.AddTriangle(i, i + 2, i + 3);
+            AvQuadGraphic.Emit(vh, r, x, y, w, h, top, top, bottom, bottom);
         }
 
         public void Line(float x0, float y0, float x1, float y1, float width, Color c)
@@ -177,14 +171,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             return t;
         }
 
-        protected static void Box(TMP_Text t, float x, float y, float w, float h) => AvLay.Place(t.rectTransform, x, y, Mathf.Max(1f, w), h);
-
-        protected static void SetText(TMP_Text t, string s)
-        {
-            s = s ?? "";
-            if (t.text != s) t.text = s;
-        }
-
         protected void Redraw() { if (Art != null) Art.SetVerticesDirty(); }
 
         /// <summary>Hover help on the whole part (shown in the console footer).</summary>
@@ -210,7 +196,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             AvStyle c = AvStyleHost.FuiStyle("card " + variant);
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             frame.SetVerticesDirty();
             for (int i = 0; i < tints.Count; i++)
                 if (tints[i].Value.Length > 0) tints[i].Key.color = EnvInk.Role(tints[i].Value);
@@ -257,10 +243,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public void Set(EnvSky d)
         {
-            SetText(code, d.Code);
-            SetText(word, (d.State == AvState.Caution || d.State == AvState.Danger ? AvStates.Glyph(d.State) : "") + d.Word);
-            SetText(cover, AvNum.Percent(d.Cover) + " COVER");
-            SetText(catValue, (d.CategoryState == AvState.Caution || d.CategoryState == AvState.Danger ? AvStates.Glyph(d.CategoryState) : "") + d.Category);
+            AvText.Set(code, d.Code);
+            AvText.Set(word, (d.State == AvState.Caution || d.State == AvState.Danger ? AvStates.Glyph(d.State) : "") + d.Word);
+            AvText.Set(cover, AvNum.Percent(d.Cover) + " COVER");
+            AvText.Set(catValue, (d.CategoryState == AvState.Caution || d.CategoryState == AvState.Danger ? AvStates.Glyph(d.CategoryState) : "") + d.Category);
             glyph.SetKind(d.Regime);
             coverFrac = Mathf.Clamp01(d.Cover);
             state = d.State; catState = d.CategoryState;
@@ -274,12 +260,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             AvLay.Place(rail.rectTransform, 0f, 0f, 3f, h);
             AvLay.Place(glyph.rectTransform, Pad + 4f, 12f, 44f, 44f);
-            Box(code, Pad + 58f, 12f, 64f, 44f);
+            AvLay.Place(code, Pad + 58f, 12f, Mathf.Max(1f, 64f), 44f);
             float wx = Pad + 128f, catW = 84f, ww = w - wx - catW - Pad;
-            Box(word, wx, 12f, ww, 26f);
-            Box(cover, wx, 40f, ww, 16f);
-            Box(catKey, w - Pad - catW, 14f, catW, 15f);
-            Box(catValue, w - Pad - catW, 30f, catW, 20f);
+            AvLay.Place(word, wx, 12f, Mathf.Max(1f, ww), 26f);
+            AvLay.Place(cover, wx, 40f, Mathf.Max(1f, ww), 16f);
+            AvLay.Place(catKey, w - Pad - catW, 14f, Mathf.Max(1f, catW), 15f);
+            AvLay.Place(catValue, w - Pad - catW, 30f, Mathf.Max(1f, catW), 20f);
             AvLay.Place(divider.rectTransform, Pad, 66f, w - 2f * Pad, 1f);
         }
 
@@ -356,15 +342,15 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (float a = Mathf.Ceil(minAlt / tickStep) * tickStep; a <= maxAlt + 0.1f && tickCount < MaxTicks; a += tickStep)
                 tickAlt[tickCount++] = a;
 
-            SetText(topLabel, "TOP " + AvNum.Fixed(data.Top, 0) + " M");
-            SetText(baseLabel, "BASE " + AvNum.Fixed(data.Base, 0) + " M");
-            SetText(camLabel, data.HasCamera ? "CAM " + AvNum.Signed(data.CameraAlt, 0) + " M" : "");
-            SetText(empty, data.HasCamera ? "" : "CAMERA UNAVAILABLE");
+            AvText.Set(topLabel, "TOP " + AvNum.Fixed(data.Top, 0) + " M");
+            AvText.Set(baseLabel, "BASE " + AvNum.Fixed(data.Base, 0) + " M");
+            AvText.Set(camLabel, data.HasCamera ? "CAM " + AvNum.Signed(data.CameraAlt, 0) + " M" : "");
+            AvText.Set(empty, data.HasCamera ? "" : "CAMERA UNAVAILABLE");
             bool alarm = data.State == AvState.Caution || data.State == AvState.Danger;
-            SetText(status, data.HasCamera ? (alarm ? AvStates.Glyph(data.State) : "") + data.Status : "");
+            AvText.Set(status, data.HasCamera ? (alarm ? AvStates.Glyph(data.State) : "") + data.Status : "");
             for (int i = 0; i < MaxTicks; i++)
             {
-                SetText(ticks[i], i < tickCount ? AvNum.Fixed(tickAlt[i], 0) : "");
+                AvText.Set(ticks[i], i < tickCount ? AvNum.Fixed(tickAlt[i], 0) : "");
                 ticks[i].gameObject.SetActive(i < tickCount);
             }
             Tint();
@@ -379,8 +365,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected override void Layout(float w, float h)
         {
             plotBottom = Mathf.Max(PlotTop + 60f, h - BottomMargin);   // a growing profile stretches its metre scale
-            Box(status, PlotX + 6f, 0f, w - PlotX - LabelW - 12f, 14f);
-            for (int i = 0; i < tickCount; i++) Box(ticks[i], 2f, Y(tickAlt[i]) - 8f, PlotX - 8f, 16f);
+            AvLay.Place(status, PlotX + 6f, 0f, Mathf.Max(1f, w - PlotX - LabelW - 12f), 14f);
+            for (int i = 0; i < tickCount; i++) AvLay.Place(ticks[i], 2f, Y(tickAlt[i]) - 8f, Mathf.Max(1f, PlotX - 8f), 16f);
             // Three labels at the right, nudged apart so they never overlap; each keeps its own level.
             float x = w - LabelW + 10f, lw = LabelW - Pad - 6f;
             float yTop = Y(d.Top), yBase = Y(d.Base), yCam = d.HasCamera ? Y(d.CameraAlt) : -100f;
@@ -395,11 +381,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 if (i == 2 && !d.HasCamera) continue;
                 float y = Mathf.Max(want[i] - 8f, last + 17f);
                 y = Mathf.Min(y, plotBottom - 8f - (2 - k) * 17f);
-                Box(who[i], x, y, lw, 16f);
+                AvLay.Place(who[i], x, y, Mathf.Max(1f, lw), 16f);
                 last = y;
             }
             camLabel.gameObject.SetActive(d.HasCamera);
-            Box(empty, PlotX + 8f, plotBottom - 22f, w - PlotX - LabelW - 16f, 15f);
+            AvLay.Place(empty, PlotX + 8f, plotBottom - 22f, Mathf.Max(1f, w - PlotX - LabelW - 16f), 15f);
             empty.gameObject.SetActive(!d.HasCamera);
         }
 
@@ -486,14 +472,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(EnvSun data)
         {
             d = data;
-            SetText(elev, AvNum.Signed(data.Elevation, 1) + "°");
-            SetText(azimuth, "AZ " + AvNum.Fixed(data.Azimuth, 0).PadLeft(3, '0') + "°   T " + AvNum.Fixed(data.TimeOfDay, 1) + "H");
-            SetText(light, AvStates.Glyph(data.LightState) + data.Light);
+            AvText.Set(elev, AvNum.Signed(data.Elevation, 1) + "°");
+            AvText.Set(azimuth, "AZ " + AvNum.Fixed(data.Azimuth, 0).PadLeft(3, '0') + "°   T " + AvNum.Fixed(data.TimeOfDay, 1) + "H");
+            AvText.Set(light, AvStates.Glyph(data.LightState) + data.Light);
             bool polar = data.PolarDay || data.PolarNight;
-            SetText(riseText, polar ? "" : "RISE " + Hhmm(data.Sunrise));
-            SetText(setText, polar ? "" : "SET " + Hhmm(data.Sunset));
+            AvText.Set(riseText, polar ? "" : "RISE " + Hhmm(data.Sunrise));
+            AvText.Set(setText, polar ? "" : "SET " + Hhmm(data.Sunset));
             bool evChanged = evt.text != (data.Event ?? "");
-            SetText(evt, data.Event);
+            AvText.Set(evt, data.Event);
             light.color = data.LightState == AvState.Caution || data.LightState == AvState.Danger
                 ? EnvInk.State(data.LightState) : EnvInk.Role("ink");
             Redraw();
@@ -512,14 +498,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected override void Layout(float w, float h)
         {
             float rx = ArcW + 16f, rw = w - rx - Pad;
-            Box(elevKey, rx, 10f, rw, 15f);
-            Box(elev, rx, 25f, rw, 32f);
-            Box(azimuth, rx, 59f, rw, 16f);
-            Box(light, rx, 76f, rw, 16f);
-            Box(riseText, Pad, 84f, 118f, 16f);
-            Box(setText, Pad + ArcW - 118f, 84f, 118f, 16f);
+            AvLay.Place(elevKey, rx, 10f, Mathf.Max(1f, rw), 15f);
+            AvLay.Place(elev, rx, 25f, Mathf.Max(1f, rw), 32f);
+            AvLay.Place(azimuth, rx, 59f, Mathf.Max(1f, rw), 16f);
+            AvLay.Place(light, rx, 76f, Mathf.Max(1f, rw), 16f);
+            AvLay.Place(riseText, Pad, 84f, Mathf.Max(1f, 118f), 16f);
+            AvLay.Place(setText, Pad + ArcW - 118f, 84f, Mathf.Max(1f, 118f), 16f);
             float e = EventH(w);
-            if (e > 0f) Box(evt, Pad, DiagramH + 2f, w - 2f * Pad, e);
+            if (e > 0f) AvLay.Place(evt, Pad, DiagramH + 2f, Mathf.Max(1f, w - 2f * Pad), e);
             evt.gameObject.SetActive(e > 0f);
         }
 
@@ -572,11 +558,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(EnvMoon data)
         {
             d = data;
-            SetText(phase, data.Phase);
-            SetText(lit, AvNum.Percent(data.Lit) + " LIT");
-            SetText(glow, "MOONLIGHT " + AvNum.Percent(data.Glow) + (data.Moonless ? "  ·  LOW NATURAL LIGHT" : ""));
+            AvText.Set(phase, data.Phase);
+            AvText.Set(lit, AvNum.Percent(data.Lit) + " LIT");
+            AvText.Set(glow, "MOONLIGHT " + AvNum.Percent(data.Glow) + (data.Moonless ? "  ·  LOW NATURAL LIGHT" : ""));
             bool changed = guidance.text != (data.Guidance ?? "");
-            SetText(guidance, data.Guidance);
+            AvText.Set(guidance, data.Guidance);
             Redraw();
             if (changed) Changed();
             if (PlacedW > 0f) Layout(PlacedW, Measure(PlacedW));
@@ -593,12 +579,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected override void Layout(float w, float h)
         {
             float x = Pad, rw = w - 2f * Pad;
-            Box(key, x, 8f, rw, 15f);
-            Box(phase, x, 22f, rw, 26f);
-            Box(lit, w - Pad - 92f, 48f, 92f, 18f);
-            Box(glow, x, 48f, rw - 96f, 18f);
+            AvLay.Place(key, x, 8f, Mathf.Max(1f, rw), 15f);
+            AvLay.Place(phase, x, 22f, Mathf.Max(1f, rw), 26f);
+            AvLay.Place(lit, w - Pad - 92f, 48f, Mathf.Max(1f, 92f), 18f);
+            AvLay.Place(glow, x, 48f, Mathf.Max(1f, rw - 96f), 18f);
             float g = GuideH(w);
-            if (g > 0f) Box(guidance, Pad, DiagramH + 2f, w - 2f * Pad, g);
+            if (g > 0f) AvLay.Place(guidance, Pad, DiagramH + 2f, Mathf.Max(1f, w - 2f * Pad), g);
             guidance.gameObject.SetActive(g > 0f);
         }
 
@@ -647,11 +633,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(EnvWind data)
         {
             d = data;
-            SetText(speed, AvNum.Fixed(data.Kts, 0) + " KT");
-            SetText(bearings, "FROM " + AvNum.Fixed(data.From, 0).PadLeft(3, '0') + "° " + data.Cardinal + "   TO " + AvNum.Fixed(data.To, 0).PadLeft(3, '0') + "°");
-            SetText(turbValue, AvStates.Glyph(data.TurbState) + data.TurbWord + "  " + AvNum.Fixed(data.Turbulence, 2));
+            AvText.Set(speed, AvNum.Fixed(data.Kts, 0) + " KT");
+            AvText.Set(bearings, "FROM " + AvNum.Fixed(data.From, 0).PadLeft(3, '0') + "° " + data.Cardinal + "   TO " + AvNum.Fixed(data.To, 0).PadLeft(3, '0') + "°");
+            AvText.Set(turbValue, AvStates.Glyph(data.TurbState) + data.TurbWord + "  " + AvNum.Fixed(data.Turbulence, 2));
             bool changed = advisory.text != AdvisoryText();
-            SetText(advisory, AdvisoryText());
+            AvText.Set(advisory, AdvisoryText());
             Tint();
             Redraw();
             if (changed) Changed();
@@ -670,15 +656,15 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         protected override void Layout(float w, float h)
         {
-            Box(north, Pad, 8f, 2f * DialR + 8f, 15f);
+            AvLay.Place(north, Pad, 8f, Mathf.Max(1f, 2f * DialR + 8f), 15f);
             float x = Pad + 2f * DialR + 24f, rw = w - x - Pad;
-            Box(speedKey, x, 8f, rw, 15f);
-            Box(speed, x, 22f, rw, 32f);
-            Box(bearings, x, 56f, rw, 16f);
-            Box(turbKey, x, 80f, rw * 0.45f, 15f);
-            Box(turbValue, x + rw * 0.45f, 78f, rw * 0.55f, 18f);
+            AvLay.Place(speedKey, x, 8f, Mathf.Max(1f, rw), 15f);
+            AvLay.Place(speed, x, 22f, Mathf.Max(1f, rw), 32f);
+            AvLay.Place(bearings, x, 56f, Mathf.Max(1f, rw), 16f);
+            AvLay.Place(turbKey, x, 80f, Mathf.Max(1f, rw * 0.45f), 15f);
+            AvLay.Place(turbValue, x + rw * 0.45f, 78f, Mathf.Max(1f, rw * 0.55f), 18f);
             float a = AdvH(w);
-            if (a > 0f) Box(advisory, Pad, DiagramH + 2f, w - 2f * Pad, a);
+            if (a > 0f) AvLay.Place(advisory, Pad, DiagramH + 2f, Mathf.Max(1f, w - 2f * Pad), a);
             advisory.gameObject.SetActive(a > 0f);
         }
 
@@ -765,7 +751,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < labels.Length; i++)
             {
                 bool on = (mask & (1 << i)) != 0;
-                SetText(labels[i], (on && alarm && i == 3 ? AvStates.Glyph(state) : "") + Names[i]);
+                AvText.Set(labels[i], (on && alarm && i == 3 ? AvStates.Glyph(state) : "") + Names[i]);
                 labels[i].color = on ? (alarm ? EnvInk.State(state) : EnvInk.Role("ink")) : EnvInk.Role("ink-dim");
             }
             Redraw();
@@ -776,7 +762,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected override void Layout(float w, float h)
         {
             float cw = w / labels.Length;
-            for (int i = 0; i < labels.Length; i++) Box(labels[i], i * cw + 2f, 38f, cw - 4f, 16f);
+            for (int i = 0; i < labels.Length; i++) AvLay.Place(labels[i], i * cw + 2f, 38f, Mathf.Max(1f, cw - 4f), 16f);
         }
 
         protected override void OnRestyle()
@@ -883,9 +869,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(int i, string timeText, bool isNow, WeatherRegimeType regime, string codeText, float rainProbability, AvState s)
         {
             if (i < 0 || i >= count) return;
-            SetText(time[i], timeText);
+            AvText.Set(time[i], timeText);
             bool alarm = s == AvState.Caution || s == AvState.Danger;
-            SetText(code[i], (alarm ? AvStates.Glyph(s) : "") + (codeText ?? ""));
+            AvText.Set(code[i], (alarm ? AvStates.Glyph(s) : "") + (codeText ?? ""));
             glyph[i].SetKind(regime);
             rain[i] = Mathf.Clamp01(rainProbability);
             state[i] = s;
@@ -910,9 +896,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < count; i++)
             {
                 float x = 4f + i * cw;
-                Box(time[i], x, 5f, cw, 16f);
+                AvLay.Place(time[i], x, 5f, Mathf.Max(1f, cw), 16f);
                 AvLay.Place(glyph[i].rectTransform, x + (cw - 26f) * 0.5f, 23f, 26f, 26f);
-                Box(code[i], x, 51f, cw, 16f);
+                AvLay.Place(code[i], x, 51f, Mathf.Max(1f, cw), 16f);
             }
         }
 

@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -7,13 +8,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         internal static float AdvanceWetness(float wetness, float rain, float seconds)
         {
-            float from = WeatherMath.Clamp01(wetness), target = WeatherMath.Clamp01(rain);
+            float from = Scalar.Clamp01(wetness), target = Scalar.Clamp01(rain);
             float amount = Math.Max(0f, seconds) / (target > from ? 35f : 180f);
             return target > from ? Math.Min(target, from + amount) : Math.Max(target, from - amount);
         }
 
         internal static float ColdTarget(float temperatureC, float recentLiquid)
-            => WeatherMath.Smoothstep(0f, 10f, -temperatureC) * WeatherMath.Clamp01(recentLiquid) * 0.35f;
+            => WeatherMath.Smoothstep(0f, 10f, -temperatureC) * Scalar.Clamp01(recentLiquid) * 0.35f;
 
         // Broad damp tone survives high views; close puddle detail has its own shader LOD.
         internal static float GroundDrawRange(float cameraAltitude)

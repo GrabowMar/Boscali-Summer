@@ -1,15 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BepInEx.Configuration;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Modules.Session.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -86,9 +83,9 @@ namespace BoscaliSummer.Modules.Session.Networking
         private Action<string, string> writeLocal;
 
         private ConfigFile config;
-        private ManualLogSource logger;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<SessionHello>(ReceiveHello);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<HostSettingsMessage>(ReceiveSettings);
         private float nextRegistration;
         private float nextHello;
         private float nextFlush;
@@ -100,9 +97,8 @@ namespace BoscaliSummer.Modules.Session.Networking
         private bool applying;
         private static bool serializersInstalled;
 
-        public void Configure(ConfigEntryBase[] hostOwned, ConfigEntryBase[] moduleSwitches, ManualLogSource log)
+        public void Configure(ConfigEntryBase[] hostOwned, ConfigEntryBase[] moduleSwitches)
         {
-            logger = log;
             entries = hostOwned ?? Array.Empty<ConfigEntryBase>();
             switchEntries = moduleSwitches ?? Array.Empty<ConfigEntryBase>();
             for (int i = 0; i < switchEntries.Length; i++)
@@ -157,7 +153,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 if (!hostSilentShown)
                 {
                     hostSilentShown = true;
-                    logger?.LogWarning("[Session] The host did not answer the session handshake; it runs an older " +
+                    Plugin.Logger?.LogWarning("[Session] The host did not answer the session handshake; it runs an older " +
                         "Boscali Summer or none. Host-owned settings stay at this client's values.");
                     Notice(HudTone.Caution, "HOST DID NOT ANSWER",
                         "The host runs an older Boscali Summer or none; host-run panels may stay empty.");
@@ -176,20 +172,11 @@ namespace BoscaliSummer.Modules.Session.Networking
             catch { return; }
 
             MessageHandler server = network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<SessionHello>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<SessionHello>(ReceiveHello, false);
-                peers.Clear();
-            }
+            if (ServerHandlers.Swap(server)) peers.Clear();
 
             MessageHandler client = network?.Client?.MessageHandler;
-            if (client != clientHandler)
+            if (ClientHandlers.Swap(client))
             {
-                clientHandler?.UnregisterHandler<HostSettingsMessage>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<HostSettingsMessage>(ReceiveSettings, false);
                 // A new connection is a new session: forget the last host and say hello again.
                 if (ledger.Active) EndSession("changed server");
                 ResetHandshake();
@@ -224,7 +211,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             peers[sender] = now;
 
             if (!string.Equals(hello.Version, Plugin.PluginVersion, StringComparison.Ordinal))
-                logger?.LogWarning("[Session] A client joined with Boscali Summer " + (hello.Version ?? "?") +
+                Plugin.Logger?.LogWarning("[Session] A client joined with Boscali Summer " + (hello.Version ?? "?") +
                     "; this host runs " + Plugin.PluginVersion + ". Mismatched versions can break panels.");
 
             outgoing.Clear();
@@ -334,7 +321,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 {
                     versionShown = true;
                     string host = string.IsNullOrEmpty(message.Version) ? "?" : message.Version;
-                    logger?.LogWarning("[Session] Host runs Boscali Summer " + host + "; this client runs " +
+                    Plugin.Logger?.LogWarning("[Session] Host runs Boscali Summer " + host + "; this client runs " +
                         Plugin.PluginVersion + ".");
                     Notice(HudTone.Caution, "BOSCALI SUMMER " + Plugin.PluginVersion + " · HOST " + host,
                         "Install the host's version so every panel matches.");
@@ -363,12 +350,12 @@ namespace BoscaliSummer.Modules.Session.Networking
             {
                 applying = false;
             }
-            if (changed > 0) logger?.LogInfo("[Session] Using " + changed + " host setting(s) for this session.");
+            if (changed > 0) Plugin.Logger?.LogInfo("[Session] Using " + changed + " host setting(s) for this session.");
             if ((message.Flags & (FlagReply | FlagComplete)) == (FlagReply | FlagComplete) && switchMismatches.Count > 0)
             {
                 string list = string.Join(", ", switchMismatches);
                 switchMismatches.Clear();
-                logger?.LogWarning("[Session] The host's module switches differ from this client's: host has " + list +
+                Plugin.Logger?.LogWarning("[Session] The host's module switches differ from this client's: host has " + list +
                     ". Match them in the config and restart the game.");
                 Notice(HudTone.Caution, "HOST MODULES: " + list, "Match the host's module switches and restart.");
             }
@@ -396,8 +383,8 @@ namespace BoscaliSummer.Modules.Session.Networking
             ConfigMenu.SetReadOnly(entries, false);
             config.SaveOnConfigSet = savedSaveOnSet;
             try { config.Save(); }
-            catch (Exception e) { logger?.LogWarning("[Session] Could not save settings: " + e.Message); }
-            logger?.LogInfo("[Session] Restored your own settings (" + reason + ").");
+            catch (Exception e) { Plugin.Logger?.LogWarning("[Session] Could not save settings: " + e.Message); }
+            Plugin.Logger?.LogInfo("[Session] Restored your own settings (" + reason + ").");
         }
 
         private string ReadLocal(string key) =>
@@ -407,7 +394,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         {
             if (!allowed.TryGetValue(key, out ConfigEntryBase entry)) return;
             try { entry.SetSerializedValue(value); }
-            catch (Exception e) { logger?.LogWarning("[Session] Ignored host value for " + key + ": " + e.Message); }
+            catch (Exception e) { Plugin.Logger?.LogWarning("[Session] Ignored host value for " + key + ": " + e.Message); }
         }
 
         private static void Notice(HudTone tone, string text, string detail)
@@ -423,8 +410,8 @@ namespace BoscaliSummer.Modules.Session.Networking
         {
             EndSession("unloading");
             if (config != null) config.SettingChanged -= OnSettingChanged;
-            serverHandler?.UnregisterHandler<SessionHello>();
-            clientHandler?.UnregisterHandler<HostSettingsMessage>();
+            ServerHandlers.Release();
+            ClientHandlers.Release();
             peers.Clear();
         }
 
@@ -435,22 +422,22 @@ namespace BoscaliSummer.Modules.Session.Networking
             if (serializersInstalled) return;
             serializersInstalled = true;
 
-            Bind(typeof(Writer<SessionHello>), "Write", (Action<NetworkWriter, SessionHello>)((w, v) =>
+            MirageSerializers.Strict.Install<SessionHello>((Action<NetworkWriter, SessionHello>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-                w.WriteString(Bounded(v.Version, MaximumVersionLength));
-            }));
-            Bind(typeof(Reader<SessionHello>), "Read", (Func<NetworkReader, SessionHello>)(r =>
+                w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
+            }),
+            (Func<NetworkReader, SessionHello>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SessionHello { Protocol = protocol };
-                return new SessionHello { Protocol = protocol, Version = Bounded(r.ReadString(), MaximumVersionLength) };
+                return new SessionHello { Protocol = protocol, Version = NetText.Clip(r.ReadString(), MaximumVersionLength) };
             }));
 
-            Bind(typeof(Writer<HostSettingsMessage>), "Write", (Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
+            MirageSerializers.Strict.Install<HostSettingsMessage>((Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
-                w.WriteString(Bounded(v.Version, MaximumVersionLength));
+                w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
                 w.WriteByte(v.Flags);
                 int count = v.Keys == null || v.Values == null ? 0 : Math.Min(v.Keys.Length, v.Values.Length);
                 if (count > HostValueChunks.MaximumEntries) count = HostValueChunks.MaximumEntries;
@@ -460,13 +447,13 @@ namespace BoscaliSummer.Modules.Session.Networking
                     w.WriteString(v.Keys[i]);
                     w.WriteString(v.Values[i]);
                 }
-            }));
-            Bind(typeof(Reader<HostSettingsMessage>), "Read", (Func<NetworkReader, HostSettingsMessage>)(r =>
+            }),
+            (Func<NetworkReader, HostSettingsMessage>)(r =>
             {
                 byte protocol = r.ReadByte();
                 var message = new HostSettingsMessage { Protocol = protocol };
                 if (protocol != ProtocolVersion) return message;
-                message.Version = Bounded(r.ReadString(), MaximumVersionLength);
+                message.Version = NetText.Clip(r.ReadString(), MaximumVersionLength);
                 message.Flags = r.ReadByte();
                 int count = r.ReadByte();
                 // An oversized or broken message is dropped whole; the handler ignores null arrays.
@@ -483,19 +470,6 @@ namespace BoscaliSummer.Modules.Session.Networking
                 return message;
             }));
 
-            MessagePacker.RegisterMessage<SessionHello>();
-            MessagePacker.RegisterMessage<HostSettingsMessage>();
-        }
-
-        private static string Bounded(string value, int length) =>
-            value == null ? "" : value.Length <= length ? value : value.Substring(0, length);
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.Name, property);
-            target.SetValue(null, value, null);
         }
     }
 }

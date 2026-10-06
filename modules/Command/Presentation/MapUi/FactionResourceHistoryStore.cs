@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Command.Runtime;
 using UnityEngine;
 
@@ -53,8 +54,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                    stats.ships.current + stats.aircraft.current;
         }
 
-        internal static float Morale(FactionHQ hq) =>
-            FactionResources.TryGetMorale(hq, out float stored) ? stored : float.NaN;
+        internal static float Morale(FactionHQ hq)
+        {
+            if (hq == null || CommandManager.Active == null) return float.NaN;
+            float stored;
+            bool ok = GameAccess.IsServer()
+                ? CommandManager.Active.Morale.TryGet(hq.GetInstanceID(), out stored)
+                : CommandManager.Active.TryGetRemoteMorale(hq.faction?.factionName, out stored);
+            return ok ? stored : float.NaN;
+        }
 
         internal static void Clear() => histories.Clear();
     }

@@ -64,28 +64,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>
-        /// Faction picture for the client mirror: cold when no hostile track was spotted
-        /// within the window. Advisory only — the server re-checks the grid at commit.
-        /// </summary>
-        public static bool FactionIntelCold(FactionHQ owner, float windowSeconds)
-        {
-            if (owner == null || owner.trackingDatabase == null) return true;
-            if (windowSeconds <= 0f || !float.IsFinite(windowSeconds)) return true;
-            float now = Time.timeSinceLevelLoad;
-            int examined = 0;
-            foreach (TrackingInfo track in owner.trackingDatabase.Values)
-            {
-                if (track == null) continue;
-                if (++examined > IntelGate.MaxTracks) break;
-                if (!HostileOrUnknown(owner, track)) continue;
-                float age = now - track.lastSpottedTime;
-                if (age < 0f) age = 0f;
-                if (age <= windowSeconds) return false;
-            }
-            return true;
-        }
-
         private static bool HostileOrUnknown(FactionHQ owner, TrackingInfo track)
         {
             Unit unit;

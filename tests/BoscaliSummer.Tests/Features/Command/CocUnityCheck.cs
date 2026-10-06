@@ -15,6 +15,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 /// <summary>
 /// Standalone render check for the STR console — SITUATION (threat ladder, force balance, air tasking
@@ -41,20 +42,9 @@ public static class CocUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
 
-            var setPaths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            var parameters = setPaths.GetParameters();
-            var arguments = new object[parameters.Length];
-            arguments[0] = Path.GetFullPath("CocCheck.exe");
-            for (int i = 1; i < arguments.Length; i++) arguments[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            setPaths.Invoke(null, arguments);
+            SetExecutablePath("CocCheck.exe");
 
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
@@ -323,7 +313,6 @@ public static class CocUnityCheck
             ContestedSectorCount = 236,
             HostileSectorCount = 3277,
             NeutralSectorCount = 240,
-            TotalNodesCount = 132,
             FrontlineSegmentCount = 41,
             FrontlineLengthMetres = 112700f,
             TerritoryControlRatio = .49f,
@@ -435,30 +424,11 @@ public static class CocUnityCheck
         int pixelWidth = Mathf.RoundToInt(width * 2f);
         int pixelHeight = Mathf.RoundToInt(height * 2f);
 
-        var cameraObject = new GameObject("CocCamera", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = height * 0.5f;
-        camera.transform.position = new Vector3(center?.x ?? 0f, center?.y ?? 0f, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = new Color(0.04f, 0.07f, 0.06f);
-
-        var target = new RenderTexture(pixelWidth, pixelHeight, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-
-        var image = new Texture2D(pixelWidth, pixelHeight, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0f, 0f, pixelWidth, pixelHeight), 0, 0);
-        image.Apply();
+        Camera camera = OrthoCamera("CocCamera", height * 0.5f, new Color(0.04f, 0.07f, 0.06f),
+            new Vector3(center?.x ?? 0f, center?.y ?? 0f, -10f));
         string path = Path.GetFullPath(file);
-        File.WriteAllBytes(path, image.EncodeToPNG());
-
-        RenderTexture.active = null;
-        camera.targetTexture = null;
-        Object.DestroyImmediate(target);
-        Object.DestroyImmediate(image);
-        Object.DestroyImmediate(cameraObject);
+        CapturePng(camera, pixelWidth, pixelHeight, path);
+        Object.DestroyImmediate(camera.gameObject);
 
         var info = new FileInfo(path);
         Check(info.Exists && info.Length > 0, "render produced no bytes: " + file);
@@ -750,76 +720,6 @@ public static class CocUnityCheck
     }
 
     // ------------------------------------------------------------------ plumbing
-
-    private sealed class OperationsStub : ITheaterOperationsView
-    {
-        public bool Available => true;
-        public bool CanCommand => true;
-        public float WaveBudget => 4f;
-        public IReadOnlyList<TheaterOperationView> Operations { get; }
-        public TheaterDirectionView Direction => new TheaterDirectionView(TheaterDirectorPosture.Defending, true, "WEST DEPOT", 2);
-        public TheaterInfluenceView Influence => new TheaterInfluenceView(.7f, false, 20f, 8f,
-            "FLIGHT LEAD", new TheaterAxisView[0]);
-        public IReadOnlyList<string> StaffLog => new[] { "STAFF FUNDED THE NORTHERN PUSH", "CONVOYS MUSTERING", "EASTERN DEFENSE HELD" };
-
-        public OperationsStub(TheaterOperationPhase phase)
-        {
-            Operations = new[]
-            {
-                new TheaterOperationView("NORTHERN LANCE", phase,
-                    phase == TheaterOperationPhase.Concluded ? TheaterOperationOutcome.ObjectiveSecured : TheaterOperationOutcome.None,
-                    phase >= TheaterOperationPhase.Launching ? "NORTH RIDGE AIRBASE" : null,
-                    .65f, 12f, 18f, phase >= TheaterOperationPhase.Assault ? 8f : 0f,
-                    240f, 90f, 4, phase >= TheaterOperationPhase.Assault ? 2 : 0, 45f, null),
-                new TheaterOperationView("EASTERN SHIELD", TheaterOperationPhase.Mustering,
-                    TheaterOperationOutcome.None, null, .3f, 8f, 10f, 0f, 0f, -1f, 2, 0, -1f, null),
-            };
-        }
-        public void Refresh() { }
-        public bool RequestStance(float stance) => false;
-        public bool RequestHold(bool hold) => false;
-        public bool RequestChest(float escrow, float reserve) => false;
-        public bool RequestAxis(string key, float weight) => false;
-    }
-
-    private sealed class PriorityStub : ITheaterPriorityView
-    {
-        private readonly string label;
-        public PriorityStub(string priorityLabel = "WEST DEPOT") { label = priorityLabel; }
-        public bool Available => true;
-        public bool HasPriority => label != null;
-        public string PriorityLabel => label;
-        public IReadOnlyList<TheaterPriorityOption> Options => new[]
-        {
-            new TheaterPriorityOption("north", "NORTH RIDGE AIRBASE", "AIRBASE · ACTIVE", 1200f, 4200f),
-            new TheaterPriorityOption("east", "EASTERN PASS", "GROUND · ACTIVE"),
-            new TheaterPriorityOption("west", "WEST DEPOT", "DEPOT · ACTIVE"),
-        };
-        public void Refresh() { }
-    }
-
-    private sealed class LogisticsStub : ITheaterLogisticsView
-    {
-        private readonly bool emptyPool, canCommand;
-        public LogisticsStub(bool emptyPool = false, bool canCommand = true)
-        {
-            this.emptyPool = emptyPool;
-            this.canCommand = canCommand;
-        }
-        public bool Available => true;
-        public bool CanCommand => canCommand;
-        public float FactionFunds => emptyPool ? 0f : 40f;
-        public IReadOnlyList<ReinforcementOption> Reinforcements => new[]
-        {
-            new ReinforcementOption("armor", "ARMORED COLUMN", "4 × MBT  ·  2 × IFV", 5f, !emptyPool, !emptyPool, 0f),
-            new ReinforcementOption("motor", "MOTORIZED", "3 × APC  ·  2 × SPAA", 3f, !emptyPool, !emptyPool, 0f),
-            new ReinforcementOption("rocket", "ROCKET BATTERY", "2 × MLRS  ·  1 × TRUCK", 4f, false, true, 60f),
-            new ReinforcementOption("supply", "SUPPLY TRAIN", "4 × TRUCK", 2f, !emptyPool, !emptyPool, 0f),
-        };
-        public ReadinessSummary Readiness => default;
-        public void Refresh() { }
-        public bool RequestReinforcement(string key) => false;
-    }
 
     private sealed class EventsStub : IActiveEventsView
     {

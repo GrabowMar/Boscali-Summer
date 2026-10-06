@@ -1,7 +1,4 @@
-using System;
 using HarmonyLib;
-using NuclearOption.Networking;
-using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
 {

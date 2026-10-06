@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.HighCommand.Domain
 {
@@ -25,12 +26,10 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
         public static int Stipend(int baseAmount, float liveWeight, float cohesion)
         {
             if (baseAmount <= 0 || liveWeight <= 0f) return 0;
-            float scale = 0.6f + 0.4f * Clamp01(cohesion);
+            float scale = 0.6f + 0.4f * Scalar.Clamp01(cohesion);
             float value = baseAmount * liveWeight * scale;
             if (float.IsNaN(value) || float.IsInfinity(value)) return 0;
             return (int)Math.Round(value);
         }
-
-        private static float Clamp01(float value) => value < 0f ? 0f : value > 1f ? 1f : value;
     }
 }

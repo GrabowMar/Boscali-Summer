@@ -1,16 +1,6 @@
 using NOAvionics;
-using System.Collections.Generic;
-using UnityEngine;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL (spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
@@ -57,8 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcRoute Route => route;
 
         public int Sub => sub;
-
-        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
 
         public string Hint => last != null && last.Count == 0 && !last.Client
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
@@ -154,8 +142,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }
             return false;
         }
-
-        private static bool InScope(WmcContext c, in SnapshotMember m) => c.InScope(m);
 
         public void Shown(WmcContext c)
         {

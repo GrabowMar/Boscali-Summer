@@ -1,5 +1,4 @@
 using NOAvionics;
-using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -7,35 +6,18 @@ using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Kit v2 drawing primitives for the WMC's Rect/top-left, y-down-negative layout convention (phase A: the tab
-    /// files that call into <see cref="WmcKit"/>/<see cref="WmcUi"/>/<see cref="WmcFui"/> still pass absolute Rects; phase B
-    /// converts them to <see cref="AvFlow"/>). Every visual here is built from <see cref="AvFrame"/>/<see cref="AvText"/>/
-    /// <see cref="AvStyleHost"/> — never the retired v1 primitives.</summary>
+    /// <summary>Kit v2 drawing primitives for the WMC's Rect/top-left, y-down-negative layout convention, built from
+    /// <see cref="AvFrame"/>/<see cref="AvText"/>/<see cref="AvStyleHost"/>.</summary>
     internal static class WmcDraw
     {
-        /// <summary>WMC Rects are top-left, y growing downward as a <em>negative</em> anchoredPosition.y (v1's Place helper
-        /// convention); kit v2's <see cref="AvLay.Place(RectTransform,float,float,float,float)"/> negates y itself, so this
+        /// <summary>WMC Rects are top-left, y growing downward as a <em>negative</em> anchoredPosition.y; kit v2's <see cref="AvLay.Place(RectTransform,float,float,float,float)"/> negates y itself, so this
         /// flips it back once, here, instead of at every call site.</summary>
         public static void Place(RectTransform t, Rect r) => AvLay.Place(t, r.x, -r.y, r.width, r.height);
 
-        public static RectTransform Container(RectTransform parent, string name, Rect r)
-        {
-            RectTransform t = AvLay.Child(parent, name);
-            Place(t, r);
-            return t;
-        }
-
-        /// <summary>A flat fill, no border (v1's Panel helper).</summary>
+        /// <summary>A flat fill, no border.</summary>
         public static AvFrame Panel(RectTransform parent, Rect r, Color fill)
         {
             AvFrame f = AvFrame.Add(parent, "Panel", default);
@@ -45,7 +27,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return f;
         }
 
-        /// <summary>A 1 px stroke, no fill (v1's Outline helper, one mesh instead of four rules).</summary>
+        /// <summary>A 1 px stroke, no fill.</summary>
         public static AvFrame Outline(RectTransform parent, Rect r, Color color)
         {
             AvFrame f = AvFrame.Add(parent, "Outline", default);
@@ -54,43 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             f.Paint(Color.clear, color);
             f.raycastTarget = false;
             return f;
-        }
-
-        /// <summary>A thin filled line (a hairline, a tick, a spine): a plain Image, not a mesh frame.</summary>
-        public static Image Rule(RectTransform parent, Rect r, Color color)
-        {
-            Image img = AvLay.Solid(parent, "Rule", color);
-            Place(img.rectTransform, r);
-            return img;
-        }
-
-        /// <summary>Top-left and bottom-right L-brackets (the FUI card-corner mark).</summary>
-        public static void Corners(RectTransform parent, Rect r, Color color, float len = WmcFui.Corner)
-        {
-            Rule(parent, new Rect(r.x, r.y, len, 1f), color);
-            Rule(parent, new Rect(r.x, r.y, 1f, len), color);
-            Rule(parent, new Rect(r.x + r.width - len, r.y - r.height + 1f, len, 1f), color);
-            Rule(parent, new Rect(r.x + r.width - 1f, r.y - r.height + len, 1f, len), color);
-        }
-
-        /// <summary>A card fill + border resolved from the fui stylesheet class (e.g. "card", "card inert", "row"), falling
-        /// back to the given colours when the class has no rule.</summary>
-        public static AvFrame Box(RectTransform parent, Rect r, string classes, Color fallbackFill, Color fallbackBorder, string state = null)
-        {
-            AvStyle s = AvStyleHost.FuiStyle(classes, state);
-            AvFrame f = AvFrame.Add(parent, "Box", default);
-            Place(f.rectTransform, r);
-            f.Paint(AvStyleHost.Resolve(s.Background, fallbackFill), s.Border.HasValue ? AvStyleHost.Resolve(s.Border, fallbackBorder) : Color.clear);
-            f.raycastTarget = false;
-            return f;
-        }
-
-        /// <summary>A flat, borderless fill as a plain <see cref="Image"/> (not an <see cref="AvFrame"/> mesh).</summary>
-        public static Image Fill(RectTransform parent, Rect r, Color color)
-        {
-            Image img = AvLay.Solid(parent, "Fill", color);
-            Place(img.rectTransform, r);
-            return img;
         }
 
         /// <summary>A single-line, non-wrapping label at a Rect, sized/cased by <paramref name="role"/> and coloured from
@@ -102,7 +47,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             t.enableWordWrapping = false;
             t.overflowMode = TextOverflowModes.Overflow;
             Place(t.rectTransform, r);
-            t.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle(classes).Color, fallback);
+            t.color = AvStyleHost.FuiInk(classes, fallback);
             return t;
         }
 
@@ -113,12 +58,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             switch (railClass)
             {
                 case "ready":
-                case "live": return AvStyleHost.FuiColor("ready", AvTheme.RailReady);
+                case "live": return AvInk.State(AvState.Ready);
                 case "caution":
                 case "armed":
-                case "warn": return AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-                case "danger": return AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
-                case "info": return AvStyleHost.FuiColor("info", AvTheme.RailInfo);
+                case "warn": return AvInk.State(AvState.Caution);
+                case "danger": return AvInk.State(AvState.Danger);
+                case "info": return AvInk.State(AvState.Info);
                 default: return AvStyleHost.FuiColor("hairline", AvTheme.RailInert);
             }
         }
@@ -162,23 +107,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return gap;
         }
 
-        /// <summary>No "…" anywhere (spec WMC rebuild): every label under <paramref name="root"/> overflows instead of cutting
-        /// and shrinks to the 10 px floor before it does. Once after a build (and after a popup opens).</summary>
-        public static void FitAll(RectTransform root)
-        {
-            if (root == null) return;
-            foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(true))
-            {
-                if (t.GetComponentInParent<TMP_InputField>(true) != null) continue;
-                if (t.overflowMode == TextOverflowModes.Ellipsis || (!t.enableWordWrapping && t.overflowMode == TextOverflowModes.Truncate))
-                    t.overflowMode = TextOverflowModes.Overflow;
-                if (t.enableAutoSizing) continue;
-                t.fontSizeMax = t.fontSize;
-                t.fontSizeMin = Mathf.Min(AvTokens.FontMicro, t.fontSize);
-                t.enableAutoSizing = true;
-            }
-        }
-
         /// <summary>Labels that would still spill out of their box at their smallest size (the automation's text-fit audit).
         /// ponytail: estimated from the preferred width at the largest size scaled to the smallest; measure per size if the
         /// estimate ever disagrees with a screenshot.</summary>
@@ -202,7 +130,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static TMP_Text Text(RectTransform parent, Rect r, string classes, TextAlignmentOptions? align = null) =>
             WmcDraw.Label(parent, r, "", RoleFor(classes), classes, ColorFor(classes), align ?? TextAlignmentOptions.MidlineLeft);
 
-        /// <summary>The nearest kit v2 type role for a legacy WmcKit/WmcFui class name (sizes come only from
+        /// <summary>The nearest kit v2 type role for a legacy WmcKit class name (sizes come only from
         /// <see cref="AvTextRole"/>, never a literal font size).</summary>
         internal static AvTextRole RoleFor(string classes)
         {
@@ -241,36 +169,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 default:
                     return AvTheme.Dim;
             }
-        }
-
-        /// <summary>Sets a label only when its text changed (TMP relays out on every assignment).</summary>
-        public static void Set(TMP_Text t, string text)
-        {
-            if (t != null && t.text != text) t.text = text;
-        }
-
-        /// <summary>A numbered step's head (the 0.9 SUPPLY steps): a boxed digit (never a U+24xx circled one), the title, and a
-        /// state chip on the right with its rail; returns the chip's label (<see cref="SetStep"/> writes it).</summary>
-        public static TMP_Text StepHeader(RectTransform p, Rect r, int n, string title, out Image rail)
-        {
-            const float box = 16f, chip = 96f;
-            var digit = new Rect(r.x, r.y - 1f, box, box);
-            WmcDraw.Box(p, digit, "chip", AvTheme.SurfaceInert, AvTheme.Frame);
-            WmcDraw.Label(p, digit, n.ToString(System.Globalization.CultureInfo.InvariantCulture), AvTextRole.Head, "section-title",
-                AvTheme.RailInfo, TextAlignmentOptions.Center);
-            WmcDraw.Label(p, new Rect(r.x + box + 8f, r.y, r.width - box - 8f - chip - 4f, r.height), title, AvTextRole.Head,
-                "section-title", AvTheme.RailInfo);
-            var state = new Rect(r.x + r.width - chip, r.y, chip, r.height);
-            WmcDraw.Box(p, state, "chip", AvTheme.SurfaceInert, AvTheme.Frame);
-            rail = WmcDraw.Rule(p, new Rect(state.x, state.y, 3f, state.height), WmcDraw.RailColor("inert"));
-            return Text(p, new Rect(state.x + 8f, state.y, chip - 10f, state.height), "row-sub");
-        }
-
-        /// <summary>A step chip's words and rail class ("live", "info", "warn", "inert").</summary>
-        public static void SetStep(TMP_Text state, Image rail, string text, string railClass)
-        {
-            Set(state, text);
-            WmcUi.SetRail(rail, railClass);
         }
 
         /// <summary>Where <paramref name="target"/> sits inside <paramref name="root"/> (a popup opens beside its button, parented

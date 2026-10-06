@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Intel.Domain
 {
@@ -24,8 +25,7 @@ namespace BoscaliSummer.Modules.Intel.Domain
                 if (!InMask(rings[i].Kind, mask)) continue;
                 float radius = rings[i].EffectiveRadius(agl);
                 if (!(radius > 0f)) continue;
-                float dx = x - rings[i].X, dz = z - rings[i].Z;
-                float distance = MathF.Sqrt(dx * dx + dz * dz);
+                float distance = Scalar.Distance2D(x, z, rings[i].X, rings[i].Z);
                 if (distance > radius) continue;
                 covering++;
                 if (!rings[i].Stale) anyFresh = true;

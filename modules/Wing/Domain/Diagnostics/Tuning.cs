@@ -4,15 +4,8 @@ using System.Globalization;
 using System.Reflection;
 using System.Text;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Makes every AI parameter tunable from data (<c>.claude/rules/ai-code.md</c>). A parameter is a
@@ -28,9 +21,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             typeof(TerrainFloor), typeof(LeaderEstimator), typeof(TurnFrame), typeof(SlotSolver),
             typeof(RejoinPlanner), typeof(FormationWing), typeof(HoldOrbit), typeof(PilotMind), typeof(RolePolicy), typeof(AirStart), typeof(RateAuthority), typeof(AirframeProfile),
             typeof(RotaryGuidance), typeof(RotaryController), typeof(RotaryPipeline), typeof(TiltwingPipeline), typeof(AnchorTrail),
-            typeof(FaultGuard), typeof(StepSequence), typeof(EscortPick),
+            typeof(FaultGuard), typeof(EscortPick),
             typeof(TaxiGraph), typeof(GroundGuidance), typeof(GroundController), typeof(LineupPlanner), typeof(DepartureSequencer),
-            typeof(StuckWatchdog), typeof(GroundPilot), typeof(FieldTraffic), typeof(ServiceSpots), typeof(RecoveryPilot), typeof(PilotSkill), typeof(RefitTimer), typeof(BingoMonitor), typeof(TaskLead), typeof(WingPlanner), typeof(CombatSupervisor), typeof(TargetAllocator), typeof(OutnumberedJudge), typeof(TargetSpread), typeof(WingHudText), typeof(MissileDefence), typeof(StandingFire), typeof(CommandValidator), typeof(SettlePilot), typeof(WingMirror), typeof(ClearSix), typeof(RadioQueue), typeof(Bra), typeof(ContactWatch), typeof(SettleJob), typeof(PerkEffects), typeof(ApSteps), typeof(OrderValidator), typeof(NavFollower), typeof(DamageWatch), typeof(EjectRules), typeof(RadarDiscipline), typeof(ReactionManeuver), typeof(ShopRules), typeof(PlanEdit), typeof(AreaGuard), typeof(FieldBounds),
+            typeof(StuckWatchdog), typeof(GroundPilot), typeof(FieldTraffic), typeof(ServiceSpots), typeof(RecoveryPilot), typeof(PilotSkill), typeof(RefitTimer), typeof(BingoMonitor), typeof(TaskLead), typeof(WingPlanner), typeof(CombatSupervisor), typeof(TargetAllocator), typeof(OutnumberedJudge), typeof(TargetSpread), typeof(WingHudText), typeof(MissileDefence), typeof(StandingFire), typeof(SettlePilot), typeof(WingMirror), typeof(ClearSix), typeof(RadioQueue), typeof(Bra), typeof(ContactWatch), typeof(SettleJob), typeof(PerkEffects), typeof(ApSteps), typeof(OrderValidator), typeof(NavFollower), typeof(DamageWatch), typeof(EjectRules), typeof(RadarDiscipline), typeof(ReactionManeuver), typeof(ShopRules), typeof(PlanEdit), typeof(AreaGuard), typeof(FieldBounds),
         };
 
         /// <summary>Returns the keys it could not apply, in input order.</summary>

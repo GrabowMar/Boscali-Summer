@@ -1,8 +1,4 @@
-using System;
 
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Core.Math
 {
     /// <summary>First-order low-pass with exact discretisation. The first sample initialises it; a

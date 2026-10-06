@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Domain
 {
@@ -533,9 +534,7 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             {
                 float lastX = x[start + count - 1];
                 float lastZ = z[start + count - 1];
-                float dx = lastX - outX[written - 1];
-                float dz = lastZ - outZ[written - 1];
-                float endGap = (float)Math.Sqrt(dx * dx + dz * dz);
+                float endGap = Scalar.Distance2D(lastX, lastZ, outX[written - 1], outZ[written - 1]);
 
                 if (endGap > 0.4f * spacing)
                 {
@@ -571,16 +570,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         {
             if (closed) return ((index % count) + count) % count;
             return Math.Clamp(index, 0, count - 1);
-        }
-
-        private static void CatmullRom(float x0, float z0, float x1, float z1, float x2, float z2,
-            float x3, float z3, float t, out float x, out float z)
-        {
-            float t2 = t * t, t3 = t2 * t;
-            x = 0.5f * (2f * x1 + (x2 - x0) * t + (2f * x0 - 5f * x1 + 4f * x2 - x3) * t2 +
-                (3f * x1 - x0 - 3f * x2 + x3) * t3);
-            z = 0.5f * (2f * z1 + (z2 - z0) * t + (2f * z0 - 5f * z1 + 4f * z2 - z3) * t2 +
-                (3f * z1 - z0 - 3f * z2 + z3) * t3);
         }
 
         /// <summary>Station normal (left-hand perpendicular) from the neighbouring stations.</summary>

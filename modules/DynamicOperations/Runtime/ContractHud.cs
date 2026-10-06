@@ -2,9 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -102,7 +100,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             if (halfWidth < 1f || halfHeight < 1f) { Hide(); return; }
 
             float size = VanillaHudStyle.OverlayTextSize;
-            if (OperationMarkerCopy.Finite(size) && size >= 1f && !Mathf.Approximately(size, textSize))
+            if (float.IsFinite(size) && size >= 1f && !Mathf.Approximately(size, textSize))
             {
                 textSize = size;
                 for (int i = 0; i < markers.Length; i++) markers[i].SetTextSize(size);

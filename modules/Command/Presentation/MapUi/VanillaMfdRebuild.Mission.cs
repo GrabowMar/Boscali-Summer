@@ -2,10 +2,7 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
-using BoscaliSummer.Modules.Command.Presentation;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
@@ -85,7 +82,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // OBJECTIVES page.
             private ObjectiveTallyPart tally;
             private AvSection checklistSection;
-            private PagedPartStack<ChecklistRow> checklist;
+            private AvPagedStack<ChecklistRow> checklist;
             private AvRow objectivesEmpty;
 
             // CONTRACTS page.
@@ -163,9 +160,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 briefTiles = new[]
                 {
-                    new AvGauge(page.Content, "SCORE", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "OBJECTIVES", AvGaugeShape.Ring, 64f),
-                    new AvGauge(page.Content, "AT STAKE", AvGaugeShape.Ring, 64f),
+                    new AvGauge(page.Content, "SCORE"),
+                    new AvGauge(page.Content, "OBJECTIVES"),
+                    new AvGauge(page.Content, "AT STAKE"),
                 };
                 briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
                 briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";
@@ -203,7 +200,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < count; i++)
                 {
                     float v = history.Value(0, i);
-                    if (!MfdResourceHistory.Finite(v)) { run = 0; runStart = i + 1; continue; }
+                    if (!float.IsFinite(v)) { run = 0; runStart = i + 1; continue; }
                     trendBuffer[run++] = v;
                 }
                 if (run < 2)
@@ -337,7 +334,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 tally = page.Add(new ObjectiveTallyPart(page.Content));
                 checklistSection = page.Section(AvIcon.ListDetails, "CHECKLIST");
-                checklist = page.Add(new PagedPartStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
+                checklist = page.Add(new AvPagedStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
                     (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
                 objectivesEmpty = page.Add(new AvRow(page.Content));
                 objectivesEmpty.SetShown(false);
@@ -735,26 +732,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-        }
-
-        private sealed class UnavailablePresenter : Presenter
-        {
-            public UnavailablePresenter(MFDScreen screen, VanillaMfdPanelId id) : base(screen, id) { }
-
-            protected override string Title => "COMPATIBILITY HOLD";
-            protected override (AvIcon Icon, string Label)[] TabItems { get; } = Array.Empty<(AvIcon, string)>();
-
-            protected override void BuildContent()
-            {
-                AvFlow page = CreatePage();
-                page.Section(AvIcon.AlertTriangle, "NATIVE ADAPTER UNAVAILABLE");
-                Note(page, "This game build changed the controller attached to this MFD. " +
-                           "The source panel remains intact and will be restored when the map closes.");
-            }
-
-            protected override void RefreshContent() { }
-
-            protected override string AmbientStatus() => "UPDATE COMPATIBILITY REQUIRED";
         }
     }
 }

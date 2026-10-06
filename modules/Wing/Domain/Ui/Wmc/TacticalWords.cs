@@ -1,12 +1,4 @@
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>TACTICAL v3's member row words (spec tactical v3 §2.2): the second line and the fuel and ammo tape classes.</summary>
@@ -27,9 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             var f = (SnapshotFlags)flags;
             return (f & SnapshotFlags.Bingo) != 0 ? "danger" : (f & SnapshotFlags.Joker) != 0 ? "armed" : "ready";
         }
-
-        /// <summary>The ammo tape's rail class: danger at winchester, else info.</summary>
-        public static string AmmoRail(byte flags) => ((SnapshotFlags)flags & SnapshotFlags.Winchester) != 0 ? "danger" : "info";
     }
 
     /// <summary>TACTICAL v3's alert stack (spec tactical v3 §2.1): which line each row shows.</summary>

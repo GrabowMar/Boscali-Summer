@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
@@ -55,10 +56,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         {
             string state = field switch
             {
-                MarkerField.Hold => "HOLD " + Percent(progress),
+                MarkerField.Hold => "HOLD " + AvNum.PercentWhole(progress),
                 MarkerField.Deliver => "LAND TO DELIVER",
-                _ => Finite(distanceMetres)
-                    ? Distance(distanceMetres, metric) + (Finite(radius) && radius > 0f ? " TO AREA" : "")
+                _ => float.IsFinite(distanceMetres)
+                    ? Distance(distanceMetres, metric) + (float.IsFinite(radius) && radius > 0f ? " TO AREA" : "")
                     : ""
             };
             string text = string.IsNullOrEmpty(state)
@@ -71,7 +72,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// <summary>The vicinity card's cue bar: closing on the edge, then the hold itself.</summary>
         public static float Bar(float distanceMetres, float radius, bool inside, float progress)
         {
-            if (inside) return Finite(progress) ? (progress < 0f ? 0f : progress > 1f ? 1f : progress) : 0f;
+            if (inside) return float.IsFinite(progress) ? (progress < 0f ? 0f : progress > 1f ? 1f : progress) : 0f;
             return Approach(distanceMetres, radius);
         }
 
@@ -83,7 +84,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// </summary>
         public static string Distance(float metres, bool metric, IFormatProvider culture = null)
         {
-            if (!Finite(metres) || metres < 0f) return "—";
+            if (!float.IsFinite(metres) || metres < 0f) return "—";
             IFormatProvider provider = culture ?? CultureInfo.CurrentCulture;
             if (metric)
             {
@@ -104,27 +105,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// </summary>
         public static float RingAlpha(float radius, float distance)
         {
-            if (!Finite(radius) || !Finite(distance) || radius <= 0f || distance <= 0.01f) return 0f;
+            if (!float.IsFinite(radius) || !float.IsFinite(distance) || radius <= 0f || distance <= 0.01f) return 0f;
             float value = radius * 20f / distance - 0.5f;
             return value < 0f ? 0f : value > 1f ? 1f : value;
         }
 
         /// <summary>Countdown text, or empty when no clock is running.</summary>
-        public static string Clock(float seconds)
-        {
-            if (!Finite(seconds) || seconds < 0f) return "";
-            int total = (int)Math.Ceiling(seconds);
-            if (total < 60) return "T-" + total + "s";
-            return "T-" + (total / 60) + ":" + (total % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
-
-        public static string Percent(float ratio)
-        {
-            if (!Finite(ratio)) return "—";
-            float clamped = ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
-            return ((int)Math.Round(clamped * 100f, MidpointRounding.AwayFromZero))
-                .ToString(CultureInfo.InvariantCulture) + "%";
-        }
+        public static string Clock(float seconds) => AvNum.TMinus(seconds);
 
         /// <summary>
         /// A contract returning to base is green, one whose clock is nearly out is amber,
@@ -134,7 +121,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public static MarkerTone Tone(string status, float secondsRemaining)
         {
             if (Returning(status)) return MarkerTone.Ready;
-            if (Finite(secondsRemaining) && secondsRemaining > 0f && secondsRemaining <= UrgentSeconds)
+            if (float.IsFinite(secondsRemaining) && secondsRemaining > 0f && secondsRemaining <= UrgentSeconds)
                 return MarkerTone.Caution;
             return MarkerTone.Info;
         }
@@ -146,14 +133,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// </summary>
         public static float VicinityBand(float radius)
         {
-            float safe = Finite(radius) && radius > 0f ? radius : 0f;
+            float safe = float.IsFinite(radius) && radius > 0f ? radius : 0f;
             return safe + Math.Max(safe * VicinityRadiusFactor, VicinityFloorMetres);
         }
 
         /// <summary>0 at the band edge, 1 at the area edge; the vicinity card's cue bar.</summary>
         public static float Approach(float distanceMetres, float radius)
         {
-            if (!Finite(distanceMetres) || !Finite(radius) || radius < 0f) return 0f;
+            if (!float.IsFinite(distanceMetres) || !float.IsFinite(radius) || radius < 0f) return 0f;
             float band = VicinityBand(radius) - radius;
             if (band <= 0f) return 0f;
             float remaining = distanceMetres - radius;
@@ -161,6 +148,5 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             return ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
         }
 
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

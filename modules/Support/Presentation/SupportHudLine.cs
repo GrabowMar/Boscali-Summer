@@ -6,7 +6,6 @@ using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Ui;
 using NOAvionics;
 

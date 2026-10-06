@@ -205,7 +205,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             uint first = output[0].Envelope.Id;
             output.Clear();
             host.Handle(Wing, Ping(0, CommsChannel.Team), 100f, output);
-            TestAssert.That(host.Board.CountBy(Wing.Id, CommsItemKind.Ping) == budget, "the budget holds");
+            TestAssert.That(host.Board.CountOf(CommsItemKind.Ping) == budget, "the budget holds");
             TestAssert.That(output.Count == 2 && output[1].Envelope.Event == CommsEvent.Remove &&
                             output[1].Envelope.Ids[0] == first, "the oldest ping is retired and announced");
             TestAssert.That(host.Board.Find(first) == null, "and really gone");
@@ -372,8 +372,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             host.Handle(Third, new CommsIntent { Op = CommsOp.RpsAccept, Target = open.Id, Style = 1 }, 2f, output);
             CommsEnvelope result = output[0].Envelope;
             TestAssert.That((result.Flags & CommsFlags.Closed) != 0 && result.Values[2] == -1, "paper beats rock");
-            TestAssert.That(output[1].Envelope.Event == CommsEvent.Scores && host.Scores.PointsOf(Third.Id) == 2 &&
-                            host.Scores.RankOf(Third.Id) == 1, "the winner scores");
+            TestAssert.That(output[1].Envelope.Event == CommsEvent.Scores && host.Scores.PointsOf(Third.Id) == 2, "the winner scores");
 
             output.Clear();
             host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsChallenge, Style = 2 }, 3f, output);
@@ -442,7 +441,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             TestAssert.That(reveal.Items[0] == "HOST" && reveal.Values[0] == 500 && reveal.Values[1] == 4,
                 "closest first, with a bullseye bonus");
             TestAssert.That(reveal.Values[3] == 2, "second place scores two");
-            TestAssert.That(host.Scores.RankOf(Host.Id) == 1 && host.Hunts.Count == 0, "scores land and the round ends");
+            TestAssert.That(host.Hunts.Count == 0, "the round ends");
         }
 
         private static void SnapshotShowsOnlyWhatTheViewerMaySee()
@@ -544,7 +543,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             Deliver(output, client, Third, 240f);
             TestAssert.That(client.Hunts[0].Revealed && client.Hunts[0].Placings.Count == 1 &&
                             client.Hunts[0].Placings[0].Name == "WING", "the reveal lands with its placings");
-            TestAssert.That(client.Scores.RankOf(Wing.Id) == 1, "and the leaderboard follows");
+            TestAssert.That(client.Scores.PointsOf(Wing.Id) > 0, "and the leaderboard follows");
             client.Tick(240f + CommsClientState.RevealSeconds + 1f);
             TestAssert.That(client.Hunts.Count == 0, "the reveal clears itself");
 

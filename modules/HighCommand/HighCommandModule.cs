@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.HighCommand.Patches;
 using BoscaliSummer.Modules.HighCommand.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.HighCommand
@@ -26,7 +25,7 @@ namespace BoscaliSummer.Modules.HighCommand
         {
             HighCommandNet network = context.AddComponent<HighCommandNet>();
             HighCommandManager manager = context.AddSceneService<HighCommandManager>(46);
-            manager.Configure(context.Settings.HighCommand, network, context.Logger);
+            manager.Configure(context.Settings.HighCommand, network);
             network.Configure(manager);
             context.AddService<IHighCommandView>(manager);
 

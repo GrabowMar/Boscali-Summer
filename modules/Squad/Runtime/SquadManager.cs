@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Squad.Configuration;
 using BoscaliSummer.Modules.Squad.Domain;
 using BoscaliSummer.Modules.Squad.Networking;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -63,7 +61,6 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         private readonly HashSet<Player> connected = new HashSet<Player>();
         private SquadSettings settings;
         private SquadNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private float nextTick, lastTime;
         private int sequence;
@@ -113,11 +110,11 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             ? careers.TryGetValue(id, out Career c) ? c.Rules.ScoreOrigin : 0 : id == localIdentity ? localOrigin : 0;
 
         private BoscaliSummer.Core.Services.ServiceRegistry services;
-        internal void Configure(SquadSettings config, SquadNet transport, ManualLogSource log,
+        internal void Configure(SquadSettings config, SquadNet transport,
             BoscaliSummer.Core.Services.ServiceRegistry registry)
         {
             services = registry;
-            settings = config; network = transport; logger = log; SquadRuntime.Active = this;
+            settings = config; network = transport; SquadRuntime.Active = this;
             settings.SpawnDebugWing = DebugSpawnWing; settings.ClearDebugWings = DebugClearWings;
         }
 
@@ -190,7 +187,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             if (count > 0)
             {
                 Apply(Snapshot(player), PlayerIdentity.Of(player));
-                logger.LogInfo("[Squad] Cleared " + count + " debug adversary wings for local player.");
+                Plugin.Logger?.LogInfo("[Squad] Cleared " + count + " debug adversary wings for local player.");
             }
             return count > 0 ? "Cleared " + count + " debug wings." : "No active debug wings owned by this player.";
         }
@@ -227,7 +224,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 ClearLocal("Waiting for a running mission."); return;
             }
             float now = mission.MissionTime;
-            if (!AceCareer.Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             if (now < lastTime) { ResetForScene(); missionIdentity = current; }
             lastTime = now;
             if (GameAccess.IsServer())
@@ -323,7 +320,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         internal void RecordDamage(Unit victim, PersistentID dealer, float amount)
         {
             if (!GameAccess.IsServer() || !MissionManager.IsRunning || victim == null || victim.disabled ||
-                victim is Missile || victim is Scenery || !AceCareer.Finite(amount) || amount <= 0f) return;
+                victim is Missile || victim is Scenery || !float.IsFinite(amount) || amount <= 0f) return;
 
             Hunt aceHunt = null;
             for (int i = 0; i < hunts.Count; i++)
@@ -495,7 +492,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             hunts.Add(hunt); career.Rules.Begin();
             Notice(career, hunt.Symbol + " " + hunt.Wing + " / " + callsign + " — HUNT ACTIVE. Tier " + tier + ", " + aircraft.Length + " aircraft.",
                 callsign, returns > 0 ? "Remember me? This time you are not getting away." : "We have your signature. Wing, concentrate on the marked aircraft.");
-            logger.LogInfo("[Squad] Ace hunt spawned: " + hunt.Wing + ", tier " + tier + ", members " + aircraft.Length + ".");
+            Plugin.Logger?.LogInfo("[Squad] Ace hunt spawned: " + hunt.Wing + ", tier " + tier + ", members " + aircraft.Length + ".");
             return true;
         }
 

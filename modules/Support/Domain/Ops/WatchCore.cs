@@ -38,12 +38,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         private readonly List<WatchLogRow> rows = new List<WatchLogRow>(Capacity);
         private int seq;
 
-        public int Newest => seq;
-
         public int Add(WatchDomain domain, WatchCode code, int a, int b)
         {
             if (seq == int.MaxValue) return seq;
-            rows.Add(new WatchLogRow { Seq = ++seq, Domain = domain, Code = code, A = Clamp(a), B = Clamp(b) });
+            rows.Add(new WatchLogRow { Seq = ++seq, Domain = domain, Code = code, A = (byte)Math.Clamp(a, 0, 255), B = (byte)Math.Clamp(b, 0, 255) });
             while (rows.Count > Capacity) rows.RemoveAt(0);
             return seq;
         }
@@ -55,8 +53,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         public void Clear() { rows.Clear(); seq = 0; }
-
-        private static byte Clamp(int v) => (byte)Math.Max(0, Math.Min(255, v));
     }
 
     /// <summary>The words of an OVERLORD action, one function for the host log, the sim transcripts and the faction console. Pure.</summary>
@@ -120,6 +116,28 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         public void Reset() { lastHumanAt = float.NegativeInfinity; }
+    }
+
+    /// <summary>The think cadence every OVERLORD brain shares: the idle rule, when it next thinks, and the cheap poll a host adapter uses while nothing can happen.</summary>
+    internal abstract class WatchBrainBase
+    {
+        private readonly WatchIdle idle = new WatchIdle();
+        protected float nextThinkAt;
+
+        /// <summary>A human of this faction did a domain verb: OVERLORD yields (60 s alone, 300 s with company).</summary>
+        public void RecordHuman(float now) => idle.RecordHuman(now);
+
+        public bool Idle(int humans, float now) => idle.Idle(humans, now);
+
+        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
+
+        /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while nothing can happen).</summary>
+        public void Defer(float now, float seconds)
+        {
+            if (SpaceRules.MissionTime(now) && float.IsFinite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
+        }
+
+        public virtual void Reset() { idle.Reset(); nextThinkAt = 0f; }
     }
 
     /// <summary>

@@ -6,13 +6,7 @@ using UnityEngine.UI;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Compact wing strip on the game's HUD canvas (spec §8; restyled with the kit's tokens, spec 2026-10-04 §2):
@@ -166,8 +160,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 chipText[i].color = state;
                 chipFrames[i].Paint(state.WithAlpha(0.16f), state.WithAlpha(0.6f));
                 float w = Mathf.Min(Width - Pad - 6f, chipText[i].preferredWidth + 12f);
-                WingUi.Place(chipFrames[i].rectTransform, new Rect(Pad, -height - 2f, w, ChipHeight));
-                WingUi.Place(chipText[i].rectTransform, new Rect(Pad + 6f, -height - 2f, w - 8f, ChipHeight));
+                WmcDraw.Place(chipFrames[i].rectTransform, new Rect(Pad, -height - 2f, w, ChipHeight));
+                WmcDraw.Place(chipText[i].rectTransform, new Rect(Pad + 6f, -height - 2f, w - 8f, ChipHeight));
                 height += ChipHeight + 3f;
             }
             if (shown > 0) height += 3f;

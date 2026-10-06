@@ -133,7 +133,7 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             foreach (float escalation in new[] { -1000f, 0f, 1000f, float.MaxValue })
             {
                 float scale = OperationTempo.Scale(OperationTempo.RewardScale(escalation, 10f, 50f));
-                TestAssert.That(OperationTempo.Finite(scale) &&
+                TestAssert.That(float.IsFinite(scale) &&
                     scale >= OperationTempo.MinimumReward && scale <= OperationTempo.MaximumReward,
                     "Every escalation input yields a finite bounded scale");
             }

@@ -1,14 +1,6 @@
 using System;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>What ground guidance asks of the controller: a path curvature (1/m, + is a right turn), a speed, or a stop.</summary>
@@ -151,6 +143,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             float yaw = Scalar.Clamp((float)Math.Atan(c.Curvature * p.WheelbaseM) * Scalar.Rad2Deg / lock_, -1f, 1f);
             Vec3 fwd = s.Fwd.Horizontal.SqrLength > 1e-4f ? s.Fwd.Horizontal.Normalized : Vec3.Forward;
             float speed = Vec3.Dot(s.Vel, fwd);
+            // No pivoting in place: full nosewheel lock from a standstill on pavement twists the mains off and kills the
+            // engine on the tail slam (wing-taxi sims: bricked jets with 1 gear left, RPM 0, full fuel). Steering needs
+            // rolling (native steers above 3 m/s); a quarter authority when slow keeps tight lineup turns possible.
+            yaw *= 0.25f + 0.75f * Scalar.Clamp01((speed - 0.5f) / 3.5f);
             if (c.Stop)
             {
                 integrator = stuck = 0f;

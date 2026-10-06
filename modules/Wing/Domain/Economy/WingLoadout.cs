@@ -4,15 +4,8 @@ using System.Reflection;
 using NuclearOption.SavedMission;
 using UnityEngine;
 
-using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Builds pylon options and loadouts from native hardpoint weaponOptions and effectiveness
@@ -87,14 +80,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             /// <summary>The set's store for the fit summary.</summary>
             public StoreFacts Facts => new StoreFacts { HasKey = !IsEmpty, Known = Known && !IsEmpty, Kind = Kind, Mass = Mass, Ammo = Ammo };
-
-            /// <summary>Two-letter role label for the store table.</summary>
-            public string RoleTag =>
-                Cargo ? "CGO"
-                : AntiAir <= 0f && AntiSurface <= 0f ? ""
-                : AntiAir > AntiSurface * 1.5f ? "A-A"
-                : AntiSurface > AntiAir * 1.5f ? "A-G"
-                : "MLT";
         }
 
         /// <summary>Cached hardpoint data for one airframe.</summary>

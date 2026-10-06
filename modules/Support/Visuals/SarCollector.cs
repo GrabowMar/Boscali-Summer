@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Core.Fx;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Visuals
@@ -87,8 +86,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool Visible { get; set; } = true;
 
         /// <param name="missionNow">Mission time at the start of the collect (<c>SupportManager.MissionNow()</c>).</param>
-        public void Begin(GlobalPosition target, in LookAngles look, in OrbitState state,
-                          double sceneHalfSize, int seed, float missionNow)
+        public void Begin(GlobalPosition target, double incidence, double azimuthX, double azimuthZ,
+                          double slantRange, double altitude, double sceneHalfSize, int seed, float missionNow)
         {
             if (Image == null)
             {
@@ -104,13 +103,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             if (Runtime.SupportTargeting.TryMapPoint(target, out Vector3 ground)) local = ground;
             centreLocal = local;
 
-            double sinInc = Math.Sin(look.Incidence), cosInc = Math.Cos(look.Incidence);
-            rangeAxis = new Vector3((float)look.AzimuthX, 0f, (float)look.AzimuthZ);
-            los = new Vector3((float)(look.AzimuthX * sinInc), (float)cosInc, (float)(look.AzimuthZ * sinInc)).normalized;
-            SlantRange = look.SlantRange;
+            double sinInc = Math.Sin(incidence), cosInc = Math.Cos(incidence);
+            rangeAxis = new Vector3((float)azimuthX, 0f, (float)azimuthZ);
+            los = new Vector3((float)(azimuthX * sinInc), (float)cosInc, (float)(azimuthZ * sinInc)).normalized;
+            SlantRange = slantRange;
 
-            var geometry = new SarGeometry(look.Incidence, look.AzimuthX, look.AzimuthZ, look.SlantRange,
-                OrbitMath.Velocity(state.Altitude));
+            var geometry = new SarGeometry(incidence, azimuthX, azimuthZ, slantRange,
+                OrbitMath.Velocity(altitude));
             former = new SarImageFormer(ImageWidth, ImageHeight, sceneHalfSize, geometry, seed);
             rangeOversample = Mathf.Max(32, Mathf.RoundToInt(
                 RangeOversample * FxBus.Scales.RenderTargets));
@@ -202,7 +201,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool AddApprovedContact(float relativeX, float relativeY, float relativeZ, float radialVelocity, float sigma)
         {
             if (former == null || Phase == SarPhase.Idle || Contacts >= SpaceWire.MaxContacts ||
-                !Finite(relativeX) || !Finite(relativeY) || !Finite(relativeZ) || !Finite(radialVelocity) || !Finite(sigma) || sigma <= 0f)
+                !float.IsFinite(relativeX) || !float.IsFinite(relativeY) || !float.IsFinite(relativeZ) || !float.IsFinite(radialVelocity) || !float.IsFinite(sigma) || sigma <= 0f)
                 return false;
             former.Add(relativeX, relativeY, relativeZ, sigma, radialVelocity);
             Contacts++;
@@ -216,7 +215,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         /// </summary>
         public bool AddApprovedContact(in FeedContact row)
         {
-            if (former == null || !Finite(row.X) || !Finite(row.Z) || approved.Contains(row.Id) || approved.Count >= SpaceWire.MaxContacts)
+            if (former == null || !float.IsFinite(row.X) || !float.IsFinite(row.Z) || approved.Contains(row.Id) || approved.Count >= SpaceWire.MaxContacts)
                 return false;
             var point = new GlobalPosition(row.X, 0f, row.Z);
             Vector3 local = point.ToLocalPosition();
@@ -232,7 +231,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public bool TryProject(in FeedContact row, out Vector2 uv)
         {
             uv = default;
-            if (former == null || !Finite(row.X) || !Finite(row.Z)) return false;
+            if (former == null || !float.IsFinite(row.X) || !float.IsFinite(row.Z)) return false;
             var point = new GlobalPosition(row.X, 0f, row.Z);
             Vector3 local = point.ToLocalPosition();
             if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
@@ -242,7 +241,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return true;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private void Cast(int index)
         {

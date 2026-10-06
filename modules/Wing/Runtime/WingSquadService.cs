@@ -1,11 +1,13 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Modules.Wing.Presentation;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>IWingSquad over the in-tree squadron: pilot generation, portraits, the
-    /// saved-pilot studio, adversary flights and survivor tracking. All state lives in
+    /// saved-pilot lookup, the WMC studio launcher, adversary flights and survivor tracking. All state lives in
     /// WingSquad; this class only adapts its fixed-position value arrays to contract
     /// views (same field order as the studio record comment there).</summary>
     internal sealed class WingSquadService : IWingSquad
@@ -48,19 +50,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public int AbilityMask(Aircraft aircraft) => WingSquad.AbilityMask(aircraft);
 
-        public int PortraitBodyCount => WingSquad.PortraitBodyCount;
-        public int PortraitFaceCount => WingSquad.PortraitFaceCount;
-        public int PortraitHairCount => WingSquad.PortraitHairCount;
-        public int PortraitUniformCount => WingSquad.PortraitUniformCount;
-        public int PortraitAccessoryCount => WingSquad.PortraitAccessoryCount;
-        public int PortraitBackdropCount => WingSquad.PortraitBackdropCount;
-        public string PortraitBodyLabel(int body) => WingSquad.PortraitBodyLabel(body);
-        public string PortraitUniformLabel(int uniform) => WingSquad.PortraitUniformLabel(uniform);
-        public string PortraitAccessoryLabel(int accessory) => WingSquad.PortraitAccessoryLabel(accessory);
-        public string PortraitBackdropLabel(int backdrop) => WingSquad.PortraitBackdropLabel(backdrop);
-        public string PersonaLabel(int persona) => WingSquad.PersonaLabel(persona);
-        public string RankNameForXp(int xp) => WingSquad.RankNameForXp(xp);
-
         public Sprite PortraitForSelection(int body, int face, int hair, int uniform,
             int accessory, int backdrop, bool preview = false) =>
             WingSquad.PortraitForSelection(body, face, hair, uniform, accessory, backdrop, preview);
@@ -71,27 +60,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return TryMap(WingSquad.GetCustomPilot(callsign), out record);
         }
 
-        public CustomPilotView[] ListCustomPilots()
+        public bool OpenPilotStudio()
         {
-            object[][] raw = WingSquad.GetCustomPilots();
-            if (raw == null || raw.Length == 0) return Array.Empty<CustomPilotView>();
-            var parsed = new System.Collections.Generic.List<CustomPilotView>(Math.Min(raw.Length, 128));
-            for (int i = 0; i < raw.Length; i++)
-                if (TryMap(raw[i], out CustomPilotView record)) parsed.Add(record);
-            return parsed.ToArray();
+            WmcPanel panel = WmcPanel.Instance;
+            if (panel == null) return false;
+            panel.Open();
+            panel.Show(WmcTabs.Squadron);
+            panel.WingPage?.ShowSubNamed("STUDIO");
+            return true;
         }
-
-        public bool SaveCustomPilot(CustomPilotView record) => WingSquad.SaveCustomPilot(ToValues(record));
-
-        public bool DeleteCustomPilot(string callsign) => WingSquad.DeleteCustomPilot(callsign);
-
-        public bool IsPilotRecruited(string callsign) => WingSquad.IsPilotRecruited(callsign);
-
-        public bool RecruitCustomPilot(string callsign) => WingSquad.RecruitCustomPilot(callsign);
-
-        public bool DischargeCustomPilot(string callsign) => WingSquad.DischargeCustomPilot(callsign);
-
-        public int ImportAllCustomPilots() => WingSquad.ImportAllCustomPilots();
 
         private static bool TryMap(object[] values, out CustomPilotView record)
         {
@@ -125,24 +102,5 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 return false;
             }
         }
-
-        private static object[] ToValues(CustomPilotView record) => new object[]
-        {
-            record.Name ?? string.Empty,
-            record.Callsign ?? string.Empty,
-            record.DialogueTag ?? string.Empty,
-            record.Persona,
-            record.Background ?? string.Empty,
-            record.Xp,
-            record.Kills,
-            record.Sorties,
-            record.HasPortrait,
-            record.Body,
-            record.Face,
-            record.Hair,
-            record.Uniform,
-            record.Accessory,
-            record.Backdrop,
-        };
     }
 }

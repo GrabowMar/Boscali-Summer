@@ -1,16 +1,12 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Immersion.Audio;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Fx;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
@@ -58,15 +54,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private bool environmentValid;
         private Quaternion composedOffset = Quaternion.identity;
         private double lastMissionClock = double.NaN;
-        private ManualLogSource logger;
         private Vector3 composedAngles;
 
-        public void Configure(ImmersionSettings immersionSettings, ManualLogSource logger)
+        public void Configure(ImmersionSettings immersionSettings)
         {
             settings = immersionSettings;
-            this.logger = logger;
-            mfdGlow.Logger = logger;
-            surface.Logger = logger;
             Live = this;
         }
 
@@ -92,7 +84,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public Quaternion HeadOffset => composedOffset;
         internal HeadMotion Head => head;
-        internal SunGlare Glare => glare;
 
         public bool IsEnabled
         {
@@ -422,6 +413,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["cockpitView"] = CameraStateManager.cameraMode == CameraMode.cockpit;
         }
 
-        internal void LogAutomation(string message) => logger?.LogInfo("[ImmersionAutomation] " + message);
+        internal void LogAutomation(string message) => Plugin.Logger?.LogInfo("[ImmersionAutomation] " + message);
     }
 }

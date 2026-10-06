@@ -5,14 +5,9 @@ using System.Globalization;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>The local player's wing (M1: one wing per host, up to <see cref="WingConfig.MaxWingmen"/>
@@ -72,7 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private readonly AircraftSensor leaderSensor = new AircraftSensor();
         private TerrainFloor floor = new TerrainFloor();
         private float frameTime = float.NaN, missionTime;
-        private int probeTick, frameIndex, nextMemberId;
+        private int probeTick, nextMemberId;
         private AirframeClass leaderClass;
         private long eventsLogged, aiTicks;
 
@@ -88,7 +83,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             FieldRegistry.Clear();
             // R7: the saved pilots join every mission as ROOKIEs (re-read, so a hand edit or another machine's save shows).
             WingPilotRoster.StartMission(WingSavedPilots.Load().Records);
-            WingKillCredit.Reset();
             WingLedger.Reset();
             WingSupplyReserve.Reset();
             WingRequisition.Reset();
@@ -159,7 +153,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             LogEvents();
             WingTakeover.Tick();
             WingSearchAndRescue.Tick();
-            WingKillCredit.Tick();
         }
 
         public void FixedTick(float dt)
@@ -279,9 +272,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     return;
                 }
                 if (m.Recovery == null && !m.HasPendingRecovery) CheckBingo(m, dt);
-                if (StepTest.Fly(m, dt)) return;
                 m.Brain.Threat = ReadThreat(m);
-                ControlOutput o = StepTest.Adjust(m, m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events), dt);
+                ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
                 m.Why.Update(m.Brain.Pipeline.Report, missionTime);
                 Trigger(m.Aircraft, m.Brain.Mind.Current == BehaviourId.Defend && m.Brain.LastDefence.Countermeasures);
@@ -289,7 +281,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 int slot = m.Brain.Slot;
                 Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
                     m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
-                if (WingSettings.Instance.DevTools.Value && frameIndex % 3 == 0) TelemetryRecorder.Sample(m, frame, missionTime);
             }
             catch (Exception e)
             {
@@ -370,6 +361,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             else m.Ground.RoofOverhead = Physics.Raycast(a.transform.position + Vector3.up * 3f, Vector3.up, 30f);
             Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.GroundSpawned });
+            Vec3 at = a.GlobalPosition().ToVec3();
+            WingLog.Verbose($"[Ground] #{m.Number} adopted at ({at.X:0}, {at.Z:0}) y {at.Y:0.0}: " + StopDiagnostics(a));
             return true;
         }
 
@@ -720,7 +713,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 foreach (WingMember x in Members) x.Sensor.Restart();
             }
             frameTime = time;
-            frameIndex++;
             // Before any frame is built this tick (review P2 I2, I3): an emptied element forgets its lead; an element whose
             // task ended (done, failed, cancelled, or never given) goes back to A. Review P3 I2: however it emptied (merge,
             // detach elsewhere, losses), a letter handed out again starts from the wing's shape and doctrine.
@@ -993,7 +985,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                             (m.Recovery != null && m.Recovery.Phase == RecoveryPhase.Landing && NativeLandingBridge.Landing(m.Pilot)) ||
                             (m.Engaged && InNativeCombat(m));
                 if (!m.Released && m.Alive && ours) continue;
-                StepTest.Forget(m);
                 m.Ground?.Leave();
                 m.Recovery?.Leave();
                 RestoreRadar(m);
@@ -1073,7 +1064,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private void LogLongStop(WingMember m)
         {
             GroundPhase phase = m.Ground.Phase;
-            bool taxiing = phase == GroundPhase.TaxiOut || phase == GroundPhase.HoldShort || phase == GroundPhase.TaxiIn;
+            bool taxiing = phase == GroundPhase.TaxiOut || phase == GroundPhase.HoldShort || phase == GroundPhase.TaxiIn ||
+                phase == GroundPhase.LineUp || phase == GroundPhase.Roll;
             if (!taxiing || m.Last.Speed > 0.5f)
             {
                 m.StoppedSince = float.NaN;
@@ -1096,22 +1088,37 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// give, whether the body can move, and who flies it (a native state still driving the inputs would show here).</summary>
         private static string StopDiagnostics(Aircraft a)
         {
-            float thrust = 0f, max = 0f, rpm = -1f;
+            float thrust = 0f, max = 0f, rpm = -1f, thrustN = 0f, maxN = 0f;
             int n = 0;
-            foreach (IEngine e in a.engines)
+            // engineStates, not engines: turbines register in engineStates on enable (a.engines stays empty). Jets report thrust, props power.
+            if (a.engineStates != null) foreach (IEngine e in a.engineStates)
             {
                 if (e == null) continue;
-                thrust += e.GetThrust();
-                max += e.GetMaxThrust();
+                if (e is IPowerSource ps) { thrust += ps.GetPower(); max += ps.GetMaxPower(); }
+                thrustN += e.GetThrust(); maxN += e.GetMaxThrust();
+
                 if (rpm < 0f) rpm = e.GetRPMRatio();
                 n++;
+            }
+            string etype = "none";
+            if (a.engineStates != null) foreach (IEngine e in a.engineStates) { if (e != null) { etype = e.GetType().Name; break; } }
+            float fuel = 0f, cap = 0f; int tanks = 0;
+            if (a.GetFuelTanks() != null) foreach (FuelTank t in a.GetFuelTanks()) { if (t == null) continue; tanks++; fuel += t.fuelMass; cap += t.GetCapacity(); }
+            int gears = 0, gearsOff = 0;
+            if (a.partLookup != null) foreach (UnitPart part in a.partLookup)
+            {
+                if (part == null) continue;
+                LandingGear lg = part.GetComponentInChildren<LandingGear>();
+                if (lg == null) continue;
+                gears++;
+                if (!lg.enabled) gearsOff++;
             }
             Rigidbody rb = a.rb;
             Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
             ControlInputs i = a.GetInputs();
-            return $"engines {n} thrust {thrust:0} of {max:0} N rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
+            return $"engines {n} power {thrust:0} of {max:0} rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
                    $"v {(rb != null ? rb.velocity.magnitude : -1f):0.00} m/s mass {(rb != null ? rb.mass : -1f):0}; state {(p != null ? p.GetCurrentState() : "none")}; " +
-                   $"inputs {i}";
+                   $"inputs {i} etype {etype} fuel {fuel:0}/{cap:0} tanks {tanks} ign {a.Ignition} thr {thrustN:0}/{maxN:0}N gears {gears}({gearsOff} off)";
         }
 
         public static float GroundTraceSeconds = 10f;
@@ -1223,9 +1230,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (notable || WingSettings.Instance.VerboseLogging.Value)
                     WingLog.Logger.LogInfo(string.Format(CultureInfo.InvariantCulture, "[Wing] t={0:0.0} #{1} {2} {3}->{4} ({5})",
                         e.Time, e.Member + 2, e.Kind, e.From, e.To, e.Reason));
-                if (WingSettings.Instance.DevTools.Value &&
-                    (e.Kind == WingEventKind.GcasActivated || e.Kind == WingEventKind.CollisionEmergency))
-                    TelemetryRecorder.AutoDump(e.Kind.ToString(), e.Time);
             }
             eventsLogged = Events.Total;
         }

@@ -1,9 +1,7 @@
 using NOAvionics;
 using System;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
@@ -103,7 +101,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-        private bool CustomEnabled() => ImageEnabled() && settings.BackgroundImagePreset.Value == 3;
+        private bool CustomEnabled() => ImageEnabled();
 
         private int BackgroundIndex() =>
             Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(settings.DeckGrid.Value,
@@ -181,7 +179,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
                 () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
                 CustomEnabled, () => "Choose CUSTOM as the background first.");
-            NoteLine wallNote = new NoteLine(flow.Content);
+            AvNote wallNote = new AvNote(flow.Content) { MinHeight = 18f };
             AvButtons scanRow = new AvButtons(flow.Content, new[]
             {
                 new AvControl.Spec("RESCAN LOCAL FILES", () =>

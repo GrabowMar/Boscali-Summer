@@ -1,5 +1,4 @@
 using System;
-using NOAvionics;
 using UnityEngine;
 
 namespace NOAvionics

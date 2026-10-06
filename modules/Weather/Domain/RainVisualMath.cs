@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static float BelowCloudFactor(float cameraHeight, float cloudHeight)
         {
-            float t = Clamp01((cameraHeight - cloudHeight) / 400f);
+            float t = Scalar.Clamp01((cameraHeight - cloudHeight) / 400f);
             return 1f - t * t * (3f - 2f * t);
         }
 
@@ -26,9 +27,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// </summary>
         public static float EmissionRate(float apparentSpeed, float intensity, float density, float gust)
         {
-            float t = Clamp01(apparentSpeed / ReferenceSpeed);
+            float t = Scalar.Clamp01(apparentSpeed / ReferenceSpeed);
             float rate = BaseEmissionSlow + (BaseEmissionFast - BaseEmissionSlow) * t;
-            return rate * Clamp01(intensity) * Math.Max(0f, density) * Math.Max(0f, gust);
+            return rate * Scalar.Clamp01(intensity) * Math.Max(0f, density) * Math.Max(0f, gust);
         }
 
         /// <summary>
@@ -37,7 +38,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// </summary>
         public static float StreakAlpha(float intensity)
         {
-            float i = Clamp01(intensity);
+            float i = Scalar.Clamp01(intensity);
             return 0.18f * i + 0.20f * i * i;
         }
 
@@ -77,7 +78,5 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (lifetime <= 0.01f || maxParticles <= 0) return Math.Max(0f, emissionRate);
             return Math.Min(Math.Max(0f, emissionRate), maxParticles / lifetime);
         }
-
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
     }
 }

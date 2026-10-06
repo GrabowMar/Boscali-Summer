@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
@@ -73,15 +74,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float eyeKeep = CloudShape.EyeCloudKeep(x, y, z, eyeX, eyeZ, eyeRadius, eyeStrength);
             float middle = MidLayer(x, y, z) * eyeKeep, fogDensity = FogBank(y);
             float mid = Math.Max(middle, fogDensity);
-            float midBottom = WeatherMath.Lerp(4200f, 3300f, WeatherMath.Clamp01(sky.MidSheet));
+            float midBottom = WeatherMath.Lerp(4200f, 3300f, Scalar.Clamp01(sky.MidSheet));
             float midHeight = middle >= fogDensity
-                ? CloudShape.LightingHeight(y, midBottom, midBottom + WeatherMath.Lerp(400f, 1700f, WeatherMath.Clamp01(sky.MidSheet)))
+                ? CloudShape.LightingHeight(y, midBottom, midBottom + WeatherMath.Lerp(400f, 1700f, Scalar.Clamp01(sky.MidSheet)))
                 : CloudShape.LightingHeight(y, -30f, 330f);
             float background = Math.Max(mid, heroes);
             localLightingHeight = background > 0f ? heroes >= mid ? heroHeight : midHeight : 0f;
             float layer = p.BackgroundCover, front = p.FrontCover, cell = p.CellShape;
             if (Math.Max(layer, Math.Max(front, cell)) < 0.025f) return background;
-            float smooth = WeatherMath.Clamp01(sky.LayerSmooth);
+            float smooth = Scalar.Clamp01(sky.LayerSmooth);
             float baseY = p.CloudBase + shift;
             // CloudMaps stores a conservative top including the low deck's independent depth.
             float lowTop = p.LowTop > 0f ? p.LowTop : p.CloudTop;
@@ -109,13 +110,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (layer > 0.02f)
             {
                 float deckBody = WeatherMath.Lerp(puffBody, 0.72f + 0.28f * puffBody, smooth);
-                float mask = CoverMask(deckBody, WeatherMath.Clamp01(layer * 1.2f));
+                float mask = CoverMask(deckBody, Scalar.Clamp01(layer * 1.2f));
                 float thick = Math.Max(280f, WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, sky.LayerDepth), genus.SheetBlend));
                 thick *= WeatherMath.Lerp(0.75f + 0.10f * genus.SheetBlend, 1f, broadR);
                 thick *= WeatherMath.Lerp(relief, 1f, genus.SheetBlend);
                 float layerBase = baseY + (puffBody - 0.5f) * WeatherMath.Lerp(genus.BaseWobble, genus.BaseWobble * 0.3f, smooth);
                 float hl = (y - layerBase) / Math.Max(1f, thick);
-                layerHeight = WeatherMath.Clamp01(hl);
+                layerHeight = Scalar.Clamp01(hl);
                 float deckAnvil = CloudShape.LocalAnvil(thick, genus.Anvil) * (1f - smooth);
                 float prof = CloudShape.Profile(hl, CloudShape.LocalDome(WeatherMath.Lerp(genus.Dome, genus.Dome * 0.25f, smooth), deckAnvil), deckAnvil);
                 float gate = CloudShape.BaseGate(y, layerBase, WeatherMath.Lerp(genus.BaseSharp, genus.BaseSharp * 2.2f, smooth));
@@ -133,11 +134,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float depth = frontCrown - frontBase;
                 float fScale = WeatherMath.Lerp(Math.Max(1800f, genus.PuffScale * 1.35f), 5200f, genus.SheetBlend);
                 float fb = Bodies(wx + 5311f, y + 5311f, wz + 5311f, fScale);
-                float fm = CoverMask(fb, WeatherMath.Clamp01(front * 1.05f));
+                float fm = CoverMask(fb, Scalar.Clamp01(front * 1.05f));
                 float frontFloor = frontBase + (fb - 0.5f) * Math.Min(220f, genus.BaseWobble + 40f);
                 float frontTop = frontCrown + (broadR - 0.5f) * Math.Min(1200f, depth * 0.25f) - (1f - fm) * Math.Min(depth * 0.25f, 900f);
                 float fh = (y - frontFloor) / Math.Max(1f, frontTop - frontFloor);
-                frontHeight = WeatherMath.Clamp01(fh);
+                frontHeight = Scalar.Clamp01(fh);
                 float uplift = WeatherMath.Smoothstep(3500f, 6500f, depth);
                 float frontAnvil = CloudShape.LocalAnvil(depth, genus.Anvil);
                 float prof = CloudShape.Profile(fh, CloudShape.LocalDome(WeatherMath.Lerp(0.25f, genus.Dome, uplift), frontAnvil), frontAnvil);
@@ -151,12 +152,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // The cell is a gaussian with no flat core, and it is already ~0.2 at the stem's
             // edge. Dividing the threshold by the footprint never clears that edge. Raising
             // the gaussian to 1/foot² is the radius scale Footprint describes.
-            float h = WeatherMath.Clamp01((y - baseY) / Math.Max(1f, columnTop - baseY));
+            float h = Scalar.Clamp01((y - baseY) / Math.Max(1f, columnTop - baseY));
             float foot = CloudShape.Footprint(h, localAnvil);
-            float wide = (float)Math.Pow(WeatherMath.Clamp01(cell), 1f / Math.Max(1f, foot * foot));
+            float wide = (float)Math.Pow(Scalar.Clamp01(cell), 1f / Math.Max(1f, foot * foot));
             float need = 0.18f + 0.42f * h * h;
             float inside = WeatherMath.Smoothstep(need - 0.12f, need + 0.12f, wide);
-            float carved = WeatherMath.Lerp(CoverMask(puffBody, WeatherMath.Clamp01(0.45f + 0.35f * cell)),
+            float carved = WeatherMath.Lerp(CoverMask(puffBody, Scalar.Clamp01(0.45f + 0.35f * cell)),
                 WeatherMath.Lerp(0.55f + 0.45f * puffBody, 1f, genus.SheetBlend), Math.Max(genus.SheetBlend, localTowerBlend));
             float tower = inside * CloudShape.Mass(carved, CloudShape.Profile(h, CloudShape.LocalDome(genus.Dome, localAnvil), localAnvil)) *
                 CloudShape.BaseGate(y, baseY, genus.BaseSharp) *
@@ -164,21 +165,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             if (nearDetail)
             {
-                float edge = WeatherMath.Clamp01(1f - Math.Abs(Math.Max(layerShape, Math.Max(frontShape, tower)) - 0.42f) * 2.4f);
+                float edge = Scalar.Clamp01(1f - Math.Abs(Math.Max(layerShape, Math.Max(frontShape, tower)) - 0.42f) * 2.4f);
                 float detail = Sample(x / 1250f, z / 1250f, y / 1250f, 0) * 0.72f +
                     Sample(x / 1250f * 3.1f + 0.21f, z / 1250f * 3.1f + 0.21f, y / 1250f * 3.1f + 0.21f, 1) * 0.28f;
                 if (edge > 0.35f) detail = detail * 0.65f + Sample(x / 340f + 0.19f, z / 340f + 0.19f, y / 300f + 0.83f, 1) * 0.35f;
                 float nibble = Math.Max(0f, 0.65f - detail) * genus.Billow * edge * 0.45f;
                 layerShape = Math.Max(0f, layerShape - nibble); frontShape = Math.Max(0f, frontShape - nibble); tower = Math.Max(0f, tower - nibble);
             }
-            float layerDensity = WeatherMath.Clamp01((layerShape - 0.12f) / 0.70f) * WeatherMath.Smoothstep(0.02f, 0.10f, layer);
-            float frontDensity = WeatherMath.Clamp01((frontShape - 0.12f) / 0.72f) * WeatherMath.Smoothstep(0.04f, 0.20f, front);
+            float layerDensity = Scalar.Clamp01((layerShape - 0.12f) / 0.70f) * WeatherMath.Smoothstep(0.02f, 0.10f, layer);
+            float frontDensity = Scalar.Clamp01((frontShape - 0.12f) / 0.72f) * WeatherMath.Smoothstep(0.04f, 0.20f, front);
             float rain = p.RainRate / 100f, scud = 0f;
             if (rain > 0.02f && y < lowest && y > lowest - 700f)
             {
                 float fragment = Sample(x / 900f + 0.29f, z / 900f + 0.29f, y / 420f + 0.61f, 0);
                 float band = WeatherMath.Smoothstep(lowest - 700f, lowest - 450f, y) * (1f - WeatherMath.Smoothstep(lowest - 180f, lowest, y));
-                scud = WeatherMath.Smoothstep(0.62f, 0.78f, fragment + rain * 0.35f) * band * WeatherMath.Clamp01(rain * 6f);
+                scud = WeatherMath.Smoothstep(0.62f, 0.78f, fragment + rain * 0.35f) * band * Scalar.Clamp01(rain * 6f);
             }
             float density = heroes;
             localLightingHeight = heroHeight;
@@ -193,7 +194,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (nearDetail && density > 0.03f && density < 0.98f)
             {
                 float cavity = Sample(x / 900f + 0.71f, z / 900f + 0.71f, y / 760f + 0.29f, 1);
-                density = WeatherMath.Clamp01(density - (cavity - 0.48f) * 1.1f);
+                density = Scalar.Clamp01(density - (cavity - 0.48f) * 1.1f);
             }
             if (mid > density) { density = mid; localLightingHeight = midHeight; }
             if (density <= 0f) localLightingHeight = 0f;
@@ -275,7 +276,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (taper <= 0f) return 0f;
             float mass = WeatherMath.Envelope(v, -s.Extent - 5000f, -s.Extent * 0.55f, -700f, 500f) *
                 WeatherMath.Envelope(y, 1250f, 1600f, s.Top - 1200f, s.Top + 300f) * 0.85f;
-            float topV = 3850f - 2980f * WeatherMath.Clamp01(v / 7000f);
+            float topV = 3850f - 2980f * Scalar.Clamp01(v / 7000f);
             float shelf = WeatherMath.Envelope(v, -400f, 0f, 6400f, 7000f) *
                 WeatherMath.Smoothstep(410f, 540f, y) * (1f - WeatherMath.Smoothstep(topV - 350f, topV, y)) * 0.72f;
             height = shelf > mass ? CloudShape.LightingHeight(y, 450f, topV)
@@ -286,10 +287,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static float CellEnvelope(Superstructure s, float x, float y, float z, out float height)
         {
             float dirX = (float)Math.Cos(s.Heading), dirZ = (float)Math.Sin(s.Heading);
-            float h = WeatherMath.Clamp01(y / s.Top);
+            float h = Scalar.Clamp01(y / s.Top);
             float lean = h * 1800f;
             float dx = x - s.X - dirX * lean, dz = z - s.Z - dirZ * lean;
-            float dome = (float)Math.Sqrt(WeatherMath.Clamp01(1f - (float)Math.Pow(Math.Max(0f, h - 0.72f) / 0.36f, 2f)));
+            float dome = (float)Math.Sqrt(Scalar.Clamp01(1f - (float)Math.Pow(Math.Max(0f, h - 0.72f) / 0.36f, 2f)));
             float radius = s.Size * (0.82f + 0.65f * WeatherMath.Smoothstep(0.35f, 0.82f, h)) * dome;
             float tower = (1f - WeatherMath.Smoothstep(radius * 0.7f, radius * 1.1f + 1f,
                     (float)Math.Sqrt(dx * dx + dz * dz))) *
@@ -312,7 +313,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float dx = x - s.X, dz = z - s.Z;
             float r = (float)Math.Sqrt(dx * dx + dz * dz);
             float eye = s.Size, wall = s.Extent;
-            float h = WeatherMath.Clamp01(y / s.Top);
+            float h = Scalar.Clamp01(y / s.Top);
             float inner = eye * (1f + 0.9f * h * h);
             float crown = s.Top * 0.91f;
             float wallM = WeatherMath.Smoothstep(inner - 1500f, inner + 2750f, r) *
@@ -346,7 +347,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             if (fog <= 0f || y <= -30f || y >= 330f) return 0f;
             float h = (y + 30f) / 360f;
-            return fog * 0.55f * WeatherMath.Clamp01(4f * h * (1f - h) * 1.3f) * 0.85f;
+            return fog * 0.55f * Scalar.Clamp01(4f * h * (1f - h) * 1.3f) * 0.85f;
         }
 
         /// <summary>The shader's middle layer (altocumulus .. altostratus), times its strength.</summary>
@@ -356,7 +357,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (cover <= 0.005f) return 0f;
             // Thins ahead of the frontal boundary, as the shader's middle layer does.
             if (split.Amount > 0f) cover *= WeatherMath.Lerp(1f - 0.75f * split.Amount, 1f, split.Share(x, z));
-            float sheet = WeatherMath.Clamp01(sky.MidSheet);
+            float sheet = Scalar.Clamp01(sky.MidSheet);
             float y0 = WeatherMath.Lerp(4200f, 3300f, sheet);
             float y1 = y0 + WeatherMath.Lerp(400f, 1700f, sheet);
             return Slab(x, y, z, y0, y1, cover, WeatherMath.Smoothstep(0.4f, 1f, sheet), 2600f, 1.4f,
@@ -389,10 +390,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float street = 0.55f + 0.45f * (float)Math.Sin(across / (scale * 0.85f) * 2f * Math.PI + (px - x) / scale * 2f);
             cells *= WeatherMath.Lerp(1f, street, 0.8f);
             float raw = WeatherMath.Lerp(streak, cells, ripple);
-            float body = WeatherMath.Clamp01(0.5f + (raw - 0.52f) * 3.16f);
+            float body = Scalar.Clamp01(0.5f + (raw - 0.52f) * 3.16f);
             body = WeatherMath.Lerp(body, 0.7f + 0.3f * body, sheet);
-            float c = WeatherMath.Clamp01(cover * (0.55f + 0.9f * WeatherMath.Clamp01(0.5f + (patch - 0.52f) * 3.16f)));
-            return CoverMask(body, c) * WeatherMath.Clamp01(4f * h * (1f - h) * 1.3f);
+            float c = Scalar.Clamp01(cover * (0.55f + 0.9f * Scalar.Clamp01(0.5f + (patch - 0.52f) * 3.16f)));
+            return CoverMask(body, c) * Scalar.Clamp01(4f * h * (1f - h) * 1.3f);
         }
 
         /// <summary>Rounded lobe field. Four cells per texture tile: scale is the lobe width,
@@ -403,12 +404,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float a = Sample(x / period, z / period, y / (period * 0.9f), 2);
             float b = Sample(z / (period * 2.73f) + 0.37f, -x / (period * 2.73f) + 0.37f, y / (period * 2.1f), 0);
             float c = Sample(x / (period * 0.29f) + 0.17f, z / (period * 0.29f) + 0.61f, y / (period * 0.24f), 2);
-            return WeatherMath.Clamp01((a * 0.65f + b * 0.15f + c * 0.20f - 0.22f) * 2.5f);
+            return Scalar.Clamp01((a * 0.65f + b * 0.15f + c * 0.20f - 0.22f) * 2.5f);
         }
 
         public static float CoverMask(float body, float cover)
         {
-            float open = WeatherMath.Clamp01((body - (1f - cover)) / Math.Max(0.18f, cover));
+            float open = Scalar.Clamp01((body - (1f - cover)) / Math.Max(0.18f, cover));
             return WeatherMath.Lerp(open, Math.Max(open, 0.55f + body * 0.45f), WeatherMath.Smoothstep(0.82f, 1f, cover));
         }
 

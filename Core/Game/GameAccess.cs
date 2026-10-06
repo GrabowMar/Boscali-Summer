@@ -312,24 +312,6 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
-        public static bool NightVisionOn()
-        {
-            if (!TryGetNightVisionState(out bool selected, out bool active)) return false;
-            return selected || active;
-        }
-
-        /// <summary>
-        /// Automation only: select vanilla night vision directly, bypassing the cursor-gated
-        /// <c>NightVision.Toggle</c> (unattended runs hold UI open). The game's own Update still
-        /// owns the fade and volume swap; production code never calls this.
-        /// </summary>
-        internal static void DebugSelectNightVision(bool selected)
-        {
-            NightVision nv = NightVision.i;
-            if (nv == null || nvSelectedRef == null) return;
-            nvSelectedRef(nv) = selected;
-        }
-
         public static bool IsServer()
         {
             try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }

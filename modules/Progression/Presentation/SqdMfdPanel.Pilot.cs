@@ -54,10 +54,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             sortieMission = sortieGrid.Add("MISSION SCORE");
             sortieGrid.Help = "This sortie: the airframe you fly, its condition, whether you respawn or have one life, and the mission score the pick ladder is built from.";
 
-            ringScore = new AvGauge(p.Content, "NEXT", AvGaugeShape.Segments, 64f);
-            ringBonus = new AvGauge(p.Content, "ACE", AvGaugeShape.Segments, 64f);
-            ringPicks = new AvGauge(p.Content, "EARNED", AvGaugeShape.Segments, 64f);
-            ringFree = new AvGauge(p.Content, "FREE", AvGaugeShape.Segments, 64f);
+            ringScore = new AvGauge(p.Content, "NEXT");
+            ringBonus = new AvGauge(p.Content, "ACE");
+            ringPicks = new AvGauge(p.Content, "EARNED");
+            ringFree = new AvGauge(p.Content, "FREE");
             ringScore.Help = "NEXT: mission score still needed to earn the next skill pick. The ladder fills as you approach it.";
             ringBonus.Help = "ACE: bonus score from ace kills and streaks, added to your career score (ceiling " + AceBonusCeiling + ").";
             ringPicks.Help = "EARNED: skill picks earned so far out of the maximum.";
@@ -306,20 +306,20 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 AvStyle c = AvStyleHost.FuiStyle("card raised");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised),
                     AvStyleHost.Resolve(c.Border, AvTheme.Frame));
-                frame.BracketColor = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 AvStyle inert = AvStyleHost.FuiStyle("card inert");
                 rankFrame.Paint(AvStyleHost.Resolve(inert.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(inert.Border, AvTheme.Hairline));
                 strip.color = AvTheme.Hairline;
-                profileTag.color = SqdTone.Caption;
-                callsignText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                nameLine.color = SqdTone.Ink;
-                rankCaption.color = SqdTone.Caption;
-                rankNumber.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                rankTitle.color = SqdTone.Key;
-                generationText.color = SqdTone.Dim;
+                profileTag.color = AvInk.Muted;
+                callsignText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                nameLine.color = AvInk.Ink;
+                rankCaption.color = AvInk.Muted;
+                rankNumber.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                rankTitle.color = AvInk.Key;
+                generationText.color = AvInk.Dim;
                 statusText.color = SqdTone.Text(status);
                 if (statusIcon != null) statusIcon.color = SqdTone.Rail(status);
-                squadronText.color = SqdTone.Caption;
+                squadronText.color = AvInk.Muted;
                 portrait.Restyle();
                 emblem.Restyle();
                 stateChip.Restyle();

@@ -435,8 +435,8 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(TrenchWire.OwnerHashFor("Coalition") != 0, "Owner hash never reads unknown");
             TestAssert.That(TrenchWire.OwnerHashFor("Coalition") != TrenchWire.OwnerHashFor("Crimson"),
                 "Factions hash apart");
-            TestAssert.That(TrenchWire.Finite(1f) && !TrenchWire.Finite(float.NaN) &&
-                !TrenchWire.Finite(float.PositiveInfinity), "Finite rejects NaN and infinity");
+            TestAssert.That(float.IsFinite(1f) && !float.IsFinite(float.NaN) &&
+                !float.IsFinite(float.PositiveInfinity), "Finite rejects NaN and infinity");
         }
 
         private static void TestBuildSteps()

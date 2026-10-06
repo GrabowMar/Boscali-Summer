@@ -1,15 +1,6 @@
 using System;
 using System.Globalization;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The words of PLAN › ELEMENTS (spec bezel v2 §5): a step row's START, KIND, detail, END and state, the cue for the
@@ -68,18 +59,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return Join(Join(Join(points, km), eta), Alt(p));
         }
 
-        public static string End(PlanStep p)
-        {
-            switch (p.End)
-            {
-                case PlanEnd.Time: return WmcText.Clock(p.EndSeconds);
-                case PlanEnd.Bingo: return "BINGO";
-                case PlanEnd.Winchester: return "WINCH";
-                case PlanEnd.TargetsDown: return "TGT DN";
-                default: return "ARRIVE";
-            }
-        }
-
         /// <summary>WAIT before EXECUTE; then RUN, DONE, HELD, BLOCKED, SKIP, NEXT for the step after the one running.</summary>
         public static string State(PlanRunner r, int lane, int step)
         {
@@ -95,14 +74,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     int current = r.Current(lane);
                     return r.Running && current >= 0 && (step == current || step == current + 1) ? "NEXT" : "WAIT";
             }
-        }
-
-        /// <summary>"B2 ATTACK · AFTER B1 · 2 TGT · ENDS TGT DN".</summary>
-        public static string Cue(WingPlan plan, int lane, int step)
-        {
-            PlanStep p = plan.Steps[lane][step];
-            string head = PlanRules.Name(lane, step) + " " + Kind(p.Kind);
-            return Join(Join(head + " · " + Start(plan, lane, step), Short(p)), "ENDS " + End(p));
         }
 
         /// <summary>"STRIKE NORTH · DRAFT · 7 STEPS".</summary>

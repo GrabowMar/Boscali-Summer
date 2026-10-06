@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Net;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Game;
@@ -33,8 +33,9 @@ namespace BoscaliSummer.Modules.Command.Networking
         private readonly Dictionary<int, float> remote = new Dictionary<int, float>(MaximumFactions);
         private readonly Dictionary<int, float> sent = new Dictionary<int, float>(MaximumFactions);
         private CommandManager owner;
-        private MessageHandler clientHandler;
+        private HandlerSlot clientSlot;
         private float nextRegistration;
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<FactionMoraleChanged>(Receive);
         private float nextBroadcast;
         private float nextHeartbeat;
 
@@ -46,14 +47,13 @@ namespace BoscaliSummer.Modules.Command.Networking
 
         private static void InstallSerializers()
         {
-            Bind(typeof(Writer<FactionMoraleChanged>), "Write",
+            MirageSerializers.Strict.Install<FactionMoraleChanged>(
                 (Action<NetworkWriter, FactionMoraleChanged>)((writer, value) =>
                 {
                     writer.WriteByte(value.Protocol);
                     writer.WritePackedInt32(value.FactionHash);
                     writer.WriteSingle(value.Morale);
-                }));
-            Bind(typeof(Reader<FactionMoraleChanged>), "Read",
+                }),
                 (Func<NetworkReader, FactionMoraleChanged>)(reader =>
                 {
                     byte protocol = reader.ReadByte();
@@ -65,7 +65,6 @@ namespace BoscaliSummer.Modules.Command.Networking
                         Morale = reader.ReadSingle(),
                     };
                 }));
-            MessagePacker.RegisterMessage<FactionMoraleChanged>();
         }
 
         internal void ResetScene()
@@ -87,14 +86,7 @@ namespace BoscaliSummer.Modules.Command.Networking
             if (Time.unscaledTime >= nextRegistration)
             {
                 nextRegistration = Time.unscaledTime + 0.5f;
-                MessageHandler handler = NetworkManagerNuclearOption.i?.Client?.MessageHandler;
-                if (handler != clientHandler)
-                {
-                    clientHandler?.UnregisterHandler<FactionMoraleChanged>();
-                    remote.Clear();
-                    clientHandler = handler;
-                    clientHandler?.RegisterHandler<FactionMoraleChanged>(Receive, false);
-                }
+                if (ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler)) remote.Clear();
             }
             if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
                 Time.unscaledTime < nextBroadcast || owner == null) return;
@@ -136,20 +128,12 @@ namespace BoscaliSummer.Modules.Command.Networking
             remote[message.FactionHash] = message.Morale;
         }
 
-        private void OnDestroy() => clientHandler?.UnregisterHandler<FactionMoraleChanged>();
+        private void OnDestroy() => ClientHandlers.Release();
 
         private static int Hash(string name)
         {
             int hash = unchecked((int)Deterministic.HashString(name));
             return hash == 0 ? 1 : hash;
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(property,
-                BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null) throw new MissingMemberException(holder.Name, property);
-            target.SetValue(null, value, null);
         }
     }
 }

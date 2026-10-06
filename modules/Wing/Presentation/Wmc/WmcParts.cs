@@ -5,14 +5,6 @@ using UnityEngine;
 using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>A bezel tab (kit v2, phase B): built once into its console page flow, refreshed at the panel's rate while it shows.
@@ -55,80 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public static Color Color(string cls) => WmcDraw.RailColor(cls);
-    }
-
-    /// <summary>The WMC's hand-drawn <see cref="Glyph"/>s as the nearest kit v2 <see cref="AvIcon"/> (the only icons that exist).</summary>
-    internal static class WmcIcons
-    {
-        public static AvIcon Of(Glyph g)
-        {
-            switch (g)
-            {
-                case Glyph.Attack: return AvIcon.Target;
-                case Glyph.MyTarget: return AvIcon.Focus2;
-                case Glyph.Splash: return AvIcon.Flame;
-                case Glyph.Engage: return AvIcon.Bolt;
-                case Glyph.Disengage: return AvIcon.ArrowBackUp;
-                case Glyph.ClearSix: return AvIcon.Eye;
-                case Glyph.Ecm: return AvIcon.Antenna;
-                case Glyph.FormUp: return AvIcon.UsersGroup;
-                case Glyph.Move: return AvIcon.ArrowUpRight;
-                case Glyph.Orbit: return AvIcon.CurrentLocation;
-                case Glyph.Hold: return AvIcon.PlayerPause;
-                case Glyph.Patrol: return AvIcon.ChartArrows;
-                case Glyph.Cap: return AvIcon.Shield;
-                case Glyph.Sweep: return AvIcon.Radar2;
-                case Glyph.Scout: return AvIcon.Map2;
-                case Glyph.Escort: return AvIcon.ShieldLock;
-                case Glyph.Rtb: return AvIcon.ArrowLeft;
-                case Glyph.Refit: return AvIcon.Gauge;
-                case Glyph.Land: return AvIcon.ArrowDown;
-                case Glyph.Cargo: return AvIcon.Stack2;
-                case Glyph.TakeOff: return AvIcon.ArrowUp;
-                case Glyph.Rescue: return AvIcon.Heart;
-                case Glyph.Detach: return AvIcon.Unlink;
-                case Glyph.Call: return AvIcon.Plus;
-                case Glyph.Bogey: return AvIcon.Radio;
-                case Glyph.Dismiss: return AvIcon.X;
-                case Glyph.React: return AvIcon.Bolt;
-                case Glyph.Missile: return AvIcon.AlertTriangle;
-                case Glyph.Warn: return AvIcon.AlertCircle;
-                case Glyph.Fuel: return AvIcon.Gauge;
-                case Glyph.Ammo: return AvIcon.Database;
-                case Glyph.Lost: return AvIcon.Skull;
-                case Glyph.Behind: return AvIcon.Eye;
-                case Glyph.Plane: return AvIcon.Plane;
-                case Glyph.Threat: return AvIcon.Radar2;
-                case Glyph.Pool: return AvIcon.Stack2;
-                case Glyph.Formation: return AvIcon.LayersSubtract;
-                case Glyph.Route: return AvIcon.MapPin;
-                case Glyph.Pilot: return AvIcon.User;
-                case Glyph.Gear: return AvIcon.Settings;
-                case Glyph.Base: return AvIcon.BuildingBank;
-                case Glyph.Pylon: return AvIcon.Stack2;
-                case Glyph.Check: return AvIcon.CircleCheck;
-                case Glyph.Info: return AvIcon.InfoCircle;
-                case Glyph.Record: return AvIcon.Circle;
-                case Glyph.Plan: return AvIcon.ListDetails;
-                case Glyph.Tuning: return AvIcon.AdjustmentsHorizontal;
-                case Glyph.Posture: return AvIcon.Shield;
-                case Glyph.Clear: return AvIcon.CircleCheck;
-                default: return AvIcon.None;
-            }
-        }
-
-        /// <summary>Changes the glyph on a control made with any icon (an order cell whose meaning swaps with the helicopter grid).</summary>
-        public static void Swap(AvControl control, AvIcon icon)
-        {
-            if (control == null) return;
-            foreach (TMP_Text t in control.GetComponentsInChildren<TMP_Text>(true))
-            {
-                if (!t.gameObject.name.StartsWith("Icon ", StringComparison.Ordinal)) continue;
-                AvIcons.Set(t, icon, AvGridTokens.IconInline);
-                t.gameObject.name = "Icon " + icon;
-                return;
-            }
-        }
     }
 
     /// <summary>Several sub-pages that share one flow line (TACTICAL's ORDERS · FORMATION · ROUTE·AP): each has a nested flow that
@@ -218,9 +136,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Count => cells.Length;
 
-        // Count, not visibility: the base AvPart.Shown (bool) still reports the grid Rect.
-        public int ShownCount => shown;
-
         /// <summary>The first <paramref name="n"/> cells show. Returns true when that changed (the caller relayouts).</summary>
         public bool SetShownCount(int n)
         {
@@ -301,7 +216,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             rail.color = WmcState.Color(AvStates.Class(state));
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+            key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             foreach (AvControl c in controls) c.Restyle();
         }
     }
@@ -359,7 +274,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            Color c = AvStyleHost.Resolve(AvStyleHost.FuiStyle(colorClass).Color, AvTheme.Dim);
+            Color c = AvStyleHost.FuiInk(colorClass, AvTheme.Dim);
             foreach (TMP_Text t in lines) t.color = c;
         }
     }

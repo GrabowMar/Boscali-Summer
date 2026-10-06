@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Production DLL builders and refresh methods; no copied presenter implementation.
 // Synthetic snapshots/catalogues exercise offline layout, never audio decoding or world mutation.
@@ -38,19 +39,8 @@ public static class WingRadioUnityCheck
         radioOnlyMode = radioOnly;
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += () => RunPreview(radioOnly);
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            ParameterInfo[] parameters = paths.GetParameters();
-            var args = new object[parameters.Length];
-            args[0] = Path.GetFullPath(radioOnly ? "RadioCheck.exe" : "WingRadioCheck.exe");
-            for (int i = 1; i < args.Length; i++) args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            paths.Invoke(null, args);
+            if (!EnsureTmpEssentials(() => RunPreview(radioOnly))) return;
+            SetExecutablePath(radioOnly ? "RadioCheck.exe" : "WingRadioCheck.exe");
             if (radioOnly) Check(Mod.GetName().Name == "BoscaliSummer", "Radio-only builders must resolve from the production mod DLL");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvBundle.Load(Debug.Log);
@@ -511,18 +501,11 @@ public static class WingRadioUnityCheck
     {
         foreach (Image fill in canvas.GetComponentsInChildren<Image>(true)) if (fill.name == "ScanCover") fill.enabled = false;
         Canvas.ForceUpdateCanvases();
-        var cameraObject = new GameObject("Camera", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true; camera.orthographicSize = height / 2f;
-        camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = AvStyleHost.FuiColor("ground", AvTheme.Surface);
-        var target = new RenderTexture((int)width * 2, (int)height * 2, 24);
-        camera.targetTexture = target; camera.Render(); RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0f, 0f, target.width, target.height), 0, 0); image.Apply(); File.WriteAllBytes(path, image.EncodeToPNG());
-        captureManifest.Add(path + "\t" + target.width + "\t" + target.height);
-        RenderTexture.active = null; camera.targetTexture = null;
-        Object.DestroyImmediate(image); Object.DestroyImmediate(target); Object.DestroyImmediate(cameraObject); captures++;
+        Camera camera = OrthoCamera("Camera", height / 2f, AvStyleHost.FuiColor("ground", AvTheme.Surface));
+        int pixelWidth = (int)width * 2, pixelHeight = (int)height * 2;
+        CapturePng(camera, pixelWidth, pixelHeight, path);
+        captureManifest.Add(path + "\t" + pixelWidth + "\t" + pixelHeight);
+        Object.DestroyImmediate(camera.gameObject); captures++;
     }
 
     private static Type TypeOf(string name)
@@ -532,14 +515,12 @@ public static class WingRadioUnityCheck
         return Mod.GetType(name, true);
     }
     private static object New(string name, params object[] args) => Activator.CreateInstance(TypeOf(name), All, null, args, null);
-    private static object Field(object owner, string name) => owner.GetType().GetField(name, All).GetValue(owner);
     private static void Set(object owner, string name, object value)
     {
         FieldInfo field = owner.GetType().GetField(name, All);
         if (field != null) field.SetValue(owner, value);
         else owner.GetType().GetProperty(name, All).SetValue(owner, value);
     }
-    private static object Call(object owner, string name, params object[] args) => owner.GetType().GetMethod(name, All).Invoke(owner, args);
     private static object CallStatic(string type, string name, params object[] args) => CallStatic(TypeOf(type), name, args);
     private static object CallStatic(Type type, string name, params object[] args) => type.GetMethod(name, All).Invoke(null, args);
     private static void Check(bool condition, string message) { assertions++; if (!condition) failures.Add(message); }

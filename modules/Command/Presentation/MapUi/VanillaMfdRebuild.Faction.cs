@@ -3,9 +3,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
@@ -66,20 +64,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvGauge[] ledgerRows;
             private UnitRosterPart attritionRoster;
             private readonly List<UnitDefinition> lossDefinitions = new List<UnitDefinition>(AttritionLimit);
-            private TextLine directorySummary;
+            private AvNote directorySummary;
             private AvHazardBar moraleBar;
             private LedgerChartPart ledgerChart;
-            private TextLine economyHeadline;
-            private TextLine economyEffect;
-            private TextLine economyContract;
+            private AvNote economyHeadline;
+            private AvNote economyEffect;
+            private AvNote economyContract;
             private ImageTile mandateFlag;
-            private TextLine mandateHeadline;
-            private TextLine mandateEffect;
-            private TextLine politicalEvent;
-            private TextLine politicalEffect;
-            private TextLine politicalBrief;
-            private TextLine politicalMission;
-            private TextLine politicalMissionDetail;
+            private AvNote mandateHeadline;
+            private AvNote mandateEffect;
+            private AvNote politicalEvent;
+            private AvNote politicalEffect;
+            private AvNote politicalBrief;
+            private AvNote politicalMission;
+            private AvNote politicalMissionDetail;
             private int selectedFaction;
             private int definitionGroup;
             private bool definitionsLoaded;
@@ -304,8 +302,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float morale = FactionResourceHistoryStore.Morale(hq);
                 float funds = hq.factionFunds;
                 int warheads = hq.GetWarheadStockpile();
-                bool manpowerKnown = MfdResourceHistory.Finite(manpower);
-                bool moraleKnown = MfdResourceHistory.Finite(morale);
+                bool manpowerKnown = float.IsFinite(manpower);
+                bool moraleKnown = float.IsFinite(morale);
 
                 resourceMetrics[0].Set(AvNum.Money(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE",
                     0f, funds < 0f ? AvState.Caution : AvState.Ready);
@@ -365,7 +363,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     for (int i = 0; i < count; i++)
                     {
                         float value = resourceHistory.Value(series, i);
-                        if (!MfdResourceHistory.Finite(value)) { run = 0; runStart = i + 1; continue; }
+                        if (!float.IsFinite(value)) { run = 0; runStart = i + 1; continue; }
                         resourceBuffer[run++] = value;
                     }
                     ResourceHistoryTile tile = history.Tiles[series];
@@ -408,7 +406,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (active == null || mission == null) return 0f;
                 float total = active.EndsAtMissionTime - active.StartedAtMissionTime;
                 float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!MfdResourceHistory.Finite(left) || !MfdResourceHistory.Finite(total)) { clock = "LIVE"; return 1f; }
+                if (!float.IsFinite(left) || !float.IsFinite(total)) { clock = "LIVE"; return 1f; }
                 clock = AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
                 return total > 0.5f ? Mathf.Clamp01(left / total) : 1f;
             }
@@ -569,7 +567,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ledgerRows = new AvGauge[ClassLabels.Length];
                 for (int i = 0; i < ledgerRows.Length; i++)
                 {
-                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i], AvGaugeShape.Ring, 56f);
+                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i]);
                     ledgerRows[i].Help = ClassLabels[i] + " in the chosen ledger view, as a share of everything that class ever fielded. " +
                                          "The bars below give the exact figures.";
                 }
@@ -770,7 +768,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     () => infoMode == InfoMode.Airbases ? 0 : 1, SelectInfo));
                 infoTabs.Options[0].Help = "List the faction's airbases with their operational state and aircraft count.";
                 infoTabs.Options[1].Help = "List the players on this faction with their craft and score.";
-                directorySummary = page.Add(new TextLine(page.Content, AvTextRole.DataSmall));
+                directorySummary = page.Add(new AvNote(page.Content, AvTextRole.DataSmall));
                 infoGrid = new MfdPagingGrid(page.Content, 1, 12, readOnly: true, rowHeight: 40f);
                 AddGrid(page, infoGrid);
             }
@@ -789,7 +787,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Sprite seal = hq.faction == null ? null : hq.faction.factionColorLogo;
                 mandateFlag.Image.sprite = seal;
                 mandateFlag.Image.enabled = seal != null;
-                bool known = MfdResourceHistory.Finite(morale);
+                bool known = float.IsFinite(morale);
                 SecondaryObjectiveView contract = FeaturedContract(hq);
                 mandateHeadline.Set(known ? MandateName(morale) : "REPORT UNAVAILABLE",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
@@ -898,7 +896,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
                 if (active == null || mission == null) return "LIVE";
                 float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!MfdResourceHistory.Finite(left)) return "LIVE";
+                if (!float.IsFinite(left)) return "LIVE";
                 return AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
             }
 
@@ -944,50 +942,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // ------------------------------------------------------------ local parts
 
             /// <summary>
-            /// One mutable line of briefing copy in a given type role. A state other than
-            /// Inert tints it through the same row-value classes an AvRow uses (R1: the copy
-            /// itself always carries the word). Kit v2 has no mutable free-text part.
-            /// </summary>
-            private sealed class TextLine : AvPart
-            {
-                private readonly TMP_Text text;
-                private readonly bool emphasize;
-                private AvState state = AvState.Inert;
-
-                public TextLine(RectTransform parent, AvTextRole role, bool emphasize = false)
-                {
-                    this.emphasize = emphasize;
-                    Rect = AvLay.Child(parent, "Line");
-                    text = AvText.Make(Rect, "Text", role, "", TextAlignmentOptions.TopLeft, true);
-                    Restyle();
-                }
-
-                public void Set(string body, AvState st = AvState.Inert)
-                {
-                    string next = body ?? "";
-                    if (text.text != next) text.text = next;
-                    if (st != state) { state = st; Restyle(); }
-                }
-
-                public override float Measure(float width) => AvText.Height(text, width);
-
-                public override void Place(AvSlot s)
-                {
-                    base.Place(s);
-                    AvLay.Place(text.rectTransform, 0f, 0f, s.W, s.H);
-                }
-
-                public override void Restyle()
-                {
-                    text.color = state != AvState.Inert
-                        ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-value " + AvStates.Class(state)).Color, AvTheme.TextPrimary)
-                        : emphasize
-                            ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
-                            : AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-                }
-            }
-
-            /// <summary>
             /// Bordered strip with Portal corner brackets. The tone recolours the frame (amber for a live event,
             /// cyan hairline otherwise); derived strips lay their own children out from the slot.
             /// </summary>
@@ -1016,7 +970,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     AvStyle c = AvStyleHost.FuiStyle("card");
                     Color line = AvStyleHost.Resolve(c.Border, AvTheme.Hairline);
-                    Color bracket = AvStyleHost.Resolve(AvStyleHost.FuiStyle("card-bracket").Background, AvTheme.Frame);
+                    Color bracket = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                     if (tone == AvState.Caution)
                         line = bracket = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
                     else if (tone == AvState.Danger)
@@ -1196,15 +1150,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// <summary>The local event: title, price effect, countdown and featured contract.</summary>
             private sealed class EventStrip : FramedPart
             {
-                public readonly TextLine Headline, Effect, Contract;
+                public readonly AvNote Headline, Effect, Contract;
                 public readonly AvHazardBar Bar;
 
                 public EventStrip(RectTransform parent) : base(parent, "EventStrip")
                 {
-                    Headline = new TextLine(Rect, AvTextRole.Head, true);
-                    Effect = new TextLine(Rect, AvTextRole.Prose);
+                    Headline = new AvNote(Rect, AvTextRole.Head, true);
+                    Effect = new AvNote(Rect, AvTextRole.Prose);
                     Bar = new AvHazardBar(Rect, "EVENT");
-                    Contract = new TextLine(Rect, AvTextRole.ProseSmall);
+                    Contract = new AvNote(Rect, AvTextRole.ProseSmall);
                     Restyle();
                 }
 
@@ -1345,14 +1299,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 private const float FlagSize = 40f;
                 public readonly ImageTile Flag;
-                public readonly TextLine Headline, Effect;
+                public readonly AvNote Headline, Effect;
                 public readonly AvHazardBar Bar;
 
                 public MandateStrip(RectTransform parent) : base(parent, "Mandate")
                 {
                     Flag = new ImageTile(Rect, FlagSize);
-                    Headline = new TextLine(Rect, AvTextRole.Head, true);
-                    Effect = new TextLine(Rect, AvTextRole.Prose);
+                    Headline = new AvNote(Rect, AvTextRole.Head, true);
+                    Effect = new AvNote(Rect, AvTextRole.Prose);
                     Bar = new AvHazardBar(Rect, "MORALE");
                     Restyle();
                 }
@@ -1389,15 +1343,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private sealed class BriefBlock : FramedPart
             {
                 private readonly TMP_Text key;
-                public readonly TextLine[] Lines;
+                public readonly AvNote[] Lines;
 
                 public BriefBlock(RectTransform parent, string keyText, params AvTextRole[] roles)
                     : base(parent, "Brief " + keyText)
                 {
                     key = AvText.Make(Rect, "Key", AvTextRole.Micro, "// " + keyText);
                     AvText.Fit(key, false);
-                    Lines = new TextLine[roles.Length];
-                    for (int i = 0; i < roles.Length; i++) Lines[i] = new TextLine(Rect, roles[i], i == 0);
+                    Lines = new AvNote[roles.Length];
+                    for (int i = 0; i < roles.Length; i++) Lines[i] = new AvNote(Rect, roles[i], i == 0);
                     Restyle();
                 }
 
@@ -1406,7 +1360,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public override float Measure(float width)
                 {
                     float w = width - 2f * Inset, h = 8f + 15f + 3f;
-                    foreach (TextLine l in Lines) h += l.Measure(w) + 2f;
+                    foreach (AvNote l in Lines) h += l.Measure(w) + 2f;
                     return h + 6f;
                 }
 
@@ -1416,7 +1370,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     float w = s.W - 2f * Inset, y = 8f;
                     AvLay.Place(key.rectTransform, Inset, y, w, 15f);
                     y += 18f;
-                    foreach (TextLine l in Lines)
+                    foreach (AvNote l in Lines)
                     {
                         float h = l.Measure(w);
                         l.Place(new AvSlot(Inset, y, w, h));
@@ -1428,8 +1382,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     base.Restyle();
                     if (Lines == null) return;
-                    key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-key").Color, AvTheme.RailInfo);
-                    foreach (TextLine l in Lines) l.Restyle();
+                    key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
+                    foreach (AvNote l in Lines) l.Restyle();
                 }
             }
 
@@ -1505,8 +1459,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public override void Restyle()
                 {
-                    name.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("title").Color, AvTheme.TextPrimary);
-                    subtitle.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                    name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                    subtitle.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 }
             }
 

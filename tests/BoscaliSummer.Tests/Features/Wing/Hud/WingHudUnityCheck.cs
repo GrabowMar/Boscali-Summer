@@ -12,6 +12,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Real WingHudPanel.Build/Refresh, with a native Component adapter and synthetic
 // display facts. No copied widget, flight tick, service activation or mission.
@@ -30,13 +31,7 @@ public static class WingHudUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
+            if (!EnsureTmpEssentials(Run)) return;
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvBundle.Load(Debug.Log);
             Check(AvBundle.Available && AvIcons.Available, "Production UI bundle must load");
@@ -207,21 +202,16 @@ public static class WingHudUnityCheck
 
     private static void Capture(GameObject canvas, string path, float width, float height)
     {
-        var cameraObject = new GameObject("Preview camera", typeof(Camera)); var camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true; camera.orthographicSize = height / 2f; camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = new Color(.04f, .065f, .08f);
-        var target = new RenderTexture((int)width * 2, (int)height * 2, 24); camera.targetTexture = target; camera.Render(); RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false); image.ReadPixels(new Rect(0f, 0f, target.width, target.height), 0, 0); image.Apply();
-        File.WriteAllBytes(path, image.EncodeToPNG()); captures.Add(path + "\t" + target.width + "\t" + target.height);
-        RenderTexture.active = null; camera.targetTexture = null; target.Release(); Object.DestroyImmediate(target); Object.DestroyImmediate(image); Object.DestroyImmediate(cameraObject);
+        Camera camera = OrthoCamera("Preview camera", height / 2f, new Color(.04f, .065f, .08f));
+        int pixelWidth = (int)width * 2, pixelHeight = (int)height * 2;
+        CapturePng(camera, pixelWidth, pixelHeight, path);
+        captures.Add(path + "\t" + pixelWidth + "\t" + pixelHeight);
+        Object.DestroyImmediate(camera.gameObject);
     }
 
     private static Type TypeOf(string name) => Mod.GetType(name, true);
     private static object New(string type, params object[] args) => Activator.CreateInstance(TypeOf(type), All & ~BindingFlags.Static, null, args, CultureInfo.InvariantCulture);
     private static object EnumValue(string type, string name) => Enum.Parse(TypeOf(Wing + "Domain." + type), name);
-    private static object Field(object target, string name) => target.GetType().GetField(name, All).GetValue(target);
-    private static void Set(object target, string name, object value) => target.GetType().GetField(name, All).SetValue(target, value);
-    private static object Call(object target, string name, params object[] args) => target.GetType().GetMethod(name, All).Invoke(target, args);
     private static object CallStatic(string type, string name, params object[] args) => TypeOf(Wing + "Domain." + type).GetMethod(name, All).Invoke(null, args);
     private static string F(float number) => number.ToString("0.0", CultureInfo.InvariantCulture);
     private static void Check(bool pass, string reason) { assertions++; if (!pass) failures.Add(reason); }

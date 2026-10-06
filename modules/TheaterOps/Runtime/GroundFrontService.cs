@@ -2,17 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Bootstrap;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
@@ -94,9 +92,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private TheaterOpsSettings settings;
         private TheaterPriorityService priority;
-        private TheaterOperationsService operations;
-        private TheaterDirectorService director;
-        private ManualLogSource logger;
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
         private int nextScanCell;
@@ -106,15 +101,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private float nextUpdate;
         private bool warnedConflict;
 
-        internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
-            TheaterOperationsService operationService, TheaterDirectorService directorService,
-            ManualLogSource log)
+        internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService)
         {
             settings = config;
             priority = priorityService;
-            operations = operationService;
-            director = directorService;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -356,7 +346,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (!group.HasFront) { ClearDestinations(group); return; }
                 group.CenterX += group.Axis * PincerFlankMeters * group.TangentX;
                 group.CenterZ += group.Axis * PincerFlankMeters * group.TangentZ;
-                if (DistanceSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
+                if (Scalar.Distance2DSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
                     AssignmentRadius * AssignmentRadius) { ClearDestinations(group); return; }
 
                 float nx = -group.TangentZ, nz = group.TangentX;
@@ -394,7 +384,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GroundVehicle lead = group.Members[0].Vehicle;
                 bool contact = lead != null && group.HQ.TryGetNearestGroundEnemy(
                     lead.GlobalPosition(), out TrackingInfo tracked) && tracked != null &&
-                    DistanceSquared(lead.GlobalPosition().x, lead.GlobalPosition().z,
+                    Scalar.Distance2DSquared(lead.GlobalPosition().x, lead.GlobalPosition().z,
                         tracked.lastKnownPosition.x, tracked.lastKnownPosition.z) <
                     ContactMeters * ContactMeters;
                 if (contact)
@@ -426,7 +416,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                                   LaneOffset(member.Lane) * group.TangentX;
                         float z = group.CenterZ + group.FriendlyZ * depth +
                                   LaneOffset(member.Lane) * group.TangentZ;
-                        if (DistanceSquared(here.x, here.z, x, z) < 300f * 300f) ready++;
+                        if (Scalar.Distance2DSquared(here.x, here.z, x, z) < 300f * 300f) ready++;
                     }
                     if (group.Stage == Stage.Rally && group.Sealed &&
                         FrontlineTactics.ShouldAdvance(ready, group.Members.Count, now - group.StageSince))
@@ -467,7 +457,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         break;
                 }
                 RaycastHit ground = default;
-                member.HasDestination = Finite(x) && Finite(z) &&
+                member.HasDestination = float.IsFinite(x) && float.IsFinite(z) &&
                     PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out ground) &&
                     ground.point.y >= Datum.LocalSeaY && ground.normal.y >= .55f;
                 if (member.HasDestination)
@@ -498,8 +488,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 group.Stage.ToString().ToUpperInvariant() +
                 (group.Axis < 0 ? " LEFT AXIS" : group.Axis > 0 ? " RIGHT AXIS" : "") +
                 " (" + group.Members.Count + "/" + group.Formed + ")";
-            director?.ReportBattle(group.HQ.faction.factionName, line);
-            logger?.LogInfo("[THEATER OPS] " + line);
+            Plugin.Logger?.LogInfo("[THEATER OPS] " + line);
         }
 
         private int PincerAxisOf(Group group)
@@ -531,13 +520,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (Member member in group.Members) member.HasDestination = false;
         }
 
-        private static float DistanceSquared(float ax, float az, float bx, float bz)
-        {
-            float dx = ax - bx, dz = az - bz;
-            return dx * dx + dz * dz;
-        }
-
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private bool HasAuthority => GameAccess.IsServer() &&
             (LivingFrontService.Active?.Authoritative == true || priority?.Authoritative == true);
@@ -561,8 +543,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     out directive, out offensive) && directive.IsValid;
             if (priority == null || !priority.Authoritative || hq == null || hq.faction == null ||
                 !priority.TryGetDirective(hq.faction.factionName, out directive)) return false;
-            offensive = operations != null &&
-                operations.IsLaunchedTarget(hq.faction.factionName, directive.Key);
             return directive.IsValid;
         }
 
@@ -652,7 +632,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (installed && !warnedConflict)
             {
                 warnedConflict = true;
-                logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
+                Plugin.Logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
             }
             return installed;
         }

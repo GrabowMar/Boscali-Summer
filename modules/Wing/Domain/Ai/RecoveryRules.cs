@@ -1,14 +1,6 @@
 using System;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>How long a refit takes on the ground (spec M3 §4): <see cref="BaseSeconds"/> plus time for the fuel and the
@@ -32,7 +24,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private float lastFuel = float.NaN, rate = float.NaN, need;
 
         public bool Bingo { get; private set; }
-        public float BurnRate => rate;
         /// <summary>Fuel within <see cref="JokerMargin"/> of bingo (spec M5 §6.2); cleared by a refuel as bingo is.</summary>
         public bool Joker { get; private set; }
         /// <summary>True on the check Joker is first reached (not when the fuel went straight past bingo).</summary>

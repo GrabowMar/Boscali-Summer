@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     /// odds are at least 55 %, and steers it with PUSH, HOLD and EXFIL by its exposure. It sees only <see cref="SofDesk.Visible"/> (what the faction has really sighted) and it never orders the helicopter
     /// lift: the lift is for human pilots. It has no wallet: raises and missions are free. Bounded by the pacer.
     /// </summary>
-    internal sealed class SofWatchBrain
+    internal sealed class SofWatchBrain : WatchBrainBase
     {
         public const float ThinkSeconds = 2f, MinSabotageOdds = 55f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
             TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
@@ -63,36 +63,23 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const int MaxBackoffs = 32, MaxRecon = 4, MaxRevealedNear = 3;
         private const ulong Me = SpaceContacts.WatchOfficerId;
 
-        private readonly WatchIdle idle = new WatchIdle();
         private readonly Dictionary<int, float> backoff = new Dictionary<int, float>(MaxBackoffs);
         private readonly List<int> scratch = new List<int>(MaxBackoffs);
         private readonly float[] reconX = new float[MaxRecon], reconZ = new float[MaxRecon], reconAt = new float[MaxRecon];
         private int reconHead, reconCount;
-        private float nextThinkAt, restUntil, sabotageAt = float.NegativeInfinity, clock;
+        private float restUntil, sabotageAt = float.NegativeInfinity, clock;
         private float lastExposure = -1f, lastExposureAt;
         private int lastSlot = -1;
 
         public int Raises, Missions, Orders, Failures, Thinks;
         public SofWatchPlan Last { get; private set; }
 
-        /// <summary>A human of this faction did a SOF verb (RAISE, an order, a mission or a divert): OVERLORD yields (60 s alone, 300 s with company).</summary>
-        public void RecordHuman(float now) => idle.RecordHuman(now);
-
-        public bool Idle(int humans, float now) => idle.Idle(humans, now);
-
-        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
-
-        public void Defer(float now, float seconds)
+        public override void Reset()
         {
-            if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
-        }
-
-        public void Reset()
-        {
-            idle.Reset(); backoff.Clear();
+            base.Reset(); backoff.Clear();
             Array.Clear(reconAt, 0, reconAt.Length);
             reconHead = reconCount = 0;
-            nextThinkAt = restUntil = clock = lastExposureAt = 0f; sabotageAt = float.NegativeInfinity; lastExposure = -1f; lastSlot = -1;
+            restUntil = clock = lastExposureAt = 0f; sabotageAt = float.NegativeInfinity; lastExposure = -1f; lastSlot = -1;
             Raises = Missions = Orders = Failures = Thinks = 0;
             Last = default;
         }
@@ -120,7 +107,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (team != null && team.State == TeamState.Lost) restUntil = Math.Max(restUntil, now + LostRestSeconds);
             pacer.SetUrgent(WatchDomain.Sof, false); // refreshed below only while a team is in danger: a stale reservation would hold CYBER off the shared limiter
             // A human working SOF suspends everything except the one thing that cannot wait: a team in the field still gets its exfil when the exposure says so.
-            bool suspended = !idle.Idle(humans, now);
+            bool suspended = !Idle(humans, now);
             if (suspended && (team == null || (team.State != TeamState.Moving && team.State != TeamState.OnSite))) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
             if (team == null || team.State == TeamState.Lost) return RaisePlan(desk, world, humans, now);
             if (team.Slot != lastSlot) { lastSlot = team.Slot; lastExposure = -1f; }

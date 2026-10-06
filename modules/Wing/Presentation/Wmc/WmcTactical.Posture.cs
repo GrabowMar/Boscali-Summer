@@ -1,6 +1,5 @@
 using NOAvionics;
 using System.Collections.Generic;
-using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;

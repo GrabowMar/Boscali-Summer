@@ -13,10 +13,10 @@ namespace BoscaliSummer.Core.Game
         public static bool Usable(UnitDefinition definition) => definition != null && definition.unitPrefab != null &&
             definition.IsAllowed(MissionManager.AllowEventContent) &&
             Finite(definition.spawnOffset) && definition.spawnOffset.sqrMagnitude <= 400f &&
-            Finite(definition.value) && definition.value > 0f &&
-            Finite(definition.width) && definition.width > 0f && definition.width <= 20f &&
-            Finite(definition.length) && definition.length > 0f && definition.length <= 25f &&
-            Finite(definition.height) && definition.height > 0f && definition.height <= 20f;
+            float.IsFinite(definition.value) && definition.value > 0f &&
+            float.IsFinite(definition.width) && definition.width > 0f && definition.width <= 20f &&
+            float.IsFinite(definition.length) && definition.length > 0f && definition.length <= 25f &&
+            float.IsFinite(definition.height) && definition.height > 0f && definition.height <= 20f;
 
         /// <summary>
         /// Settle the footprint at <paramref name="desired"/>: every corner on dry terrain within a
@@ -54,7 +54,6 @@ namespace BoscaliSummer.Core.Game
             return Finite(point);
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
+        private static bool Finite(Vector3 value) => float.IsFinite(value.x) && float.IsFinite(value.y) && float.IsFinite(value.z);
     }
 }

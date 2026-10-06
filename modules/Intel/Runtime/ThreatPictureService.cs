@@ -1,11 +1,9 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Intel.Configuration;
 using BoscaliSummer.Modules.Intel.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
 
@@ -34,7 +32,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private readonly UnitProfiles profiles = new UnitProfiles();
 
         private IntelSettings settings;
-        private ManualLogSource logger;
         private int pictureCount;
         private int rebuildCursor;
         private bool server;
@@ -46,12 +43,10 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private int searchFrame = -1;
         private int searchesThisFrame;
 
-        public void Configure(IntelSettings config, ManualLogSource log)
+        public void Configure(IntelSettings config)
         {
             settings = config;
-            logger = log;
-            profiles.Configure(log);
-            for (int i = 0; i < pictures.Length; i++) pictures[i] = new FactionPicture(profiles, log);
+            for (int i = 0; i < pictures.Length; i++) pictures[i] = new FactionPicture(profiles);
         }
 
         public void ResetForScene()
@@ -101,7 +96,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
                 // and every consumer falls back to what it did before Intel existed.
                 failed = true;
                 DetachAll();
-                logger?.LogError("Intel threat picture stopped for this scene: " + e);
+                Plugin.Logger?.LogError("Intel threat picture stopped for this scene: " + e);
             }
         }
 
@@ -133,7 +128,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             depthMetres = float.NaN;
             rings = -1;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(x) || !Finite(z) || !Finite(agl)) return false;
+            if (picture == null || !picture.Ready || !float.IsFinite(x) || !float.IsFinite(z) || !float.IsFinite(agl)) return false;
             RingGeometry.Coverage(picture.Rings, picture.RingCount, x, z, agl, ThreatPictureLimits.AllRingsMask,
                 out depthMetres, out rings, out _);
             return true;
@@ -144,8 +139,8 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             exposedMetres = float.NaN;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(ax) || !Finite(az) || !Finite(bx) || !Finite(bz) ||
-                !Finite(agl))
+            if (picture == null || !picture.Ready || !float.IsFinite(ax) || !float.IsFinite(az) || !float.IsFinite(bx) || !float.IsFinite(bz) ||
+                !float.IsFinite(agl))
                 return false;
             exposedMetres = RingGeometry.SegmentExposure(picture.Rings, picture.RingCount, ax, az, bx, bz, agl,
                 kindMask, out _);
@@ -175,7 +170,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             intel = AreaIntel.Unknown;
             FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !Finite(x) || !Finite(z) || !(radius >= 0f)) return false;
+            if (picture == null || !picture.Ready || !float.IsFinite(x) || !float.IsFinite(z) || !(radius >= 0f)) return false;
             intel = AreaIntelReader.Read(picture.Known, picture.Grid, x, z, radius, Time.timeSinceLevelLoad);
             return true;
         }
@@ -268,7 +263,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             if (settings.PreWarIntel.Value)
             {
                 int seeded = PreWarSeeder.Seed(pictures, pictureCount, profiles, level);
-                logger?.LogInfo("Intel: pre-war intel gave " + seeded + " fixed air-defence entries to " +
+                Plugin.Logger?.LogInfo("Intel: pre-war intel gave " + seeded + " fixed air-defence entries to " +
                                 pictureCount + " faction picture(s).");
             }
             for (int p = 0; p < pictureCount; p++) pictures[p].PreWarSeeded = true;
@@ -306,6 +301,5 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             return unit is GroundVehicle || unit is Ship ? ObservationGrid.GroundRadius : 0f;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

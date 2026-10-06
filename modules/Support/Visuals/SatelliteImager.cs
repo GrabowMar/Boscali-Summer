@@ -89,9 +89,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
         /// <summary>The refusal in words, empty while the camera works.</summary>
         public string Words => SpaceFeedRules.OpticalRefusal(verdict);
 
-        /// <summary>0 sharp .. 1 fully overcast haze.</summary>
-        public float Softness => softness;
-
         /// <summary>Brackets for the revealed contacts that currently fall inside the image. Valid until the next Aim or contact update.</summary>
         public IReadOnlyList<OpticalBracket> Brackets => brackets;
 

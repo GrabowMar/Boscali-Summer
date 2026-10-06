@@ -14,6 +14,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Actual production desk and MIS, production fonts and chart art; synthetic host views.
 // Geometry, passive art, readable states and local controls only. No live dispatch claim.
@@ -32,18 +33,8 @@ public static class MissionDeskUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            ParameterInfo[] parameters = paths.GetParameters(); var args = new object[parameters.Length];
-            args[0] = Path.GetFullPath("MissionDeskCheck.exe");
-            for (int i = 1; i < args.Length; i++) args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            paths.Invoke(null, args); AvBundle.Load(Debug.Log);
+            if (!EnsureTmpEssentials(Run)) return;
+            SetExecutablePath("MissionDeskCheck.exe"); AvBundle.Load(Debug.Log);
             Check(AvBundle.Available && AvIcons.Available, "Production fonts and icons must load.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             AvFxDriver.Configure(AvFxTier.Off, true); new GameObject("Events", typeof(EventSystem));
@@ -335,12 +326,11 @@ public static class MissionDeskUnityCheck
     }
     private static void Capture(RectTransform rect, string file, float scale)
     {
-        var go = new GameObject("MissionCheckCamera", typeof(Camera)); Camera camera = go.GetComponent<Camera>(); Vector3 center = rect.TransformPoint(rect.rect.center);
-        camera.orthographic = true; camera.orthographicSize = rect.rect.height * Mathf.Abs(rect.lossyScale.y) * .5f; camera.transform.position = new Vector3(center.x, center.y, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor; camera.backgroundColor = AvStyleHost.FuiColor("ground", AvTheme.Ground);
-        var target = new RenderTexture(Mathf.RoundToInt(rect.rect.width * scale), Mathf.RoundToInt(rect.rect.height * scale), 24); camera.targetTexture = target; Canvas.ForceUpdateCanvases(); camera.Render(); RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false); image.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0); image.Apply(); File.WriteAllBytes(file, image.EncodeToPNG());
-        RenderTexture.active = null; camera.targetTexture = null; Object.DestroyImmediate(image); Object.DestroyImmediate(target); Object.DestroyImmediate(go); captures++;
+        Vector3 center = rect.TransformPoint(rect.rect.center);
+        Camera camera = OrthoCamera("MissionCheckCamera", rect.rect.height * Mathf.Abs(rect.lossyScale.y) * .5f, AvStyleHost.FuiColor("ground", AvTheme.Ground), new Vector3(center.x, center.y, -10f));
+        Canvas.ForceUpdateCanvases();
+        CapturePng(camera, Mathf.RoundToInt(rect.rect.width * scale), Mathf.RoundToInt(rect.rect.height * scale), file);
+        Object.DestroyImmediate(camera.gameObject); captures++;
         Check(new FileInfo(file).Length > 0, "Render failed: " + file); Notes.Add(file + " / " + new FileInfo(file).Length + " bytes");
     }
     private static object Field(object owner, string name)

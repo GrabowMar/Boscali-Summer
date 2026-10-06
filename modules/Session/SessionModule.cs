@@ -2,8 +2,6 @@ using System;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Modules.Session.Networking;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Session
 {
@@ -25,7 +23,7 @@ namespace BoscaliSummer.Modules.Session
         public void Install(ModuleContext context)
         {
             context.AddComponent<SessionNet>().Configure(
-                HostAuthority.Entries(context.Settings), HostAuthority.Switches(context.Settings), context.Logger);
+                HostAuthority.Entries(context.Settings), HostAuthority.Switches(context.Settings));
         }
     }
 }

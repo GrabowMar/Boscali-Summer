@@ -1,9 +1,7 @@
 using NOAvionics;
-using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
-using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL › ORDERS › STANCE (spec 2026-10-04 §4.1; mockup board/orders.html .slots and .tune): six stance slots (W+1 … W+6,

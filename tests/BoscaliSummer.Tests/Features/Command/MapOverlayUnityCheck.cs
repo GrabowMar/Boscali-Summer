@@ -12,6 +12,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Only native scene lifecycle is suppressed. All map widgets, meshes, glyphs, raster
 // bakes and caption builders come from the production BoscaliSummer assembly.
@@ -78,16 +79,8 @@ public static class MapOverlayUnityCheck
     public static void Run()
     {
         try {
-            if (Shader.Find("TextMeshPro/Distance Field") == null) {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", All);
-            var parameters = paths.GetParameters(); var args = new object[parameters.Length]; args[0] = Path.GetFullPath("MapOverlayCheck.exe");
-            for (int i = 1; i < args.Length; i++) args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            paths.Invoke(null, args);
+            if (!EnsureTmpEssentials(Run)) return;
+            SetExecutablePath("MapOverlayCheck.exe");
             AvBundle.Load(Debug.Log); Check(AvBundle.Available && AvIcons.Available, "Embedded production assets loaded.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             if (!nonWingOnly) Call(T("Wing.Runtime.WingLog"), "Init", new ManualLogSource("MapPreview"));

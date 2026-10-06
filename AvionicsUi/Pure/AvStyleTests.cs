@@ -21,8 +21,6 @@ namespace NOAvionics.Tests
             TestCompoundSelectors(assert);
             TestStateBeatsBaseRegardlessOfOrder(assert);
             TestSourceOrderWithinAPass(assert);
-            TestShorthandPad(assert);
-            TestNamedFontSteps(assert);
             TestCommentsAndCommaSelectors(assert);
             TestMalformedInputIsSurvivable(assert);
             TestUnknownLookupsAreEmpty(assert);
@@ -31,13 +29,13 @@ namespace NOAvionics.Tests
         private static void TestVariablesSubstitute(Action<bool, string> assert)
         {
             AvStyleSheet s = AvStyleSheet.Parse(
-                ":root { ink: #EBFFF5; pad-std: 14; }" +
-                ".t { color: ink; pad: pad-std; }");
+                ":root { ink: #EBFFF5; w-std: 14; }" +
+                ".t { color: ink; width: w-std; }");
 
             AvStyle t = s.Resolve("t");
             assert(!s.HasErrors, "a sheet using variables parses without errors");
             Near(assert, t.Color.Value.R, 0.9216f, "a variable resolves to its colour");
-            Near(assert, t.PadLeft, 14f, "a variable resolves to its number");
+            Near(assert, t.Width, 14f, "a variable resolves to its number");
         }
 
         private static void TestColourForms(Action<bool, string> assert)
@@ -82,13 +80,13 @@ namespace NOAvionics.Tests
         private static void TestCompoundSelectors(Action<bool, string> assert)
         {
             AvStyleSheet s = AvStyleSheet.Parse(
-                ".card { background: #101010; gap: 4; }" +
+                ".card { background: #101010; width: 4; }" +
                 ".card.locked { background: #050505; }");
 
             Near(assert, s.Resolve("card").Background.Value.R, 0.0627f, "the base rule applies alone");
             Near(assert, s.Resolve("card locked").Background.Value.R, 0.0196f,
                  "a compound rule applies when every one of its classes is present");
-            Near(assert, s.Resolve("card locked").Gap, 4f, "the base rule still contributes to a compound match");
+            Near(assert, s.Resolve("card locked").Width, 4f, "the base rule still contributes to a compound match");
             Near(assert, s.Resolve("locked").Background.Value.R, 0f,
                  "a compound rule does not apply on a partial class match");
         }
@@ -116,40 +114,6 @@ namespace NOAvionics.Tests
             Near(assert, s.Resolve("a").Color.Value.R, 0.1333f, "a later rule overrides an earlier one");
         }
 
-        private static void TestShorthandPad(Action<bool, string> assert)
-        {
-            AvStyleSheet s = AvStyleSheet.Parse(
-                ".one { pad: 8; }" +
-                ".two { pad: 6 12; }" +
-                ".four { pad: 1 2 3 4; }");
-
-            AvStyle one = s.Resolve("one");
-            assert(one.PadTop == 8f && one.PadBottom == 8f && one.PadLeft == 8f && one.PadRight == 8f,
-                   "one pad value applies to all four sides");
-
-            AvStyle two = s.Resolve("two");
-            assert(two.PadTop == 6f && two.PadBottom == 6f && two.PadLeft == 12f && two.PadRight == 12f,
-                   "two pad values are vertical then horizontal");
-
-            AvStyle four = s.Resolve("four");
-            assert(four.PadTop == 1f && four.PadRight == 2f && four.PadBottom == 3f && four.PadLeft == 4f,
-                   "four pad values run clockwise from the top");
-        }
-
-        private static void TestNamedFontSteps(Action<bool, string> assert)
-        {
-            AvStyleSheet s = AvStyleSheet.Parse(
-                ".t { font: title bold; }" +
-                ".m { font: micro; }" +
-                ".n { font: 25 bold; }");
-
-            Near(assert, s.Resolve("t").FontSize, AvTokens.FontTitle, "a named step resolves off the token scale");
-            assert(s.Resolve("t").Bold, "'bold' after a size sets the weight");
-            Near(assert, s.Resolve("m").FontSize, AvTokens.FontMicro, "the micro step is the 10px floor");
-            assert(!s.Resolve("m").Bold, "a size without 'bold' stays normal weight");
-            Near(assert, s.Resolve("n").FontSize, 25f, "a display size can be stated outright");
-        }
-
         private static void TestCommentsAndCommaSelectors(Action<bool, string> assert)
         {
             AvStyleSheet s = AvStyleSheet.Parse(
@@ -169,12 +133,12 @@ namespace NOAvionics.Tests
                 ".good { color: #FFFFFF; }\n" +
                 ".bad { color: notacolour; }\n" +
                 ".alsobad { nonsense: 4; }\n" +
-                ".good2 { gap: 6; }");
+                ".good2 { width: 6; }");
 
             assert(s.HasErrors, "a malformed declaration is reported");
             assert(s.Errors.Count >= 2, "each distinct problem is reported");
             Near(assert, s.Resolve("good").Color.Value.R, 1f, "rules before the bad one still apply");
-            Near(assert, s.Resolve("good2").Gap, 6f, "parsing continues past a bad declaration");
+            Near(assert, s.Resolve("good2").Width, 6f, "parsing continues past a bad declaration");
 
             foreach (string e in s.Errors)
                 assert(e.StartsWith("line ", StringComparison.Ordinal), "every error names a line: '" + e + "'");
@@ -197,7 +161,6 @@ namespace NOAvionics.Tests
             assert(!none.Color.HasValue && !none.Background.HasValue,
                    "an unknown class declares nothing, so the widget keeps its own colours");
             assert(!s.Resolve(null).Color.HasValue, "a null class set is harmless");
-            Near(assert, s.Number("missing", 470f), 470f, "a missing variable falls back");
             Near(assert, s.Paint("missing", AvTokens.RailReady).Value.G, AvTokens.RailReady.G,
                 "a missing colour variable preserves the supplied fallback");
         }

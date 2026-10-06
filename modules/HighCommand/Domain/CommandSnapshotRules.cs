@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
         public const float MaximumCoordinate = 2000000f;
 
         public static bool ValidHeader(float cohesion, int active, int kia) =>
-            Finite(cohesion) && cohesion >= 0f && cohesion <= 1f &&
+            float.IsFinite(cohesion) && cohesion >= 0f && cohesion <= 1f &&
             active >= 0 && active <= CommandTier.MaximumSlots * 8 &&
             kia >= 0 && kia <= CommandTier.MaximumSlots * 8;
 
@@ -29,9 +29,9 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             parentId >= -1 && parentId < MaximumIdentifier &&
             tier <= MaximumTier &&
             (flags & ~FlagsMask) == 0 &&
-            Finite(intelAge) && intelAge >= -1f && intelAge <= MaximumIntelAge &&
-            Finite(weight) && weight >= 0f && weight <= 1f &&
-            Finite(x) && Finite(z) &&
+            float.IsFinite(intelAge) && intelAge >= -1f && intelAge <= MaximumIntelAge &&
+            float.IsFinite(weight) && weight >= 0f && weight <= 1f &&
+            float.IsFinite(x) && float.IsFinite(z) &&
             x >= -MaximumCoordinate && x <= MaximumCoordinate &&
             z >= -MaximumCoordinate && z <= MaximumCoordinate;
 
@@ -39,8 +39,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             targetId >= -1 && targetId < MaximumIdentifier &&
             tone <= (byte)CommanderLogTone.Alert &&
             text != null && text.Length <= MaximumLogText &&
-            Finite(age) && age >= 0f && age <= MaximumLogAge;
+            float.IsFinite(age) && age >= 0f && age <= MaximumLogAge;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

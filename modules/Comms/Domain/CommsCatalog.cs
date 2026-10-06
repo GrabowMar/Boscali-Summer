@@ -114,10 +114,8 @@ namespace BoscaliSummer.Modules.Comms.Domain
     internal static class CommsCatalog
     {
         public const int PingMark = 0;
-        public const int PingEnemy = 1;
         public const int PingSam = 2;
         public const int PingAttack = 3;
-        public const int PingDefend = 4;
         public const int PingRally = 5;
         public const int PingHelp = 6;
         public const int PingSpike = 7;

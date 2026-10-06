@@ -1,6 +1,5 @@
 using System;
 using BoscaliSummer.Modules.Trenches.Domain;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime

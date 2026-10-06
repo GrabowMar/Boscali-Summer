@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Ops;

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Runtime;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Visuals

@@ -9,12 +9,12 @@ namespace BoscaliSummer.Modules.Weather.Audio
             float heightAboveGroundM, float exposure, float time)
         {
             rain = Unit(rain); exposure = Unit(exposure);
-            float variation = 1f + 0.055f * (float)Math.Sin(Finite(time) * 0.37f)
-                + 0.025f * (float)Math.Sin(Finite(time) * 1.13f + 2.1f);
+            float variation = 1f + 0.055f * (float)Math.Sin((float.IsFinite(time) ? time : 0f) * 0.37f)
+                + 0.025f * (float)Math.Sin((float.IsFinite(time) ? time : 0f) * 1.13f + 2.1f);
             if (cockpit)
             {
                 // Impact energy changes with slipstream; falling water never changes pitch.
-                float speed = Unit(Finite(speedMps) / 250f);
+                float speed = Unit((float.IsFinite(speedMps) ? speedMps : 0f) / 250f);
                 return ((float)Math.Pow(rain, 0.7f) * (0.15f + speed * 0.12f) * exposure * variation,
                     4200f + speed * 1100f);
             }
@@ -32,12 +32,11 @@ namespace BoscaliSummer.Modules.Weather.Audio
 
         internal static float ThunderCutoff(float distanceM, bool cockpit)
         {
-            float distance = Math.Max(0f, Finite(distanceM));
+            float distance = Math.Max(0f, (float.IsFinite(distanceM) ? distanceM : 0f));
             float cutoff = 1000f + 8500f / (1f + distance / 850f);
             return cockpit ? Math.Min(2600f, cutoff * 0.62f) : cutoff;
         }
 
-        private static float Unit(float value) => Math.Max(0f, Math.Min(1f, Finite(value)));
-        private static float Finite(float value) => float.IsNaN(value) || float.IsInfinity(value) ? 0f : value;
+        private static float Unit(float value) => Math.Max(0f, Math.Min(1f, (float.IsFinite(value) ? value : 0f)));
     }
 }

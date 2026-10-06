@@ -1,15 +1,7 @@
 using System;
 using UnityEngine;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Plays native radio clicks. Retry missing singletons; disable playback after exceptions
@@ -28,35 +20,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public enum Earcon
         {
             Transmission,
-            Wilco,
-            Unable,
             ThreatAlarm,
             Splash,
-            RoeCycle,
-            RadialTick,
         }
 
-        private static AudioClip wilcoClip;
-        private static AudioClip unableClip;
         private static AudioClip threatClip;
         private static AudioClip splashClip;
-        private static AudioClip roeClip;
-        private static AudioClip radialTickClip;
-        private static float lastTickPlayed = -100f;
-
-        /// <summary>Play the native transmission-opening click.</summary>
-        public static void Transmission() => Play(Earcon.Transmission);
 
         /// <summary>Play a distinct avionics earcon.</summary>
         public static void Play(Earcon earcon)
         {
             if (unavailable || WingSettings.Instance == null || WingSettings.Instance.Radio.Value == RadioLevel.Off) return;
             if (earcon == Earcon.Transmission && Time.unscaledTime - lastPlayed < MinimumGap) return;
-            if (earcon == Earcon.RadialTick)
-            {
-                if (Time.unscaledTime - lastTickPlayed < 0.045f) return;
-                lastTickPlayed = Time.unscaledTime;
-            }
 
             try
             {
@@ -86,18 +61,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 case Earcon.Transmission:
                     GameAssets assets = GameAssets.i;
                     return assets != null ? assets.radioStatic : null;
-                case Earcon.Wilco:
-                    return wilcoClip ?? (wilcoClip = CreateChime("Earcon_Wilco", 520f, 780f, 0.09f, 0.22f));
-                case Earcon.Unable:
-                    return unableClip ?? (unableClip = CreateBuzz("Earcon_Unable", 240f, 0.12f, 0.20f));
                 case Earcon.ThreatAlarm:
                     return threatClip ?? (threatClip = CreateWarble("Earcon_Threat", 950f, 1300f, 0.14f, 0.30f));
                 case Earcon.Splash:
                     return splashClip ?? (splashClip = CreateChime("Earcon_Splash", 880f, 1100f, 0.07f, 0.25f));
-                case Earcon.RoeCycle:
-                    return roeClip ?? (roeClip = CreateChime("Earcon_Roe", 650f, 650f, 0.05f, 0.18f));
-                case Earcon.RadialTick:
-                    return radialTickClip ?? (radialTickClip = CreateChime("Earcon_RadialTick", 1200f, 1400f, 0.025f, 0.12f));
                 default:
                     return null;
             }
@@ -115,25 +82,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 float freq = Mathf.Lerp(fStart, fEnd, progress);
                 float envelope = Mathf.Sin(Mathf.PI * progress);
                 data[i] = Mathf.Sin(2f * Mathf.PI * freq * t) * envelope * volume;
-            }
-            AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
-            clip.SetData(data, 0);
-            return clip;
-        }
-
-        private static AudioClip CreateBuzz(string name, float freq, float duration, float volume)
-        {
-            const int sampleRate = 22050;
-            int samples = (int)(sampleRate * duration);
-            float[] data = new float[samples];
-            for (int i = 0; i < samples; i++)
-            {
-                float t = (float)i / sampleRate;
-                float progress = t / duration;
-                float envelope = Mathf.Sin(Mathf.PI * progress);
-                // Square wave approximation for buzz
-                float sin = Mathf.Sin(2f * Mathf.PI * freq * t);
-                data[i] = (sin >= 0f ? 1f : -1f) * envelope * volume * 0.5f;
             }
             AudioClip clip = AudioClip.Create(name, samples, 1, sampleRate, false);
             clip.SetData(data, 0);

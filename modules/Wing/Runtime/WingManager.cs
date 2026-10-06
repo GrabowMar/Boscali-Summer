@@ -3,16 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 // Unity calls Awake, Update, FixedUpdate and OnDestroy by reflection.
 #pragma warning disable IDE0051
 
@@ -81,7 +75,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 settings.VerboseLogging.SettingChanged -= OnLoggingChanged;
             settings = null;
             if (WingLog.Logger != null)
-                WingLogExport.Stop(WingLog.Logger);
+                WingLogExport.Stop();
             if (ReferenceEquals(Instance, this)) Instance = null;
         }
 
@@ -98,7 +92,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (!patchCheckDone)
             {
                 patchCheckDone = true;
-                PatchManifest.Verify(WingLog.Logger);
+                PatchManifest.Verify();
             }
             // The network is up before a mission is (the lobby): its hooks and hellos run regardless.
             try

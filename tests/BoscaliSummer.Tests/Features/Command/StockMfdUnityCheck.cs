@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using static UnityCheckHarness;
 
 // Real production presenters and installed game type metadata, synthetic display data.
 // This verifies kit v2 console layout and reachability, not game adapters, authority or multiplayer.
@@ -26,19 +27,8 @@ public static class StockMfdUnityCheck
     {
         try
         {
-            if (Shader.Find("TextMeshPro/Distance Field") == null)
-            {
-                var package = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(TMP_Text).Assembly);
-                AssetDatabase.importPackageCompleted += _ => EditorApplication.delayCall += Run;
-                AssetDatabase.ImportPackage(Path.Combine(package.resolvedPath, "Package Resources/TMP Essential Resources.unitypackage"), false);
-                return;
-            }
-            MethodInfo paths = typeof(BepInEx.Paths).GetMethod("SetExecutablePath", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            ParameterInfo[] parameters = paths.GetParameters();
-            var args = new object[parameters.Length];
-            args[0] = Path.GetFullPath("StockMfdCheck.exe");
-            for (int i = 1; i < args.Length; i++) args[i] = parameters[i].HasDefaultValue ? parameters[i].DefaultValue : null;
-            paths.Invoke(null, args);
+            if (!EnsureTmpEssentials(Run)) return;
+            SetExecutablePath("StockMfdCheck.exe");
             AvBundle.Load(Debug.Log);
             Check(AvBundle.Available && AvIcons.Available, "Production fonts and icon bundle must load before rendering.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
@@ -526,26 +516,9 @@ public static class StockMfdUnityCheck
                     failure = failure ?? path + ": cell text spills below its frame: " + label.text;
             }
         }
-        var cameraObject = new GameObject("Camera", typeof(Camera));
-        Camera camera = cameraObject.GetComponent<Camera>();
-        camera.orthographic = true;
-        camera.orthographicSize = height / 2f;
-        camera.transform.position = new Vector3(0f, 0f, -10f);
-        camera.clearFlags = CameraClearFlags.SolidColor;
-        camera.backgroundColor = AvStyleHost.FuiColor("ground", AvTheme.Surface);
-        var target = new RenderTexture(960, (int)height * 2, 24);
-        camera.targetTexture = target;
-        camera.Render();
-        RenderTexture.active = target;
-        var image = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
-        image.ReadPixels(new Rect(0f, 0f, target.width, target.height), 0, 0);
-        image.Apply();
-        File.WriteAllBytes(path, image.EncodeToPNG());
-        RenderTexture.active = null;
-        camera.targetTexture = null;
-        Object.DestroyImmediate(image);
-        Object.DestroyImmediate(target);
-        Object.DestroyImmediate(cameraObject);
+        Camera camera = OrthoCamera("Camera", height / 2f, AvStyleHost.FuiColor("ground", AvTheme.Surface));
+        CapturePng(camera, 960, (int)height * 2, path);
+        Object.DestroyImmediate(camera.gameObject);
         captures++;
         if (failure != null) throw new Exception(failure);
     }

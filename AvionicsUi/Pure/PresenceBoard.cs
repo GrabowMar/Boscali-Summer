@@ -11,9 +11,6 @@ namespace NOAvionics
     {
         public const string WingMemberIds = "NO.Wing.ids.v1";
         public const string WingGuid = "NO.Wing.guid.v1";
-        public const string TheaterGuid = "NO.Theater.guid.v1";
-        public const string TheaterDoctrine = "NO.Theater.doctrine.v1";
-        public const string TheaterPriorityIds = "NO.Theater.priority.v1";
 
         private const string LockKey = "NO.Presence.v1";
 
@@ -74,9 +71,6 @@ namespace NOAvionics
             {
                 AppDomain.CurrentDomain.SetData(WingMemberIds, null);
                 AppDomain.CurrentDomain.SetData(WingGuid, null);
-                AppDomain.CurrentDomain.SetData(TheaterGuid, null);
-                AppDomain.CurrentDomain.SetData(TheaterDoctrine, null);
-                AppDomain.CurrentDomain.SetData(TheaterPriorityIds, null);
             }
         }
     }

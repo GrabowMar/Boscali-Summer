@@ -4,16 +4,12 @@ using System.Collections.Generic;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
-using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
 using BoscaliSummer.Modules.Support.Presentation;
-using BoscaliSummer.Modules.Support.Runtime.Actions;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Interop;
 using BoscaliSummer.Core.Game;
@@ -86,8 +82,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private Action<GlobalPosition> localPick;
 
-        public IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
-
         public bool TryGetNear(float x, float z, float vicinity,
             out string label, out float secondsToImpact)
         {
@@ -137,25 +131,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public int CameraSerial { get; private set; }
         public GlobalPosition CameraTarget { get; private set; }
 
-        /// <summary>Display the same owned-zone footprint that FORTIFY executes.</summary>
-        public void ResolveMapArea(SupportActionId action, ref GlobalPosition target, ref float radius)
-        {
-            EffectReceipt(action, LocalHQ(), target.x, target.z, out radius, out _);
-            if (action != SupportActionId.Fortify) return;
-            if (!GameManager.GetLocalPlayer<Player>(out Player player)) return;
-            Airbase zone = SupportTargeting.NearestOwnedAirbase(player, target.ToLocalPosition(), out float distance);
-            if (zone == null || distance > Mathf.Max(650f, zone.GetRadius() * 1.5f))
-            {
-                radius = 0f;
-                return;
-            }
-            target = (zone.center != null ? zone.center.position : zone.transform.position).ToGlobalPosition();
-            radius = zone.GetRadius();
-        }
-
-        public float GetEffectRadius(SupportActionId action) =>
-            GetEffectRadius(action, LocalHQ());
-
         public float GetEffectRadius(SupportActionId action, FactionHQ owner)
         {
             switch (action)
@@ -179,24 +154,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 default:
                     return 1000f;
             }
-        }
-
-        // Capture before execution so a receipt describes the effect the host actually applied.
-        internal void EffectReceipt(SupportActionId action, FactionHQ owner, float x, float z,
-            out float radius, out float duration)
-        {
-            radius = GetEffectRadius(action, owner);
-            duration = settings != null ? settings.JtacMarkDuration.Value : 10f;
-            if (action == SupportActionId.Emp)
-                duration = SupportEffectPolicy.EmpDuration;
-            else if (action == SupportActionId.FlareMissile)
-                duration = settings.FlareBarrageDuration.Value;
-        }
-
-        private static FactionHQ LocalHQ()
-        {
-            GameManager.GetLocalPlayer<Player>(out Player player);
-            return player == null ? null : player.HQ;
         }
 
         public void RegisterActiveStrike(
@@ -280,7 +237,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             refusal = SupportResult.SpawnFailed;
             return space != null ? space.OpenOptical(owner, point, baseRadius, out refusal) : -1;
         }
-        internal SpaceObservations SpaceObservationsFor(FactionHQ owner) => space?.ObservationsFor(owner);
         internal MarkVerdict ConfirmSpaceMark(Player player, int id)
         {
             if (!GameAccess.IsServer() || player == null || player.HQ == null) return MarkVerdict.NoContact;
@@ -640,14 +596,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public float LocalCooldownRemaining =>
             DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - MissionNow());
 
-        /// <summary>
-        /// The cooldown this peer would show: the host's configured seconds scaled by the
-        /// local player's own re-tasking perk, so the countdown matches what the host applies.
-        /// </summary>
-        public float LocalCooldownTotal =>
-            DisableCooldowns ? 0f : settings != null ? CooldownFor(
-                GameManager.GetLocalPlayer<Player>(out Player local) ? local : null) : 0f;
-
         public bool IsAuthorised(SupportActionDefinition action)
         {
             if (BypassRequirements) return true;
@@ -758,17 +706,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ArmedAction = null;
             localPick = null;
             mapGesture.Complete(Time.frameCount);
-        }
-
-        /// <summary>Deliver the armed action at a point chosen off the map (the uplink
-        /// crosshair). Consumes the arming exactly as a map click would.</summary>
-        public bool CallArmedAt(GlobalPosition target)
-        {
-            if (GameplayUI.GameIsPaused || pending || !ArmedAction.HasValue) return false;
-            SupportActionId action = ArmedAction.Value;
-            CancelArmed();
-            RequestAt(action, target);
-            return true;
         }
 
         public void RequestAtMark(IObservationSource observations)
@@ -901,7 +838,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (action != null && action.Id == SupportActionId.ElintSweep)
                     Status = name + " complete: " + Mathf.Max(0, message.Contacts) + " emitting radar(s) located.";
                 if (action != null && (action.Id == SupportActionId.Recon || action.Id == SupportActionId.MtiSweep) &&
-                    Finite(message.X) && Finite(message.Z))
+                    float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     RadarScanTarget = new GlobalPosition(message.X, message.Y, message.Z);
                     RadarScanContacts = Mathf.Max(0, message.Contacts);
@@ -909,7 +846,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Status = name + " accepted: imaging, " + RadarScanContacts +
                         (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
                 }
-                if (action != null && action.Id == SupportActionId.SatCamera && Finite(message.X) && Finite(message.Z))
+                if (action != null && action.Id == SupportActionId.SatCamera && float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
                     CameraSerial++;
@@ -919,9 +856,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                             action != null && action.Id == SupportActionId.Artillery ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
-                if (!Finite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
-                    !Finite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
-                    !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;
+                if (!float.IsFinite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
+                    !float.IsFinite(message.Duration) || message.Duration < 0f || message.Duration > 60f ||
+                    !float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z)) return;
                 if (eta <= 0f && action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise)) return;
                 RegisterActiveStrike(message.RequestId, (SupportActionId)message.Action,
                     new GlobalPosition(message.X, message.Y, message.Z), message.Radius, eta, name, message.Duration);
@@ -939,7 +876,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal SupportResult Evaluate(Player player, SupportRequestMessage request)
         {
             if (player == null || player.HQ == null) return SupportResult.InvalidTarget;
-            if (!Finite(request.X) || !Finite(request.Y) || !Finite(request.Z) ||
+            if (!float.IsFinite(request.X) || !float.IsFinite(request.Y) || !float.IsFinite(request.Z) ||
                 Math.Abs(request.X) > 10000000f || Math.Abs(request.Y) > 10000000f || Math.Abs(request.Z) > 10000000f)
                 return SupportResult.InvalidTarget;
 
@@ -1148,25 +1085,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal CruiseTasking Tasking => cruiseTasking ?? (cruiseTasking =
             new CruiseTasking(routine => ((ISupportHost)this).Run(routine), BroadcastLegs));
 
-        internal CruiseLegMirror LegsFor(int requestId)
-        {
-            cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror);
-            return mirror;
-        }
-
-        /// <summary>Client: chains a waypoint onto a live cruise strike, or clears its legs.</summary>
-        public void SendWaypoint(int requestId, GlobalPosition point, bool clear)
-        {
-            if (network == null)
-            {
-                ReportOffline();
-                return;
-            }
-            pendingWaypoint = requestId;
-            pendingWaypointUntil = Time.unscaledTime + ReplyTimeout;
-            network.SendWaypoint(requestId, point, clear);
-        }
-
         /// <summary>Server: validates a leg intent; every event broadcasts the strike's legs.</summary>
         internal void ApplyWaypoint(Player player, int requestId, GlobalPosition leg, bool clear)
         {
@@ -1249,11 +1167,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (message.X != null && message.Z != null)
                 for (int i = 0; i < legs && i < message.X.Length && i < message.Z.Length; i++)
                 {
-                    if (!Finite(message.X[i]) || !Finite(message.Z[i])) continue;
+                    if (!float.IsFinite(message.X[i]) || !float.IsFinite(message.Z[i])) continue;
                     mirror.Legs.Add(new GlobalPosition(message.X[i], 0f, message.Z[i]));
                 }
             cruiseLegs[message.RequestId] = mirror;
-            if (Finite(message.Tti) && message.Tti > 0f)
+            if (float.IsFinite(message.Tti) && message.Tti > 0f)
             {
                 SupportActionDefinition def = catalog != null ? catalog.Find(SupportActionId.Cruise) : null;
                 float linger = Math.Max(0f, known.Value.ExpiryTime - known.Value.ImpactTime);
@@ -1326,7 +1244,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>What Urban Combat may do on the ground for one faction: one position or camp.</summary>
         int IGroundForceReadiness.InsertionCamps(FactionHQ owner) => 1;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 
         private static string FactionKey(FactionHQ hq)
         {

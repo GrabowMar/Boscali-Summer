@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private AvRow[] recentRows;
 
         // ---- POLL --------------------------------------------------------------------------
-        private CommsHeaderPart pollHeader;
+        private AvKeyHeader pollHeader;
         private AvRow pollRow;
         private AvControl pollClose;
         private PollOptionRow[] optionRows;
@@ -126,7 +126,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void BuildPollPage(AvFlow p)
         {
-            pollHeader = p.Add(new CommsHeaderPart(p.Content, AvIcon.QuestionMark, "POLL",
+            pollHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.QuestionMark, "POLL",
                 new AvControl.Spec(string.Empty, () => pollStep--, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec(string.Empty, () => pollStep++, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
             pollHeader[0].Help = "Previous poll. Open polls come first, then the ones that closed.";
@@ -196,7 +196,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
             pollTips = p.Add(new AvNote(p.Content,
                 "HOW POLLS WORK · anyone on the audience can vote once and change their mind until it closes. " +
-                "The asker or the host can close early; the result is posted to the log. One open poll per player."));
+                "The asker or the host can close early; the result is posted to the log. One open poll per player.") { MinHeight = AvGridTokens.RowDense, StretchText = true });
         }
 
         private void AskCustom()
@@ -349,7 +349,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             public override void Restyle()
             {
                 vote.Restyle();
-                track.Track = AvStyleHost.Resolve(AvStyleHost.FuiStyle("gauge-track").Background, AvTheme.Hairline);
+                track.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 track.SetVerticesDirty();
             }
         }

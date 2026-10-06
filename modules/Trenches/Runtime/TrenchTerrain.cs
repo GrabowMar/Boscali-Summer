@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Modules.Trenches.Domain;
 using UnityEngine;
 

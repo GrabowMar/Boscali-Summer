@@ -2,15 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal enum AirframeClass { FixedWing, Rotary, Tiltwing }
@@ -76,7 +68,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, LengthM = 15f, TakeoffSpeed = 66f;
         public static float WheelbaseMin = 2f;
 #pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
-        public bool ForceAutoAimFallback;
+        
 #pragma warning restore CS0649
 
         /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter or a tiltwing can

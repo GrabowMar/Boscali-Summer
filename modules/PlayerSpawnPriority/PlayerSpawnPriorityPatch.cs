@@ -3,7 +3,6 @@ using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NuclearOption.Networking;
-using NuclearOption.SavedMission;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.PlayerSpawnPriority

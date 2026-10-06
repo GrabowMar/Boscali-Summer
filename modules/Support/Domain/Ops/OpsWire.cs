@@ -50,12 +50,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// One faction's OPERATIONS state, always a full snapshot. Own rows and own satellite state go to the owning faction only; pings are the enemies' operations
     /// as the viewer may hear them; flights are everyone's. Times are host mission seconds; on the wire an expiry is the quantized seconds left from <see cref="Now"/>.
     /// </summary>
-    internal sealed class OpsStateData
+    internal sealed class OpsStateData : FactionStateData<OpsStateData>
     {
-        public byte Protocol;
         public bool Active, CyberOps, SofOps;
-        public int Seq;
-        public float Now;
         /// <summary>Bit i set while the faction's satellite i (OPTICAL, RADAR, KINETIC) is dead; <see cref="BirdPercent"/> is its rebuild progress.</summary>
         public byte BirdsDown;
         public readonly byte[] BirdPercent = new byte[SpaceRules.BirdCount];
@@ -66,7 +63,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         /// <summary>The last OVERLORD actions of the viewer's own faction (a reason code and two arguments each): the console reads them. Never another faction's.</summary>
         public readonly List<WatchLogRow> Log = new List<WatchLogRow>();
 
-        public OpsStateData Clone()
+        public override OpsStateData Clone()
         {
             var c = new OpsStateData { Protocol = Protocol, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
@@ -81,7 +78,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
-        public bool SameAs(OpsStateData o)
+        public override bool SameAs(OpsStateData o)
         {
             if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown ||
                 Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Log.Count != o.Log.Count) return false;
@@ -239,93 +236,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
 
         private static OpsStateData Bad() => new OpsStateData();
 
-        private sealed class Counter : ISpaceWriter
-        {
-            public int Bytes;
-            public void WriteByte(byte value) => Bytes++;
-        }
-
         public static int StateSize(OpsStateData s)
         {
-            var c = new Counter();
+            var c = new ByteCounter();
             WriteState(c, s);
             return c.Bytes;
         }
     }
 
-    /// <summary>The client's copy of its own faction's OPERATIONS state. Full snapshots only: anything not newer than the last one on this link is dropped.</summary>
-    internal sealed class OpsMirror
+    /// <summary>The client's copy of its own faction's OPERATIONS state (see <see cref="FactionMirror{T}"/>).</summary>
+    internal sealed class OpsMirror : FactionMirror<OpsStateData>
     {
-        public OpsStateData State { get; private set; } = new OpsStateData();
-        public bool Known { get; private set; }
-        public int Seq { get; private set; }
-        public int Floor { get; private set; }
+        protected override bool Bounds(OpsStateData d) =>
+            d.Rows.Count <= OpsWire.MaxRows && d.Pings.Count <= OpsWire.MaxPings && d.Events.Count <= OpsWire.MaxEvents && d.Flights.Count <= OpsWire.MaxFlights && d.Log.Count <= OpsWire.MaxLog;
 
-        public void Reset() { State = new OpsStateData(); Known = false; Seq = 0; }
-
-        public void ResetLink() { Reset(); Floor = 0; }
-
-        public bool Apply(OpsStateData d, byte protocol, float clientNow)
+        protected override OpsStateData Shift(OpsStateData d, float offset, float clientNow)
         {
-            if (d == null || d.Protocol != protocol || d.Seq <= 0 || d.Seq <= Floor || !SpaceRules.MissionTime(clientNow)) return false;
-            if (d.Rows.Count > OpsWire.MaxRows || d.Pings.Count > OpsWire.MaxPings || d.Events.Count > OpsWire.MaxEvents || d.Flights.Count > OpsWire.MaxFlights || d.Log.Count > OpsWire.MaxLog) return false;
-            float offset = clientNow - d.Now;
             OpsStateData copy = d.Clone();
             copy.Now = clientNow;
             for (int i = 0; i < copy.Rows.Count; i++) { OpsRow r = copy.Rows[i]; if (r.EndsAt > 0f) r.EndsAt += offset; copy.Rows[i] = r; }
             for (int i = 0; i < copy.Pings.Count; i++) { OpsPingRow p = copy.Pings[i]; if (p.Until > 0f) p.Until += offset; copy.Pings[i] = p; }
             for (int i = 0; i < copy.Flights.Count; i++) { OpsFlightRow f = copy.Flights[i]; if (f.EndsAt > 0f) f.EndsAt += offset; copy.Flights[i] = f; }
-            State = copy; Known = true; Seq = d.Seq; Floor = d.Seq;
-            return true;
+            return copy;
         }
 
         /// <summary>The client's own view of a satellite: false while an ASAT strike has it dead. Unknown mirror = alive.</summary>
         public bool BirdUp(BirdKind bird) => !Known || !State.Active || (byte)bird >= SpaceRules.BirdCount || (State.BirdsDown & (1 << (byte)bird)) == 0;
-    }
-
-    /// <summary>Host side: per-member send gating (change-only, at most one message per 2 s, a fresh full on a new member or an explicit sync).</summary>
-    internal sealed class OpsSubscriptions
-    {
-        public const int MaxSubscribers = SpaceContacts.MaxPlayers;
-        public const float MinGapSeconds = 2f;
-
-        private sealed class Sub { public int Faction = int.MinValue; public float NextAt; public OpsStateData Last; public bool Force = true; }
-        private readonly Dictionary<ulong, Sub> subs = new Dictionary<ulong, Sub>();
-        private readonly List<ulong> removed = new List<ulong>();
-        private int seq;
-
-        public int Count => subs.Count;
-
-        public void Clear() { subs.Clear(); removed.Clear(); }
-
-        public void Resync(ulong player) { if (subs.TryGetValue(player, out Sub s)) { s.Force = true; s.NextAt = 0f; } }
-
-        public void Prune(HashSet<ulong> keep)
-        {
-            removed.Clear();
-            foreach (var pair in subs) if (keep == null || !keep.Contains(pair.Key)) removed.Add(pair.Key);
-            for (int i = 0; i < removed.Count; i++) subs.Remove(removed[i]);
-            removed.Clear();
-        }
-
-        public OpsStateData Next(ulong player, int faction, OpsStateData current, float now, float wall)
-        {
-            if (player == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall) || seq == int.MaxValue) return null;
-            if (!subs.TryGetValue(player, out Sub s))
-            {
-                if (subs.Count >= MaxSubscribers) return null;
-                subs[player] = s = new Sub();
-            }
-            if (s.Faction != faction) { s.Faction = faction; s.Force = true; s.Last = null; }
-            if (!s.Force && wall < s.NextAt) return null;
-            if (!s.Force && s.Last != null && s.Last.SameAs(current)) return null;
-            current.Seq = ++seq;
-            current.Now = now;
-            s.Last = current.Clone();
-            s.Force = false;
-            s.NextAt = wall + MinGapSeconds;
-            return current;
-        }
     }
 
     internal enum OpsNoticeKind : byte { None, Execute, Broken, Done, Ping }
@@ -342,13 +278,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// The pilot's OPERATIONS HUD notice, derived only from the mirror: an own EXECUTE (T-60), BROKEN or executed event, or an enemy ping (what the enemy is doing).
     /// One every 3 s, silent on first sight of a mirror, and QUIET drops them.
     /// </summary>
-    internal sealed class OpsNoticeTracker
+    internal sealed class OpsNoticeTracker : NoticeTrackerBase
     {
-        public const float GapSeconds = 3f;
         private int lastEvent = -1, lastPing = -1;
-        private float nextAt;
 
-        public void Reset() { lastEvent = lastPing = -1; nextAt = 0f; }
+        public void Reset() { lastEvent = lastPing = -1; ResetGate(); }
 
         public OpsNotice Observe(bool known, OpsStateData state, float now, bool quiet)
         {
@@ -370,9 +304,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                     if (p.Seq > lastPing) found = new OpsNotice(OpsNoticeKind.Ping, OpsWords.Ping(p.Kind, p.Phase, p.Name, p.Detail));
             lastEvent = Math.Max(lastEvent, newestEvent);
             lastPing = Math.Max(lastPing, newestPing);
-            if (quiet || found.Kind == OpsNoticeKind.None || now < nextAt) return OpsNotice.None;
-            nextAt = now + GapSeconds;
-            return found;
+            return Admit(found.Kind != OpsNoticeKind.None, now, quiet) ? found : OpsNotice.None;
         }
     }
 
@@ -388,7 +320,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             {
                 case OpState.Execute: return head + " · PROTECT THE " + OpsWords.Anchor(r.Kind);
                 case OpState.Done:
-                    return head + (r.EndsAt > now ? " · " + (r.Kind == OpKind.Asat ? "IN FLIGHT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAMS DOWN ") + OpsWords.Clock(r.EndsAt - now) : "");
+                    return head + (r.EndsAt > now ? " · " + (r.Kind == OpKind.Asat ? "IN FLIGHT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAMS DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "");
                 case OpState.Broken: return head + " · BAR 50 % · FUND TO RESUME";
                 default: return head + " · " + r.Percent + " % OF " + r.Goal + " CR" + (r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");
             }
@@ -403,7 +335,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 case OpState.Execute:
                     return "PROTECT THE " + OpsWords.Anchor(r.Kind) + (r.Kind == OpKind.Asat ? " AND THE LAUNCHER" : "");
                 case OpState.Done:
-                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + OpsWords.Clock(r.EndsAt - now) : "EXECUTED";
+                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "EXECUTED";
                 default:
                     return r.Percent + " % OF " + r.Goal + " CR · YOURS " + r.MyCr + " CR" + (r.WorkPercent > 0 ? " · WORK " + r.WorkPercent + " %" : "") +
                         (r.State == OpState.Broken ? " · BROKEN, FUND TO RESUME" : r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");

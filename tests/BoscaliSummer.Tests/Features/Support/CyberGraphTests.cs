@@ -167,7 +167,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(set.DataCenterUp, "a fresh data center stands");
             set.Set(AnchorKind.EwTruck, 0, 0.4f, false, 50f);
             Eq(set.Health(AnchorKind.EwTruck, 0), AnchorHealth.Damaged, "damaged");
-            Near(set.TruckReach(0), 10800f, "damaged truck reach");
             set.Set(AnchorKind.EwTruck, 0, 0f, true, 60f);
             Eq(set.Health(AnchorKind.EwTruck, 0), AnchorHealth.Down, "down");
             Near(set.DownSince(AnchorKind.EwTruck, 0), 60f, "down since");

@@ -1,26 +1,11 @@
 using System;
-using System.Collections.Generic;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>RTB despawn/park and allocation-refund policy; recruitment fees are never refunded as
     /// purchases.</summary>
     internal static class RecoverySettlementPolicy
     {
-        /// <summary>Use native Returned despawn when enabled.</summary>
-        public static bool ShouldDespawn(bool rtbReturnsToReserve) => rtbReturnsToReserve;
-
-        /// <summary>Refund only allocation actually paid for an owned purchase.</summary>
-        public static bool ShouldRefund(bool purchased, float paid) => purchased && paid > 0f;
 
         /// <summary>Native spawning replaces missing/empty weapon lists with loadouts[1]; deliberate empty
         /// fits need one entry per hardpoint.</summary>

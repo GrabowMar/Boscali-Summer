@@ -3,14 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // LOADOUT's HARDPOINTS: a station map beside the station table (a station is one row everywhere, a pair counts once, only ✕ empties
@@ -26,7 +18,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int selStation = -1, pickerPage;
         private bool hpResetPending;
         private readonly List<WingLoadoutCatalog.StoreOption> stores = new List<WingLoadoutCatalog.StoreOption>();
-        private readonly List<string> storeKeys = new List<string>();
         private readonly List<int> pylonCounts = new List<int>();
 
         private void BuildHardpoints(AvFlow f)

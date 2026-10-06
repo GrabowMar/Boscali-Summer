@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             firstId = secondId = -1;
             if (legal == null || legal.Count < 2 || legal.Count > MaxCandidates ||
-                !SpaceRules.Finite(diagonal) || diagonal <= 0f) return false;
+                !float.IsFinite(diagonal) || diagonal <= 0f) return false;
             double minimum = diagonal * (double)SeparationFraction;
             double minimumSquared = minimum * minimum;
             double best = double.NegativeInfinity;
@@ -58,6 +58,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         private static bool Valid(in UplinkCandidate candidate) => candidate.Id >= 0 &&
-            SpaceRules.Finite(candidate.X) && SpaceRules.Finite(candidate.Z) && SpaceRules.Finite(candidate.RearScore);
+            float.IsFinite(candidate.X) && float.IsFinite(candidate.Z) && float.IsFinite(candidate.RearScore);
     }
 }

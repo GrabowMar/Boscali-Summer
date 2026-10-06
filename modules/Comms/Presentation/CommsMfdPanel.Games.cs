@@ -182,7 +182,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = 0; i < ScoreRows; i++) scoreRows[i] = p.Add(new AvRow(p.Content));
             scoreTips = p.Add(new AvNote(p.Content,
                 "HOW TO SCORE · win rock-paper-scissors duels and map hunts to climb the board. In a hunt the closest three " +
-                "guesses score and a bullseye scores extra. Scores reset with the mission; GG appears after a result."));
+                "guesses score and a bullseye scores extra. Scores reset with the mission; GG appears after a result.") { MinHeight = AvGridTokens.RowDense, StretchText = true });
         }
 
         private static string ThrowLabel(int t) =>

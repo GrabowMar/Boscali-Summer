@@ -2,15 +2,8 @@ using System;
 using HarmonyLib;
 using UnityEngine;
 
-using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Delegate-backed native radial action. Harmony prefixes dispatch nonvirtual
@@ -36,7 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             action.OnTrigger = onTrigger;
             action.OnAllowed = onAllowed;
             // Use native no-op NavLights as fallback if no prefix claims this action.
-            GameAccess.SetActionType(action, ActionType.NavLights);
+            CoreGameAccess.SetRadialActionType(action, ActionType.NavLights);
             action.weapon_number = -1;
             return action;
         }
@@ -45,7 +38,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// invisible appearance.</summary>
         public void CopyAppearanceFrom(RadialMenuAction template)
         {
-            GameAccess.CopyAppearance(this, template);
+            CoreGameAccess.CopyRadialAppearance(this, template);
         }
     }
 
@@ -95,7 +88,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static bool Flash_Prefix(RadialMenuAction __instance)
         {
             if (!GameAccess.Available) return true;
-            return GameAccess.GetIconImage(__instance) != null;
+            return CoreGameAccess.GetRadialIconImage(__instance) != null;
         }
     }
 }

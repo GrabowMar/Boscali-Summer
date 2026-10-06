@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -117,7 +118,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             vertical = 6f * up * Gauss(d, Radius) - 8f * down * Gauss(d, Radius * 0.8f);
 
             // The gust front spreads out from the core as the downdraft matures.
-            float ring = Radius * (1.0f + 2.0f * WeatherMath.Clamp01((Age - 0.35f) / 0.4f));
+            float ring = Radius * (1.0f + 2.0f * Scalar.Clamp01((Age - 0.35f) / 0.4f));
             float gust = 15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f);
             if (d > 1f)
             {
@@ -172,7 +173,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float driftX, float driftZ, SkySplit spine = default)
         {
             int count = 0;
-            float convective = WeatherMath.Clamp01(sky.Convective);
+            float convective = Scalar.Clamp01(sky.Convective);
             if (convective <= 0f) return 0;
             for (int slot = 0; slot < MaxCells && count < cells.Length; slot++)
             {
@@ -215,8 +216,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     float tx = -spine.NormalZ * along, tz = spine.NormalX * along;
                     float offset = spine.SignedDistance(tx, tz) - 2000f +
                         WeatherMath.HashRange(cellSeed, 13, 1, 0, -1600f, 1600f);
-                    cell.X = WeatherMath.Clamp(tx + spine.NormalX * offset, -halfX * 0.96f, halfX * 0.96f);
-                    cell.Z = WeatherMath.Clamp(tz + spine.NormalZ * offset, -halfZ * 0.96f, halfZ * 0.96f);
+                    cell.X = Scalar.Clamp(tx + spine.NormalX * offset, -halfX * 0.96f, halfX * 0.96f);
+                    cell.Z = Scalar.Clamp(tz + spine.NormalZ * offset, -halfZ * 0.96f, halfZ * 0.96f);
                 }
                 cell.Radius = WeatherMath.Lerp(
                     WeatherMath.HashRange(cellSeed, 2, 0, 0, 1500f, 4000f) * (0.7f + 0.3f * convective),
@@ -226,7 +227,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     WeatherMath.HashRange(cellSeed, 3, 0, 0, peakRain * 0.36f, peakRain),
                     WeatherMath.HashRange(cellSeed, 3, 0, 0, 60f, 120f), severe);
                 cell.Hail = severe > 0.5f && cell.PeakRain > 70f && WeatherMath.Hash01(cellSeed, 4, 0) < 0.6f;
-                cell.Base = WeatherMath.Clamp(sky.CloudBase, 400f, 2500f);
+                cell.Base = Scalar.Clamp(sky.CloudBase, 400f, 2500f);
                 // A fair-weather thermal condenses into shallow cumulus; deep moist
                 // convection has the buoyancy for a tall rain cell.
                 float depth = 1200f + 4600f * convective +

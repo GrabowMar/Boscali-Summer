@@ -1,9 +1,7 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Garrisons;
 
 namespace BoscaliSummer.Modules.UrbanCombat.Runtime

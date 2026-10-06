@@ -170,7 +170,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 owner.Hq, baseTarget, name, false, null);
             if (unit == null) return false;
             Watch(owner, slot, unit, AssetKind.Post);
-            logger?.LogInfo("[HighCommand] Post established: " + slot.Role + " at " + slot.SiteName + " (" + baseTarget.name + ").");
+            Plugin.Logger?.LogInfo("[HighCommand] Post established: " + slot.Role + " at " + slot.SiteName + " (" + baseTarget.name + ").");
             return true;
         }
 
@@ -661,7 +661,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     if (postDefinition == null || candidate.value < postDefinition.value) postDefinition = candidate;
                 }
             }
-            logger?.LogInfo("[HighCommand] Command post structure: " +
+            Plugin.Logger?.LogInfo("[HighCommand] Command post structure: " +
                             (postDefinition != null ? postDefinition.name : "none available"));
             return postDefinition;
         }

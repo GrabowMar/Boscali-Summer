@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Squad.Domain
 
         public bool Damage(float amount, float now, float threshold)
         {
-            if (!Finite(amount) || !Finite(now) || !Finite(threshold) || threshold <= 0f || amount <= 0f ||
+            if (!float.IsFinite(amount) || !float.IsFinite(now) || !float.IsFinite(threshold) || threshold <= 0f || amount <= 0f ||
                 Hunting || ReplacementPending || now < ReadyAt) return false;
             Threat = Math.Min(threshold, Threat + Math.Min(amount, threshold));
             return Threat >= threshold;
@@ -70,6 +70,5 @@ namespace BoscaliSummer.Modules.Squad.Domain
             if (debugTier < 0 || debugTier > 5) throw new ArgumentOutOfRangeException(nameof(debugTier));
             return debugTier != 0 ? debugTier : Math.Min(5, Math.Max(careerTier, returningTier + 1));
         }
-        public static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

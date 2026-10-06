@@ -5,8 +5,6 @@ using BoscaliSummer.Modules.Support.Presentation;
 using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Support
 {
@@ -70,7 +68,7 @@ namespace BoscaliSummer.Modules.Support
             manager.AttachCalls(calls);
             hudLine.Configure(manager, calls);
             SpaceFeedController feed = context.AddSceneService<SpaceFeedController>(57);
-            feed.Configure(manager, calls, context.Settings.Support, context.Logger);
+            feed.Configure(manager, calls, context.Settings.Support);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
             panel.Configure(manager, calls, feed);
             satellite.Configure(manager);

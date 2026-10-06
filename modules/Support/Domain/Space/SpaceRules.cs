@@ -33,7 +33,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        internal static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
-        internal static bool MissionTime(float value) => Finite(value) && value >= 0f;
+        /// <summary>The countdown clock of every SPACE-family console line: whole seconds rounded up as <c>m:ss</c>; a bad or negative value reads 0:00.</summary>
+        public static string Clock(float seconds)
+        {
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
+            int s = (int)System.Math.Ceiling(seconds);
+            return (s / 60).ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        internal static bool MissionTime(float value) => float.IsFinite(value) && value >= 0f;
     }
 }

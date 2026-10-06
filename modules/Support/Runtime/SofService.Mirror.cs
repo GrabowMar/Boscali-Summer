@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Cyber;

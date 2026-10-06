@@ -1,12 +1,9 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
@@ -129,8 +126,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             float factor = map.mapDisplayFactor;
             float zoom = map.mapImage.transform.localScale.x;
-            if (!OperationMarkerCopy.Finite(factor) || factor <= 0f ||
-                !OperationMarkerCopy.Finite(zoom) || zoom <= 0f)
+            if (!float.IsFinite(factor) || factor <= 0f ||
+                !float.IsFinite(zoom) || zoom <= 0f)
             {
                 Hide();
                 return;

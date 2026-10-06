@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Comms.Domain
 {
@@ -83,9 +84,8 @@ namespace BoscaliSummer.Modules.Comms.Domain
         /// <summary>"BRG 045 · 12.4 KM": where a point lies from the reader's own aircraft.</summary>
         public static string BearingRange(float fromX, float fromZ, float toX, float toZ, bool metric)
         {
-            float dx = toX - fromX, dz = toZ - fromZ;
             return "BRG " + Bearing(fromX, fromZ, toX, toZ).ToString("000", CultureInfo.InvariantCulture) + " · " +
-                   Distance((float)Math.Sqrt(dx * dx + dz * dz), metric);
+                   Distance(Scalar.Distance2D(toX, toZ, fromX, fromZ), metric);
         }
 
         /// <summary>A distance in the unit the player flies with.</summary>

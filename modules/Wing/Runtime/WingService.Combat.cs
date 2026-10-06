@@ -3,14 +3,9 @@ using System.Collections.Generic;
 using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Supervised engagement (spec M5 §2): members fight in the game's own combat state; every way out of it is
@@ -359,15 +354,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingFrame f = FrameOf(m);
             int slot = m.Brain.Slot;
             return f == null || slot < 0 || slot >= f.Slots.Length ? 0 : f.Slots[slot].Element;
-        }
-
-        /// <summary>Spec M5 §10.2: members of the second element flying with the wing (Buddy Attack can use).</summary>
-        public int SecondElement()
-        {
-            int n = 0;
-            foreach (WingMember m in Members)
-                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && PairOf(m) == 1) n++;
-            return n;
         }
 
         public int ClearMySix(out int engaged)

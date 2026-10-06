@@ -1,14 +1,5 @@
 using System;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The bezel's tabs (spec bezel v2 §2): the flying tabs, a group rule, then the logistics tabs. Each control id's prefix
@@ -22,9 +13,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Spec FUI §tabs (the user, 2026-09-28): the 0.9 tabs plus BEHAVIOUR. TACTICAL holds ORDERS · FORMATION · ROUTE·AP;
         /// BEHAVIOUR holds TUNING · PLAN · TIMELINE · LOG; WING holds the roster with INSPECT, and the STUDIO.</summary>
         public static readonly string[] Labels = { "TACTICAL", "BEHAVIOUR", "SUPPLY", "LOADOUT", "WING" };
-
-        /// <summary>The first logistics tab (the group rule sits on its left edge).</summary>
-        public const int FirstLogistics = Supply;
 
         private static readonly string[][] prefixes =
         {
@@ -59,8 +47,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     if (id.StartsWith(p, StringComparison.Ordinal)) return i;
             return -1;
         }
-
-        /// <summary>The x of the rule between the flying and the logistics tabs on a <paramref name="width"/> px tab bar.</summary>
-        public static float GroupRuleX(float width, int tabs) => tabs > 0 ? width * FirstLogistics / tabs : 0f;
     }
 }

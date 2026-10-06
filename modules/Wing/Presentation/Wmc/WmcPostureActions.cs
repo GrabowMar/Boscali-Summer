@@ -1,12 +1,5 @@
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The posture settings' orders (spec tactical v3 §4), shared by TACTICAL's posture strip and BEHAVIOUR's TUNING and FORM
@@ -54,9 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 default: WingCommands.Stack(WingCommands.GoLowMetres, "Going low"); break;
             }
         });
-
-        /// <summary>0 high, 1 level, 2 low, from the wing's stack in metres.</summary>
-        public static int StackIndex(float stack) => stack > 1f ? 0 : stack < -1f ? 2 : 1;
 
         /// <summary>0 BUSTER (no afterburner), 1 GATE.</summary>
         public static void Power(WmcContext c, int i) => WmcUi.Order(c, () => WingCommands.Afterburner(i == 1));

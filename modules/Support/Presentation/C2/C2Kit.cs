@@ -2,7 +2,6 @@ using BoscaliSummer.Modules.Support.Domain.C2;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.C2
 {
@@ -53,13 +52,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public static string Tint(string text, Color c) => "<color=" + Hex(c) + ">" + text + "</color>";
 
+        /// <summary>The footer slab word of a tone: NEG, WARN, READY, or INT for anything else.</summary>
+        public static string SlabWord(AvState tone) =>
+            tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
+
         public static Color SlabFill(AvState tone) =>
-            AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab " + AvStates.Class(tone)).Background, AvTheme.Accent);
+            AvStyleHost.FuiFill("slab " + AvStates.Class(tone), AvTheme.Accent);
 
         /// <summary>The ink that sits on a slab (the palette's ground colour).</summary>
-        public static Color SlabInk => AvStyleHost.Resolve(AvStyleHost.FuiStyle("slab").Color, Color.black);
-
-        public static void Place(TMP_Text t, float x, float y, float w, float h) => AvLay.Place(t.rectTransform, x, y, w, h);
+        public static Color SlabInk => AvStyleHost.FuiInk("slab", Color.black);
 
         public static AvState StateOf(C2Tone tone) =>
             tone == C2Tone.Danger ? AvState.Danger : tone == C2Tone.Warn ? AvState.Caution : AvState.Ready;

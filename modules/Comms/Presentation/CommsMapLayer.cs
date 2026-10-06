@@ -5,14 +5,13 @@ using BoscaliSummer.Modules.Comms.Configuration;
 using BoscaliSummer.Modules.Comms.Domain;
 using BoscaliSummer.Modules.Comms.Runtime;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
@@ -230,8 +229,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             if (manager.HasMeasure && usedTags < MaxTags)
             {
-                float dx = manager.MeasureBX - manager.MeasureAX, dz = manager.MeasureBZ - manager.MeasureAZ;
-                float metres = Mathf.Sqrt(dx * dx + dz * dz);
+                float metres = Scalar.Distance2D(manager.MeasureBX, manager.MeasureBZ, manager.MeasureAX, manager.MeasureAZ);
                 int bearing = CommsText.Bearing(manager.MeasureAX, manager.MeasureAZ, manager.MeasureBX, manager.MeasureBZ);
                 Vector2 mid = CommsProjection.At((manager.MeasureAX + manager.MeasureBX) * 0.5f,
                     (manager.MeasureAZ + manager.MeasureBZ) * 0.5f, factor);

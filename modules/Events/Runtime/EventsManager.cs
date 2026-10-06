@@ -1,14 +1,11 @@
 using System;
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.Events.Domain;
 using BoscaliSummer.Modules.Events.Networking;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using NuclearOption.Networking;
@@ -81,7 +78,6 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         private EventsSettings settings;
         private EventsNet network;
-        private ManualLogSource logger;
 
         private readonly List<ActiveEventView> history = new List<ActiveEventView>(16);
         private readonly List<int> recent = new List<int>(EventSelector.RecentWindow);
@@ -280,7 +276,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             else if (kind == EventResponseKind.Treasury)
             {
                 if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null ||
-                    !Finite(player.HQ.factionFunds)) reason = "TREASURY UNAVAILABLE";
+                    !float.IsFinite(player.HQ.factionFunds)) reason = "TREASURY UNAVAILABLE";
                 else if (player.HQ.factionFunds + 0.001f < cost) reason = "INSUFFICIENT FACTION FUNDS";
             }
             else if (kind == EventResponseKind.Contract)
@@ -355,7 +351,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 cost = EventSelector.ResponseCost(baseMultiplier);
                 if (cost <= 0) return EventResponseResult.NoEffect;
                 if (responses.Count >= MaximumResponses) return EventResponseResult.Busy;
-                if (!Finite(player.Allocation) || player.Allocation + 0.001f < cost)
+                if (!float.IsFinite(player.Allocation) || player.Allocation + 0.001f < cost)
                     return EventResponseResult.Insufficient;
                 player.SetAllocation(Mathf.Max(0f, player.Allocation - cost));
                 kind = available;
@@ -370,7 +366,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 {
                     cost = EventSelector.TreasuryCost(baseMultiplier);
                     if (cost <= 0) return EventResponseResult.NoEffect;
-                    if (!Finite(hq.factionFunds)) return EventResponseResult.TreasuryUnavailable;
+                    if (!float.IsFinite(hq.factionFunds)) return EventResponseResult.TreasuryUnavailable;
                     if (hq.factionFunds + 0.001f < cost) return EventResponseResult.InsufficientFunds;
                     hq.AddFunds(-cost);
                     kind = EventResponseKind.Treasury;
@@ -399,7 +395,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             else return EventResponseResult.NoEffect;
             SetSignal("RESPONSE ACCEPTED · " + ResponseLabel(kind) +
                 (cost > 0 ? " · " + cost + (kind == EventResponseKind.Treasury ? "M FUNDS" : " ALLOC") : ""));
-            logger?.LogInfo("[Events] " + ResponseLabel(kind) + " answer to " +
+            Plugin.Logger?.LogInfo("[Events] " + ResponseLabel(kind) + " answer to " +
                 EventCatalog.At(currentIndex).Title + " by " + id + ".");
             return EventResponseResult.Accepted;
         }
@@ -439,11 +435,10 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         // ---- Lifecycle --------------------------------------------------------------------
 
-        public void Configure(EventsSettings configuration, EventsNet transport, ManualLogSource log)
+        public void Configure(EventsSettings configuration, EventsNet transport)
         {
             settings = configuration;
             network = transport;
-            logger = log;
             wasEnabled = settings.Enabled.Value;
         }
 
@@ -516,7 +511,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             }
 
             float now = mission.MissionTime;
-            if (!Finite(now)) return;
+            if (!float.IsFinite(now)) return;
             // A warm restart of the same mission rewinds the clock under an unchanged
             // identity; without this the director would stay quiet until it caught up.
             if (now + 0.001f < lastMissionTime)
@@ -714,7 +709,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 Announce(definition);
             }
 
-            logger?.LogInfo("[Events] " + definition.Title + " (" + EventCatalog.TierLabel(definition.Tier) +
+            Plugin.Logger?.LogInfo("[Events] " + definition.Title + " (" + EventCatalog.TierLabel(definition.Tier) +
                             ", " + EventCatalog.TargetLabel(definition.Target) + ") active for " + duration +
                             "s (" + current.EffectSummary + ").");
             network?.Broadcast((sbyte)index, targetHash, currentStart, currentEnd,
@@ -787,13 +782,13 @@ namespace BoscaliSummer.Modules.Events.Runtime
             if (definition.Target == EventTarget.All)
             {
                 for (int i = 0; i < factions.Count; i++) Apply(step, factions[i], strength);
-                logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (all factions).");
+                Plugin.Logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (all factions).");
                 return;
             }
 
             if (targetFaction == null) return;
             Apply(step, targetFaction, strength);
-            logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (" +
+            Plugin.Logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (" +
                             (targetName ?? "target") + ").");
         }
 
@@ -854,14 +849,14 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 Faction.ConvoyGroup group = groups[i];
                 if (group == null) continue;
                 float cost = group.GetCost();
-                if (!Finite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
+                if (!float.IsFinite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
                 if (hq.CmdGetDelaySpawnConvoy((byte)i) > 0f) continue;
                 chosen = group;
                 chosenCost = cost;
             }
             if (chosen == null)
             {
-                logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
+                Plugin.Logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
                                 hq.faction.factionName + ".");
                 return;
             }
@@ -870,7 +865,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             if (shortfall > 0f) hq.AddFunds(shortfall);
             hq.AddFunds(-chosenCost);
             hq.AddConvoy(chosen);
-            logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
+            Plugin.Logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
                             hq.faction.factionName + " at " + chosenCost.ToString("F0") +
                             " (event grant " + shortfall.ToString("F0") + ").");
         }
@@ -880,7 +875,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
         internal void ApplyRemote(sbyte catalogIndex, int remoteTargetHash, float start, float end,
             float effectStrength, int[] responseFactions, byte[] responseKinds)
         {
-            if (!Finite(start) || !Finite(end) || !Finite(effectStrength) ||
+            if (!float.IsFinite(start) || !float.IsFinite(end) || !float.IsFinite(effectStrength) ||
                 effectStrength < 0f || effectStrength > 2f ||
                 responseFactions == null || responseKinds == null ||
                 responseFactions.Length != responseKinds.Length ||
@@ -1033,6 +1028,5 @@ namespace BoscaliSummer.Modules.Events.Runtime
             GameManager.GetLocalPlayer<Player>(out Player player) && player != null
                 ? HashOf(player.HQ) : 0;
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

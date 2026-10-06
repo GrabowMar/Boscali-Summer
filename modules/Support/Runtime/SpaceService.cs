@@ -208,9 +208,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return admitted;
         }
 
-        public SpaceFamilyState ReadFamily(FactionHQ owner, float now) =>
-            TryGetState(owner, out SpaceState state) ? state.Family(now) : SpaceFamilyState.Dark;
-
         // ---- TASKED calls (host authority; Task 6 network handlers call these) ---------------------
 
         private bool TryDesk(Player player, out TaskedDesk desk)

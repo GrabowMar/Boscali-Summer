@@ -4,15 +4,6 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // Kit v2 parts SUPPLY and LOADOUT share and the toolkit has no part for (kit gaps): built from AvPart + AvFrame/AvText/AvLay.
@@ -101,8 +92,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-            nameText.color = WmcSheet.Ink;
-            infoText.color = WmcSheet.Dim;
+            nameText.color = AvInk.Ink;
+            infoText.color = AvInk.Dim;
             if (Prev != null)
             {
                 Prev.Restyle();
@@ -157,7 +148,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The next-call figures beside the button (price, funds after, crew).</summary>
         public void SetMeta(string text)
         {
-            WmcSheet.Set(meta, text);
+            AvText.Set(meta, text);
             Changed();
         }
 
@@ -168,8 +159,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             titleFull = titleText ?? "";
             icon.sprite = sprite;
             icon.enabled = sprite != null;
-            WmcSheet.Set(line, lineText);
-            WmcSheet.Set(blocker, blockerText);
+            AvText.Set(line, lineText);
+            AvText.Set(blocker, blockerText);
             blockerLevel = level ?? "";
             state = s;
             Restyle();
@@ -219,9 +210,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("card " + AvStates.Class(state));
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             rail.color = WmcState.Color(AvStates.Class(state));
-            title.color = WmcSheet.Ink;
-            line.color = WmcSheet.Dim;
-            meta.color = WmcSheet.Dim;
+            title.color = AvInk.Ink;
+            line.color = AvInk.Dim;
+            meta.color = AvInk.Dim;
             blocker.color = blockerLevel == "info" ? AvStyleHost.FuiColor("info", AvTheme.RailInfo)
                 : blockerLevel.Length > 0 ? WmcUi.LevelColor(blockerLevel) : line.color;
             chip.Restyle();
@@ -310,9 +301,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle c = AvStyleHost.FuiStyle("card " + AvStates.Class(state));
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
             rail.color = WmcState.Color(railState);
-            title.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-            chain.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            track.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("metric-track").Background, AvTheme.Hairline);
+            title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            chain.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            track.color = AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
             fill.color = WmcState.Color(tapeState);
             icon.color = AvTheme.Friendly;
             chip.Restyle();

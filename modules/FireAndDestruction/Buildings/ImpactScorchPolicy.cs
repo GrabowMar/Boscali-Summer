@@ -18,7 +18,7 @@ namespace BoscaliSummer.Fire
         internal static float DecalSize(float blastYield)
         {
             float size = MinimumSize + Max(0f, blastYield) * 0.85f;
-            return Clamp(size, MinimumSize, MaximumSize);
+            return Scalar.Clamp(size, MinimumSize, MaximumSize);
         }
 
         /// <summary>Large blasts gain a small bounded cluster instead of a facade-wide state.</summary>
@@ -46,9 +46,6 @@ namespace BoscaliSummer.Fire
         internal static float JitterOffset(float size, float unitSigned) => unitSigned * size * 0.25f;
 
         private static float UnitSigned(uint hash) => Deterministic.UnitFloat(hash) * 2f - 1f;
-
-        private static float Clamp(float value, float min, float max) =>
-            value < min ? min : value > max ? max : value;
 
         private static float Max(float a, float b) => a > b ? a : b;
     }

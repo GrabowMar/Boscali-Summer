@@ -8,15 +8,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Offers surviving wing aircraft after player loss, spawning a fresh player copy through the
@@ -238,7 +231,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 var go = new GameObject("Card" + i, typeof(RectTransform));
                 RectTransform rt = go.GetComponent<RectTransform>();
                 rt.SetParent(content, worldPositionStays: false);
-                WingUi.Place(rt, rect);
+                WmcDraw.Place(rt, rect);
 
                 WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), Fade(WingUi.Friendly, 0.58f));
 

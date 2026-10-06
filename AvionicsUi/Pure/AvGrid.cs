@@ -3,6 +3,45 @@ using System;
 namespace NOAvionics
 {
     /// <summary>
+    /// A rectangle in avionics panel space: top-left origin, <c>Y</c> negative going down.
+    ///
+    /// This is the convention <c>AvLay.Place</c> writes into a <c>RectTransform</c>
+    /// (anchor and pivot pinned to the parent's top-left), so a computed box drops straight
+    /// into the widget calls. It is a separate type from <c>UnityEngine.Rect</c>
+    /// only because this assembly is compiled into the net8.0 test projects, which have no
+    /// game install to reference.
+    /// </summary>
+    public readonly struct AvRect
+    {
+        public readonly float X;
+        public readonly float Y;
+        public readonly float Width;
+        public readonly float Height;
+
+        public AvRect(float x, float y, float width, float height)
+        {
+            X = x;
+            Y = y;
+            Width = width;
+            Height = height;
+        }
+
+        /// <summary>The bottom edge, which is the most negative Y the box covers.</summary>
+        public float Bottom => Y - Height;
+
+        public float Right => X + Width;
+
+        public AvRect Inset(float left, float top, float right, float bottom) =>
+            new AvRect(X + left, Y - top,
+                       Math.Max(0f, Width - left - right),
+                       Math.Max(0f, Height - top - bottom));
+
+        public override string ToString() =>
+            "(" + X.ToString("0.##") + ", " + Y.ToString("0.##") + ", " +
+            Width.ToString("0.##") + " x " + Height.ToString("0.##") + ")";
+    }
+
+    /// <summary>
     /// Geometry parameters for the MFD 3-column layout grid.
     /// </summary>
     public struct AvGridSpec
@@ -22,9 +61,6 @@ namespace NOAvionics
         /// <summary>Bottom reserve for spawn / Select Aircraft strip.</summary>
         public float BottomReserve;
 
-        /// <summary>Inset holding map back from filling its column outright.</summary>
-        public float MapInset;
-
         public static AvGridSpec Default => new AvGridSpec
         {
             Module = 8f,
@@ -32,7 +68,6 @@ namespace NOAvionics
             Gutter = 8f,
             TopReserve = 0f,
             BottomReserve = 0f,
-            MapInset = 0f,
         };
     }
 
@@ -112,20 +147,6 @@ namespace NOAvionics
 
             float mapW = Math.Max(0f, mapRight - mapLeft);
             var map = new AvRect(mapLeft, topBound, mapW, totalH);
-
-            // Optional map inset
-            if (spec.MapInset > 0f)
-            {
-                float inset = Snap(spec.MapInset, mod);
-                float inLeft = Snap(mapLeft + inset, mod);
-                float inRight = Snap(mapRight - inset, mod);
-                float inTop = Snap(topBound - inset, mod);
-                float inBottom = Snap(bottomBound + inset, mod);
-
-                float inW = Math.Max(0f, inRight - inLeft);
-                float inH = Math.Max(0f, inTop - inBottom);
-                map = new AvRect(inLeft, inTop, inW, inH);
-            }
 
             return new AvRegions
             {

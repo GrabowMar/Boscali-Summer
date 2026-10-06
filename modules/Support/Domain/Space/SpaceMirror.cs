@@ -160,7 +160,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (deadline <= 0) return 0;
             if (deadline == SpaceWire.RadarUnavailable) return deadline;
-            double shifted = (double)deadline + (SpaceRules.Finite(offset) ? Math.Round(offset) : 0d);
+            double shifted = (double)deadline + (float.IsFinite(offset) ? Math.Round(offset) : 0d);
             return (int)Math.Max(1d, Math.Min(SpaceWire.MaxDeadline, shifted));
         }
 

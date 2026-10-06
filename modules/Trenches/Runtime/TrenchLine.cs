@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Modules.Trenches.Domain;
 using UnityEngine;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime
 {
@@ -108,8 +109,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             float total = 0f;
             for (int i = 1; i < curve.Length; i++)
             {
-                float dx = curve[i].x - curve[i - 1].x, dz = curve[i].z - curve[i - 1].z;
-                total += Mathf.Sqrt(dx * dx + dz * dz);
+                total += Scalar.Distance2D(curve[i].x, curve[i].z, curve[i - 1].x, curve[i - 1].z);
             }
             return total;
         }

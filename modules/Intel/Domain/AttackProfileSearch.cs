@@ -23,8 +23,8 @@ namespace BoscaliSummer.Modules.Intel.Domain
             float targetZ, float releaseRange, float transitAgl, float releaseAgl, out AttackProfile profile)
         {
             profile = default;
-            if (!Finite(fromX) || !Finite(fromZ) || !Finite(targetX) || !Finite(targetZ) || !Finite(transitAgl) ||
-                !Finite(releaseAgl) || !Finite(releaseRange) || !(releaseRange > 0f))
+            if (!float.IsFinite(fromX) || !float.IsFinite(fromZ) || !float.IsFinite(targetX) || !float.IsFinite(targetZ) || !float.IsFinite(transitAgl) ||
+                !float.IsFinite(releaseAgl) || !float.IsFinite(releaseRange) || !(releaseRange > 0f))
                 return false;
 
             float bearing = MathF.Atan2(fromZ - targetZ, fromX - targetX);
@@ -55,6 +55,5 @@ namespace BoscaliSummer.Modules.Intel.Domain
             return true;
         }
 
-        private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
     }
 }

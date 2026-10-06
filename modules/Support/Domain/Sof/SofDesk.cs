@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Sof
 {
@@ -21,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             switch (outcome)
             {
                 case SofOutcome.None: return "";
-                case SofOutcome.Raised: return "TEAM RAISING — DEPLOYS AT THE CAMP IN " + SofWords.Clock(detail);
+                case SofOutcome.Raised: return "TEAM RAISING — DEPLOYS AT THE CAMP IN " + SpaceRules.Clock(detail);
                 case SofOutcome.Ordered: return "ORDER SENT";
                 case SofOutcome.Sent: return "TEAM TASKED — MOVING OUT";
                 case SofOutcome.Diverted: return "TEAM DIVERTED";
@@ -34,12 +36,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.Pinned: return "NEGATIVE: TEAM PINNED — COVER IT FROM THE AIR";
                 case SofOutcome.Wounded: return "NEGATIVE: TEAM WOUNDED — RECOVERS IN " + Math.Max(0, detail) + " S";
                 case SofOutcome.NoAmmo: return "NEGATIVE: TEAM OUT OF AMMO — EXFIL TO A CAMP TO RESUPPLY";
-                case SofOutcome.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + Math.Max(0, detail) + " CR";
+                case SofOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: Math.Max(0, detail));
                 case SofOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case SofOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case SofOutcome.BadOrder: return "NEGATIVE: ORDER NOT POSSIBLE NOW — CHECK THE TEAM STATE";
                 case SofOutcome.OutOfTheater: return "NEGATIVE: OUT OF THE THEATER — PICK A POINT ON THE MAP";
-                case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SofWords.Clock(detail);
+                case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SpaceRules.Clock(detail);
                 default: return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING";
             }
         }
@@ -116,7 +118,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public float X, Z, HomeX, HomeZ, DestX, DestZ, Exposure, Ammo = 100f;
         public bool HasDest, PushOn, HoldOn, Wounded, LiftWaiting, Carried, CarrierFlew;
         public Insertion Insert;
-        public float RaiseEndsAt, RecoverUntil, LostAt, PinDeadline, CoverUntil, LiftUntil, OnSiteStart, OnSiteEnd, LastScene;
+        public float RaiseEndsAt, RecoverUntil, LostAt, PinDeadline, CoverUntil, LiftUntil, OnSiteStart, OnSiteEnd;
         public TeamState PrePin;
         public MissionKind Mission;
         public int TargetId;
@@ -342,7 +344,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             TargetKind tk = TargetKind.Ground; AnchorSub sub = AnchorSub.Uplink; uint key = 0; float tx, tz; int id = 0;
             if (kind == MissionKind.Recon)
             {
-                if (!Finite(px) || !Finite(pz) || Math.Abs(px) > 2000000f || Math.Abs(pz) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
+                if (!float.IsFinite(px) || !float.IsFinite(pz) || Math.Abs(px) > 2000000f || Math.Abs(pz) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
                 tx = px; tz = pz;
             }
             else
@@ -371,7 +373,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t == null) return new SofResult(SofOutcome.NoTeam);
             SofResult gate = Gate(t, now, false);
             if (gate.Outcome != SofOutcome.None) return gate;
-            if (!Finite(x) || !Finite(z) || Math.Abs(x) > 2000000f || Math.Abs(z) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
+            if (!float.IsFinite(x) || !float.IsFinite(z) || Math.Abs(x) > 2000000f || Math.Abs(z) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
             if (t.State == TeamState.Raising || t.State == TeamState.Recovering) return new SofResult(SofOutcome.BadOrder, slot);
             ClearMission(t);
             t.DestX = x; t.DestZ = z; t.HasDest = true; t.HoldOn = false; t.LiftWaiting = false; t.Wounded = false;
@@ -444,7 +446,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             ports.LaseEnd(t.Slot, t.TargetKey);
         }
 
-        private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
 
         /// <summary>Distance to the nearest base a team can return to: a standing camp or a held building (falls back to where it was raised).</summary>
         private float HomeDistance(SofTeam t, out float bx, out float bz)

@@ -233,7 +233,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public override void Restyle()
             {
                 foreach (MfdIconCell c in cells) c.Restyle();
-                empty.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
+                empty.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 prev?.Restyle();
                 next?.Restyle();
             }

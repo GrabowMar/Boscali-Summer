@@ -4,7 +4,6 @@ using BoscaliSummer.Modules.Trenches.Presentation;
 using BoscaliSummer.Modules.Trenches.Runtime;
 using BoscaliSummer.Modules.Trenches.Visuals;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Core.Contracts;
 
@@ -25,14 +24,14 @@ namespace BoscaliSummer.Modules.Trenches
         public void Install(ModuleContext context)
         {
             TrenchManager manager = context.AddSceneService<TrenchManager>(60);
-            manager.Configure(context.Settings.Trenches, context.Logger, context.Services.GetRequired<ITerritoryIngress>());
+            manager.Configure(context.Settings.Trenches, context.Services.GetRequired<ITerritoryIngress>());
             context.AddService<IFieldworksReadiness>(manager);
 
             TrenchMapOverlay overlay = context.AddSceneService<TrenchMapOverlay>(61);
-            overlay.Configure(context.Settings.Trenches, manager, context.Logger);
+            overlay.Configure(context.Settings.Trenches, manager);
 
             TrenchNet net = context.AddSceneService<TrenchNet>(62);
-            net.Configure(manager, context.Logger);
+            net.Configure(manager);
 
             // These bounded host controls limit future trench creation and growth work.
             context.AddHostSettings(new HostSettingsTable("TRENCHES")

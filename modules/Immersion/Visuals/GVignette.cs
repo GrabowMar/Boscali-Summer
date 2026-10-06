@@ -1,4 +1,3 @@
-using BoscaliSummer.Modules.Immersion.Domain;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;

@@ -6,12 +6,6 @@ param(
     [switch]$Watch
 )
 $ErrorActionPreference = 'Stop'
-function Get-UiInputHash([string]$Path) {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [System.IO.File]::OpenRead($Path)
-    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
-    finally { $stream.Dispose(); $sha.Dispose() }
-}
 if ($Watch) { throw 'These validated fixtures are one-shot. Use nomod panels render.' }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 # nomod runs each script from its script directory. Resolve CLI output paths
@@ -76,11 +70,11 @@ try {
     $manifest['validation'] = $result.Trim()
     $dll = Join-Path $ProjectDir 'Assets/BoscaliSummer.dll'
     if (Test-Path -LiteralPath $dll) {
-        $manifest['productionDllSha256'] = Get-UiInputHash $dll
+        $manifest['productionDllSha256'] = (Get-FileHash -LiteralPath $dll).Hash
     }
     $inputs = @()
     foreach ($inputFile in Get-ChildItem -LiteralPath (Join-Path $ProjectDir 'Assets') -File -Filter '*.cs' -Recurse | Sort-Object FullName) {
-        $inputs += @{ file=$inputFile.FullName.Substring($ProjectDir.Length).TrimStart([char[]]'\/'); sha256=(Get-UiInputHash $inputFile.FullName) }
+        $inputs += @{ file=$inputFile.FullName.Substring($ProjectDir.Length).TrimStart([char[]]'\/'); sha256=(Get-FileHash -LiteralPath $inputFile.FullName).Hash }
     }
     $manifest['sourceInputs'] = $inputs
     Copy-Item -LiteralPath (Join-Path $ProjectDir 'result.txt') -Destination (Join-Path $dest 'result.txt') -Force

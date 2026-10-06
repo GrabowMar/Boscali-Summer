@@ -26,8 +26,8 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(CyberNetWords.Code(NodeKind.SamC2), "SAM", "code");
             Eq(CyberNetWords.Name(NodeKind.DataCenter), "DATA CENTER", "name");
             Eq(CyberNetWords.Node(NodeKind.Radar, 12), "RADAR #12", "node label");
-            Eq(CyberNetWords.Clock(61f), "1:01", "clock");
-            Eq(CyberNetWords.Clock(-5f), "0:00", "negative clock");
+            Eq(SpaceRules.Clock(61f), "1:01", "clock");
+            Eq(SpaceRules.Clock(-5f), "0:00", "negative clock");
             Eq(CyberNetWords.TraceTone(49), 0, "trace tone green");
             Eq(CyberNetWords.TraceTone(50), 1, "trace tone amber");
             Eq(CyberNetWords.TraceTone(80), 2, "trace tone red");

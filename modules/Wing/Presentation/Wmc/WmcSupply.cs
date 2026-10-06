@@ -1,17 +1,8 @@
 using NOAvionics;
-using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>SUPPLY (spec 2026-10-04 §SUPPLY × LOADOUT, "One Sheet"): one sheet that does not scroll on a tall dock. A DISPATCH card

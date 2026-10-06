@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Weather.Domain;
 using BoscaliSummer.Modules.Weather.Audio;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using UnityEngine;
 using UnityEngine.Rendering;
 

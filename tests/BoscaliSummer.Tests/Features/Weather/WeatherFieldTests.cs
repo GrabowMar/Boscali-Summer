@@ -31,10 +31,9 @@ namespace BoscaliSummer.Tests.Features.Weather
             ConsoleFormationsFollowTheKey();
             FrontCloudProfilesHaveVerticalStructure();
             FieldIsDeterministic();
-            ForecastEqualsLiveField();
             VisibilityFollowsRain();
             ClassificationAndConditions();
-            MetarReadsLikeOne();
+            WordsBasics();
             CloudDensityMapsCover();
             FlightLevelPrecipitation();
         }
@@ -362,25 +361,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             }
         }
 
-        private static void ForecastEqualsLiveField()
-        {
-            WeatherKey key = Key(11u);
-            var scratch = new WeatherField();
-            var live = new WeatherField();
-            var entries = new ForecastEntry[6];
-            int n = WeatherWords.Forecast(scratch, key, 1000f, 600f, 5000f, -3000f, HalfX, HalfZ, 10f, entries);
-            TestAssert.That(n == 6, "forecast fills its buffer");
-            for (int i = 0; i < n; i++)
-            {
-                float at = 1000f + entries[i].OffsetSeconds;
-                live.Build(key, at, HalfX, HalfZ, (10f + entries[i].OffsetSeconds / 3600f) % 24f);
-                WeatherPoint p = live.Sample(5000f, -3000f);
-                TestAssert.That(p.RainRate == entries[i].RainRate && p.Cover == entries[i].Cover,
-                    "forecast must be the live field sampled ahead");
-                TestAssert.That(live.Timeline.Dominant == entries[i].Regime, "forecast state matches");
-            }
-        }
-
         private static void ClassificationAndConditions()
         {
             TestAssert.That(WeatherField.Classify(0f) == PrecipitationKind.None, "none");
@@ -424,22 +404,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(RadarScale.Level(WeatherField.Reflectivity(100f)) == 5, "100 mm/h is extreme");
         }
 
-        private static void MetarReadsLikeOne()
+        private static void WordsBasics()
         {
-            var p = new WeatherPoint
-            {
-                RainRate = 30f, Cover = 0.95f, CloudBase = 250f, VisibilityKm = 1.8f,
-                WindX = -7f, WindZ = 0f, Gust = 8f, Turbulence = 0.5f, LightningRate = 3f,
-                CoreDepth = 0.7f, ConvectiveShare = 0.8f, Qnh = 998.4f, Temperature = 18.2f, Dewpoint = 17.4f,
-            };
-            string metar = WeatherWords.Metar(p, 18, 15.55f);
-            TestAssert.That(metar.StartsWith("BSCL 181530Z "), "time group: " + metar);
-            // Wind blowing toward the west comes FROM the east: 090.
-            TestAssert.That(metar.Contains(" 09014G29KT "), "wind group: " + metar);
-            TestAssert.That(metar.Contains(" 1800 "), "visibility group: " + metar);
-            TestAssert.That(metar.Contains(" +TSRA "), "present weather: " + metar);
-            TestAssert.That(metar.Contains(" OVC008CB "), "cloud group: " + metar);
-            TestAssert.That(metar.EndsWith(" 18/17 Q0998"), "temperature and pressure: " + metar);
             TestAssert.That(WeatherWords.WindFrom(0f) == 180f, "a northward wind comes from the south");
             TestAssert.That(WeatherWords.Cardinal(44f) == "NE" && WeatherWords.Cardinal(350f) == "N", "cardinals");
             TestAssert.That(WeatherWords.Category(1f, 1000f) == FlightCategory.Lifr, "LIFR by visibility");

@@ -1,15 +1,6 @@
 using System;
 using System.Globalization;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>INSPECT's WHY line (spec bezel v2 §5 INSPECT, I1): what holds the aircraft back and for how long, from its flight
@@ -19,7 +10,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal sealed class WhyText
     {
         public const float HoldSeconds = 1f;
-        public const int MaxChars = 60;
         public const string Free = "NOTHING LIMITS IT";
         /// <summary>Reports further apart than this (s) mean the member left formation flight (a fight, a settle, a recovery): what
         /// held before is forgotten.</summary>

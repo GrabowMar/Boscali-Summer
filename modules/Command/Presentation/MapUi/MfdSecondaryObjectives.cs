@@ -158,14 +158,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             "#" + id + " " + (string.IsNullOrEmpty(title) ? "SECONDARY OBJECTIVE" : title);
 
         /// <summary>The cockpit marker's own countdown rule: T-45s under a minute, T-5:00 above it.</summary>
-        public static string Countdown(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) return "";
-            int total = (int)Math.Ceiling(seconds);
-            if (total < 60) return "T-" + total.ToString(CultureInfo.InvariantCulture) + "s";
-            return "T-" + (total / 60).ToString(CultureInfo.InvariantCulture) + ":" +
-                (total % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
+        public static string Countdown(float seconds) => AvNum.TMinus(seconds);
 
         /// <summary>The urgency chip: the phase is named, then the clock the host reported.</summary>
         public static string ChipLabel(SecondaryObjectiveView objective)

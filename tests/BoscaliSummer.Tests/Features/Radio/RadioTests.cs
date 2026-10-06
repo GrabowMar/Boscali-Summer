@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Radio.Domain;
-using BoscaliSummer.Modules.Radio.Presentation;
 using BoscaliSummer.Modules.Radio.Runtime;
 
 namespace BoscaliSummer.Tests.Features.Radio
@@ -66,15 +66,15 @@ namespace BoscaliSummer.Tests.Features.Radio
             }
 
             byte[] valid = MakePngHeader(256, 128);
-            TestAssert.That(PngIconHeader.IsSupported(valid, out int width, out int height),
+            TestAssert.That(PngSprites.IsSupported(valid, 256, out int width, out int height),
                 "valid bounded PNG header was rejected");
             TestAssert.That(width == 256 && height == 128, "PNG dimensions were read incorrectly");
-            TestAssert.That(!PngIconHeader.IsSupported(MakePngHeader(257, 128), out _, out _),
+            TestAssert.That(!PngSprites.IsSupported(MakePngHeader(257, 128), 256, out _, out _),
                 "oversized PNG width was accepted");
-            TestAssert.That(!PngIconHeader.IsSupported(MakePngHeader(128, 0), out _, out _),
+            TestAssert.That(!PngSprites.IsSupported(MakePngHeader(128, 0), 256, out _, out _),
                 "zero-height PNG was accepted");
             valid[1] = 0;
-            TestAssert.That(!PngIconHeader.IsSupported(valid, out _, out _),
+            TestAssert.That(!PngSprites.IsSupported(valid, 256, out _, out _),
                 "invalid PNG signature was accepted");
 
             TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.AgrapolId),

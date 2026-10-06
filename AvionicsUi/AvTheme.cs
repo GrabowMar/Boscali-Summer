@@ -1,4 +1,3 @@
-using System;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
 
@@ -25,15 +24,6 @@ namespace NOAvionics
             {
                 try { return ThemeManager.Active.ColorTheme.MapIconFriendly; }
                 catch { return new Color(0.45f, 0.95f, 0.55f, 1f); }
-            }
-        }
-
-        public static Color HudFriendly
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.HudUnitFriendly; }
-                catch { return Friendly; }
             }
         }
 
@@ -86,8 +76,6 @@ namespace NOAvionics
         public static Color Dim => Unity(AvTokens.TextDim);
         public static Color Disabled => Unity(AvTokens.TextMuted);
         public static Color TextInk => Unity(AvTokens.TextInk);
-        public static Color SelectLabelText(Color fill) =>
-            (fill.r * 0.2126f + fill.g * 0.7152f + fill.b * 0.0722f) > 0.35f ? TextInk : Color.white;
         public static Color Frame => Unity(AvTokens.Frame);
         public static Color Hairline => Unity(AvTokens.Hairline);
         public static Color Surface => Unity(AvTokens.Surface);

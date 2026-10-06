@@ -111,9 +111,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Count => reveals.Count;
         public int Generation => retired ? 0 : stateGeneration;
         public int MarkCount => marks.Count;
-        public int PlayerCount => players.Count;
-        public int ConfirmedObservationCount => confirmed.Count;
-        public int Effort(ulong player) => players.TryGetValue(player, out PlayerRecord record) ? record.Effort : 0;
 
         public bool Reveal(int id, ContactClass classification, int typeId, float x, float z, bool moving,
             float now, BirdKind source = BirdKind.Optical)
@@ -256,7 +253,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static bool Coordinate(float value) => SpaceRules.Finite(value) && Math.Abs(value) <= MaximumCoordinate;
+        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= MaximumCoordinate;
         private bool RemoveReveal(int id)
         {
             confirmed.Remove(id);
@@ -265,7 +262,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool Deadline(float now, float lifetime, out float deadline)
         {
             deadline = now + lifetime;
-            return SpaceRules.Finite(deadline) && deadline > now;
+            return float.IsFinite(deadline) && deadline > now;
         }
     }
 }

@@ -60,12 +60,26 @@ namespace BoscaliSummer.Core.Config
             // The sector grid moved from a fixed dimension count to cells on the map's own
             // base grid, so the old size knob no longer means anything.
             BindAndRemove(config, "Command", "GridResolution", 32);
+            // The retired checkerboard overlay no longer reads an opacity.
+            BindAndRemove(config, "Command", "CheckerboardOpacity", 0.08f);
 
             // Offensives stopped charging one price for the staff work and the first wave
             // together: the overhead and each wave slot are priced apart now. The old keys are
             // purged rather than reused so the new defaults are not read as 60 and 40.
             BindAndRemove(config, "TheaterOps", "OperationSetupCost", 60f);
             BindAndRemove(config, "TheaterOps", "OperationCommitCost", 40f);
+
+            // The legacy director and offensive planner never ran under Living Front; their knobs went.
+            BindAndRemove(config, "TheaterOps", "DirectorFactions", "PlayerFactions");
+            BindAndRemove(config, "TheaterOps", "OperationOverheadCost", 25f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveBudget", 45f);
+            BindAndRemove(config, "TheaterOps", "OperationMusterSeconds", 75f);
+            BindAndRemove(config, "TheaterOps", "OperationPlanSeconds", 45f);
+            BindAndRemove(config, "TheaterOps", "OperationLaunchDelaySeconds", 15f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveSeconds", 35f);
+            BindAndRemove(config, "TheaterOps", "OperationWaveRetrySeconds", 8f);
+            BindAndRemove(config, "TheaterOps", "OperationHoldSeconds", 90f);
+            BindAndRemove(config, "TheaterOps", "OperationAssaultSeconds", 600f);
 
             // Support costs stopped being hand-picked constants and became vanilla-value
             // derived. The old keys are purged rather than reused: an existing config would

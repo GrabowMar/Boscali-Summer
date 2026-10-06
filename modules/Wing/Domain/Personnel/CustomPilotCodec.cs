@@ -1,17 +1,8 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Decoded custom-pilot data.</summary>
@@ -80,25 +71,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
     }
 
-    /// <summary>Decoded custom radio line or exchange.</summary>
-    internal sealed class CustomChatterRecord
-    {
-        public string Opening { get; set; }
-        public string Reply { get; set; }
-        public string SpeakerTag { get; set; }
-        public string ReplyTag { get; set; }
-        public string Event { get; set; }
-        public string Text { get; set; }
-
-        public bool IsAmbientExchange => !string.IsNullOrWhiteSpace(Opening);
-        public bool IsEventLine => !string.IsNullOrWhiteSpace(Event) && !string.IsNullOrWhiteSpace(Text);
-    }
-
-    /// <summary>Pilots and chatter decoded from one file.</summary>
+    /// <summary>Pilots decoded from one file.</summary>
     internal sealed class CustomPilotPayload
     {
         public List<CustomPilotRecord> Pilots { get; } = new List<CustomPilotRecord>();
-        public List<CustomChatterRecord> Chatters { get; } = new List<CustomChatterRecord>();
     }
 
     /// <summary>Dependency-free custom-pilot JSON decoder accepting comments, optional fields, and case
@@ -130,18 +106,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     CustomPilotRecord record = ParsePilot(dict);
                     if (record != null) payload.Pilots.Add(record);
                 }
-
-                if (MiniJson.TryGetList(dict, "chatters", out List<object> chatterList))
-                {
-                    foreach (object item in chatterList)
-                    {
-                        if (item is Dictionary<string, object> chatterDict)
-                        {
-                            CustomChatterRecord chatter = ParseChatter(chatterDict);
-                            if (chatter != null) payload.Chatters.Add(chatter);
-                        }
-                    }
-                }
             }
             else if (root is List<object> list)
             {
@@ -156,94 +120,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
 
             return payload;
-        }
-
-        public static string SampleJson()
-        {
-            return @"{
-  ""pilots"": [
-    {
-      ""name"": ""Alex Mercer"",
-      ""callsign"": ""GHOST"",
-      ""dialogueTag"": ""GHOST"",
-      ""persona"": ""Calm"",
-      ""background"": ""Former high-altitude interceptor pilot with hundreds of hours in supersonic patrol. Unflappable under heavy AA fire."",
-      ""xp"": 140,
-      ""kills"": 3,
-      ""sorties"": 5
-    },
-    {
-      ""name"": ""Sarah Connor"",
-      ""callsign"": ""VALKYRIE"",
-      ""dialogueTag"": ""VALKYRIE"",
-      ""persona"": ""Aggressive"",
-      ""background"": ""Aggressive close air support specialist. Prefers low-level gun passes and high-G turn fights."",
-      ""xp"": 260,
-      ""kills"": 7,
-      ""sorties"": 12
-    },
-    {
-      ""name"": ""Marcus Vance"",
-      ""callsign"": ""SPECTRE"",
-      ""dialogueTag"": ""SPECTRE"",
-      ""persona"": ""Dry"",
-      ""background"": ""Electronic warfare technician turned frontline combat pilot. Masters ECM radar masking and terrain masking."",
-      ""xp"": 50,
-      ""kills"": 1,
-      ""sorties"": 2
-    }
-  ],
-  ""chatters"": [
-    {
-      ""speakerTag"": ""GHOST"",
-      ""opening"": ""Ghost on station. Radar picture is clean."",
-      ""reply"": ""Copy Ghost. Settle into the formation."",
-      ""replyTag"": ""VALKYRIE""
-    },
-    {
-      ""speakerTag"": ""VALKYRIE"",
-      ""opening"": ""Bandits on scope. Let's make this quick."",
-      ""reply"": ""Check your spacing, Valkyrie. We engage together."",
-      ""replyTag"": ""GHOST""
-    },
-    {
-      ""speakerTag"": ""SPECTRE"",
-      ""opening"": ""Radar warning receiver is quiet. Suspiciously quiet."",
-      ""reply"": ""Enjoy the silence while it lasts, Spectre."",
-      ""replyTag"": ""VALKYRIE""
-    },
-    {
-      ""event"": ""Splash"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Splash one! Target eliminated, who's next?""
-    },
-    {
-      ""event"": ""Splash"",
-      ""speakerTag"": ""GHOST"",
-      ""text"": ""Target confirmed destroyed. Clean shot.""
-    },
-    {
-      ""event"": ""Bingo"",
-      ""speakerTag"": ""GHOST"",
-      ""text"": ""Ghost is at bingo fuel. Egressing for RTB.""
-    },
-    {
-      ""event"": ""BreakCall"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Lead, missile break break! Hard right now!""
-    },
-    {
-      ""event"": ""Damaged"",
-      ""speakerTag"": ""SPECTRE"",
-      ""text"": ""Damage to port avionics. ECM remains operational.""
-    },
-    {
-      ""event"": ""Maneuvering"",
-      ""speakerTag"": ""VALKYRIE"",
-      ""text"": ""Executing {0}. Keep your eyes open, Lead!""
-    }
-  ]
-}";
         }
 
         private static CustomPilotRecord ParsePilot(Dictionary<string, object> dict)
@@ -296,15 +172,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             if (face >= 0)
             {
-                PortraitSelection selection = portraitVersion >= 2
-                    ? new PortraitSelection(body, face, hair, uniform, portraitVersion >= 3 ? accessory : 0, backdrop)
-                    : PilotPortraitGenerator.FromLegacySelection(face, hair, uniform, backdrop);
-                record.ApplySelection(selection);
+                record.ApplySelection(new PortraitSelection(body, face, hair, uniform, portraitVersion >= 3 ? accessory : 0, backdrop));
             }
             return record;
         }
 
-        public static string Encode(IEnumerable<CustomPilotRecord> pilots, IEnumerable<CustomChatterRecord> chatters = null)
+        public static string Encode(IEnumerable<CustomPilotRecord> pilots)
         {
             var sb = new StringBuilder();
             sb.AppendLine("{");
@@ -349,84 +222,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             sb.AppendLine();
             sb.Append("  ]");
 
-            if (chatters != null)
-            {
-                bool anyChatter = false;
-                var chatterSb = new StringBuilder();
-                foreach (CustomChatterRecord c in chatters)
-                {
-                    if (c == null) continue;
-                    if (anyChatter) chatterSb.AppendLine(",");
-                    anyChatter = true;
-
-                    chatterSb.AppendLine("    {");
-                    if (c.IsAmbientExchange)
-                    {
-                        chatterSb.AppendLine($"      \"speakerTag\": \"{MiniJson.Escape(c.SpeakerTag)}\",");
-                        chatterSb.AppendLine($"      \"opening\": \"{MiniJson.Escape(c.Opening)}\",");
-                        chatterSb.AppendLine($"      \"reply\": \"{MiniJson.Escape(c.Reply)}\",");
-                        chatterSb.Append($"      \"replyTag\": \"{MiniJson.Escape(c.ReplyTag)}\"");
-                    }
-                    else if (c.IsEventLine)
-                    {
-                        chatterSb.AppendLine($"      \"event\": \"{MiniJson.Escape(c.Event)}\",");
-                        chatterSb.AppendLine($"      \"speakerTag\": \"{MiniJson.Escape(c.SpeakerTag)}\",");
-                        chatterSb.Append($"      \"text\": \"{MiniJson.Escape(c.Text)}\"");
-                    }
-                    chatterSb.AppendLine();
-                    chatterSb.Append("    }");
-                }
-
-                if (anyChatter)
-                {
-                    sb.AppendLine(",");
-                    sb.AppendLine("  \"chatters\": [");
-                    sb.Append(chatterSb.ToString());
-                    sb.AppendLine();
-                    sb.Append("  ]");
-                }
-            }
-
             sb.AppendLine();
             sb.AppendLine("}");
             return sb.ToString();
-        }
-
-        public static string EncodeSingle(CustomPilotRecord pilot)
-        {
-            if (pilot == null) return "";
-            return Encode(new[] { pilot });
-        }
-
-        public static string RemovePilot(string json, string callsign, out bool removed)
-        {
-            CustomPilotPayload payload = Decode(json);
-            removed = payload.Pilots.RemoveAll(p =>
-                string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase)) > 0;
-            return removed ? Encode(payload.Pilots, payload.Chatters) : json;
-        }
-
-        private static CustomChatterRecord ParseChatter(Dictionary<string, object> dict)
-        {
-            string opening = MiniJson.GetString(dict, "opening");
-            string reply = MiniJson.GetString(dict, "reply");
-            string speakerTag = MiniJson.GetString(dict, "speakertag");
-            string replyTag = MiniJson.GetString(dict, "replytag");
-            string eventName = MiniJson.GetString(dict, "event");
-            string text = MiniJson.GetString(dict, "text");
-
-            if (string.IsNullOrWhiteSpace(opening) && (string.IsNullOrWhiteSpace(eventName) || string.IsNullOrWhiteSpace(text)))
-                return null;
-
-            return new CustomChatterRecord
-            {
-                Opening = opening?.Trim(),
-                Reply = reply?.Trim(),
-                SpeakerTag = speakerTag?.Trim().ToUpperInvariant(),
-                ReplyTag = replyTag?.Trim().ToUpperInvariant(),
-                Event = eventName?.Trim(),
-                Text = text?.Trim(),
-            };
         }
     }
 }

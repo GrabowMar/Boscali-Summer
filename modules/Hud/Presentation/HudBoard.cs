@@ -1,11 +1,9 @@
 using System.Collections.Generic;
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
@@ -34,7 +32,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Awake() => Instance = this;
 
-        public void Configure(HudSettings config, ManualLogSource logger)
+        public void Configure(HudSettings config)
         {
             settings = config;
             SubscribeProjection();

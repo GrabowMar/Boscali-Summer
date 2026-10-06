@@ -5,13 +5,8 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL › FORMATION, the Station Board (spec 2026-10-04 §4.2; mockup board/formation.html #a): a plan view of the scope
@@ -48,11 +43,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly float[] px = new float[StationData.Max + 1], pz = new float[StationData.Max + 1];
         private readonly float[] presets = { FormationCatalog.Close, FormationCatalog.Standard, FormationCatalog.Open, FormationCatalog.Spread };
         private readonly string[] shapeIds = new string[MaxShapes];
-        private readonly string[] favouriteIds = new string[Favourites];
         private FormationDefinition shownShape;
         private string captionShown, memberCaptionShown, spacingCaptionShown, shapeCaptionShown;
         private int formKey = int.MinValue, shapesKey = int.MinValue, stackShown = -1;
-        private bool hostShown;
         private ShapeWindow window;
 
         public WmcForm(WmcControls controls)
@@ -409,15 +402,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The strip's shapes by hand (offline preview).</summary>
-        internal void PreviewFavourites(List<FormationDefinition> list, FormationDefinition current)
-        {
-            favourite.Clear();
-            favourite.AddRange(list);
-            FillFavourites(current);
-            flow.RequestRelayout();
-        }
-
         private void OpenShapes()
         {
             if (last == null || !last.CanOrder) return;
@@ -441,10 +425,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (string.IsNullOrEmpty(id)) return;
             WmcPostureActions.Shape(last, id);
         }
-
-        internal bool ShapeWindowVisible => window != null && window.Visible;
-
-        internal AvWindow ShapeWindowRoot => window?.Window;
 
         private static bool LeaderFrame(WingService w, int e, out Vec3 at, out float heading)
         {

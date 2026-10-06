@@ -1,9 +1,6 @@
 using NOAvionics;
-using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {
@@ -21,18 +18,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         /// <summary>The text colour for a word of this state (inert words read as plain ink).</summary>
         public static Color Word(AvState state) => state == AvState.Inert
-            ? AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary)
-            : AvStyleHost.Resolve(AvStyleHost.FuiStyle("chip " + AvStates.Class(state)).Color, AvTheme.TextPrimary);
-
-        public static Color Ink => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
-        public static Color Dim => AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-        public static Color Muted => Role("ink-muted", AvTheme.Disabled);
-        public static Color Hairline => Role("hairline", AvTheme.Hairline);
-        public static Color Frame => Role("frame", AvTheme.Frame);
-        public static Color Key => Role("key", AvTheme.RailInfo);
-        public static Color Select => Role("select", AvTheme.Accent);
-        public static Color Sunken => AvStyleHost.Resolve(AvStyleHost.FuiStyle("header").Background, AvTheme.Surface);
-        public static Color Inert => AvStyleHost.Resolve(AvStyleHost.FuiStyle("card inert").Background, AvTheme.SurfaceInert);
+            ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary)
+            : AvStyleHost.FuiInk("chip " + AvStates.Class(state), AvTheme.TextPrimary);
 
         public static Color A(Color c, float alpha) => c.WithAlpha(alpha);
     }
@@ -47,22 +34,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvText.Fit(t, false);
             return t;
         }
-
-        /// <summary>A wrapped block that the owning part measures with <see cref="AvText.Height"/>.</summary>
-        public static TMP_Text Block(RectTransform parent, string name, AvTextRole role)
-        {
-            return AvText.Make(parent, name, role, "", TextAlignmentOptions.TopLeft, true);
-        }
-
-        /// <summary>Set text only when it changed; returns true when it did.</summary>
-        public static bool Set(TMP_Text t, string value)
-        {
-            string v = value ?? "";
-            if (t.text == v) return false;
-            t.text = v;
-            return true;
-        }
-
-        public static void Place(TMP_Text t, float x, float y, float w, float h) => AvLay.Place(t.rectTransform, x, y, w, h);
     }
 }

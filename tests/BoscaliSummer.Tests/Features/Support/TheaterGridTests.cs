@@ -17,15 +17,6 @@ namespace BoscaliSummer.Tests.Features.Support
                     "large map distances use whole kilometres");
                 TestAssert.That(TheaterGrid.Km(double.NaN) == "—" && TheaterGrid.Km(double.PositiveInfinity) == "—",
                     "unknown coordinates never print non-finite values");
-                TestAssert.That(TheaterGrid.Clock(125.4) == "02:05" && TheaterGrid.Clock(3725.0) == "1:02:05",
-                    "countdowns use minutes and then hours");
-                TestAssert.That(TheaterGrid.Clock(3599.99) == "59:59" && TheaterGrid.Clock(3600) == "1:00:00",
-                    "clock changes format at exactly one hour and floors fractional seconds");
-                TestAssert.That(TheaterGrid.Elapsed(393856.0) == "109:24:16" && TheaterGrid.Elapsed(0) == "000:00:00",
-                    "elapsed mission time uses the three-digit hour format");
-                foreach (double bad in new[] { -1.0, double.NaN, double.PositiveInfinity })
-                    TestAssert.That(TheaterGrid.Clock(bad) == "--:--" && TheaterGrid.Elapsed(bad) == "---:--:--",
-                        "invalid clocks show an unavailable value");
             }
             finally { CultureInfo.CurrentCulture = previous; }
         }

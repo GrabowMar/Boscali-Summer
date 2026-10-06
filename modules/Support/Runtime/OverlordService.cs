@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// <list type="bullet">
     /// <item>A faction with humans is staffed only where no human is working (the idle rule, 60 s alone, 300 s with company; only domain verbs count) and only when WATCH OFFICER is on.</item>
     /// <item>A faction with no humans is run by the same brains at one domain action every 30 s (one limiter for both domains), plus its operations, when AI FACTIONS is on. CYBER and SOF are
-    /// staffed for it, SPACE is not (<c>SpaceWatchOfficer.StaffAiOnlyFactions</c>): a SPACE scan stamps the AI faction's native tracking with the human side's bases, a CYBER hop or a SOF
+    /// staffed for it, SPACE is not (an AI-only faction is never staffed, see <c>SpaceWatchOfficer.Tick</c>): a SPACE scan stamps the AI faction's native tracking with the human side's bases, a CYBER hop or a SOF
     /// mission does not (a held node is an effect, a sabotage destroys an anchor the faction has revealed), and the one SOF path that does stamp it, RECON, is off for it.</item>
     /// <item>Every action it takes is logged with its reason string and kept in a three-row ring that reaches the faction's own console through the OPERATIONS mirror.</item>
     /// </list>

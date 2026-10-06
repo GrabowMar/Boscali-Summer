@@ -81,13 +81,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Optical footprint at night as a share of the clear-day footprint. A tunable starting value, not a spec constant.</summary>
         public const float NightRadiusFactor = 0.35f;
 
-        /// <summary>
-        /// The game has no thermal/IR rendering path (verified 2026-10-05: no FLIR/thermal types in Assembly-CSharp, no
-        /// thermal shader names in its data; IR exists only for seekers and flares, and NightVision is a gain and tint).
-        /// So the optical bird has no night picture and refuses with words. A green tint is not thermal.
-        /// </summary>
-        public const bool NightOpticalAvailable = false;
-
         /// <summary>A footprint smaller than this is not a window worth opening.</summary>
         public const float MinimumOpticalRadius = 100f;
 
@@ -127,11 +120,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>0 sharp .. 1 fully overcast. Drives the image haze; it never changes which contacts are revealed.</summary>
         public static float Softness(in WeatherViewSample weather) => Cover(weather);
 
-        /// <summary>No sky state means no clear-sky fiction; night means no picture (see <see cref="NightOpticalAvailable"/>).</summary>
+        /// <summary>
+        /// No sky state means no clear-sky fiction; night means no picture. The game has no thermal/IR rendering path
+        /// (verified 2026-10-05: no FLIR/thermal types in Assembly-CSharp, no thermal shader names in its data; IR exists only
+        /// for seekers and flares, and NightVision is a gain and tint), so the optical bird refuses with words.
+        /// </summary>
         public static OpticalVerdict Optical(bool haveSample, in WeatherViewSample weather)
         {
             if (!haveSample) return OpticalVerdict.SkyUnknown;
-            return weather.Night && !NightOpticalAvailable ? OpticalVerdict.NightUnavailable : OpticalVerdict.Ok;
+            return weather.Night ? OpticalVerdict.NightUnavailable : OpticalVerdict.Ok;
         }
 
         public static string OpticalRefusal(OpticalVerdict verdict)
@@ -164,15 +161,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!s.ValidOperator) return FeedCloseReason.InvalidOperator;
             if (requireOwnship && !s.ValidOwnship) return FeedCloseReason.InvalidOwnship;
             if (!focused) return FeedCloseReason.FocusLost;
-            if (SpaceRules.Finite(idleSeconds) && idleSeconds >= IdleSeconds) return FeedCloseReason.Idle;
+            if (float.IsFinite(idleSeconds) && idleSeconds >= IdleSeconds) return FeedCloseReason.Idle;
             return FeedCloseReason.None;
         }
 
-        private static bool TerrainOn(in CockpitThreatSnapshot s) => s.ValidOwnship && SpaceRules.Finite(s.TerrainUrgency) && s.TerrainUrgency > 0f;
+        private static bool TerrainOn(in CockpitThreatSnapshot s) => s.ValidOwnship && float.IsFinite(s.TerrainUrgency) && s.TerrainUrgency > 0f;
         private static bool MissileOn(in CockpitThreatSnapshot s) => s.ValidOwnship && s.MissileWarning;
         private static bool RwrOn(in CockpitThreatSnapshot s) => s.ValidOwnship && s.RwrSpike;
         private static bool BanditOn(in CockpitThreatSnapshot s) =>
-            s.ValidOwnship && SpaceRules.Finite(s.NearestKnownBanditMeters) && s.NearestKnownBanditMeters >= 0f && s.NearestKnownBanditMeters < BanditWarnMeters;
+            s.ValidOwnship && float.IsFinite(s.NearestKnownBanditMeters) && s.NearestKnownBanditMeters >= 0f && s.NearestKnownBanditMeters < BanditWarnMeters;
 
         /// <summary>The top critical warning: terrain, then missile, then RWR, then bandit. A ground operator has none.</summary>
         public static FeedThreat Threat(in CockpitThreatSnapshot s)
@@ -183,9 +180,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (BanditOn(s)) return FeedThreat.Bandit;
             return FeedThreat.None;
         }
-
-        public static int ThreatCount(in CockpitThreatSnapshot s) =>
-            (TerrainOn(s) ? 1 : 0) + (MissileOn(s) ? 1 : 0) + (RwrOn(s) ? 1 : 0) + (BanditOn(s) ? 1 : 0);
 
         /// <summary>
         /// Every active condition as its own word in priority order, so a lower warning is never hidden behind a higher one.
@@ -239,7 +233,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public static void CoverCrop(float areaAspect, float textureAspect, out float u0, out float v0, out float uw, out float vh)
         {
             u0 = 0f; v0 = 0f; uw = 1f; vh = 1f;
-            if (!SpaceRules.Finite(areaAspect) || !SpaceRules.Finite(textureAspect) || areaAspect <= 0.01f || textureAspect <= 0.01f) return;
+            if (!float.IsFinite(areaAspect) || !float.IsFinite(textureAspect) || areaAspect <= 0.01f || textureAspect <= 0.01f) return;
             if (areaAspect > textureAspect) { vh = textureAspect / areaAspect; v0 = (1f - vh) * 0.5f; }
             else if (areaAspect < textureAspect) { uw = areaAspect / textureAspect; u0 = (1f - uw) * 0.5f; }
         }
@@ -249,7 +243,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             areaX = (u - u0) / uw;
             areaY = (v - v0) / vh;
-            return SpaceRules.Finite(areaX) && SpaceRules.Finite(areaY) && areaX >= 0f && areaX <= 1f && areaY >= 0f && areaY <= 1f;
+            return float.IsFinite(areaX) && float.IsFinite(areaY) && areaX >= 0f && areaX <= 1f && areaY >= 0f && areaY <= 1f;
         }
 
         /// <summary>The one status line under the picture: live MARK count (a confirm at twelve answers NO CONTACT by design), uplinks, family.</summary>
@@ -306,8 +300,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The TASKED section caption: how many are posted and how many do not fit the board.</summary>
         public static string CaptionOf(int posted, int capacity) =>
             posted <= 0 ? "TASKED CALLS · NONE" : posted <= capacity ? "TASKED CALLS · " + posted : "TASKED CALLS · " + posted + " (+" + (posted - capacity) + " MORE)";
-
-        public static bool CanFire(PostStatus status) => status == PostStatus.Open;
 
         public static string PostWord(PostStatus status) =>
             status == PostStatus.Stale ? "STALE" : status == PostStatus.Launching ? "LAUNCHING" : "READY";

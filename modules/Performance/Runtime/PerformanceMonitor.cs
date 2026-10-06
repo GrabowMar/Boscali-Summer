@@ -1,10 +1,8 @@
-using BepInEx.Logging;
 using BoscaliSummer.Modules.Performance.Domain;
 using BoscaliSummer.Modules.Performance.Configuration;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Performance.Runtime
@@ -12,15 +10,13 @@ namespace BoscaliSummer.Modules.Performance.Runtime
     internal sealed class PerformanceMonitor : MonoBehaviour, ISceneService
     {
         private readonly FrameBudgetPolicy policy = new FrameBudgetPolicy();
-        private ManualLogSource logger;
         private PerformanceSettings settings;
         private bool appliedReduction;
         private bool wasEnabled;
 
-        public void Configure(PerformanceSettings config, ManualLogSource log)
+        public void Configure(PerformanceSettings config)
         {
             settings = config;
-            logger = log;
             ResetForScene();
         }
 
@@ -72,7 +68,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             appliedReduction = policy.Reduced;
             AdaptiveBudgetReport.Reduced = appliedReduction;
             FxBus.SetAdaptiveCap(appliedReduction ? FxQuality.Low : (FxQuality?)null);
-            logger?.LogInfo("Performance: Boscali cosmetic budget " +
+            Plugin.Logger?.LogInfo("Performance: Boscali cosmetic budget " +
                 (appliedReduction ? "reduced" : "restored") +
                 " after " + policy.LastAverageMs.ToString("F1") + " ms average frames.");
         }

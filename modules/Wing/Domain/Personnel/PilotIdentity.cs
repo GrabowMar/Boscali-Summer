@@ -1,14 +1,5 @@
 using System;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal static class PilotIdentity
@@ -36,25 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         [ThreadStatic]
         private static Random threadRandom;
-        private static Random Rng => threadRandom ?? (threadRandom = new Random());
-
-        public static string RandomName(Random rng = null)
-        {
-            var r = rng ?? Rng;
-            return Name(r.Next);
-        }
-
-        public static string RandomCallsign(Func<string, bool> taken = null, Random rng = null)
-        {
-            var r = rng ?? Rng;
-            return Callsign(r.Next, taken ?? (_ => false));
-        }
-
-        public static string RandomBackground(ChatterPersona persona, Random rng = null)
-        {
-            var r = rng ?? Rng;
-            return Background(r.Next, persona);
-        }
 
         private static readonly string[] Surnames =
         {

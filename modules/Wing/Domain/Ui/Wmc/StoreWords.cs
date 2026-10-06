@@ -1,14 +1,5 @@
 using System.Globalization;
 
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>A store's verdict in words (research loadout-rules §5): the popup's right-hand detail (≤ 15, 96 px at 10 px), the word a
@@ -16,7 +7,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// line.</summary>
     internal static class StoreWords
     {
-        public const int DetailChars = 15;
 
         public static string Detail(StoreVerdict v, StoreKind kind, int ammo, int rank)
         {

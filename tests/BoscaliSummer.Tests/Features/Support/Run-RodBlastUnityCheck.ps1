@@ -5,15 +5,10 @@ param(
     [int]$TimeoutSeconds = 180
 )
 $ErrorActionPreference = "Stop"
-$repo = (Resolve-Path (Join-Path $PSScriptRoot "../../../..")).Path
-New-Item -ItemType Directory -Force -Path "$PreviewDirectory/Assets", "$PreviewDirectory/ProjectSettings", "$PreviewDirectory/Packages" | Out-Null
-Set-Content -LiteralPath "$PreviewDirectory/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: 2022.3.62f3"
-Set-Content -LiteralPath "$PreviewDirectory/Packages/manifest.json" -Value '{"dependencies":{"com.unity.modules.physics":"1.0.0"}}'
+. "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.modules.physics":"1.0.0"}}'
 Copy-Item -LiteralPath "$PSScriptRoot/RodBlastUnityCheck.cs", "$repo/modules/Support/Runtime/RodBlast.cs", "$repo/modules/Support/Runtime/SupportEffectPolicy.cs", "$repo/modules/Support/Patches/SupportMissileVisualPatch.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core/0Harmony.dll" -Destination "$PreviewDirectory/Assets/"
-foreach ($dependency in @('Mono.Cecil.dll', 'MonoMod.Utils.dll', 'MonoMod.RuntimeDetour.dll')) {
-    Copy-Item -LiteralPath (Join-Path 'C:/Program Files (x86)/Steam/steamapps/common/Nuclear Option/BepInEx/core' $dependency) -Destination "$PreviewDirectory/Assets/"
-}
+Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(0Harmony\.dll|Mono\.Cecil\.dll|MonoMod\.Utils\.dll|MonoMod\.RuntimeDetour\.dll)$'
 if ($ReproducePreviousPrefix) {
     $patchPath = "$PreviewDirectory/Assets/SupportMissileVisualPatch.cs"
     $source = Get-Content -LiteralPath $patchPath -Raw
@@ -32,14 +27,8 @@ if ($ReproducePreviousPrefix) {
 '@
     Set-Content -LiteralPath $patchPath -Value ($source.Substring(0, $start) + $old + $source.Substring($end))
 }
-$arguments = @("-batchmode", "-nographics", "-projectPath", ('"' + $PreviewDirectory + '"'), "-executeMethod", "RodBlastUnityCheck.Run", "-logFile", ('"' + "$PreviewDirectory/check.log" + '"'))
-if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Remove-Item -LiteralPath "$PreviewDirectory/result.txt" }
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $PreviewDirectory -WindowStyle Hidden -PassThru
-if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-    Stop-Process -Id $process.Id
-    throw "Unity rod blast check timed out after $TimeoutSeconds seconds: $PreviewDirectory/check.log"
-}
+$process = Invoke-UnityCheck $Unity $PreviewDirectory 'RodBlastUnityCheck.Run' -Flags '-batchmode', '-nographics' -TimeoutSeconds $TimeoutSeconds `
+    -TimeoutMessage "Unity rod blast check timed out after $TimeoutSeconds seconds: $PreviewDirectory/check.log"
 Write-Output "Results: $PreviewDirectory/result.txt"
-if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Get-Content -LiteralPath "$PreviewDirectory/result.txt" }
-else { Get-Content -LiteralPath "$PreviewDirectory/check.log" -Tail 90 }
+Show-UnityCheckResult $PreviewDirectory -LogTail 90
 if ($process.ExitCode -ne 0) { throw "Unity rod blast check failed: $($process.ExitCode)" }

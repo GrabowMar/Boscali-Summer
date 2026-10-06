@@ -95,18 +95,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void Set(string kindText, string name, string phase, string summaryText, int ground, int air, int naval)
         {
-            bool changed = StrPaint.Put(kind, "ACT · " + kindText);
-            changed |= StrPaint.Put(label, name);
-            changed |= StrPaint.Put(summary, string.IsNullOrEmpty(summaryText) ? "AIM UNAVAILABLE" : summaryText);
+            bool changed = AvText.Set(kind, "ACT · " + kindText);
+            changed |= AvText.Set(label, name);
+            changed |= AvText.Set(summary, string.IsNullOrEmpty(summaryText) ? "AIM UNAVAILABLE" : summaryText);
             AvHelpTip.Attach(frame.gameObject, string.IsNullOrEmpty(summaryText)
                 ? "Live operation. The phase strip shows how far it has come."
                 : summaryText + " The phase strip shows how far the operation has come.");
             AvState s = PhaseState(phase);
-            changed |= StrPaint.Put(phaseText, AvStates.Glyph(s) + (phase ?? ""));
+            changed |= AvText.Set(phaseText, AvStates.Glyph(s) + (phase ?? ""));
             strip.Set(PhaseIndex(phase), s);
             int[] counts = { ground, air, naval };
             for (int i = 0; i < forces.Length; i++)
-                StrPaint.Put(forces[i].Number, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
+                AvText.Set(forces[i].Number, counts[i].ToString(System.Globalization.CultureInfo.InvariantCulture));
             if (s != state) state = s;
             Restyle();
             if (changed) Changed();
@@ -145,24 +145,24 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public override void Restyle()
         {
-            Color c = StrPaint.State(state);
-            frame.Paint(StrPaint.Raised, c.WithAlpha(0.6f));
+            Color c = AvInk.State(state);
+            frame.Paint(AvInk.Raised, c.WithAlpha(0.6f));
             frame.BracketColor = c;
             frame.SetVerticesDirty();
             rail.color = c;
-            kind.color = StrPaint.Key;
-            label.color = StrPaint.Ink;
-            summary.color = StrPaint.Dim;
+            kind.color = AvInk.Key;
+            label.color = AvInk.Ink;
+            summary.color = AvInk.Dim;
             phaseFrame.Paint(c.WithAlpha(0.2f), c.WithAlpha(0.8f));
-            phaseText.color = StrPaint.Ink;
+            phaseText.color = AvInk.Ink;
             strip.Restyle();
             for (int i = 0; i < forces.Length; i++)
             {
                 bool none = forces[i].Number.text == "0";
                 forces[i].Frame.Paint(Color.clear, Color.clear);
-                forces[i].Symbol.color = none ? StrPaint.Muted : c.WithAlpha(0.8f);
-                forces[i].Number.color = none ? StrPaint.Muted : StrPaint.Ink;
-                forces[i].Name.color = StrPaint.Muted;
+                forces[i].Symbol.color = none ? AvInk.Muted : c.WithAlpha(0.8f);
+                forces[i].Number.color = none ? AvInk.Muted : AvInk.Ink;
+                forces[i].Name.color = AvInk.Muted;
             }
         }
     }
@@ -254,14 +254,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bool changed = !wasOn;
             c.Id = id;
             c.Revision = revision;
-            changed |= StrPaint.Put(c.Kind, "O" + (i + 1) + " · " + kind + (i == 0 ? " · AUTO DEFAULT" : ""));
-            changed |= StrPaint.Put(c.Label, label);
-            changed |= StrPaint.Put(c.Brief, "AIM · " + (string.IsNullOrEmpty(brief) ? "UNAVAILABLE" : brief));
-            changed |= StrPaint.Put(c.Forces, "NEARBY · " + (string.IsNullOrEmpty(forces) ? "UNKNOWN" : forces));
-            changed |= StrPaint.Put(c.Countdown, seconds < 0 ? "—" : seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
+            changed |= AvText.Set(c.Kind, "O" + (i + 1) + " · " + kind + (i == 0 ? " · AUTO DEFAULT" : ""));
+            changed |= AvText.Set(c.Label, label);
+            changed |= AvText.Set(c.Brief, "AIM · " + (string.IsNullOrEmpty(brief) ? "UNAVAILABLE" : brief));
+            changed |= AvText.Set(c.Forces, "NEARBY · " + (string.IsNullOrEmpty(forces) ? "UNKNOWN" : forces));
+            changed |= AvText.Set(c.Countdown, seconds < 0 ? "—" : seconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "S");
             AvState rs = RiskStateOf(risk);
             string riskWord = AvStates.Glyph(rs) + "RISK " + (risk ?? "");
-            changed |= StrPaint.Put(c.Risk, riskWord);
+            changed |= AvText.Set(c.Risk, riskWord);
             c.RiskState = rs;
             if (c.Live != pickable) { c.Live = pickable; changed = true; }
             c.Hit.Interactable = pickable;
@@ -314,18 +314,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void Style(int i)
         {
             Card c = cards[i];
-            Color select = StrPaint.Select, rail = StrPaint.State(AvState.Ready), risk = StrPaint.State(c.RiskState);
+            Color select = AvInk.Select, rail = AvInk.State(AvState.Ready), risk = AvInk.State(c.RiskState);
             bool lit = c.Hover && c.Live;
-            c.Frame.Paint(lit ? StrPaint.Raised : StrPaint.Inert, lit ? select : StrPaint.Hairline);
-            c.Rail.color = c.Live ? rail : StrPaint.State(AvState.Inert);
-            c.Kind.color = StrPaint.Key;
-            c.Countdown.color = StrPaint.Ink;
-            c.Label.color = StrPaint.Ink;
-            c.Forces.color = StrPaint.Dim;
-            c.Brief.color = StrPaint.Dim;
-            c.Chevron.color = lit ? select : StrPaint.Dim;
+            c.Frame.Paint(lit ? AvInk.Raised : AvInk.Inert, lit ? select : AvInk.Hairline);
+            c.Rail.color = c.Live ? rail : AvInk.State(AvState.Inert);
+            c.Kind.color = AvInk.Key;
+            c.Countdown.color = AvInk.Ink;
+            c.Label.color = AvInk.Ink;
+            c.Forces.color = AvInk.Dim;
+            c.Brief.color = AvInk.Dim;
+            c.Chevron.color = lit ? select : AvInk.Dim;
             c.RiskFrame.Paint(risk.WithAlpha(0.18f), risk.WithAlpha(0.75f));
-            c.Risk.color = StrPaint.Ink;
+            c.Risk.color = AvInk.Ink;
         }
 
         public override void Restyle()
@@ -338,151 +338,82 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// Active fronts as compact rows: name and status on the left, a pressure percentage and bar on the
     /// right. Paged past <c>pageSize</c> like the kit's list, with the same pager.
     /// </summary>
-    internal sealed class StrFrontBoard : AvPart
+    internal sealed class StrFrontBoard : AvPagedStack<StrFrontBoard.Row>
     {
         private const float RowH = 32f, PadX = 10f, GaugeW = 92f;
-        private readonly Row[] rows;
-        private readonly Action<int, Row> bind;
-        private readonly AvControl prev, next;
-        private readonly TMP_Text range;
-        private int count;
 
-        internal sealed class Row
+        internal sealed class Row : AvPart
         {
-            public RectTransform Root;
-            public AvFrame Frame;
-            public Image Rail;
-            public TMP_Text Name, Status, Percent;
-            public AvGaugeGraphic Bar;
-            public AvHelpTip Tip;
-            public bool Observed;
-            public AvState State;
+            private readonly AvFrame frame;
+            private readonly Image rail;
+            private readonly TMP_Text name, status, percent;
+            private readonly AvGaugeGraphic bar;
+            private readonly AvHelpTip tip;
+            private bool observed;
+            private AvState state;
 
-            public void Set(string name, string status, float pressure01, bool observed, AvState state, string help)
+            public Row(RectTransform parent, int index)
             {
-                StrPaint.Put(Name, name);
-                StrPaint.Put(Status, status);
-                Observed = observed;
-                State = state;
-                StrPaint.Put(Percent, observed ? TheaterReadout.Percent(pressure01) : "—");
-                Bar.Value = observed ? pressure01 : 0f;
-                Bar.gameObject.SetActive(observed);
-                Tip.Text = help;
-                Style();
+                Rect = AvLay.Child(parent, "Front " + index);
+                frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
+                AvLay.Fill(frame.rectTransform);
+                rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                name = StrPaint.Fit(Rect, "Name", AvTextRole.Label);
+                status = StrPaint.Fit(Rect, "Status", AvTextRole.Micro);
+                percent = StrPaint.Fit(Rect, "Percent", AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight);
+                var go = new GameObject("Bar", typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(Rect, false);
+                bar = go.AddComponent<AvGaugeGraphic>();
+                bar.Shape = AvGaugeShape.Bar;
+                bar.raycastTarget = false;
+                frame.raycastTarget = true;
+                tip = AvHelpTip.Attach(frame.gameObject, null);
             }
 
-            public void Style()
+            public void Set(string label, string text, float pressure01, bool isObserved, AvState newState, string help)
             {
-                Color c = StrPaint.State(State);
-                Frame.Paint(StrPaint.Inert, Color.clear);
-                Rail.color = c;
-                Name.color = Observed ? StrPaint.Ink : StrPaint.Dim;
-                Status.color = StrPaint.Dim;
-                Percent.color = Observed ? StrPaint.StateText(State) : StrPaint.Muted;
-                Bar.Track = StrPaint.Hairline;
-                Bar.FillColor = Bar.FillEnd = c;
-                Bar.SetVerticesDirty();
+                AvText.Set(name, label);
+                AvText.Set(status, text);
+                observed = isObserved;
+                state = newState;
+                AvText.Set(percent, isObserved ? TheaterReadout.Percent(pressure01) : "—");
+                bar.Value = isObserved ? pressure01 : 0f;
+                bar.gameObject.SetActive(isObserved);
+                tip.Text = help;
+                Restyle();
+            }
+
+            public override float Measure(float width) => RowH;
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, RowH);
+                float tw = Mathf.Max(20f, s.W - PadX - GaugeW - 16f);
+                AvLay.Place(name.rectTransform, PadX + 4f, 1f, tw, 16f);
+                AvLay.Place(status.rectTransform, PadX + 4f, 16f, tw, 15f);
+                AvLay.Place(percent.rectTransform, s.W - PadX - GaugeW, 1f, GaugeW, 17f);
+                AvLay.Place((RectTransform)bar.transform, s.W - PadX - GaugeW, 22f, GaugeW, 5f);
+            }
+
+            public override void Restyle()
+            {
+                Color c = AvInk.State(state);
+                frame.Paint(AvInk.Inert, Color.clear);
+                rail.color = c;
+                name.color = observed ? AvInk.Ink : AvInk.Dim;
+                status.color = AvInk.Dim;
+                percent.color = observed ? AvInk.StateText(state) : AvInk.Muted;
+                bar.Track = AvInk.Hairline;
+                bar.FillColor = bar.FillEnd = c;
+                bar.SetVerticesDirty();
             }
         }
 
         public StrFrontBoard(RectTransform parent, int pageSize, Action<int, Row> binder)
+            : base(parent, null, pageSize, 2f, (rect, i) => new Row(rect, i), binder, "FrontBoard", pagerLead: 4f)
         {
-            Rect = AvLay.Child(parent, "FrontBoard");
-            bind = binder;
-            rows = new Row[Mathf.Clamp(pageSize, 1, 12)];
-            for (int i = 0; i < rows.Length; i++)
-            {
-                var r = new Row { Root = AvLay.Child(Rect, "Front " + i) };
-                r.Frame = AvFrame.Add(r.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(r.Frame.rectTransform);
-                r.Rail = AvLay.Solid(r.Root, "Rail", Color.clear);
-                r.Name = StrPaint.Fit(r.Root, "Name", AvTextRole.Label);
-                r.Status = StrPaint.Fit(r.Root, "Status", AvTextRole.Micro);
-                r.Percent = StrPaint.Fit(r.Root, "Percent", AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight);
-                var go = new GameObject("Bar", typeof(RectTransform), typeof(CanvasRenderer));
-                go.transform.SetParent(r.Root, false);
-                r.Bar = go.AddComponent<AvGaugeGraphic>();
-                r.Bar.Shape = AvGaugeShape.Bar;
-                r.Bar.raycastTarget = false;
-                r.Frame.raycastTarget = true;
-                r.Tip = AvHelpTip.Attach(r.Frame.gameObject, null);
-                r.Root.gameObject.SetActive(false);
-                rows[i] = r;
-            }
-            prev = AvControl.Make(Rect, new AvControl.Spec("PREV", () => Go(Page - 1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-            next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => Go(Page + 1), AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
-            range = AvText.Make(Rect, "Range", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
             Restyle();
-        }
-
-        public int Page { get; private set; }
-        private int Pages => Mathf.Max(1, (count + rows.Length - 1) / rows.Length);
-
-        public void SetCount(int n)
-        {
-            count = Mathf.Max(0, n);
-            Go(Page);
-        }
-
-        private void Go(int page)
-        {
-            Page = Mathf.Clamp(page, 0, Pages - 1);
-            int first = Page * rows.Length;
-            for (int i = 0; i < rows.Length; i++)
-            {
-                int item = first + i;
-                bool shown = item < count;
-                rows[i].Root.gameObject.SetActive(shown);
-                if (shown) bind?.Invoke(item, rows[i]);
-            }
-            range.text = count == 0 ? "0 OF 0" : (first + 1) + "–" + Mathf.Min(count, first + rows.Length) + " OF " + count;
-            prev.Interactable = Page > 0;
-            next.Interactable = Page < Pages - 1;
-            Changed();
-        }
-
-        public override float Measure(float width)
-        {
-            float h = 0f;
-            for (int i = 0; i < rows.Length; i++) if (rows[i].Root.gameObject.activeSelf) h += RowH + 2f;
-            h = Mathf.Max(0f, h - 2f);
-            return h + (Pages > 1 ? AvGridTokens.Row + 6f : 0f);
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float y = 0f;
-            for (int i = 0; i < rows.Length; i++)
-            {
-                Row r = rows[i];
-                if (!r.Root.gameObject.activeSelf) continue;
-                AvLay.Place(r.Root, 0f, y, s.W, RowH);
-                AvLay.Place(r.Rail.rectTransform, 0f, 0f, 2f, RowH);
-                float tw = Mathf.Max(20f, s.W - PadX - GaugeW - 16f);
-                AvLay.Place(r.Name.rectTransform, PadX + 4f, 1f, tw, 16f);
-                AvLay.Place(r.Status.rectTransform, PadX + 4f, 16f, tw, 15f);
-                AvLay.Place(r.Percent.rectTransform, s.W - PadX - GaugeW, 1f, GaugeW, 17f);
-                AvLay.Place((RectTransform)r.Bar.transform, s.W - PadX - GaugeW, 22f, GaugeW, 5f);
-                y += RowH + 2f;
-            }
-            bool paged = Pages > 1;
-            prev.gameObject.SetActive(paged);
-            next.gameObject.SetActive(paged);
-            range.gameObject.SetActive(paged);
-            if (!paged) return;
-            y += 4f;
-            AvLay.Place(prev.Rect, 0f, y, 96f, AvGridTokens.Row);
-            AvLay.Place(next.Rect, s.W - 96f, y, 96f, AvGridTokens.Row);
-            AvLay.Place(range.rectTransform, 100f, y, s.W - 200f, AvGridTokens.Row);
-        }
-
-        public override void Restyle()
-        {
-            for (int i = 0; i < rows.Length; i++) rows[i].Style();
-            range.color = StrPaint.Dim;
-            prev.Restyle();
-            next.Restyle();
         }
     }
 }

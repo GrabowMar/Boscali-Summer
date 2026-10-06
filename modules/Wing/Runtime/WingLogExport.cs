@@ -6,14 +6,7 @@ using BepInEx.Logging;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     internal static class WingLogExport
@@ -22,15 +15,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static WingLogBuffer buffer;
         private static string status = "Exports mod log events only; message bodies are omitted for privacy.";
 
-        internal static void Start(ManualLogSource source)
+        internal static void Start()
         {
-            buffer = new WingLogBuffer(source, typeof(Plugin).Assembly);
-            source.LogEvent += OnLog;
+            buffer = new WingLogBuffer(WingLog.Logger, typeof(Plugin).Assembly);
+            WingLog.Logger.LogEvent += OnLog;
         }
 
-        internal static void Stop(ManualLogSource source)
+        internal static void Stop()
         {
-            source.LogEvent -= OnLog;
+            WingLog.Logger.LogEvent -= OnLog;
             buffer = null;
         }
 

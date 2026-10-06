@@ -48,7 +48,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public int UplinkCount => health.Length;
-        public int BirdCount => SpaceRules.BirdCount;
         public int Generation { get; private set; } = 1;
         public int LiveUplinkCount
         {
@@ -59,15 +58,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 return count;
             }
         }
-        public int ReservationCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < birds.Length; i++) if (birds[i].Token != 0) count++;
-                return count;
-            }
-        }
         /// <summary>CYBER BIRD JAM: the host sets the multiplier an enemy intrusion puts on this faction's task cooldowns (1 = none).</summary>
         public float JamFactor { get; set; } = 1f;
 
@@ -75,7 +65,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             get
             {
-                float jam = SpaceRules.Finite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
+                float jam = float.IsFinite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
                 for (int i = 0; i < health.Length; i++)
                     if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
                 return jam;
@@ -132,13 +122,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             return restored;
         }
-        public bool UplinkDown(int index) => index < 0 || index >= down.Length || down[index];
-        public float UplinkHealthFraction(int index) => index < 0 || index >= health.Length ? 0f : health[index];
 
         public void SetUplink(int index, float nativeHealthFraction, bool isDown, float now)
         {
             if (index < 0 || index >= health.Length || !SpaceRules.MissionTime(now) ||
-                !SpaceRules.Finite(nativeHealthFraction) || nativeHealthFraction < 0f || nativeHealthFraction > 1f) return;
+                !float.IsFinite(nativeHealthFraction) || nativeHealthFraction < 0f || nativeHealthFraction > 1f) return;
             bool wasAllDown = LiveUplinkCount == 0;
             health[index] = isDown ? 0f : nativeHealthFraction;
             down[index] = isDown;
@@ -195,7 +183,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 now < birds[bird].ReservedAt || !SpaceRules.MissionTime(taskSeconds)) return false;
             float busyUntil = now + taskSeconds;
             float coolingUntil = now + SpaceRules.Cooldown(reservation.Task) * CooldownFactor;
-            return SpaceRules.Finite(busyUntil) && SpaceRules.Finite(coolingUntil);
+            return float.IsFinite(busyUntil) && float.IsFinite(coolingUntil);
         }
 
         public bool Commit(in SpaceTaskReservation reservation, float now, float taskSeconds)
@@ -212,14 +200,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!Owns(reservation, out int bird)) return false;
             birds[bird] = default;
             return true;
-        }
-
-        public bool TryStart(BirdTask task, float now, float taskSeconds)
-        {
-            if (!SpaceRules.MissionTime(taskSeconds) || !TryReserve(task, now, out var reservation)) return false;
-            if (Commit(reservation, now, taskSeconds)) return true;
-            Cancel(reservation);
-            return false;
         }
 
         public float CooldownRemaining(BirdTask task, float now) =>

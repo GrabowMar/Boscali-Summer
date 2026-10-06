@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.Comms.Domain;
 using BoscaliSummer.Modules.Comms.Runtime;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
@@ -69,8 +69,9 @@ namespace BoscaliSummer.Modules.Comms.Networking
         private const int MaxRoster = 64;
 
         private CommsManager manager;
-        private MessageHandler serverHandler;
-        private MessageHandler clientHandler;
+        private HandlerSlot serverSlot, clientSlot;
+        private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<CommsUpMessage>(ReceiveUp);
+        private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<CommsDownMessage>(ReceiveDown);
         private float nextRegistration;
 
         private readonly Dictionary<ulong, INetworkPlayer> roster = new Dictionary<ulong, INetworkPlayer>();
@@ -116,20 +117,8 @@ namespace BoscaliSummer.Modules.Comms.Networking
 
             MessageHandler server = network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.MessageHandler;
-            if (server != serverHandler)
-            {
-                serverHandler?.UnregisterHandler<CommsUpMessage>();
-                serverHandler = server;
-                serverHandler?.RegisterHandler<CommsUpMessage>(ReceiveUp, false);
-                roster.Clear();
-            }
-            if (client != clientHandler)
-            {
-                clientHandler?.UnregisterHandler<CommsDownMessage>();
-                clientHandler = client;
-                clientHandler?.RegisterHandler<CommsDownMessage>(ReceiveDown, false);
-                if (clientHandler != null) manager?.OnTransportChanged();
-            }
+            if (ServerHandlers.Swap(server)) roster.Clear();
+            if (ClientHandlers.Swap(client) && client != null) manager?.OnTransportChanged();
         }
 
         // ---- Send --------------------------------------------------------------------------
@@ -245,10 +234,8 @@ namespace BoscaliSummer.Modules.Comms.Networking
 
         private void Unregister()
         {
-            serverHandler?.UnregisterHandler<CommsUpMessage>();
-            clientHandler?.UnregisterHandler<CommsDownMessage>();
-            serverHandler = null;
-            clientHandler = null;
+            ServerHandlers.Release();
+            ClientHandlers.Release();
         }
 
         private static CommsDownMessage ToMessage(CommsEnvelope e) => new CommsDownMessage
@@ -276,31 +263,17 @@ namespace BoscaliSummer.Modules.Comms.Networking
         // ---- Serializers -------------------------------------------------------------------
 
         private static bool serializersInstalled;
+        private static readonly MirageSerializers Seams = new MirageSerializers(
+            "[COMMS]", " is missing; comms cannot replicate on this game build.");
 
         private static void InstallSerializers()
         {
             if (serializersInstalled) return;
             serializersInstalled = true;
-            Bind(typeof(Writer<CommsUpMessage>), "Write", (Action<NetworkWriter, CommsUpMessage>)CommsWire.WriteUp);
-            Bind(typeof(Reader<CommsUpMessage>), "Read", (Func<NetworkReader, CommsUpMessage>)CommsWire.ReadUp);
-            Bind(typeof(Writer<CommsDownMessage>), "Write", (Action<NetworkWriter, CommsDownMessage>)CommsWire.WriteDown);
-            Bind(typeof(Reader<CommsDownMessage>), "Read", (Func<NetworkReader, CommsDownMessage>)CommsWire.ReadDown);
-            MessagePacker.RegisterMessage<CommsUpMessage>();
-            MessagePacker.RegisterMessage<CommsDownMessage>();
-        }
-
-        private static void Bind(Type holder, string property, object value)
-        {
-            PropertyInfo target = holder.GetProperty(
-                property, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (target == null)
-            {
-                Plugin.Logger.LogError(
-                    "[COMMS] Mirage serializer seam " + holder.Name + "." + property +
-                    " is missing; comms cannot replicate on this game build.");
-                return;
-            }
-            target.SetValue(null, value, null);
+            Seams.Install<CommsUpMessage>((Action<NetworkWriter, CommsUpMessage>)CommsWire.WriteUp,
+            (Func<NetworkReader, CommsUpMessage>)CommsWire.ReadUp);
+            Seams.Install<CommsDownMessage>((Action<NetworkWriter, CommsDownMessage>)CommsWire.WriteDown,
+            (Func<NetworkReader, CommsDownMessage>)CommsWire.ReadDown);
         }
     }
 }

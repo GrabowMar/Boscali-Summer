@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;

@@ -3,8 +3,6 @@ using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Patches;
 using BoscaliSummer.Modules.Autopilot.Runtime;
 using BoscaliSummer.Core.Modules;
-using BoscaliSummer.Core.Services;
-using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Autopilot
 {

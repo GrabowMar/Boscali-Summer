@@ -4,14 +4,6 @@ using TMPro;
 using UnityEngine;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
-using BoscaliSummer.Modules.Wing.Networking;
-using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Who the page's orders go to (spec bezel v2 §5), as a kit v2 flow line: a key word, the scope in words, then ALL and a
@@ -79,8 +71,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle row = AvStyleHost.FuiStyle("row");
             frame.Paint(AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert),
                 row.Border.HasValue ? AvStyleHost.Resolve(row.Border, Color.clear) : Color.clear);
-            key.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-sub").Color, AvTheme.Dim);
-            scopeText.color = AvStyleHost.Resolve(AvStyleHost.FuiStyle("row-name").Color, AvTheme.TextPrimary);
+            key.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            scopeText.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             allChip.Restyle();
             foreach (AvControl c in elementChips) c.Restyle();
         }
@@ -112,7 +104,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 scopeKey = k;
                 scopeLabelShown = c.ScopeLabel;
-                WmcKit.Set(scopeText, WmcWords.ScopeText(c.ScopeLabel, inScope));
+                AvText.Set(scopeText, WmcWords.ScopeText(c.ScopeLabel, inScope));
             }
             allChip.Latched = c.Scope.Kind == ScopeKind.Wing;
 

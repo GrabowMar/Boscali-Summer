@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
@@ -56,7 +55,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     if (!unit.disabled && unit.TryGetComponent(out Repairer _)) hasEngineers = true;
                     if (unit is PilotDismounted && !unit.disabled) Choose(OperationKind.Rescue);
                     if (unit is GroundVehicle && !unit.disabled && unit.TryGetComponent(out Rearmer rearmer) &&
-                        Operation.Finite(rearmer.Capacity) && rearmer.Capacity > 0f) Choose(OperationKind.SupplyEscort);
+                        float.IsFinite(rearmer.Capacity) && rearmer.Capacity > 0f) Choose(OperationKind.SupplyEscort);
                     if (unit is Building building && building.NeedsRepair() && building.IsRepairable()) Choose(OperationKind.RepairCover);
                     if (ground && (unit.disabled || unit is Building damaged && damaged.NeedsRepair())) Choose(OperationKind.BattlefieldSurvey);
                 }
@@ -195,7 +194,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             if (unit == null || !TryKnownPosition(hq, unit, out _)) return false;
             TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
             float age = Time.timeSinceLevelLoad - tracking.lastSpottedTime;
-            return Operation.Finite(age) && age >= 0f && age <= 2f;
+            return float.IsFinite(age) && age >= 0f && age <= 2f;
         }
 
         private static bool MarkerPosition(FactionHQ hq, Target target)

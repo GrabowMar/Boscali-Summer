@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private void Layout()
         {
             AvLay.Place(frame.rectTransform, 0f, 0f, width, HeightFor(count));
-            for (int i = 0; i < count; i++) C2Kit.Place(rows[i], 8f, Pad + i * LineH, width - 16f, LineH);
+            for (int i = 0; i < count; i++) AvLay.Place(rows[i], 8f, Pad + i * LineH, width - 16f, LineH);
         }
 
         private void Repaint()
@@ -80,15 +80,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 bool on = i < n;
                 rows[i].gameObject.SetActive(on);
                 if (!on) continue;
-                OpsText.Set(rows[i], C2Kit.FitTo(rows[i], raw[i], width - 16f));
-                rows[i].color = shownCount == 0 ? OpsInk.Muted : OpsInk.Word(C2Kit.StateOf(tones[i]));
+                AvText.Set(rows[i], C2Kit.FitTo(rows[i], raw[i], width - 16f));
+                rows[i].color = shownCount == 0 ? AvInk.Muted : OpsInk.Word(C2Kit.StateOf(tones[i]));
             }
         }
 
         public override void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("console");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), OpsInk.Hairline);
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvInk.Hairline);
             Repaint();
         }
     }

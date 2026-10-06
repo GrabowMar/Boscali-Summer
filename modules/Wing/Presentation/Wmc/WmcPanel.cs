@@ -7,13 +7,10 @@ using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
-using BoscaliSummer.Modules.Wing.Presentation;
-using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
-using BoscaliSummer.Core.Math;
-using BoscaliSummer.Core.Util;
-using BoscaliSummer.Core.Storage;
+using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
+using MfdPanelInstaller = BoscaliSummer.Core.Game.MfdPanelInstaller;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · WING (the
@@ -116,7 +113,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bool visible = Visible;
             if (wasVisible && !visible) WmcNameField.BlurAny();
             wasVisible = visible;
-            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && GameAccess.MfdAvailable;
+            bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && CoreGameAccess.MfdAvailable;
             if (!enabled)
             {
                 if (screen != null && screen.isActive) screen.CloseScreen(screen.transform.localPosition);
@@ -131,7 +128,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 TryInstall();
                 return;
             }
-            MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
             context.Map.Update(context, Visible);
             overlay.Tick(context, Visible);
@@ -210,7 +206,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Reset()
         {
             WmcNameField.BlurAny();
-            MfdPresentation.Reset();
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
@@ -262,7 +257,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     BezelRegistry.Release(BezelRegistry.Wmc);
                     return;
                 }
-                screen = Build(template, buttons[slot], out float height);
+                screen = Build(template, buttons[slot], out _);
                 if (screen == null)
                 {
                     BezelRegistry.Release(BezelRegistry.Wmc);
@@ -275,8 +270,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     return;
                 }
                 bezelButton = buttons[slot];
-                MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
-                    new Vector2(AvTokens.PanelWidth, height), buttons[slot], left);
                 WingLog.Verbose("[WMC] installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1));
             }
             catch (Exception e)
@@ -307,21 +300,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel, out float height)
         {
-            root = new GameObject("Wmc", typeof(RectTransform), typeof(Image));
-            var rootRect = (RectTransform)root.transform;
-            rootRect.SetParent(template.transform.parent, false);
-            var templateRect = (RectTransform)template.transform;
-            rootRect.anchorMin = templateRect.anchorMin;
-            rootRect.anchorMax = templateRect.anchorMax;
-            rootRect.pivot = templateRect.pivot;
-            rootRect.localScale = templateRect.localScale;
-            height = ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
-            rootRect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
-
-            // The console draws its own frame; this invisible plate only keeps clicks off the map beneath.
-            Image plate = root.GetComponent<Image>();
-            plate.color = Color.clear;
-            plate.raycastTarget = true;
+            // The console draws its own frame; the invisible plate only keeps clicks off the map beneath.
+            RectTransform rootRect = MfdPanelInstaller.MakeRoot(template, "Wmc", false, true, out root, out height);
 
             var contentObject = new GameObject("Content", typeof(RectTransform));
             content = (RectTransform)contentObject.transform;
@@ -346,8 +326,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float top = AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f + AvGridTokens.Tab + 4f;
             bodyRect = new Rect(0f, 0f, AvTokens.PanelWidth, Mathf.Max(40f, height - top - AvGridTokens.Footer));
 
-            // TACTICAL is a kit v2 flow page. The rest are LEGACY (phase B2 converts them): their Rect-based build is hosted in one
-            // fixed-height part of their flow, and their v1 buttons register in controls.Legacy.
+            // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
             tactical = new WmcTactical(controls);
             plan = new WmcPlan(controls);
             supply = new WmcSupply(controls);
@@ -374,7 +353,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.displayPanel = contentObject;
             s.aircraftOnly = false;
             s.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            s.highlight = FindHighlight(bezel);
+            s.highlight = MfdPanelInstaller.FindHighlight(bezel);
             if (s.label == null || s.highlight == null)
             {
                 UnityEngine.Object.Destroy(root);
@@ -384,21 +363,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvDisplayGlass.Attach(content);
             shell.SetPage(WmcTabs.Tactical);
             return s;
-        }
-
-        /// <summary>The height this panel takes in the slot it was parented into (the template's bay, measured), clamped.</summary>
-        private static float ResolveHeight(RectTransform parent, float min, float max)
-        {
-            if (max < min) max = min;
-            if (parent == null) return min;
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            return available <= 1f ? min : Mathf.Clamp(Mathf.Floor(available), min, max);
         }
 
         private static readonly string[] FitLabels = { "FIT", "ALL", "FOLLOW" };
@@ -458,14 +422,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcNameField.BlurAny();
             AvPopup.CloseAny();
             nextRefresh = 0f;
-        }
-
-        private static Image FindHighlight(Button button)
-        {
-            if (button == null) return null;
-            foreach (Image img in button.GetComponentsInChildren<Image>(true))
-                if (img.gameObject != button.gameObject) return img;
-            return button.GetComponent<Image>();
         }
 
         /// <summary>The context's rows and scope now, bezel or not (the room reads it).</summary>
