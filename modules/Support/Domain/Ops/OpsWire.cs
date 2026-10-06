@@ -278,13 +278,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// The pilot's OPERATIONS HUD notice, derived only from the mirror: an own EXECUTE (T-60), BROKEN or executed event, or an enemy ping (what the enemy is doing).
     /// One every 3 s, silent on first sight of a mirror, and QUIET drops them.
     /// </summary>
-    internal sealed class OpsNoticeTracker
+    internal sealed class OpsNoticeTracker : NoticeTrackerBase
     {
-        public const float GapSeconds = 3f;
         private int lastEvent = -1, lastPing = -1;
-        private float nextAt;
 
-        public void Reset() { lastEvent = lastPing = -1; nextAt = 0f; }
+        public void Reset() { lastEvent = lastPing = -1; ResetGate(); }
 
         public OpsNotice Observe(bool known, OpsStateData state, float now, bool quiet)
         {
@@ -306,9 +304,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                     if (p.Seq > lastPing) found = new OpsNotice(OpsNoticeKind.Ping, OpsWords.Ping(p.Kind, p.Phase, p.Name, p.Detail));
             lastEvent = Math.Max(lastEvent, newestEvent);
             lastPing = Math.Max(lastPing, newestPing);
-            if (quiet || found.Kind == OpsNoticeKind.None || now < nextAt) return OpsNotice.None;
-            nextAt = now + GapSeconds;
-            return found;
+            return Admit(found.Kind != OpsNoticeKind.None, now, quiet) ? found : OpsNotice.None;
         }
     }
 
@@ -324,7 +320,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             {
                 case OpState.Execute: return head + " · PROTECT THE " + OpsWords.Anchor(r.Kind);
                 case OpState.Done:
-                    return head + (r.EndsAt > now ? " · " + (r.Kind == OpKind.Asat ? "IN FLIGHT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAMS DOWN ") + OpsWords.Clock(r.EndsAt - now) : "");
+                    return head + (r.EndsAt > now ? " · " + (r.Kind == OpKind.Asat ? "IN FLIGHT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAMS DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "");
                 case OpState.Broken: return head + " · BAR 50 % · FUND TO RESUME";
                 default: return head + " · " + r.Percent + " % OF " + r.Goal + " CR" + (r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");
             }
@@ -339,7 +335,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 case OpState.Execute:
                     return "PROTECT THE " + OpsWords.Anchor(r.Kind) + (r.Kind == OpKind.Asat ? " AND THE LAUNCHER" : "");
                 case OpState.Done:
-                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + OpsWords.Clock(r.EndsAt - now) : "EXECUTED";
+                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "EXECUTED";
                 default:
                     return r.Percent + " % OF " + r.Goal + " CR · YOURS " + r.MyCr + " CR" + (r.WorkPercent > 0 ? " · WORK " + r.WorkPercent + " %" : "") +
                         (r.State == OpState.Broken ? " · BROKEN, FUND TO RESUME" : r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");

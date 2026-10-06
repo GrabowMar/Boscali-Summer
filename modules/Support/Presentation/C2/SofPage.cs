@@ -11,6 +11,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Presentation.C2
 {
@@ -348,7 +349,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 heldDots[i].gameObject.SetActive(true); heldDots[i].color = OpsInk.Rail(AvState.Info);
                 AvLay.Place(heldDots[i].rectTransform, p.X - 4f, p.Y - 4f, 8f, 8f);
                 heldTags[i].gameObject.SetActive(true);
-                OpsText.Set(heldTags[i], "H" + h.Id + " " + SofWords.Clock(h.Until - now));
+                OpsText.Set(heldTags[i], "H" + h.Id + " " + SpaceRules.Clock(h.Until - now));
                 heldTags[i].color = OpsInk.Word(AvState.Info);
                 Vector2 tag = Free(p.X + 7f, p.Y - 7f, 54f, 14f);
                 C2Kit.Place(heldTags[i], tag.x, tag.y, 54f, 14f);
@@ -484,7 +485,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             }
             else { OpsText.Set(infoLine, "SELECT A TARGET ON THE MAP, OR PICK A POINT"); infoLine.color = OpsInk.Dim; }
             bool tapped = state.TapUntil > now;
-            OpsText.Set(tapLine, tapped && full ? "TAP · " + state.TapIntrusions + " ENEMY INTRUSIONS · " + SofWords.Clock(state.TapUntil - now) : "");
+            OpsText.Set(tapLine, tapped && full ? "TAP · " + state.TapIntrusions + " ENEMY INTRUSIONS · " + SpaceRules.Clock(state.TapUntil - now) : "");
             tapLine.color = OpsInk.Word(AvState.Info);
         }
 

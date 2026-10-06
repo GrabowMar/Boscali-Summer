@@ -289,13 +289,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     internal enum SofNoticeKind : byte { None, Pinned, Lost, Success }
 
     /// <summary>The pilot's SOF HUD notice, derived only from the faction mirror: TEAM PINNED, TEAM LOST and mission success events, one every 3 s, silent on first sight of a mirror.</summary>
-    internal sealed class SofNoticeTracker
+    internal sealed class SofNoticeTracker : NoticeTrackerBase
     {
-        public const float GapSeconds = 3f;
         private int lastSeq = -1;
-        private float nextAt;
 
-        public void Reset() { lastSeq = -1; nextAt = 0f; }
+        public void Reset() { lastSeq = -1; ResetGate(); }
 
         public SofNoticeKind Observe(bool known, SofStateData state, float now, bool quiet)
         {
@@ -312,9 +310,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 else if (e.Kind == SofEventKind.Success && found == SofNoticeKind.None) found = SofNoticeKind.Success;
             }
             lastSeq = Math.Max(lastSeq, newest);
-            if (quiet || found == SofNoticeKind.None || now < nextAt) return SofNoticeKind.None;
-            nextAt = now + GapSeconds;
-            return found;
+            return Admit(found != SofNoticeKind.None, now, quiet) ? found : SofNoticeKind.None;
         }
     }
 
@@ -357,16 +353,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             string head = SofRules.Callsign(t.Slot) + " · " + SofWords.State(t.State);
             switch (t.State)
             {
-                case TeamState.Raising: return head + " · " + SofWords.Clock(t.EndsAt - now);
-                case TeamState.Recovering: return head + " · " + SofWords.Clock(t.EndsAt - now);
+                case TeamState.Raising: return head + " · " + SpaceRules.Clock(t.EndsAt - now);
+                case TeamState.Recovering: return head + " · " + SpaceRules.Clock(t.EndsAt - now);
                 case TeamState.Lost: return head;
-                case TeamState.Pinned: return head + " · LOST IN " + SofWords.Clock(t.EndsAt - now) + " · EXP " + t.Exposure + " %";
-                case TeamState.OnSite: return head + " · " + SofWords.Kind(t.Mission) + (t.Mission == MissionKind.Lase ? " · HOLDING" : " · " + SofWords.Clock(t.EndsAt - now)) + " · EXP " + t.Exposure + " %";
+                case TeamState.Pinned: return head + " · LOST IN " + SpaceRules.Clock(t.EndsAt - now) + " · EXP " + t.Exposure + " %";
+                case TeamState.OnSite: return head + " · " + SofWords.Kind(t.Mission) + (t.Mission == MissionKind.Lase ? " · HOLDING" : " · " + SpaceRules.Clock(t.EndsAt - now)) + " · EXP " + t.Exposure + " %";
                 case TeamState.Moving:
                 case TeamState.Returning:
                     float d = SofRules.Distance(t.X, t.Z, t.DestX, t.DestZ);
                     float speed = SofRules.SpeedMetresPerSecond * (t.Push ? SofRules.PushSpeedFactor : 1f);
-                    return head + (t.Hold ? " · HOLD" : t.Push ? " · PUSH" : "") + (t.Carried ? " · HELO" : " · ETA " + SofWords.Clock(d / speed)) + " · EXP " + t.Exposure + " %";
+                    return head + (t.Hold ? " · HOLD" : t.Push ? " · PUSH" : "") + (t.Carried ? " · HELO" : " · ETA " + SpaceRules.Clock(d / speed)) + " · EXP " + t.Exposure + " %";
                 default:
                     return head + (t.Carried ? " · IN HELO" : t.LiftWaiting ? " · LIFT REQUESTED" : "") + " · AMMO " + t.Ammo + " · EXP " + t.Exposure + " %";
             }

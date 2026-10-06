@@ -542,13 +542,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 string said = spacePanel != null ? spacePanel.Words : "";
                 tone = spacePanel != null && said.Length > 0 ? spacePanel.WordsTone : AvState.Ready;
                 words = said.Length > 0 ? said : "ORBIT FEED · OPEN FULL FOR THE TASKING STATION";
-                slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
+                slab = C2Kit.SlabWord(tone);
             }
             else if (tab == C2Tab.Board && boardPage != null)
             {
                 tone = boardPage.WordsTone;
                 words = boardPage.Words.Length > 0 ? boardPage.Words : "BOARD CLEAR \u00B7 WAITING FOR A POSTED CALL";
-                slab = tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
+                slab = C2Kit.SlabWord(tone);
             }
             else if (tab == C2Tab.Net || tab == C2Tab.Sof)
             {

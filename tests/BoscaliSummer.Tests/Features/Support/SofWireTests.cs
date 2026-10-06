@@ -241,7 +241,7 @@ namespace BoscaliSummer.Tests.Features.Support
                 if (refusal) TestAssert.That(w.Contains(" — "), "a refusal says what fixes it (" + (SofOutcome)o + ")");
             }
             TestAssert.That(new SofResult(SofOutcome.Raised).Ok && !new SofResult(SofOutcome.NoTarget).Ok, "ok flags");
-            Eq(SofWords.Clock(125f), "2:05", "clock"); Eq(SofWords.Clock(float.NaN), "0:00", "bad clock");
+            Eq(SpaceRules.Clock(125f), "2:05", "clock"); Eq(SpaceRules.Clock(float.NaN), "0:00", "bad clock");
             var t = new SofTeamRow { Slot = 0, State = TeamState.Moving, X = 0f, Z = 0f, DestX = 3500f, DestZ = 0f, Exposure = 34 };
             Eq(SofPageWords.TeamLine(t, 0f), "A-1 · MOVING · ETA 6:00 · EXP 34 %", "moving line");
             t.Push = true;

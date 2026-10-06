@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return site != null && sam != null && aaa != null;
         }
 
-        private static VehicleDefinition Find(string key)
+        internal static VehicleDefinition Find(string key)
         {
             List<VehicleDefinition> definitions = Encyclopedia.i?.vehicles;
             if (definitions == null) return null;

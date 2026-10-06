@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             VehicleDefinition truck = FindFirst(TruckKeys, null), center = FindFirst(CenterKeys, truck);
             return "truck=" + (truck != null ? truck.jsonKey : "none") + " center=" + (center != null ? center.jsonKey : "none") +
-                " guard=" + (Find("SPAAG1") != null ? "SPAAG1" : "none");
+                " guard=" + (UplinkSpawner.Find("SPAAG1") != null ? "SPAAG1" : "none");
         }
 
         /// <summary>What the SOF camp resolved to this mission, for the log line and the native fixture.</summary>
@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             string[] keys = fuel ? FobFuelKeys : FobSupplyKeys;
             for (int i = 0; i < keys.Length; i++)
             {
-                VehicleDefinition d = Find(keys[i]);
+                VehicleDefinition d = UplinkSpawner.Find(keys[i]);
                 if (d == null) continue;
                 bool carries = fuel ? d.unitPrefab.GetComponentInChildren<Refueler>(true) != null : d.unitPrefab.GetComponentInChildren<Rearmer>(true) != null;
                 if (carries) return d;
@@ -155,7 +155,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             positions = null;
             rotation = Quaternion.identity;
-            VehicleDefinition truck = FindFirst(TruckKeys, null), center = FindFirst(CenterKeys, truck), guard = Find("SPAAG1");
+            VehicleDefinition truck = FindFirst(TruckKeys, null), center = FindFirst(CenterKeys, truck), guard = UplinkSpawner.Find("SPAAG1");
             if (center == null || guard == null) return false;
             Vector3 origin = anchor.ToLocalPosition();
             var definitions = new[] { center, guard, guard };
@@ -187,7 +187,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             center = null;
             if (!TryPlanCenter(anchor, parent, out GlobalPosition[] positions, out Quaternion rotation)) return false;
-            VehicleDefinition truck = FindFirst(TruckKeys, null), site = FindFirst(CenterKeys, truck), guard = Find("SPAAG1");
+            VehicleDefinition truck = FindFirst(TruckKeys, null), site = FindFirst(CenterKeys, truck), guard = UplinkSpawner.Find("SPAAG1");
             return TryCreateGroup(owner, "Center", ordinal, new[] { site, guard, guard }, positions, rotation, parent, out center);
         }
 
@@ -284,24 +284,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             VehicleDefinition fallback = null;
             for (int i = 0; i < keys.Length; i++)
             {
-                VehicleDefinition d = Find(keys[i]);
+                VehicleDefinition d = UplinkSpawner.Find(keys[i]);
                 if (d == null) continue;
                 if (different == null || d != different) return d;
                 fallback = fallback ?? d;
             }
             return fallback;
-        }
-
-        private static VehicleDefinition Find(string key)
-        {
-            List<VehicleDefinition> definitions = Encyclopedia.i?.vehicles;
-            if (definitions == null || definitions.Count > 256) return null;
-            for (int i = 0; i < definitions.Count; i++)
-            {
-                VehicleDefinition d = definitions[i];
-                if (d != null && d.jsonKey == key && GroundPlacement.Usable(d) && d.unitPrefab.GetComponent<GroundVehicle>() != null) return d;
-            }
-            return null;
         }
     }
 }

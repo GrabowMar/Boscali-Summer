@@ -195,12 +195,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 sub == AnchorSub.Uplink ? "UPLINK" : sub == AnchorSub.EwTruck ? "EW TRUCK" : sub == AnchorSub.DataCenter ? "DATA CENTER" : "CAMP";
             return name + " #" + id.ToString(CultureInfo.InvariantCulture);
         }
-
-        public static string Clock(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
-            int s = (int)Math.Ceiling(seconds);
-            return (s / 60).ToString(CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
     }
 }

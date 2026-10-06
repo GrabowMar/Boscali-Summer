@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Ops
 {
@@ -7,13 +8,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     internal static class OpsWords
     {
         public const byte MaxOutcome = (byte)OpOutcome.Offline;
-
-        public static string Clock(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
-            int s = (int)Math.Ceiling(seconds);
-            return (s / 60).ToString(CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
 
         /// <summary>The full name an operator reads on the box header.</summary>
         public static string Name(OpKind kind) =>
@@ -55,7 +49,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 case OpOutcome.NoOperation: return "NEGATIVE: NO OPERATION RUNNING — START ONE FIRST";
                 case OpOutcome.BadAmount: return "NEGATIVE: FUND TAPS ARE 25 OR 50 CR";
                 case OpOutcome.Busy: return "NEGATIVE: ANOTHER OPERATION IS RUNNING — FINISH OR CANCEL IT";
-                case OpOutcome.Cooldown: return "NEGATIVE: OPERATION COOLING — READY IN " + Clock(detail);
+                case OpOutcome.Cooldown: return "NEGATIVE: OPERATION COOLING — READY IN " + SpaceRules.Clock(detail);
                 case OpOutcome.AnchorDown: return "NEGATIVE: ANCHOR DOWN — RESTORE IT TO CONTINUE";
                 case OpOutcome.Executing: return "NEGATIVE: COUNTDOWN RUNNING — PROTECT THE ANCHOR";
                 case OpOutcome.PlayerCap: return "NEGATIVE: YOUR SHARE IS CAPPED AT " + (detail > 0 ? detail : 30) + " % — LET OTHERS FUND";

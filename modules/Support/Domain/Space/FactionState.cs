@@ -100,4 +100,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return current;
         }
     }
+
+    /// <summary>The rate gate every faction HUD notice tracker (CYBER, SOF, OPS) shares: QUIET drops a notice, and at most one shows every <see cref="GapSeconds"/>.</summary>
+    internal abstract class NoticeTrackerBase
+    {
+        public const float GapSeconds = 3f;
+        private float nextAt;
+
+        protected void ResetGate() { nextAt = 0f; }
+
+        /// <summary>True when a notice found by this observation may show now; it then starts the gap.</summary>
+        protected bool Admit(bool found, float now, bool quiet)
+        {
+            if (quiet || !found || now < nextAt) return false;
+            nextAt = now + GapSeconds;
+            return true;
+        }
+    }
 }
