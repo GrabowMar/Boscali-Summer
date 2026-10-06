@@ -79,9 +79,7 @@ namespace BoscaliSummer.Core.Diagnostics
                 $"HighCommand={highCommand}, AutopilotLanding={autopilotLanding}, ThreatPictureFeed={threatPictureFeed}.");
             Plugin.Logger.LogInfo(
                 "Wing Command API: squad " +
-                (WingLink.SquadAvailable ? "OK" : WingLink.SquadUnavailableReason) +
-                "; pilot studio " +
-                (WingLink.PilotStudioAvailable ? "OK" : WingLink.PilotStudioUnavailableReason) + ".");
+                (WingLink.SquadAvailable ? "OK" : WingLink.SquadUnavailableReason) + ".");
 
             try
             {

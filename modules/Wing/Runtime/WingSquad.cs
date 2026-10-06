@@ -12,7 +12,7 @@ using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
-    /// <summary>In-tree squadron services: pilot presentation, saved-pilot studio records,
+    /// <summary>In-tree squadron services: pilot presentation, saved-pilot lookup,
     /// host-owned adversary flights and survivor tracking. Boscali consumers reach them through
     /// IWingSquad (see WingSquadService); the nested patch classes stay registered in WingModule.</summary>
     internal static class WingSquad
@@ -61,38 +61,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return PilotPortrait.ForIdentity(identity, role, faction);
         }
 
-        // ---- Saved-pilot studio records ------------------------------------------------
-        // Internal record API behind IWingSquad. Values stay BCL primitives in fixed
-        // positions; the record order shared by GetCustomPilot/SaveCustomPilot is:
-        // 0 Name, 1 Callsign, 2 DialogueTag, 3 Persona, 4 Background, 5 Xp, 6 Kills,
-        // 7 Sorties, 8 HasPortrait, 9 Body, 10 Face, 11 Hair, 12 Uniform, 13 Accessory,
-        // 14 Backdrop. Portrait and appearance browsing never mutate the roster; only
-        // Save/Delete/Recruit/Discharge touch files or the live squadron.
-
-        internal static int PortraitBodyCount => 2;
-        internal static int PortraitFaceCount => PilotPortraitGenerator.FacesPerBody;
-        internal static int PortraitHairCount => PilotPortraitGenerator.HairCount;
-        internal static int PortraitUniformCount => PilotPortraitGenerator.UniformCount;
-        internal static int PortraitAccessoryCount => PilotPortraitGenerator.AccessoryCount;
-        internal static int PortraitBackdropCount => PilotPortraitGenerator.BackdropCount;
-
-        internal static string PortraitBodyLabel(int body) =>
-            PilotPortraitGenerator.BodyLabel(body == 1 ? PortraitBody.Female : PortraitBody.Male);
-
-        internal static string PortraitUniformLabel(int uniform) =>
-            PilotPortraitGenerator.UniformLabel(uniform);
-
-        internal static string PortraitAccessoryLabel(int accessory) =>
-            PilotPortraitGenerator.AccessoryLabel(accessory);
-
-        internal static string PortraitBackdropLabel(int backdrop) =>
-            PilotPortraitGenerator.BackdropLabel(backdrop);
-
-        internal static string PersonaLabel(int persona) =>
-            ((ChatterPersona)Clamp(persona, 0, 3)).ToString();
-
-        internal static string RankNameForXp(int xp) =>
-            WingPilotRoster.RankName(WingPilotRoster.RankFor(Math.Max(0, xp)));
+        // ---- Saved-pilot lookup --------------------------------------------------------
+        // Read-only record API behind IWingSquad (the WMC studio edits the store directly).
+        // Values stay BCL primitives in fixed positions: 0 Name, 1 Callsign, 2 DialogueTag,
+        // 3 Persona, 4 Background, 5 Xp, 6 Kills, 7 Sorties, 8 HasPortrait, 9 Body, 10 Face,
+        // 11 Hair, 12 Uniform, 13 Accessory, 14 Backdrop.
 
         /// <summary>Borrow a portrait for an explicit appearance selection. Callers must
         /// never destroy it.</summary>
@@ -115,87 +88,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             CustomPilotRecord record = FindCustomPilot(callsign);
             return record == null ? null : Export(record);
-        }
-
-        /// <summary>Flat records for every saved pilot on this machine (fields 5-7: the service record's best XP, kills, sorties).</summary>
-        internal static object[][] GetCustomPilots()
-        {
-            IReadOnlyList<CustomPilotRecord> records = WingSavedPilots.Store.Records;
-            var result = new List<object[]>(Math.Min(records.Count, 128));
-            for (int i = 0; i < records.Count && result.Count < 128; i++)
-            {
-                if (records[i] != null && !string.IsNullOrWhiteSpace(records[i].Callsign))
-                    result.Add(Export(records[i]));
-            }
-            return result.ToArray();
-        }
-
-        /// <summary>Create or replace one saved pilot by callsign (identity and look; the service record is Wing Command's). The
-        /// live squadron pilot with the same callsign takes the new identity, never XP (R7).</summary>
-        internal static bool SaveCustomPilot(object[] values)
-        {
-            if (values == null || values.Length < 15) return false;
-            try
-            {
-                string callsign = Limit(Convert.ToString(values[1]), 14).Trim().ToUpperInvariant();
-                if (string.IsNullOrWhiteSpace(callsign)) return false;
-                var record = new CustomPilotRecord
-                {
-                    Name = Limit(Convert.ToString(values[0]), 24),
-                    Callsign = callsign,
-                    DialogueTag = Limit(Convert.ToString(values[2]), 24),
-                    Persona = (ChatterPersona)Clamp(Convert.ToInt32(values[3]), 0, 3),
-                    Background = Limit(Convert.ToString(values[4]), 280),
-                    Xp = Math.Max(0, Convert.ToInt32(values[5])),
-                    Kills = Math.Max(0, Convert.ToInt32(values[6])),
-                    Sorties = Math.Max(0, Convert.ToInt32(values[7])),
-                };
-                if (Convert.ToBoolean(values[8]))
-                {
-                    record.ApplySelection(new PortraitSelection(
-                        Convert.ToInt32(values[9]) == 1 ? PortraitBody.Female : PortraitBody.Male,
-                        Convert.ToInt32(values[10]), Convert.ToInt32(values[11]),
-                        Convert.ToInt32(values[12]), Convert.ToInt32(values[13]),
-                        Convert.ToInt32(values[14])));
-                }
-                bool ok = WingSavedPilots.Save(record, callsign, WingPilotRoster.FindByCallsign(callsign), out string why);
-                if (!ok) WingLog.Logger.LogWarning("[WingSquad] Custom pilot save refused: " + why);
-                return ok;
-            }
-            catch (Exception error)
-            {
-                WingLog.Logger.LogWarning("[WingSquad] Custom pilot save rejected: " + error.Message);
-                return false;
-            }
-        }
-
-        internal static bool DeleteCustomPilot(string callsign) => WingSavedPilots.Delete(Limit(callsign, 32), out _);
-
-        internal static bool IsPilotRecruited(string callsign) =>
-            WingPilotRoster.ContainsCallsign(Limit(callsign, 32));
-
-        internal static bool RecruitCustomPilot(string callsign)
-        {
-            callsign = Limit(callsign, 32);
-            if (string.IsNullOrWhiteSpace(callsign)) return false;
-            if (WingPilotRoster.ContainsCallsign(callsign)) return true;
-            CustomPilotRecord record = FindCustomPilot(callsign);
-            return record != null && WingPilotRoster.Enlist(record) != null;
-        }
-
-        internal static bool DischargeCustomPilot(string callsign)
-        {
-            WingPilot pilot = WingPilotRoster.FindByCallsign(Limit(callsign, 32));
-            return pilot != null && WingPilotRoster.RemoveFromSquadron(pilot);
-        }
-
-        /// <summary>Enlist every saved pilot not already in this mission's squadron; returns how many joined.</summary>
-        internal static int ImportAllCustomPilots()
-        {
-            int n = 0;
-            foreach (CustomPilotRecord r in WingSavedPilots.Store.Records)
-                if (WingPilotRoster.Enlist(r) != null) n++;
-            return n;
         }
 
         private static CustomPilotRecord FindCustomPilot(string callsign) =>
@@ -223,9 +115,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 selection.Backdrop,
             };
         }
-
-        private static int Clamp(int value, int min, int max) =>
-            value < min ? min : value > max ? max : value;
 
 
         /// <summary>Spawn at a host-selected global ingress. The companion owns territory policy.</summary>

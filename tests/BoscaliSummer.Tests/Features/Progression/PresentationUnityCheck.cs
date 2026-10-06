@@ -112,10 +112,6 @@ public static class PresentationUnityCheck
         Set(panel, "settings", settings);
         Set(panel, "console", console);
 
-        Type wingLink = TypeOf("BoscaliSummer.Core.Game.WingLink");
-        SetStatic(wingLink, "studioResolved", true);
-        SetStatic(wingLink, "studioUnavailableReason", string.Empty);
-
         string[] methods = { "BuildPilotPage", "BuildSkillsPage", "BuildWingsPage", "BuildStudioPage", "BuildPlanePage" };
         string[] names = { "pilot", "skills", "wings", "studio", "plane" };
         for (int i = 0; i < methods.Length; i++) Call(panel, methods[i], console.Page(i));
@@ -338,29 +334,11 @@ public static class PresentationUnityCheck
 
     private static void SeedStudio(object panel, Sprite portrait, Sprite crest)
     {
-        Call(Get(panel, "studioSection"), "SetCaption", "1–2 OF 4 · WING COMMAND");
-        Call(Get(panel, "studioEmpty"), "SetShown", false);
-        Call(Get(panel, "studioPager"), "SetShown", true);
-        string[] calls = { "DAYMAN", "VIXEN" };
-        int index = 0;
-        foreach (object row in (Array)Get(panel, "studioRows"))
-        {
-            Call(row, "SetShown", true);
-            Call(row, "Set", calls[index], "M. Fontaine   ·   ROOKIE " + (index + 1),
-                index == 0 ? "IN SQUADRON" : "READY", index == 0 ? "EDITING" : null,
-                index == 0 ? AvState.Ready : AvState.Info);
-            Call(row, "set_Armed", index == 0);
-            index++;
-        }
-        Call(Get(panel, "studioPortrait"), "Set", portrait);
+        Call(Get(panel, "studioLauncher"), "Set", "WING COMMAND NOT CONNECTED", "The Wing feature is not installed.");
         Call(Get(panel, "studioEmblem"), "Set", crest);
-        Call(Get(panel, "studioEditorSection"), "SetCaption", "DAYMAN");
-        Call(Get(panel, "studioCallsignField"), "set_Text", "DAYMAN");
-        Call(Get(panel, "studioNameField"), "set_Text", "M. Fontaine");
-        Call(Get(panel, "studioBioField"), "set_Text", "Coastal patrol pilot with a steady radio voice.");
         Call(Get(panel, "studioSquadronField"), "set_Text", "BOSCALI SUMMER");
         Call(Get(panel, "studioMessageText"), "SetShown", true);
-        Call(Get(panel, "studioMessageText"), "Set", "Saved DAYMAN to the custom pilots folder.");
+        Call(Get(panel, "studioMessageText"), "Set", "Rolled a new emblem.");
     }
 
     private static void SeedPlane(object panel)
@@ -721,7 +699,6 @@ public static class PresentationUnityCheck
     private static object Get(object target, string field) => target.GetType().GetField(field, All)?.GetValue(target);
     private static object GetStatic(Type type, string field) => type.GetField(field, All)?.GetValue(null);
     private static void Set(object target, string field, object value) => target.GetType().GetField(field, All).SetValue(target, value);
-    private static void SetStatic(Type type, string field, object value) => type.GetField(field, All).SetValue(null, value);
     private static object Call(object target, string method, params object[] args) =>
         target.GetType().GetMethod(method, All).Invoke(target, args);
     private static object CallStatic(Type type, string method, params object[] args) =>
