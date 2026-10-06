@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using BoscaliSummer.Core.Util;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
@@ -24,19 +25,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             attempted = true;
             try
             {
-                using (Stream stream = typeof(PilotShaderBundle).Assembly.GetManifestResourceStream("BoscaliSummer.Immersion.pilot.bundle"))
-                {
-                    if (stream == null || stream.Length <= 0 || stream.Length > 4 * 1024 * 1024) return;
-                    byte[] data = new byte[stream.Length];
-                    int offset = 0;
-                    while (offset < data.Length)
-                    {
-                        int read = stream.Read(data, offset, data.Length - offset);
-                        if (read == 0) return;
-                        offset += read;
-                    }
-                    bundle = AssetBundle.LoadFromMemory(data);
-                }
+                byte[] data = EmbeddedResources.ReadAll(
+                    typeof(PilotShaderBundle).Assembly, "BoscaliSummer.Immersion.pilot.bundle", 4 * 1024 * 1024);
+                if (data == null) return;
+                bundle = AssetBundle.LoadFromMemory(data);
                 if (bundle == null) return;
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();
                 for (int i = 0; i < shaders.Length; i++)

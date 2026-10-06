@@ -1,4 +1,6 @@
 
+using BoscaliSummer.Core.Util;
+
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static class SettingsChoices
@@ -14,10 +16,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static bool SupportedImage(byte[] data)
         {
             if (data == null || data.Length < 24 || data.Length > 16 * 1024 * 1024) return false;
-            if (data[0] == 137 && data[1] == 80 && data[2] == 78 && data[3] == 71 &&
-                data[4] == 13 && data[5] == 10 && data[6] == 26 && data[7] == 10 &&
-                data[12] == 73 && data[13] == 72 && data[14] == 68 && data[15] == 82)
-                return Dimension(data, 16) && Dimension(data, 20);
+            if (PngSprites.IsSupported(data, 4096, out _, out _)) return true;
             if (data[0] != 255 || data[1] != 216) return false;
             int offset = 2;
             while (offset + 3 < data.Length)
@@ -41,13 +40,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 offset += length;
             }
             return false;
-        }
-
-        private static bool Dimension(byte[] data, int offset)
-        {
-            if (data[offset] != 0 || data[offset + 1] != 0) return false;
-            int size = (data[offset + 2] << 8) | data[offset + 3];
-            return size > 0 && size <= 4096;
         }
     }
 }

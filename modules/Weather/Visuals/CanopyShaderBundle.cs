@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using BoscaliSummer.Core.Util;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
@@ -109,21 +110,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             try
             {
-                Assembly asm = typeof(CanopyShaderBundle).Assembly;
-                using (Stream s = asm.GetManifestResourceStream(ResourceName))
-                {
-                    if (s == null || s.Length == 0 || s.Length > MaxBundleBytes) return null;
-                    byte[] bytes = new byte[s.Length];
-                    int read = 0;
-                    while (read < bytes.Length)
-                    {
-                        int n = s.Read(bytes, read, bytes.Length - read);
-                        if (n <= 0) break;
-                        read += n;
-                    }
-                    if (read != bytes.Length) return null;
-                    bundle = AssetBundle.LoadFromMemory(bytes);
-                }
+                byte[] bytes = EmbeddedResources.ReadAll(typeof(CanopyShaderBundle).Assembly, ResourceName, MaxBundleBytes);
+                if (bytes == null) return null;
+                bundle = AssetBundle.LoadFromMemory(bytes);
 
                 if (bundle == null) return null;
                 Shader[] shaders = bundle.LoadAllAssets<Shader>();

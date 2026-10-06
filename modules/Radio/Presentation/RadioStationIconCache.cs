@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
+using BoscaliSummer.Core.Util;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Radio.Presentation
@@ -9,6 +9,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
     internal static class RadioStationIconCache
     {
         internal const string EmbeddedPrefix = "embedded:";
+        private const int MaximumFileBytes = 256 * 1024;
+        private const int MaximumDimension = 256;
 
         private sealed class Entry
         {
@@ -51,32 +53,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             try
             {
                 byte[] data = ReadData(path);
-                if (data == null) return null;
-                if (!PngIconHeader.IsSupported(data, out int width, out int height)) return null;
-
-                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, false)
-                {
-                    name = "BoscaliRadio.Icon",
-                    filterMode = FilterMode.Bilinear,
-                    wrapMode = TextureWrapMode.Clamp
-                };
-                if (!ImageConversion.LoadImage(texture, data, true) ||
-                    texture.width != width || texture.height != height)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    return null;
-                }
-
-                Sprite sprite = Sprite.Create(
-                    texture, new Rect(0f, 0f, texture.width, texture.height),
-                    new Vector2(0.5f, 0.5f), 100f);
-                if (sprite == null)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    return null;
-                }
-                sprite.name = "BoscaliRadio.IconSprite";
-                return new Entry { Texture = texture, Sprite = sprite };
+                return data != null && PngSprites.TryLoad(data, MaximumDimension, "BoscaliRadio.Icon",
+                    out Texture2D texture, out Sprite sprite) ? new Entry { Texture = texture, Sprite = sprite } : null;
             }
             catch
             {
@@ -88,26 +66,13 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             if (source.StartsWith(EmbeddedPrefix, StringComparison.Ordinal))
             {
-                string resourceName = source.Substring(EmbeddedPrefix.Length);
-                Assembly assembly = typeof(RadioStationIconCache).Assembly;
-                using Stream stream = assembly.GetManifestResourceStream(resourceName);
-                if (stream == null || stream.Length <= 0 ||
-                    stream.Length > PngIconHeader.MaximumFileBytes)
-                    return null;
-                var data = new byte[(int)stream.Length];
-                int offset = 0;
-                while (offset < data.Length)
-                {
-                    int read = stream.Read(data, offset, data.Length - offset);
-                    if (read <= 0) return null;
-                    offset += read;
-                }
-                return data;
+                return EmbeddedResources.ReadAll(typeof(RadioStationIconCache).Assembly,
+                    source.Substring(EmbeddedPrefix.Length), MaximumFileBytes);
             }
 
             if (!File.Exists(source)) return null;
             var info = new FileInfo(source);
-            if (info.Length <= 0 || info.Length > PngIconHeader.MaximumFileBytes) return null;
+            if (info.Length <= 0 || info.Length > MaximumFileBytes) return null;
             return File.ReadAllBytes(source);
         }
     }
