@@ -126,7 +126,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 TryInstall();
                 return;
             }
-            MfdPresentation.Tick();
             // Every frame: the right button is followed per frame (spec WMC program §5).
             context.Map.Update(context, Visible);
             overlay.Tick(context, Visible);
@@ -205,7 +204,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Reset()
         {
             WmcNameField.BlurAny();
-            MfdPresentation.Reset();
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
@@ -257,7 +255,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     BezelRegistry.Release(BezelRegistry.Wmc);
                     return;
                 }
-                screen = Build(template, buttons[slot], out float height);
+                screen = Build(template, buttons[slot], out _);
                 if (screen == null)
                 {
                     BezelRegistry.Release(BezelRegistry.Wmc);
@@ -270,8 +268,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     return;
                 }
                 bezelButton = buttons[slot];
-                MfdPresentation.Register(screen, screen.displayPanel.transform as RectTransform,
-                    new Vector2(AvTokens.PanelWidth, height), buttons[slot], left);
                 WingLog.Verbose("[WMC] installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1));
             }
             catch (Exception e)

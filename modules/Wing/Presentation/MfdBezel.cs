@@ -91,14 +91,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             foreach (MFDScreen s in screens)
             {
                 if (s != null && (s.shortName == "MAP" || s.shortName == "HUD") &&
-                    s.transform.parent != null && MfdPresentation.HasNativeLayout(s)) return s;
+                    s.transform.parent != null && HasNativeLayout(s)) return s;
             }
             foreach (MFDScreen s in screens)
             {
-                if (s != null && s.transform.parent != null && MfdPresentation.HasNativeLayout(s)) return s;
+                if (s != null && s.transform.parent != null && HasNativeLayout(s)) return s;
             }
             return null;
         }
+
+        private static bool HasNativeLayout(MFDScreen template) =>
+            template != null && template.displayPanel != null && template.transform is RectTransform;
 
         private static bool IsFree(List<Button> buttons, List<MFDScreen> screens, int index)
         {
