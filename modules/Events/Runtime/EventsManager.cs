@@ -79,7 +79,6 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         private EventsSettings settings;
         private EventsNet network;
-        private ManualLogSource logger;
 
         private readonly List<ActiveEventView> history = new List<ActiveEventView>(16);
         private readonly List<int> recent = new List<int>(EventSelector.RecentWindow);
@@ -397,7 +396,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             else return EventResponseResult.NoEffect;
             SetSignal("RESPONSE ACCEPTED · " + ResponseLabel(kind) +
                 (cost > 0 ? " · " + cost + (kind == EventResponseKind.Treasury ? "M FUNDS" : " ALLOC") : ""));
-            logger?.LogInfo("[Events] " + ResponseLabel(kind) + " answer to " +
+            Plugin.Logger?.LogInfo("[Events] " + ResponseLabel(kind) + " answer to " +
                 EventCatalog.At(currentIndex).Title + " by " + id + ".");
             return EventResponseResult.Accepted;
         }
@@ -437,11 +436,10 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         // ---- Lifecycle --------------------------------------------------------------------
 
-        public void Configure(EventsSettings configuration, EventsNet transport, ManualLogSource log)
+        public void Configure(EventsSettings configuration, EventsNet transport)
         {
             settings = configuration;
             network = transport;
-            logger = log;
             wasEnabled = settings.Enabled.Value;
         }
 
@@ -712,7 +710,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 Announce(definition);
             }
 
-            logger?.LogInfo("[Events] " + definition.Title + " (" + EventCatalog.TierLabel(definition.Tier) +
+            Plugin.Logger?.LogInfo("[Events] " + definition.Title + " (" + EventCatalog.TierLabel(definition.Tier) +
                             ", " + EventCatalog.TargetLabel(definition.Target) + ") active for " + duration +
                             "s (" + current.EffectSummary + ").");
             network?.Broadcast((sbyte)index, targetHash, currentStart, currentEnd,
@@ -785,13 +783,13 @@ namespace BoscaliSummer.Modules.Events.Runtime
             if (definition.Target == EventTarget.All)
             {
                 for (int i = 0; i < factions.Count; i++) Apply(step, factions[i], strength);
-                logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (all factions).");
+                Plugin.Logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (all factions).");
                 return;
             }
 
             if (targetFaction == null) return;
             Apply(step, targetFaction, strength);
-            logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (" +
+            Plugin.Logger?.LogInfo("[Events] " + definition.Title + " beat: " + step.Label + " (" +
                             (targetName ?? "target") + ").");
         }
 
@@ -859,7 +857,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             }
             if (chosen == null)
             {
-                logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
+                Plugin.Logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
                                 hq.faction.factionName + ".");
                 return;
             }
@@ -868,7 +866,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             if (shortfall > 0f) hq.AddFunds(shortfall);
             hq.AddFunds(-chosenCost);
             hq.AddConvoy(chosen);
-            logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
+            Plugin.Logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
                             hq.faction.factionName + " at " + chosenCost.ToString("F0") +
                             " (event grant " + shortfall.ToString("F0") + ").");
         }

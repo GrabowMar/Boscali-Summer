@@ -31,11 +31,8 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private readonly Dictionary<UnitDefinition, short> lookup = new Dictionary<UnitDefinition, short>(Capacity);
         private readonly UnitProfile[] profiles = new UnitProfile[Capacity];
         private readonly StationSample[] stations = new StationSample[MaximumStations];
-        private ManualLogSource logger;
         private int count;
         private bool fullLogged;
-
-        public void Configure(ManualLogSource log) => logger = log;
 
         public UnitProfile this[short index] => profiles[index];
 
@@ -60,7 +57,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
                 if (!fullLogged)
                 {
                     fullLogged = true;
-                    logger?.LogWarning("Intel: more than " + Capacity + " unit types seen; later types read as unknown.");
+                    Plugin.Logger?.LogWarning("Intel: more than " + Capacity + " unit types seen; later types read as unknown.");
                 }
                 return -1;
             }

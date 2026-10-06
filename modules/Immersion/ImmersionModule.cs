@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Immersion
         public void Install(ModuleContext context)
         {
             ImmersionManager immersion = context.AddSceneService<ImmersionManager>(47);
-            immersion.Configure(context.Settings.Immersion, context.Logger);
+            immersion.Configure(context.Settings.Immersion);
             context.AddClientEffect(immersion);
             context.AddService<IImmersionSettings>(immersion);
             CockpitPilot pilot = context.AddSceneService<CockpitPilot>(48);

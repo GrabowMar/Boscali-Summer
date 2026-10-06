@@ -37,7 +37,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private const float RefusalReportSeconds = 60f;
 
         private TrenchesSettings settings;
-        private ManualLogSource logger;
         private ITerritoryIngress territory;
 
         private readonly List<TrenchLine> lines = new List<TrenchLine>(MaximumActiveLines);
@@ -203,10 +202,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             for (int i = 0; i < traces.Length; i++) SnapHeights(traces[i]);
         }
 
-        public void Configure(TrenchesSettings config, ManualLogSource log, ITerritoryIngress control)
+        public void Configure(TrenchesSettings config, ITerritoryIngress control)
         {
             settings = config;
-            logger = log;
             territory = control;
         }
 
@@ -439,7 +437,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             lastTraceReport[slot] = traceCount;
             int stations = 0;
             for (int t = 0; t < traceCount; t++) stations += traceLengths[t];
-            logger?.LogInfo($"[TRENCHES] Front traces for {factions[factionIndex].name}: " +
+            Plugin.Logger?.LogInfo($"[TRENCHES] Front traces for {factions[factionIndex].name}: " +
                 $"{traceCount} trace(s), {stations} stations.");
         }
 
@@ -523,7 +521,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 Time.unscaledTime < nextRefusalWarning) return;
             nextRefusalWarning = Time.unscaledTime + RefusalReportSeconds;
             planRefusals = 0;
-            logger?.LogWarning($"[TRENCHES] No position accepted yet: the front was refused ({refusal}) " +
+            Plugin.Logger?.LogWarning($"[TRENCHES] No position accepted yet: the front was refused ({refusal}) " +
                 "on every attempt. Check the control field and terrain probe.");
         }
 
@@ -571,7 +569,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     if (Time.unscaledTime >= nextGarrisonWarning)
                     {
                         nextGarrisonWarning = Time.unscaledTime + 30f;
-                        logger?.LogWarning("[TRENCHES] Position rejected: " + garrison.LastFailure +
+                        Plugin.Logger?.LogWarning("[TRENCHES] Position rejected: " + garrison.LastFailure +
                             ". No empty cosmetic position was created.");
                     }
                     return false;
@@ -585,7 +583,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 lineWorks?.Remove();
                 if (chunk != null) Destroy(chunk.gameObject);
                 garrison?.Remove();
-                logger?.LogWarning("[TRENCHES] Position creation rolled back: " + ex.Message);
+                Plugin.Logger?.LogWarning("[TRENCHES] Position creation rolled back: " + ex.Message);
                 return false;
             }
 
@@ -599,7 +597,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             line.HostileSince = -1f;
             line.NextGrowthAt = Time.time + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
             line.NextBarrageAt = Time.time + TrenchTraceMath.BarrageDelay(settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value, line.Pressure, UnityEngine.Random.value);
-            logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
+            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
             TrenchNet.BroadcastGeometry(line);
             TrenchNet.BroadcastState(line);
             OnLinesChanged?.Invoke();
@@ -616,7 +614,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
 
             try { chunk.Initialize(line); }
             catch { Destroy(go); throw; }
-            logger?.LogInfo($"[TRENCHES] World chunk {line.Id}: {chunk.MeshCount} meshes, center={chunk.WorldCenter}, camera distance={chunk.CameraDistance:0}m, lod={chunk.ActiveLod} (near {chunk.Lod0Distance:0}/{chunk.Lod1Distance:0}/{chunk.Lod2Distance:0}m), material={chunk.EarthMaterial}.");
+            Plugin.Logger?.LogInfo($"[TRENCHES] World chunk {line.Id}: {chunk.MeshCount} meshes, center={chunk.WorldCenter}, camera distance={chunk.CameraDistance:0}m, lod={chunk.ActiveLod} (near {chunk.Lod0Distance:0}/{chunk.Lod1Distance:0}/{chunk.Lod2Distance:0}m), material={chunk.EarthMaterial}.");
             return chunk;
         }
 
@@ -647,7 +645,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     line.RetireAt = now + RetireSeconds;
                     line.DefenderCount = 0;
                     changed = true;
-                    logger?.LogInfo($"[TRENCHES] '{line.Name}' neutralized: no defenders remain; growth stopped, no respawns.");
+                    Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' neutralized: no defenders remain; growth stopped, no respawns.");
                 }
                 else if (!line.Overrun && TrenchTraceMath.FieldAbandons(now, line.DugAt, line.HostileSince))
                 {
@@ -656,7 +654,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     line.Overrun = true;
                     line.RetireAt = now + RetireSeconds;
                     changed = true;
-                    logger?.LogInfo($"[TRENCHES] '{line.Name}' cut off: the front moved past it; growth stopped, {line.DefenderCount} defenders fight on without relief.");
+                    Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' cut off: the front moved past it; growth stopped, {line.DefenderCount} defenders fight on without relief.");
                 }
                 if (line.Overrun && previousDefenders > 0 && line.DefenderCount == 0)
                     line.RetireAt = now + RetireSeconds;
@@ -686,7 +684,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                         changed = true;
                         string missing = MissingBeltTrace(line, before);
                         if (missing != null)
-                            logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
+                            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
                         if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk chunk) && chunk != null) chunk.Rebuild();
                         garrison.ResetAttempts();
                         garrison.Reinforce();
@@ -697,14 +695,14 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     else if (line.Stage != TrenchStage.Saps && Time.unscaledTime >= nextGrowthWarning)
                     {
                         nextGrowthWarning = Time.unscaledTime + 60f;
-                        logger?.LogWarning($"[TRENCHES] '{line.Name}' growth held at {line.Stage}: the ground refused the next belt trace.");
+                        Plugin.Logger?.LogWarning($"[TRENCHES] '{line.Name}' growth held at {line.Stage}: the ground refused the next belt trace.");
                     }
                 }
 
                 if (changed)
                 {
                     anyChanged = true;
-                    logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
+                    Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
                     TrenchNet.BroadcastState(line);
                 }
             }
@@ -784,7 +782,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (fired > 0 && Time.unscaledTime >= nextBarrageLog)
             {
                 nextBarrageLog = Time.unscaledTime + 60f;
-                logger?.LogInfo($"[TRENCHES] '{shooter.Name}' fired {fired} harassing round(s) into '{target.Name}' no-man's-land ({pairDistance:0}m).");
+                Plugin.Logger?.LogInfo($"[TRENCHES] '{shooter.Name}' fired {fired} harassing round(s) into '{target.Name}' no-man's-land ({pairDistance:0}m).");
             }
         }
 

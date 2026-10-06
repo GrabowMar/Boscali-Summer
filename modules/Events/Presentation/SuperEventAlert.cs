@@ -37,7 +37,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private EventsSettings settings;
         private EventsManager events;
-        private ManualLogSource logger;
         private ActiveEventView activeView;
 
         private GameObject root;
@@ -76,11 +75,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private int planeNotifiedSerial;
         private bool failed;
 
-        public void Configure(EventsSettings config, EventsManager manager, ManualLogSource log)
+        public void Configure(EventsSettings config, EventsManager manager)
         {
             settings = config;
             events = manager;
-            logger = log;
         }
 
         public void ResetForScene()
@@ -183,7 +181,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             expandedFx?.Play(AvFxKind.Dissolve, 0.8f, 6f);
             UpdateNextOrder(MissionTime());
             tone?.Play();
-            logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
+            Plugin.Logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
         }
 
         private void Dismiss()
@@ -249,7 +247,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 failed = true;
                 if (root != null) UnityEngine.Object.Destroy(root);
                 root = null;
-                logger?.LogError("Superevent dispatch unavailable: " + e);
+                Plugin.Logger?.LogError("Superevent dispatch unavailable: " + e);
                 return false;
             }
         }

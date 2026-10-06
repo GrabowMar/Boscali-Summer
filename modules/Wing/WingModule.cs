@@ -54,10 +54,10 @@ namespace BoscaliSummer.Modules.Wing
             if (context == null) throw new ArgumentNullException(nameof(context));
             WingLog.Init(context.Logger);
             WingSettings.Instance = context.Settings.Wing;
-            WingLogExport.Start(context.Logger);
+            WingLogExport.Start();
             GameAccess.Initialise();
             WingNet.Init();
-            WingData.Load(context.Logger);
+            WingData.Load();
 
             var wing = new WingService();
             wing.RosterChanged += () => WingMembership.Publish(wing.Members);

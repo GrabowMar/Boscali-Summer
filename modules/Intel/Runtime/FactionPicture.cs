@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private readonly Action<PersistentID> onDiscover;
         private readonly Action<PersistentID> onForget;
         private readonly UnitProfiles profiles;
-        private readonly ManualLogSource logger;
 
         private AirDefenceRing[] front = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
         private AirDefenceRing[] back = new AirDefenceRing[ThreatPictureLimits.MaximumRings];
@@ -35,10 +34,9 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private bool gridFullLogged;
         private bool faultLogged;
 
-        public FactionPicture(UnitProfiles unitProfiles, ManualLogSource log)
+        public FactionPicture(UnitProfiles unitProfiles)
         {
             profiles = unitProfiles;
-            logger = log;
             onDiscover = OnDiscover;
             onForget = OnForget;
         }
@@ -222,13 +220,13 @@ namespace BoscaliSummer.Modules.Intel.Runtime
                 if (ringSet.Dropped > 0 && !ringsFullLogged)
                 {
                     ringsFullLogged = true;
-                    logger?.LogWarning("Intel: " + name + " knows more than " + ThreatPictureLimits.MaximumRings +
+                    Plugin.Logger?.LogWarning("Intel: " + name + " knows more than " + ThreatPictureLimits.MaximumRings +
                                        " air-defence rings; gun rings give way first, then IR.");
                 }
                 if (grid.Overflowed && !gridFullLogged)
                 {
                     gridFullLogged = true;
-                    logger?.LogWarning("Intel: " + name + " observation grid is full (" + ObservationGrid.DefaultCapacity +
+                    Plugin.Logger?.LogWarning("Intel: " + name + " observation grid is full (" + ObservationGrid.DefaultCapacity +
                                        " cells); ground beyond it reads unscouted.");
                 }
                 AirDefenceRing[] swap = front;
@@ -377,7 +375,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             if ((result != UpsertResult.Evicted && result != UpsertResult.Refused) || tableFullLogged) return;
             tableFullLogged = true;
-            logger?.LogWarning("Intel: " + name + " knows more than " + known.Capacity +
+            Plugin.Logger?.LogWarning("Intel: " + name + " knows more than " + known.Capacity +
                                " hostiles; the oldest static non-air-defence entries give way first.");
         }
 
@@ -385,7 +383,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         {
             if (faultLogged) return;
             faultLogged = true;
-            logger?.LogError("Intel: " + name + " picture fault (logged once per scene): " + e);
+            Plugin.Logger?.LogError("Intel: " + name + " picture fault (logged once per scene): " + e);
         }
 
         private static int Signature(AirDefenceRing[] rings, int count)

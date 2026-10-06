@@ -14,7 +14,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
     {
         public static CommandManager Active { get; internal set; }
 
-        private ManualLogSource logger;
         private IOperationOutcomeSource operationOutcomes;
         private IActiveEventsView activeEvents;
         private FactionMoraleNet moraleNet;
@@ -63,12 +62,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return moraleNet != null && moraleNet.TryGet(factionName, out morale);
         }
 
-        public void Configure(ManualLogSource log, FactionMoraleNet network)
+        public void Configure(FactionMoraleNet network)
         {
-            logger = log;
             moraleNet = network;
             Active = this;
-            logger?.LogInfo("[COM] Faction Morale ready: host-owned, 0–100; new contract rewards scale from 0.8x to 1.1x.");
+            Plugin.Logger?.LogInfo("[COM] Faction Morale ready: host-owned, 0–100; new contract rewards scale from 0.8x to 1.1x.");
         }
 
         public void ResetForScene()

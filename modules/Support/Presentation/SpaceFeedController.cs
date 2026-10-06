@@ -34,7 +34,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportManager manager;
         private CallsController calls;
         private SupportSettings settings;
-        private ManualLogSource logger;
 
         private readonly FeedDraft draft = new FeedDraft();
         private readonly SpaceFeedView view = new SpaceFeedView();
@@ -69,12 +68,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool WindowOpen => window != null && window.IsOpen;
         public FeedDraft Draft => draft;
 
-        public void Configure(SupportManager manager, CallsController calls, SupportSettings settings, ManualLogSource logger)
+        public void Configure(SupportManager manager, CallsController calls, SupportSettings settings)
         {
             this.manager = manager;
             this.calls = calls;
             this.settings = settings;
-            this.logger = logger;
             if (manager != null) manager.SpaceReplied += OnReply;
         }
 
@@ -200,7 +198,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void FailFeed(Exception e, float wall)
         {
             failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
-            logger?.LogError("SPACE feed refresh failed: " + e);
+            Plugin.Logger?.LogError("SPACE feed refresh failed: " + e);
             compactVisible = false;
             CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
         }

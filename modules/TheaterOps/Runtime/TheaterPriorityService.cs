@@ -31,17 +31,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private TheaterOpsSettings settings;
         private TheaterOpsNet network;
-        private ManualLogSource logger;
         private float nextAuthority;
         private bool authoritative;
 
         internal bool Authoritative => authoritative;
 
-        public void Configure(TheaterOpsSettings config, TheaterOpsNet net, ManualLogSource log)
+        public void Configure(TheaterOpsSettings config, TheaterOpsNet net)
         {
             settings = config;
             network = net;
-            logger = log;
         }
 
         private void Awake() => Active = this;
@@ -107,7 +105,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!table.TryClear(hq.faction.factionName)) return false;
 
             network?.BroadcastState(hq.faction.factionName, null);
-            logger?.LogInfo("Theater priority cleared for " + hq.faction.factionName + ".");
+            Plugin.Logger?.LogInfo("Theater priority cleared for " + hq.faction.factionName + ".");
             return true;
         }
 

@@ -84,7 +84,6 @@ namespace BoscaliSummer.Modules.Session.Networking
         private Action<string, string> writeLocal;
 
         private ConfigFile config;
-        private ManualLogSource logger;
         private HandlerSlot serverSlot, clientSlot;
         private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<SessionHello>(ReceiveHello);
         private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<HostSettingsMessage>(ReceiveSettings);
@@ -99,9 +98,8 @@ namespace BoscaliSummer.Modules.Session.Networking
         private bool applying;
         private static bool serializersInstalled;
 
-        public void Configure(ConfigEntryBase[] hostOwned, ConfigEntryBase[] moduleSwitches, ManualLogSource log)
+        public void Configure(ConfigEntryBase[] hostOwned, ConfigEntryBase[] moduleSwitches)
         {
-            logger = log;
             entries = hostOwned ?? Array.Empty<ConfigEntryBase>();
             switchEntries = moduleSwitches ?? Array.Empty<ConfigEntryBase>();
             for (int i = 0; i < switchEntries.Length; i++)
@@ -156,7 +154,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 if (!hostSilentShown)
                 {
                     hostSilentShown = true;
-                    logger?.LogWarning("[Session] The host did not answer the session handshake; it runs an older " +
+                    Plugin.Logger?.LogWarning("[Session] The host did not answer the session handshake; it runs an older " +
                         "Boscali Summer or none. Host-owned settings stay at this client's values.");
                     Notice(HudTone.Caution, "HOST DID NOT ANSWER",
                         "The host runs an older Boscali Summer or none; host-run panels may stay empty.");
@@ -214,7 +212,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             peers[sender] = now;
 
             if (!string.Equals(hello.Version, Plugin.PluginVersion, StringComparison.Ordinal))
-                logger?.LogWarning("[Session] A client joined with Boscali Summer " + (hello.Version ?? "?") +
+                Plugin.Logger?.LogWarning("[Session] A client joined with Boscali Summer " + (hello.Version ?? "?") +
                     "; this host runs " + Plugin.PluginVersion + ". Mismatched versions can break panels.");
 
             outgoing.Clear();
@@ -324,7 +322,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 {
                     versionShown = true;
                     string host = string.IsNullOrEmpty(message.Version) ? "?" : message.Version;
-                    logger?.LogWarning("[Session] Host runs Boscali Summer " + host + "; this client runs " +
+                    Plugin.Logger?.LogWarning("[Session] Host runs Boscali Summer " + host + "; this client runs " +
                         Plugin.PluginVersion + ".");
                     Notice(HudTone.Caution, "BOSCALI SUMMER " + Plugin.PluginVersion + " · HOST " + host,
                         "Install the host's version so every panel matches.");
@@ -353,12 +351,12 @@ namespace BoscaliSummer.Modules.Session.Networking
             {
                 applying = false;
             }
-            if (changed > 0) logger?.LogInfo("[Session] Using " + changed + " host setting(s) for this session.");
+            if (changed > 0) Plugin.Logger?.LogInfo("[Session] Using " + changed + " host setting(s) for this session.");
             if ((message.Flags & (FlagReply | FlagComplete)) == (FlagReply | FlagComplete) && switchMismatches.Count > 0)
             {
                 string list = string.Join(", ", switchMismatches);
                 switchMismatches.Clear();
-                logger?.LogWarning("[Session] The host's module switches differ from this client's: host has " + list +
+                Plugin.Logger?.LogWarning("[Session] The host's module switches differ from this client's: host has " + list +
                     ". Match them in the config and restart the game.");
                 Notice(HudTone.Caution, "HOST MODULES: " + list, "Match the host's module switches and restart.");
             }
@@ -386,8 +384,8 @@ namespace BoscaliSummer.Modules.Session.Networking
             ConfigMenu.SetReadOnly(entries, false);
             config.SaveOnConfigSet = savedSaveOnSet;
             try { config.Save(); }
-            catch (Exception e) { logger?.LogWarning("[Session] Could not save settings: " + e.Message); }
-            logger?.LogInfo("[Session] Restored your own settings (" + reason + ").");
+            catch (Exception e) { Plugin.Logger?.LogWarning("[Session] Could not save settings: " + e.Message); }
+            Plugin.Logger?.LogInfo("[Session] Restored your own settings (" + reason + ").");
         }
 
         private string ReadLocal(string key) =>
@@ -397,7 +395,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         {
             if (!allowed.TryGetValue(key, out ConfigEntryBase entry)) return;
             try { entry.SetSerializedValue(value); }
-            catch (Exception e) { logger?.LogWarning("[Session] Ignored host value for " + key + ": " + e.Message); }
+            catch (Exception e) { Plugin.Logger?.LogWarning("[Session] Ignored host value for " + key + ": " + e.Message); }
         }
 
         private static void Notice(HudTone tone, string text, string detail)

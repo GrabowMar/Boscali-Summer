@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 settings.VerboseLogging.SettingChanged -= OnLoggingChanged;
             settings = null;
             if (WingLog.Logger != null)
-                WingLogExport.Stop(WingLog.Logger);
+                WingLogExport.Stop();
             if (ReferenceEquals(Instance, this)) Instance = null;
         }
 
@@ -92,7 +92,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (!patchCheckDone)
             {
                 patchCheckDone = true;
-                PatchManifest.Verify(WingLog.Logger);
+                PatchManifest.Verify();
             }
             // The network is up before a mission is (the lobby): its hooks and hellos run regardless.
             try

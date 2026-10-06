@@ -20,7 +20,6 @@ namespace BoscaliSummer.Modules.Performance.Runtime
     internal sealed class BaseGameTuning : MonoBehaviour, ISceneService
     {
         private PerformanceSettings settings;
-        private ManualLogSource logger;
 
         private bool lodApplied;
         private float lodOriginal = 1f;
@@ -29,10 +28,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private bool frameApplied;
         private int frameOriginal = -1;
 
-        public void Configure(PerformanceSettings config, ManualLogSource log)
+        public void Configure(PerformanceSettings config)
         {
             settings = config;
-            logger = log;
             ResetForScene();
         }
 
@@ -77,7 +75,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     lodOriginal = QualitySettings.lodBias;
                     QualitySettings.lodBias = ClientTuningMath.PlanLodBias(lodOriginal, true);
                     lodApplied = true;
-                    logger?.LogInfo("Performance: LOD bias floor on (game " +
+                    Plugin.Logger?.LogInfo("Performance: LOD bias floor on (game " +
                         lodOriginal.ToString("F2") + " -> " +
                         QualitySettings.lodBias.ToString("F2") + ").");
                 }
@@ -85,13 +83,13 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 {
                     QualitySettings.lodBias = lodOriginal;
                     lodApplied = false;
-                    logger?.LogInfo("Performance: LOD bias restored to " +
+                    Plugin.Logger?.LogInfo("Performance: LOD bias restored to " +
                         lodOriginal.ToString("F2") + ".");
                 }
             }
             catch (Exception error)
             {
-                logger?.LogWarning("Performance: LOD bias tuning failed: " + error.Message);
+                Plugin.Logger?.LogWarning("Performance: LOD bias tuning failed: " + error.Message);
             }
         }
 
@@ -106,7 +104,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     QualitySettings.shadowDistance =
                         ClientTuningMath.PlanShadowDistance(shadowOriginal, true);
                     shadowApplied = true;
-                    logger?.LogInfo("Performance: shadow distance cap on (game " +
+                    Plugin.Logger?.LogInfo("Performance: shadow distance cap on (game " +
                         shadowOriginal.ToString("F0") + " m -> " +
                         QualitySettings.shadowDistance.ToString("F0") + " m).");
                 }
@@ -114,13 +112,13 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 {
                     QualitySettings.shadowDistance = shadowOriginal;
                     shadowApplied = false;
-                    logger?.LogInfo("Performance: shadow distance restored to " +
+                    Plugin.Logger?.LogInfo("Performance: shadow distance restored to " +
                         shadowOriginal.ToString("F0") + " m.");
                 }
             }
             catch (Exception error)
             {
-                logger?.LogWarning("Performance: shadow cap tuning failed: " + error.Message);
+                Plugin.Logger?.LogWarning("Performance: shadow cap tuning failed: " + error.Message);
             }
         }
 
@@ -135,19 +133,19 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     Application.targetFrameRate =
                         ClientTuningMath.PlanFrameRate(frameOriginal, true);
                     frameApplied = true;
-                    logger?.LogInfo("Performance: frame rate cap on (game " +
+                    Plugin.Logger?.LogInfo("Performance: frame rate cap on (game " +
                         frameOriginal + " -> " + Application.targetFrameRate + ").");
                 }
                 else
                 {
                     Application.targetFrameRate = frameOriginal;
                     frameApplied = false;
-                    logger?.LogInfo("Performance: frame rate restored to " + frameOriginal + ".");
+                    Plugin.Logger?.LogInfo("Performance: frame rate restored to " + frameOriginal + ".");
                 }
             }
             catch (Exception error)
             {
-                logger?.LogWarning("Performance: frame cap tuning failed: " + error.Message);
+                Plugin.Logger?.LogWarning("Performance: frame cap tuning failed: " + error.Message);
             }
         }
 
@@ -157,11 +155,11 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             {
                 Resources.UnloadUnusedAssets();
                 GC.Collect();
-                logger?.LogInfo("Performance: scene-transition cleanup ran.");
+                Plugin.Logger?.LogInfo("Performance: scene-transition cleanup ran.");
             }
             catch (Exception error)
             {
-                logger?.LogWarning("Performance: scene cleanup failed: " + error.Message);
+                Plugin.Logger?.LogWarning("Performance: scene cleanup failed: " + error.Message);
             }
         }
 

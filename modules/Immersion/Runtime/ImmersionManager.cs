@@ -55,15 +55,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private bool environmentValid;
         private Quaternion composedOffset = Quaternion.identity;
         private double lastMissionClock = double.NaN;
-        private ManualLogSource logger;
         private Vector3 composedAngles;
 
-        public void Configure(ImmersionSettings immersionSettings, ManualLogSource logger)
+        public void Configure(ImmersionSettings immersionSettings)
         {
             settings = immersionSettings;
-            this.logger = logger;
-            mfdGlow.Logger = logger;
-            surface.Logger = logger;
             Live = this;
         }
 
@@ -418,6 +414,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["cockpitView"] = CameraStateManager.cameraMode == CameraMode.cockpit;
         }
 
-        internal void LogAutomation(string message) => logger?.LogInfo("[ImmersionAutomation] " + message);
+        internal void LogAutomation(string message) => Plugin.Logger?.LogInfo("[ImmersionAutomation] " + message);
     }
 }

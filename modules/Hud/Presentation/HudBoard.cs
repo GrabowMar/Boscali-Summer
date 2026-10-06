@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Awake() => Instance = this;
 
-        public void Configure(HudSettings config, ManualLogSource logger)
+        public void Configure(HudSettings config)
         {
             settings = config;
             SubscribeProjection();

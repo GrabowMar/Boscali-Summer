@@ -62,7 +62,6 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         private readonly HashSet<Player> connected = new HashSet<Player>();
         private SquadSettings settings;
         private SquadNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private float nextTick, lastTime;
         private int sequence;
@@ -112,11 +111,11 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             ? careers.TryGetValue(id, out Career c) ? c.Rules.ScoreOrigin : 0 : id == localIdentity ? localOrigin : 0;
 
         private BoscaliSummer.Core.Services.ServiceRegistry services;
-        internal void Configure(SquadSettings config, SquadNet transport, ManualLogSource log,
+        internal void Configure(SquadSettings config, SquadNet transport,
             BoscaliSummer.Core.Services.ServiceRegistry registry)
         {
             services = registry;
-            settings = config; network = transport; logger = log; SquadRuntime.Active = this;
+            settings = config; network = transport; SquadRuntime.Active = this;
             settings.SpawnDebugWing = DebugSpawnWing; settings.ClearDebugWings = DebugClearWings;
         }
 
@@ -189,7 +188,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             if (count > 0)
             {
                 Apply(Snapshot(player), PlayerIdentity.Of(player));
-                logger.LogInfo("[Squad] Cleared " + count + " debug adversary wings for local player.");
+                Plugin.Logger?.LogInfo("[Squad] Cleared " + count + " debug adversary wings for local player.");
             }
             return count > 0 ? "Cleared " + count + " debug wings." : "No active debug wings owned by this player.";
         }
@@ -494,7 +493,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             hunts.Add(hunt); career.Rules.Begin();
             Notice(career, hunt.Symbol + " " + hunt.Wing + " / " + callsign + " — HUNT ACTIVE. Tier " + tier + ", " + aircraft.Length + " aircraft.",
                 callsign, returns > 0 ? "Remember me? This time you are not getting away." : "We have your signature. Wing, concentrate on the marked aircraft.");
-            logger.LogInfo("[Squad] Ace hunt spawned: " + hunt.Wing + ", tier " + tier + ", members " + aircraft.Length + ".");
+            Plugin.Logger?.LogInfo("[Squad] Ace hunt spawned: " + hunt.Wing + ", tier " + tier + ", members " + aircraft.Length + ".");
             return true;
         }
 

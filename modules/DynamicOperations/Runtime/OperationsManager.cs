@@ -65,7 +65,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly OperationRewards rewards = new OperationRewards();
         private DynamicOperationsSettings settings;
         private OperationsNet network;
-        private ManualLogSource logger;
         private object missionIdentity;
         private float nextTick, previousTime, lastSnapshot;
         private int nextId;
@@ -115,10 +114,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         internal void EndAction(string result)
         { IsActionPending = false; PendingObjectiveId = 0; pendingCancel = false; ActionResult = result ?? string.Empty; }
 
-        public void Configure(DynamicOperationsSettings configuration, OperationsNet transport, ManualLogSource log)
+        public void Configure(DynamicOperationsSettings configuration, OperationsNet transport)
         {
-            settings = configuration; network = transport; logger = log;
-            rewards.Configure(log);
+            settings = configuration; network = transport;
             wasEnabled = settings.Enabled.Value;
             Active = this;
         }
@@ -270,7 +268,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             bool validTempo = mission != null &&
                 OperationTempo.Finite(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold);
-            if (!validTempo) logger.LogWarning("[Operations] Nonfinite escalation fields; conventional tempo used for this cycle.");
+            if (!validTempo) Plugin.Logger?.LogWarning("[Operations] Nonfinite escalation fields; conventional tempo used for this cycle.");
             float scale = validTempo
                 ? OperationTempo.RewardScale(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold)
                 : OperationTempo.ConventionalReward;
@@ -455,7 +453,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 bool completer = op.AcceptorId == 0 || PlayerIdentity.Of(player) == op.AcceptorId;
                 float share = ContractShares.Share(completer, crew, teamShare);
                 try { hq.RewardPlayer(player, null, ContractShares.Scaled(op.Money, share), ContractShares.Scaled(op.Xp, share), FactionHQ.RewardType.None); credited++; }
-                catch (Exception ex) { failures++; logger.LogWarning("[Operations] Award failed: " + ex.Message); }
+                catch (Exception ex) { failures++; Plugin.Logger?.LogWarning("[Operations] Award failed: " + ex.Message); }
             }
             string deployment = "";
             try
@@ -467,7 +465,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             catch (Exception ex)
             {
                 deployment = "Special deployment failed.";
-                logger.LogWarning("[Operations] " + deployment + " " + ex.Message);
+                Plugin.Logger?.LogWarning("[Operations] " + deployment + " " + ex.Message);
             }
             string split = credited > 1 && op.AcceptorId != 0
                 ? "Completer " + (string.IsNullOrEmpty(op.AcceptedBy) ? "its pilot" : op.AcceptedBy) + " takes the full reward, the rest the team share. "
@@ -475,7 +473,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             target.Outcome = (failures > 0 ? "Payment incomplete; see host log. " :
                 credited == 0 ? "No connected faction players to credit. " : "Faction players credited (money after tax). " + split) + deployment;
             target.Outcome = OperationsNet.Text(target.Outcome);
-            logger.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
+            Plugin.Logger?.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
             SeedFollowOn(board, op);
         }
 

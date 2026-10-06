@@ -27,15 +27,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly Vector3[] positions = new Vector3[ConvoySize];
         private readonly Quaternion[] rotations = new Quaternion[ConvoySize];
         private readonly UnitDefinition[] definitions = new UnitDefinition[ConvoySize];
-        private ManualLogSource log;
         private Encyclopedia catalog;
         private int catalogVehicleCount = -1, catalogBuildingCount = -1;
         private VehicleDefinition escort;
         private VehicleDefinition supply;
         private BuildingDefinition defense;
         private bool executing;
-
-        internal void Configure(ManualLogSource logger) => log = logger;
 
         internal bool CanOfferConvoy
         {
@@ -113,7 +110,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             catch (Exception error)
             {
                 RemoveOwnedFrom(start);
-                log?.LogWarning("[DynamicOperations] Reinforcement batch rolled back: " + error.Message);
+                Plugin.Logger?.LogWarning("[DynamicOperations] Reinforcement batch rolled back: " + error.Message);
                 return owned.Count == start ? "Reinforcements failed; spawned batch removed. Money and XP retained."
                     : "Reinforcements failed; cleanup pending. Money and XP retained.";
             }
@@ -181,7 +178,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                         candidate.unitPrefab.GetComponent<Building>() != null &&
                         (defense == null || candidate.value < defense.value)) defense = candidate;
                 }
-            log?.LogInfo("[DynamicOperations] Reward catalogue: convoy=" + (escort != null && supply != null) + ", fortification=" + (defense != null));
+            Plugin.Logger?.LogInfo("[DynamicOperations] Reward catalogue: convoy=" + (escort != null && supply != null) + ", fortification=" + (defense != null));
         }
 
         private bool PlanConvoy(FactionHQ hq, Airbase target, out GlobalPosition destination)
@@ -317,7 +314,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     owned.RemoveAt(i);
                 }
                 else if (pendingCleanup.Add(unit))
-                    log?.LogWarning("[DynamicOperations] Reward cleanup deferred; object retains its capacity slot.");
+                    Plugin.Logger?.LogWarning("[DynamicOperations] Reward cleanup deferred; object retains its capacity slot.");
             }
         }
 
