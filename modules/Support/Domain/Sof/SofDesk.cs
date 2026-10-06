@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Sof
 {
@@ -21,7 +22,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             switch (outcome)
             {
                 case SofOutcome.None: return "";
-                case SofOutcome.Raised: return "TEAM RAISING — DEPLOYS AT THE CAMP IN " + SofWords.Clock(detail);
+                case SofOutcome.Raised: return "TEAM RAISING — DEPLOYS AT THE CAMP IN " + SpaceRules.Clock(detail);
                 case SofOutcome.Ordered: return "ORDER SENT";
                 case SofOutcome.Sent: return "TEAM TASKED — MOVING OUT";
                 case SofOutcome.Diverted: return "TEAM DIVERTED";
@@ -39,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case SofOutcome.BadOrder: return "NEGATIVE: ORDER NOT POSSIBLE NOW — CHECK THE TEAM STATE";
                 case SofOutcome.OutOfTheater: return "NEGATIVE: OUT OF THE THEATER — PICK A POINT ON THE MAP";
-                case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SofWords.Clock(detail);
+                case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SpaceRules.Clock(detail);
                 default: return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING";
             }
         }

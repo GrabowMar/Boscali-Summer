@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// <see cref="SpaceFeedView"/> the ORBIT page paints. There is no contributions box: the client holds no per-player income or
     /// contribution figure (only the credit balance and its changes).
     /// </summary>
-    internal sealed class BoardPage
+    internal sealed class BoardPage : C2PageBase
     {
         private const float Gap = 6f, MinRowH = 46f, MaxRowH = 58f, NoticeBody = 44f;
         private static readonly string[] HowTo =
@@ -25,14 +25,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
             "CLAIM arms a post, EXECUTE fires it: the first claim wins."
         };
 
-        private readonly float width;
-        private readonly bool full;
         private readonly int rowCount;
         private readonly float rowH;
         private readonly Action<int> press;
         private readonly Action toggleQuiet;
-        private readonly Action<AvPart> register;
-        private readonly C2ConsoleView console;
         private readonly C2Box board, notices;
         private readonly C2Row[] rows;
         private readonly int[] ids;
@@ -45,12 +41,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private int titleLive = -1, titleStale = -1, titleHidden = -1;
 
         public BoardPage(RectTransform parent, float width, float height, Action<int> press, Action toggleQuiet, Action<AvPart> register)
+            : base(width, height, register)
         {
-            this.width = width;
             this.press = press;
             this.toggleQuiet = toggleQuiet;
-            this.register = register ?? (_ => { });
-            full = height >= 560f;
             rowCount = full ? C2Board.Rows896 : C2Board.Rows596;
             rows = new C2Row[rowCount];
             ids = new int[rowCount];
@@ -123,12 +117,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         /// <summary>The words the footer shows for this page.</summary>
         public string Words { get; private set; } = "";
         public AvState WordsTone { get; private set; } = AvState.Ready;
-
-        private T Make<T>(T part) where T : AvPart
-        {
-            register(part);
-            return part;
-        }
 
         public void Paint(SpaceFeedView v, bool quiet)
         {

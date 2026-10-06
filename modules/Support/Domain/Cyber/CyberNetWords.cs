@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
@@ -57,13 +58,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public static string Node(NodeKind kind, int id) => Name(kind) + " #" + id.ToString(CultureInfo.InvariantCulture);
 
-        public static string Clock(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
-            int s = (int)Math.Ceiling(seconds);
-            return (s / 60).ToString(CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
-
         /// <summary>0 ready (green), 1 caution (amber), 2 danger (red): the trace bar and its number.</summary>
         public static int TraceTone(int trace) => trace >= 80 ? 2 : trace >= 50 ? 1 : 0;
 
@@ -75,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (a.Kind == AnchorKind.EwTruck)
             {
                 float reach = AnchorRules.Reach(a.Health) / 1000f;
-                string locked = a.LockUntil > now ? " · TRACED " + Clock(a.LockUntil - now) : "";
+                string locked = a.LockUntil > now ? " · TRACED " + SpaceRules.Clock(a.LockUntil - now) : "";
                 return name + " · " + state + " · REACH " + reach.ToString("0", CultureInfo.InvariantCulture) + " KM" + locked;
             }
             return name + " · " + state + (a.Health == AnchorHealth.Live ? " · TRACE -20 %, UPKEEP -25 %" : "");
@@ -149,13 +143,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     /// The pilot's CYBER HUD notice, derived only from the faction mirror: the operator's own NODE HELD and TRACED events, one line each, at most
     /// one every 3 s, silent on first sight of a mirror (a join never replays history). QUIET mode drops them.
     /// </summary>
-    internal sealed class CyberNoticeTracker
+    internal sealed class CyberNoticeTracker : NoticeTrackerBase
     {
-        public const float GapSeconds = 3f;
         private int lastSeq = -1;
-        private float nextAt;
 
-        public void Reset() { lastSeq = -1; nextAt = 0f; }
+        public void Reset() { lastSeq = -1; ResetGate(); }
 
         public CyberNoticeKind Observe(bool known, CyberStateData state, float now, bool quiet)
         {
@@ -171,9 +163,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 else if (e.Kind == CyberEventKind.NodeHeld && found != CyberNoticeKind.Traced) found = CyberNoticeKind.Held;
             }
             lastSeq = Math.Max(lastSeq, newest);
-            if (quiet || found == CyberNoticeKind.None || now < nextAt) return CyberNoticeKind.None;
-            nextAt = now + GapSeconds;
-            return found;
+            return Admit(found != CyberNoticeKind.None, now, quiet) ? found : CyberNoticeKind.None;
         }
     }
 }

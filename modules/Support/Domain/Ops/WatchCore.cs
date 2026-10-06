@@ -122,6 +122,28 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public void Reset() { lastHumanAt = float.NegativeInfinity; }
     }
 
+    /// <summary>The think cadence every OVERLORD brain shares: the idle rule, when it next thinks, and the cheap poll a host adapter uses while nothing can happen.</summary>
+    internal abstract class WatchBrainBase
+    {
+        private readonly WatchIdle idle = new WatchIdle();
+        protected float nextThinkAt;
+
+        /// <summary>A human of this faction did a domain verb: OVERLORD yields (60 s alone, 300 s with company).</summary>
+        public void RecordHuman(float now) => idle.RecordHuman(now);
+
+        public bool Idle(int humans, float now) => idle.Idle(humans, now);
+
+        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
+
+        /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while nothing can happen).</summary>
+        public void Defer(float now, float seconds)
+        {
+            if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
+        }
+
+        public virtual void Reset() { idle.Reset(); nextThinkAt = 0f; }
+    }
+
     /// <summary>
     /// The rate bounds of OVERLORD for one faction. A faction with humans is bounded per domain (one action every 10 s in CYBER and one in SOF); a faction with no humans runs
     /// both domains through one limiter (one domain action every 30 s) and its operation funding is one tap or plan every 60 s.

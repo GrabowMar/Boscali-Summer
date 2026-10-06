@@ -1,7 +1,6 @@
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
-using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
@@ -12,33 +11,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal sealed partial class SupportManager
     {
         private readonly CyberMirror cyberMirror = new CyberMirror();
-        private bool cyberWanted;
-        private float nextCyberSync;
+        private MirrorFeed<CyberStateData> cyberFeed;
 
         /// <summary>The local player's faction CYBER view as the host last told it (own faction only).</summary>
         internal CyberMirror CyberMirror => cyberMirror;
 
-        internal void ReceiveCyberState(CyberStateData data)
-        {
-            if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;
-            cyberMirror.Apply(data, SupportNet.ProtocolVersion, MissionNow());
-        }
-
-        /// <summary>The NET page is on screen: keep asking the host for a state until one arrives (and again after a lost link).</summary>
-        internal void SetCyberWanted(bool wanted)
-        {
-            if (wanted && !cyberWanted) nextCyberSync = 0f;
-            cyberWanted = wanted;
-        }
-
-        private void UpdateCyberMirror()
-        {
-            if (network == null || !cyberWanted || cyberMirror.Known) return;
-            float t = Time.unscaledTime;
-            if (t < nextCyberSync) return;
-            nextCyberSync = t + 2f;
-            network.RequestSpace(new SpaceCommand(SupportNet.ProtocolVersion, SpaceCommandKind.CyberSync, 0));
-        }
+        /// <summary>The NET page is the only reader of the CYBER mirror: while it is open the feed asks the host for a state.</summary>
+        internal MirrorFeed<CyberStateData> CyberFeed => cyberFeed ?? (cyberFeed = new MirrorFeed<CyberStateData>(cyberMirror, SpaceCommandKind.CyberSync));
 
         /// <summary>HOP to a visible node (starts an intrusion, or goes deeper from a node you hold). Returns the request id (0 when not sent).</summary>
         internal int CyberHop(int nodeId) => SendCyber(SpaceCommandKind.CyberHop, nodeId);

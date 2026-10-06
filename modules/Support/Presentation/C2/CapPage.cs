@@ -52,14 +52,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     /// Fixed rows, no scrolling. The page owns no policy: every press goes through the <see cref="CallsController"/> exactly as the
     /// old CALLS page did. Coordinates are page coordinates: y = 0 is the bottom of the chrome.
     /// </summary>
-    internal sealed class CapPage
+    internal sealed class CapPage : C2PageBase
     {
         private const float Gap = 6f, CellH = 34f, ButtonH = 30f, StripH = 30f, BoxBodyFull = 76f;
         private readonly CallsController calls;
-        private readonly float width;
-        private readonly bool full;
-        private readonly Action<AvPart> register;
-        private readonly C2ConsoleView console;
         private readonly C2Box caps;
         private readonly Dictionary<SupportActionId, C2Row> rows = new Dictionary<SupportActionId, C2Row>();
         private readonly Action[] pinActions;
@@ -80,11 +76,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
         private AvState stripTone = AvState.Inert;
 
         public CapPage(RectTransform parent, float width, float height, CallsController calls, Action<AvPart> register)
+            : base(width, height, register)
         {
             this.calls = calls;
-            this.width = width;
-            this.register = register ?? (_ => { });
-            full = height >= 560f;
             int n = CallSheet.Rows.Count;
 
             // ---- Vertical budget ----
@@ -196,12 +190,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
                 AvLay.Place(favourites[i].Rect, 6f + i * (favW + 4f), favY, favW, favH);
             }
             Restyle();
-        }
-
-        private T Make<T>(T part) where T : AvPart
-        {
-            register(part);
-            return part;
         }
 
         // ---- Paint -------------------------------------------------------------------------------------------

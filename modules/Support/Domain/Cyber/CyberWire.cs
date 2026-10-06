@@ -47,19 +47,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     /// One faction's CYBER state, always a full snapshot (never a delta): a lost or reordered message is healed by the next one. Sent to members of
     /// the owning faction only. Times are host mission seconds; on the wire an expiry is the quantized seconds left from <see cref="Now"/>.
     /// </summary>
-    internal sealed class CyberStateData
+    internal sealed class CyberStateData : FactionStateData<CyberStateData>
     {
-        public byte Protocol;
         public bool Active, DataCenterUp;
-        public int Seq;
-        public float Now;
         public byte IntrusionCap, HeldTotal;
         public readonly List<CyberAnchorRow> Anchors = new List<CyberAnchorRow>();
         public readonly List<CyberNodeRow> Nodes = new List<CyberNodeRow>();
         public readonly List<CyberIntrusionRow> Intrusions = new List<CyberIntrusionRow>();
         public readonly List<CyberEventRow> Events = new List<CyberEventRow>();
 
-        public CyberStateData Clone()
+        public override CyberStateData Clone()
         {
             var c = new CyberStateData { Protocol = Protocol, Active = Active, DataCenterUp = DataCenterUp, Seq = Seq, Now = Now, IntrusionCap = IntrusionCap, HeldTotal = HeldTotal };
             c.Anchors.AddRange(Anchors); c.Nodes.AddRange(Nodes); c.Events.AddRange(Events);
@@ -73,7 +70,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
 
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
-        public bool SameAs(CyberStateData o)
+        public override bool SameAs(CyberStateData o)
         {
             if (o == null || Active != o.Active || DataCenterUp != o.DataCenterUp || IntrusionCap != o.IntrusionCap || HeldTotal != o.HeldTotal ||
                 Anchors.Count != o.Anchors.Count || Nodes.Count != o.Nodes.Count || Intrusions.Count != o.Intrusions.Count || Events.Count != o.Events.Count) return false;
@@ -220,49 +217,29 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         private static CyberStateData Bad() => new CyberStateData();
 
-        private sealed class Counter : ISpaceWriter
-        {
-            public int Bytes;
-            public void WriteByte(byte value) => Bytes++;
-        }
-
         public static int StateSize(CyberStateData s)
         {
-            var c = new Counter();
+            var c = new ByteCounter();
             WriteState(c, s);
             return c.Bytes;
         }
     }
 
-    /// <summary>
-    /// The client's copy of its own faction's CYBER state. Full snapshots only: anything not newer than the last one on this link is dropped,
-    /// and times are moved onto the client's own mission clock when a snapshot is applied.
-    /// </summary>
-    internal sealed class CyberMirror
+    /// <summary>The client's copy of its own faction's CYBER state (see <see cref="FactionMirror{T}"/>).</summary>
+    internal sealed class CyberMirror : FactionMirror<CyberStateData>
     {
-        public CyberStateData State { get; private set; } = new CyberStateData();
-        public bool Known { get; private set; }
-        public int Seq { get; private set; }
-        /// <summary>Highest sequence applied on this link; a faction or scene reset keeps it so an in-flight snapshot of the old view stays refused.</summary>
-        public int Floor { get; private set; }
+        protected override bool Bounds(CyberStateData d) =>
+            d.Anchors.Count <= CyberWire.MaxAnchors && d.Nodes.Count <= CyberWire.MaxNodes && d.Intrusions.Count <= CyberWire.MaxIntrusions && d.Events.Count <= CyberWire.MaxEvents;
 
-        public void Reset() { State = new CyberStateData(); Known = false; Seq = 0; }
-
-        public void ResetLink() { Reset(); Floor = 0; }
-
-        public bool Apply(CyberStateData d, byte protocol, float clientNow)
+        protected override CyberStateData Shift(CyberStateData d, float offset, float clientNow)
         {
-            if (d == null || d.Protocol != protocol || d.Seq <= 0 || d.Seq <= Floor || !SpaceRules.MissionTime(clientNow)) return false;
-            if (d.Anchors.Count > CyberWire.MaxAnchors || d.Nodes.Count > CyberWire.MaxNodes || d.Intrusions.Count > CyberWire.MaxIntrusions || d.Events.Count > CyberWire.MaxEvents) return false;
-            float offset = clientNow - d.Now;
             var copy = new CyberStateData { Protocol = d.Protocol, Active = d.Active, DataCenterUp = d.DataCenterUp, Seq = d.Seq, Now = clientNow,
                 IntrusionCap = d.IntrusionCap, HeldTotal = d.HeldTotal };
             for (int i = 0; i < d.Anchors.Count; i++) { CyberAnchorRow a = d.Anchors[i]; if (a.LockUntil > 0f) a.LockUntil += offset; copy.Anchors.Add(a); }
             copy.Nodes.AddRange(d.Nodes);
             for (int i = 0; i < d.Intrusions.Count; i++) { CyberIntrusionRow x = d.Intrusions[i]; if (x.HopTarget != 0 && x.HopEndsAt > 0f) x.HopEndsAt += offset; copy.Intrusions.Add(x); }
             copy.Events.AddRange(d.Events);
-            State = copy; Known = true; Seq = d.Seq; Floor = d.Seq;
-            return true;
+            return copy;
         }
 
         /// <summary>The faction holds at least one node (the EXPLOIT chip on FLARE BARRAGE and EMP).</summary>
@@ -274,61 +251,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 for (int i = 0; i < State.Nodes.Count; i++) if (State.Nodes[i].Held) return true;
                 return false;
             }
-        }
-    }
-
-    /// <summary>Host side: per-member send gating (change-only, at most one message per 2 s, a fresh full on a new member or an explicit sync).</summary>
-    internal sealed class CyberSubscriptions
-    {
-        public const int MaxSubscribers = SpaceContacts.MaxPlayers;
-        public const float MinGapSeconds = 2f;
-
-        private sealed class Sub { public int Faction = int.MinValue; public float NextAt; public CyberStateData Last; public bool Force = true; }
-        private readonly Dictionary<ulong, Sub> subs = new Dictionary<ulong, Sub>();
-        private readonly List<ulong> removed = new List<ulong>();
-        private int seq;
-
-        public int Count => subs.Count;
-        public int Seq => seq;
-
-        public void Clear() { subs.Clear(); removed.Clear(); }
-
-        /// <summary>The member asked for a fresh state (a client that lost its mirror): the next poll sends one.</summary>
-        public void Resync(ulong player) { if (subs.TryGetValue(player, out Sub s)) { s.Force = true; s.NextAt = 0f; } }
-
-        /// <summary>Forgets a member that left; call from the poll for every id no longer in any roster.</summary>
-        public void Forget(ulong player) => subs.Remove(player);
-
-        /// <summary>Drops every member that is not in <paramref name="keep"/> (this poll's roster).</summary>
-        public void Prune(HashSet<ulong> keep)
-        {
-            removed.Clear();
-            foreach (var pair in subs) if (keep == null || !keep.Contains(pair.Key)) removed.Add(pair.Key);
-            for (int i = 0; i < removed.Count; i++) subs.Remove(removed[i]);
-            removed.Clear();
-        }
-
-        /// <summary>
-        /// The snapshot to send this member now, or null. <paramref name="current"/> is built for the member's faction; it is copied by the
-        /// caller, never kept here beyond the comparison copy.
-        /// </summary>
-        public CyberStateData Next(ulong player, int faction, CyberStateData current, float now, float wall)
-        {
-            if (player == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall) || seq == int.MaxValue) return null;
-            if (!subs.TryGetValue(player, out Sub s))
-            {
-                if (subs.Count >= MaxSubscribers) return null;
-                subs[player] = s = new Sub();
-            }
-            if (s.Faction != faction) { s.Faction = faction; s.Force = true; s.Last = null; }
-            if (!s.Force && wall < s.NextAt) return null;
-            if (!s.Force && s.Last != null && s.Last.SameAs(current)) return null;
-            current.Seq = ++seq;
-            current.Now = now;
-            s.Last = current.Clone();
-            s.Force = false;
-            s.NextAt = wall + MinGapSeconds;
-            return current;
         }
     }
 }

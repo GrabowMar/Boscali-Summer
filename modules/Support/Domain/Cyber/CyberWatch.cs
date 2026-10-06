@@ -50,40 +50,26 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     /// has not revealed. It has no wallet: its starts and upkeep are free, its packages go to the board labelled WATCH OFFICER and their fee goes to HQ FUND. Bounded by the pacer (one action every 10 s
     /// in this domain, every 30 s for a faction with no humans).
     /// </summary>
-    internal sealed class CyberWatchBrain
+    internal sealed class CyberWatchBrain : WatchBrainBase
     {
         public const float ThinkSeconds = 2f, BurnTrace = 70f, SafeTrace = 96f, HopBudgetTrace = 92f, PilotBurnMeters = 40000f, PilotBurnMinHoldSeconds = 45f,
             RestSeconds = 45f, AiRestSeconds = 150f, BurnSpacingSeconds = 480f, NodeBackoffSeconds = 60f, BurnBackoffSeconds = 30f;
         public const int MaxHeldByOverlord = 2, MaxBackoffs = 32;
         private const ulong Me = SpaceContacts.WatchOfficerId;
 
-        private readonly WatchIdle idle = new WatchIdle();
         private readonly Dictionary<int, float> backoff = new Dictionary<int, float>(MaxBackoffs);
         private readonly List<EwSource> trucks = new List<EwSource>(AnchorRules.MaxTrucks);
         private readonly List<CyberNode> held = new List<CyberNode>(CyberRules.MaxHeldPerFaction);
         private readonly List<int> scratch = new List<int>(MaxBackoffs);
-        private float nextThinkAt, restUntil, burnBackoffUntil, clock, lastBurnAt = float.NegativeInfinity;
+        private float restUntil, burnBackoffUntil, clock, lastBurnAt = float.NegativeInfinity;
 
         public int Hops, Deepers, Burns, Drops, Failures, Thinks;
         public CyberWatchPlan Last { get; private set; }
 
-        /// <summary>A human of this faction did a CYBER verb (HOP, BURN or DROP): OVERLORD yields (60 s alone, 300 s with company).</summary>
-        public void RecordHuman(float now) => idle.RecordHuman(now);
-
-        public bool Idle(int humans, float now) => idle.Idle(humans, now);
-
-        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
-
-        /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while nothing can happen).</summary>
-        public void Defer(float now, float seconds)
+        public override void Reset()
         {
-            if (SpaceRules.MissionTime(now) && SpaceRules.Finite(seconds) && seconds > 0f) nextThinkAt = Math.Max(nextThinkAt, now + seconds);
-        }
-
-        public void Reset()
-        {
-            idle.Reset(); backoff.Clear(); trucks.Clear(); held.Clear();
-            nextThinkAt = restUntil = burnBackoffUntil = clock = 0f; lastBurnAt = float.NegativeInfinity;
+            base.Reset(); backoff.Clear(); trucks.Clear(); held.Clear();
+            restUntil = burnBackoffUntil = clock = 0f; lastBurnAt = float.NegativeInfinity;
             Hops = Deepers = Burns = Drops = Failures = Thinks = 0;
             Last = default;
         }
@@ -141,7 +127,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (desk.Anchors.Count(AnchorKind.EwTruck) == 0) return CyberWatchPlan.Idle(CyberWatchWhy.NoAnchors);
             Prune(now);
             int humans = world.Humans;
-            bool quiet = idle.Idle(humans, now);
+            bool quiet = Idle(humans, now);
             float factor = desk.TraceFactor(now);
             // How long a trace can run before OVERLORD may act again: the think cadence, plus the pacer's wait now; a hop planned now arrives later, so it assumes the worst wait the pacer can impose (the shared 30 s of an AI faction).
             float margin = ThinkSeconds + 1f;

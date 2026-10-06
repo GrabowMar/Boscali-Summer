@@ -162,9 +162,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
             }
             if (network == null) return;
-            UpdateCyberMirror();
-            UpdateSofMirror();
-            UpdateOpsMirror();
+            CyberFeed.Update(network);
+            SofFeed.Update(network);
+            OpsFeed.Update(network);
+            Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {

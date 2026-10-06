@@ -17,38 +17,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public static double Velocity(double altitude) => Math.Sqrt(GravitationalParameter / Radius(altitude));
 
-        /// <summary>Elevation of the satellite seen from a ground point at the given central angle.</summary>
-        public static double Elevation(double altitude, double centralAngle)
-        {
-            double ratio = EarthRadius / Radius(altitude);
-            return Math.Atan2(Math.Cos(centralAngle) - ratio, Math.Sin(centralAngle));
-        }
-
-        /// <summary>Angle at the satellite between nadir and the line of sight to the ground point.</summary>
-        public static double OffNadir(double altitude, double elevation)
-        {
-            double ratio = EarthRadius * Math.Cos(elevation) / Radius(altitude);
-            return Math.Asin(Clamp(ratio, -1.0, 1.0));
-        }
-
-        /// <summary>Incidence on level ground: the angle between local vertical and the line of sight.</summary>
-        public static double Incidence(double elevation) => Math.PI * 0.5 - elevation;
-
-        public static double SlantRange(double altitude, double centralAngle)
-        {
-            double r = Radius(altitude);
-            return Math.Sqrt(EarthRadius * EarthRadius + r * r - 2.0 * EarthRadius * r * Math.Cos(centralAngle));
-        }
-
-        /// <summary>Central angle reached by pointing <paramref name="offNadir"/> away from nadir.
-        /// Beyond the Earth limb the result is the limb itself.</summary>
-        public static double CentralAngleForOffNadir(double altitude, double offNadir)
-        {
-            double sine = Radius(altitude) / EarthRadius * Math.Sin(offNadir);
-            if (sine >= 1.0) return Math.PI * 0.5 - offNadir;
-            return Math.Asin(sine) - offNadir;
-        }
-
         public static double Clamp(double value, double min, double max) =>
             value < min ? min : value > max ? max : value;
     }
