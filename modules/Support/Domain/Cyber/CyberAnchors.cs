@@ -180,8 +180,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             SetPosition(kind, index, x, z);
         }
 
-        public float TruckReach(int index) => AnchorRules.Reach(Health(AnchorKind.EwTruck, index));
-
         public bool TruckLocked(int index, float now) => InRange(AnchorKind.EwTruck, index) && now < slots[0][index].LockUntil;
 
         /// <summary>The truck was traced: it cannot start intrusions for 90 s and its position is revealed to the enemy for 120 s.</summary>

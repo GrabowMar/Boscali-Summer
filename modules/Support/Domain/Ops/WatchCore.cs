@@ -38,8 +38,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         private readonly List<WatchLogRow> rows = new List<WatchLogRow>(Capacity);
         private int seq;
 
-        public int Newest => seq;
-
         public int Add(WatchDomain domain, WatchCode code, int a, int b)
         {
             if (seq == int.MaxValue) return seq;

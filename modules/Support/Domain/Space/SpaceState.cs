@@ -202,14 +202,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        public bool TryStart(BirdTask task, float now, float taskSeconds)
-        {
-            if (!SpaceRules.MissionTime(taskSeconds) || !TryReserve(task, now, out var reservation)) return false;
-            if (Commit(reservation, now, taskSeconds)) return true;
-            Cancel(reservation);
-            return false;
-        }
-
         public float CooldownRemaining(BirdTask task, float now) =>
             !SpaceRules.MissionTime(now) || !SpaceRules.TryBird(task, out _)
                 ? 0f : Math.Max(0f, cooldownUntil[(int)task] - now);

@@ -73,9 +73,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>A per-mission secret that never leaves the host: it salts the noise in the probable class shown before a verdict.</summary>
         public ulong Salt { get; private set; }
 
-        public SpaceCommandHost Commands => commands;
-        public SpaceSubscriptions Subscriptions => subs;
-
         public void ResetForScene()
         {
             commands.ResetForScene();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
@@ -35,7 +36,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.Pinned: return "NEGATIVE: TEAM PINNED — COVER IT FROM THE AIR";
                 case SofOutcome.Wounded: return "NEGATIVE: TEAM WOUNDED — RECOVERS IN " + Math.Max(0, detail) + " S";
                 case SofOutcome.NoAmmo: return "NEGATIVE: TEAM OUT OF AMMO — EXFIL TO A CAMP TO RESUPPLY";
-                case SofOutcome.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + Math.Max(0, detail) + " CR";
+                case SofOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: Math.Max(0, detail));
                 case SofOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case SofOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case SofOutcome.BadOrder: return "NEGATIVE: ORDER NOT POSSIBLE NOW — CHECK THE TEAM STATE";
@@ -117,7 +118,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public float X, Z, HomeX, HomeZ, DestX, DestZ, Exposure, Ammo = 100f;
         public bool HasDest, PushOn, HoldOn, Wounded, LiftWaiting, Carried, CarrierFlew;
         public Insertion Insert;
-        public float RaiseEndsAt, RecoverUntil, LostAt, PinDeadline, CoverUntil, LiftUntil, OnSiteStart, OnSiteEnd, LastScene;
+        public float RaiseEndsAt, RecoverUntil, LostAt, PinDeadline, CoverUntil, LiftUntil, OnSiteStart, OnSiteEnd;
         public TeamState PrePin;
         public MissionKind Mission;
         public int TargetId;

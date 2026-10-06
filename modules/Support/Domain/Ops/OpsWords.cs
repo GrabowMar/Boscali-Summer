@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Ops
@@ -52,7 +53,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 case OpOutcome.AnchorDown: return "NEGATIVE: ANCHOR DOWN — RESTORE IT TO CONTINUE";
                 case OpOutcome.Executing: return "NEGATIVE: COUNTDOWN RUNNING — PROTECT THE ANCHOR";
                 case OpOutcome.PlayerCap: return "NEGATIVE: YOUR SHARE IS CAPPED AT " + (detail > 0 ? detail : 30) + " % — LET OTHERS FUND";
-                case OpOutcome.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + Math.Max(0, detail) + " CR";
+                case OpOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: Math.Max(0, detail));
                 case OpOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case OpOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case OpOutcome.NotOwner: return "NEGATIVE: NOT YOUR OPERATION — ONLY ITS OWNER CHANGES OR CANCELS IT";

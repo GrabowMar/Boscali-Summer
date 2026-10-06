@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
@@ -36,7 +37,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case CyberOutcome.HeldCap: return "NEGATIVE: " + CyberRules.MaxHeldPerFaction + " NODES HELD — BURN OR DROP ONE";
                 case CyberOutcome.TruckDown: return "NEGATIVE: EW TRUCK DOWN — NO REACH UNTIL IT IS RESTORED";
                 case CyberOutcome.TruckLocked: return "NEGATIVE: EW TRUCK TRACED — LOCKED " + Math.Max(0, detail) + " S";
-                case CyberOutcome.LowCredit: return "NEGATIVE: LOW CREDIT — NEED " + Math.Max(0, detail) + " CR";
+                case CyberOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: Math.Max(0, detail));
                 case CyberOutcome.Frozen: return "NEGATIVE: CREDIT FROZEN — STAND BY";
                 case CyberOutcome.RateLimited: return "NEGATIVE: RATE LIMITED — SLOW DOWN";
                 case CyberOutcome.BoardFull: return "NEGATIVE: BOARD FULL — FIRE A POST OR DROP THE NODE";

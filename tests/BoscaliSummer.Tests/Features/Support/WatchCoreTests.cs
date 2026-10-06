@@ -101,7 +101,6 @@ namespace BoscaliSummer.Tests.Features.Support
             Eq(ring.CopyTo(rows), 3, "three rows kept");
             Eq(rows[0].Seq, 3, "oldest kept is 3");
             Eq(rows[2].Seq, 5, "newest is 5");
-            Eq(ring.Newest, 5, "newest sequence");
             ring.Add(WatchDomain.Ops, WatchCode.OpFund, 999, -4);
             rows.Clear(); ring.CopyTo(rows);
             Eq(rows[2].A, (byte)255, "arguments clamp to a byte");
@@ -109,7 +108,6 @@ namespace BoscaliSummer.Tests.Features.Support
             ring.Clear();
             rows.Clear();
             Eq(ring.CopyTo(rows), 0, "cleared");
-            Eq(ring.Newest, 0, "sequence restarts");
         }
 
         private static void CheckLead()
