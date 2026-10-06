@@ -83,7 +83,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             FieldRegistry.Clear();
             // R7: the saved pilots join every mission as ROOKIEs (re-read, so a hand edit or another machine's save shows).
             WingPilotRoster.StartMission(WingSavedPilots.Load().Records);
-            WingKillCredit.Reset();
             WingLedger.Reset();
             WingSupplyReserve.Reset();
             WingRequisition.Reset();
@@ -154,7 +153,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             LogEvents();
             WingTakeover.Tick();
             WingSearchAndRescue.Tick();
-            WingKillCredit.Tick();
         }
 
         public void FixedTick(float dt)

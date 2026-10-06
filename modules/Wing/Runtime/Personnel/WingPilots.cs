@@ -10,8 +10,7 @@ using Random = UnityEngine.Random;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
-    /// <summary>Squadron pilot record. The roster owns callsign generation; external providers can supply
-    /// complete records through Provide.</summary>
+    /// <summary>Squadron pilot record. The roster owns callsign generation.</summary>
     internal sealed class WingPilot
     {
         public string Name;
@@ -202,10 +201,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             Version++;
         }
-
-        /// <summary>Replaceable pilot factory; the default generates a random squadron identity. Other
-        /// systems obtain pilots through this provider.</summary>
-        public static Func<int, WingPilot> Provide = DefaultProvider;
 
         public static void Reset()
         {
@@ -409,7 +404,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingPilot pilot = null;
             try
             {
-                pilot = Provide != null ? Provide(created) : null;
+                pilot = DefaultProvider(created);
             }
             catch (Exception e)
             {

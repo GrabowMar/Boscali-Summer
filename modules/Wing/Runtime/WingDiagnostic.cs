@@ -6,7 +6,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         PatchesInstalled,
         MissionStarted,
         WingReset,
-        AiSettingsChanged,
         VerboseLoggingChanged,
     }
 
@@ -30,7 +29,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 case WingDiagnosticEvent.PatchesInstalled: return $"Harmony patches installed: count={Value}";
                 case WingDiagnosticEvent.MissionStarted: return $"Mission started: performanceMode={Value != 0}";
                 case WingDiagnosticEvent.WingReset: return $"Wing reset: previousMemberCount={Value}";
-                case WingDiagnosticEvent.AiSettingsChanged: return $"AI settings changed: sharpTurns={(Value & 1) != 0}, targetSpreading={(Value & 2) != 0}, missileWarningRepair={(Value & 4) != 0}";
                 case WingDiagnosticEvent.VerboseLoggingChanged: return $"Verbose logging enabled={Value != 0}";
                 default: return "Unknown mod diagnostic";
             }

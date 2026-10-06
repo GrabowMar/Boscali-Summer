@@ -171,8 +171,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private PilotStatus StatusOf(WingPilot p, out int n) => WmcPilots.StatusOf(p, wing, out n);
 
-        private WingMember MemberOf(WingPilot p) => WmcPilots.MemberOf(p, wing);
-
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
         /// <summary>A sub-page by its label (automation). "INSPECT" is the old name of AIRCRAFT.</summary>

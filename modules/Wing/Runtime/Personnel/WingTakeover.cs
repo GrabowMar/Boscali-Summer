@@ -231,7 +231,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 var go = new GameObject("Card" + i, typeof(RectTransform));
                 RectTransform rt = go.GetComponent<RectTransform>();
                 rt.SetParent(content, worldPositionStays: false);
-                WingUi.Place(rt, rect);
+                WmcDraw.Place(rt, rect);
 
                 WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), Fade(WingUi.Friendly, 0.58f));
 

@@ -51,8 +51,8 @@ namespace BoscaliSummer.Modules.Wing.Networking
         public static WingMirror Mirror { get; private set; }
 
         /// <summary>This game is a client of someone else's server (review M7b-1 I3); false until the manager is found.</summary>
-        public static bool ClientOnly => manager != null &&
-            NetRole.ClientOnly(manager.Server != null && manager.Server.Active, manager.Client != null && manager.Client.Active);
+        public static bool ClientOnly => manager != null && manager.Client != null && manager.Client.Active &&
+            !(manager.Server != null && manager.Server.Active);
 
         private static bool hooked;
         private static NetworkManagerNuclearOption manager;

@@ -101,7 +101,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static string Because(TransitionReason r) => r == TransitionReason.None ? "" : " (" + Words(r.ToString()) + ")";
 
         /// <summary>"NoTarget" → "no target".</summary>
-        private static string Words(string pascal)
+        internal static string Words(string pascal)
         {
             var sb = new StringBuilder(pascal.Length + 4);
             for (int i = 0; i < pascal.Length; i++)

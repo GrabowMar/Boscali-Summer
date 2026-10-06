@@ -76,24 +76,28 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void Dismiss() => WingOrders.Run(WingOrder.Of(OrderKind.Dismiss));
 
-        /// <summary>Escort the player's selected friendly unit (aircraft, vehicle or ship), else the nearest friendly
-        /// aircraft ahead within 5 km (spec M2 §6).</summary>
-        public static void EscortTarget()
+        /// <summary>The grid orders TACTICAL's grid and the call ladder run the same way. Detach and Dismiss differ per caller and stay at the call sites.</summary>
+        public static void RunGrid(GridOrder order, WingScope scope)
         {
-            if (!Ready(out WingService w)) return;
-            Aircraft player = w.Player;
-            if (player == null)
+            switch (order)
             {
-                WingToast.Show("Not flying");
-                return;
+                case GridOrder.Splash: Splash(scope); break;
+                case GridOrder.Engage: Engage(scope); break;
+                case GridOrder.MyTarget: AttackTarget(scope); break;
+                case GridOrder.Scout: ScoutAhead(scope); break;
+                case GridOrder.Break: Disengage(scope); break;
+                case GridOrder.ClearSix: ClearMySix(); break;
+                case GridOrder.FormUp: FormUp(scope); break;
+                case GridOrder.Patrol: PatrolHere(scope); break;
+                case GridOrder.Escort: EscortMe(); break;
+                case GridOrder.Call: Call(1); break;
+                case GridOrder.Bogey: BogeyDope(); break;
+                case GridOrder.Rtb: Rtb(scope); break;
+                case GridOrder.Refit: Refit(scope); break;
+                case GridOrder.TakeOff: TakeOff(scope); break;
+                case GridOrder.Rescue: Rescue(scope); break;
+                case GridOrder.Ecm: WingOrders.Run(WingOrder.Of(OrderKind.Ecm, scope)); break;
             }
-            Unit target = SelectedFriendly(player, w) ?? NearestFriendlyAhead(player, w);
-            if (target == null)
-            {
-                WingToast.Show("No friendly to escort");
-                return;
-            }
-            WingOrders.Run(new WingOrder { Kind = OrderKind.EscortTarget, Units = new[] { target.persistentID.Id } });
         }
 
         /// <summary>Takes command of the selected friendly aircraft, else the nearest one ahead (spec M3 §5).</summary>

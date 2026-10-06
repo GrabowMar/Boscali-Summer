@@ -14,8 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static byte[] layers;
         private static bool loadAttempted;
 
-        public static Sprite Sprite => For(null);
-
         /// <summary>Renders a semantic selection. Atlas tile IDs never escape the compositor.</summary>
         public static Sprite ForSelection(PortraitSelection selection)
         {

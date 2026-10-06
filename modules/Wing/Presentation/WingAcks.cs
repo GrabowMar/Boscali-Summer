@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static void Push(WingOrder o, OrderResult r)
         {
             if (o == null || o.Source != OrderSource.Player) return;
-            string what = r.Accepted && !string.IsNullOrEmpty(r.Ack) ? r.Ack : KindWord(o.Kind);
+            string what = r.Accepted && !string.IsNullOrEmpty(r.Ack) ? r.Ack : LogRows.Words(o.Kind.ToString()).ToUpperInvariant();
             Feed.Push(Time.unscaledTime, Who(o.Scope), what, r.Accepted, r.Accepted ? null : r.Reason);
         }
 
@@ -34,17 +34,5 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return AckWords.Who((byte)s.Kind, s.Element, first, count);
         }
 
-        /// <summary>"FORM UP" from FormUp: the kind's name with spaces before inner capitals.</summary>
-        private static string KindWord(OrderKind k)
-        {
-            string n = k.ToString();
-            var sb = new System.Text.StringBuilder(n.Length + 4);
-            for (int i = 0; i < n.Length; i++)
-            {
-                if (i > 0 && char.IsUpper(n[i])) sb.Append(' ');
-                sb.Append(char.ToUpperInvariant(n[i]));
-            }
-            return sb.ToString();
-        }
     }
 }

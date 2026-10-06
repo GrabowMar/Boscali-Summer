@@ -6,6 +6,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Core.Storage;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>The DEBRIEF's sortie (spec WMC rebuild §PLAN LOG and DEBRIEF): the wing's events folded as they come, kills credited by
@@ -65,11 +66,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Store.Add(Sortie.Lines(), Sortie.Theatre);
             try
             {
-                Directory.CreateDirectory(WingConfig.RecordsRoot);
-                string tmp = FilePath + ".tmp";
-                File.WriteAllText(tmp, Store.ToJson());
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-                File.Move(tmp, FilePath);
+                string json = Store.ToJson();
+                if (!AtomicFile.WriteAllText(FilePath, json, out string error))
+                    WingLog.Logger.LogWarning("[Debrief] could not save debrief.user.json: " + error);
             }
             catch (Exception e)
             {

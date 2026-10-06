@@ -172,7 +172,6 @@
 
   <ItemGroup Label="Wing assets (merged from Wing Command; logical names kept)">
     <EmbeddedResource Include="modules\Wing\Assets\Icons\*.png" LogicalName="WingCommand.Icons.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="modules\Wing\Assets\maneuvers.json" LogicalName="WingCommand.maneuvers.json" />
     <EmbeddedResource Include="modules\Wing\Assets\Data\formations.json" LogicalName="WingCommand.formations.json" />
     <EmbeddedResource Include="modules\Wing\Assets\Data\airframes.json" LogicalName="WingCommand.airframes.json" />
     <EmbeddedResource Include="modules\Wing\Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />

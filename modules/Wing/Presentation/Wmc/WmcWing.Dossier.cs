@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (last == null || p == null || client) return;
             WmcUi.Order(last, () =>
             {
-                WingMember m = MemberOf(p);
+                WingMember m = WmcPilots.MemberOf(p, wing);
                 if (m == null) return;
                 if (!releaseGate.Press(p.Callsign, Time.unscaledTime))
                 {

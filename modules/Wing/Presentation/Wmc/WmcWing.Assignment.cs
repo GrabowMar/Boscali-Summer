@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingPilot p = client ? null : inspected;
             int at = IndexOf(p);
             PilotStatus s = at >= 0 ? status[at] : PilotStatus.Free;
-            WingMember m = p != null && s == PilotStatus.Flying ? MemberOf(p) : null;
+            WingMember m = p != null && s == PilotStatus.Flying ? WmcPilots.MemberOf(p, wing) : null;
             int row = m != null ? WingRows.IndexOf(last.Rows, last.Count, m.Aircraft.persistentID.Id) : -1;
             InboundRow launch = default;
             bool isInbound = (s == PilotStatus.Flying || s == PilotStatus.Inbound) && FindLaunch(p, out launch);

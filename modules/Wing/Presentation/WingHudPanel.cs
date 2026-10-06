@@ -160,8 +160,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 chipText[i].color = state;
                 chipFrames[i].Paint(state.WithAlpha(0.16f), state.WithAlpha(0.6f));
                 float w = Mathf.Min(Width - Pad - 6f, chipText[i].preferredWidth + 12f);
-                WingUi.Place(chipFrames[i].rectTransform, new Rect(Pad, -height - 2f, w, ChipHeight));
-                WingUi.Place(chipText[i].rectTransform, new Rect(Pad + 6f, -height - 2f, w - 8f, ChipHeight));
+                WmcDraw.Place(chipFrames[i].rectTransform, new Rect(Pad, -height - 2f, w, ChipHeight));
+                WmcDraw.Place(chipText[i].rectTransform, new Rect(Pad + 6f, -height - 2f, w - 8f, ChipHeight));
                 height += ChipHeight + 3f;
             }
             if (shown > 0) height += 3f;

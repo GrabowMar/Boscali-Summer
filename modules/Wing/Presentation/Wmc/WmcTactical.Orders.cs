@@ -133,18 +133,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 WingScope scoped = last.Scope;
                 switch (cell.Order)
                 {
-                    case GridOrder.Splash: WingCommands.Splash(scoped); break;
-                    case GridOrder.Engage: WingCommands.Engage(scoped); break;
-                    case GridOrder.MyTarget: WingCommands.AttackTarget(scoped); break;
-                    case GridOrder.Scout: WingCommands.ScoutAhead(scoped); break;
-                    case GridOrder.Break: WingCommands.Disengage(scoped); break;
-                    case GridOrder.ClearSix: WingCommands.ClearMySix(); break;
-                    case GridOrder.FormUp: WingCommands.FormUp(scoped); break;
-                    case GridOrder.Patrol: WingCommands.PatrolHere(scoped); break;
-                    case GridOrder.Escort: WingCommands.EscortMe(); break;
                     case GridOrder.Detach: Detach(); break;
-                    case GridOrder.Call: WingCommands.Call(1); break;
-                    case GridOrder.Bogey: WingCommands.BogeyDope(); break;
                     case GridOrder.Dismiss:
                         if (!dismissGate.Press("dismiss", Time.unscaledTime))
                         {
@@ -153,11 +142,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                         }
                         WingCommands.Dismiss();
                         break;
-                    case GridOrder.Rtb: WingCommands.Rtb(scoped); break;
-                    case GridOrder.Refit: WingCommands.Refit(scoped); break;
-                    case GridOrder.TakeOff: WingCommands.TakeOff(scoped); break;
-                    case GridOrder.Rescue: WingCommands.Rescue(scoped); break;
-                    case GridOrder.Ecm: WingOrders.Run(WingOrder.Of(OrderKind.Ecm, scoped)); break;
+                    default: WingCommands.RunGrid(cell.Order, scoped); break;
                 }
                 FlashScope();
             });
@@ -219,7 +204,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (m.Released || !m.Alive || (object)m.Aircraft == null) continue;
                 uint id = m.Aircraft.persistentID.Id;
                 int i = WingRows.IndexOf(last.Rows, last.Count, id);
-                if (i < 0 || !InScope(last, last.Rows[i])) continue;
+                if (i < 0 || !last.InScope(last.Rows[i])) continue;
                 pos += m.Last.Pos;
                 vel += m.Last.Vel;
                 n++;
@@ -491,7 +476,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 if (float.IsNaN(m.JamUntil) || (object)m.Aircraft == null) continue;
                 int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
-                if (i >= 0 && InScope(c, c.Rows[i])) return true;
+                if (i >= 0 && c.InScope(c.Rows[i])) return true;
             }
             return false;
         }
@@ -504,7 +489,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 if (m.Released || (object)m.Aircraft == null || m.Profile == null || m.Profile.Class == AirframeClass.FixedWing) continue;
                 int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
-                if (i >= 0 && InScope(c, c.Rows[i])) return true;
+                if (i >= 0 && c.InScope(c.Rows[i])) return true;
             }
             return false;
         }

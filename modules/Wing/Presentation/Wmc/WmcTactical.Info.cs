@@ -132,7 +132,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 {
                     if (m.Released || !m.Alive || (object)m.Aircraft == null) continue;
                     int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
-                    if (i < 0 || !InScope(c, c.Rows[i])) continue;
+                    if (i < 0 || !c.InScope(c.Rows[i])) continue;
                     WmcDetail.Stores(m, ref storeScratch);
                     for (int st = 0; st < storeScratch.StoreCount; st++) FlightPool.Add(ref totals, storeScratch.Stores[st]);
                     only = m;

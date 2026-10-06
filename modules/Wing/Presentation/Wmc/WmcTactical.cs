@@ -143,8 +143,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return false;
         }
 
-        private static bool InScope(WmcContext c, in SnapshotMember m) => c.InScope(m);
-
         public void Shown(WmcContext c)
         {
             profileShown = null;
