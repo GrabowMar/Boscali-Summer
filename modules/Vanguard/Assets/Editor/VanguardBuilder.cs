@@ -51,6 +51,22 @@ namespace Vanguard
                 Description = "AEGIS-3 hard-kill self-defence pod. Three hit-to-kill darts drop clear, swing onto missiles closing from any direction inside 2 km and light their motors. Roughly two in three hits kill.",
                 Mass = 25, Yield = 3, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 70,
                 Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
+            new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A UGV Carrier", Short = "GLAIVE-A", Model = "Glaive",
+                Description = "Powered glide carrier. Flies up to 35 km to the target, comes in at 40 m and puts two Hexhound GMG robots on the ground beside it. Their batteries last four minutes.",
+                Mass = 900, Yield = 1, Cost = 1.2f, Value = 25, RadarSize = 0.4f, Thrust = 2500, BurnTime = 200, GLimit = 6, TurnRate = 15,
+                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S SAM Drop", Short = "GLAIVE-S", Model = "Glaive",
+                Description = "As GLAIVE-2A, carrying two Hexhound SAM robots: an instant short-range air-defence pocket behind the lines for four minutes.",
+                Mass = 950, Yield = 1, Cost = 1.6f, Value = 28, RadarSize = 0.4f, Thrust = 2500, BurnTime = 200, GLimit = 6, TurnRate = 15,
+                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_Orca", Name = "AGT-80 ORCA Glide Torpedo", Short = "ORCA", Model = "Orca",
+                Description = "Long-glide torpedo. Glides ~25 km toward a ship, enters the water 2 km out and runs at 90 m/s, 6 m deep, into the hull. Ships only; a hard turn in the last 300 m can beat it.",
+                Mass = 600, Yield = 450, Pierce = 600, Cost = 1.5f, Value = 30, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
+                Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple" } },
+            new Spec { Key = "VG_AleX", Name = "ALE-X Towed Decoy", Short = "ALE-X", Model = "AleX",
+                Description = "Fiber-towed decoy. Trails 100 m behind the aircraft; radar missiles tracking you may switch to it, mostly from the rear. Lost above 7 g, below 50 m or after five minutes.",
+                Mass = 20, Yield = 2, Cost = 0.05f, Value = 3, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
+                Racks = new string[0] }, // ALE-X gets its own two-decoy pod, see AleXPod()
         };
 
         public static void Run()
@@ -62,6 +78,7 @@ namespace Vanguard
             foreach (Spec spec in Missiles)
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
             AegisPod(infos["VG_AegisDart"], materials);
+            AleXPod(infos["VG_AleX"], materials);
             Lance(materials);
             AssetDatabase.SaveAssets();
             OpReferenceIndex.Refresh();
@@ -263,7 +280,7 @@ namespace Vanguard
                 P(s, "targetRequirements.minAlignment").floatValue = 180;
                 P(s, "targetRequirements.lineOfSight").boolValue = false;
                 // The AEGIS dart is never seen on a rack; the loadout shows its pod with darts.
-                P(s, "weaponIcon").objectReferenceValue = Icon(spec.Key == "VG_AegisDart" ? "AegisPod" : spec.Model);
+                P(s, "weaponIcon").objectReferenceValue = Icon(spec.Key == "VG_AegisDart" ? "AegisPod" : spec.Key == "VG_AleX" ? "AleXPod" : spec.Model);
             });
             Edit(def, s =>
             {
@@ -301,7 +318,7 @@ namespace Vanguard
             var seeker = g.GetComponent<OpticalSeekerCruiseMissile>();
             if (!seeker) throw new Exception("CruiseMissile1 donor lost its OpticalSeekerCruiseMissile");
             // Decoys, drones and darts must not trip the enemy's missile warning; HAWC-X should.
-            seeker.triggerMissileWarning = spec.Key == "VG_HawcX";
+            seeker.triggerMissileWarning = spec.Key == "VG_HawcX" || spec.Key == "VG_Orca";
             EditorUtility.SetDirty(seeker);
 
             var b = VisualBounds(visual);
@@ -371,6 +388,39 @@ namespace Vanguard
             }
             Edit(mount, s => P(s, "ammo").intValue = AegisCells.Length);
             // Compact enough for the self-protection stations that carry flare and ECM pods.
+            SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
+        }
+
+        // ALE-X: two decoys in aft tubes, released backward onto the fiber. = BuildVanguard.py ALEX_CELLS.
+        static readonly Vector3[] AleXCells = { new Vector3(0.06f, 0f, -0.7f), new Vector3(-0.06f, 0f, -0.7f) };
+
+        static void AleXPod(WeaponInfo info, Dictionary<string, Material> materials)
+        {
+            const string donor = "AGM_heavy_single";
+            const string json = "VG_AleX_Pod";
+            var mount = Copy<WeaponMount>(donor, "WM_" + json);
+            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
+            g.name = json;
+            HideRenderers(g);
+            var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
+            Vector3 home = first.transform.localPosition;
+            Visual(first.transform.parent, "AleXPod", materials).transform.localPosition = home;
+            for (int i = 0; i < AleXCells.Length; i++)
+            {
+                var cell = i == 0 ? first : UnityEngine.Object.Instantiate(first, first.transform.parent);
+                cell.name = "AleXCell" + i;
+                cell.transform.localPosition = home + AleXCells[i];
+                cell.transform.localRotation = Quaternion.identity;
+                Edit(cell, s =>
+                {
+                    P(s, "info").objectReferenceValue = info;
+                    P(s, "railDirection").enumValueIndex = 4; // Backward
+                    P(s, "railLength").floatValue = 0.8f;
+                    P(s, "railSpeed").floatValue = 6f;
+                    P(s, "railDelay").floatValue = 0f;
+                });
+            }
+            Edit(mount, s => P(s, "ammo").intValue = AleXCells.Length);
             SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
         }
 
