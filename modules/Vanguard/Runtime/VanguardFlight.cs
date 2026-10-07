@@ -100,6 +100,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Drone: return 360f;
                 case VanguardRole.Interceptor: return 6f;
                 case VanguardRole.Torpedo: return 400f;
+                case VanguardRole.Carrier: return 300f;
                 case VanguardRole.Glider: return 900f;
                 default: return 600f;
             }
@@ -116,6 +117,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Drone: PlanDrone(pos); break;
                 case VanguardRole.Interceptor: PlanIntercept(pos); break;
                 case VanguardRole.Torpedo: PlanTorpedo(pos); break;
+                case VanguardRole.Carrier: PlanCarrier(pos); break;
             }
         }
 
@@ -229,6 +231,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), InterceptKillRadius)) return;
             if (target is Missile threat && Random.value < InterceptKillChance) threat.Detonate(Vector3.up, false, false);
             Detonate();
+        }
+
+        // Shallow glide to the target, 40 m over the last 1.5 km, then deploy two UGVs and scuttle the shell.
+        private void PlanCarrier(GlobalPosition pos)
+        {
+            GlobalPosition aim = TargetPosition(out _);
+            Vector3 to = aim - pos;
+            float flat = new Vector2(to.x, to.z).magnitude;
+            if (CarrierProfile.ShouldRelease(flat, missile.radarAlt))
+            {
+                int placed = PayloadRelease.Drop(VanguardKeys.PayloadOf(missile.definition.jsonKey), pos,
+                    missile.rb.velocity, missile.NetworkHQ, CarrierProfile.PayloadCount);
+                if (placed == 0) Plugin.Logger?.LogInfo("[Vanguard] GLAIVE release found no dry flat ground; carrier scuttled");
+                Detonate();
+                return;
+            }
+            GlobalPosition point = aim;
+            point.y = aim.y + CarrierProfile.Height(flat);
+            missile.SetAimpoint(point, Vector3.zero);
         }
 
         // Air phase: glide along the ship's predicted track and reach the water EntryRange short of it.
