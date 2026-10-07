@@ -48,9 +48,9 @@ namespace Vanguard
                 Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 30, GLimit = 25, TurnRate = 18,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
-                Description = "Hard-kill self-defence pod. Six hit-to-kill darts fire automatically at missiles closing inside 3 km.",
+                Description = "AEGIS-3 hard-kill self-defence pod. Three hit-to-kill darts drop clear, swing onto missiles closing from any direction inside 2 km and light their motors. Roughly two in three hits kill.",
                 Mass = 25, Yield = 3, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 70,
-                Racks = new string[0] }, // AEGIS gets its own six-cell pod, see AegisPod()
+                Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
         };
 
         public static void Run()
@@ -114,7 +114,8 @@ namespace Vanguard
             foreach (string file in Directory.GetFiles(src))
             {
                 string name = Path.GetFileName(file);
-                if (name.EndsWith(".fbx") || name.EndsWith("_Albedo.png") || name.EndsWith("_Normal.png") || name.EndsWith("_MetalGloss.png"))
+                if (name.EndsWith(".fbx") || name.EndsWith("_Albedo.png") || name.EndsWith("_Normal.png") || name.EndsWith("_MetalGloss.png")
+                    || name.EndsWith("_Icon.png"))
                     File.Copy(file, R + "Models/" + name, true);
             }
             AssetDatabase.Refresh();
@@ -133,12 +134,24 @@ namespace Vanguard
                     importer.materialImportMode = ModelImporterMaterialImportMode.None;
                     importer.SaveAndReimport();
                 }
+                else if (path.EndsWith("_Icon.png"))
+                {
+                    // Vanilla weapon icons: 512x256 white line art on black, sampled as a UI sprite.
+                    var icon = (TextureImporter)AssetImporter.GetAtPath(path);
+                    icon.textureType = TextureImporterType.Sprite;
+                    icon.spriteImportMode = SpriteImportMode.Single;
+                    icon.sRGBTexture = true;
+                    icon.mipmapEnabled = false;
+                    icon.maxTextureSize = 512;
+                    icon.textureCompression = TextureImporterCompression.Uncompressed;
+                    icon.SaveAndReimport();
+                }
                 else if (path.EndsWith(".png"))
                 {
                     var tex = (TextureImporter)AssetImporter.GetAtPath(path);
                     tex.textureType = path.EndsWith("_Normal.png") ? TextureImporterType.NormalMap : TextureImporterType.Default;
                     tex.sRGBTexture = path.EndsWith("_Albedo.png");
-                    tex.maxTextureSize = 1024;
+                    tex.maxTextureSize = 2048; // BuildVanguard.py bakes 2048 for the 4-7 m airframes, 1024 otherwise
                     tex.textureCompression = TextureImporterCompression.CompressedHQ;
                     tex.mipmapEnabled = true;
                     tex.anisoLevel = 4;
@@ -219,6 +232,8 @@ namespace Vanguard
             return g;
         }
 
+        static Sprite Icon(string model) => Load<Sprite>(R + "Models/" + model + "_Icon.png");
+
         static Bounds VisualBounds(GameObject visual)
         {
             var rs = visual.GetComponentsInChildren<Renderer>(true);
@@ -247,6 +262,8 @@ namespace Vanguard
                 P(s, "targetRequirements.maxRange").floatValue = spec.Key == "VG_HawcX" ? 600000 : 150000;
                 P(s, "targetRequirements.minAlignment").floatValue = 180;
                 P(s, "targetRequirements.lineOfSight").boolValue = false;
+                // The AEGIS dart is never seen on a rack; the loadout shows its pod with darts.
+                P(s, "weaponIcon").objectReferenceValue = Icon(spec.Key == "VG_AegisDart" ? "AegisPod" : spec.Model);
             });
             Edit(def, s =>
             {
@@ -278,6 +295,8 @@ namespace Vanguard
                 var motor = P(s, "motors").GetArrayElementAtIndex(0);
                 motor.FindPropertyRelative("thrust").floatValue = spec.Thrust;
                 motor.FindPropertyRelative("burnTime").floatValue = spec.BurnTime;
+                // AEGIS darts cold-launch: they fall clear unpowered while VanguardFlight slews them.
+                if (spec.Key == "VG_AegisDart") motor.FindPropertyRelative("delayTimer").floatValue = 0.45f;
             });
             var seeker = g.GetComponent<OpticalSeekerCruiseMissile>();
             if (!seeker) throw new Exception("CruiseMissile1 donor lost its OpticalSeekerCruiseMissile");
@@ -318,6 +337,11 @@ namespace Vanguard
             SaveMount(g, mount, json, info, donor);
         }
 
+        // AEGIS-3: three darts ride visibly under the pod and eject straight down (MountedMissile rail
+        // Down), so remaining ammo reads at a glance. Offsets mirror the cradles in BuildVanguard.py.
+        static readonly Vector3[] AegisCells =
+            { new Vector3(-0.13f, -0.095f, 0.15f), new Vector3(0f, -0.095f, 0.15f), new Vector3(0.13f, -0.095f, 0.15f) };
+
         static void AegisPod(WeaponInfo info, Dictionary<string, Material> materials)
         {
             const string donor = "AGM_heavy_single";
@@ -329,17 +353,25 @@ namespace Vanguard
             var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
             Vector3 home = first.transform.localPosition;
             Visual(first.transform.parent, "AegisPod", materials).transform.localPosition = home;
-            // Six darts sit in the pod tubes; the pod skin hides them, so they carry no visual.
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < AegisCells.Length; i++)
             {
                 var cell = i == 0 ? first : UnityEngine.Object.Instantiate(first, first.transform.parent);
-                float a = Mathf.PI * 2f * i / 6f;
                 cell.name = "AegisCell" + i;
-                cell.transform.localPosition = home + new Vector3(Mathf.Cos(a) * 0.12f, Mathf.Sin(a) * 0.12f, 0.6f);
-                Edit(cell, s => P(s, "info").objectReferenceValue = info);
+                cell.transform.localPosition = home + AegisCells[i];
+                cell.transform.localRotation = Quaternion.identity;
+                Visual(cell.transform, "AegisInterceptor", materials);
+                Edit(cell, s =>
+                {
+                    P(s, "info").objectReferenceValue = info;
+                    P(s, "railDirection").enumValueIndex = 1; // Down
+                    P(s, "railLength").floatValue = 0.35f;
+                    P(s, "railSpeed").floatValue = 4f;
+                    P(s, "railDelay").floatValue = 0f;
+                });
             }
-            Edit(mount, s => P(s, "ammo").intValue = 6);
-            SaveMount(g, mount, json, info, donor);
+            Edit(mount, s => P(s, "ammo").intValue = AegisCells.Length);
+            // Compact enough for the self-protection stations that carry flare and ECM pods.
+            SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
         }
 
         static void Lance(Dictionary<string, Material> materials)
@@ -357,6 +389,7 @@ namespace Vanguard
                 P(s, "blastDamage").floatValue = 25;
                 P(s, "dragCoef").floatValue = 0.05f;
                 P(s, "costPerRound").floatValue = 0.02f;
+                P(s, "weaponIcon").objectReferenceValue = Icon("Lance");
             });
             var mount = Copy<WeaponMount>(donor, "WM_" + json);
             var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
@@ -366,6 +399,11 @@ namespace Vanguard
             foreach (var gun in g.GetComponentsInChildren<Gun>(true))
                 Edit(gun, s =>
                 {
+                    // Fire from the model's lit bore, not the donor 57 mm barrel. = BuildVanguard.py lance() muzzle.
+                    var muzzles = P(s, "muzzles");
+                    for (int i = 0; i < muzzles.arraySize; i++)
+                        if (muzzles.GetArrayElementAtIndex(i).objectReferenceValue is Transform t)
+                            t.position = g.transform.TransformPoint(new Vector3(0f, 0f, 2.62f));
                     P(s, "info").objectReferenceValue = info;
                     P(s, "fireRate").floatValue = 30;
                     P(s, "magazineCapacity").intValue = 12;

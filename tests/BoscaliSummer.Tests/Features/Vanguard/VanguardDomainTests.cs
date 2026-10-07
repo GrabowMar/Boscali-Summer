@@ -30,13 +30,13 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(Mathf.Abs(DecoyRoute.Lateral(0f)) <= DecoyRoute.WeaveAmplitude, "weave stays inside its amplitude");
 
             var picker = new InterceptPicker();
-            var threats = new List<ThreatView> { new ThreatView(1, 2500f, 600f), new ThreatView(2, 1200f, 700f),
-                new ThreatView(3, 900f, -50f), new ThreatView(4, 100f, 900f) };
+            var threats = new List<ThreatView> { new ThreatView(1, 1800f, 600f), new ThreatView(2, 1200f, 700f),
+                new ThreatView(3, 900f, -50f), new ThreatView(4, 200f, 900f), new ThreatView(5, 2500f, 900f) };
             TestAssert.That(picker.Pick(0f, threats) == 2, "nearest closing threat in envelope wins");
             picker.Fired(0f, 2);
-            TestAssert.That(picker.Pick(1f, threats) == -1, "cooldown holds the next shot");
-            TestAssert.That(picker.Pick(2f, threats) == 1, "an engaged threat is not double-tapped");
-            TestAssert.That(picker.Pick(7f, threats) == 2, "a survivor is re-engaged after the memory lapses");
+            TestAssert.That(picker.Pick(2f, threats) == -1, "cooldown holds the next shot");
+            TestAssert.That(picker.Pick(4f, threats) == 1, "an engaged threat is not double-tapped");
+            TestAssert.That(picker.Pick(9f, threats) == 2, "a survivor is re-engaged after the memory lapses");
 
             TestAssert.That(SeductionRule.Seduces("ARH", 3000f, 0.1f) && !SeductionRule.Seduces("IR", 3000f, 0.1f),
                 "only radar seekers are seduced");

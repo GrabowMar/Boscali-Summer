@@ -13,7 +13,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     {
         private const float PlanInterval = 0.2f;
         private const float EffectInterval = 0.5f;
-        private const float InterceptKillRadius = 25f;
+        private const float InterceptKillRadius = 12f;
+        private const float InterceptKillChance = 0.7f;
+        // Cold launch: the dart falls clear unpowered (motor delayTimer in the bundle), slewing its nose
+        // onto the intercept point so it lights already pointed at threats from any direction.
+        private const float DropPhase = 0.55f;
+        private const float DropSlewDegPerSec = 540f;
         private const float JamRange = 25000f;
         private const float JamConeCos = 0.5f; // 60 deg half-angle
 
@@ -56,7 +61,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
-            if (role == VanguardRole.Interceptor) CheckIntercept();
+            if (role == VanguardRole.Interceptor)
+            {
+                if (missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
+                CheckIntercept();
+            }
             float now = Time.timeSinceLevelLoad;
             if (now >= nextPlan)
             {
@@ -84,7 +93,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (role)
             {
                 case VanguardRole.Drone: return 360f;
-                case VanguardRole.Interceptor: return 8f;
+                case VanguardRole.Interceptor: return 6f;
                 case VanguardRole.Glider: return 900f;
                 default: return 600f;
             }
@@ -195,11 +204,23 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.SetAimpoint(tPos + tVel * tgo, tVel);
         }
 
+        private void SlewDuringDrop()
+        {
+            if (target == null || target.disabled) return;
+            Rigidbody rb = missile.rb;
+            Vector3 tVel = target.rb != null ? target.rb.velocity : Vector3.zero;
+            Vector3 to = target.GlobalPosition() + tVel * 0.5f - missile.GlobalPosition();
+            if (to.sqrMagnitude < 1f) return;
+            Quaternion want = Quaternion.LookRotation(to.normalized, Vector3.up);
+            rb.angularVelocity = Vector3.zero;
+            rb.MoveRotation(Quaternion.RotateTowards(rb.rotation, want, DropSlewDegPerSec * Time.fixedDeltaTime));
+        }
+
         private void CheckIntercept()
         {
             if (target == null || target.disabled) return;
             if (!FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), InterceptKillRadius)) return;
-            if (target is Missile threat) threat.Detonate(Vector3.up, false, false);
+            if (target is Missile threat && Random.value < InterceptKillChance) threat.Detonate(Vector3.up, false, false);
             Detonate();
         }
 

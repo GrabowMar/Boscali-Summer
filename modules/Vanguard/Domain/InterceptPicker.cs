@@ -19,10 +19,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>AEGIS fire control: nearest closing threat in range, one interceptor per threat, global cooldown.</summary>
     internal sealed class InterceptPicker
     {
-        public const float MaxRange = 3000f;
-        public const float MinRange = 150f;
-        public const float Cooldown = 1.5f;
-        public const float EngagementMemory = 6f;
+        public const float MaxRange = 2000f;
+        public const float MinRange = 250f; // the dart needs room to drop, turn and light
+        public const float Cooldown = 3f;
+        public const float EngagementMemory = 8f;
 
         private readonly Dictionary<int, float> engaged = new Dictionary<int, float>();
         private float nextShot;
