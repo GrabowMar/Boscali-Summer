@@ -181,7 +181,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     status: Read(a => Upper(a.countermeasureManager.GetActiveCountermeasure()?.displayName, 16))))
                 .Add(Leaf("radar", "RADAR", AceIcon.Radar, With(a => a.CmdToggleRadar()),
                     visible: When(a => a.radar != null),
-                    status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))));
+                    status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))))
+                .Add(Leaf("drone-strike", "DRONES: STRIKE", AceIcon.Strike, () => Service<IDroneCommand>()?.Strike(),
+                    visible: () => Service<IDroneCommand>() is IDroneCommand d && !d.Striking,
+                    enabled: () => Service<IDroneCommand>()?.CanStrike == true,
+                    status: () => Service<IDroneCommand>()?.CanStrike == true ? new AceRadialStatus("ON TARGET", AceTone.Active)
+                        : new AceRadialStatus("NO TARGET", AceTone.Caution)))
+                .Add(Leaf("drone-screen", "DRONES: SCREEN", AceIcon.Defence, () => Service<IDroneCommand>()?.Screen(),
+                    visible: () => Service<IDroneCommand>()?.Striking == true,
+                    status: () => new AceRadialStatus("STRIKING", AceTone.Caution)));
         }
 
         private static AceRadialStatus FlareStatus(Aircraft a)

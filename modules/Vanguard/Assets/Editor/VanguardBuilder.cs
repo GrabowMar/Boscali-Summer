@@ -1,0 +1,442 @@
+// Builds Vanguard.nobp from vanilla donors + the Blender models (BuildVanguard.py output).
+//   Unity -batchmode -quit -projectPath <bp> -executeMethod Vanguard.VanguardBuilder.Run
+// Env: VG_MODELS (folder with the *.fbx), VG_OUT (where Vanguard.nobp is copied).
+// Recipe follows Circuit-Breaker: copy donor ScriptableObjects, clone donor prefabs, hide donor
+// renderers, attach our FBX, re-point references, then one OpAddWeaponToHardpoint per rack that
+// reuses every hardpoint the donor rack is allowed on. Prefabs carry vanilla components only;
+// behaviour lives in BoscaliSummer.dll (modules/Vanguard/Runtime) keyed on the jsonKeys below.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Blueprinter;
+using UnityEditor;
+using UnityEngine;
+
+namespace Vanguard
+{
+    public static class VanguardBuilder
+    {
+        const string R = "Assets/Blueprinter/Mods/Vanguard/";
+        const string D = "Assets/Blueprinter/_donotship/";
+        const string Version = "0.1.0";
+
+        // Keep in sync with modules/Vanguard/Domain/VanguardKeys.cs.
+        sealed class Spec
+        {
+            public string Key, Name, Short, Model, Description;
+            public float Mass, Yield, Pierce, Cost, Value, RadarSize, Thrust, BurnTime, GLimit, TurnRate;
+            public string[] Racks;
+        }
+
+        static readonly Spec[] Missiles =
+        {
+            new Spec { Key = "VG_MaldX", Name = "ADM-160X MALD-X", Short = "MALD-X", Model = "MaldX",
+                Description = "Miniature air-launched decoy. Flies a weaving 80 km route with a fighter-sized radar signature, then orbits. Radar-guided missiles chasing the launcher may switch to it.",
+                Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 0.6f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
+                Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldX",
+                Description = "Jammer decoy. As MALD-X, and jams every enemy radar inside a 60 degree cone ahead of it out to 25 km.",
+                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 600, GLimit = 6, TurnRate = 12,
+                Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
+                Description = "Attritable escort drone. Holds a wing slot on the launcher and draws radar-guided missiles. On STRIKE it dives into the launcher's target with a 60 kg warhead. Six-minute endurance.",
+                Mass = 450, Yield = 60, Pierce = 300, Cost = 0.8f, Value = 40, RadarSize = 0.15f, Thrust = 4200, BurnTime = 360, GLimit = 9, TurnRate = 25,
+                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_HawcX", Name = "HAWC-X Hypersonic Glide Vehicle", Short = "HAWC-X", Model = "HawcX",
+                Description = "Boost-glide strike weapon. Climbs to 25 km at Mach 8, skips and weaves along the edge of space, then dives near-vertically onto the target.",
+                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 30, GLimit = 25, TurnRate = 18,
+                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+            new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
+                Description = "Hard-kill self-defence pod. Six hit-to-kill darts fire automatically at missiles closing inside 3 km.",
+                Mass = 25, Yield = 3, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 70,
+                Racks = new string[0] }, // AEGIS gets its own six-cell pod, see AegisPod()
+        };
+
+        public static void Run()
+        {
+            ImportModels();
+            var materials = Materials();
+            var infos = new Dictionary<string, WeaponInfo>();
+            foreach (Spec spec in Missiles) infos[spec.Key] = Missile(spec, materials);
+            foreach (Spec spec in Missiles)
+                foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
+            AegisPod(infos["VG_AegisDart"], materials);
+            Lance(materials);
+            AssetDatabase.SaveAssets();
+            OpReferenceIndex.Refresh();
+            Build();
+        }
+
+        // ------------------------------------------------------------------ helpers
+
+        static T Load<T>(string p) where T : UnityEngine.Object =>
+            AssetDatabase.LoadAssetAtPath<T>(p) ?? throw new Exception("Missing " + p);
+
+        static SerializedProperty P(SerializedObject s, string n) =>
+            s.FindProperty(n) ?? throw new Exception(s.targetObject.name + " missing " + n);
+
+        static void Edit(UnityEngine.Object o, Action<SerializedObject> a)
+        {
+            var s = new SerializedObject(o);
+            a(s);
+            s.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(o);
+        }
+
+        static T Copy<T>(string donor, string name) where T : UnityEngine.Object
+        {
+            string p = R + name + ".asset";
+            if (!File.Exists(p) && !AssetDatabase.CopyAsset(D + "MonoBehaviour/" + donor + "_PLACEHOLDER.asset", p))
+                throw new Exception("copy failed " + donor);
+            var o = Load<T>(p);
+            o.name = name;
+            return o;
+        }
+
+        static GameObject Clone(string path)
+        {
+            var g = UnityEngine.Object.Instantiate(Load<GameObject>(path));
+            g.name = g.name.Replace("(Clone)", "");
+            return g;
+        }
+
+        static void HideRenderers(GameObject g)
+        {
+            foreach (var r in g.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+            foreach (var l in g.GetComponentsInChildren<LODGroup>(true)) UnityEngine.Object.DestroyImmediate(l);
+        }
+
+        static void ImportModels()
+        {
+            string src = Environment.GetEnvironmentVariable("VG_MODELS") ?? throw new Exception("VG_MODELS not set");
+            Directory.CreateDirectory(R + "Models");
+            foreach (string file in Directory.GetFiles(src))
+            {
+                string name = Path.GetFileName(file);
+                if (name.EndsWith(".fbx") || name.EndsWith("_Albedo.png") || name.EndsWith("_Normal.png") || name.EndsWith("_MetalGloss.png"))
+                    File.Copy(file, R + "Models/" + name, true);
+            }
+            AssetDatabase.Refresh();
+            foreach (string file in Directory.GetFiles(R + "Models"))
+            {
+                string path = file.Replace('\\', '/');
+                if (path.EndsWith(".fbx"))
+                {
+                    var importer = (ModelImporter)AssetImporter.GetAtPath(path);
+                    importer.globalScale = 1f;
+                    importer.useFileUnits = false;
+                    importer.bakeAxisConversion = true;
+                    importer.importNormals = ModelImporterNormals.Import;
+                    importer.importTangents = ModelImporterTangents.CalculateMikk;
+                    importer.animationType = ModelImporterAnimationType.None;
+                    importer.materialImportMode = ModelImporterMaterialImportMode.None;
+                    importer.SaveAndReimport();
+                }
+                else if (path.EndsWith(".png"))
+                {
+                    var tex = (TextureImporter)AssetImporter.GetAtPath(path);
+                    tex.textureType = path.EndsWith("_Normal.png") ? TextureImporterType.NormalMap : TextureImporterType.Default;
+                    tex.sRGBTexture = path.EndsWith("_Albedo.png");
+                    tex.maxTextureSize = 1024;
+                    tex.textureCompression = TextureImporterCompression.CompressedHQ;
+                    tex.mipmapEnabled = true;
+                    tex.anisoLevel = 4;
+                    tex.SaveAndReimport();
+                }
+            }
+        }
+
+        static Material MakeMaterial(string name, Action<Material> setup)
+        {
+            Directory.CreateDirectory(R + "Materials");
+            string p = R + "Materials/" + name + ".mat";
+            var lit = Shader.Find("Universal Render Pipeline/Lit");
+            var m = AssetDatabase.LoadAssetAtPath<Material>(p);
+            if (!m)
+            {
+                m = new Material(lit) { name = name };
+                AssetDatabase.CreateAsset(m, p);
+            }
+            m.shader = lit;
+            setup(m);
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        static Dictionary<string, Material> Materials() => new Dictionary<string, Material>
+        {
+            ["Dark"] = MakeMaterial("Vanguard_Dark", m =>
+            {
+                m.SetColor("_BaseColor", new Color(0.05f, 0.05f, 0.055f));
+                m.SetFloat("_Metallic", 0.4f);
+                m.SetFloat("_Smoothness", 0.4f);
+            }),
+            ["Glass"] = MakeMaterial("Vanguard_Glass", m =>
+            {
+                m.SetColor("_BaseColor", new Color(0.02f, 0.03f, 0.04f));
+                m.SetFloat("_Metallic", 0.9f);
+                m.SetFloat("_Smoothness", 0.95f);
+            }),
+            ["Glow"] = MakeMaterial("Vanguard_Glow", m =>
+            {
+                m.SetColor("_BaseColor", new Color(0.1f, 0.6f, 1f));
+                m.SetFloat("_Smoothness", 0.7f);
+                m.EnableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", new Color(0.25f, 0.8f, 1f) * 4f);
+                m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+            }),
+        };
+
+        // One textured skin per model: baked albedo, panel-line normal map, metal (R) / smoothness (A).
+        static Material Skin(string model) => MakeMaterial("Skin_" + model, m =>
+        {
+            m.SetColor("_BaseColor", Color.white);
+            m.SetTexture("_BaseMap", Load<Texture2D>(R + "Models/" + model + "_Albedo.png"));
+            m.SetTexture("_BumpMap", Load<Texture2D>(R + "Models/" + model + "_Normal.png"));
+            m.SetFloat("_BumpScale", 1f);
+            m.EnableKeyword("_NORMALMAP");
+            m.SetTexture("_MetallicGlossMap", Load<Texture2D>(R + "Models/" + model + "_MetalGloss.png"));
+            m.EnableKeyword("_METALLICSPECGLOSSMAP");
+            m.SetFloat("_Smoothness", 1f);
+        });
+
+        // BuildVanguard.py joins each model into parts named Skin / Glow / Glass / Dark.
+        static GameObject Visual(Transform parent, string model, Dictionary<string, Material> materials)
+        {
+            var g = Clone(R + "Models/" + model + ".fbx");
+            g.name = "VanguardVisual";
+            g.transform.SetParent(parent, false);
+            g.transform.localPosition = Vector3.zero;
+            g.transform.localRotation = Quaternion.identity;
+            foreach (var t in g.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = parent.gameObject.layer;
+            var skin = Skin(model);
+            foreach (var r in g.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                var mat = materials.TryGetValue(r.name, out var shared) ? shared : skin;
+                r.sharedMaterials = Enumerable.Repeat(mat, r.sharedMaterials.Length).ToArray();
+            }
+            return g;
+        }
+
+        static Bounds VisualBounds(GameObject visual)
+        {
+            var rs = visual.GetComponentsInChildren<Renderer>(true);
+            var b = rs[0].bounds;
+            foreach (var r in rs.Skip(1)) b.Encapsulate(r.bounds);
+            return b;
+        }
+
+        // ------------------------------------------------------------------ weapons
+
+        static WeaponInfo Missile(Spec spec, Dictionary<string, Material> materials)
+        {
+            var info = Copy<WeaponInfo>("info_CruiseMissile1", "WI_" + spec.Key);
+            var def = Copy<MissileDefinition>("CruiseMissile1", "Def_" + spec.Key);
+            Edit(info, s =>
+            {
+                P(s, "weaponName").stringValue = spec.Name;
+                P(s, "shortName").stringValue = spec.Short;
+                P(s, "description").stringValue = spec.Description;
+                P(s, "massPerRound").floatValue = spec.Mass;
+                P(s, "costPerRound").floatValue = spec.Cost;
+                P(s, "blastDamage").floatValue = spec.Yield;
+                P(s, "pierceDamage").floatValue = spec.Pierce;
+                P(s, "nuclear").boolValue = false;
+                P(s, "targetRequirements.minRange").floatValue = 0;
+                P(s, "targetRequirements.maxRange").floatValue = spec.Key == "VG_HawcX" ? 600000 : 150000;
+                P(s, "targetRequirements.minAlignment").floatValue = 180;
+                P(s, "targetRequirements.lineOfSight").boolValue = false;
+            });
+            Edit(def, s =>
+            {
+                P(s, "jsonKey").stringValue = spec.Key;
+                P(s, "unitName").stringValue = spec.Name;
+                P(s, "description").stringValue = spec.Description;
+                P(s, "mass").floatValue = spec.Mass;
+                P(s, "value").floatValue = spec.Value;
+                P(s, "radarSize").floatValue = spec.RadarSize;
+                P(s, "disabled").boolValue = false;
+            });
+
+            var g = Clone(D + "GameObject/CruiseMissile1_PLACEHOLDER.prefab");
+            g.name = spec.Key;
+            HideRenderers(g);
+            var visual = Visual(g.transform, spec.Model, materials);
+            var missile = g.GetComponent<Missile>();
+            Edit(missile, s =>
+            {
+                P(s, "info").objectReferenceValue = info;
+                P(s, "definition").objectReferenceValue = def;
+                P(s, "mass").floatValue = spec.Mass;
+                P(s, "blastYield").floatValue = spec.Yield;
+                P(s, "pierceDamage").floatValue = spec.Pierce;
+                P(s, "gLimit").floatValue = spec.GLimit;
+                P(s, "maxTurnRate").floatValue = spec.TurnRate;
+                if (spec.Key == "VG_HawcX") P(s, "supersonicDrag").floatValue = 0.35f; // waverider: holds Mach 8 in the glide
+                P(s, "foldingFins").arraySize = 0;
+                var motor = P(s, "motors").GetArrayElementAtIndex(0);
+                motor.FindPropertyRelative("thrust").floatValue = spec.Thrust;
+                motor.FindPropertyRelative("burnTime").floatValue = spec.BurnTime;
+            });
+            var seeker = g.GetComponent<OpticalSeekerCruiseMissile>();
+            if (!seeker) throw new Exception("CruiseMissile1 donor lost its OpticalSeekerCruiseMissile");
+            // Decoys, drones and darts must not trip the enemy's missile warning; HAWC-X should.
+            seeker.triggerMissileWarning = spec.Key == "VG_HawcX";
+            EditorUtility.SetDirty(seeker);
+
+            var b = VisualBounds(visual);
+            Edit(def, s =>
+            {
+                P(s, "length").floatValue = b.size.z;
+                P(s, "width").floatValue = b.size.x;
+                P(s, "height").floatValue = b.size.y;
+            });
+            PrefabUtility.SaveAsPrefabAsset(g, R + spec.Key + ".prefab");
+            UnityEngine.Object.DestroyImmediate(g);
+            var prefab = Load<GameObject>(R + spec.Key + ".prefab");
+            Edit(info, s => P(s, "weaponPrefab").objectReferenceValue = prefab);
+            Edit(def, s => P(s, "unitPrefab").objectReferenceValue = prefab);
+            return info;
+        }
+
+        static void Mount(Spec spec, WeaponInfo info, string donor, Dictionary<string, Material> materials)
+        {
+            string json = spec.Key + "_" + donor;
+            var mount = Copy<WeaponMount>(donor, "WM_" + json);
+            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
+            g.name = json;
+            HideRenderers(g);
+            // Keep the donor rack hardware visible; only its ammunition is replaced.
+            foreach (var r in g.GetComponentsInChildren<Renderer>(true))
+                if (!r.GetComponentInParent<MountedMissile>(true)) r.enabled = true;
+            foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
+            {
+                Visual(station.transform, spec.Model, materials);
+                Edit(station, s => P(s, "info").objectReferenceValue = info);
+            }
+            SaveMount(g, mount, json, info, donor);
+        }
+
+        static void AegisPod(WeaponInfo info, Dictionary<string, Material> materials)
+        {
+            const string donor = "AGM_heavy_single";
+            const string json = "VG_Aegis_Pod";
+            var mount = Copy<WeaponMount>(donor, "WM_" + json);
+            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
+            g.name = json;
+            HideRenderers(g);
+            var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
+            Vector3 home = first.transform.localPosition;
+            Visual(first.transform.parent, "AegisPod", materials).transform.localPosition = home;
+            // Six darts sit in the pod tubes; the pod skin hides them, so they carry no visual.
+            for (int i = 0; i < 6; i++)
+            {
+                var cell = i == 0 ? first : UnityEngine.Object.Instantiate(first, first.transform.parent);
+                float a = Mathf.PI * 2f * i / 6f;
+                cell.name = "AegisCell" + i;
+                cell.transform.localPosition = home + new Vector3(Mathf.Cos(a) * 0.12f, Mathf.Sin(a) * 0.12f, 0.6f);
+                Edit(cell, s => P(s, "info").objectReferenceValue = info);
+            }
+            Edit(mount, s => P(s, "ammo").intValue = 6);
+            SaveMount(g, mount, json, info, donor);
+        }
+
+        static void Lance(Dictionary<string, Material> materials)
+        {
+            const string donor = "gun_57mm_pod";
+            const string json = "VG_Lance_Pod";
+            var info = Copy<WeaponInfo>("Gun57mm_Pod", "WI_VG_Lance");
+            Edit(info, s =>
+            {
+                P(s, "weaponName").stringValue = "RG-12 LANCE Railgun";
+                P(s, "shortName").stringValue = "LANCE";
+                P(s, "description").stringValue = "Electromagnetic railgun pod. 3 km/s tungsten slugs punch through any armour; one round every two seconds, twelve in the magazine.";
+                P(s, "muzzleVelocity").floatValue = 3000;
+                P(s, "pierceDamage").floatValue = 4000;
+                P(s, "blastDamage").floatValue = 25;
+                P(s, "dragCoef").floatValue = 0.05f;
+                P(s, "costPerRound").floatValue = 0.02f;
+            });
+            var mount = Copy<WeaponMount>(donor, "WM_" + json);
+            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
+            g.name = json;
+            HideRenderers(g);
+            Visual(g.transform, "Lance", materials);
+            foreach (var gun in g.GetComponentsInChildren<Gun>(true))
+                Edit(gun, s =>
+                {
+                    P(s, "info").objectReferenceValue = info;
+                    P(s, "fireRate").floatValue = 30;
+                    P(s, "magazineCapacity").intValue = 12;
+                    P(s, "tracerColor").colorValue = new Color(0.3f, 0.8f, 1f);
+                    P(s, "tracerRatio").intValue = 1;
+                    P(s, "tracerSize").floatValue = 3f;
+                });
+            Edit(mount, s => P(s, "ammo").intValue = 12);
+            // Any station that takes a gun pod or a single heavy AGM can hang the pod.
+            SaveMount(g, mount, json, info, donor, "gun_30mm_rotary_pod", "AGM_heavy_single");
+        }
+
+        static void SaveMount(GameObject g, WeaponMount mount, string json, WeaponInfo info, params string[] donors)
+        {
+            PrefabUtility.SaveAsPrefabAsset(g, R + json + ".prefab");
+            UnityEngine.Object.DestroyImmediate(g);
+            Edit(mount, s =>
+            {
+                P(s, "jsonKey").stringValue = json;
+                P(s, "mountName").stringValue = info.weaponName + (mount.ammo > 1 ? " x" + mount.ammo : "");
+                P(s, "info").objectReferenceValue = info;
+                P(s, "prefab").objectReferenceValue = Load<GameObject>(R + json + ".prefab");
+                P(s, "mass").floatValue = info.massPerRound * Mathf.Max(1, mount.ammo);
+                P(s, "disabled").boolValue = false;
+            });
+            Carriers(json, donors);
+        }
+
+        // Every aircraft station that may carry the donor rack may carry ours.
+        static void Carriers(string json, string[] donors)
+        {
+            var op = ScriptableObject.CreateInstance<OpAddWeaponToHardpoint>();
+            op.weaponJsonKey = json;
+            var keys = new HashSet<string>(donors.Select(d => Load<WeaponMount>(D + "MonoBehaviour/" + d + "_PLACEHOLDER.asset").jsonKey));
+            foreach (string path in Directory.GetFiles(D + "MonoBehaviour", "*_PLACEHOLDER.asset"))
+            {
+                var aircraft = AssetDatabase.LoadAssetAtPath<AircraftDefinition>(path.Replace('\\', '/'));
+                if (!aircraft || !aircraft.unitPrefab) continue;
+                var manager = aircraft.unitPrefab.GetComponentInChildren<WeaponManager>(true);
+                if (!manager) continue;
+                var indices = new List<int>();
+                for (int i = 0; i < manager.hardpointSets.Length; i++)
+                    if (manager.hardpointSets[i].weaponOptions.Any(w => w && keys.Contains(w.jsonKey))) indices.Add(i);
+                if (indices.Count > 0)
+                    op.aircraft.Add(new OpAddWeaponToHardpoint.AircraftTarget { aircraftJsonKey = aircraft.jsonKey, hardpointIndices = indices });
+            }
+            if (op.aircraft.Count == 0) throw new Exception("no carrier offers " + string.Join("/", donors));
+            Debug.Log("[Vanguard] " + json + " -> " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
+            op.name = "Op_" + json;
+            string opPath = R + "Op_" + json + ".asset";
+            var old = AssetDatabase.LoadAssetAtPath<OpAddWeaponToHardpoint>(opPath);
+            if (old)
+            {
+                EditorUtility.CopySerialized(op, old);
+                UnityEngine.Object.DestroyImmediate(op);
+            }
+            else AssetDatabase.CreateAsset(op, opPath);
+        }
+
+        static void Build()
+        {
+            string outDir = Environment.GetEnvironmentVariable("VG_OUT") ?? throw new Exception("VG_OUT not set");
+            string delivery = Path.GetFullPath("Delivery~");
+            Directory.CreateDirectory(delivery);
+            var started = DateTime.UtcNow;
+            ModBuilder.Build("Vanguard", "Vanguard", Version, delivery);
+            string built = Path.Combine(delivery, "Vanguard_" + Version + ".nobp");
+            if (!File.Exists(built) || File.GetLastWriteTimeUtc(built) < started.AddSeconds(-1))
+                throw new Exception("fresh bundle was not produced");
+            File.Copy(built, Path.Combine(outDir, "Vanguard.nobp"), true);
+            Debug.Log("[Vanguard] BUNDLE_OK " + new FileInfo(built).Length + " bytes");
+        }
+    }
+}

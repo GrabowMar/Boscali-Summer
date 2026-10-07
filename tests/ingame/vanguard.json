@@ -1,0 +1,48 @@
+{
+  "name": "vanguard",
+  "mods": ["boscalisummer"],
+  "timeout_s": 300,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "FS-20 Vortex", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 3000, "speed": 220, "heading": 0 },
+    { "op": "spawn", "id": "bandit", "type": "FS-20 Vortex", "faction": "Primeva", "at": { "map": [0, 80000] }, "altitude": 3000, "speed": 200, "heading": 180 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "catalog" }, "store": "catalog" },
+
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "launch", "key": "VG_Remora" }, "store": "remora_launch" },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "launch", "key": "VG_MaldX" }, "store": "mald_launch" },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "launch", "key": "VG_HawcX" }, "store": "hawc_launch" },
+    { "op": "wait", "seconds": 15 },
+    { "op": "capture", "name": "remora-escort", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "status" }, "store": "escort" },
+
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "threat", "range": 2500 }, "store": "threat1" },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "launch", "key": "VG_AegisDart", "at": "threat" }, "store": "dart" },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "status" }, "store": "intercept" },
+
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "threat", "range": 6000 }, "store": "threat2" },
+    { "op": "wait", "seconds": 12 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "status" }, "store": "seduction" },
+
+    { "op": "wait", "seconds": 15 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "status" }, "store": "glide" },
+
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "strike" }, "store": "strike_order" },
+    { "op": "wait", "seconds": 25 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "status" }, "store": "strike" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "catalog.missiles", "min": 5 },
+    { "check": "result_above", "path": "catalog.mounts", "min": 10 },
+    { "check": "result_above", "path": "escort.VG_Remora_guided", "min": 1 },
+    { "check": "result_below", "path": "escort.VG_Remora_fromLead", "max": 300 },
+    { "check": "result_above", "path": "escort.VG_Remora_fromLead", "min": 40 },
+    { "check": "result_above", "path": "escort.VG_MaldX_fromLead", "min": 2000 },
+    { "check": "result_above", "path": "intercept.threatsGone", "min": 1 },
+    { "check": "result_above", "path": "intercept.VG_HawcX_topSpeed", "min": 1700 },
+    { "check": "result_above", "path": "intercept.VG_HawcX_altitude", "min": 12000 }
+  ]
+}

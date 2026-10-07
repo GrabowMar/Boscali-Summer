@@ -151,6 +151,7 @@ namespace BoscaliSummer.Core
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
+            if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             return modules.ToArray();
         }
 

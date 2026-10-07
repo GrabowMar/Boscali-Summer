@@ -1,0 +1,26 @@
+{
+  "name": "vanguard-showcase",
+  "mods": ["boscalisummer"],
+  "timeout_s": 180,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "FS-20 Vortex", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 1500, "speed": 200, "heading": 0 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "atmosphere", "time_of_day": 11, "conditions": 0.05, "cloud_height": 6000, "wind_speed": 1, "wind_turbulence": 0, "wind_heading": 90, "moon_phase": 14 },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "showcase" }, "store": "showcase" },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "view", "angle": "front" }, "store": "front" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "showcase-front", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "view", "angle": "rear" }, "store": "rear" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "showcase-rear", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step", "args": { "action": "view", "angle": "close" }, "store": "close" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "showcase-close", "hide_ui": true },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "showcase.shown", "min": 7 }
+  ]
+}

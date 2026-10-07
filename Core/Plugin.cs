@@ -7,6 +7,8 @@ using NOAvionics;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+    // Soft: Vanguard's embedded .nobp needs Blueprinter loaded first; everything else runs without it.
+    [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     // Avionics is compiled in; consumers already handle an unavailable optional Wing service.
     public sealed class Plugin : BaseUnityPlugin
     {
