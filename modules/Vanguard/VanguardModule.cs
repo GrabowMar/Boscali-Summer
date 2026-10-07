@@ -21,7 +21,8 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.AegisLockPatch)
+            typeof(Patches.AegisLockPatch),
+            typeof(Patches.TorpedoCollisionsPatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);

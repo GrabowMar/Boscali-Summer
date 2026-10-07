@@ -34,6 +34,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool fins;
         private float nextPlan;
         private float nextEffect;
+        private bool underwater;
+        private Vector3 swimHeading;
+        private float lostFor;
+        private float searchFor = -1f;
 
         public VanguardFlight(Missile missile, VanguardRole role, Unit target, GlobalPosition aimpoint, int slot)
         {
@@ -52,6 +56,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public VanguardRole Role => role;
         public Unit Launcher => launcher;
+        public Missile Missile => missile;
 
         public void Tick()
         {
@@ -85,7 +90,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
             if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            if (age > Lifetime() || (age > 10f && missile.speed < 60f)) Detonate();
+            if (age > Lifetime() || (age > 10f && missile.speed < 60f && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
         private float Lifetime()
@@ -94,6 +99,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 case VanguardRole.Drone: return 360f;
                 case VanguardRole.Interceptor: return 6f;
+                case VanguardRole.Torpedo: return 400f;
                 case VanguardRole.Glider: return 900f;
                 default: return 600f;
             }
@@ -109,6 +115,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Jammer: PlanDecoy(pos); break;
                 case VanguardRole.Drone: PlanDrone(pos); break;
                 case VanguardRole.Interceptor: PlanIntercept(pos); break;
+                case VanguardRole.Torpedo: PlanTorpedo(pos); break;
             }
         }
 
@@ -222,6 +229,86 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), InterceptKillRadius)) return;
             if (target is Missile threat && Random.value < InterceptKillChance) threat.Detonate(Vector3.up, false, false);
             Detonate();
+        }
+
+        // Air phase: glide along the ship's predicted track and reach the water EntryRange short of it.
+        private void PlanTorpedo(GlobalPosition pos)
+        {
+            if (underwater)
+            {
+                PlanSwim(pos);
+                return;
+            }
+            GlobalPosition aim = TargetPosition(out Vector3 tVel);
+            Vector3 to = aim - pos;
+            float flat = new Vector2(to.x, to.z).magnitude;
+            GlobalPosition point = aim + tVel * (flat / 250f);
+            point.y = flat > WaterRun.EntryRange ? Mathf.Clamp(flat * 0.05f, 30f, 2000f) : -5f;
+            missile.SetAimpoint(point, tVel);
+        }
+
+        // Water phase (5 Hz): home on the ship; lead it until StopLeadRange; snake-search when the track is lost.
+        private void PlanSwim(GlobalPosition pos)
+        {
+            bool tracking = target is Ship ship && !ship.disabled;
+            Vector3 to = tracking ? target.GlobalPosition() - pos : Vector3.zero;
+            Vector3 flatTo = new Vector3(to.x, 0f, to.z);
+            if (tracking && Vector3.Angle(swimHeading, flatTo) > 75f && flatTo.magnitude < 600f) tracking = false; // overran it
+            if (tracking)
+            {
+                lostFor = 0f;
+                searchFor = -1f;
+                Vector3 lead = flatTo.magnitude > WaterRun.StopLeadRange && target.rb != null
+                    ? flatTo + new Vector3(target.rb.velocity.x, 0f, target.rb.velocity.z) * (flatTo.magnitude / WaterRun.Speed)
+                    : flatTo;
+                swimHeading = lead.normalized;
+                return;
+            }
+            lostFor += PlanInterval;
+            if (lostFor < WaterRun.LostLimit) return;
+            searchFor = searchFor < 0f ? 0f : searchFor + PlanInterval;
+            if (searchFor > WaterRun.SearchTime)
+            {
+                Detonate();
+                return;
+            }
+            swimHeading = Quaternion.Euler(0f, WaterRun.SnakeYaw(searchFor) * PlanInterval, 0f) * swimHeading;
+        }
+
+        /// <summary>Called from Missile.DetectCollisions. True when the torpedo owns this physics tick (underwater).</summary>
+        public bool SwimTick()
+        {
+            if (missile.disabled) return false;
+            float y = (float)missile.GlobalPosition().y;
+            if (!underwater)
+            {
+                if (y > 0f) return false;
+                if (!WaterRun.Accepts(target is Ship ship && !ship.disabled))
+                {
+                    Detonate(); // never swim at a non-ship
+                    return true;
+                }
+                underwater = true;
+                VanguardStats.WaterEntries++;
+                Vector3 v0 = new Vector3(missile.rb.velocity.x, 0f, missile.rb.velocity.z);
+                swimHeading = v0.sqrMagnitude > 1f ? v0.normalized : missile.transform.forward;
+            }
+            Rigidbody rb = missile.rb;
+            Vector3 here = missile.transform.position;
+            if (Physics.Linecast(here, here + rb.velocity * Time.fixedDeltaTime * 1.1f, out RaycastHit hit,
+                (int)PhysicsLayers.ShipsMask | (int)PhysicsLayers.StaticsMask))
+            {
+                bool hull = ((1 << hit.collider.gameObject.layer) & (int)PhysicsLayers.ShipsMask) != 0;
+                if (hull) VanguardStats.ShipHits++;
+                missile.Detonate(hit.normal, hull, !hull);
+                return true;
+            }
+            Vector3 v = swimHeading * WaterRun.Speed;
+            v.y = rb.velocity.y + WaterRun.VerticalAccel(y, rb.velocity.y) * Time.fixedDeltaTime;
+            rb.velocity = v;
+            rb.angularVelocity = Vector3.zero;
+            rb.MoveRotation(Quaternion.LookRotation(new Vector3(v.x, v.y * 0.2f, v.z)));
+            return true;
         }
 
         private void Effects()

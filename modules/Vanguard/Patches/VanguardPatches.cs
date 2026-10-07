@@ -48,4 +48,16 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             if (__instance.IsServer) AegisService.Watch(__instance);
         }
     }
+
+    // ORCA underwater: skip vanilla water drag/detonation and run the torpedo instead (server-side flights only).
+    [HarmonyPatch(typeof(Missile), "DetectCollisions")]
+    internal static class TorpedoCollisionsPatch
+    {
+        private static bool Prefix(Missile __instance)
+        {
+            if (__instance == null || !VanguardRegistry.TryGet(__instance, out VanguardFlight flight) ||
+                flight.Role != VanguardRole.Torpedo) return true;
+            return !flight.SwimTick();
+        }
+    }
 }
