@@ -11,6 +11,7 @@
     <Compile Include="..\..\Core\Contracts\PortraitRole.cs" Link="Framework\PortraitRole.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Personnel\PilotPortraitGenerator.cs" Link="Features\Wing\PilotPortraitGenerator.cs" />
     <Compile Include="..\..\modules\Weather\Domain\*.cs" LinkBase="Features\Weather" />
+    <Compile Include="..\..\modules\Vanguard\Domain\*.cs" LinkBase="Features\Vanguard" />
     <Compile Include="..\..\modules\Weather\Audio\EnvironmentAudioMath.cs" Link="Features\Weather\EnvironmentAudioMath.cs" />
     <Compile Include="..\..\modules\Immersion\Audio\CanopyWindMath.cs" Link="Features\Immersion\CanopyWindMath.cs" />
     <Compile Include="..\..\modules\Support\Domain\Calls\*.cs" LinkBase="Features\Support\Calls" />

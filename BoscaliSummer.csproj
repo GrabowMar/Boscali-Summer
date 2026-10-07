@@ -27,7 +27,7 @@
 
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
-    <Compile Include="modules\**\*.cs" />
+    <Compile Include="modules\**\*.cs" Exclude="modules\**\Assets\Editor\**" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics, engine-free sources under Pure/). Wing Command was merged in as modules/Wing/, so this
          is the only copy: the bezel registry and map-input picker coordinate panels
@@ -113,6 +113,12 @@
     <EmbeddedResource Include="AvionicsUi\avionics.nightops.avss"><LogicalName>NOAvionics.avionics.nightops.avss</LogicalName></EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Vanguard Blueprinter bundle">
+    <!-- Built by modules/Vanguard/Assets/Editor/VanguardBuilder.cs; Blueprinter loads any *.nobp resource. -->
+    <EmbeddedResource Include="modules\Vanguard\Assets\Vanguard.nobp" Condition="Exists('modules\Vanguard\Assets\Vanguard.nobp')">
+      <LogicalName>BoscaliSummer.Vanguard.nobp</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
     <!-- FUI fonts, icon font and UI shaders, built by tools/Compile-AvionicsUiAssets.ps1
          (Unity 2022.3.62f3). Optional at build time: without it the kit uses vanilla fonts
