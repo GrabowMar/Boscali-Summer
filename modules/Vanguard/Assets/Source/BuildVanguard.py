@@ -25,7 +25,7 @@ sys.path.insert(0, os.environ.get("NOMOD_BLENDER_PYLIBS", os.path.join(
 from PIL import Image, ImageDraw, ImageFont
 
 TEX = 1024
-MODEL_TEX = {"Remora": 2048, "HawcX": 2048, "Lance": 2048}  # 4-7 m airframes get double density
+MODEL_TEX = {"Remora": 2048, "HawcX": 2048, "Lance": 2048, "Glaive": 2048}  # 4-7 m airframes get double density
 ICON_TMP = os.path.join(tempfile.gettempdir(), "vanguard_icon_lines")  # build scratch, never shipped
 SKIN, GLOW, GLASS, DARK = "Skin", "Vanguard_Glow", "Vanguard_Glass", "Vanguard_Dark"
 
@@ -1049,6 +1049,103 @@ def lance(m):
     }
 
 
+def glaive(m):
+    """GLAIVE-2: 4.5 m UGV glide carrier. Flat-bottomed chined lifting body, pop-out wing, canted twin tails,
+    clamshell split along the spine, ventral payload doors, chin EO window. No warhead: no yellow band."""
+    def crisp(name, size, loc, mat, rot=(0, 0, 0)):
+        return box(name, size, loc, mat, rot, chamfer=0.008)
+
+    loft("Hull", [
+        (-2.25, 0.18, 0.12, 0.10, 0.0, 2.6, 4.0, 0.8),
+        (-1.9, 0.34, 0.22, 0.20, 0.0, 3.0, 5.0, 0.7),
+        (1.2, 0.34, 0.22, 0.20, 0.0, 3.0, 5.0, 0.7),
+        (1.9, 0.20, 0.15, 0.13, -0.01, 2.6, 4.0, 0.8),
+        (2.25, 0.03, 0.03, 0.03, -0.02, 2.0, 2.0, 1.2),
+    ], m[SKIN], rings=26, n=24, tip=True, cap_tail=True)
+    surface("Wing", [(0.3, 0.35, 0.2, 1.1, 0.06), (2.1, -0.35, 0.22, 0.45, 0.05)], m[SKIN], mirror="x")
+    fin("Tail", (-1.5, 0, 0.6, 0.06), (-2.0, 0.42, 0.28, 0.05), m[SKIN], cant=30, x=0.24, z=0.16, mirror=True)
+    crisp("EoWindow", (0.12, 0.2, 0.012), (0.0, 1.7, -0.148), m[GLASS])
+    crisp("WingPivot", (0.2, 0.3, 0.04), (0.0, 0.25, 0.225), m[SKIN])
+    tube("Exhaust", [(-2.33, 0.075, 0, 0), (-2.2, 0.09, 0, 0)], m[DARK], n=16)  # sustainer nozzle
+    lugs(-0.35, 0.35, 0.24, m[DARK])
+    return {
+        "color": (0.43, 0.45, 0.44), "metal": 0.12, "smooth": 0.3, "grime": 0.12, "wear": (0.6, 0.6, 0.58),
+        "underside": [(-0.6, (0.3, 0.31, 0.32))],
+        "lines": [plane_y(y) for y in (-1.6, -0.6, 0.6, 1.5)] + [plane_x(0.0, -1.9, 1.3, (0.15, 9))],
+        "hatches": [(-1.4, 1.0, -0.2, 0.2, False), (-1.7, -1.2, -0.12, 0.12, True)],
+        "stencils": [("GLAIVE-2", -1.25, -0.35, 0.02, 0.1, 0.25, (0.14, 0.15, 0.16))],
+        "smooth_angle": 30, "view": (1.0, 0.75, 0.35),
+    }
+
+
+def orca(m):
+    """ORCA AGT-80: 3.1 m HAAWC-style long-glide torpedo. Dark olive torpedo with blunt sonar nose, X tail fins
+    and pump-jet shroud, strapped under a grey glide kit (spine, pop-out wing)."""
+    tube("Torpedo", [(-1.45, 0.11, 0, 0), (-1.3, 0.16, 0, 0), (1.15, 0.165, 0, 0), (1.3, 0.15, 0, 0)],
+         m[SKIN], n=24, cap0=True, cap1=False)
+    loft("SonarNose", [(y, r, r, r, 0, 2, 2, 2) for y, r in ((1.29, 0.152), (1.42, 0.12), (1.48, 0.06), (1.5, 0.01))],
+         m[DARK], rings=8, n=24, tip=True, cap_tail=False)
+    tube("PumpJet", [(-1.62, 0.15, 0, 0), (-1.42, 0.17, 0, 0)], m[SKIN], n=24)
+    for i in range(4):
+        a = math.pi / 4 + math.pi / 2 * i
+        o = fin(f"TailFin{i}", (-1.28, 0, 0.18, 0.08), (-1.34, 0.07, 0.12, 0.06), m[SKIN])[0]
+        o.rotation_euler = (0, -a, 0)
+        o.location = (0.15 * math.sin(a), 0, 0.15 * math.cos(a))
+    box("KitSpine", (0.12, 2.0, 0.07), (0.0, 0.1, 0.19), m[SKIN], chamfer=0.006)
+    surface("KitWing", [(0.06, 0.55, 0.24, 0.32, 0.06), (1.35, 0.35, 0.25, 0.18, 0.05)], m[SKIN], mirror="x")
+    lugs(-0.35, 0.35, 0.225, m[DARK])
+    return {
+        "color": (0.26, 0.29, 0.25), "metal": 0.15, "smooth": 0.35, "grime": 0.1, "wear": (0.5, 0.52, 0.48),
+        "patches": [((-3, -3, 0.15), (3, 3, 1), (0.46, 0.48, 0.48))],              # glide kit grey
+        "bands": [(0.3, 0.38, 0.2, (0.85, 0.66, 0.08)),                           # yellow: live warhead
+                  (-0.95, -0.88, 0.2, (0.45, 0.28, 0.14))],                       # brown: propulsion
+        "lines": [plane_y(y) for y in (-1.2, -0.5, 0.25, 0.85)],
+        "stencils": [("AGT-80 ORCA", -0.8, 0.15, -0.05, 0.05, 0.15, (0.85, 0.82, 0.6))],
+        "smooth_angle": 30, "view": (1.0, 0.7, 0.35),
+    }
+
+
+def alex(m):
+    """ALE-X: 0.95 m towed fiber decoy. Slim body, dark radome, X tail fins, aft fiber port. Blue: inert/decoy."""
+    tube("Body", [(-0.42, 0.045, 0, 0), (0.3, 0.05, 0, 0)], m[SKIN], n=16)
+    loft("Radome", [(y, r, r, r, 0, 2, 2, 2) for y, r in ((0.3, 0.05), (0.42, 0.035), (0.48, 0.004))],
+         m[DARK], rings=6, n=16, tip=True, cap_tail=False)
+    for i in range(4):
+        a = math.pi / 4 + math.pi / 2 * i
+        o = fin(f"TailFin{i}", (-0.28, 0, 0.12, 0.06), (-0.36, 0.05, 0.06, 0.05), m[SKIN])[0]
+        o.rotation_euler = (0, -a, 0)
+        o.location = (0.045 * math.sin(a), 0, 0.045 * math.cos(a))
+    tube("FiberPort", [(-0.47, 0.012, 0, 0), (-0.42, 0.012, 0, 0)], m[DARK], n=8)
+    return {
+        "color": (0.5, 0.52, 0.5), "metal": 0.15, "smooth": 0.35, "grime": 0.08,
+        "bands": [(-0.05, 0.0, 0.06, (0.12, 0.3, 0.75))],                         # blue: inert / decoy
+        "lines": [plane_y(y) for y in (-0.2, 0.1)], "line_width": 0.003,
+        "view": (1.0, 0.6, 0.45),
+    }
+
+
+ALEX_CELLS = [(0.06, -0.7, 0.0), (-0.06, -0.7, 0.0)]  # = VanguardBuilder.AleXCells (Unity x, z, y)
+
+
+def alex_pod(m):
+    """ALE-X pod: 1.7 m self-protection pod, two aft launch tubes, ventral fiber-reel housing."""
+    loft("Pod", [(-0.82, 0.12, 0.1, 0.1, 0, 2.4, 2.4, 1.6), (-0.6, 0.13, 0.13, 0.13, 0, 2.2, 2.2, 1.8),
+                 (0.55, 0.13, 0.13, 0.13, 0, 2.2, 2.2, 1.8), (0.85, 0.02, 0.02, 0.02, 0, 2, 2, 2)],
+         m[SKIN], rings=16, n=20, tip=True, cap_tail=True)
+    for side in (1, -1):
+        box(f"Tube{side}", (0.07, 0.02, 0.07), (side * 0.06, -0.825, 0.0), m[DARK], chamfer=0.004)
+    loft("ReelHousing", [(-0.45, 0.06, 0.01, 0.05, -0.12, 2, 3, 1.4), (0.2, 0.06, 0.01, 0.05, -0.12, 2, 3, 1.4)],
+         m[SKIN], rings=4, n=12, tip=False, cap_tail=True)
+    lugs(-0.25, 0.25, 0.13, m[DARK])
+    return {
+        "color": (0.44, 0.46, 0.47), "metal": 0.12, "smooth": 0.3, "grime": 0.1,
+        "lines": [plane_y(y) for y in (-0.55, 0.0, 0.5)] + [plane_x(0.0, -0.6, 0.6, (0.05, 9))],
+        "hatches": [(-0.3, 0.1, -0.06, 0.06, True)],
+        "stencils": [("ALE-X", -0.45, 0.05, -0.02, 0.04, 0.12, (0.14, 0.15, 0.16))],
+        "view": (1.0, -0.6, 0.35),
+    }
+
+
 MODELS = {
     "Remora": remora,
     "MaldX": mald,
@@ -1056,6 +1153,10 @@ MODELS = {
     "AegisInterceptor": interceptor,  # before the pod: its preview loads the dart .blend
     "AegisPod": aegis_pod,
     "Lance": lance,
+    "Glaive": glaive,
+    "Orca": orca,
+    "AleX": alex,
+    "AleXPod": alex_pod,
 }
 
 
