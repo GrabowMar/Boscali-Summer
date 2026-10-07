@@ -66,6 +66,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
+            if (role == VanguardRole.Towed) HoldTow();
             if (role == VanguardRole.Interceptor)
             {
                 if (missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
@@ -101,6 +102,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Interceptor: return 6f;
                 case VanguardRole.Torpedo: return 400f;
                 case VanguardRole.Carrier: return 300f;
+                case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
                 default: return 600f;
             }
@@ -337,6 +339,49 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Decoy || role == VanguardRole.Jammer || role == VanguardRole.Drone)
                 SeduceThreats();
             if (role == VanguardRole.Jammer) JamRadars();
+            if (role == VanguardRole.Towed) SeduceTowed();
+        }
+
+        public void Scuttle() => Detonate();
+
+        // Ride the fiber: trail point behind and below the host, snapped by hard g or low height above ground.
+        private void HoldTow()
+        {
+            if (missile.disabled) return;
+            if (!(launcher is Aircraft host) || host.disabled || TowedTrail.Snaps(host.gForce, host.radarAlt))
+            {
+                Detonate();
+                return;
+            }
+            Transform h = host.transform;
+            Vector3 want = h.position + TowedTrail.Offset(h.forward, h.up);
+            Rigidbody rb = missile.rb;
+            rb.MovePosition(Vector3.Lerp(missile.transform.position, want, 0.25f));
+            rb.velocity = host.rb != null ? host.rb.velocity : rb.velocity;
+            rb.angularVelocity = Vector3.zero;
+            rb.MoveRotation(Quaternion.LookRotation(h.forward, h.up));
+        }
+
+        // Radar missiles tracking the host may jump to the decoy; rear-aspect shots far more often.
+        private void SeduceTowed()
+        {
+            if (!(launcher is Aircraft host) || host.disabled) return;
+            MissileWarning warning = host.GetMissileWarningSystem();
+            if (warning == null) return;
+            GlobalPosition hostPos = host.GlobalPosition();
+            Vector3 fwd = host.transform.forward;
+            var known = warning.knownMissiles;
+            for (int i = known.Count - 1; i >= 0; i--)
+            {
+                Missile threat = known[i];
+                if (threat == null || threat.disabled || threat.targetID.Id != host.persistentID.Id) continue;
+                Vector3 toThreat = threat.GlobalPosition() - hostPos;
+                float range = toThreat.magnitude;
+                float aspect = Vector3.Dot(fwd, toThreat / Mathf.Max(range, 1f));
+                if (!SeductionRule.SeducesTowed(threat.GetSeekerType(), range, aspect, Random.value)) continue;
+                threat.SetTarget(missile);
+                VanguardStats.Seductions++;
+            }
         }
 
         // Radar-guided missiles chasing the launcher may switch onto this airframe.

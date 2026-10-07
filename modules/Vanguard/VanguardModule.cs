@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Vanguard
         {
             context.AddSceneService<AegisService>(60);
             context.AddSceneService<PayloadLifetime>(60);
+            context.AddSceneService<Presentation.TowCable>(60);
             context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
         }
     }

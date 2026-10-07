@@ -13,6 +13,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             if (___missile == null || !___missile.LocalSim || ___missile.definition == null) return;
             VanguardRole role = VanguardKeys.RoleOf(___missile.definition.jsonKey);
             if (role == VanguardRole.None) return;
+            if (role == VanguardRole.Towed) VanguardRegistry.CutTowed(___missile.owner);
             int slot = role == VanguardRole.Drone ? VanguardRegistry.NextDroneSlot(___missile.owner) : 0;
             VanguardRegistry.Add(___missile, new VanguardFlight(___missile, role, target, aimpoint, slot));
         }
