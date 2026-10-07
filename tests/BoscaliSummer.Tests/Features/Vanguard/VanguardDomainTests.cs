@@ -42,6 +42,35 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 "only radar seekers are seduced");
             TestAssert.That(!SeductionRule.Seduces("ARH", 9000f, 0.1f) && !SeductionRule.Seduces("ARH", 3000f, 0.9f),
                 "range and the roll both gate seduction");
+
+            TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Glaive2A) == VanguardRole.Carrier &&
+                VanguardKeys.RoleOf(VanguardKeys.Glaive2S) == VanguardRole.Carrier &&
+                VanguardKeys.RoleOf(VanguardKeys.Orca) == VanguardRole.Torpedo &&
+                VanguardKeys.RoleOf(VanguardKeys.AleX) == VanguardRole.Towed, "batch-2 keys get their roles");
+            TestAssert.That(VanguardKeys.PayloadOf(VanguardKeys.Glaive2A) == "UGV1_grenade" &&
+                VanguardKeys.PayloadOf(VanguardKeys.Glaive2S) == "UGV1_SAMx1" &&
+                VanguardKeys.PayloadOf(VanguardKeys.Orca) == null, "only GLAIVE carries a payload");
+
+            TestAssert.That(CarrierProfile.Height(20000f) > CarrierProfile.Height(5000f) &&
+                CarrierProfile.Height(1000f) == CarrierProfile.ReleaseHeight, "glide slope, then 40 m inside 1.5 km");
+            TestAssert.That(CarrierProfile.ShouldRelease(250f, 60f) && !CarrierProfile.ShouldRelease(250f, 300f) &&
+                !CarrierProfile.ShouldRelease(900f, 40f), "release needs both close range and low height");
+
+            TestAssert.That(WaterRun.VerticalAccel(0f, 0f) < 0f && WaterRun.VerticalAccel(-12f, 0f) > 0f &&
+                Mathf.Abs(WaterRun.VerticalAccel(WaterRun.Depth, 0f)) < 1e-3f, "depth spring holds -6 m");
+            TestAssert.That(WaterRun.Accepts(true) && !WaterRun.Accepts(false), "ORCA swims only at ships");
+            TestAssert.That(Mathf.Abs(WaterRun.SnakeYaw(1f)) <= 30f && Mathf.Abs(WaterRun.SnakeYaw(1f)) > 25f &&
+                Mathf.Abs(WaterRun.SnakeYaw(0f)) < 1e-3f, "snake search swings +/-30 deg");
+
+            Vector3 trail = TowedTrail.Offset(Vector3.forward, Vector3.up);
+            TestAssert.That(trail == new Vector3(0f, -8f, -100f), "decoy trails 100 m behind, 8 m below");
+            TestAssert.That(TowedTrail.Snaps(7.5f, 500f) && TowedTrail.Snaps(2f, 40f) && !TowedTrail.Snaps(4f, 500f),
+                "cable snaps above 7 g or below 50 m");
+
+            TestAssert.That(SeductionRule.SeducesTowed("ARH", 2000f, -0.8f, 0.3f) &&
+                !SeductionRule.SeducesTowed("ARH", 2000f, 0.8f, 0.3f) &&
+                !SeductionRule.SeducesTowed("IR", 2000f, -0.8f, 0.01f) &&
+                !SeductionRule.SeducesTowed("ARH", 4000f, -0.8f, 0.01f), "towed decoy: radar, close, rear-biased");
         }
     }
 }
