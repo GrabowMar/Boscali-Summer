@@ -25,6 +25,11 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     status: CallStatus))
                 .Add(Leaf("clear", "CLEAR MARK", AceIcon.Clear, () => Service<ICameraTargetService>()?.Clear(),
                     visible: () => Service<ICameraTargetService>()?.HasMark == true))
+                .Add(Leaf("skywell", "SKYWELL", AceIcon.Support, () => Service<ISkywellControl>()?.Toggle(),
+                    visible: () => Service<ISkywellControl>()?.Carried == true,
+                    status: () => Service<ISkywellControl>() is ISkywellControl k
+                        ? new AceRadialStatus((k.Deployed ? "DEPLOYED  " : "STOWED  ") + k.Stock, k.Deployed ? AceTone.Active : AceTone.Normal)
+                        : AceRadialStatus.None))
                 .WithChildren(ContributedPage);
         }
 
