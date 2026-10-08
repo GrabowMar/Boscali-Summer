@@ -1236,92 +1236,148 @@ TELE_STAGES = 4
 
 
 def skywell(m):
-    """SKYWELL roll-on refuel/rearm kit: pallet, hose-drum unit, munitions rack and two articulated telescoping
-    arms (FuelArm, CargoArm) that reach out of the open ramp. Nose +Y, ramp -Y. Joint names are runtime API."""
-    def crisp(name, size, loc, mat, rot=(0, 0, 0), ch=0.012):
+    """SKYWELL roll-on refuel/rearm kit, after real roll-on AAR kits and KUKA-class arms (see
+    docs/superpowers/specs/2026-10-08-skywell-visual-reference.md): two tandem 463L pallets, strapped capsule tank,
+    pump skid with filter-separator and flanged JP-8 plumbing, wide hose drum with level-wind, and two articulated
+    telescoping arms (fuel nozzle / munitions gripper). Nose +Y, ramp -Y. Joint names are runtime API."""
+    def crisp(name, size, loc, mat, rot=(0, 0, 0), ch=0.01):
         return box(name, size, loc, mat, rot, chamfer=ch)
 
-    # Pallet deck, rails, tie-downs
-    crisp("Deck", (2.6, 4.4, 0.22), (0.0, 0.0, 0.11), m[SKIN], ch=0.02)
+    def ycyl(name, rings, mat, n=16):
+        return tube(name, rings, mat, n=n)
+
+    for k, cy in enumerate((1.4, -1.4)):
+        crisp(f"Pallet{k}", (2.24, 2.74, 0.05), (0.0, cy, 0.025), m[SKIN], ch=0.008)
+        for side in (1, -1):
+            crisp(f"RailX{k}{side}", (0.05, 2.74, 0.05), (side * 1.095, cy, 0.075), m[SKIN], ch=0.006)
+            crisp(f"RailY{k}{side}", (2.24, 0.05, 0.05), (0.0, cy + side * 1.345, 0.075), m[SKIN], ch=0.006)
+            for t in range(5):
+                crisp(f"Ring{k}{side}{t}", (0.07, 0.04, 0.03), (side * 1.06, cy - 1.1 + t * 0.55, 0.11), m[DARK], ch=0.004)
+    tank = [(0.45, 0.12), (0.5, 0.3), (0.62, 0.42), (0.8, 0.46), (2.0, 0.46), (2.18, 0.42), (2.3, 0.3), (2.35, 0.12)]
+    ycyl("Tank", [(y, r, 0.0, 0.62) for y, r in tank], m[SKIN], n=24)
+    for y in (0.95, 1.85):
+        crisp(f"Saddle{y}", (0.86, 0.14, 0.2), (0.0, y, 0.15), m[SKIN], ch=0.008)
+        ycyl(f"Strap{y}", [(y - 0.03, 0.475, 0.0, 0.62), (y + 0.03, 0.475, 0.0, 0.62)], m[DARK], n=24)
+    cylinder("Manway", 0.16, 0.06, (0.0, 1.4, 1.1), m[SKIN], verts=16)
+    for i in range(8):
+        a_ = 2 * math.pi * i / 8
+        cylinder(f"ManBolt{i}", 0.014, 0.03, (0.13 * math.cos(a_), 1.4 + 0.13 * math.sin(a_), 1.14), m[DARK], verts=6)
+    cylinder("Vent", 0.03, 0.28, (0.25, 1.9, 1.17), m[SKIN], verts=8)
+    cylinder("VentCap", 0.05, 0.04, (0.25, 1.9, 1.32), m[DARK], verts=8)
+    crisp("Skid", (0.7, 0.55, 0.08), (-0.55, 0.0, 0.09), m[SKIN])
+    ycyl("PumpMotor", [(-0.22, 0.13, -0.55, 0.3), (0.12, 0.13, -0.55, 0.3)], m[SKIN], n=14)
+    for r_ in range(3):
+        ycyl(f"MotorRib{r_}", [(-0.15 + r_ * 0.1, 0.145, -0.55, 0.3), (-0.13 + r_ * 0.1, 0.145, -0.55, 0.3)], m[DARK], n=14)
+    cylinder("Filter", 0.17, 0.7, (0.6, 0.05, 0.45), m[SKIN], verts=16)
+    sphere("FilterHead", 0.17, (0.6, 0.05, 0.8), m[SKIN], seg=12)
+    cylinder("FilterFlange", 0.2, 0.04, (0.6, 0.05, 0.62), m[DARK], verts=16)
+    ycyl("FuelLine", [(0.6, 0.045, 0.6, 0.2), (-0.7, 0.045, 0.6, 0.2)], m[SKIN], n=10)
+    for y in (0.35, -0.3):
+        ycyl(f"LineFlange{y}", [(y - 0.02, 0.07, 0.6, 0.2), (y + 0.02, 0.07, 0.6, 0.2)], m[DARK], n=10)
+    cylinder("ValveStem", 0.02, 0.18, (0.6, 0.0, 0.3), m[SKIN], verts=6)
+    cylinder("Handwheel", 0.1, 0.02, (0.6, 0.0, 0.4), m[DARK], verts=12)
+    xcyl("DrumHub", 0.25, 0.7, (0.0, -1.0, 0.85), m[SKIN], verts=20)
+    xcyl("HoseWrap", 0.6, 0.52, (0.0, -1.0, 0.85), m[DARK], verts=28)
     for side in (1, -1):
-        crisp(f"Rail{side}", (0.07, 4.4, 0.08), (side * 1.27, 0.0, 0.26), m[DARK])
-        for k in range(5):
-            crisp(f"TieDown{side}{k}", (0.12, 0.08, 0.05), (side * 1.18, -1.8 + k * 0.9, 0.245), m[DARK])
-    # Hose-drum unit (forward): drum, hose wrap, flanges, frame, pump
-    xcyl("Drum", 0.55, 1.5, (0.0, 1.55, 0.85), m[SKIN], verts=28)
-    xcyl("HoseWrap", 0.585, 1.3, (0.0, 1.55, 0.85), m[DARK], verts=28)
+        xcyl(f"Flange{side}", 0.75, 0.04, (side * 0.3, -1.0, 0.85), m[SKIN], verts=32)
+        for h in range(6):
+            a_ = 2 * math.pi * h / 6
+            xcyl(f"Hole{side}{h}", 0.1, 0.045, (side * 0.3, -1.0 + 0.48 * math.cos(a_), 0.85 + 0.48 * math.sin(a_)), m[DARK], verts=10)
+        crisp(f"DrumPost{side}", (0.08, 0.3, 0.85), (side * 0.42, -1.0, 0.45), m[SKIN])
+    xcyl("ReelMotor", 0.2, 0.3, (0.65, -1.0, 0.85), m[SKIN], verts=16)
+    xcyl("ReelGearbox", 0.15, 0.2, (0.88, -1.0, 0.85), m[SKIN], verts=16)
+    crisp("ChainGuard", (0.06, 0.55, 0.3), (0.5, -1.0, 0.6), m[DARK])
+    for z in (0.32, 0.44):
+        xcyl(f"LevelWind{z}", 0.04, 0.8, (0.0, -1.85, z), m[SKIN], verts=10)
     for side in (1, -1):
-        xcyl(f"Flange{side}", 0.66, 0.06, (side * 0.76, 1.55, 0.85), m[SKIN], verts=28)
-        crisp(f"DrumFrame{side}", (0.08, 1.45, 1.25), (side * 0.86, 1.55, 0.74), m[SKIN])
-    crisp("Pump", (1.3, 0.55, 0.5), (0.0, 0.55, 0.47), m[SKIN])
-    crisp("PumpGrille", (1.1, 0.02, 0.32), (0.0, 0.27, 0.47), m[DARK])
-    # Munitions rack: 4 cassettes in a frame, mid-deck
-    for i, (cx, cz) in enumerate(((0.33, 0.43), (-0.33, 0.43), (0.33, 0.8), (-0.33, 0.8))):
-        crisp(f"Cassette{i}", (0.5, 1.3, 0.32), (cx, -0.75, cz), m[SKIN])
-        crisp(f"CassetteRail{i}", (0.52, 1.32, 0.04), (cx, -0.75, cz + 0.17), m[DARK])
-    for y in (-1.42, -0.08):
-        crisp(f"RackFrame{y}", (1.25, 0.08, 1.05), (0.0, y, 0.62), m[SKIN])
-    # Two articulated arms
+        crisp(f"WindPost{side}", (0.05, 0.08, 0.45), (side * 0.42, -1.85, 0.3), m[SKIN])
     for suf, x, tip in SKYWELL_ARMS:
         sx = 1 if x > 0 else -1
-        with seg("Base" + suf, None, (x, -1.75, 0.22)):
-            cylinder("BaseDrum" + suf, 0.32, 0.34, (x, -1.75, 0.39), m[SKIN], verts=24)
-            cylinder("BaseRing" + suf, 0.35, 0.05, (x, -1.75, 0.56), m[DARK], verts=24)
-            crisp("ClevisL" + suf, (0.05, 0.36, 0.5), (x + 0.2, -1.75, 0.8), m[SKIN])
-            crisp("ClevisR" + suf, (0.05, 0.36, 0.5), (x - 0.2, -1.75, 0.8), m[SKIN])
-        with seg("Shoulder" + suf, "Base" + suf, (x, -1.75, 0.9)):
-            xcyl("ShoulderHub" + suf, 0.2, 0.36, (x, -1.75, 0.9), m[SKIN])
-            xcyl("ShoulderCap" + suf, 0.12, 0.42, (x, -1.75, 0.9), m[DARK])
-        with seg("UpperArm" + suf, "Shoulder" + suf, (x, -1.75, 0.9)):
-            crisp("UpperBeam" + suf, (0.26, 3.4, 0.3), (x, 0.0, 0.9), m[SKIN])
-            tube("RamBody" + suf, [(-1.45, 0.075, x + sx * 0.2, 0.78), (0.3, 0.075, x + sx * 0.2, 0.78)], m[DARK], n=12)
-            tube("RamRod" + suf, [(0.3, 0.04, x + sx * 0.2, 0.78), (1.35, 0.04, x + sx * 0.2, 0.78)], m[SKIN], n=10)
-            tube("UpperCable" + suf, [(-1.6, 0.025, x - sx * 0.1, 1.08), (1.6, 0.025, x - sx * 0.1, 1.08)], m[DARK], n=8)
-        with seg("Forearm" + suf, "UpperArm" + suf, (x, 1.75, 1.25)):
-            xcyl("ElbowHub" + suf, 0.19, 0.4, (x, 1.75, 1.25), m[SKIN])
-            crisp("Sleeve" + suf, (0.26, 3.4, 0.26), (x, 0.05, 1.25), m[SKIN])
-            crisp("SleeveGlow" + suf, (0.01, 2.6, 0.04), (x + sx * 0.131, 0.0, 1.25), m[GLOW], ch=0.002)
-            tube("ForeCable" + suf, [(1.6, 0.022, x, 1.4), (-1.5, 0.022, x, 1.4)], m[DARK], n=8)
+        x = sx * 0.95
+        with seg("Base" + suf, None, (x, -2.2, 0.05)):
+            cylinder("Pedestal" + suf, 0.26, 0.3, (x, -2.2, 0.2), m[SKIN], verts=20)
+            cylinder("SlewRing" + suf, 0.3, 0.06, (x, -2.2, 0.38), m[DARK], verts=24)
+            cylinder("Turret" + suf, 0.24, 0.22, (x, -2.2, 0.52), m[SKIN], verts=20)
+            cylinder("Strobe" + suf, 0.04, 0.06, (x - sx * 0.18, -2.05, 0.66), m[GLASS], verts=8)
+            for side in (1, -1):
+                crisp(f"Yoke{side}" + suf, (0.06, 0.32, 0.42), (x + side * 0.2, -2.2, 0.78), m[SKIN], ch=0.012)
+        with seg("Shoulder" + suf, "Base" + suf, (x, -2.2, 0.9)):
+            xcyl("ShoulderHousing" + suf, 0.17, 0.34, (x, -2.2, 0.9), m[SKIN], verts=20)
+            xcyl("ShoulderFlange" + suf, 0.2, 0.05, (x - sx * 0.2, -2.2, 0.9), m[DARK], verts=20)
+            xcyl("ShoulderMotor" + suf, 0.1, 0.24, (x + sx * 0.33, -2.2, 0.9), m[SKIN], verts=14)
+        with seg("UpperArm" + suf, "Shoulder" + suf, (x, -2.2, 0.9)):
+            loft("UpperLink" + suf, [(-2.1, 0.13, 0.15, 0.15, 0.9, 3, 3, 3), (-0.5, 0.11, 0.12, 0.12, 0.9, 3, 3, 3),
+                                     (0.85, 0.09, 0.1, 0.1, 0.9, 3, 3, 3)], m[SKIN], rings=10, n=16, tip=False).location.x = x  # loft has no X offset
+            ycyl("Counterbal" + suf, [(-1.95, 0.07, x + sx * 0.17, 0.74), (-0.6, 0.07, x + sx * 0.17, 0.74)], m[DARK], n=12)
+            ycyl("CounterRod" + suf, [(-0.6, 0.035, x + sx * 0.17, 0.74), (0.3, 0.035, x + sx * 0.17, 0.74)], m[SKIN], n=8)
+            for side in (1, -1):  # elbow clevis bridging the link to the forearm hub
+                crisp(f"ElbowPlate{side}" + suf, (0.04, 0.32, 0.5), (x + side * 0.13, 0.85, 1.03), m[SKIN], ch=0.008)
+            ycyl("Conduit" + suf, [(-2.0, 0.03, x - sx * 0.05, 1.05), (0.7, 0.03, x - sx * 0.05, 1.03)], m[DARK], n=8)
+            for c in range(5):
+                crisp(f"PClamp{c}" + suf, (0.08, 0.04, 0.05), (x - sx * 0.05, -1.7 + c * 0.55, 1.02), m[SKIN], ch=0.006)
+        with seg("Forearm" + suf, "UpperArm" + suf, (x, 0.85, 1.2)):
+            xcyl("ElbowHousing" + suf, 0.15, 0.3, (x, 0.85, 1.2), m[SKIN], verts=18)
+            xcyl("ElbowFlange" + suf, 0.17, 0.04, (x - sx * 0.17, 0.85, 1.2), m[DARK], verts=18)
+            xcyl("ElbowMotor" + suf, 0.08, 0.2, (x + sx * 0.25, 0.85, 1.2), m[SKIN], verts=12)
+            loft("ForeLink" + suf, [(-2.0, 0.09, 0.1, 0.1, 1.2, 2.4, 2.4, 2.4), (0.75, 0.1, 0.12, 0.12, 1.2, 2.4, 2.4, 2.4)],
+                 m[SKIN], rings=6, n=16, tip=False).location.x = x  # loft has no X offset
+            crisp("ForeGlow" + suf, (0.008, 2.2, 0.03), (x + sx * 0.1, -0.5, 1.2), m[GLOW], ch=0.002)
+            ycyl("ForeConduit" + suf, [(0.75, 0.025, x, 1.33), (-1.9, 0.025, x, 1.33)], m[DARK], n=8)
         parent = "Forearm" + suf
-        for k in range(TELE_STAGES):  # nested telescope stages, hidden in the sleeve when stowed
-            w = 0.2 - 0.03 * k
+        for k in range(TELE_STAGES):
+            w = 0.075 - 0.007 * k
             name = f"Tele{k + 1}{suf}"
-            with seg(name, parent, (x, -1.5, 1.25)):
-                crisp(f"TeleTube{k}{suf}", (w, 3.0, w), (x, 0.0, 1.25), m[SKIN], ch=0.006)
+            with seg(name, parent, (x, -2.0, 1.2)):
+                loft(f"Stage{k}" + suf, [(-2.0, w, w, w, 1.2, 3, 3, 3), (0.5, w, w, w, 1.2, 3, 3, 3)],
+                     m[SKIN], rings=3, n=12, tip=False).location.x = x  # loft has no X offset
+                ycyl(f"Wiper{k}" + suf, [(-2.04, w + 0.012, x, 1.2), (-1.98, w + 0.012, x, 1.2)], m[DARK], n=12)
             parent = name
-        with seg("Wrist" + suf, parent, (x, -1.5, 1.25)):
-            box("WristKnuckle" + suf, (0.22, 0.22, 0.22), (x, -1.62, 1.25), m[SKIN], chamfer=0.02)
-            xcyl("WristPin" + suf, 0.05, 0.3, (x, -1.62, 1.25), m[DARK])
+        with seg("Wrist" + suf, parent, (x, -2.05, 1.2)):
+            xcyl("WristHousing" + suf, 0.09, 0.2, (x, -2.12, 1.2), m[SKIN], verts=16)
+            ycyl("RotaryUnion" + suf, [(-2.2, 0.06, x, 1.2), (-2.3, 0.06, x, 1.2)], m[DARK], n=12)
+            crisp("CameraPod" + suf, (0.07, 0.1, 0.06), (x, -2.15, 1.32), m[DARK], ch=0.006)
+            crisp("Lens" + suf, (0.04, 0.01, 0.04), (x, -2.21, 1.32), m[GLASS], ch=0.003)
+            crisp("WorkLight" + suf, (0.06, 0.012, 0.03), (x, -2.21, 1.1), m[GLASS], ch=0.003)
         if tip == "Nozzle":
-            with seg("Nozzle", "Wrist", (x, -1.62, 1.25)):
-                tube("NozzleBody", [(-1.75, 0.12, x, 1.25), (-2.35, 0.09, x, 1.25), (-2.55, 0.06, x, 1.25)], m[SKIN], n=16)
-                tube("NozzleRing", [(-2.38, 0.13, x, 1.25), (-2.43, 0.13, x, 1.25)], m[GLOW], n=16)
-                tube("NozzleTip", [(-2.55, 0.05, x, 1.25), (-2.62, 0.035, x, 1.25)], m[DARK], n=12)
+            with seg("Nozzle", "Wrist", (x, -2.3, 1.2)):
+                for b_ in range(4):
+                    ycyl(f"Bellow{b_}", [(-2.3 - b_ * 0.05, 0.075 if b_ % 2 else 0.06, x, 1.2),
+                                         (-2.35 - b_ * 0.05, 0.06 if b_ % 2 else 0.075, x, 1.2)], m[DARK], n=12)
+                ycyl("Collar", [(-2.5, 0.09, x, 1.2), (-2.6, 0.09, x, 1.2)], m[SKIN], n=16)
+                ycyl("Cone", [(-2.6, 0.08, x, 1.2), (-2.95, 0.045, x, 1.2), (-3.02, 0.03, x, 1.2)], m[SKIN], n=16)
+                ycyl("NozzleRing", [(-2.62, 0.095, x, 1.2), (-2.66, 0.095, x, 1.2)], m[GLOW], n=16)
+                for d in range(3):
+                    a_ = 2 * math.pi * d / 3
+                    crisp(f"Dog{d}", (0.03, 0.08, 0.03), (x + 0.07 * math.cos(a_), -2.75, 1.2 + 0.07 * math.sin(a_)), m[DARK], ch=0.004)
         else:
-            with seg("Cassette2", "Wrist2", (x, -1.62, 1.25)):
-                crisp("GripPlate", (0.42, 0.1, 0.34), (x, -1.78, 1.25), m[SKIN])
+            with seg("Cassette2", "Wrist2", (x, -2.3, 1.2)):
+                ycyl("ToolFlange", [(-2.3, 0.1, x, 1.2), (-2.34, 0.1, x, 1.2)], m[DARK], n=16)
+                ycyl("ForceDisc", [(-2.34, 0.085, x, 1.2), (-2.38, 0.085, x, 1.2)], m[SKIN], n=16)
+                crisp("JawRail", (0.32, 0.06, 0.06), (x, -2.42, 1.2), m[SKIN], ch=0.006)
                 for side in (1, -1):
-                    crisp(f"Prong{side}", (0.05, 0.55, 0.06), (x + side * 0.18, -2.08, 1.25), m[DARK])
-                crisp("Payload", (0.3, 0.5, 0.24), (x, -2.1, 1.25), m[SKIN])
+                    crisp(f"Jaw{side}", (0.04, 0.32, 0.12), (x + side * 0.13, -2.6, 1.2), m[DARK], ch=0.006)
+                crisp("Payload", (0.2, 0.42, 0.14), (x, -2.62, 1.2), m[SKIN], ch=0.01)
 
     def pose(stow=False):
-        """Deployed preview pose: arms swing up and back out of the ramp, telescopes run out."""
         objs = bpy.data.objects
         for suf, x, tip in SKYWELL_ARMS:
-            objs["Shoulder" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(-160), 0.0, 0.0)
-            objs["Forearm" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(150), 0.0, 0.0)
+            objs["Shoulder" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(-155), 0.0, 0.0)
+            objs["Forearm" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(140), 0.0, 0.0)
             for k in range(TELE_STAGES):
-                objs[f"Tele{k + 1}{suf}"].location.y = 0.0 if stow else -2.6
+                objs[f"Tele{k + 1}{suf}"].location.y = 0.0 if stow else -2.2
         bpy.context.view_layer.update()
 
     return {
-        "color": (0.42, 0.44, 0.45), "metal": 0.15, "smooth": 0.32, "grime": 0.12, "wear": (0.62, 0.62, 0.6),
-        "patches": [((-3, -3.2, 0.95), (3, -2.3, 1.6), (0.85, 0.66, 0.08)),              # hazard yellow end effectors
-                    ((-0.8, 1.0, 0.25), (0.8, 2.2, 1.5), (0.34, 0.36, 0.33))],          # drum olive drab
-        "lines": [plane_y(y) for y in (-1.2, 0.0, 1.2)] + [((0, 1, 0), y, (-3, y - 0.05, 0.85), (3, y + 0.05, 1.6))
-                                                               for y in (-2.0, -2.15, -2.3)],
-        "stencils": [("SKYWELL", 1.0, 2.1, 0.55, 1.15, 0.8, (0.85, 0.66, 0.08))],
-        "smooth_angle": 30, "view": (1.0, -0.9, 0.7), "pose": pose, "pose_view": (1.2, -1.0, 0.45),
+        "color": (0.39, 0.41, 0.38), "metal": 0.15, "smooth": 0.32, "grime": 0.14, "wear": (0.6, 0.6, 0.57),
+        "patches": [((-1.2, -3.0, -0.1), (1.2, 3.0, 0.11), (0.6, 0.62, 0.62)),
+                    ((-0.5, 0.4, 0.15), (0.5, 2.4, 1.1), (0.32, 0.35, 0.29)),
+                    ((0.54, -0.8, 0.15), (0.66, 0.65, 0.25), (0.85, 0.66, 0.08)),
+                    ((-2, -3.2, 1.05), (2, -2.45, 1.4), (0.85, 0.66, 0.08))],
+        "bands": [(1.25, 1.33, 0.5, (0.85, 0.66, 0.08))],
+        "lines": [plane_y(y) for y in (-1.6, 0.6, 2.1)],
+        "stencils": [("JP-8 / F-34", 0.9, 1.95, 0.5, 0.75, 0.3, (0.12, 0.13, 0.12)),
+                     ("SKYWELL", 0.95, 1.85, 0.8, 0.98, 0.3, (0.85, 0.66, 0.08))],
+        "smooth_angle": 32, "view": (1.0, -1.1, 0.75), "pose": pose, "pose_view": (1.3, -0.9, 0.5),
     }
 
 
