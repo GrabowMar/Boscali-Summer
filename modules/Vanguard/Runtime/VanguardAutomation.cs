@@ -182,7 +182,9 @@ namespace BoscaliSummer.Vanguard
             if (tanker == null) return Failure("VanguardAutomation", "skyview", "equip first");
             SkyChase.Offset = angle == "off" ? (Vector3?)null
                 : angle == "rear" ? new Vector3(6f, 4f, -45f)
-                : angle == "close" ? new Vector3(14f, -3f, -8f) : new Vector3(38f, 0f, -16f);
+                : angle == "close" ? new Vector3(12f, -9f, -20f)
+                : angle == "below" ? new Vector3(-16f, -24f, -40f) : new Vector3(34f, -4f, -22f);
+            SkyChase.Look = angle == "below" ? new Vector3(-1.5f, -16f, -35f) : new Vector3(0f, -9f, -24f);
             SkyChase.Target = tanker;
             if (SkyChase.Offset != null && UnityEngine.Object.FindObjectOfType<SkyChase>() == null)
                 new GameObject("SkywellChase").AddComponent<SkyChase>();
@@ -197,6 +199,7 @@ namespace BoscaliSummer.Vanguard
         {
             public static Aircraft Target;
             public static Vector3? Offset;
+            public static Vector3 Look = new Vector3(0f, -9f, -24f);
 
             private void LateUpdate()
             {
@@ -205,7 +208,7 @@ namespace BoscaliSummer.Vanguard
                 Transform t = Target.transform;
                 Vector3 mount = Modules.Vanguard.Runtime.SkywellBoard.Mount(Target).position;
                 Vector3 eye = mount + t.rotation * Offset.Value;
-                Vector3 look = mount + t.rotation * new Vector3(0f, -6f, -14f);
+                Vector3 look = mount + t.rotation * Look;
                 camera.SetCameraPosition(eye.ToGlobalPosition(), Quaternion.LookRotation(look - eye, t.up));
                 camera.cameraVelocity = Vector3.zero;
             }
@@ -400,6 +403,7 @@ namespace BoscaliSummer.Vanguard
                 Bounds rb = Modules.Vanguard.Runtime.SkywellBoard.LocalBounds(receiver);
                 state["receiverBounds"] = rb.center.ToString("F1") + "/" + rb.size.ToString("F1");
                 state["rail"] = Modules.Vanguard.Presentation.SkywellVisuals.RailProbe;
+                state["kite"] = Modules.Vanguard.Presentation.SkywellVisuals.KiteProbe;
                 state["receiverMissing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(receiver);
             }
             foreach (KeyValuePair<string, float> death in Deaths) state[death.Key] = death.Value;

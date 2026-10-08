@@ -131,6 +131,11 @@
       "store": "t1"
     },
     {
+      "op": "capture",
+      "name": "skywell-kite-t1",
+      "hide_ui": true
+    },
+    {
       "op": "wait",
       "seconds": 2.5
     },
@@ -153,6 +158,11 @@
         "action": "status"
       },
       "store": "t3"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-kite-t3",
+      "hide_ui": true
     },
     {
       "op": "capture",
@@ -255,6 +265,14 @@
       "hide_ui": true
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
       "op": "capture",
       "name": "skywell-side-9",
       "hide_ui": true
@@ -273,7 +291,7 @@
     },
     {
       "op": "capture",
-      "name": "skywell-close-t10",
+      "name": "skywell-below-t10",
       "hide_ui": true
     },
     {
@@ -290,7 +308,7 @@
     },
     {
       "op": "capture",
-      "name": "skywell-close-t11",
+      "name": "skywell-below-t11",
       "hide_ui": true
     },
     {
