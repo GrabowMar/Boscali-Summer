@@ -394,7 +394,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (fuelStage)
             {
                 Transform rt = r.transform;
-                want = SkywellBoard.ProbePoint(r) + rt.forward * (HingeAheadOfProbe + rig.HingeBehind) + rt.up * 1.6f;
+                want = SkywellBoard.ProbePoint(r) + rt.forward * (HingeAheadOfProbe + rig.HingeBehind) + rt.up * 2.0f;   // clear of the nose cone
                 wantRot = rt.rotation;
             }
             else if (ammoStage)

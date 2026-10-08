@@ -446,7 +446,7 @@ namespace Vanguard
             {
                 P(s, "weaponName").stringValue = "SKYWELL Refuel/Rearm Kit";
                 P(s, "shortName").stringValue = "SKYWELL";
-                P(s, "description").stringValue = "Roll-on robotic tanker kit. Fire to open the ramp and deploy two telescoping arms: friendly aircraft holding position behind the ramp are docked, refuelled and re-armed from an 8 t fuel / 1.5 t munitions stock. Fire again to stow.";
+                P(s, "description").stringValue = "Roll-on service-glider kit. Fire to open the ramp and launch a tethered, folding-wing service glider. Friendly pilots close astern and HOLD BRAKE: the glider refuels them through its tail boom and loads missiles onto empty pylons from an 8 t fuel / 1.5 t munitions stock. Fire again to recover and stow.";
                 P(s, "weaponIcon").objectReferenceValue = Icon("SkywellKit");
             });
             var mount = Copy<WeaponMount>(donor, "WM_" + json);
