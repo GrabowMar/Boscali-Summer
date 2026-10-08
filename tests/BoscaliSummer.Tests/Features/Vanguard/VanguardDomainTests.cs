@@ -76,6 +76,9 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(trail == new Vector3(0f, -8f, -100f), "decoy trails 100 m behind, 8 m below");
             TestAssert.That(TowedTrail.Snaps(7.5f, 500f) && TowedTrail.Snaps(2f, 40f) && !TowedTrail.Snaps(4f, 500f),
                 "cable snaps above 7 g or below 50 m");
+            TestAssert.That(Mathf.Abs(TowedTrail.GLoad(Vector3.zero, new Vector3(0f, 0f, 9.81f * 7f * 0.25f), 0.25f) - 7f) < 0.01f &&
+                TowedTrail.GLoad(new Vector3(200f, 0f, 0f), new Vector3(200f, 0f, 0f), 0.25f) == 0f &&
+                TowedTrail.GLoad(Vector3.zero, Vector3.one, 0f) == 0f, "server-side g from velocity change (no divide by zero)");
 
             TestAssert.That(SeductionRule.SeducesTowed("ARH", 2000f, -0.8f, 0.3f) &&
                 !SeductionRule.SeducesTowed("ARH", 2000f, 0.8f, 0.3f) &&

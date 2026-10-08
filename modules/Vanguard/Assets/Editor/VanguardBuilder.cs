@@ -60,7 +60,7 @@ namespace Vanguard
                 Mass = 950, Yield = 1, Cost = 1.6f, Value = 28, RadarSize = 0.4f, Thrust = 2500, BurnTime = 200, GLimit = 6, TurnRate = 15,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Orca", Name = "AGT-80 ORCA Glide Torpedo", Short = "ORCA", Model = "Orca",
-                Description = "Long-glide torpedo. Glides ~25 km toward a ship, enters the water 2 km out and runs at 90 m/s, 6 m deep, into the hull. Ships only; a hard turn in the last 300 m can beat it.",
+                Description = "Long-glide torpedo. Glides ~25 km toward a ship, enters the water 5 km out and runs at 90 m/s, 6 m deep, into the hull. Ships only; a hard turn in the last 300 m can beat it.",
                 Mass = 600, Yield = 450, Pierce = 600, Cost = 1.5f, Value = 30, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple" } },
             new Spec { Key = "VG_AleX", Name = "ALE-X Towed Decoy", Short = "ALE-X", Model = "AleX",

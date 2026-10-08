@@ -13,5 +13,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static Vector3 Offset(Vector3 forward, Vector3 up) => -forward * Length - up * Drop;
 
         public static bool Snaps(float gForce, float agl) => gForce > SnapG || agl < MinAgl;
+
+        /// <summary>Manoeuvre load in g from a velocity change over dt (gravity excluded, as vanilla gForce).</summary>
+        public static float GLoad(Vector3 previousVelocity, Vector3 velocity, float dt) =>
+            dt > 0f ? (velocity - previousVelocity).magnitude / (dt * 9.81f) : 0f;
     }
 }

@@ -39,6 +39,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private float lostFor;
         private float searchFor = -1f;
         private readonly System.Collections.Generic.List<Missile> captured = new System.Collections.Generic.List<Missile>();
+        private readonly System.Collections.Generic.List<Missile> inbound = new System.Collections.Generic.List<Missile>();
+        // ALE-X host load, measured on the server from positions: Aircraft.gForce is only written where the aircraft
+        // is simulated, i.e. on the owning client for player-flown jets.
+        private GlobalPosition towPrevPos;
+        private Vector3 towPrevVel;
+        private float towSampleAt = -1f;
+        private bool towHasVel;
+        private float towG;
 
         public VanguardFlight(Missile missile, VanguardRole role, Unit target, GlobalPosition aimpoint, int slot)
         {
@@ -371,10 +379,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void HoldTow()
         {
             if (missile.disabled) return;
-            if (!(launcher is Aircraft host) || host.disabled || TowedTrail.Snaps(host.gForce, host.radarAlt))
+            if (launcher is Aircraft sampled && !sampled.disabled) SampleHostLoad(sampled);
+            if (!(launcher is Aircraft host) || host.disabled || TowedTrail.Snaps(towG, host.radarAlt))
             {
                 Plugin.Logger?.LogInfo("[Vanguard] ALE-X fiber cut: host=" + (launcher != null ? launcher.name : "none") +
-                    " g=" + ((launcher as Aircraft)?.gForce ?? -1f).ToString("F1") + " agl=" + (launcher?.radarAlt ?? -1f).ToString("F0"));
+                    " g=" + towG.ToString("F1") + " agl=" + (launcher?.radarAlt ?? -1f).ToString("F0"));
                 Detonate();
                 return;
             }
@@ -385,6 +394,27 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             rb.velocity = host.rb != null ? host.rb.velocity : rb.velocity;
             rb.angularVelocity = Vector3.zero;
             rb.MoveRotation(Quaternion.LookRotation(h.forward, h.up));
+        }
+
+        // 4 Hz velocity samples from global positions (origin-shift safe); g from the change between samples.
+        private void SampleHostLoad(Aircraft host)
+        {
+            float now = Time.timeSinceLevelLoad;
+            GlobalPosition here = host.GlobalPosition();
+            if (towSampleAt < 0f)
+            {
+                towPrevPos = here;
+                towSampleAt = now;
+                return;
+            }
+            float dt = now - towSampleAt;
+            if (dt < 0.25f) return;
+            Vector3 vel = (here - towPrevPos) / dt;
+            if (towHasVel) towG = TowedTrail.GLoad(towPrevVel, vel, dt);
+            towPrevVel = vel;
+            towHasVel = true;
+            towPrevPos = here;
+            towSampleAt = now;
         }
 
         // Radar missiles tracking the host may jump to the decoy; rear-aspect shots far more often. A captured
@@ -398,15 +428,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (held == null || held.disabled) captured.RemoveAt(i);
                 else if (held.targetID.Id != missile.persistentID.Id) SeekerCapture.Retarget(held, missile);
             }
-            MissileWarning warning = host.GetMissileWarningSystem();
-            if (warning == null) return;
             GlobalPosition hostPos = host.GlobalPosition();
             Vector3 fwd = host.transform.forward;
-            var known = warning.knownMissiles;
-            for (int i = known.Count - 1; i >= 0; i--)
+            ThreatScan.Inbound(host, inbound);
+            for (int i = 0; i < inbound.Count; i++)
             {
-                Missile threat = known[i];
-                if (threat == null || threat.disabled || threat.targetID.Id != host.persistentID.Id) continue;
+                Missile threat = inbound[i];
                 Vector3 toThreat = threat.GlobalPosition() - hostPos;
                 float range = toThreat.magnitude;
                 float aspect = Vector3.Dot(fwd, toThreat / Mathf.Max(range, 1f));
@@ -421,14 +448,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void SeduceThreats()
         {
             if (!(launcher is Aircraft aircraft) || aircraft.disabled) return;
-            MissileWarning warning = aircraft.GetMissileWarningSystem();
-            if (warning == null) return;
             GlobalPosition self = missile.GlobalPosition();
-            var known = warning.knownMissiles;
-            for (int i = known.Count - 1; i >= 0; i--)
+            ThreatScan.Inbound(aircraft, inbound);
+            for (int i = 0; i < inbound.Count; i++)
             {
-                Missile threat = known[i];
-                if (threat == null || threat.disabled) continue;
+                Missile threat = inbound[i];
                 float range = FastMath.Distance(threat.GlobalPosition(), self);
                 if (SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
                     SeekerCapture.Retarget(threat, missile);
