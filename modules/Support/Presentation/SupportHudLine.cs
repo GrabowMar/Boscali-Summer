@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             {
                 SupportActionId id = calls.Armed.Value;
                 text = "CALL ARMED · " + (CallSheet.TryGet(id, out CallRow row) ? row.Label : id.ToString());
-                detail = manager.Quote(id).Cost + " CR · " + Aim.Label(calls.AimNow);
+                detail = manager.Quote(id).Cost + " ALLOC · " + Aim.Label(calls.AimNow);
                 tone = HudTone.Caution;
                 return true;
             }

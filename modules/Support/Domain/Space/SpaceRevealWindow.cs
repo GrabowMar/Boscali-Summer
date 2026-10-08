@@ -8,6 +8,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float ObservationSeconds = 20f;
         /// <summary>RADAR bird busy time: the window plus a margin so Execute lag cannot overlap two windows.</summary>
         public const float BirdBusySeconds = ObservationSeconds + 1f;
+        /// <summary>The upper speed bound of a window that admits every ground contact, static and moving (RECON PASS).</summary>
+        public const float AnySpeed = float.MaxValue;
         public readonly BirdKind Source;
         public readonly float X, Z, Radius, CreatedAt, ExpiresAt, MinimumSpeed, MaximumSpeed;
 

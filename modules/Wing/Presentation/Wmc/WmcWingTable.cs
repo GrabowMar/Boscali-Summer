@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             hType = Label("HType", AvTextRole.Micro);
             hTask = Label("HTask", AvTextRole.Micro);
             hFuel = Label("HFuel", AvTextRole.Micro);
-            hAmmo = Label("HAmmo", AvTextRole.Micro);
+            hAmmo = Label("HAmmo", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
             hDmg = Label("HDmg", AvTextRole.Micro);
             hAll.text = "ALL";
             hName.text = "CALLSIGN";

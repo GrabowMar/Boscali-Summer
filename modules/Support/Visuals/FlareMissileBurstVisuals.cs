@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly List<(Aircraft Aircraft, IRSource Source)> irRegistrations =
             new List<(Aircraft Aircraft, IRSource Source)>(64);
 
+        private FlareTrailFx fx;
         private static GameObject cachedFlarePrefab;
         private static bool hasSearchedPrefab;
         private static AudioClip burstAudioClip;
@@ -111,6 +112,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void OnDestroy()
         {
+            fx?.Finish();
             UnregisterFlareIr();
             Live.Remove(this);
         }
@@ -118,8 +120,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private IEnumerator BarrageRoutine(Vector3 impactPoint, float radius, float duration, int initialFlares, FactionHQ owner)
         {
             EnsureAudio();
-            var bloom = SupportParticles.Layer(transform, "Flare ignition bloom", true, 96, 2f, 16f, new Color(3f, 1.7f, 0.4f));
-            SupportParticles.Ring(bloom, 96, 4f, 65f, 35f);
+            fx = FlareFx.Begin(impactPoint); // pop, sparks fan, smoke trails and the ground glow (visuals only)
             GameObject flarePrefab = ResolveFlarePrefab();
             float endTime = Time.time + duration;
             var activeSources = new List<IRSource>(64);
@@ -238,6 +239,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 yield return new WaitForSeconds(0.1f);
             }
 
+            fx?.Finish();
             Destroy(gameObject, 5f);
         }
 
@@ -294,6 +296,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     GameObject flareObj = UnityEngine.Object.Instantiate(flarePrefab, spawnPos, rot, originParent);
                     if (flareObj == null) continue;
 
+                    fx?.Track(flareObj.transform, 12.5f);
                     var irFlare = flareObj.GetComponent<IRFlare>();
                     if (irFlare != null)
                     {
@@ -328,6 +331,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     flareObj.transform.position = spawnPos;
                     if (originParent != null) flareObj.transform.SetParent(originParent, true);
 
+                    fx?.Track(flareObj.transform, 12.5f);
                     var light = flareObj.AddComponent<Light>();
                     light.type = LightType.Point;
                     light.color = new Color(1f, 0.85f, 0.4f);

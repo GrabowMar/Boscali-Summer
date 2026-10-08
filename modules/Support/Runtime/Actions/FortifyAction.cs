@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
         public FortifyAction(IZoneFortificationService service) => fortifications = service;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {

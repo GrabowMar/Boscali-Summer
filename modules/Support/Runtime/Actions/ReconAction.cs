@@ -17,10 +17,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     }
 
     /// <summary>
-    /// Radar scan. The faction's station, overhead with a spy imager, images the scene; the host
-    /// reveals the stationary ground contacts in it through the native tracking RPC (at most
-    /// 48; sightings decay under vanilla rules). Movers faster than a walking vehicle smear
-    /// across azimuth in a real SAR image and are not revealed, and aircraft are never imaged.
+    /// RECON PASS (the former RADAR SCAN, merged with MTI SWEEP). The faction's station, overhead with a spy imager, images the scene; the host
+    /// reveals the static and the moving ground contacts in it through the native tracking RPC (at most
+    /// 48; sightings decay under vanilla rules). Aircraft are never imaged.
     /// The scene grows with the orbit band and a neighbouring relay; the scan spends station
     /// energy and starts its recharge.
     /// </summary>
@@ -29,9 +28,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const int MaximumReveals = 48;
 
         /// <summary>Radial speed above which a SAR target smears rather than focuses, m/s.</summary>
-        public const float StationaryThreshold = 4f;
+        public const float StationaryThreshold = 4f; // the SAR smear speed; informational only since RECON PASS reveals movers too
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -39,9 +38,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
                 int contacts = context.Host.OpenSpaceWindow(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value, BirdKind.Radar, 0f, StationaryThreshold);
+                    context.Settings.SarSceneRadius.Value * context.Quality, BirdKind.Radar, 0f, SpaceRevealWindow.AnySpeed);
                 if (contacts < 0) return SupportResult.SpawnFailed;
                 context.Host.ReportContacts(context.RequestId, contacts);
+                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), context.Settings.SarSceneRadius.Value * context.Quality, 6f, Visuals.AreaFx.ReconTint, context.Owner); }
+                catch (Exception e) { context.Logger.LogDebug("[Support] Recon sweep visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }
             catch (Exception e)

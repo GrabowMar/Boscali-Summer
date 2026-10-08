@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -21,7 +23,9 @@ namespace BoscaliSummer.Garrisons
 
         public sealed class EncampmentSite
         {
-            public Vector3 Center;
+            // Stored global: sites outlive floating-origin shifts.
+            private GlobalPosition center;
+            public Vector3 Center { get => center.ToLocalPosition(); set => center = value.ToGlobalPosition(); }
             public Vector3 Forward;
             public FactionHQ Owner;
             public Airbase Airbase;
@@ -110,6 +114,33 @@ namespace BoscaliSummer.Garrisons
                 if (enumerator.MoveNext()) return enumerator.Current;
             }
             return null;
+        }
+
+        /// <summary>
+        /// Exfil (server): strikes the nearest standing site <paramref name="owner"/> holds within
+        /// <paramref name="radius"/> of <paramref name="near"/> and hands back its centre and troops.
+        /// </summary>
+        internal static bool TryRelease(Vector3 near, float radius, FactionHQ owner, out Vector3 centre, out int troops)
+        {
+            centre = default;
+            troops = 0;
+            PruneFallenSites();
+            EncampmentSite best = null;
+            float bestSq = radius * radius;
+            foreach (EncampmentSite site in ActiveSites)
+            {
+                if (site.Owner != owner) continue;
+                Vector3 d = site.Center - near;
+                d.y = 0f;
+                if (d.sqrMagnitude <= bestSq) { bestSq = d.sqrMagnitude; best = site; }
+            }
+            if (best == null || !GameAccess.IsServer() || NetworkManagerNuclearOption.i?.ServerObjectManager == null) return false;
+            foreach (Building slot in best.Slots)
+                if (IsStanding(slot)) NetworkManagerNuclearOption.i.ServerObjectManager.Destroy(slot.Identity, true);
+            ActiveSites.Remove(best);
+            centre = best.Center;
+            troops = Math.Max(best.Troops, TroopDeploymentMath.DefaultSquadSize);
+            return true;
         }
 
         public static EncampmentSite FindNearbySite(Vector3 pos, float maxDistance = 150f)

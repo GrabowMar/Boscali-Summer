@@ -4,7 +4,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Comms.Configuration
 {
     /// <summary>
-    /// COMMS: the multiplayer map-talk screen. Lifetimes, channels and games are
+    /// COMMS: the multiplayer map-talk screen. Lifetimes and channels are
     /// host-authoritative — on a server only the host's values apply — while everything about
     /// what this player sees and hears (HUD notices, cockpit markers, hotkeys) is client-local.
     /// </summary>
@@ -18,7 +18,6 @@ namespace BoscaliSummer.Modules.Comms.Configuration
         public ConfigEntry<int> DrawingSeconds { get; }
         public ConfigEntry<bool> AllowAllChannel { get; }
         public ConfigEntry<bool> AllowDrawing { get; }
-        public ConfigEntry<bool> AllowGames { get; }
 
         // ---- client-local
         public ConfigEntry<bool> ShowOnMap { get; }
@@ -32,8 +31,8 @@ namespace BoscaliSummer.Modules.Comms.Configuration
         {
             const string section = "Comms";
             Enabled = config.Bind(section, "Enabled", true,
-                "Run the COM bezel screen: shared map pings, stickers, drawings and labels, brevity " +
-                "calls, polls and small games between players. On the host this also stops relaying " +
+                "Run the COM bezel screen: shared map pings, drawings and labels, brevity " +
+                "calls between players. On the host this also stops relaying " +
                 "everyone's comms; on a client it hides the screen and the overlays.");
 
             PingSeconds = config.Bind(section, "PingSeconds", 60,
@@ -42,7 +41,7 @@ namespace BoscaliSummer.Modules.Comms.Configuration
                     new AcceptableValueRange<int>(10, 600)));
             StickerSeconds = config.Bind(section, "StickerSeconds", 900,
                 new ConfigDescription(
-                    "How long stickers and text labels stay on the map. Host-authoritative.",
+                    "How long text labels stay on the map. Host-authoritative.",
                     new AcceptableValueRange<int>(30, 3600)));
             DrawingSeconds = config.Bind(section, "DrawingSeconds", 1200,
                 new ConfigDescription(
@@ -50,17 +49,14 @@ namespace BoscaliSummer.Modules.Comms.Configuration
                     new AcceptableValueRange<int>(30, 3600)));
             AllowAllChannel = config.Bind(section, "AllowAllChannel", true,
                 "Let players post to ALL, which the other side sees too. Off keeps every ping, " +
-                "drawing, poll and game inside each team. Host-authoritative.");
+                "drawing and label inside each team. Host-authoritative.");
             AllowDrawing = config.Bind(section, "AllowDrawing", true,
-                "Let players draw strokes and shapes on the shared map. Pings, stickers and labels " +
+                "Let players draw strokes and shapes on the shared map. Pings and labels " +
                 "stay available either way. Host-authoritative.");
-            AllowGames = config.Bind(section, "AllowGames", true,
-                "Allow dice, rock-paper-scissors and map hunts. Host-authoritative.");
-
             ShowOnMap = config.Bind(section, "ShowOnMap", true,
                 "Draw shared comms on your tactical map. Client-local.");
             HudNotices = config.Bind(section, "HudNotices", true,
-                "Show teammates' pings, calls, polls and game invites as cockpit HUD notices. " +
+                "Show teammates' pings and calls as cockpit HUD notices. " +
                 "Client-local.");
             CockpitPingMarkers = config.Bind(section, "CockpitPingMarkers", true,
                 "Project recent pings into the cockpit view as markers with range, so a teammate's " +

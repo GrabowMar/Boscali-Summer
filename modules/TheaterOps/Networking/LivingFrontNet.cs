@@ -133,7 +133,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             }
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
             if (ServerHandlers.Swap(server))
@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (GameAccess.IsServer() || CommandPending || !ValidIntent(kind, id, revision, posture) ||
                 seenHostEpoch <= 0 || !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null)
                 return false;
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active) return false;
             pendingRequestId = nextRequestId = nextRequestId >= int.MaxValue ? 1 : nextRequestId + 1;
             pendingFaction = hq.faction.factionName;
@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         internal void Broadcast(string faction)
         {
             if (owner?.Authoritative != true || string.IsNullOrEmpty(faction)) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             LivingFrontSnapshot snapshot = SnapshotOf(faction);
             IReadOnlyList<INetworkPlayer> players = server.AuthenticatedPlayers;

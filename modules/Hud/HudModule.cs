@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Hud
     {
         private static readonly ModuleMetadata Module =
             new ModuleMetadata("hud", "HUD and interface presentation");
-        private static readonly Type[] Patches = { typeof(WingviewCameraPatch) };
+        private static readonly Type[] Patches = { typeof(WingviewCameraPatch), typeof(ShotLaunchPatch), typeof(ShotDetonatePatch) };
 
         public ModuleMetadata Metadata => Module;
 
@@ -29,8 +29,8 @@ namespace BoscaliSummer.Modules.Hud
         public void Install(ModuleContext context)
         {
             HudBoard board = context.AddSceneService<HudBoard>(80);
-            board.Configure(context.Settings.Hud);
             context.AddService<IHudBoard>(board);
+            context.AddService<IMissileView>(board);
             context.Logger.LogInfo("Hud: TargetCamera=" + BoscaliSummer.Core.Game.NativeCamera.Available);
         }
     }

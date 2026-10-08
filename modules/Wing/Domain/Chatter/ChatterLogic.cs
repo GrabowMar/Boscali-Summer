@@ -1,184 +1,136 @@
 using System;
+using System.Collections.Generic;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>Pilot radio style, independent of rank and flight skill.</summary>
-    internal enum ChatterPersona
-    {
-        Professional,
-        Aggressive,
-        Calm,
-        Dry,
-    }
+    internal enum ChatterPersona { Professional, Aggressive, Calm, Dry }
 
-    /// <summary>Ambient flight line with an optional pilot reply.</summary>
     internal readonly struct ChatterExchange
     {
-        public readonly string Opening;
-        public readonly string Reply;
-        public readonly string SpeakerTag;
-        public readonly string ReplyTag;
-
-        public ChatterExchange(string opening, string reply = null,
-                               string speakerTag = null, string replyTag = null)
-        {
-            Opening = opening;
-            Reply = reply;
-            SpeakerTag = speakerTag;
-            ReplyTag = replyTag;
-        }
+        public readonly string Opening, Reply, SpeakerTag, ReplyTag;
+        public readonly ChatterScene Scene;
+        public ChatterExchange(string opening, string reply = null, string speakerTag = null,
+            string replyTag = null, ChatterScene scene = ChatterScene.Transit)
+        { Opening = opening; Reply = reply; SpeakerTag = speakerTag; ReplyTag = replyTag; Scene = scene; }
     }
 
-    /// <summary>Engine-free radio presentation and dialogue selection.</summary>
+    /// <summary>Authored radio dialogue. Urgent calls remain precise; personality lives in delivery and quiet moments.</summary>
     internal static class ChatterDialogue
     {
-        // Keep ambient dialogue in static data and within the pilots' world.
         private static readonly ChatterExchange[] ambient =
         {
-            new ChatterExchange("If the sky turns orange, I'm blaming the briefing officer.",
-                                "Briefing said scattered clouds. Orange is technically scattered."),
-            new ChatterExchange("Somebody remind me: are borders the thing we're defending or the thing we're crossing?",
-                                "Ask after we land. Preferably very quietly."),
-            new ChatterExchange("I count one fighter, two bombers, and at least twelve dramatic backstories.",
-                                "Tally the fighters. The backstories will find us."),
-            new ChatterExchange("Command says the enemy ace has a personal emblem.",
-                                "Great. Aim for the expensive paint."),
-            new ChatterExchange("Anyone else smell cordium?",
-                                "That's reactor coolant. Cordium isn't real."),
-            new ChatterExchange("They promised this sortie would be cost-effective.",
-                                "It is. We're spending their aircraft."),
-            new ChatterExchange("I spent eight minutes aligning the nav system.",
-                                "And how long remembering the master arm?"),
-            new ChatterExchange("My checklist says 'fly the aircraft.' That's underlined twice."),
-            new ChatterExchange("The radar says that's a tank. My missiles say it's a philosophical question.",
-                                "Ask it at high explosive velocity."),
-            new ChatterExchange("How did that vehicle survive the first hit?",
-                                "It angled its optimism."),
-            new ChatterExchange("Ground crew says every aircraft is perfectly balanced.",
-                                "On which wing?"),
-            new ChatterExchange("If I pull any harder, the maintenance log becomes a confession."),
-            new ChatterExchange("Fox three. Because apparently sending one was too subtle."),
-            new ChatterExchange("I have visual on the runway and emotional contact with the arresting gear."),
-            new ChatterExchange("Who put the nuclear option on the bottom of the checklist?",
-                                "The optimist."),
-            new ChatterExchange("The fires are ravaging the forests.",
-                                "Then let's make sure they don't reach the airfields."),
-            new ChatterExchange("Something big is coming.",
-                                "Radar is clean. I don't think you mean an aircraft."),
-            new ChatterExchange("I can feel the buildings shaking.",
-                                "We're ten kilometres out and I can feel it too."),
-            new ChatterExchange("They say it's going to be a hot summer.",
-                                "With our sortie rate? That's one forecast I trust."),
-            new ChatterExchange("Do you ever feel like the missile knows where it is because it knows where it isn't?",
-                                "Keep philosophising and it'll know exactly where you are."),
-            new ChatterExchange("Good news: the warning light works.",
-                                "Bad news: it has several opinions."),
-            new ChatterExchange("If we make it home, I'm naming the next manoeuvre after whoever buys the drinks."),
-            new ChatterExchange("This valley looked wider on the tactical map.",
-                                "So did your wingspan."),
-            new ChatterExchange("My flight manual calls this an edge case.",
-                                "We're flying along the edge, so that checks out."),
-            new ChatterExchange("Check tape on the canopy seal. Last flight whistled in G-minor.",
-                                "If it hits high C, check your oxygen."),
-            new ChatterExchange("Ground crew swore the radar altimeter was calibrated.",
-                                "Calibrated to what? Sea level or wishful thinking?"),
-            new ChatterExchange("Look at the smoke over the coastline. Someone had a loud afternoon.",
-                                "Let's make sure the return flight doesn't add to it."),
-            new ChatterExchange("Notice how the briefing always skips the egress plan?",
-                                "Egress is discretionary. Landing gear optional."),
-            new ChatterExchange("Thermal bloom on the horizon. Not a flare.",
-                                "Cruise missile boost stage. Eyes open."),
-            new ChatterExchange("They told us the new ECM pod was field-tested.",
-                                "Yeah, in a climate-controlled hangar."),
-            new ChatterExchange("Airfield tower said we have priority clearance for landing.",
-                                "Priority clearance just means the crash trucks are already waiting."),
-            new ChatterExchange("Ever wonder who manufactures all these missiles?",
-                                "Contractors who never fly within fifty klicks of here."),
-            new ChatterExchange("Watch the ridge line. Radar shadows love hiding SAM batteries.",
-                                "Already got my finger on the flare pickle."),
-            new ChatterExchange("How many flight hours do you have on this airframe?",
-                                "Enough to know which rattle means trouble and which is just character."),
-            new ChatterExchange("My trim wheel has been drifting left since sunrise.",
-                                "Compensate with aggressive optimism."),
-            new ChatterExchange("Fuel flow is running four percent over book values.",
-                                "Book was written by accountants who don't pull eight Gs."),
-            new ChatterExchange("Remember: altitude is life, airspeed is insurance.",
-                                "And the ground is the deductible."),
-            new ChatterExchange("Valley fog is rolling in thick below us.",
-                                "Good. Makes running home easier if things get crowded."),
-            new ChatterExchange("Command wants combat footage for the recruitment reel.",
-                                "Tell them high-G grimacing doesn't test well with focus groups."),
-            new ChatterExchange("Listening to the turbines sing. Best music on this frequency."),
-            new ChatterExchange("Checklist complete, canopy locked. Ready when you are."),
-            new ChatterExchange("Checking horizon reference. Clean horizon, clean conscience."),
-            new ChatterExchange("RWR chirp... just ground clutter. Keep scanning."),
-
-            // Null tags allow any eligible pilot; named speaker and reply tags independently require
-            // those pilots airborne.
-            new ChatterExchange("Clean picture. Let's keep it that way.",
-                                speakerTag: "COBALT"),
-            new ChatterExchange("If it's below the weather, it belongs to me.",
-                                speakerTag: "HATCHET"),
-            new ChatterExchange("The sea is calm. Radar isn't.",
-                                speakerTag: "MERIDIAN"),
-            new ChatterExchange("Hatchet, your definition of close support concerns me.",
-                                "Nobody complained from the ground.",
-                                speakerTag: "COBALT", replyTag: "HATCHET"),
-            new ChatterExchange("Cobalt, permission to improve their radar picture?",
-                                "Permission to remove it.",
-                                speakerTag: "HATCHET", replyTag: "COBALT"),
-            new ChatterExchange("Meridian, you always this calm?",
-                                "No. Sometimes I'm asleep.",
-                                speakerTag: "HATCHET", replyTag: "MERIDIAN"),
-            new ChatterExchange("Valkyrie, you're crowding my search sector.",
-                                "First to see it gets to kill it, Ghost.",
-                                speakerTag: "GHOST", replyTag: "VALKYRIE"),
-            new ChatterExchange("Ghost, confirm radar sweep. Thought I saw a faint spike.",
-                                "Clean sweep. Must have been a sea bird or a ghost.",
-                                speakerTag: "VALKYRIE", replyTag: "GHOST"),
-            new ChatterExchange("Spectre, is that jammer humming on our intercom?",
-                                "That's the sound of survivability. You're welcome.",
-                                speakerTag: "COBALT", replyTag: "SPECTRE"),
-            new ChatterExchange("Hatchet, keep your nose up. Terrain clearance looks sporty.",
-                                "Rocks are just stationary targets, Cobalt.",
-                                speakerTag: "COBALT", replyTag: "HATCHET"),
-            new ChatterExchange("Meridian, how's the wind off the water?",
-                                "Steady crosswind. Nothing a rudder can't handle.",
-                                speakerTag: "VALKYRIE", replyTag: "MERIDIAN"),
-            new ChatterExchange("Cobalt, lead us into something loud.",
-                                "Orderly engagement only, Valkyrie. Save fireworks for egress.",
-                                speakerTag: "VALKYRIE", replyTag: "COBALT"),
-            new ChatterExchange("Valkyrie, check master arm. Let's make this count.",
-                                speakerTag: "VALKYRIE"),
-            new ChatterExchange("Spectre on the wing. Frequency hopping active.",
-                                speakerTag: "SPECTRE"),
+            new ChatterExchange("You ever look down and forget this is home?", "Only until I recognise the roads.", null, null, ChatterScene.Transit),
+            new ChatterExchange("I used to drive that coast road in summer.", "Keep the memory. We will need it later.", null, null, ChatterScene.Transit),
+            new ChatterExchange("They left the lights on in the hangar for us.", "Then let us give them a reason.", null, null, ChatterScene.Transit),
+            new ChatterExchange("Same coastline. Different summer.", "One sortie at a time.", null, null, ChatterScene.Transit),
+            new ChatterExchange("I can hear the breathing in my mask again.", "Good. Keep it steady.", null, null, ChatterScene.Transit),
+            new ChatterExchange("No speeches from me today. Just bring everyone home.", null, null, null, ChatterScene.Transit),
+            new ChatterExchange("There used to be fishing boats all along this coast.", "Maybe there will be again.", null, null, ChatterScene.Transit),
+            new ChatterExchange("The ground crew wrote their names inside my gear door.", "Then you had better bring it back.", null, null, ChatterScene.Transit),
+            new ChatterExchange("Cobalt, you remember the first time we flew this route?", "We had fewer things to worry about.", "HATCHET", "COBALT", ChatterScene.Transit),
+            new ChatterExchange("Hatchet. Save something for the flight home.", "I heard you, Cobalt.", "COBALT", "HATCHET", ChatterScene.Transit),
+            new ChatterExchange("Meridian, you still there?", "Still here. Always listening.", "HATCHET", "MERIDIAN", ChatterScene.Transit),
+            new ChatterExchange("Ghost, say something.", "I am here, Valkyrie. Keep your scan moving.", "VALKYRIE", "GHOST", ChatterScene.Transit),
+            new ChatterExchange("Spectre. How is the ride?", "Better with company.", "COBALT", "SPECTRE", ChatterScene.Transit),
+            new ChatterExchange("That got close.", "We are still flying. Start with that.", null, null, ChatterScene.AfterCombat),
+            new ChatterExchange("Give me a moment. Hands are still shaking.", "Take your time. I am with you.", null, null, ChatterScene.AfterCombat),
+            new ChatterExchange("I could hear every rivet on that last turn.", "Check your aircraft. We will talk on the ground.", null, null, ChatterScene.AfterCombat),
+            new ChatterExchange("I will remember that pass for a while.", "Keep flying. The rest comes later.", null, null, ChatterScene.AfterCombat),
+            new ChatterExchange("There is always a silence after.", null, null, null, ChatterScene.AfterCombat),
+            new ChatterExchange("Keep their place open until we get home.", "Understood.", null, null, ChatterScene.Loss),
+            new ChatterExchange("I keep waiting for them to answer.", "I know. Stay with us.", null, null, ChatterScene.Loss),
+            new ChatterExchange("Nobody needs to say anything right now.", null, null, null, ChatterScene.Loss),
+            new ChatterExchange("I am thinking about the sound of the engine shutting down.", "Best part of a long day.", null, null, ChatterScene.Recovery),
+            new ChatterExchange("Save the debrief for the ground.", "Agreed. Fly the approach.", null, null, ChatterScene.Recovery),
+            new ChatterExchange("Home cannot come soon enough.", null, null, null, ChatterScene.Recovery),
+            new ChatterExchange("Rain on the canopy. Reminds me of the hangar roof.", "Keep your eyes on the instruments.", null, null, ChatterScene.Weather),
+            new ChatterExchange("The weather does not care whose side we are on.", "Then we treat it with respect.", null, null, ChatterScene.Weather),
+            new ChatterExchange("Strange how small the cockpit feels after dark.", "Stay on my wing. You are not alone.", null, null, ChatterScene.Night),
+            new ChatterExchange("Just the panel lights and the engine tonight.", null, null, null, ChatterScene.Night),
+        };
+        private static readonly Dictionary<string, string[]> orders = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "FORMATION", new[] { "Copy. Rejoining your wing.", "Coming back in. Keep it moving.", "Roger. Closing to station.", "Copy. Back where you can see me." } },
+            { "ENGAGE", new[] { "Weapons free. Moving to engage.", "Tally. Taking the fight to them.", "Copy. Establishing the intercept.", "Copy. Time to earn our fuel." } },
+            { "ATTACK", new[] { "Copy target. Beginning attack.", "Target acquired. Rolling in.", "Roger. Setting up the run.", "Copy. One pass, then we reassess." } },
+            { "FIREFOREFFECT", new[] { "Copy. Committing full salvo.", "Full salvo. Keep clear of the run.", "Roger. Concentrating fire.", "Copy. Making this pass count." } },
+            { "RETURNTOBASE", new[] { "Copy. Returning to base.", "Turning for home. Cover the egress.", "Roger. Setting course for recovery.", "Copy. Enough sky for today." } },
+            { "FALLBACK", new[] { "Copy. Breaking off and regrouping.", "Breaking off. We fight on our terms.", "Roger. Opening separation.", "Copy. We can come back." } },
+            { "ORBITHERE", new[] { "Copy. Establishing orbit.", "Holding here. Call the push.", "Roger. Taking up the hold.", "Copy. I will keep the seat warm." } },
+            { "DELIVERCARGO", new[] { "Copy. Proceeding to delivery point.", "Moving the package. Cover us.", "Roger. Beginning delivery approach.", "Copy. Cargo stays with us until the drop." } },
+            { "LANDHERE", new[] { "Copy. Setting up to land.", "Coming down. Watch our approach.", "Roger. Establishing final.", "Copy. Taking it to the ground." } },
+            { "MOVETOPOINT", new[] { "Copy. Proceeding to the mark.", "Moving. Keep the route clear.", "Roger. Taking the assigned course.", "Copy. Following your line." } },
+            { "SEEKANDDESTROY", new[] { "Copy. Searching the assigned area.", "Sweeping the area. Ready to engage.", "Roger. Starting the search.", "Copy. Let us see what is still out there." } },
+            { "REFIT", new[] { "Copy. Returning to rearm and refuel.", "Heading in. Keep a place for me.", "Roger. Returning for turnaround.", "Copy. Ground crew gets the next shift." } },
+            { "JAMTARGET", new[] { "Copy. Beginning radar suppression.", "Jammer coming up. Make your move.", "Roger. Working the assigned emitter.", "Copy. Putting noise on their picture." } },
+            { "MANEUVER", new[] { "Copy. Executing manoeuvre.", "Executing. Watch the separation.", "Roger. Manoeuvring now.", "Copy. Keep a little room for me." } },
+            { "STANDDOWN", new[] { "Copy. Task cancelled. Holding near friendlies.", "Standing down. Still available.", "Roger. Cancelling task and holding.", "Copy. Still here if you need us." } },
+            { "COPY", new[] { "Roger.", "Copy.", "Understood.", "Copy that." } },
+        };
+        private static readonly Dictionary<string, string[]> events = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ENGAGING", new[] { "Engaging{on}.", "Committing{on}. Cover my exit.", "Moving to engage{on}.", "Taking{target}. Keep the lane clear." } },
+            { "DEFENDING", new[] { "Defensive.", "Defensive. Breaking away.", "Defensive. Opening separation.", "Defensive. Give me room." } },
+            { "BREAKCALL", new[] { "Lead, break! Missile tracking you!", "Break, Lead! Countermeasures now!", "Lead, missile inbound. Break now.", "Lead, break now. Do not hold that course." } },
+            { "SPLASH", new[] { "Target destroyed{detail}.", "Good hit{detail}. Target down.", "Confirmed kill{detail}.", "Target down{detail}. Keep scanning." } },
+            { "WINCHESTER", new[] { "Winchester. Returning to base.", "Stores empty. Turning for home.", "Winchester. Beginning recovery.", "Winchester. Heading home with an empty rack." } },
+            { "BINGO", new[] { "Bingo fuel. Returning to base.", "Bingo. Cover us on the way out.", "At bingo. Turning for recovery.", "Bingo. That is our margin gone." } },
+            { "REJOINING", new[] { "Rejoining your wing.", "Coming back in. Hold your heading.", "Rejoining. Closing steadily.", "Rejoining. Good to see you again." } },
+            { "TAXIING", new[] { "Taxiing to the runway.", "Taxiing out. Ready for departure.", "Taxiing. Maintaining interval.", "Taxiing out. Another long day." } },
+            { "DEPARTING", new[] { "Beginning takeoff.", "Rolling. See you overhead.", "Beginning departure.", "Departing. Back to work." } },
+            { "AIRBORNE", new[] { "Airborne. Continuing on task.", "Wheels up. Climbing out.", "Airborne. Establishing climb.", "Airborne. Field is behind us." } },
+            { "AIRBORNEREJOINING", new[] { "Airborne. Joining your wing.", "Off the deck. Coming to you.", "Airborne. Closing for join-up.", "Airborne. Save a place for me." } },
+            { "FALLINGBACK", new[] { "Disengaging. Falling back.", "Breaking off. Regroup before we push.", "Opening distance. Disengaging.", "Falling back. We still have options." } },
+            { "HOLDING", new[] { "Holding at standoff.", "Holding. Ready for the next push.", "Maintaining the hold.", "Holding here. Listening." } },
+            { "COVERING", new[] { "Covering your flight.", "I have your six. Take the shot.", "Cover established. Continue.", "Watching your back. Keep moving." } },
+            { "ORBITING", new[] { "Orbit established. On station.", "On station. Ready to move.", "Established in the orbit.", "On station. Waiting on your call." } },
+            { "DELIVERING", new[] { "Beginning cargo delivery.", "Taking the package in. Cover the run.", "On delivery approach.", "Beginning delivery. Keep this one quiet." } },
+            { "DELIVERED", new[] { "Cargo released. Beginning egress.", "Package away. Coming out.", "Delivery complete. Leaving the drop.", "Cargo delivered. Our part is done." } },
+            { "NODROPOFF", new[] { "Unable to deliver. Returning with cargo.", "No usable drop-off. Bringing it home.", "Delivery unavailable. Retaining cargo.", "No drop-off. Package stays with us." } },
+            { "FIREFOREFFECT", new[] { "Full salvo{on}.", "Committing all stores{on}. Keep clear.", "Concentrating fire{on}.", "Full salvo{on}. One committed pass." } },
+            { "EXPENDED", new[] { "Stores expended. Off target.", "Weapons away. Coming off the run.", "Delivery complete. Off target.", "Off target. Check the results before another pass." } },
+            { "OUTOFAMMO", new[] { "Winchester. Rejoining formation.", "Stores empty. Coming back to your wing.", "Winchester. Returning to station.", "Winchester. Still flying with you." } },
+            { "DOWN", new[] { "Touchdown. Rolling out.", "On the deck. Ending the sortie.", "Down. Beginning rollout.", "Down in one piece. That will do." } },
+            { "UNABLE", new[] { "Unable to maintain station. Returning to base.", "Cannot hold this pace. Returning to base.", "Outside flight limits. Returning to base.", "Cannot keep station. Taking the aircraft home." } },
+            { "SLOWLEADER", new[] { "Lead, too slow for close formation. Holding wide.", "Lead, increase airspeed. I am holding wide.", "Holding wide until your speed increases.", "Lead, I need more airspeed to close up." } },
+            { "PANIC", new[] { "Missile inbound! Defensive!", "Missile! Breaking hard!", "Missile warning. Going defensive.", "Missile inbound. Breaking now." } },
+            { "DEFENSIVECLEAR", new[] { "Missile warning clear. Resuming.", "Threat warning clear. Back on task.", "Warning clear. Recovering the flight path.", "Warning clear. Still here." } },
+            { "FOX1", new[] { "Fox one{on}.", "Fox one{on}. Guiding.", "Fox one{on}. Maintaining illumination.", "Fox one{on}." } },
+            { "FOX2", new[] { "Fox two{on}.", "Fox two{on}. Missile away.", "Fox two{on}.", "Fox two{on}. Coming off." } },
+            { "FOX3", new[] { "Fox three{on}.", "Fox three{on}. Weapon away.", "Fox three{on}.", "Fox three{on}. Staying alert." } },
+            { "MAGNUM", new[] { "Magnum{on}.", "Magnum{on}. Coming off the emitter.", "Magnum{on}. Weapon away.", "Magnum{on}." } },
+            { "RIFLE", new[] { "Rifle{on}.", "Rifle{on}. Coming off target.", "Rifle{on}. Missile away.", "Rifle{on}." } },
+            { "JAMMING", new[] { "Jamming{target}.", "Jammer active{detail}. Make your move.", "Suppression active{detail}.", "Putting noise on{target}." } },
+            { "JAMMINGOFF", new[] { "Jammer off.", "Jammer off. Returning to task.", "Jamming ended.", "Jammer off. Back to listening." } },
+            { "MANEUVERING", new[] { "Executing{detail}.", "Beginning{detail}. Keep clear.", "Manoeuvring{detail}.", "Executing{detail}. Watch the spacing." } },
+            { "MANEUVERDONE", new[] { "Manoeuvre complete. Rejoining.", "Rolling out. Coming back in.", "Manoeuvre complete. Recovering station.", "Finished. Back on your wing." } },
+            { "DAMAGED", new[] { "Taking damage. Assessing the aircraft.", "I am hit. Checking what we have left.", "Damage sustained. Checking systems.", "Took a hit. Let me assess it." } },
+            { "CRITICAL", new[] { "Critical damage. Requesting cover.", "Heavy damage! I need an exit!", "Aircraft critical. Assessing recovery.", "Heavy damage. Keep them off me." } },
+            { "PILOTKILLED", new[] { "Pilot lost{detail}.", "We lost a pilot{detail}.", "Confirmed pilot loss{detail}.", "Pilot lost{detail}." } },
+            { "EJECTED", new[] { "Pilot ejected{detail}.", "Ejection observed{detail}. Mark the position.", "Pilot out{detail}. Recovery required.", "Pilot punched out{detail}. Mark that position." } },
+            { "AIRFRAMELOST", new[] { "Aircraft lost{detail}.", "We have an aircraft down{detail}.", "Aircraft down{detail}.", "Aircraft lost{detail}." } },
+            { "RECOVERED", new[] { "Aircraft recovered.", "Parked. Ready for turnaround.", "Recovery complete.", "Recovered. Ground crew has it." } },
+            { "JOKER", new[] { "Joker fuel. Monitoring reserve.", "At joker. Watch our time here.", "Joker fuel. Planning the return.", "Joker. We have less time than we had." } },
+            { "FALLINGBEHIND", new[] { "Falling behind. Closing as able.", "Cannot match the pace. Trying to close.", "Lagging the formation. Adjusting.", "Falling behind. Leave me some room to catch up." } },
+            { "PULLUP", new[] { "Terrain! Pull up!", "Pull up! Terrain ahead!", "Terrain warning. Climbing now.", "Terrain! Climb now!" } },
+            { "BREAKOFF", new[] { "Collision risk! Break away!", "Break off! Too close!", "Collision warning. Opening separation.", "Break away! Clear the flight path!" } },
+            { "ESCORTLOST", new[] { "Escort lost. Forming on you.", "Escort down. Returning to your wing.", "Escort lost. Rejoining Lead.", "Lost the escort. Coming back to you." } },
+            { "GOAROUND", new[] { "Going around.", "Missed approach. Coming around.", "Going around. Resetting the approach.", "Going around. We have another try." } },
+            { "TASKDONE", new[] { "Task complete. Awaiting orders.", "Task done. Ready for the next call.", "Assignment complete. Standing by.", "Task complete. Still available." } },
+            { "UNABLEORDER", new[] { "Negative. Unable to comply.", "Cannot execute that order.", "Unable under current conditions.", "Unable. I need another option." } },
         };
 
+        public static IEnumerable<string> EventKeys => events.Keys;
         public static int AmbientCount => ambient.Length;
-
+        public static ChatterExchange AmbientAt(int index) => ambient[Index(index, ambient.Length)];
         public static ChatterExchange Ambient(int seed, bool repliesAllowed = true)
         {
-            int total = AmbientCount;
-            if (total == 0) return default;
-            int start = Index(seed, total);
-            if (repliesAllowed || AmbientAt(start).Reply == null) return AmbientAt(start);
-
-            // For solo flight, select a line that needs no reply.
-            for (int offset = 1; offset < total; offset++)
+            for (int i = 0; i < ambient.Length; i++)
             {
-                ChatterExchange candidate = AmbientAt(start + offset);
-                if (candidate.Reply == null) return candidate;
+                ChatterExchange line = AmbientAt(seed + i);
+                if (repliesAllowed || line.Reply == null) return line;
             }
-
-            return AmbientAt(start);
-        }
-
-        public static ChatterExchange AmbientAt(int index)
-        {
-            int total = AmbientCount;
-            if (total == 0) return default;
-            int normalized = Index(index, total);
-            return ambient[normalized];
+            return default;
         }
 
         public static string Identity(string name, string callsign)
@@ -199,510 +151,30 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Acknowledge(ChatterPersona persona, string order, int seed)
         {
-            string key = string.IsNullOrWhiteSpace(order) ? "COPY" : order.ToUpperInvariant();
-            switch (key)
-            {
-                case "FORMATION":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Rejoining formation.", "Copy. Forming up." },
-                        new[] { "Copy. Coming back in.", "Fine. Back on your wing." },
-                        new[] { "Understood. Rejoining.", "Copy. Sliding into position." },
-                        new[] { "Back to formation. Copy.", "Apparently we're being tidy. Rejoining." });
-                case "ENGAGE":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Weapons free.", "Copy. Engaging." },
-                        new[] { "Tally. Let's hunt.", "Copy. I'm going in." },
-                        new[] { "Understood. Engaging.", "Copy. Taking the fight." },
-                        new[] { "Weapons free. That should wake them up.", "Engaging. Try to keep up." });
-                case "ATTACK":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Attacking target.", "Copy. Going in on the attack." },
-                        new[] { "Tally! Commencing attack run!", "Copy. Rolling in hot." },
-                        new[] { "Understood. Beginning attack run.", "Copy. Moving in on target." },
-                        new[] { "Attacking target. Let's see what breaks.", "Copy. Delivering bad news." });
-                case "FIREFOREFFECT":
-                    return Pick(persona, seed,
-                        new[] { "Roger. All weapons on the mark.", "Copy. Firing for effect." },
-                        new[] { "Everything we've got. Commencing barrage!", "Copy. Emptying the racks!" },
-                        new[] { "Understood. Commencing full bombardment.", "Copy. Massed fire inbound." },
-                        new[] { "Subtlety cancelled. Full attack commencing.", "Copy. Making the coordinates disappear." });
-                case "RETURNTOBASE":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Returning to base.", "Copy. RTB." },
-                        new[] { "Copy. Heading home.", "RTB. Save me a parking spot." },
-                        new[] { "Understood. Returning to base.", "Copy. Egressing for home." },
-                        new[] { "RTB. The ground crew wins again.", "Copy. Taking this one home." });
-                case "FALLBACK":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Breaking off.", "Copy. Disengaging." },
-                        new[] { "Breaking off. Not finished yet.", "Copy. Coming out hot." },
-                        new[] { "Understood. Disengaging.", "Copy. Opening the distance." },
-                        new[] { "Disengaging. Temporarily.", "Copy. Leaving them disappointed." });
-                case "ORBITHERE":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Holding here.", "Copy. Taking station." },
-                        new[] { "Holding. Call me when it gets interesting.", "Copy. Circling here." },
-                        new[] { "Understood. Establishing orbit.", "Copy. Holding station." },
-                        new[] { "Orbiting. Round and round we go.", "Copy. I'll keep the seat warm." });
-                case "DELIVERCARGO":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Starting the delivery run.", "Copy. Cargo inbound." },
-                        new[] { "Cargo run. I'll put it on the mark.", "Copy. Going in low." },
-                        new[] { "Understood. Beginning delivery.", "Copy. Cargo is moving." },
-                        new[] { "Delivery run. Very glamorous.", "Copy. Taking the freight in." });
-                case "LANDHERE":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Setting down.", "Copy. Landing at the mark." },
-                        new[] { "Going down. Keep the field clear.", "Copy. Putting it on the deck." },
-                        new[] { "Understood. Beginning descent.", "Copy. Landing now." },
-                        new[] { "Landing there. Looks inviting enough.", "Copy. Wheels down." });
-                case "MOVETOPOINT":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Moving to the waypoint.", "Copy. En route." },
-                        new[] { "Moving. I'll get there first.", "Copy. Pushing to the point." },
-                        new[] { "Understood. En route.", "Copy. Proceeding to the waypoint." },
-                        new[] { "Waypoint received. Off I go.", "Copy. Moving." });
-                case "SEEKANDDESTROY":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Proceeding to the search area.", "Copy. Seek and destroy." },
-                        new[] { "Copy. I'll find something to ruin.", "Heading in. I'll take it from there." },
-                        new[] { "Understood. Moving to the search area.", "Copy. I'll engage on arrival." },
-                        new[] { "Search area received. Let's see what breaks first.", "Copy. Going hunting." });
-                case "REFIT":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Returning for refit.", "Copy. Heading home to rearm." },
-                        new[] { "Copy. I want a full rack when I get back.", "Refit run. See you shortly." },
-                        new[] { "Understood. Returning to refit.", "Copy. Replenishing and rejoining." },
-                        new[] { "Copy. Time to meet the ground crew again.", "Refit it is. I'll be back." });
-                case "JAMTARGET":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Jammer coming up.", "Copy. Working their radar." },
-                        new[] { "Copy. I'll blind them.", "Jammer up. Let's make them squint." },
-                        new[] { "Understood. Beginning jamming.", "Copy. On the jammer." },
-                        new[] { "Jamming. Electrons deployed.", "Copy. Ruining someone's picture." });
-                case "MANEUVER":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Executing.", "Copy. Manoeuvring now." },
-                        new[] { "Copy. Watch this.", "On it. Hold my drink." },
-                        new[] { "Understood. Beginning the manoeuvre.", "Copy. Executing." },
-                        new[] { "Manoeuvre received. Showtime.", "Copy. Being theatrical." });
-                case "STANDDOWN":
-                    return Pick(persona, seed,
-                        new[] { "Roger. Standing down. Holding near friendlies.", "Copy. Cancelling and loitering." },
-                        new[] { "Copy. I'll hang out over friendly ground.", "Standing down. Call if you need me." },
-                        new[] { "Understood. Task cancelled. Holding nearby.", "Copy. Loitering over friendly territory." },
-                        new[] { "Standing down. I'll keep the coffee warm.", "Copy. Out of the fight, still in the air." });
-                default:
-                    return Pick(persona, seed,
-                        new[] { "Roger.", "Copy." },
-                        new[] { "Copy. Let's move.", "Roger that." },
-                        new[] { "Understood.", "Copy." },
-                        new[] { "Copy that.", "Apparently so." });
-            }
+            if (!orders.TryGetValue(order ?? "COPY", out string[] lines)) lines = orders["COPY"];
+            return Variant(lines, persona, seed);
         }
 
-        public static string Event(ChatterPersona persona, string eventName,
-                                   string detail, int seed)
+        public static string Event(ChatterPersona persona, string eventName, string detail, int seed)
         {
+            if (string.Equals(eventName, "DETACHED", StringComparison.OrdinalIgnoreCase))
+                return Acknowledge(persona, "RETURNTOBASE", seed);
+            if (!events.TryGetValue(eventName ?? "", out string[] lines)) return Acknowledge(persona, "COPY", seed);
             string subject = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim();
-            switch ((eventName ?? string.Empty).ToUpperInvariant())
-            {
-                case "ENGAGING":
-                    if (subject == null) return Acknowledge(persona, "ENGAGE", seed);
-                    return persona == ChatterPersona.Aggressive
-                        ? Pick(seed, "Tally " + subject + ". I'm going in.",
-                                     subject + " is mine.",
-                                     "Closing on " + subject + ". Light 'em up!")
-                        : persona == ChatterPersona.Dry
-                            ? Pick(seed, "Taking " + subject + ".",
-                                         "Found " + subject + ". Engaging.",
-                                         "Acquired " + subject + ". Providing customer service.")
-                            : persona == ChatterPersona.Calm
-                                ? Pick(seed, "Visual on " + subject + ". Rolling in.",
-                                             "Tracking " + subject + ". Moving to engage.",
-                                             "Engaging " + subject + ". Smooth approach.")
-                                : Pick(seed, "Engaging " + subject + ".",
-                                             "Tally " + subject + ".",
-                                             "Intercepting " + subject + ".");
-                case "DEFENDING":
-                    return Pick(persona, seed,
-                        new[] { "Defending.", "Covering the formation." },
-                        new[] { "Defensive! Breaking into the threat!", "Taking fire! Defending!" },
-                        new[] { "Defending. Holding station.", "Covering the flight. All clear." },
-                        new[] { "Defending. Someone wants attention.", "Defensive manoeuvres. How exciting." });
-                case "BREAKCALL":
-                    return Pick(persona, seed,
-                        new[] { "Lead, break break! Missile tracking you!", "Missile inbound! Evade, Lead!", "Spike on your six! Break hard!" },
-                        new[] { "Break hard, Lead! Missile closing fast!", "Hard break, Lead! Evade now!", "Spike on your six! Break break!" },
-                        new[] { "Lead, break now. Missile tracking on your tail.", "Defensive break, Lead. Track is hot.", "Break, Lead. Countermeasures now." },
-                        new[] { "Lead, break hard unless you like shrapnel.", "Missile is very fond of you, Lead. Break break.", "Break, Lead. That spike isn't friendly." });
-                case "SPLASH":
-                    string target = subject ?? "one";
-                    return Pick(persona, seed,
-                        new[] { "Splash " + target + ".", subject == null ? "Target down." : subject + " is down.", "Target destroyed. Clean hit." },
-                        new[] { "Splash " + target + "! Who's next?", subject == null ? "One less problem!" : subject + " is finished!", "Scratch " + target + "! Good hit!" },
-                        new[] { "Splash " + target + ".", subject == null ? "Contact down." : subject + " is down. Clear.", "Target neutralized. Clear." },
-                        new[] { "Splash " + target + ". That seemed important.", subject == null ? "Target reconsidered living." : subject + " has left the fight.", "Target confirmed removed." });
-                case "WINCHESTER":
-                    return Pick(persona, seed,
-                        new[] { "Winchester. Returning to base.", "Winchester. I'm out of the fight." },
-                        new[] { "Winchester! I used every last one!", "Winchester. Heading home angry." },
-                        new[] { "Winchester. Egressing for home.", "Stores empty. Returning to base." },
-                        new[] { "Winchester. Strongly worded looks from here.", "Out of ammunition. Sensible exit commencing." });
-                case "BINGO":
-                    return Pick(persona, seed,
-                        new[] { "Bingo fuel. Returning to base.", "Bingo. Turning for home." },
-                        new[] { "Bingo! One more minute would've been nice!", "Fuel's gone. Heading home." },
-                        new[] { "Bingo fuel. Egressing.", "At bingo. Turning for home." },
-                        new[] { "Bingo. Apparently fuel is mandatory.", "Fuel gauge says we're done. RTB." });
-                case "REJOINING":
-                    return Pick(persona, seed,
-                        new[] { "Rejoining.", "Coming back to formation." },
-                        new[] { "Rejoining. Give me something else to hit.", "Back on your wing. Let's move." },
-                        new[] { "Sliding into position. Rejoining.", "On your wing, Lead. Steady." },
-                        new[] { "Rejoining. Did you miss me?", "Back in the box. Try not to scratch the paint." });
-                case "TAXIING":
-                    return Pick(persona, seed,
-                        new[] { "Taxiing to the runway.", "Taxiing out." },
-                        new[] { "Taxiing out. Ready to go.", "Rolling out to the runway." },
-                        new[] { "Taxiing out. Holding interval.", "Moving to the runway." },
-                        new[] { "Taxiing out. One queue at a time.", "Taxiing out. Runway next." });
-                case "DEPARTING":
-                    return Pick(persona, seed,
-                        new[] { "Beginning departure.", "Starting takeoff." },
-                        new[] { "Starting takeoff. Let's move.", "Beginning departure. See you up there." },
-                        new[] { "Beginning departure.", "Starting takeoff. Coming up." },
-                        new[] { "Starting takeoff. Finally.", "Departing. Enough sightseeing." });
-                case "AIRBORNE":
-                    return Pick(persona, seed,
-                        new[] { "Airborne. Proceeding as ordered.", "Off the deck. Continuing on task." },
-                        new[] { "Airborne! Wheels up and climbing!", "Off the ground. Let's hunt." },
-                        new[] { "Airborne. Settling into climb.", "Off the deck. Proceeding steady." },
-                        new[] { "Airborne. Gravity loses again.", "Off the ground. The easy part is over." });
-                case "AIRBORNEREJOINING":
-                    return Pick(persona, seed,
-                        new[] { "Airborne. Joining your wing.", "Off the ground. Forming up." },
-                        new[] { "Airborne. Coming to you.", "Off the ground. Catching up." },
-                        new[] { "Airborne. Moving into formation.", "Off the ground. Joining up." },
-                        new[] { "Airborne. Room for one more?", "Off the ground. Coming to join you." });
-                // Use the RTB sign-off for released aircraft returning home.
-                case "DETACHED": return Acknowledge(persona, "RETURNTOBASE", seed);
-                case "FALLINGBACK":
-                    return Pick(persona, seed,
-                        new[] { "Breaking off. Falling back.", "Disengaging and opening the distance." },
-                        new[] { "Disengaging! We'll come back and finish it!", "Breaking off hot! Regrouping!" },
-                        new[] { "Opening distance. Falling back smoothly.", "Disengaging to standoff." },
-                        new[] { "Tactical repositioning. Don't call it retreating.", "Falling back. Giving them false hope." });
-                case "HOLDING":
-                    return Pick(persona, seed,
-                        new[] { "Holding at standoff.", "Holding position." },
-                        new[] { "Holding at standoff. Call me when targets pop.", "Holding position. Ready to push." },
-                        new[] { "Holding steady at standoff.", "Maintaining position. Ready." },
-                        new[] { "Holding at standoff. Burning fuel quietly.", "Holding here. Practicing my patience." });
-                case "COVERING":
-                    return Pick(persona, seed,
-                        new[] { "Covering you.", "I've got your back." },
-                        new[] { "Covering your six. Anything crosses you dies.", "Got you covered. Take the shot." },
-                        new[] { "You're covered, Lead. Take your time.", "Watching your tail. Clear." },
-                        new[] { "Covering you. Try not to make it dramatic.", "Got your back. Don't do anything reckless." });
-                case "ORBITING":
-                    return Pick(persona, seed,
-                        new[] { "On station. Orbit established.", "Holding in the orbit." },
-                        new[] { "Orbiting. Keep scanning for bogeys.", "On station and ready to roll." },
-                        new[] { "Established on station. Orbit steady.", "Holding station smoothly." },
-                        new[] { "Orbiting. Scenic route engaged.", "Round and round. Holding station." });
-                case "DELIVERING":
-                    return Pick(persona, seed,
-                        new[] { "Running the cargo in.", "Cargo inbound." },
-                        new[] { "Cargo run underway. Coming in fast!", "Delivering the package. Watch the mark." },
-                        new[] { "Beginning delivery approach. Steady on course.", "Cargo inbound. Descending on profile." },
-                        new[] { "Special delivery inbound. Try to look grateful.", "Freight service arriving. Mind the downdraft." });
-                case "DELIVERED":
-                    return Pick(persona, seed,
-                        new[] { "Cargo away. Delivery complete.", "Load delivered. Egressing." },
-                        new[] { "Package dropped! Right on the mark!", "Delivered! Climbing out!" },
-                        new[] { "Cargo released cleanly. Beginning egress.", "Drop complete. Turning for home." },
-                        new[] { "Package delivered. Five-star rating expected.", "Cargo is their problem now. Egressing." });
-                case "NODROPOFF":
-                    return Pick(persona, seed,
-                        new[] { "No drop-off available. Bringing the cargo back." },
-                        new[] { "Drop zone is unworkable. Hauling cargo home." },
-                        new[] { "No landing zone clear. Returning with cargo intact." },
-                        new[] { "Nobody home at the drop zone. Free return shipping." });
-                case "FIREFOREFFECT":
-                    if (subject == null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "In hot. Commencing full attack.", "Firing for effect." },
-                            new[] { "In hot! Splashing 'em all!", "Dumping the whole rack on them!" },
-                            new[] { "Commencing bombardment run.", "Coordinated strike underway." },
-                            new[] { "Full barrage inbound. Erasing coordinates.", "Deploying maximum persuasion." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "In hot on " + subject + ".", "All weapons on " + subject + "." },
-                        new[] { "Emptying racks into " + subject + "!", "Wiping " + subject + " off the map!" },
-                        new[] { "Concentrating fire on " + subject + ".", "Heavy ordnance inbound on " + subject + "." },
-                        new[] { "Delivering bad news to " + subject + ".", "Cancelling " + subject + "'s warranty." });
-                case "EXPENDED":
-                    return Pick(persona, seed,
-                        new[] { "Rounds complete. Off target.", "Expended. Coming off target." },
-                        new[] { "Racks empty! Climbing out!", "All ordnance away! Off target!" },
-                        new[] { "Stores expended cleanly. Pulling off target.", "Delivery complete. Off target." },
-                        new[] { "Off target. That was expensive.", "Stores expended. Standing by for review." });
-                case "OUTOFAMMO":
-                    return Pick(persona, seed,
-                        new[] { "Winchester. Forming back up.", "Ammo's gone. Rejoining formation." },
-                        new[] { "Winchester! Coming back to the wing.", "Bone dry. Forming up on you." },
-                        new[] { "Winchester. Returning to formation.", "Empty. Rejoining." },
-                        new[] { "Winchester. Nothing left but harsh language. Forming up.",
-                                "Out of ammunition. Tucking back in." });
-                case "DOWN":
-                    return Pick(persona, seed,
-                        new[] { "On the deck.", "Down safely." },
-                        new[] { "Wheels on the deck! Good sortie!", "Touchdown! Field is secure." },
-                        new[] { "Firm touchdown. Rolling out safely.", "Down and rolling. Smooth landing." },
-                        new[] { "Down in one piece. Ground crew's turn.", "Gravity won, but gracefully. Down safe." });
-                case "UNABLE":
-                    return Pick(persona, seed,
-                        new[] { "Unable to maintain station. Disengaging for RTB." },
-                        new[] { "Aircraft can't take this pace. Heading home angry." },
-                        new[] { "Unable to keep parameters. Returning to base." },
-                        new[] { "Airframe has filed a formal objection. RTB." });
-                case "SLOWLEADER":
-                    return Pick(persona, seed,
-                        new[] { "Leader too slow for close formation. Holding wide until you accelerate." },
-                        new[] { "Pick up the speed, Lead! Holding wide so I don't stall out!" },
-                        new[] { "Holding wide, Lead. Accelerate when ready and I'll tuck in." },
-                        new[] { "Lead, are we flying or parking? Holding wide." });
-                case "PANIC":
-                    if (subject == null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Missile! Defensive!", "Missile warning! Breaking!" },
-                            new[] { "Missile launch! Breaking hard!", "SAM tracking! Evading!" },
-                            new[] { "Missile inbound. Going defensive.", "Threat launch detected. Breaking." },
-                            new[] { "RWR is screaming. Defensive.", "Warning lights are unanimous. Breaking!" });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Missile " + subject + "! Defensive!", subject + " missile! Breaking!" },
-                        new[] { subject + " launched! Breaking hard!", "Incoming from " + subject + "! Evading!" },
-                        new[] { "Tracking launch from " + subject + ". Defensive.", subject + " firing. Breaking clean." },
-                        new[] { subject + " has opinions. Defensive.", "Missile from " + subject + ". How rude." });
-                case "DEFENSIVECLEAR":
-                    return Pick(persona, seed,
-                        new[] { "Threat clear. Resuming.", "Missile defeated. Back on task." },
-                        new[] { "Tricked it! Threat defeated!", "Lost that one! Back on the attack!" },
-                        new[] { "Threat clear. Settling back on heading.", "Missile defeated. All clear." },
-                        new[] { "Missile reconsidered. Resuming.", "Another false alarm for my obituary. Back on task." });
-                case "FOX1":
-                    if (subject != null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Fox one on " + subject + ".", "Fox one, " + subject + "." },
-                            new[] { "Fox one on " + subject + "! Keep him painted!", "Fox one! " + subject + " is locked!" },
-                            new[] { "Fox one on " + subject + ". Guiding.", "Fox one, " + subject + ". Maintaining lock." },
-                            new[] { "Fox one on " + subject + ". Illuminating.", "Fox one on " + subject + ". Stay in the beam." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Fox one.", "Fox one! Tracking.", "Fox one away." },
-                        new[] { "Fox one! Stick with it!", "Fox one away! Keep him painted!" },
-                        new[] { "Fox one. Guiding.", "Fox one away. Maintaining lock." },
-                        new[] { "Fox one away. Hope you enjoy the radar beam.", "Fox one. Illuminating." });
-                case "FOX2":
-                    if (subject != null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Fox two on " + subject + ".", "Fox two, " + subject + "." },
-                            new[] { "Fox two on " + subject + "! Burn 'em!", "Fox two, " + subject + "! Eat heat!" },
-                            new[] { "Fox two on " + subject + ". Good track.", "Fox two, " + subject + ". Seeker locked." },
-                            new[] { "Fox two on " + subject + ". Someone's about to get very warm.", "Fox two, " + subject + ". Following the exhaust." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Fox two.", "Fox two! Heater away.", "Fox two away." },
-                        new[] { "Fox two! Eat heat!", "Fox two away! Burn 'em!" },
-                        new[] { "Fox two. Heat seeker off the rail.", "Fox two away. Good track." },
-                        new[] { "Fox two. Someone's about to get very warm.", "Fox two. Following the exhaust." });
-                case "FOX3":
-                    if (subject != null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Fox three on " + subject + ".", "Fox three, " + subject + "." },
-                            new[] { "Fox three on " + subject + "! Pitbull!", "Fox three, " + subject + "! Fire and forget!" },
-                            new[] { "Fox three on " + subject + ". Active off the rail.", "Fox three, " + subject + ". Clean release." },
-                            new[] { "Fox three on " + subject + ". Tracking on its own dime.", "Fox three on " + subject + ". Good luck dodging that." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Fox three.", "Fox three away.", "Fox three! Pitbull active." },
-                        new[] { "Fox three! Fire and forget, baby!", "Fox three away! Find him!" },
-                        new[] { "Fox three. Active off the rail.", "Fox three away. Clean release." },
-                        new[] { "Fox three. Tracking on its own dime.", "Fox three away. Good luck dodging that." });
-                case "MAGNUM":
-                    if (subject != null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Magnum on " + subject + ".", "Magnum, " + subject + "." },
-                            new[] { "Magnum on " + subject + "! Silence that battery!", "Magnum, " + subject + "! Kill their radar!" },
-                            new[] { "Magnum on " + subject + ". Riding the beam down.", "Magnum, " + subject + ". SEAD inbound." },
-                            new[] { "Magnum on " + subject + ". Compliments to their radar crew.", "Magnum on " + subject + ". Time to turn their screen off." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Magnum.", "Magnum! Anti-radiation away.", "Magnum on the emitter." },
-                        new[] { "Magnum! Silence that battery!", "Magnum away! Kill their radar!" },
-                        new[] { "Magnum. Riding the beam down.", "Magnum away. SEAD inbound." },
-                        new[] { "Magnum. Compliments to their radar crew.", "Magnum away. Time to turn their screen off." });
-                case "RIFLE":
-                    if (subject != null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Rifle on " + subject + ".", "Rifle, " + subject + "." },
-                            new[] { "Rifle on " + subject + "! Package inbound!", "Rifle, " + subject + "! Hammering 'em!" },
-                            new[] { "Rifle on " + subject + ". Air-to-ground away.", "Rifle, " + subject + ". Guiding on mark." },
-                            new[] { "Rifle on " + subject + ". Structural advice incoming.", "Rifle on " + subject + ". Package delivered to their doorstep." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Rifle.", "Rifle away.", "Rifle! Surface missile away." },
-                        new[] { "Rifle! Target is getting hammered!", "Rifle away! Package inbound!" },
-                        new[] { "Rifle. Air-to-ground away.", "Rifle away. Guiding on mark." },
-                        new[] { "Rifle away. Structural advice incoming.", "Rifle away. Someone down there has a problem." });
-                case "JAMMING":
-                    if (subject == null)
-                    {
-                        return Pick(persona, seed,
-                            new[] { "Jammer's up.", "Buzzing their radar." },
-                            new[] { "Jammer blazing! Blinding the scope!", "Lighting up the ECM!" },
-                            new[] { "Jammer active. Screening the flight.", "Emitting. Radar picture screened." },
-                            new[] { "Deploying electrons. Ruining their screen.", "Jammer up. Enjoy the snowstorm." });
-                    }
-                    return Pick(persona, seed,
-                        new[] { "Jamming " + subject + ".", "Working " + subject + "'s radar." },
-                        new[] { "Burning through " + subject + "'s radar!", "Blinding " + subject + " now!" },
-                        new[] { "Jamming active on " + subject + ".", "Screening " + subject + "'s emitters." },
-                        new[] { "Filling " + subject + "'s scope with static.", "Decorating " + subject + "'s radar screen." });
-                case "JAMMINGOFF":
-                    return Pick(persona, seed,
-                        new[] { "Jammer's cold. Rejoining.", "Off the jammer. Back on your wing." },
-                        new[] { "Jammer dark! Ready to fight!", "Ceasing ECM. Rejoining!" },
-                        new[] { "Jammer silent. Rejoining formation.", "Powering down ECM. Returning to position." },
-                        new[] { "Jammer cold. Back to honest flying.", "Electrons recalled. Rejoining." });
-                case "MANEUVERING":
-                    return Pick(persona, seed,
-                        new[] { subject != null ? subject + ", executing." : "Manoeuvring." },
-                        new[] { subject != null ? subject + ", watch this!" : "Watch this!" },
-                        new[] { subject != null ? "Beginning " + subject + "." : "Beginning manoeuvre. Smooth." },
-                        new[] { subject != null ? subject + ". Being theatrical." : "Manoeuvring. Look away if you get airsick." });
-                case "MANEUVERDONE":
-                    return Pick(persona, seed,
-                        new[] { "Rolling out. Back on your wing.", "Manoeuvre complete. Rejoining." },
-                        new[] { "Nailed it! Back in position!", "Done! Back on your six." },
-                        new[] { "Rolling out smoothly. Re-establishing formation.", "Manoeuvre finished. Back in position." },
-                        new[] { "Done showing off. Rejoining.", "Surviving the aerobatics. Returning to wing." });
-                case "DAMAGED":
-                    return persona == ChatterPersona.Aggressive
-                        ? Pick(seed, "I'm hit. Still fighting!", "Took a hit! I'm not done with them!")
-                        : persona == ChatterPersona.Calm
-                            ? Pick(seed, "Taking fire. Controls are responding.", "Airframe damage noted. Systems holding steady.")
-                            : persona == ChatterPersona.Dry
-                                ? Pick(seed, "I've acquired some extra ventilation.", "Hit, but the important pieces remain.")
-                                : Pick(seed, "I'm hit. Flight controls responsive.", "Taking damage. Still operational.");
-                case "CRITICAL":
-                    return persona == ChatterPersona.Aggressive
-                        ? Pick(seed, "Heavy damage! I need a way out!", "I'm coming apart here! Clear my tail!")
-                        : persona == ChatterPersona.Calm
-                            ? Pick(seed, "Multiple system failures. Assessing recovery options.", "Heavy structural damage. Looking for egress vector.")
-                            : persona == ChatterPersona.Dry
-                                ? Pick(seed, "This aircraft is becoming theoretical.", "Critical damage. An ejection seat is looking fashionable.")
-                                : Pick(seed, "Critical damage. I may not make it back.", "Aircraft critical. Requesting cover.");
-                case "PILOTKILLED": return subject == null
-                    ? "We've lost a pilot."
-                    : Pick(seed, subject + " is down!", "We lost " + subject + "!");
-                case "EJECTED": return subject == null
-                    ? "Pilot punched out."
-                    : Pick(seed, subject + " punched out!", subject + " ejected. Mark the position.");
-                case "AIRFRAMELOST": return subject == null
-                    ? "Aircraft down."
-                    : Pick(seed, subject + " is going down!", "We've lost " + subject + "'s aircraft.");
-                case "RECOVERED":
-                    return Pick(persona, seed,
-                        new[] { "Down and shut down. Airframe recovered.", "Recovered. Airframe is back in the pool." },
-                        new[] { "Parked and ready for turnaround! Fuel me up!", "Recovered! Get this bird rearmed!" },
-                        new[] { "Engines spooling down. Airframe recovered cleanly.", "Safe on the pad. Ready for servicing." },
-                        new[] { "Shut down complete. Time to inspect the coffee machine.", "Recovered. Maintenance can start complaining." });
-                case "JOKER":
-                {
-                    string m = subject ?? "a few";
-                    return Pick(persona, seed,
-                        new[] { "Joker fuel, " + m + " minutes to bingo.", "Joker. " + m + " minutes to bingo." },
-                        new[] { "Joker! " + m + " minutes of fight left!", "Joker fuel! " + m + " minutes, make them count!" },
-                        new[] { "Joker fuel. " + m + " minutes to bingo.", "Passing joker. Bingo in " + m + " minutes." },
-                        new[] { "Joker. " + m + " minutes before this gets awkward.", "Joker fuel. " + m + " minutes of optimism left." });
-                }
-                case "FALLINGBEHIND":
-                    return Pick(persona, seed,
-                        new[] { "Falling behind, Lead. Cutting off to catch up.", "Can't keep up. Taking the inside." },
-                        new[] { "Slow down, Lead! Cutting across to you!", "You're leaving me! Cutting the corner!" },
-                        new[] { "Dropping back. Cutting inside to rejoin.", "Losing ground, Lead. Taking the short way." },
-                        new[] { "Lead, this isn't a race. Cutting off.", "Admiring your tail from far away. Cutting in." });
-                case "PULLUP":
-                    return Pick(persona, seed,
-                        new[] { "Terrain! Pulling up.", "Too low. Pulling up." },
-                        new[] { "Ground! Pulling up hard!", "Whoa, terrain! Climbing!" },
-                        new[] { "Terrain warning. Pulling up.", "Low. Climbing out." },
-                        new[] { "The ground is getting friendly. Pulling up.", "Terrain. Not today." });
-                case "BREAKOFF":
-                    return Pick(persona, seed,
-                        new[] { "Too close! Breaking off.", "Traffic! Breaking away." },
-                        new[] { "Watch it! Breaking off!", "Too close! Getting clear!" },
-                        new[] { "Close aboard. Opening out.", "Traffic close. Breaking away." },
-                        new[] { "Personal space, please. Breaking off.", "That was a bit intimate. Opening out." });
-                case "ESCORTLOST":
-                    return Pick(persona, seed,
-                        new[] { "Escort's down. Forming on you.", "Lost the escort. Rejoining you, Lead." },
-                        new[] { "We lost them! Coming back to you!", "Escort's gone! Forming up on you!" },
-                        new[] { "Escort lost. Forming on you, Lead.", "No escort left. Rejoining." },
-                        new[] { "That escort went badly. Forming on you.", "Escort's no longer our problem. Rejoining." });
-                case "GOAROUND":
-                    return Pick(persona, seed,
-                        new[] { "Going around.", "Missed approach. Going around." },
-                        new[] { "Botched it! Going around!", "Waved off! Coming around again!" },
-                        new[] { "Going around for another approach.", "Missed. Setting up again." },
-                        new[] { "That runway moved. Going around.", "Practice approach. Going around." });
-                case "TASKDONE":
-                    return Pick(persona, seed,
-                        new[] { "Task complete.", "Done here, Lead." },
-                        new[] { "Job's done! What's next?", "Finished! Give us more!" },
-                        new[] { "Task complete. Awaiting orders.", "All done here." },
-                        new[] { "Task complete. Applause optional.", "Done. Try to look surprised." });
-                case "UNABLEORDER":
-                    return Pick(persona, seed,
-                        new[] { "Unable.", "Negative. Unable to comply." },
-                        new[] { "Negative! Can't do that right now!", "No chance. Aircraft won't let me." },
-                        new[] { "Unable to comply under current conditions.", "Negative. Outside safe parameters." },
-                        new[] { "I'd love to, but physics says no.", "Negative. Even my simulator couldn't pull that off." });
-                default: return Acknowledge(persona, "COPY", seed);
-            }
+            if (string.Equals(eventName, "JOKER", StringComparison.OrdinalIgnoreCase) && subject != null)
+                return "Joker fuel. About " + subject + " minutes to bingo.";
+            return Variant(lines, persona, seed).Replace("{on}", subject == null ? "" : " on " + subject)
+                .Replace("{detail}", subject == null ? "" : ", " + subject)
+                .Replace("{target}", subject == null ? " the assigned target" : " " + subject);
         }
 
-        private static string Pick(ChatterPersona persona, int seed, string[] professional,
-                                   string[] aggressive, string[] calm, string[] dry)
+        private static string Variant(string[] lines, ChatterPersona persona, int seed)
         {
-            switch (persona)
-            {
-                case ChatterPersona.Aggressive: return Pick(aggressive, seed);
-                case ChatterPersona.Calm: return Pick(calm, seed);
-                case ChatterPersona.Dry: return Pick(dry, seed);
-                default: return Pick(professional, seed);
-            }
+            // Alternate the pilot's own phrasing with the standard call; urgency never becomes a joke.
+            int style = (int)persona;
+            if (style < 0 || style >= lines.Length) style = 0;
+            return lines[((uint)seed % 3 == 0) ? 0 : style];
         }
-
-        private static string Pick(int seed, params string[] lines) => Pick(lines, seed);
-
-        private static string Pick(string[] lines, int seed)
-        {
-            if (lines == null || lines.Length == 0) return "Copy.";
-            return lines[Index(seed, lines.Length)];
-        }
-
-        private static int Index(int seed, int count) =>
-            seed == int.MinValue || count <= 0 ? 0 : Math.Abs(seed) % count;
+        private static int Index(int seed, int count) => count <= 0 ? 0 : (int)((uint)seed % (uint)count);
     }
 }

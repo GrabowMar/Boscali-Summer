@@ -115,6 +115,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
+        /// <summary>
+        /// DATA CENTER or EW TRUCK programme finished: the first dead anchor of that kind has its restore bar filled, so the existing rebuild puts it back where it stood (after its
+        /// 120 s grace, if that has not passed yet). False when none of that kind is down.
+        /// </summary>
+        internal bool CompleteRebuild(FactionHQ owner, AnchorKind kind)
+        {
+            if (owner == null || !factions.TryGetValue(owner, out FactionCyber f)) return false;
+            foreach (AnchorSlot slot in f.Slots)
+            {
+                if (slot.Kind != kind || f.Anchors.Health(slot.Kind, slot.Index) != AnchorHealth.Down || slot.Bar.Complete) continue;
+                slot.Bar.Fund(slot.Bar.Goal);
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>True once this faction has at least one standing EW truck.</summary>
         /// <summary>True once any faction has a CYBER desk (the cheap gate of the detection scope patch).</summary>
         internal bool HasFactions => factions.Count > 0;
@@ -199,9 +215,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!f.Anchors.PastGrace(slot.Kind, slot.Index, now)) { slot.LastFund = now; continue; }
                 float dt = Mathf.Clamp(now - slot.LastFund, 0f, 5f);
                 slot.LastFund = now;
-                bool flat = manager.HumanCount(f.Owner) == 0;
-                float took = slot.Bar.AutoFund(dt, manager.CyberTreasury(f.Owner), flat);
-                if (took > 0f) manager.CyberTreasurySpend(f.Owner, took);
+                slot.Bar.Fund(slot.Kind == AnchorKind.EwTruck ? manager.EwTruckRebuildFunding(f.Owner, dt) : manager.DataCenterRebuildFunding(f.Owner, dt));
                 if (!slot.Bar.Complete || now < slot.NextRebuildTry) continue;
                 slot.NextRebuildTry = now + RelocateRetrySeconds;
                 spawner.DiscardGroup(slot.Unit);

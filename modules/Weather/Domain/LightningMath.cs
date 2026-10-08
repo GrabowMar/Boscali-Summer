@@ -41,6 +41,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Thunder loudness for a strike distance, scaled by the master volume.</summary>
         public static float ThunderGain(float distanceM, float master) =>
-            Scalar.Clamp(900f / (900f + Math.Max(0f, distanceM)), 0f, 1f) * Math.Max(0f, master);
+            Scalar.Clamp(2500f / (2500f + Math.Max(0f, distanceM)), 0f, 1f) * Math.Max(0f, master);
     }
 }

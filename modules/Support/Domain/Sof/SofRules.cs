@@ -43,11 +43,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             switch (kind)
             {
-                case MissionKind.Recon: return 25;
-                case MissionKind.Lase: return 25;
-                case MissionKind.Tap: return 40;
-                case MissionKind.Seize: return 50;
-                case MissionKind.Sabotage: return 60;
+                // OPS FRONTS S2: an operator's mission costs 4 allocation, whatever the kind (the front programmes pay for the war; the pilot pays a perk's price for the call).
+                case MissionKind.Recon:
+                case MissionKind.Lase:
+                case MissionKind.Tap:
+                case MissionKind.Seize:
+                case MissionKind.Sabotage: return 4;
                 default: return 0;
             }
         }
@@ -99,12 +100,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         /// <summary>Change of exposure over <paramref name="dt"/> seconds (positive rises). Enemies within 1 km add 0.5 %/s each (the mission target's own unit is never counted) (x1.25 under a bird, x1.5 pushed); against the 0.5 %/s a team always recovers (x2 held), so nothing near falls 0.5 %/s.</summary>
-        public static float ExposureDelta(int enemies, bool stare, bool pushed, bool held, float dt)
+        public static float ExposureDelta(int enemies, bool stare, bool pushed, bool held, float dt, float pressure = 1f)
         {
             if (dt <= 0f || float.IsNaN(dt)) return 0f;
             if (enemies > 0)
             {
-                float rate = Math.Min(60, enemies) * ExposurePerEnemyPerSecond * (stare ? BirdStareFactor : 1f) * (pushed ? PushExposureFactor : 1f);
+                float rate = Math.Min(60, enemies) * ExposurePerEnemyPerSecond * (stare ? BirdStareFactor : 1f) * (pushed ? PushExposureFactor : 1f) * (float.IsFinite(pressure) && pressure > 0f ? pressure : 1f); // pressure: the enemy SPACE front's counter (x1.5)
                 return (rate - ExposureDecayPerSecond * (held ? HoldDecayFactor : 1f)) * dt; // a team always recovers: one unpushed defender is a stand-off, two are a slow climb
             }
             return -ExposureDecayPerSecond * (held ? HoldDecayFactor : 1f) * dt;

@@ -25,6 +25,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return used;
         }
 
+        // ALE-X: one decoy on the fiber per aircraft. A new deployment cuts the old one.
+        public static void CutTowed(Unit launcher)
+        {
+            if (launcher == null) return;
+            var cut = new List<VanguardFlight>();
+            foreach (VanguardFlight flight in Flights.Values)
+                if (flight.Role == VanguardRole.Towed && flight.Launcher == launcher) cut.Add(flight);
+            foreach (VanguardFlight flight in cut) flight.Scuttle();
+        }
+
         public static void Clear() => Flights.Clear();
 
         private static void OnDisabled(Unit unit)

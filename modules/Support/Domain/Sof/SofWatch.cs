@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
@@ -70,6 +71,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private float restUntil, sabotageAt = float.NegativeInfinity, clock;
         private float lastExposure = -1f, lastExposureAt;
         private int lastSlot = -1;
+
+        /// <summary>The SOF front's directive and focus pin (the host sets it every tick; neutral = RECON, the rule as it always was).</summary>
+        public DirectorBias Bias = DirectorBias.Neutral(Front.Sof);
 
         public int Raises, Missions, Orders, Failures, Thinks;
         public SofWatchPlan Last { get; private set; }
@@ -182,17 +186,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             IReadOnlyList<SofTarget> visible = desk.Visible;
             // SABOTAGE: the highest odds, then the more valuable anchor, then the nearer one.
-            if (now - sabotageAt >= SabotageCooldownSeconds)
+            if (now - sabotageAt >= SabotageCooldownSeconds * Bias.SabotageCooldownScale)
             {
-                int bestIndex = -1, bestOdds = 0;
+                int bestIndex = -1, bestOdds = 0, bestRank = 0;
                 for (int i = 0; i < visible.Count; i++)
                 {
                     SofTarget t = visible[i];
                     if (t.Kind != TargetKind.Anchor || Backed(t.Id) || !Reachable(team, t) || RevealedNear(visible, world, t, RiskRadiusMeters, false) > MaxRevealedNear) continue;
                     int odds = SofRules.Odds(team.Exposure, RevealedNear(visible, world, t, ArmourRadiusMeters, true), false, SofRules.Exploit(t.Kind, t.Sub), world.CyberNear(t.X, t.Z));
-                    if (odds < MinSabotageOdds) continue;
-                    if (bestIndex < 0 || odds > bestOdds || (odds == bestOdds && AnchorRank(t.Sub) > AnchorRank(visible[bestIndex].Sub)) ||
-                        (odds == bestOdds && AnchorRank(t.Sub) == AnchorRank(visible[bestIndex].Sub) && t.Id < visible[bestIndex].Id)) { bestIndex = i; bestOdds = odds; }
+                    if (odds < Bias.MinSabotageOdds) continue;
+                    int rank = odds + Bias.OddsBonus(t.X, t.Z); // the focus pin ranks a target higher, it never lowers the bar
+                    if (bestIndex < 0 || rank > bestRank || (rank == bestRank && AnchorRank(t.Sub) > AnchorRank(visible[bestIndex].Sub)) ||
+                        (rank == bestRank && AnchorRank(t.Sub) == AnchorRank(visible[bestIndex].Sub) && t.Id < visible[bestIndex].Id)) { bestIndex = i; bestOdds = odds; bestRank = rank; }
                 }
                 if (bestIndex >= 0)
                 {
@@ -205,9 +210,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             for (int i = 0; i < visible.Count; i++)
             {
                 SofTarget t = visible[i];
-                if (t.Kind != TargetKind.Ground || Backed(t.Id) || t.Front > NearFrontMeters || !Reachable(team, t)) continue;
+                if (t.Kind != TargetKind.Ground || Backed(t.Id) || t.Front > NearFrontMeters * Bias.NearFrontScale || !Reachable(team, t)) continue;
                 if (!world.TryGround(t, out float value, out WatchKind kind) || RevealedNear(visible, world, t, RiskRadiusMeters, false) > MaxRevealedNear) continue;
-                float score = WatchOfficerPolicy.Score(new WatchTarget(t.Id, t.X, t.Z, value, kind, false, false, float.MaxValue, t.Front));
+                float score = WatchOfficerPolicy.Score(new WatchTarget(t.Id, t.X, t.Z, value, kind, false, false, float.MaxValue, t.Front)) * Bias.Focus(t.X, t.Z);
                 if (score > pickScore || (score == pickScore && t.Id < visible[pickIndex].Id)) { pickIndex = i; pickScore = score; }
             }
             if (pickIndex < 0) return SofWatchPlan.Idle(SofWatchWhy.NoWork);
@@ -215,7 +220,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             int km = (int)Math.Min(255f, Math.Round(Math.Max(0f, g.Front) / 1000f));
             if (pickScore >= HighValueScore)
                 return new SofWatchPlan(SofWatchAction.Mission, SofWatchWhy.None, team.Slot, MissionKind.Lase, g.Id, TeamVerb.Cancel, g.X, g.Z, WatchCode.SofLase, team.Slot, km);
-            if (world.AllowRecon)
+            if (world.AllowRecon && Bias.AllowRecon)
             {
                 // RECON takes a point, not a unit: the team stops 900 m short of the contact (inside the 1 km exposure circle but well inside the 2 km reveal radius), instead of walking onto it.
                 float px = g.X, pz = g.Z, d = SofRules.Distance(team.X, team.Z, g.X, g.Z);

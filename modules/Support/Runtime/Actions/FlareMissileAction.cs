@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// Tactical Flare Barrage: launches a high-velocity countermeasure delivery missile that
+    /// DECOY BARRAGE (the former Flare Barrage): launches a high-velocity countermeasure delivery missile that
     /// strikes the designated sector and initiates an intensive 15-second pyrotechnic flare barrage
     /// directly at the impact point, completely seducing and misguiding hostile IR-seeking missiles.
     /// </summary>
@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float ReleaseAltitude = 6000f;
         private const float ReleaseSpeed = 1200f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -39,9 +39,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
-            float radius = context.Settings.FlareBarrageRadius.Value;
+            float radius = Mathf.Min(context.Settings.FlareBarrageRadius.Value * context.Quality, 15000f);
             int count = context.Settings.FlareBarrageCount.Value;
-            float duration = CyberService.ExploitDuration(context.Owner, context.Settings.FlareBarrageDuration.Value, 45f); // EXPLOIT x1.5 while a node is held
+            float duration = CyberService.ExploitDuration(context.Owner, context.Settings.FlareBarrageDuration.Value * context.Quality, 45f); // EXPLOIT x1.5 while a node is held
             // The host's barrage values ride in the replicated name, so every peer seduces alike.
             string unique = SupportEffectPolicy.FlareName(SupportNaming.Unique("Flare", context), radius, duration, count);
 

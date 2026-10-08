@@ -12,23 +12,17 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private static readonly CommsTool[] ToolRow =
         {
             CommsTool.Ping, CommsTool.Pen, CommsTool.Line, CommsTool.Arrow, CommsTool.Circle, CommsTool.Box,
-            CommsTool.Sticker, CommsTool.Label, CommsTool.Eraser, CommsTool.Measure,
+            CommsTool.Label, CommsTool.Eraser, CommsTool.Measure,
         };
 
         private static readonly AvIcon[] ToolIcons =
         {
             AvIcon.MapPin, AvIcon.Pencil, AvIcon.Line, AvIcon.ArrowUpRight, AvIcon.Circle, AvIcon.Square,
-            AvIcon.Sticker, AvIcon.Typography, AvIcon.Eraser, AvIcon.Ruler2,
+            AvIcon.Typography, AvIcon.Eraser, AvIcon.Ruler2,
         };
 
         private static readonly AvIcon[] PingIcons =
             { AvIcon.MapPin, AvIcon.AlertTriangle, AvIcon.Radar2, AvIcon.Target, AvIcon.Shield, AvIcon.Flag };
-
-        private static readonly AvIcon[] StickerIcons =
-        {
-            AvIcon.Star, AvIcon.Heart, AvIcon.MoodSmile, AvIcon.Skull, AvIcon.Flame, AvIcon.Crown,
-            AvIcon.Bolt, AvIcon.Flag, AvIcon.QuestionMark, AvIcon.AlertTriangle, AvIcon.Eye, AvIcon.Coffee,
-        };
 
         private static readonly string[] ToolTips =
         {
@@ -38,7 +32,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             "Arrow: drag from the tail to the tip — an attack axis or a route.",
             "Circle: drag from the centre out to the edge — a threat ring or a CAP station.",
             "Box: drag corner to corner — a kill box or an area to avoid.",
-            "Sticker: click the map to place the selected sticker.",
             "Text: type the words in the field below, press PLACE, then click the map where they belong.",
             "Erase: click one of your own marks to remove it (the host can erase any mark).",
             "Ruler: drag for range and true bearing. Only you see it.",
@@ -49,7 +42,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         // Everything on the MAP page except its mark list: part heights, gaps and padding, biased a few px high
         // so the list never overshoots into a scrollbar.
-        private const float MapFixedHeight = 473f;
+        private const float MapFixedHeight = 407f;
 
         // The YOUR MARKS header and ring row, gaps included.
         private const float MapRingsHeight = 107f;
@@ -57,7 +50,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private AvControl[] toolButtons;
         private AvControl[] pingButtons;
         private PenRow penRow;
-        private AvControl[] stickerButtons;
         private AvField labelField;
         private AvSegmented channelStrip;
         private AvControl clearAllButton;
@@ -67,14 +59,13 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private AvRow[] boardRows;
         private readonly CommsItem[] boardBound = new CommsItem[BoardRows];
         private AvHazardBar boardBar;
-        private readonly int[] markCounts = new int[4];
+        private readonly int[] markCounts = new int[3];
 
         private void ResetMap()
         {
             toolButtons = null;
             pingButtons = null;
             penRow = null;
-            stickerButtons = null;
             labelField = null;
             channelStrip = null;
             clearAllButton = null;
@@ -115,7 +106,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 penRow.Swatches[i].Help = CommsCatalog.Pens[i].Name + " ink, for the pen and the shapes.";
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Help = "Stroke width for the pen and shapes. " + HoldHint();
 
-            // Pings and stickers are one group of markers: one header, three rows of six.
+            // Tactical pings share one compact marker row.
             p.Section(AvIcon.MapPin, "MARKERS", QuickPingNote());
             var pingSpecs = new AvControl.Spec[CommsCatalog.PalettePings];
             var pingHelps = new string[pingSpecs.Length];
@@ -132,21 +123,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
             pingButtons = ButtonGrid(p, pingSpecs, pingSpecs.Length, pingHelps);
 
-            var stickerSpecs = new AvControl.Spec[CommsCatalog.Stickers.Length];
-            var stickerHelps = new string[stickerSpecs.Length];
-            for (int i = 0; i < stickerSpecs.Length; i++)
-            {
-                int kind = i;
-                StickerKind sticker = CommsCatalog.Stickers[i];
-                stickerSpecs[i] = new AvControl.Spec(sticker.Name, () =>
-                {
-                    comms.StickerKind = kind;
-                    comms.SetTool(CommsTool.Sticker);
-                }, AvButtonStyle.Default, StickerIcons[i]);
-                stickerHelps[i] = sticker.Name + " sticker. Pick it, then click the map.";
-            }
-            stickerButtons = ButtonGrid(p, stickerSpecs, 6, stickerHelps);
-
             // Label field and its PLACE key share one line; who sees a post and the clear keys share the next.
             labelField = new AvField(p.Content, "TEXT: FARP HERE, CAP EAST…", CommsText.MaxLabel, _ => ArmLabel());
             Tip(labelField, "Words for the map, up to " + CommsText.MaxLabel + " characters. Press PLACE, then click where they go.");
@@ -160,7 +136,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 {
                     if ((comms.Channel == CommsChannel.All) != (index == 1)) comms.ToggleChannel();
                 });
-            channelStrip.Options[0].Help = "Send to TEAM: only your side sees your marks, calls, polls and games.";
+            channelStrip.Options[0].Help = "Send to TEAM: only your side sees your marks and calls.";
             channelStrip.Options[1].Help = "Send to ALL: every player sees them, including the other side. The host can switch this channel off.";
             var clearRow = new AvButtons(p.Content,
                 new[]
@@ -179,13 +155,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             {
                 new AvGauge(p.Content, "PINGS"),
                 new AvGauge(p.Content, "DRAWN"),
-                new AvGauge(p.Content, "STICKERS"),
                 new AvGauge(p.Content, "LABELS"),
             };
             markRings[0].Help = "Pings you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Ping) + ". A new one retires your oldest.";
             markRings[1].Help = "Pen strokes and shapes you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Stroke) + ". A new one retires your oldest.";
-            markRings[2].Help = "Stickers you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Sticker) + ". A new one retires your oldest.";
-            markRings[3].Help = "Text labels you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Label) + ". A new one retires your oldest.";
+            markRings[2].Help = "Text labels you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Label) + ". A new one retires your oldest.";
             p.Row(markRings);
 
             // The list is what fills the page: as many marks as fit, newest first. Click one to flash it on the map.
@@ -214,8 +188,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 pingButtons[i].Latched = comms.PingKind == i && comms.Tool == CommsTool.Ping;
             for (int i = 0; i < penRow.Swatches.Length; i++) penRow.Swatches[i].Selected = comms.PenInk == i;
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Latched = comms.PenWidth == i;
-            for (int i = 0; i < stickerButtons.Length; i++)
-                stickerButtons[i].Latched = comms.StickerKind == i && comms.Tool == CommsTool.Sticker;
 
             channelStrip.Refresh();
             clearAllButton.Interactable = comms.IsHost;
@@ -232,13 +204,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 if (item.Author != me) continue;
                 if (item.Kind == CommsItemKind.Ping) { if (!item.IsCall) markCounts[0]++; }
                 else if (item.Kind == CommsItemKind.Stroke) markCounts[1]++;
-                else if (item.Kind == CommsItemKind.Sticker) markCounts[2]++;
-                else markCounts[3]++;
+                else if (item.Kind == CommsItemKind.Label) markCounts[2]++;
             }
             SetRing(markRings[0], markCounts[0], CommsBoard.AuthorBudget(CommsItemKind.Ping));
             SetRing(markRings[1], markCounts[1], CommsBoard.AuthorBudget(CommsItemKind.Stroke));
-            SetRing(markRings[2], markCounts[2], CommsBoard.AuthorBudget(CommsItemKind.Sticker));
-            SetRing(markRings[3], markCounts[3], CommsBoard.AuthorBudget(CommsItemKind.Label));
+            SetRing(markRings[2], markCounts[2], CommsBoard.AuthorBudget(CommsItemKind.Label));
 
             // A short console drops the budget rings (their numbers stay in the tips) so the mark list keeps its rows.
             float viewport = console.Page(TabMap).ViewportHeight;
@@ -250,7 +220,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = items.Count - 1; i >= 0 && shown < fit; i--)
             {
                 CommsItem item = items[i];
-                if (comms.State.IsMuted(item.Author)) continue;
+                if (item.Kind == CommsItemKind.Sticker || comms.State.IsMuted(item.Author)) continue;
                 boardBound[shown] = item;
                 boardRows[shown].Set(Who(item.Author, item.AuthorName) + " · " + ItemName(item), null,
                     CommsText.Countdown(item.Expires - now), ItemState(item));
@@ -289,8 +259,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             {
                 case CommsItemKind.Ping:
                     return CommsCatalog.ValidPing(item.Style) ? CommsCatalog.Pings[item.Style].Code + " PING" : "PING";
-                case CommsItemKind.Sticker:
-                    return CommsCatalog.ValidSticker(item.Style) ? CommsCatalog.Stickers[item.Style].Name + " STICKER" : "STICKER";
                 case CommsItemKind.Label:
                     return "“" + item.Text + "”";
                 default:

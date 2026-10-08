@@ -18,10 +18,16 @@ namespace BoscaliSummer.Modules.Vanguard
         public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[]
         {
+            typeof(Patches.VanguardArticulationPatch),
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.AegisLockPatch)
+            typeof(Patches.GlaiveSuspendedPhysicsPatch),
+            typeof(Patches.AegisLockPatch),
+            typeof(Patches.TorpedoCollisionsPatch),
+            typeof(Patches.LanceFirePatch),
+            typeof(Patches.SkywellLaunchPatch),
+            typeof(Patches.SkywellFirePatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);
@@ -29,6 +35,13 @@ namespace BoscaliSummer.Modules.Vanguard
         public void Install(ModuleContext context)
         {
             context.AddSceneService<AegisService>(60);
+            context.AddSceneService<Networking.GlaiveNet>(60);
+            context.AddSceneService<LanceService>(60);
+            context.AddSceneService<Presentation.TowCable>(60);
+            context.AddSceneService<SkywellService>(60);
+            context.AddSceneService<Networking.SkywellNet>(60);
+            context.AddSceneService<Presentation.SkywellVisuals>(60);
+            context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));
             context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
         }
     }

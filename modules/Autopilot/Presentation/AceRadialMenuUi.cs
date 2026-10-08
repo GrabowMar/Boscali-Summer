@@ -1,4 +1,5 @@
 using NOAvionics;
+using NuclearOption.UIStyleSystem;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Configuration;
@@ -25,38 +26,87 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// </summary>
     internal sealed class AceRadialMenuUi : MonoBehaviour, ISceneService
     {
+        /// <summary>
+        /// The menu's palette, base-game aligned (2026-10-07): the game's own HUD theme ink for everything that is
+        /// "the HUD", its warning/alert colours for tones, near-black slabs for plates. Read once per frame; the
+        /// base game's default green / amber / red when no theme is up (menus, offline checks).
+        /// </summary>
+        private static class Hud
+        {
+            private static int frame = -1;
+            private static Color ink, warn, alert;
+
+            private static void Refresh()
+            {
+                if (frame == Time.frameCount) return;
+                frame = Time.frameCount;
+                try
+                {
+                    var theme = ThemeManager.Active.ColorTheme;
+                    ink = theme.AllClear; warn = theme.Warning; alert = theme.Alert;
+                }
+                catch
+                {
+                    ink = new Color(0.22f, 1f, 0.38f); warn = new Color(1f, 0.78f, 0.2f); alert = new Color(1f, 0.26f, 0.2f);
+                }
+            }
+
+            public static Color TextPrimary { get { Refresh(); return ink; } }
+            public static Color Accent => TextPrimary;
+            public static Color Selected => TextPrimary;
+            public static Color RailInfo { get { Refresh(); return new Color(ink.r * 0.85f, ink.g * 0.85f, ink.b * 0.85f, 1f); } }
+            public static Color Dim { get { Refresh(); return new Color(ink.r, ink.g, ink.b, 0.55f); } }
+            public static Color Disabled => new Color(0.55f, 0.58f, 0.56f, 0.6f);
+            public static Color Warning { get { Refresh(); return warn; } }
+            public static Color Alert { get { Refresh(); return alert; } }
+            public static Rgba Panel => new Color(0f, 0.02f, 0.03f, 1f).ToRgba();
+            public static Rgba TextInk => new Color(0.01f, 0.04f, 0.03f, 1f).ToRgba();
+        }
+
         private const float TapSeconds = 0.25f;
         private const int WidgetCount = AceRadialMenuTree.MaxVisible + 1;
-        private const int VectorCapacity = (WidgetCount * 72) + 160;
-        private const int PlateCapacity = (WidgetCount * 4) + 24;
+        private const int VectorCapacity = (WidgetCount * 120) + 200;
+        private const int PlateCapacity = (WidgetCount * 48) + 200 + (BackdropRings * BackdropSegments); // per token: guide arc, leader, capsule, edges
         private const int SelectorCapacity = 12;
         private const CursorFlags ForeignCursorOwners =
             CursorFlags.GameMenu | CursorFlags.Dialogue | CursorFlags.Chat;
 
         // Discs and glyphs (1080p canvas units; option roots scale with the pop-out animation).
-        private const float DiscRadius = 17f;
-        private const float CenterRadius = 22f;
-        private const float DiscOutline = 1.25f;
-        private const float PathOutline = 2f;
-        private const float IconHalf = 8f;
-        private const float CenterIconHalf = 10f;
-        private const float IconStroke = 1.5f;
-        private const int DiscSegments = 18;
+        private const float DiscRadius = 21f;
+        private const float CenterRadius = 34f;
+        private const float DiscOutline = 1.75f;
+        private const float PathOutline = 2.5f;
+        private const float IconHalf = 10f;
+        private const float CenterIconHalf = 14f;
+        private const float IconStroke = 1.75f;
+        private const int DiscSegments = 28;
         private const float LeaderWidth = 1.25f;
         private const float DimAlpha = 0.35f;
 
+        // State halo: a coloured ring just outside a disc whose state line is lit (ON, caution, danger),
+        // so state reads at a glance without the tag.
+        private const float HaloGap = 3f;
+        private const float HaloWidth = 2f;
+
+        // Backdrop: stacked translucent discs behind the whole menu, darkest at the centre, so it
+        // reads over a bright sky and separates from the flight HUD underneath.
+        private const int BackdropRings = 12;
+        private const int BackdropSegments = 64;
+        private const float BackdropAlpha = 0.08f;
+        private const float BackdropPad = 40f;
+
         // Data tag: label + state line beside the disc, on a dark plate that starts under the disc.
         private const float LabelSize = 14f;
-        private const float StatusSize = 11.5f;
+        private const float StatusSize = 12.5f;
         private const float CenterLabelSize = 12f;
         private const float TextGap = 7f;
         private const float LabelLift = 7f;
         private const float StatusDrop = 8f;
         private const float PlatePadding = 5f;
         private const float RailWidth = 2f;
-        private const float PlateBaseAlpha = 0.72f;
+        private const float PlateBaseAlpha = 0.94f;
         private const float LabelDimAlpha = 0.55f;
-        private const float CenterLabelDrop = 30f;
+        private const float CenterLabelDrop = 44f;
         private const float HintDrop = 250f;
 
         private const float SelectorSize = 46f;
@@ -261,7 +311,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void Render(float unit)
         {
             float textScale = 1f / Mathf.Clamp(unit, .1f, 1f);
-            float hintSize = 11f * textScale;
+            float hintSize = 12.5f * textScale;
             bool hintSizeChanged = !Mathf.Approximately(hint.fontSize, hintSize);
             if (hintSizeChanged) hint.fontSize = hintSize;
             IReadOnlyList<AceRadialNodeLayout> layout = tree.Layout;
@@ -270,7 +320,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             float centerX = count > 0 ? layout[0].Position.X / unit : 0f;
             float centerY = count > 0 ? layout[0].Position.Y / unit : 0f;
 
+            string verb = holding ? "RELEASE" : "CLICK";
             string hintText = !tree.HasOptions ? "NO ACTIONS AVAILABLE"
+                : hovered > 0 && hovered < layout.Count && layout[hovered].Node.Enabled
+                    ? verb + ": " + (layout[hovered].Node.Action.Label ?? "").ToUpperInvariant() + "  ·  RMB " + (holding ? "CANCEL" : "CLOSE")
                 : holding ? "RELEASE TO SELECT  ·  RMB CANCEL"
                 : "CLICK TO SELECT  ·  RMB CLOSE";
             bool hintChanged = hintText != hint.text;
@@ -302,7 +355,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 prevHovered = hovered;
             }
 
-            bool showSelector = hovered > 0 && hovered < count;
+            bool showSelector = false; // the lit token and bold leader mark the hover now
             selectorRoot.gameObject.SetActive(showSelector);
             if (showSelector)
             {
@@ -330,7 +383,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
             string label = (data.Action.Label ?? string.Empty).ToUpperInvariant()
                 + (!centre && data.IsBranch ? "  ›" : string.Empty);
-            string status = centre ? string.Empty : data.Status.Text ?? string.Empty;
+            string status = data.Status.Text ?? string.Empty;
 
             bool changed = false;
             // Keep text readable when the reference canvas scales down at 720p.
@@ -373,8 +426,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
             bool live = centre || node.OnPath || node.CurrentLevel;
             float alpha = live || hovered ? 1f : LabelDimAlpha;
-            widget.Label.color = (data.Enabled ? AvTheme.TextPrimary : AvTheme.Disabled).WithAlpha(alpha);
-            widget.Status.color = (data.Enabled ? ToneColor(data.Status.Tone) : AvTheme.Disabled).WithAlpha(alpha);
+            bool lit = hovered && data.Enabled && !centre;
+            Color dark = new Color(0.01f, 0.04f, 0.03f, 1f);
+            widget.Label.color = lit ? dark : (data.Enabled ? Hud.TextPrimary : Hud.Disabled).WithAlpha(alpha);
+            widget.Status.color = lit ? dark : (data.Enabled ? ToneColor(data.Status.Tone) : Hud.Disabled).WithAlpha(alpha);
         }
 
         /// <summary>Sizes and anchors the two text boxes to their own glyphs on the chosen side.</summary>
@@ -400,7 +455,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 label.pivot = new Vector2(0.5f, 1f);
                 widget.Label.alignment = TextAlignmentOptions.Top;
                 label.anchoredPosition = new Vector2(0f, -CenterLabelDrop);
-                status.gameObject.SetActive(false);
+                bool centreStatus = statusPref.y > 0f;
+                status.pivot = new Vector2(0.5f, 1f);
+                widget.Status.alignment = TextAlignmentOptions.Top;
+                status.anchoredPosition = new Vector2(0f, -CenterLabelDrop - labelPref.y);
+                if (status.gameObject.activeSelf != centreStatus) status.gameObject.SetActive(centreStatus);
                 return;
             }
 
@@ -420,10 +479,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             switch (tone)
             {
-                case AceTone.Active: return AvTheme.Accent;
-                case AceTone.Caution: return AvTheme.Warning;
-                case AceTone.Danger: return AvTheme.Alert;
-                default: return AvTheme.Dim;
+                case AceTone.Active: return Hud.Accent;
+                case AceTone.Caution: return Hud.Warning;
+                case AceTone.Danger: return Hud.Alert;
+                default: return Hud.Dim;
             }
         }
 
@@ -440,28 +499,62 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             plates.Clear();
             for (int i = 0; i < lastIndexAtLevel.Length; i++) lastIndexAtLevel[i] = -1;
 
-            Rgba info = AvTheme.RailInfo.ToRgba();
-            Rgba selected = AvTheme.Selected.ToRgba();
+            Rgba info = Hud.RailInfo.ToRgba();
+            Rgba selected = Hud.Selected.ToRgba();
 
+            float reach = CenterRadius;
+            for (int i = 1; i < count; i++)
+            {
+                float dx = layout[i].Position.X / unit - centerX, dy = layout[i].Position.Y / unit - centerY;
+                reach = Mathf.Max(reach, Mathf.Sqrt((dx * dx) + (dy * dy)) + DiscRadius);
+            }
+            Rgba shade = Hud.Panel.WithAlpha(BackdropAlpha);
+            for (int r = 0; r < BackdropRings; r++)
+            {
+                float radius = (reach + BackdropPad) * (1f - (r * 0.07f));
+                AvStrokes.Ring(plates, centerX, centerY, radius * 0.5f, BackdropSegments, radius, shade);
+            }
+
+            // Pass 1, on the plate surface (under every token and its text): orbit guides through each ring and fan,
+            // then the leaders.
+            bool rootGuide = false;
             for (int i = 0; i < count; i++)
             {
                 AceRadialNodeLayout node = layout[i];
                 int level = node.Level;
                 if (level < lastIndexAtLevel.Length) lastIndexAtLevel[level] = i;
+                if (level == 0 || level - 1 >= lastIndexAtLevel.Length || lastIndexAtLevel[level - 1] < 0) continue;
+                AceRadialNodeLayout parent = layout[lastIndexAtLevel[level - 1]];
+                float ppx = parent.Position.X / unit, ppy = parent.Position.Y / unit;
+                float npx = node.Position.X / unit, npy = node.Position.Y / unit;
+                float dx = npx - ppx, dy = npy - ppy, dist = Mathf.Sqrt((dx * dx) + (dy * dy));
+                bool live = node.OnPath || node.CurrentLevel;
+                if (level == 1 && !rootGuide)
+                {
+                    AvStrokes.Ring(plates, ppx, ppy, dist, 72, 1f, info.WithAlpha(0.16f));
+                    rootGuide = true;
+                }
+                else if (level > 1)
+                {
+                    float a = Mathf.Atan2(dy, dx) * Mathf.Rad2Deg;
+                    AvStrokes.Arc(plates, ppx, ppy, dist, a - 16f, a + 16f, 8, 1f, info.WithAlpha(live ? 0.22f : 0.1f));
+                }
+                float parentRadius = (parent.Level == 0 ? CenterRadius : DiscRadius) * parent.Scale;
+                float alpha = live ? 0.75f : DimAlpha * 0.6f;
+                TrimmedLeader(plates, ppx, ppy, parentRadius, npx, npy, DiscRadius * node.Scale,
+                    (i == hovered ? selected : info).WithAlpha(i == hovered ? 1f : alpha),
+                    i == hovered ? LeaderWidth * 2.2f : node.OnPath ? LeaderWidth * 1.5f : LeaderWidth);
+            }
 
+            // Pass 2: capsule tags (plate surface) and discs (vector surface).
+            for (int i = 0; i < count; i++)
+            {
+                AceRadialNodeLayout node = layout[i];
+                int level = node.Level;
                 float px = node.Position.X / unit;
                 float py = node.Position.Y / unit;
                 float k = node.Scale;
                 float radius = (level == 0 ? CenterRadius : DiscRadius) * k;
-
-                if (level > 0 && level - 1 < lastIndexAtLevel.Length && lastIndexAtLevel[level - 1] >= 0)
-                {
-                    AceRadialNodeLayout parent = layout[lastIndexAtLevel[level - 1]];
-                    float parentRadius = (parent.Level == 0 ? CenterRadius : DiscRadius) * parent.Scale;
-                    float alpha = node.OnPath || node.CurrentLevel ? 0.85f : DimAlpha;
-                    TrimmedLeader(buffer, parent.Position.X / unit, parent.Position.Y / unit, parentRadius,
-                        px, py, radius, info.WithAlpha(alpha));
-                }
 
                 if (level == 0) continue;
 
@@ -472,13 +565,13 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
                 PaintPlate(plates, widgets[i], px, py, k, tagAlpha, isHovered, data);
 
-                Rgba ink = !data.Enabled ? AvTheme.Disabled.ToRgba()
-                    : data.IsBranch ? info : AvTheme.TextPrimary.ToRgba();
+                Rgba ink = !data.Enabled ? Hud.Disabled.ToRgba()
+                    : data.IsBranch ? info : Hud.TextPrimary.ToRgba();
                 float discAlpha = live || isHovered ? 1f : DimAlpha + 0.2f;
 
-                Rgba fill = isHovered && data.Enabled ? selected.WithAlpha(0.92f)
-                    : AvTokens.HudPanel.WithAlpha(0.9f * discAlpha);
-                Disc(buffer, px, py, radius, fill);
+                Rgba fill = isHovered && data.Enabled ? selected
+                    : Hud.Panel.WithAlpha(0.9f * discAlpha);
+                Disc(isHovered && data.Enabled ? plates : buffer, px, py, radius, fill); // lit disc on the tag's layer, so no seam
 
                 if (!data.Enabled)
                     AvStrokes.DashedRing(buffer, px, py, radius, 10, 0.55f, DiscOutline, ink.WithAlpha(discAlpha));
@@ -487,12 +580,19 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                         node.OnPath ? PathOutline : DiscOutline,
                         (isHovered ? selected : node.OnPath ? info : ink.WithAlpha(0.8f)).WithAlpha(discAlpha));
 
-                Rgba glyph = isHovered && data.Enabled ? AvTokens.TextInk : ink.WithAlpha(discAlpha);
+                if (data.Enabled && !data.Status.IsEmpty && data.Status.Tone != AceTone.Normal)
+                    AvStrokes.Ring(buffer, px, py, radius + HaloGap + (HaloWidth * 0.5f), DiscSegments * 2, HaloWidth,
+                        ToneColor(data.Status.Tone).ToRgba().WithAlpha(discAlpha));
+
+                if (isHovered && data.Enabled)
+                    AvStrokes.Ring(buffer, px, py, radius + 6f, DiscSegments * 2, 1.5f, selected.WithAlpha(0.45f));
+
+                Rgba glyph = isHovered && data.Enabled ? Hud.TextInk : ink.WithAlpha(discAlpha);
                 AceRadialIcons.Draw(buffer, data.Action.Icon, px, py, IconHalf * k, IconStroke, glyph);
             }
 
             // Centre node: the aircraft itself.
-            Disc(buffer, centerX, centerY, CenterRadius, AvTokens.HudPanel.WithAlpha(0.92f));
+            Disc(buffer, centerX, centerY, CenterRadius, Hud.Panel.WithAlpha(0.92f));
             AvStrokes.Ring(buffer, centerX, centerY, CenterRadius, 24, PathOutline, info);
             AvStrokes.Ring(buffer, centerX, centerY, CenterRadius + 5f, 24, 0.75f, info.WithAlpha(0.35f));
             AceRadialIcons.Draw(buffer, AceIcon.Aircraft, centerX, centerY, CenterIconHalf, IconStroke, info);
@@ -503,8 +603,12 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             {
                 float hintX = centerX - (hintPlateW * 0.5f);
                 float hintY = (centerY - HintDrop) - (hintPlateH * 0.5f);
-                AvStrokes.Fill(plates, hintX, hintY, hintPlateW, hintPlateH, AvTokens.HudPanel.WithAlpha(PlateBaseAlpha));
-                AvStrokes.Fill(plates, hintX, hintY, 1f, hintPlateH, info);
+                AvStrokes.Fill(plates, hintX, hintY, hintPlateW, hintPlateH, Hud.Panel.WithAlpha(PlateBaseAlpha));
+                Rgba hintEdge = info.WithAlpha(0.55f);
+                AvStrokes.Fill(plates, hintX, hintY, hintPlateW, 1f, hintEdge);
+                AvStrokes.Fill(plates, hintX, hintY + hintPlateH - 1f, hintPlateW, 1f, hintEdge);
+                AvStrokes.Fill(plates, hintX + hintPlateW - 1f, hintY, 1f, hintPlateH, hintEdge);
+                AvStrokes.Fill(plates, hintX, hintY, 2f, hintPlateH, info);
             }
 
             vector.Commit();
@@ -512,8 +616,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         }
 
         /// <summary>
-        /// Dark tag plate from under the disc out past the text, with a tone rail on its outer
-        /// edge (the state line's colour) and a selection border while hovered.
+        /// HUD callout, no pill: a 1 px rule leaves the disc edge and runs under the label (the state line sits under
+        /// the rule), ending in a tick; a faint square scrim keeps text legible over sky. The rule takes the state tone.
+        /// Hovered: a solid square block behind the text with corner brackets around it.
         /// </summary>
         private static void PaintPlate(AvQuadBuffer plates, NodeWidget widget, float px, float py, float k,
             float alpha, bool hovered, AceRadialNode data)
@@ -522,50 +627,60 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             bool hasStatus = widget.StatusH > 0f;
             float top = (hasStatus ? LabelLift + (widget.LabelH * 0.5f) : widget.LabelH * 0.5f) + PlatePadding;
             float bottom = (hasStatus ? -StatusDrop - (widget.StatusH * 0.5f) : -(widget.LabelH * 0.5f)) - PlatePadding;
-            float outer = DiscRadius + TextGap + widget.TextW + PlatePadding;
-            top = Mathf.Max(top, DiscRadius * 0.7f);
-            bottom = Mathf.Min(bottom, -DiscRadius * 0.7f);
-
-            float w = outer * k;
-            float h = (top - bottom) * k;
-            float y = py + (bottom * k);
             bool right = widget.Side >= 0;
-            float x = right ? px : px - w;
+            float s = right ? 1f : -1f;
+            float edge = px + (s * DiscRadius * k);
+            float textIn = px + (s * (DiscRadius + TextGap - (PlatePadding * 0.5f)) * k);
+            float textOut = px + (s * (DiscRadius + TextGap + widget.TextW + PlatePadding) * k);
+            float boxX = Mathf.Min(textIn, textOut), boxW = Mathf.Abs(textOut - textIn);
+            float boxY = py + (bottom * k), boxH = (top - bottom) * k;
+            float ruleY = hasStatus ? py - (0.5f * k) : boxY + (PlatePadding * 0.5f * k);
 
-            AvStrokes.Fill(plates, x, y, w, h, AvTokens.HudPanel.WithAlpha(PlateBaseAlpha * alpha));
-            Rgba rail = (data.Enabled && !data.Status.IsEmpty ? ToneColor(data.Status.Tone) : AvTheme.RailInfo).ToRgba();
-            float railX = right ? x + w - RailWidth : x;
-            AvStrokes.Fill(plates, railX, y, RailWidth, h, rail.WithAlpha(alpha * (data.Status.IsEmpty ? 0.6f : 1f)));
-            // Portal: hairline top/bottom edges carry the tag, and the hovered tag wears corner brackets.
-            Rgba hair = AvTheme.RailInfo.ToRgba().WithAlpha(0.35f * alpha);
-            AvStrokes.Fill(plates, x, y + h - 1f, w, 1f, hair);
-            AvStrokes.Fill(plates, x, y, w, 1f, hair);
-            if (hovered) AvStrokes.Bracket(plates, x, y, w, h, 5f, 1.25f, AvTheme.Selected.ToRgba());
+            bool lit = hovered && data.Enabled;
+            if (lit)
+            {
+                Rgba sel = Hud.Selected.ToRgba();
+                AvStrokes.Fill(plates, Mathf.Min(edge, textIn), ruleY - k, Mathf.Abs(textIn - edge) + 1f, 2f * k, sel);
+                AvStrokes.Fill(plates, boxX, boxY, boxW, boxH, sel);
+                float g = 3f * k, arm = 6f * k;
+                float l = boxX - g, r = boxX + boxW + g, b = boxY - g, t = boxY + boxH + g;
+                AvStrokes.Fill(plates, l, b, arm, 1.5f, sel); AvStrokes.Fill(plates, l, b, 1.5f, arm, sel);
+                AvStrokes.Fill(plates, l, t - 1.5f, arm, 1.5f, sel); AvStrokes.Fill(plates, l, t - arm, 1.5f, arm, sel);
+                AvStrokes.Fill(plates, r - arm, b, arm, 1.5f, sel); AvStrokes.Fill(plates, r - 1.5f, b, 1.5f, arm, sel);
+                AvStrokes.Fill(plates, r - arm, t - 1.5f, arm, 1.5f, sel); AvStrokes.Fill(plates, r - 1.5f, t - arm, 1.5f, arm, sel);
+                return;
+            }
+
+            AvStrokes.Fill(plates, boxX, boxY, boxW, boxH, Hud.Panel.WithAlpha(0.88f * Mathf.Max(alpha, 0.85f))); // contrast over the native HUD
+            bool toned = data.Enabled && !data.Status.IsEmpty && data.Status.Tone != AceTone.Normal;
+            Rgba rule = (toned ? ToneColor(data.Status.Tone) : Hud.RailInfo).ToRgba().WithAlpha((toned ? 1f : 0.7f) * alpha);
+            AvStrokes.Fill(plates, Mathf.Min(edge, textOut), ruleY, Mathf.Abs(textOut - edge), 1f, rule);
+            AvStrokes.Fill(plates, right ? textOut - 1f : textOut, ruleY - (2f * k), 1f, 5f * k, rule);
         }
 
         private static void PaintCentrePlate(AvQuadBuffer plates, NodeWidget widget, float cx, float cy)
         {
             if (widget.TextW <= 0f) return;
             float w = widget.TextW + (PlatePadding * 2f);
-            float h = widget.LabelH + PlatePadding;
+            float h = widget.LabelH + widget.StatusH + PlatePadding;
             float x = cx - (w * 0.5f);
-            float y = cy - CenterLabelDrop - widget.LabelH - (PlatePadding * 0.5f);
-            AvStrokes.Fill(plates, x, y, w, h, AvTokens.HudPanel.WithAlpha(PlateBaseAlpha));
-            AvStrokes.Fill(plates, x, y + h - 1f, w, 1f, AvTheme.RailInfo.ToRgba());
-            AvStrokes.Fill(plates, x, y, w, 1f, AvTheme.RailInfo.ToRgba().WithAlpha(0.35f));
+            float y = cy - CenterLabelDrop - widget.LabelH - widget.StatusH - (PlatePadding * 0.5f);
+            AvStrokes.Fill(plates, x, y, w, h, Hud.Panel.WithAlpha(PlateBaseAlpha));
+            AvStrokes.Fill(plates, x, y + h - 1f, w, 1f, Hud.RailInfo.ToRgba());
+            AvStrokes.Fill(plates, x, y, w, 1f, Hud.RailInfo.ToRgba().WithAlpha(0.35f));
         }
 
         private static void Disc(AvQuadBuffer buffer, float x, float y, float radius, Rgba color) =>
             AvStrokes.Ring(buffer, x, y, radius * 0.5f, DiscSegments, radius, color);
 
         private static void TrimmedLeader(AvQuadBuffer buffer, float ax, float ay, float ar,
-            float bx, float by, float br, Rgba color)
+            float bx, float by, float br, Rgba color, float width)
         {
             float dx = bx - ax, dy = by - ay;
             float len = Mathf.Sqrt((dx * dx) + (dy * dy));
             if (len <= ar + br + 1f) return;
             float ux = dx / len, uy = dy / len;
-            AvStrokes.Line(buffer, ax + (ux * ar), ay + (uy * ar), bx - (ux * br), by - (uy * br), LeaderWidth, color);
+            AvStrokes.Line(buffer, ax + (ux * ar), ay + (uy * ar), bx - (ux * br), by - (uy * br), width, color);
         }
 
         // ------------------------------------------------------------------ build
@@ -593,7 +708,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             for (int i = 0; i < WidgetCount; i++) widgets.Add(BuildWidget(i));
 
             hint = HudLabel("Hint", host.Data, 11f, TextAlignmentOptions.Center);
-            hint.color = AvTheme.Dim.WithAlpha(0.85f);
+            hint.color = Hud.Dim.WithAlpha(0.85f);
             hint.rectTransform.anchorMin = Vector2.zero;
             hint.rectTransform.anchorMax = Vector2.zero;
             hint.rectTransform.pivot = new Vector2(0.5f, 0.5f);
@@ -606,7 +721,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             buffer.Clear();
             // selectorVector fills selectorRoot's own rect (AvVector.Create stretches to its
             // parent), so its local origin is that rect's bottom-left corner.
-            AvStrokes.Bracket(buffer, 0f, 0f, SelectorSize, SelectorSize, SelectorArm, 1.5f, AvTheme.Selected.ToRgba());
+            AvStrokes.Bracket(buffer, 0f, 0f, SelectorSize, SelectorSize, SelectorArm, 1.5f, Hud.Selected.ToRgba());
             selectorVector.Commit();
         }
 
@@ -671,7 +786,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
 
             label.fontSize = size;
-            label.color = AvTheme.TextPrimary;
+            label.color = Hud.TextPrimary;
             label.enableWordWrapping = false;
             label.richText = false;
             label.overflowMode = TextOverflowModes.Overflow;

@@ -6,24 +6,18 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Chimera ramp paratrooper drop and Ibis fast-rope visuals. Client-local and cosmetic:
+    /// HALO paratrooper stick and Ibis fast-rope visuals. Client-local and cosmetic:
     /// the server resolves the drop's outcome in AirAssaultController on its own clock.
     /// </summary>
     internal static class AirAssaultVisuals
     {
-        private static Mesh cachedParachuteMesh;
-        private static Material cachedParachuteMat;
-        private static Material cachedChuteFabricMat;
-        private static Material cachedChuteLineMat;
-
         private const int MaximumActiveOperations = 8;
         private static readonly List<GameObject> ActiveOperations = new List<GameObject>(MaximumActiveOperations);
 
         private static bool HasActiveRappel(Aircraft aircraft)
         {
             foreach (GameObject operation in ActiveOperations)
-                if (operation != null && operation.GetComponent<FastRopeRappellingOperation>() is FastRopeRappellingOperation rappel &&
-                    rappel.transform.IsChildOf(aircraft.transform)) return true;
+                if (operation != null && operation.GetComponent<RopeOperation>() is RopeOperation rope && rope.Aircraft == aircraft) return true;
             return false;
         }
 
@@ -32,13 +26,6 @@ namespace BoscaliSummer.Garrisons
             for (int i = 0; i < ActiveOperations.Count; i++)
                 if (ActiveOperations[i] != null) UnityEngine.Object.Destroy(ActiveOperations[i]);
             ActiveOperations.Clear();
-
-            if (cachedParachuteMesh != null) UnityEngine.Object.Destroy(cachedParachuteMesh);
-            cachedParachuteMesh = null;
-            cachedParachuteMat = null;
-            if (cachedChuteFabricMat != null) UnityEngine.Object.Destroy(cachedChuteFabricMat);
-            cachedChuteFabricMat = null;
-            cachedChuteLineMat = null;
         }
 
         private static bool Track(GameObject operation)
@@ -55,563 +42,548 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
 
-        public static void SpawnParatrooperCargoDrop(
-            Aircraft aircraft,
-            Vector3 rampPos,
-            Vector3 exitVelocity,
-            int troopCount)
+        /// <summary>Jumper and canopy templates riding inactive inside the Airborne.nobp mount prefab.</summary>
+        private static bool TryHaloTemplates(out GameObject jumper, out GameObject canopy)
         {
-            var dropGo = new GameObject("BoscaliSummer.ParatrooperCargoDrop");
-            dropGo.transform.position = rampPos;
-            if (!Track(dropGo)) return;
-
-            ParatrooperCargoDropOperation op = dropGo.AddComponent<ParatrooperCargoDropOperation>();
-            op.Initialize(aircraft, rampPos, exitVelocity, troopCount);
+            jumper = canopy = null;
+            if (Encyclopedia.WeaponLookup == null ||
+                !Encyclopedia.WeaponLookup.TryGetValue(AirAssaultController.HaloMountKey, out WeaponMount mount) ||
+                mount == null || mount.prefab == null)
+                return false;
+            jumper = mount.prefab.transform.Find("AirborneJumper")?.gameObject;
+            canopy = mount.prefab.transform.Find("AirborneCanopy")?.gameObject;
+            return jumper != null && canopy != null;
         }
 
-        public static void SpawnFastRopeRappelling(Aircraft aircraft, Vector3 landingPos, int soldierCount)
+        public static void SpawnHaloDrop(HaloGlidePlan plan, float startDelay)
+        {
+            if (!TryHaloTemplates(out GameObject jumper, out GameObject canopy))
+            {
+                Plugin.Logger.LogWarning("[Air Assault] HALO models missing from the Airborne bundle; the stick drops unseen.");
+                return;
+            }
+            var go = new GameObject("BoscaliSummer.HaloDrop");
+            if (!Track(go)) return;
+            go.AddComponent<HaloDropOperation>().Initialize(plan, startDelay, jumper, canopy);
+        }
+
+        /// <summary>
+        /// Draws a HALO stick by sampling its <see cref="HaloGlidePlan"/> every frame: no physics,
+        /// so every peer shows the same flight. The plan is in global coordinates; samples become
+        /// local positions after the floating-origin shift (CameraStateManager.LateUpdate, order 2),
+        /// hence the late LateUpdate.
+        /// </summary>
+        [DefaultExecutionOrder(1000)]
+        private sealed class HaloDropOperation : MonoBehaviour
+        {
+            private const float TrailSeconds = 14f;
+            private const float TrailStep = 0.5f;
+            private const int TrailPoints = (int)(TrailSeconds / TrailStep) + 1;
+            private static readonly string[] BodyShapes = { "Track", "Exit", "Hang", "SteerL", "SteerR", "Flare", "Land" };
+            private static Material smokeMaterial;
+
+            private sealed class Jumper
+            {
+                public Transform Body, Canopy;
+                public SkinnedMeshRenderer BodyMesh, CanopyMesh;
+                public int[] Shapes;
+                public int Snivel, Packed;
+                public LineRenderer Smoke;
+                public HaloPhase LastPhase;
+            }
+
+            private HaloGlidePlan plan;
+            private float startAt;
+            private Jumper[] jumpers;
+            private readonly float[] weights = new float[7];
+            private readonly Vector3[] trail = new Vector3[TrailPoints];
+
+            public void Initialize(HaloGlidePlan haloPlan, float startDelay, GameObject jumperTemplate, GameObject canopyTemplate)
+            {
+                plan = haloPlan;
+                startAt = Time.time + startDelay;
+                jumpers = new Jumper[plan.Count];
+                for (int i = 0; i < plan.Count; i++)
+                {
+                    GameObject body = Instantiate(jumperTemplate, transform);
+                    body.name = "Jumper_" + (i + 1);
+                    GameObject chute = Instantiate(canopyTemplate, body.transform);
+                    chute.name = "Canopy";
+                    chute.transform.localPosition = Vector3.zero;
+                    chute.transform.localRotation = Quaternion.identity;
+                    chute.SetActive(true);
+                    var j = new Jumper
+                    {
+                        Body = body.transform, Canopy = chute.transform,
+                        BodyMesh = body.GetComponentInChildren<SkinnedMeshRenderer>(true),
+                        CanopyMesh = chute.GetComponentInChildren<SkinnedMeshRenderer>(true),
+                        Shapes = new int[BodyShapes.Length],
+                        Smoke = CreateSmoke(body.name),
+                        LastPhase = HaloPhase.Aboard,
+                    };
+                    Mesh bodyMesh = j.BodyMesh != null ? j.BodyMesh.sharedMesh : null;
+                    for (int s = 0; s < BodyShapes.Length; s++)
+                        j.Shapes[s] = bodyMesh != null ? bodyMesh.GetBlendShapeIndex(BodyShapes[s]) : -1;
+                    Mesh canopyMesh = j.CanopyMesh != null ? j.CanopyMesh.sharedMesh : null;
+                    j.Snivel = canopyMesh != null ? canopyMesh.GetBlendShapeIndex("Snivel") : -1;
+                    j.Packed = canopyMesh != null ? canopyMesh.GetBlendShapeIndex("Packed") : -1;
+                    body.SetActive(false);
+                    jumpers[i] = j;
+                }
+            }
+
+            private LineRenderer CreateSmoke(string owner)
+            {
+                var go = new GameObject(owner + "_Smoke");
+                go.transform.SetParent(transform, false);
+                LineRenderer line = go.AddComponent<LineRenderer>();
+                line.sharedMaterial = SmokeMaterial();
+                line.useWorldSpace = true;
+                line.alignment = LineAlignment.View;
+                line.numCapVertices = 2;
+                line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                line.receiveShadows = false;
+                line.widthCurve = AnimationCurve.Linear(0f, 0.5f, 1f, 4.5f);
+                var fade = new Gradient();
+                fade.SetKeys(
+                    new[] { new GradientColorKey(new Color(0.92f, 0.92f, 0.9f), 0f), new GradientColorKey(new Color(0.75f, 0.76f, 0.78f), 1f) },
+                    new[] { new GradientAlphaKey(0.6f, 0f), new GradientAlphaKey(0f, 1f) });
+                line.colorGradient = fade;
+                line.positionCount = 0;
+                return line;
+            }
+
+            private static Material SmokeMaterial()
+            {
+                if (smokeMaterial != null) return smokeMaterial;
+                Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
+                var m = new Material(shader) { name = "BoscaliSummer.HaloSmoke" };
+                m.SetOverrideTag("RenderType", "Transparent");
+                m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                if (m.HasProperty("_Surface")) m.SetFloat("_Surface", 1f);
+                if (m.HasProperty("_SrcBlend")) m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                if (m.HasProperty("_DstBlend")) m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                if (m.HasProperty("_ZWrite")) m.SetFloat("_ZWrite", 0f);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                return smokeMaterial = m;
+            }
+
+            private void LateUpdate()
+            {
+                float t = Time.time - startAt;
+                if (t > plan.TotalSeconds)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+                for (int i = 0; i < jumpers.Length; i++)
+                    Draw(i, jumpers[i], t);
+            }
+
+            private static Vector3 Local(Vector3 global) => new GlobalPosition(global.x, global.y, global.z).ToLocalPosition();
+
+            private void Draw(int index, Jumper j, float t)
+            {
+                HaloSample s = plan.Sample(index, t);
+                bool visible = s.Phase != HaloPhase.Aboard && s.Phase != HaloPhase.Gone;
+                if (j.Body.gameObject.activeSelf != visible) j.Body.gameObject.SetActive(visible);
+                DrawSmoke(index, j, t, visible);
+                if (!visible) return;
+
+                if (s.Phase == HaloPhase.Landed && j.LastPhase != HaloPhase.Landed) LandingDust(Local(s.Position));
+                j.LastPhase = s.Phase;
+
+                j.Body.position = Local(s.Position);
+                // Pitch tips the head forward into the belly-down glide; toggles bank the canopy turn.
+                j.Body.rotation = Quaternion.LookRotation(s.Heading, Vector3.up) * Quaternion.Euler(s.Pitch, 0f, -s.Steer * 14f);
+
+                Pose(s);
+                if (j.BodyMesh != null)
+                    for (int k = 0; k < weights.Length; k++)
+                        if (j.Shapes[k] >= 0) j.BodyMesh.SetBlendShapeWeight(j.Shapes[k], weights[k] * 100f);
+
+                bool chute = s.Canopy > 0.001f;
+                if (j.Canopy.gameObject.activeSelf != chute) j.Canopy.gameObject.SetActive(chute);
+                if (chute && j.CanopyMesh != null)
+                {
+                    // Packed -> snivel (slider holds it narrow) -> open.
+                    float packed = Mathf.Clamp01(1f - s.Canopy * 2f);
+                    float snivel = s.Canopy < 0.5f ? s.Canopy * 2f : 2f - s.Canopy * 2f;
+                    if (j.Packed >= 0) j.CanopyMesh.SetBlendShapeWeight(j.Packed, packed * 100f);
+                    if (j.Snivel >= 0) j.CanopyMesh.SetBlendShapeWeight(j.Snivel, snivel * 100f);
+                }
+            }
+
+            /// <summary>Crossfade weights over the baked poses; they always sum to one.</summary>
+            private void Pose(HaloSample s)
+            {
+                Array.Clear(weights, 0, weights.Length);
+                const int track = 0, exit = 1, hang = 2, left = 3, right = 4, flare = 5, land = 6;
+                switch (s.Phase)
+                {
+                    case HaloPhase.Exit:
+                        // Arch out of the tumble into the track as the body levels.
+                        float level = Mathf.Clamp01((s.Pitch - 10f) / 70f);
+                        weights[exit] = 1f - level;
+                        weights[plan.LowDrop ? hang : track] += level;
+                        break;
+                    case HaloPhase.Glide:
+                        weights[track] = 1f;
+                        break;
+                    case HaloPhase.Deploy:
+                        weights[hang] = 1f - s.Pitch / 80f;
+                        weights[plan.LowDrop ? hang : track] += s.Pitch / 80f;
+                        break;
+                    case HaloPhase.Canopy:
+                        float turn = Mathf.Abs(s.Steer) * (1f - s.Flare);
+                        weights[s.Steer < 0f ? left : right] = turn;
+                        weights[flare] = s.Flare;
+                        weights[hang] = 1f - turn - s.Flare;
+                        break;
+                    case HaloPhase.Landed:
+                        weights[flare] = s.Flare;
+                        weights[land] = 1f - s.Flare;
+                        break;
+                }
+            }
+
+            private void DrawSmoke(int index, Jumper j, float t, bool visible)
+            {
+                int count = 0;
+                if (visible)
+                    for (int k = 0; k < TrailPoints; k++)
+                    {
+                        HaloSample past = plan.Sample(index, t - k * TrailStep);
+                        if (!past.Smoke)
+                        {
+                            if (count == 0) continue;
+                            break;
+                        }
+                        // The canisters ride the ankles, a body length behind the pelvis in the glide.
+                        trail[count++] = Local(past.Position - past.Heading * 0.9f);
+                    }
+                j.Smoke.positionCount = count >= 2 ? count : 0;
+                if (count >= 2) j.Smoke.SetPositions(trail);
+            }
+
+            private static void LandingDust(Vector3 pelvis)
+            {
+                if (GameAssets.i == null || GameAssets.i.contactDust == null) return;
+                GameObject dust = Instantiate(GameAssets.i.contactDust, pelvis - Vector3.up * (HaloGlidePlan.PelvisHeight - 0.2f), Quaternion.identity);
+                dust.SetActive(true);
+                Destroy(dust, 3.5f);
+            }
+        }
+
+        private static bool TryTrooperTemplate(out GameObject trooper)
+        {
+            trooper = null;
+            if (Encyclopedia.WeaponLookup == null ||
+                !Encyclopedia.WeaponLookup.TryGetValue(AirAssaultController.HaloMountKey, out WeaponMount mount) ||
+                mount == null || mount.prefab == null)
+                return false;
+            trooper = mount.prefab.transform.Find("AirborneTrooper")?.gameObject;
+            return trooper != null;
+        }
+
+        public static void SpawnRopeInsertion(Aircraft aircraft, RopeMode mode, float height, Vector3 landing, GameObject shell, int count)
         {
             if (aircraft == null || HasActiveRappel(aircraft)) return;
-            var opGo = new GameObject("BoscaliSummer.FastRopeRappelling");
-            opGo.transform.position = aircraft.transform.position;
-            if (!Track(opGo)) return;
-
-            FastRopeRappellingOperation op = opGo.AddComponent<FastRopeRappellingOperation>();
-            op.Initialize(aircraft, landingPos, soldierCount);
+            var go = new GameObject("BoscaliSummer.RopeInsertion");
+            if (!Track(go)) return;
+            go.AddComponent<RopeOperation>().Insertion(aircraft, mode, height, landing, shell, count);
         }
 
-        public static Mesh GetParachuteMesh()
+        public static void SpawnRopeExtraction(Aircraft aircraft, Vector3 site, int count, float height)
         {
-            if (cachedParachuteMesh == null)
-                cachedParachuteMesh = ParachuteMeshBuilder.Build();
-            return cachedParachuteMesh;
+            if (aircraft == null || HasActiveRappel(aircraft)) return;
+            var go = new GameObject("BoscaliSummer.RopeExtraction");
+            if (!Track(go)) return;
+            go.AddComponent<RopeOperation>().Extraction(aircraft, site, count, height);
         }
 
-        public static GameObject CreateParachuteRig()
+        /// <summary>
+        /// Ibis rope work drawn from a <see cref="FastRopePlan"/>: two ropes off the side doors,
+        /// troopers posed from the plan's phases, insertion ropes cut away to fall once the squad is
+        /// down, extraction ropes reeled in with the riders. Plan points are global; the doors are
+        /// read from the live helicopter every frame after the floating-origin shift.
+        /// </summary>
+        [DefaultExecutionOrder(1000)]
+        private sealed class RopeOperation : MonoBehaviour
         {
-            var rig = new GameObject("BoscaliSummer.ParachuteRig");
-            MeshFilter filter = rig.AddComponent<MeshFilter>();
-            filter.sharedMesh = GetParachuteMesh();
-
-            MeshRenderer renderer = rig.AddComponent<MeshRenderer>();
-            Material fabric = GetChuteFabricMaterial();
-            if (fabric == null) fabric = MaterialProvider.GetConcreteMaterial();
-            Material lines = GetChuteLineMaterial();
-            if (lines == null) lines = fabric;
-            renderer.sharedMaterials = new[] { fabric, lines };
-            return rig;
-        }
-
-        public static Material GetParachuteMaterial()
-        {
-            if (cachedParachuteMat != null) return cachedParachuteMat;
-            Material[] mats = Resources.FindObjectsOfTypeAll<Material>();
-            for (int i = 0; i < mats.Length; i++)
-            {
-                if (mats[i] != null && mats[i].name.IndexOf("parachute", StringComparison.OrdinalIgnoreCase) >= 0)
-                    return cachedParachuteMat = mats[i];
-            }
-            // GetSandbagMaterial already falls back to concrete.
-            return cachedParachuteMat = MaterialProvider.GetSandbagMaterial();
-        }
-
-        public static Material GetChuteFabricMaterial()
-        {
-            if (cachedChuteFabricMat != null) return cachedChuteFabricMat;
-            Material source = GetParachuteMaterial();
-            if (source == null) return null;
-
-            cachedChuteFabricMat = new Material(source) { name = "BoscaliSummer.ChuteFabric" };
-            if (cachedChuteFabricMat.HasProperty("_wrinkleStrength"))
-                cachedChuteFabricMat.SetFloat("_wrinkleStrength", 0.18f);
-            if (cachedChuteFabricMat.HasProperty("_wrinkleDisplacment"))
-                cachedChuteFabricMat.SetFloat("_wrinkleDisplacment", 0f);
-            return cachedChuteFabricMat;
-        }
-
-        public static Material GetChuteLineMaterial()
-        {
-            if (cachedChuteLineMat == null)
-                cachedChuteLineMat = MaterialProvider.GetCargoHookRopeMaterial();
-            return cachedChuteLineMat;
-        }
-
-        private sealed class ParatrooperCargoDropOperation : MonoBehaviour
-        {
-            private const float ExitInterval = 1.15f;
-            private const float ExitRearSpeed = 7f;
-            private const float FallGravity = 9.81f;
-            private const float ChuteOpenDelayMin = 0.7f;
-            private const float ChuteDeploySeconds = 0.5f;
-            private const float LandingHoldSeconds = 3.2f;
-            private const float SeaMargin = 0.5f;
-            private const int MaxParatroopers = 16;
-
-            private static RuntimeAnimatorController chuteParameterSource;
-            private static readonly List<int> ChuteParameters = new List<int>(4);
-
-            private Aircraft aircraft;
-            private Vector3 exitAnchorLocal;
-            private Vector3 aircraftForward = Vector3.forward;
-            private int troopCount;
-            private float elapsed;
-            private float operationTime;
-            private int frame;
-
-            private readonly List<ParatrooperDrop> droppers = new List<ParatrooperDrop>(MaxParatroopers);
-
-            private sealed class ParatrooperDrop
-            {
-                public GameObject Soldier;
-                public GameObject Rig;
-                public Vector3 Velocity;
-                public Vector3 ChuteOffset;
-                public Vector3 LandingPosition;
-                public Vector3 DriftDir;
-                public float DriftSpeed;
-                public float TerminalSpeed;
-                public float ExitAt;
-                public float ChuteDelay;
-                public float ChuteOpen;
-                public float ChuteCollapse = 1f;
-                public float ChuteSpin;
-                public float CleanupDelay;
-                public int Seed;
-                public int Slot;
-                public bool Exited;
-                public bool ChuteDeployed;
-                public bool Landed;
-                public int Index;
-                public Animator Animator;
-            }
-
-            public void Initialize(Aircraft aircraftRef, Vector3 exitPos, Vector3 initialVel, int count)
-            {
-                aircraft = aircraftRef;
-                troopCount = Mathf.Max(1, Mathf.Min(MaxParatroopers, count));
-                transform.position = exitPos;
-
-                aircraftForward = aircraft != null ? aircraft.transform.forward : Vector3.forward;
-                exitAnchorLocal = aircraft != null ? aircraft.transform.InverseTransformPoint(exitPos) : exitPos;
-
-                // Height above the sea bounds the height above any landing spot.
-                operationTime = TroopDeploymentMath.ParadropOperationSeconds(
-                    exitPos.y - Datum.LocalSeaY, TroopDeploymentMath.ParachuteDescentRate);
-
-                BuildDroppers(initialVel);
-                StartCoroutine(FlightRoutine());
-            }
-
-            private void BuildDroppers(Vector3 initialVel)
-            {
-                droppers.Clear();
-
-                for (int i = 0; i < troopCount; i++)
-                {
-                    ParatrooperDrop drop = new ParatrooperDrop
-                    {
-                        Seed = i * 37 + 11,
-                        Index = i,
-                        Slot = i % 2,
-                        ExitAt = i * ExitInterval,
-                        ChuteDelay = ChuteOpenDelayMin + (i % 3) * 0.14f + UnityEngine.Random.Range(0f, 0.2f),
-                        Velocity = initialVel,
-                        DriftSpeed = 1f + UnityEngine.Random.Range(0f, 0.5f),
-                        // Earlier jumpers hang longer; later ones sink faster, stretching the trail.
-                        TerminalSpeed = -(TroopDeploymentMath.ParachuteDescentRate + i * 0.1f + UnityEngine.Random.Range(0f, 0.12f))
-                    };
-
-                    drop.Soldier = VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform);
-                    if (drop.Soldier == null)
-                    {
-                        drop.Soldier = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-                        UnityEngine.Object.Destroy(drop.Soldier.GetComponent<Collider>());
-                        drop.Soldier.transform.SetParent(transform, false);
-                    }
-                    drop.Soldier.name = $"Paratrooper_{i + 1}";
-                    drop.Animator = drop.Soldier.GetComponentInChildren<Animator>();
-                    drop.Soldier.SetActive(false);
-
-                    // The whole chute rig hangs from the operation, never the swinging body.
-                    drop.Rig = CreateParachuteRig();
-                    drop.Rig.transform.SetParent(transform, false);
-                    drop.Rig.SetActive(false);
-
-                    droppers.Add(drop);
-                }
-            }
-
-            private IEnumerator FlightRoutine()
-            {
-                while (elapsed < operationTime)
-                {
-                    float dt = Time.deltaTime;
-                    if (dt <= 0f)
-                    {
-                        yield return null;
-                        continue;
-                    }
-
-                    elapsed += dt;
-                    bool anyActive = false;
-                    frame++;
-                    Vector3 frameWind = GetWindVector();
-
-                    for (int i = 0; i < droppers.Count; i++)
-                    {
-                        if (droppers[i].Soldier == null)
-                            continue;
-
-                        if (AdvanceDrop(droppers[i], dt, frameWind))
-                            anyActive = true;
-                    }
-
-                    if (!anyActive)
-                        break;
-
-                    yield return null;
-                }
-
-                CleanupAll();
-                yield return new WaitForSeconds(1f);
-                Destroy(gameObject);
-            }
-
-            private bool AdvanceDrop(ParatrooperDrop drop, float dt, Vector3 wind)
-            {
-                if (drop.Soldier == null)
-                    return false;
-
-                if (drop.Landed)
-                {
-                    // The canopy deflates over the hold, then the rig fades out.
-                    if (drop.ChuteCollapse > 0f)
-                    {
-                        drop.ChuteCollapse = Mathf.Max(0f, drop.ChuteCollapse - dt / 0.3f);
-                        UpdateChuteRig(drop, drop.Soldier.transform.position, dt);
-                    }
-
-                    drop.CleanupDelay -= dt;
-                    if (drop.CleanupDelay > 0f)
-                        return true;
-
-                    if (drop.Rig != null) { Destroy(drop.Rig); drop.Rig = null; }
-                    Destroy(drop.Soldier);
-                    drop.Soldier = null;
-                    return false;
-                }
-
-                if (!drop.Exited)
-                {
-                    if (elapsed < drop.ExitAt)
-                        return true;
-
-                    ExitDrop(drop);
-                }
-
-                float fallTime = elapsed - drop.ExitAt;
-                if (!drop.ChuteDeployed)
-                {
-                    drop.Velocity += Vector3.down * FallGravity * dt;
-
-                    // Slipstream bleeds off the aircraft's speed across the line stretch;
-                    // a little early drift keeps the stick from stacking on itself.
-                    Vector3 slipstream = (aircraft != null && aircraft.rb != null) ? aircraft.rb.velocity * 0.18f : Vector3.zero;
-                    slipstream += drop.DriftDir * (drop.DriftSpeed * 0.45f);
-                    drop.Velocity.x = Mathf.MoveTowards(drop.Velocity.x, slipstream.x, 22f * dt);
-                    drop.Velocity.z = Mathf.MoveTowards(drop.Velocity.z, slipstream.z, 22f * dt);
-
-                    if (fallTime >= drop.ChuteDelay)
-                        DeployChute(drop);
-                }
-
-                if (drop.ChuteDeployed)
-                {
-                    drop.ChuteOpen = Mathf.Min(1f, drop.ChuteOpen + dt / ChuteDeploySeconds);
-
-                    // Mission wind plus a per-jumper drift fans the stick out naturally.
-                    float driftBlend = Mathf.Clamp01(fallTime / 1.8f);
-
-                    Vector3 target = new Vector3(
-                        wind.x * 0.75f + drop.DriftDir.x * drop.DriftSpeed * driftBlend,
-                        drop.TerminalSpeed,
-                        wind.z * 0.75f + drop.DriftDir.z * drop.DriftSpeed * driftBlend);
-                    drop.Velocity = Vector3.MoveTowards(drop.Velocity, target, (drop.ChuteOpen < 1f ? 30f : 6f) * dt);
-                    ApplyCanopySway(drop, dt);
-                }
-
-                IntegrateSoldier(drop, dt);
-                if (((frame + drop.Index) & 1) == 0) CheckLanding(drop);
-                return true;
-            }
-
-            private void ExitDrop(ParatrooperDrop drop)
-            {
-                Vector3 forward = aircraftForward;
-                Vector3 right = Vector3.right;
-                Vector3 exitPos = transform.position;
-                Vector3 inheritedVelocity = drop.Velocity;
-
-                if (aircraft != null)
-                {
-                    forward = aircraft.transform.forward;
-                    right = aircraft.transform.right;
-                    exitPos = aircraft.transform.TransformPoint(exitAnchorLocal);
-                    if (aircraft.rb != null)
-                        inheritedVelocity = aircraft.rb.velocity;
-                }
-
-                exitPos += right * (drop.Slot == 0 ? -0.55f : 0.55f);
-                drop.Velocity = inheritedVelocity - forward * ExitRearSpeed + Vector3.up * 0.35f
-                    + right * (drop.Slot == 0 ? -0.55f : 0.55f);
-
-                // Ordered fan behind the flight path: a visible jumped-one-after-another trail.
-                Vector3 trail = Vector3.ProjectOnPlane(-forward, Vector3.up);
-                if (trail.sqrMagnitude < 0.01f) trail = right;
-                trail.Normalize();
-                Vector3 fanRight = Vector3.Cross(Vector3.up, trail).normalized;
-                float side = drop.Slot == 0 ? -1f : 1f;
-                float fanAngle = side * (20f + drop.Index * 4f) * Mathf.Deg2Rad;
-                drop.DriftDir = (trail * Mathf.Cos(fanAngle) + fanRight * Mathf.Sin(fanAngle)).normalized;
-
-                drop.Exited = true;
-                drop.ChuteOffset = Vector3.up * ParachuteMeshBuilder.RimHeight;
-                drop.Soldier.SetActive(true);
-                drop.Soldier.transform.SetPositionAndRotation(exitPos, Quaternion.LookRotation(-forward, Vector3.up));
-                if (drop.Animator != null)
-                    SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.parachuting);
-            }
-
-            private static void DeployChute(ParatrooperDrop drop)
-            {
-                drop.ChuteDeployed = true;
-                drop.ChuteOpen = 0.01f;
-                drop.ChuteCollapse = 1f;
-                if (drop.Velocity.y < -12f)
-                    drop.Velocity.y = -12f;
-
-                // Static line snaps the canopy open and checks the forward speed.
-                drop.Velocity.x *= 0.4f;
-                drop.Velocity.z *= 0.4f;
-
-                if (drop.Rig != null) drop.Rig.SetActive(true);
-            }
-
-            private void ApplyCanopySway(ParatrooperDrop drop, float dt)
-            {
-                float phase = elapsed * 1.15f + drop.Seed * 0.17f;
-                Vector3 right = aircraft != null ? aircraft.transform.right : Vector3.right;
-                Vector3 forward = aircraft != null ? aircraft.transform.forward : Vector3.forward;
-                drop.Velocity += (right * Mathf.Sin(phase) + forward * Mathf.Cos(phase * 0.73f)) * 0.35f * dt;
-            }
-
-            private static Vector3 GetWindVector()
-            {
-                LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-                return level != null ? level.GetWind() : Vector3.zero;
-            }
-
-            private void IntegrateSoldier(ParatrooperDrop drop, float dt)
-            {
-                if (drop == null || drop.Soldier == null) return;
-
-                Vector3 pos = drop.Soldier.transform.position + drop.Velocity * dt;
-                drop.Soldier.transform.position = pos;
-
-                Vector3 motion = drop.Velocity;
-                motion.y = 0f;
-                Vector3 facing = motion.sqrMagnitude > 0.04f
-                    ? motion.normalized
-                    : Vector3.ProjectOnPlane(-aircraftForward, Vector3.up);
-                if (facing.sqrMagnitude < 0.01f) facing = Vector3.forward;
-                float bank = Mathf.Sin(Time.time * 0.8f + drop.Seed) * (drop.ChuteDeployed ? 5f : 2f);
-                drop.Soldier.transform.rotation = Quaternion.LookRotation(facing, Vector3.up) * Quaternion.Euler(0f, 0f, bank);
-
-                UpdateChuteRig(drop, pos, dt);
-            }
-
-            private void UpdateChuteRig(ParatrooperDrop drop, Vector3 soldierPos, float dt)
-            {
-                if (drop.Rig == null) return;
-
-                float scale = Mathf.SmoothStep(0f, 1f, drop.ChuteOpen) * drop.ChuteCollapse;
-                if (scale <= 0.02f)
-                {
-                    if (drop.Rig.activeSelf) drop.Rig.SetActive(false);
-                    return;
-                }
-                if (!drop.Rig.activeSelf) drop.Rig.SetActive(true);
-
-                // The canopy floats on a short pendulum above the harness.
-                Vector3 target = Vector3.up * ParachuteMeshBuilder.RimHeight
-                    + new Vector3(drop.Velocity.x, 0f, drop.Velocity.z) * 0.06f
-                    + new Vector3(
-                        Mathf.Sin(elapsed * 1.1f + drop.Seed) * 0.4f,
-                        0f,
-                        Mathf.Cos(elapsed * 0.83f + drop.Seed) * 0.4f);
-                float follow = 1f - Mathf.Exp(-2.6f * dt);
-                drop.ChuteOffset = drop.ChuteOffset.sqrMagnitude < 0.01f
-                    ? target
-                    : Vector3.Lerp(drop.ChuteOffset, target, follow);
-
-                Vector3 dir = drop.ChuteOffset.sqrMagnitude > 0.001f ? drop.ChuteOffset.normalized : Vector3.up;
-                drop.ChuteSpin += dt * 2.2f;
-                Quaternion yaw = Quaternion.AngleAxis(Mathf.Sin(drop.ChuteSpin + drop.Seed) * 12f, Vector3.up);
-
-                drop.Rig.transform.position = soldierPos + Vector3.up * ParachuteMeshBuilder.HarnessHeight;
-                drop.Rig.transform.rotation = Quaternion.FromToRotation(Vector3.up, dir) * yaw;
-                drop.Rig.transform.localScale = new Vector3(scale, scale, scale);
-            }
-
-            private void CheckLanding(ParatrooperDrop drop)
-            {
-                if (drop == null || drop.Soldier == null || drop.Landed) return;
-
-                Vector3 pos = drop.Soldier.transform.position;
-                float sweep = Mathf.Max(0.6f, drop.Velocity.magnitude * Time.deltaTime + 0.8f);
-                if (Physics.Raycast(pos + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, sweep + 0.1f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                {
-                    Land(drop, hit, false);
-                    return;
-                }
-
-                if (pos.y <= Datum.LocalSeaY + SeaMargin)
-                {
-                    hit.point = new Vector3(pos.x, Datum.LocalSeaY, pos.z);
-                    Land(drop, hit, true);
-                }
-            }
-
-            private void Land(ParatrooperDrop drop, RaycastHit hit, bool inWater)
-            {
-                if (drop == null || drop.Soldier == null || drop.Landed)
-                    return;
-
-                drop.Landed = true;
-                drop.CleanupDelay = LandingHoldSeconds + drop.Slot * 0.15f;
-                drop.LandingPosition = inWater ? hit.point : SnapToGround(hit.point);
-                drop.ChuteCollapse = 1f;
-
-                if (!inWater && GameAssets.i != null && GameAssets.i.contactDust != null)
-                {
-                    GameObject dust = Instantiate(GameAssets.i.contactDust, drop.LandingPosition + Vector3.up * 0.2f, Quaternion.identity);
-                    dust.SetActive(true);
-                    Destroy(dust, 3.5f);
-                }
-
-                drop.Soldier.transform.position = drop.LandingPosition;
-                if (drop.Animator != null)
-                    SetPilotAnimation(drop.Animator, PilotDismounted.PilotState.landing);
-            }
-
-            private void CleanupAll()
-            {
-                for (int i = 0; i < droppers.Count; i++)
-                {
-                    ParatrooperDrop drop = droppers[i];
-                    if (drop.Rig != null) Destroy(drop.Rig);
-                    if (drop.Soldier != null) Destroy(drop.Soldier);
-                }
-            }
-
-            private static Vector3 SnapToGround(Vector3 point)
-            {
-                if (Physics.Raycast(point + Vector3.up * 0.5f, Vector3.down, out RaycastHit ground, 8f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                    return ground.point;
-                return point;
-            }
-
-            private static void SetPilotAnimation(Animator anim, PilotDismounted.PilotState state)
-            {
-                if (anim == null) return;
-                anim.SetInteger("PilotState", (int)state);
-                // Animator.parameters allocates a fresh array; read it once per controller.
-                if (anim.runtimeAnimatorController != chuteParameterSource)
-                {
-                    chuteParameterSource = anim.runtimeAnimatorController;
-                    ChuteParameters.Clear();
-                    foreach (AnimatorControllerParameter p in anim.parameters)
-                        if (p.type == AnimatorControllerParameterType.Bool &&
-                            p.name.IndexOf("chute", StringComparison.OrdinalIgnoreCase) >= 0)
-                            ChuteParameters.Add(p.nameHash);
-                }
-                for (int i = 0; i < ChuteParameters.Count; i++)
-                    anim.SetBool(ChuteParameters[i], true);
-            }
-        }
-
-
-
-        private sealed class FastRopeRappellingOperation : MonoBehaviour
-        {
-            private const float RopeHalfSpread = 0.55f;
-            private const float FallbackRearDistance = 5f;
-            private const float FallbackDoorDrop = 0.6f;
-            private const float SlideDescentSpeed = 7.2f;
-            private const float DeployWinchSpeed = 24f;
-            private const float RetractWinchSpeed = 22f;
-            private const float OperationTimeCap = 22f;
-            private const int RopePoints = 14;
+            private const float DoorHalfWidth = 1.35f;
+            private const float DoorDrop = 0.45f;
+            private const int RopePoints = 12;
+            private static readonly string[] ShapeNames = { "Rope", "Rappel", "Kneel", "WalkA", "WalkB", "Ride", "Land" };
+            private const int Rope = 0, Rappel = 1, Kneel = 2, WalkA = 3, WalkB = 4, Ride = 5, Land = 6;
+
+            public Aircraft Aircraft { get; private set; }
+
+            private FastRopePlan plan;
+            private bool extraction;
+            private float startAt;
+            private Vector3 cabinLocal;
+            private Transform[] bodies;
+            private SkinnedMeshRenderer[] meshes;
+            private int[] shapes;
+            private LineRenderer[] ropes;
+            private readonly Vector3[] feet = new Vector3[2];
+            private readonly Vector3[] cutTop = new Vector3[2];
+            private readonly Vector3[] line = new Vector3[RopePoints];
+            private readonly float[] weights = new float[ShapeNames.Length];
+            private RopePhase[] lastPhase;
+            private float cutAt = -1f;
+            private AudioSource audioSource;
 
             private static AudioClip cachedWinchStart;
             private static AudioClip cachedWinchStop;
             private static AudioClip cachedWinchLoop;
             private static bool audioProbed;
 
-            private Aircraft aircraft;
-            private Transform helo;
-            private Vector3 target;
-            private int requestedCount;
+            private static Vector3 Global(Vector3 local) => local.ToGlobalPosition().AsVector3();
+            private static Vector3 Local(Vector3 global) => new GlobalPosition(global.x, global.y, global.z).ToLocalPosition();
 
-            private LineRenderer ropeLeft;
-            private LineRenderer ropeRight;
-            private AudioSource audioSource;
-
-            private Vector3 rearExitLocal;
-            private Vector3 doorLeft;
-            private Vector3 doorRight;
-            private Vector3 groundLeft;
-            private Vector3 groundRight;
-
-            private readonly List<RappellingSoldier> soldiers = new List<RappellingSoldier>();
-            private int landedCount;
-            private float elapsed;
-
-            private sealed class RappellingSoldier
+            public void Insertion(Aircraft aircraft, RopeMode mode, float height, Vector3 landing, GameObject shell, int count)
             {
-                public GameObject Root;
-                public int Rope;
-                public float StartDelay;
-                public float Progress;
-                public bool Landed;
-                public Vector3 FanDir;
-                public Vector3 LandingPosition;
-                public float LandedAt;
+                Setup(aircraft, count);
+                Vector3[] doors = Doors();
+                for (int k = 0; k < 2; k++) feet[k] = Global(Foot(doors[k], landing + aircraft.transform.right * (k == 0 ? -DoorHalfWidth : DoorHalfWidth)));
+                Vector3[] destinations = Destinations(landing, shell, bodies.Length, out bool enter);
+                for (int i = 0; i < destinations.Length; i++) destinations[i] = Global(destinations[i]);
+                plan = FastRopePlan.Insertion(mode, height, feet, destinations, enter);
             }
 
-            public void Initialize(Aircraft currentAircraft, Vector3 targetPos, int soldierCount)
+            public void Extraction(Aircraft aircraft, Vector3 site, int count, float height)
             {
-                aircraft = currentAircraft;
-                helo = aircraft != null ? aircraft.transform : transform;
-                target = targetPos;
-                requestedCount = Mathf.Max(1, soldierCount);
+                Setup(aircraft, count);
+                extraction = true;
+                Vector3[] doors = Doors();
+                for (int k = 0; k < 2; k++) feet[k] = Global(Foot(doors[k], doors[k] + Vector3.down * height));
+                var sources = new Vector3[bodies.Length];
+                for (int i = 0; i < sources.Length; i++)
+                {
+                    float a = i * Mathf.PI * 2f / sources.Length;
+                    sources[i] = Global(Ground(site + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * 3f));
+                }
+                plan = FastRopePlan.Extraction(height, feet, sources);
+                PlayWinchAudio(isDeploy: false);
+            }
 
-                transform.SetParent(helo, false);
-                transform.localPosition = Vector3.zero;
-                transform.localRotation = Quaternion.identity;
+            private void Setup(Aircraft aircraft, int count)
+            {
+                Aircraft = aircraft;
+                startAt = Time.time;
+                // The troop bench sits in the cabin; the side doors are either side of it.
+                MountedTroops bench = aircraft.GetComponentInChildren<MountedTroops>();
+                Vector3 cabin = bench != null ? bench.transform.position : aircraft.transform.position;
+                cabinLocal = aircraft.transform.InverseTransformPoint(cabin);
 
-                SetupAudio();
-
-                // GetCargoHookRopeMaterial already falls back to concrete.
                 Material ropeMat = MaterialProvider.GetCargoHookRopeMaterial();
-                ropeLeft = CreateRopeLine("Rope_Left", ropeMat);
-                ropeRight = CreateRopeLine("Rope_Right", ropeMat);
+                ropes = new[] { CreateRopeLine("Rope_Left", ropeMat), CreateRopeLine("Rope_Right", ropeMat) };
+                TryTrooperTemplate(out GameObject template);
+                count = Mathf.Clamp(count, 1, FastRopePlan.MaxTroops);
+                bodies = new Transform[count];
+                meshes = new SkinnedMeshRenderer[count];
+                shapes = new int[ShapeNames.Length];
+                lastPhase = new RopePhase[count];
+                for (int i = 0; i < count; i++)
+                {
+                    GameObject body = template != null
+                        ? Instantiate(template, transform)
+                        : VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform) ?? new GameObject();
+                    body.transform.SetParent(transform, true);
+                    body.name = "Trooper_" + (i + 1);
+                    body.SetActive(false);
+                    bodies[i] = body.transform;
+                    meshes[i] = template != null ? body.GetComponentInChildren<SkinnedMeshRenderer>(true) : null;
+                }
+                Mesh mesh = meshes[0] != null ? meshes[0].sharedMesh : null;
+                for (int s = 0; s < ShapeNames.Length; s++) shapes[s] = mesh != null ? mesh.GetBlendShapeIndex(ShapeNames[s]) : -1;
+                SetupAudio();
+            }
 
-                rearExitLocal = helo.InverseTransformPoint(ComputeRearExit());
-                ComputeInitialAnchors();
-                BuildSoldiers();
+            private Vector3[] Doors()
+            {
+                Transform helo = Aircraft.transform;
+                Vector3 cabin = helo.TransformPoint(cabinLocal) - helo.up * DoorDrop;
+                return new[] { cabin - helo.right * DoorHalfWidth, cabin + helo.right * DoorHalfWidth };
+            }
 
-                StartCoroutine(RappellingRoutine());
+            private static Vector3 Foot(Vector3 door, Vector3 fallback) =>
+                Physics.Raycast(door, Vector3.down, out RaycastHit hit, FastRopePlan.RappelMaxHeight + 20f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
+                    ? hit.point : fallback;
+
+            private static Vector3 Ground(Vector3 point) =>
+                Physics.Raycast(point + Vector3.up * 6f, Vector3.down, out RaycastHit hit, 30f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
+                    ? hit.point : point;
+
+            /// <summary>
+            /// On a roof: overwatch along its edges. Beside a building: stack up on the nearest wall
+            /// and go in. In the open: a kneeling perimeter.
+            /// </summary>
+            private static Vector3[] Destinations(Vector3 landing, GameObject shell, int count, out bool enter)
+            {
+                enter = false;
+                var d = new Vector3[count];
+                if (shell != null)
+                {
+                    for (int k = 0; k < count; k++)
+                    {
+                        float a = k * Mathf.PI * 2f / count + 0.4f;
+                        var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                        Vector3 best = landing + dir * 1.5f;
+                        for (float r = 2f; r <= 18f; r += 1.5f)
+                        {
+                            Vector3 probe = landing + dir * r;
+                            if (!Physics.Raycast(probe + Vector3.up * 4f, Vector3.down, out RaycastHit hit, 8f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
+                                Mathf.Abs(hit.point.y - landing.y) > 1.2f || AirAssaultController.ResolveCivilianBuilding(hit.collider) != shell)
+                                break;
+                            best = hit.point - dir;
+                        }
+                        d[k] = best;
+                    }
+                    return d;
+                }
+
+                Bounds? wall = null;
+                float nearest = float.MaxValue;
+                foreach (Collider c in Physics.OverlapSphere(landing, 35f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                {
+                    if (AirAssaultController.ResolveCivilianBuilding(c) == null) continue;
+                    float dist = (c.bounds.ClosestPoint(landing) - landing).sqrMagnitude;
+                    if (dist < nearest) { nearest = dist; wall = c.bounds; }
+                }
+                if (wall.HasValue && nearest > 4f)
+                {
+                    Vector3 entry = wall.Value.ClosestPoint(landing);
+                    entry.y = landing.y;
+                    Vector3 inward = entry - landing;
+                    inward.y = 0f;
+                    inward.Normalize();
+                    Vector3 side = Vector3.Cross(Vector3.up, inward);
+                    // A file along the wall, point man at the corner of the entry.
+                    for (int k = 0; k < count; k++)
+                        d[k] = Ground(entry - inward * 0.8f + side * ((k % 2 == 0 ? 1f : -1f) * (0.6f + (k / 2) * 1.1f)));
+                    enter = true;
+                    return d;
+                }
+
+                for (int k = 0; k < count; k++)
+                {
+                    float a = k * Mathf.PI * 2f / count;
+                    d[k] = Ground(landing + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * 7f);
+                }
+                return d;
+            }
+
+            private void LateUpdate()
+            {
+                float t = Time.time - startAt;
+                if (Aircraft == null || plan == null || t > plan.TotalSeconds + 4f)
+                {
+                    Destroy(gameObject);
+                    return;
+                }
+                Vector3[] doors = Doors();
+                Vector3 left = Global(doors[0]), right = Global(doors[1]);
+                for (int i = 0; i < bodies.Length; i++)
+                    DrawTrooper(i, plan.Sample(i, t, left, right));
+                DrawRopes(doors, t);
+                if (extraction && plan.RopeOut(t) <= 0f && audioSource != null && audioSource.isPlaying) StopWinchAudio();
+            }
+
+            private void DrawTrooper(int i, RopeSample s)
+            {
+                bool visible = s.Phase != RopePhase.Aboard && s.Phase != RopePhase.Gone;
+                Transform body = bodies[i];
+                if (body.gameObject.activeSelf != visible) body.gameObject.SetActive(visible);
+                if (!visible) return;
+                if (s.Phase == RopePhase.Landing && lastPhase[i] == RopePhase.Sliding) SpawnDust(Local(s.Position));
+                lastPhase[i] = s.Phase;
+
+                // Plan points are where the boots are; the model pivots at the pelvis. Riders hang under the clip.
+                float lift = s.Phase == RopePhase.Riding ? -0.2f : HaloGlidePlan.PelvisHeight;
+                body.position = Local(s.Position) + Vector3.up * lift;
+                body.rotation = Quaternion.LookRotation(s.Heading, Vector3.up);
+
+                SkinnedMeshRenderer mesh = meshes[i];
+                if (mesh == null) return;
+                Array.Clear(weights, 0, weights.Length);
+                switch (s.Phase)
+                {
+                    case RopePhase.Sliding: weights[plan.Mode == RopeMode.FastRope ? Rope : Rappel] = 1f; break;
+                    case RopePhase.Landing: weights[Land] = 1f - s.Recover; weights[Kneel] = s.Recover; break;
+                    case RopePhase.Moving:
+                        float a = 0.5f + 0.5f * Mathf.Cos(s.Stride * Mathf.PI * 2f);
+                        weights[WalkA] = a;
+                        weights[WalkB] = 1f - a;
+                        break;
+                    case RopePhase.Holding: weights[Kneel] = 1f; break;
+                    case RopePhase.Riding: weights[Ride] = 1f; break;
+                }
+                for (int k = 0; k < weights.Length; k++)
+                    if (shapes[k] >= 0) mesh.SetBlendShapeWeight(shapes[k], weights[k] * 100f);
+            }
+
+            private void DrawRopes(Vector3[] doors, float t)
+            {
+                bool cut = plan.RopesCut(t);
+                if (cut && cutAt < 0f)
+                {
+                    cutAt = t;
+                    for (int k = 0; k < 2; k++) cutTop[k] = Global(doors[k]);
+                }
+                for (int k = 0; k < 2; k++)
+                {
+                    Vector3 foot = Local(feet[k]);
+                    Vector3 top;
+                    if (cut)
+                    {
+                        // Released at the door: the free end falls and the rope piles at its foot.
+                        float fall = t - cutAt;
+                        if (fall > 6f)
+                        {
+                            ropes[k].enabled = false;
+                            continue;
+                        }
+                        Vector3 start = Local(cutTop[k]);
+                        top = start + Vector3.down * Mathf.Min(Mathf.Max(0f, start.y - foot.y), 4.9f * fall * fall);
+                    }
+                    else
+                    {
+                        top = doors[k];
+                        if (extraction) foot = Vector3.Lerp(top, foot, plan.RopeOut(t));
+                    }
+                    ropes[k].enabled = true;
+                    float length = Mathf.Max(0.5f, (top - foot).magnitude);
+                    Vector3 wash = Aircraft.transform.right * (k == 0 ? -0.012f : 0.012f);
+                    for (int p = 0; p < RopePoints; p++)
+                    {
+                        float u = (float)p / (RopePoints - 1);
+                        float belly = 4f * u * (1f - u);
+                        Vector3 sway = (Vector3.right * Mathf.Sin(t * 3.1f + k * 1.7f) + Vector3.forward * Mathf.Cos(t * 2.4f + k)) * 0.006f;
+                        line[p] = Vector3.Lerp(top, foot, u) + (wash + sway + Vector3.down * 0.02f) * (length * belly);
+                    }
+                    ropes[k].SetPositions(line);
+                }
+            }
+
+            private LineRenderer CreateRopeLine(string name, Material mat)
+            {
+                var go = new GameObject(name);
+                go.transform.SetParent(transform, false);
+                LineRenderer lr = go.AddComponent<LineRenderer>();
+                if (mat != null) lr.sharedMaterial = mat;
+                lr.startWidth = 0.055f;
+                lr.endWidth = 0.045f;
+                lr.useWorldSpace = true;
+                lr.positionCount = RopePoints;
+                lr.alignment = LineAlignment.View;
+                lr.textureMode = LineTextureMode.Tile;
+                lr.numCapVertices = 2;
+                lr.numCornerVertices = 2;
+                lr.enabled = false;
+                return lr;
             }
 
             private static void EnsureWinchAudio()
@@ -703,304 +675,7 @@ namespace BoscaliSummer.Garrisons
                     audioSource.PlayOneShot(cachedWinchStop, 0.65f);
             }
 
-            private LineRenderer CreateRopeLine(string name, Material mat)
-            {
-                var go = new GameObject(name);
-                go.transform.SetParent(transform, false);
-                LineRenderer lr = go.AddComponent<LineRenderer>();
-                if (mat != null) lr.sharedMaterial = mat;
-                lr.startWidth = 0.045f;
-                lr.endWidth = 0.035f;
-                lr.useWorldSpace = true;
-                lr.positionCount = RopePoints;
-                lr.alignment = LineAlignment.View;
-                lr.textureMode = LineTextureMode.Tile;
-                lr.numCapVertices = 2;
-                lr.numCornerVertices = 2;
-                return lr;
-            }
-
-            private GameObject CreateSoldier(string name)
-            {
-                GameObject soldier = VanillaSoldierFactory.CreateVisualSoldier(transform.position, Quaternion.identity, transform);
-                if (soldier != null)
-                {
-                    soldier.name = name;
-                    soldier.SetActive(false);
-                    return soldier;
-                }
-                var fallback = new GameObject(name);
-                fallback.transform.SetParent(transform, false);
-                fallback.SetActive(false);
-                return fallback;
-            }
-
-            private void BuildSoldiers()
-            {
-                int count = Mathf.Clamp(requestedCount, 1, 16);
-                for (int i = 0; i < count; i++)
-                {
-                    int rope = i % 2;
-                    int onRope = i / 2;
-                    float angle = (i * 60f + 15f) * Mathf.Deg2Rad;
-                    soldiers.Add(new RappellingSoldier
-                    {
-                        Root = CreateSoldier($"Rappeller_{i}"),
-                        Rope = rope,
-                        StartDelay = onRope * 0.75f + UnityEngine.Random.Range(0f, 0.18f) + rope * 0.08f,
-                        Progress = 0f,
-                        FanDir = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)).normalized
-                    });
-                }
-            }
-
-            private void ComputeInitialAnchors()
-            {
-                UpdateDoorAnchors();
-
-                groundLeft = target - helo.right * 1.2f;
-                groundRight = target + helo.right * 1.2f;
-
-                if (Physics.Raycast(groundLeft + Vector3.up * 4f, Vector3.down, out RaycastHit hitL, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                    groundLeft = hitL.point;
-                if (Physics.Raycast(groundRight + Vector3.up * 4f, Vector3.down, out RaycastHit hitR, 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                    groundRight = hitR.point;
-            }
-
-            private void UpdateDoorAnchors()
-            {
-                Vector3 rearCenter = helo.TransformPoint(rearExitLocal);
-                doorLeft = rearCenter - helo.right * RopeHalfSpread;
-                doorRight = rearCenter + helo.right * RopeHalfSpread;
-            }
-
-            private Vector3 ComputeRearExit()
-            {
-                if (aircraft == null)
-                    return helo.position - helo.forward * FallbackRearDistance - helo.up * FallbackDoorDrop;
-
-                BayDoor[] doors = aircraft.GetComponentsInChildren<BayDoor>(true);
-                Transform best = null;
-                float bestRear = float.MaxValue;
-                for (int i = 0; i < doors.Length; i++)
-                {
-                    if (doors[i] == null) continue;
-                    Transform t = doors[i].transform;
-                    float rear = Vector3.Dot(t.position - helo.position, helo.forward);
-                    if (rear < bestRear) { bestRear = rear; best = t; }
-                }
-
-                if (best != null)
-                    return best.position - helo.up * 0.25f;
-
-                return helo.position - helo.forward * FallbackRearDistance - helo.up * FallbackDoorDrop;
-            }
-
-            private Vector3 EvaluateRopeCurve(int ropeIndex, float u, float lengthRatio, float time)
-            {
-                Vector3 door = ropeIndex == 0 ? doorLeft : doorRight;
-                Vector3 ground = ropeIndex == 0 ? groundLeft : groundRight;
-                Vector3 targetEnd = Vector3.Lerp(door, ground, lengthRatio);
-
-                // Baseline straight segment
-                Vector3 basePos = Vector3.Lerp(door, targetEnd, u);
-
-                // Gravity / Catenary sag (4u(1-u) has maximum 1.0 at u = 0.5)
-                float sagFactor = 4f * u * (1f - u);
-                float fullDist = Mathf.Max(1f, Vector3.Distance(door, ground));
-                float sagAmount = Mathf.Clamp(fullDist * 0.035f, 0.45f, 1.2f) * lengthRatio;
-                Vector3 sag = Vector3.down * (sagFactor * sagAmount);
-
-                // Aerodynamic drag swing (trails opposite to horizontal airspeed)
-                Vector3 heloVel = (aircraft != null && aircraft.rb != null) ? aircraft.rb.velocity : Vector3.zero;
-                Vector3 horizVel = Vector3.ProjectOnPlane(heloVel, Vector3.up);
-                float dragShape = Mathf.Sin(u * Mathf.PI);
-                Vector3 drag = -horizVel * 0.08f * dragShape * lengthRatio;
-
-                // Rotor downwash deflection and lateral spread
-                float side = ropeIndex == 0 ? -1f : 1f;
-                Vector3 wash = (Vector3.down * 0.2f + helo.right * (0.12f * side)) * dragShape * lengthRatio;
-
-                // Dynamic pendulum sway oscillation
-                Vector3 sway = (helo.right * Mathf.Sin(time * 3.2f + ropeIndex * 1.5f) +
-                                helo.forward * Mathf.Cos(time * 2.6f)) * (0.05f * dragShape * lengthRatio);
-
-                return basePos + sag + drag + wash + sway;
-            }
-
-            private void UpdateRopeRenderer(LineRenderer lr, int ropeIndex, float lengthRatio, float time)
-            {
-                if (lr == null) return;
-                for (int i = 0; i < RopePoints; i++)
-                {
-                    float u = (float)i / (RopePoints - 1);
-                    lr.SetPosition(i, EvaluateRopeCurve(ropeIndex, u, lengthRatio, time));
-                }
-            }
-
-            private IEnumerator RappellingRoutine()
-            {
-                float totalDist = Mathf.Max(1f, Vector3.Distance(helo.position, target));
-
-                // -------------------------------------------------------------
-                // Phase 1: Winch Cable Deployment Animation (ropes reel down)
-                // -------------------------------------------------------------
-                PlayWinchAudio(isDeploy: true);
-                float deployProgress = 0f;
-
-                while (deployProgress < 1f)
-                {
-                    float dt = Time.deltaTime;
-                    elapsed += dt;
-                    UpdateDoorAnchors();
-
-                    deployProgress += (DeployWinchSpeed / totalDist) * dt;
-                    if (deployProgress > 1f) deployProgress = 1f;
-
-                    if (audioSource != null)
-                        audioSource.pitch = 0.95f + 0.1f * deployProgress;
-
-                    UpdateRopeRenderer(ropeLeft, 0, deployProgress, elapsed);
-                    UpdateRopeRenderer(ropeRight, 1, deployProgress, elapsed);
-
-                    // Break safety check if helo moves out of range; the squad's outcome is the server's.
-                    if (Vector3.Distance(helo.position, target) > 65f)
-                    {
-                        Plugin.Logger.LogInfo("[IBIS] Fast-rope visual cut short: the helicopter drifted more than 65 m off the LZ.");
-                        StopWinchAudio();
-                        Destroy(gameObject);
-                        yield break;
-                    }
-
-                    yield return null;
-                }
-
-                StopWinchAudio();
-                SpawnDust(groundLeft);
-                SpawnDust(groundRight);
-
-                // -------------------------------------------------------------
-                // Phase 2: Rappelling Descent along Physics Cable
-                // -------------------------------------------------------------
-                float rappellingStartTime = elapsed;
-
-                while (elapsed < OperationTimeCap && landedCount < soldiers.Count)
-                {
-                    float dt = Time.deltaTime;
-                    elapsed += dt;
-                    UpdateDoorAnchors();
-
-                    UpdateRopeRenderer(ropeLeft, 0, 1f, elapsed);
-                    UpdateRopeRenderer(ropeRight, 1, 1f, elapsed);
-
-                    float descentElapsed = elapsed - rappellingStartTime;
-
-                    for (int i = 0; i < soldiers.Count; i++)
-                    {
-                        RappellingSoldier s = soldiers[i];
-                        if (s.Root == null) continue;
-                        if (s.Landed)
-                        {
-                            s.Root.transform.position = Vector3.Lerp(s.LandingPosition,
-                                s.LandingPosition + s.FanDir * 3f, Mathf.Clamp01((elapsed - s.LandedAt) / 2f));
-                            continue;
-                        }
-                        if (descentElapsed < s.StartDelay) continue;
-
-                        if (!s.Root.activeSelf)
-                        {
-                            s.Root.SetActive(true);
-                            Animator anim = s.Root.GetComponentInChildren<Animator>();
-                            if (anim != null)
-                                anim.SetInteger("PilotState", (int)PilotDismounted.PilotState.parachuting);
-                        }
-
-                        if (!s.Landed)
-                        {
-                            s.Progress += (SlideDescentSpeed / totalDist) * dt;
-                            if (s.Progress < 1f)
-                            {
-                                Vector3 pos = EvaluateRopeCurve(s.Rope, s.Progress, 1f, elapsed);
-                                Vector3 faceDir = -helo.forward;
-
-                                s.Root.transform.position = pos;
-                                s.Root.transform.rotation = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
-                                continue;
-                            }
-
-                            // Touchdown!
-                            s.Landed = true;
-                            landedCount++;
-                            Vector3 touchGround = s.Rope == 0 ? groundLeft : groundRight;
-                            SpawnDust(touchGround);
-
-                            Animator landedAnim = s.Root.GetComponentInChildren<Animator>();
-                            if (landedAnim != null)
-                                landedAnim.SetInteger("PilotState", (int)PilotDismounted.PilotState.landing);
-
-                            s.Root.transform.SetParent(Datum.origin, true);
-                            s.LandingPosition = touchGround;
-                            s.LandedAt = elapsed;
-                            s.Root.transform.position = touchGround;
-                            s.Root.transform.rotation = Quaternion.LookRotation(s.FanDir, Vector3.up);
-
-                            // Soldiers dismount and cleanly despawn into the established encampment/building
-                            Destroy(s.Root, 2.5f);
-                        }
-                    }
-
-                    yield return null;
-                }
-
-                // -------------------------------------------------------------
-                // Phase 3: Winch Retraction Animation (ropes reel back into door)
-                // -------------------------------------------------------------
-                yield return new WaitForSeconds(0.4f);
-                PlayWinchAudio(isDeploy: false);
-                float retractProgress = 0f;
-
-                while (retractProgress < 1f)
-                {
-                    float dt = Time.deltaTime;
-                    elapsed += dt;
-                    UpdateDoorAnchors();
-
-                    retractProgress += (RetractWinchSpeed / totalDist) * dt;
-                    if (retractProgress > 1f) retractProgress = 1f;
-
-                    if (audioSource != null)
-                        audioSource.pitch = 1.0f - 0.1f * retractProgress;
-
-                    float remainingRatio = 1f - retractProgress;
-                    UpdateRopeRenderer(ropeLeft, 0, remainingRatio, elapsed);
-                    UpdateRopeRenderer(ropeRight, 1, remainingRatio, elapsed);
-
-                    yield return null;
-                }
-
-                StopWinchAudio();
-                if (ropeLeft != null) ropeLeft.enabled = false;
-                if (ropeRight != null) ropeRight.enabled = false;
-
-                // Ensure all soldier GameObjects are cleaned up
-                for (int i = 0; i < soldiers.Count; i++)
-                {
-                    if (soldiers[i]?.Root != null)
-                        Destroy(soldiers[i].Root);
-                }
-
-                Destroy(gameObject, 0.5f);
-            }
-
-            private void OnDestroy()
-            {
-                StopWinchAudio();
-                for (int i = 0; i < soldiers.Count; i++)
-                {
-                    if (soldiers[i]?.Root != null)
-                        Destroy(soldiers[i].Root);
-                }
-            }
+            private void OnDestroy() => StopWinchAudio();
 
             private static void SpawnDust(Vector3 pos)
             {

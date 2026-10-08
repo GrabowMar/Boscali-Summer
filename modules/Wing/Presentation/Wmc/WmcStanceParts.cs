@@ -194,18 +194,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>The FINE-TUNE box's frame (mockup .tune): a sunken card the header, the status line and the four rows sit in.</summary>
+    /// <summary>The FINE-TUNE box's frame (mockup .tune): a sunken card the header, the status line and the four rows sit in. Folded by
+    /// default to its header and status so the command card sits higher; it opens itself while the scope differs from its stance.</summary>
     internal sealed class WmcTuneBox : AvPart
     {
         private const float Pad = 6f, HeadH = 24f, StatusH = 18f, RowH = 26f, Gap = 2f;
         private readonly AvFrame frame;
         private readonly TMP_Text title, status;
-        public readonly AvControl Reset, Save, Edit;
+        public readonly AvControl Reset, Save, Edit, Fold;
         public readonly WmcTuneRow[] Rows;
-        private bool edited;
+        private readonly Action folded;
+        private bool edited, userOpen;
 
-        public WmcTuneBox(RectTransform parent, Action reset, Action save, Action edit, WmcTuneRow[] rows)
+        private bool Open => userOpen || edited;
+
+        public WmcTuneBox(RectTransform parent, Action reset, Action save, Action edit, WmcTuneRow[] rows, Action relayout)
         {
+            folded = relayout;
             Rect = AvLay.Child(parent, "TuneBox");
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
@@ -216,26 +221,45 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Reset = AvControl.Make(Rect, new AvControl.Spec("RESET", reset, AvButtonStyle.Quiet));
             Save = AvControl.Make(Rect, new AvControl.Spec("SAVE AS…", save, AvButtonStyle.Quiet));
             Edit = AvControl.Make(Rect, new AvControl.Spec("EDIT ›", edit, AvButtonStyle.Quiet));
-            foreach (AvControl b in new[] { Reset, Save, Edit }) b.SingleLine();
+            Fold = AvControl.Make(Rect, new AvControl.Spec("FINE-TUNE", ToggleFold, AvButtonStyle.Quiet, AvIcon.ChevronRight));
+            Fold.Help = "Show or hide the four combat settings.";
+            foreach (AvControl b in new[] { Reset, Save, Edit, Fold }) b.SingleLine();
+            title.gameObject.SetActive(false);
             Rows = rows;
             foreach (WmcTuneRow r in rows) r.Rect.SetParent(Rect, false);
+            ShowRows();
             Restyle();
         }
 
-        public override float Measure(float width) => Pad + HeadH + StatusH + Rows.Length * (RowH + Gap) + Pad - Gap;
+        public override float Measure(float width) => Pad + HeadH + StatusH + (Open ? Rows.Length * (RowH + Gap) - Gap : 0f) + Pad;
+
+        private void ToggleFold()
+        {
+            userOpen = !Open;
+            ShowRows();
+            folded?.Invoke();
+        }
+
+        private void ShowRows()
+        {
+            bool open = Open;
+            foreach (WmcTuneRow r in Rows) r.Rect.gameObject.SetActive(open);
+            Fold.SetIcon(open ? AvIcon.ChevronDown : AvIcon.ChevronRight);
+        }
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             float w = s.W - 2f * Pad, y = Pad;
             float bw = 60f, sw = 78f;
-            AvLay.Place(title.rectTransform, Pad + 2f, y, 80f, HeadH);
+            AvLay.Place(Fold.Rect, Pad, y + 2f, 104f, HeadH - 4f);
             AvLay.Place(Edit.Rect, s.W - Pad - bw, y + 2f, bw, HeadH - 4f);
             AvLay.Place(Save.Rect, s.W - Pad - bw - 3f - sw, y + 2f, sw, HeadH - 4f);
             AvLay.Place(Reset.Rect, s.W - Pad - bw - 3f - sw - 3f - bw, y + 2f, bw, HeadH - 4f);
             y += HeadH;
             AvLay.Place(status.rectTransform, Pad + 2f, y, w - 4f, StatusH);
             y += StatusH;
+            if (!Open) return;
             foreach (WmcTuneRow r in Rows)
             {
                 r.Place(new AvSlot(Pad, y, w, RowH));
@@ -248,6 +272,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(status, text);
             if (edited == isEdited) return;
             edited = isEdited;
+            ShowRows();
             Restyle();
         }
 
@@ -260,6 +285,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Reset.Restyle();
             Save.Restyle();
             Edit.Restyle();
+            Fold.Restyle();
             if (Rows != null) foreach (WmcTuneRow r in Rows) r.Restyle();
         }
     }

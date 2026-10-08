@@ -1,0 +1,265 @@
+{
+  "name": "ops-solo",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 620,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "strict",
+      "args": {
+        "verb": "strict"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "t0",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "sync",
+      "args": {
+        "verb": "sync"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "win",
+      "args": {
+        "front": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "q0",
+      "args": {
+        "verb": "queue",
+        "front": 0,
+        "programme": 0
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "q1",
+      "args": {
+        "verb": "queue",
+        "front": 1,
+        "programme": 0
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "q2",
+      "args": {
+        "verb": "queue",
+        "front": 2,
+        "programme": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "queued",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "solo_queued"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "perk",
+      "args": {
+        "verb": "scan",
+        "unit": "player"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "after_perk",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "donate",
+      "args": {
+        "verb": "donate",
+        "front": 0,
+        "programme": 0,
+        "amount": 25
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "after_donate",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "m1",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "m2",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "m3",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "m4",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "m5",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "solo_end"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.SoloRead",
+      "store": "final",
+      "args": {}
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "t0.front0Readiness",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "queued.front0Queue",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_perk.spentSinceVerb",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_donate.front0Pct",
+      "min": 10
+    },
+    {
+      "check": "result_above",
+      "path": "m5.front0Readiness",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "m5.enemyReadiness",
+      "min": 3.5
+    },
+    {
+      "check": "result_above",
+      "path": "m5.windowOpenN",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "m5.hostBudget",
+      "max": 3000
+    },
+    {
+      "check": "result_above",
+      "path": "after_donate.spentSinceVerb",
+      "min": 10
+    },
+    {
+      "check": "result_above",
+      "path": "after_donate.lastOutcome",
+      "min": 2.5
+    },
+    {
+      "check": "result_below",
+      "path": "after_donate.lastOutcome",
+      "max": 3.5
+    }
+  ]
+}

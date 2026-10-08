@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             (settings != null && settings.DrawHoldKey.Value != KeyCode.None &&
              Input.GetKey(settings.DrawHoldKey.Value));
 
-        private readonly CommsAuthority authority = new CommsAuthority(Environment.TickCount);
+        private readonly CommsAuthority authority = new CommsAuthority();
         private readonly CommsClientState client = new CommsClientState();
         private readonly List<CommsOutbound> outbox = new List<CommsOutbound>(32);
         private readonly List<CommsArrival> arrivals = new List<CommsArrival>(8);
@@ -79,16 +79,12 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         // ---- local choices --------------------------------------------------------------------
         public CommsTool Tool { get; private set; }
         public int PingKind;
-        public int StickerKind;
         public int PenInk = 1;
         public int PenWidth = 1;
 
         /// <summary>Who the next post reaches. ALL holds for one post, then falls back to TEAM.</summary>
         public CommsChannel Channel { get; private set; }
         public string LabelText = "";
-        public int PollDurationIndex = 1;
-        public int HuntDurationIndex = 1;
-        private uint huntTarget;
 
         // ---- gesture ------------------------------------------------------------------------
         private bool pressTracked;
@@ -161,7 +157,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             MapPicker.Disarm(PickerOwner);
             CommsInput.DrawToolArmed = false;
             CommsInput.GestureActive = false;
-            huntTarget = 0;
             HasMeasure = false;
             HighlightUntil = 0f;
             Channel = CommsChannel.Team;
@@ -315,7 +310,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             DrawingSeconds = settings.DrawingSeconds.Value,
             AllowAllChannel = settings.AllowAllChannel.Value,
             AllowDrawing = settings.AllowDrawing.Value,
-            AllowGames = settings.AllowGames.Value,
+            AllowGames = false,
         };
 
         /// <summary>
@@ -601,9 +596,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                 case CommsTool.Ping:
                     PlacePoint(CommsItemKind.Ping, PingKind, x, z, null, TakeChannel());
                     break;
-                case CommsTool.Sticker:
-                    PlacePoint(CommsItemKind.Sticker, StickerKind, x, z, null, TakeChannel());
-                    break;
                 case CommsTool.Label:
                     string text = CommsText.Clean(LabelText, CommsText.MaxLabel);
                     if (text.Length == 0)
@@ -623,23 +615,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                     }
                     Submit(new CommsIntent { Op = CommsOp.Erase, Target = hit.Id });
                     break;
-                case CommsTool.HuntHide:
-                    client.NoteLocalHide(x, z);
-                    Submit(new CommsIntent
-                    {
-                        Op = CommsOp.HuntStart,
-                        Channel = TakeChannel(),
-                        Size = (byte)Mathf.Clamp(HuntDurationIndex, 0, CommsCatalog.HuntDurations.Length - 1),
-                        Points = StrokeCodec.Point(x, z),
-                    });
-                    SetTool(CommsTool.None);
-                    break;
-                case CommsTool.HuntGuess:
-                    uint target = huntTarget;
-                    if (Submit(new CommsIntent { Op = CommsOp.HuntGuess, Target = target, Points = StrokeCodec.Point(x, z) }))
-                        client.NoteLocalGuess(target, x, z);
-                    SetTool(CommsTool.None);
-                    break;
+
             }
         }
 
@@ -713,6 +689,9 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
         public void SetTool(CommsTool tool)
         {
+            if (tool == CommsTool.Sticker || tool == CommsTool.HuntHide || tool == CommsTool.HuntGuess)
+                tool = CommsTool.None;
+
             if (tool == CommsTool.None)
             {
                 Tool = CommsTool.None;
@@ -742,12 +721,9 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                 case CommsTool.Arrow: return "ARROW · DRAG FROM TAIL TO TIP";
                 case CommsTool.Circle: return "CIRCLE · DRAG FROM CENTRE TO EDGE";
                 case CommsTool.Box: return "BOX · DRAG CORNER TO CORNER";
-                case CommsTool.Sticker: return "STICKER · CLICK THE MAP · " + CommsCatalog.Stickers[Mathf.Clamp(StickerKind, 0, CommsCatalog.Stickers.Length - 1)].Name;
                 case CommsTool.Label: return "LABEL · CLICK THE MAP TO PLACE \"" + CommsText.Clean(LabelText, CommsText.MaxLabel) + "\"";
                 case CommsTool.Eraser: return IsHost ? "ERASE · CLICK ANY MARK" : "ERASE · CLICK ONE OF YOUR MARKS";
                 case CommsTool.Measure: return "MEASURE · DRAG FOR RANGE AND BEARING (ONLY YOU SEE IT)";
-                case CommsTool.HuntHide: return "HUNT · CLICK WHERE TO HIDE THE TARGET";
-                case CommsTool.HuntGuess: return "HUNT · CLICK YOUR ONE GUESS";
                 default: return null;
             }
         }
@@ -776,45 +752,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         string IQuickCalls.CallLabel(int index) =>
             CommsCatalog.ValidCall(index) ? CommsCatalog.Calls[index].Code : string.Empty;
         void IQuickCalls.Call(int index) => Call(index);
-
-        public void CreatePoll(string question, string[] options)
-        {
-            Submit(new CommsIntent
-            {
-                Op = CommsOp.PollCreate,
-                Channel = TakeChannel(),
-                Size = (byte)Mathf.Clamp(PollDurationIndex, 0, CommsCatalog.PollDurations.Length - 1),
-                Text = question,
-                Items = options,
-            });
-        }
-
-        public void Vote(uint poll, int option)
-        {
-            if (Submit(new CommsIntent { Op = CommsOp.PollVote, Target = poll, Style = (byte)Mathf.Clamp(option, 0, 255) }))
-                client.NoteLocalVote(poll, option);
-        }
-
-        public void ClosePoll(uint poll) => Submit(new CommsIntent { Op = CommsOp.PollClose, Target = poll });
-
-        public void Roll(int die) =>
-            Submit(new CommsIntent { Op = CommsOp.Roll, Channel = TakeChannel(), Style = (byte)Mathf.Clamp(die, 0, 255) });
-
-        public void Challenge(int throwIndex, ulong targetPlayer = 0, CommsChannel? channel = null) =>
-            Submit(new CommsIntent { Op = CommsOp.RpsChallenge, Channel = channel ?? TakeChannel(),
-                Style = (byte)Mathf.Clamp(throwIndex, 0, 255),
-                Text = targetPlayer == 0 ? null : targetPlayer.ToString() });
-
-        public void AcceptDuel(uint duel, int throwIndex) =>
-            Submit(new CommsIntent { Op = CommsOp.RpsAccept, Target = duel, Style = (byte)Mathf.Clamp(throwIndex, 0, 255) });
-
-        public void CancelDuel(uint duel) => Submit(new CommsIntent { Op = CommsOp.RpsCancel, Target = duel });
-
-        public void ArmHuntGuess(uint hunt)
-        {
-            huntTarget = hunt;
-            SetTool(CommsTool.HuntGuess);
-        }
 
         public void Undo()
         {

@@ -122,12 +122,59 @@ namespace BoscaliSummer.Garrisons
             return go != null && GarrisonOccupancy.IsOccupied(go);
         }
 
+        // Last shockwave the server saw. Vanilla's FragTrace calls TakeShockwave and then
+        // TakeDamage on the same target in the same frame, so the damage prefixes read the
+        // warhead's blast power (yield^(1/3)) from here; bullets and fire never set it.
+        private static object shockTarget;
+        private static int shockFrame = -1;
+        private static float shockPower;
+        private static Vector3 shockOrigin;
+
+        internal static void NoteShockwave(object target, Vector3 origin, float blastPower)
+        {
+            shockTarget = target;
+            shockFrame = Time.frameCount;
+            shockPower = blastPower;
+            shockOrigin = origin;
+        }
+
+        private static float ShockFor(object target, out Vector3 origin)
+        {
+            bool hit = ReferenceEquals(shockTarget, target) && shockFrame == Time.frameCount;
+            origin = hit ? shockOrigin : default;
+            return hit ? shockPower : 0f;
+        }
+
+        /// <summary>Set while the manager itself damages a shell or carrier, so its guards let it through.</summary>
+        internal static bool SelfDamage;
+
+        /// <summary>Shell TakeDamage verdict. True runs vanilla (not a strongpoint).</summary>
+        internal static bool ApplyShellHit(MapBuilding shell)
+        {
+            float power = ShockFor(shell, out Vector3 origin);
+            return ApplyStrongpointHit(shell, power, origin);
+        }
+
         /// <summary>
-        /// Server-side strongpoint verdict for one TakeDamage call. Returns true when
-        /// vanilla must run (unoccupied shells, siege off, final and overkill hits),
-        /// false when the hit was counted or ignored and vanilla must be skipped.
+        /// Nest-part TakeDamage verdict. The rooftop emplacement is the building's targetable
+        /// face: while its shell stands, every hit on it wears the shell's structure instead and
+        /// the nest itself takes nothing, so only levelling the building clears it. True runs
+        /// vanilla (siege off, encampments, nests without a known shell).
         /// </summary>
-        internal static bool ApplyStrongpointHit(MapBuilding shell, float blastTerm, float total)
+        internal static bool ApplyNestHit(UnitPart part)
+        {
+            if (SelfDamage || part == null || Instance == null || !SiegeActive || !GameAccess.IsServer()) return true;
+            if (!(part.GetUnit() is Building nest) || !NestRegistry.TryGetShell(nest, out GameObject shellObject))
+                return true;
+            if (shellObject == null || !GarrisonOccupancy.IsOccupied(shellObject)) return true;
+            MapBuilding shell = shellObject.GetComponent<MapBuilding>();
+            if (shell == null) return true;
+            float power = ShockFor(part, out Vector3 origin);
+            ApplyStrongpointHit(shell, power, origin);
+            return false;
+        }
+
+        private static bool ApplyStrongpointHit(MapBuilding shell, float power, Vector3 origin)
         {
             if (shell == null || Instance == null || !SiegeActive) return true;
             GameObject go = shell.gameObject;
@@ -135,37 +182,61 @@ namespace BoscaliSummer.Garrisons
             int id = go.GetInstanceID();
             if (!Instance.strongpoints.TryGetValue(id, out StrongpointRecord record))
             {
-                if (Instance.strongpoints.Count >= 128) Instance.strongpoints.Clear();
-                record = new StrongpointRecord();
+                if (Instance.strongpoints.Count >= 128) Instance.EvictStaleStrongpoints();
+                Bounds bounds = Instance.GetShellBounds(go);
+                record = new StrongpointRecord
+                {
+                    Structure = StrongpointHitPolicy.Structure(bounds.size.x * bounds.size.z)
+                };
                 Instance.strongpoints[id] = record;
             }
-            float now = Time.timeSinceLevelLoad;
-            StrongpointHitPolicy.Verdict verdict = StrongpointHitPolicy.Decide(
-                record.Hits, record.LastHitAt, now, blastTerm, total);
-            if (verdict == StrongpointHitPolicy.Verdict.Final ||
-                verdict == StrongpointHitPolicy.Verdict.Overkill)
-            {
-                GameAccess.SetMapBuildingHitPoints(shell, 0f);
-                return true;
-            }
+            // One explosion traces every collider of the shell and of its nest: count it once.
+            int frame = Time.frameCount;
+            if (record.LastFrame == frame && (record.LastOrigin - origin).sqrMagnitude < 1f) return false;
+            StrongpointHitPolicy.Verdict verdict = StrongpointHitPolicy.Decide(record.Damage, record.Structure, power);
+            if (verdict == StrongpointHitPolicy.Verdict.Ignore) return false;
+            record.LastFrame = frame;
+            record.LastOrigin = origin;
             if (verdict == StrongpointHitPolicy.Verdict.Count)
             {
-                record.Hits++;
-                record.LastHitAt = now;
-                GameAccess.SetMapBuildingHitPoints(
-                    shell, StrongpointHitPolicy.SteppedHitPoints(record.Hits));
-                TickCarrier(go);
+                record.Damage += StrongpointHitPolicy.HitWeight(power);
+                float fraction = StrongpointHitPolicy.Fraction(record.Damage, record.Structure);
+                float maxHp = Instance.shellStates.TryGetValue(go, out ShellState state)
+                    ? state.MaxHp : StrongpointHitPolicy.BaseHitPoints;
+                GameAccess.SetMapBuildingHitPoints(shell, StrongpointHitPolicy.SteppedHitPoints(fraction, maxHp));
+                TickCarrier(go, fraction);
                 if (Diagnostics.VerboseLogging.Value)
-                    Plugin.Logger.LogInfo($"[Strongpoint] {go.name} took counted hit {record.Hits}.");
+                    Plugin.Logger.LogInfo($"[Strongpoint] {go.name} worn {record.Damage:0.00}/{record.Structure:0} (blast power {power:0.0}).");
+                return false;
             }
+            // Final or overkill: level the shell through vanilla's own destroy path; the
+            // Destruct postfix then removes the nest.
+            record.Damage = record.Structure;
+            GameAccess.SetMapBuildingHitPoints(shell, 0f);
+            SelfDamage = true;
+            try { shell.TakeDamage(0f, 0f, 0f, 0f, 1f, PersistentID.None); }
+            finally { SelfDamage = false; }
+            if (Diagnostics.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[Strongpoint] {go.name} levelled (blast power {power:0.0}).");
             return false;
         }
 
+        private readonly List<int> staleStrongpoints = new List<int>(16);
+
+        private void EvictStaleStrongpoints()
+        {
+            staleStrongpoints.Clear();
+            foreach (int id in strongpoints.Keys)
+                if (!shellBounds.ContainsKey(id)) staleStrongpoints.Add(id);
+            for (int i = 0; i < staleStrongpoints.Count; i++) strongpoints.Remove(staleStrongpoints[i]);
+            if (strongpoints.Count >= 128) strongpoints.Clear();
+        }
+
         /// <summary>
-        /// Ticks the nest's dugout part so every peer reads the stage from replicated
-        /// part HP. Nests without a dugout part carry no stage; clients show stage 0.
+        /// Lowers the nest's dugout part to the worn fraction so every peer reads the stage
+        /// from replicated part HP. Nests without a dugout part carry no stage.
         /// </summary>
-        private static void TickCarrier(GameObject shell)
+        private static void TickCarrier(GameObject shell, float fraction)
         {
             if (shell == null || Instance == null) return;
             if (!Instance.shellStates.TryGetValue(shell, out ShellState state)) return;
@@ -186,8 +257,11 @@ namespace BoscaliSummer.Garrisons
                     }
             }
             if (dugout == null) return;
-            dugout.TakeDamage(0f, 0f, 1f, 0f,
-                StrongpointHitPolicy.CarrierTickDamage, PersistentID.None);
+            float tick = dugout.hitPoints - StrongpointHitPolicy.CarrierHitPoints(fraction);
+            if (tick <= 0f) return;
+            SelfDamage = true;
+            try { dugout.TakeDamage(0f, 0f, 1f, 0f, tick, PersistentID.None); }
+            finally { SelfDamage = false; }
         }
 
         internal static void NoteShellDestroyed(MapBuilding shell)
@@ -346,8 +420,34 @@ namespace BoscaliSummer.Garrisons
         /// </summary>
         public bool TryOccupyBuilding(GameObject shell, FactionHQ owner)
         {
-            if (shell == null || !Urban.GarrisonsEnabled.Value) return false;
+            if (shell == null || !Urban.GarrisonsEnabled.Value || IsCriticalName(shell.name)) return false;
+            Building building = shell.GetComponentInParent<Building>();
+            if (building != null && (building.disabled || (building.NetworkHQ != null && building.NetworkHQ != owner)))
+                return false;
             return Occupy(shell, owner, null, shell.GetInstanceID(), "Assault:");
+        }
+
+        /// <summary>
+        /// Exfil (server): ends the nearest shell-keyed occupation (air assault or seizure)
+        /// <paramref name="owner"/> holds within <paramref name="radius"/>; zone garrisons stay.
+        /// </summary>
+        public bool TryReleaseOccupation(Vector3 near, float radius, FactionHQ owner, out Vector3 centre)
+        {
+            centre = default;
+            int bestKey = 0;
+            float bestSq = radius * radius;
+            foreach (KeyValuePair<int, GarrisonRecord> pair in records)
+            {
+                GarrisonRecord record = pair.Value;
+                GameObject shell = record.Shells.Count > 0 ? record.Shells[0] : null;
+                if (record.Owner != owner || shell == null || shell.GetInstanceID() != pair.Key) continue;
+                Vector3 d = shell.transform.position - near;
+                d.y = 0f;
+                if (d.sqrMagnitude <= bestSq) { bestSq = d.sqrMagnitude; bestKey = pair.Key; centre = GetShellBounds(shell).center; }
+            }
+            if (bestKey == 0 || !GameAccess.IsServer()) return false;
+            ClearRecord(bestKey);
+            return true;
         }
 
         private bool Occupy(GameObject shell, FactionHQ owner, Airbase airbase, int key, string tag)
@@ -390,8 +490,6 @@ namespace BoscaliSummer.Garrisons
             previous.Defenses.Add(core);
             previous.Shells.Add(shell);
             SeedShellState(shell, core, key);
-            if (!nestPeaks.TryGetValue(key, out int peak) || previous.Defenses.Count > peak)
-                nestPeaks[key] = previous.Defenses.Count;
 
             Building shellBuilding = shell.GetComponentInParent<Building>();
             if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
@@ -414,7 +512,6 @@ namespace BoscaliSummer.Garrisons
         private readonly List<KeyValuePair<float, GameObject>> seizeCandidates = new List<KeyValuePair<float, GameObject>>(64);
         private readonly HashSet<int> seizedKeys = new HashSet<int>();
         private readonly HashSet<int> barrenZones = new HashSet<int>();
-        private readonly Dictionary<int, int> nestPeaks = new Dictionary<int, int>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();
         private readonly Dictionary<int, int> generations = new Dictionary<int, int>();
         private readonly List<GameObject> shellCatalogue = new List<GameObject>(512);
@@ -441,8 +538,10 @@ namespace BoscaliSummer.Garrisons
 
         private sealed class StrongpointRecord
         {
-            public int Hits;
-            public float LastHitAt = -10f;
+            public float Damage;
+            public float Structure;
+            public int LastFrame = -1;
+            public Vector3 LastOrigin;
         }
 
         private readonly Dictionary<GameObject, ShellState> shellStates = new Dictionary<GameObject, ShellState>();
@@ -467,7 +566,6 @@ namespace BoscaliSummer.Garrisons
             pending.Clear();
             captureJobs.Clear();
             barrenZones.Clear();
-            nestPeaks.Clear();
             shellStates.Clear();
             strongpoints.Clear();
             NestRegistry.Reset();
@@ -657,7 +755,8 @@ namespace BoscaliSummer.Garrisons
         private bool StepCaptureJob(CaptureJob job)
         {
             if (job.Next >= Mathf.Min(job.Candidates.Count, 128) ||
-                job.Record.Defenses.Count >= job.Count || job.Tries >= MaxRoofTries)
+                job.Record.Defenses.Count >= job.Count || job.Tries >= MaxRoofTries ||
+                CountDefenses() >= RooftopPlacement.MaxBuildings)
                 return false;
             // Try the remaining catalogue candidates when a roof is too small or stepped.
             GameObject shell = job.Candidates[job.Next++];
@@ -689,8 +788,6 @@ namespace BoscaliSummer.Garrisons
 
         private void FinalizeCaptureJob(CaptureJob job)
         {
-            if (!nestPeaks.TryGetValue(job.Key, out int peak) || job.Record.Defenses.Count > peak)
-                nestPeaks[job.Key] = job.Record.Defenses.Count;
             int rejected = job.OccupiedSkips + job.RoofSkips + job.SpawnSkips;
             string rejectionSuffix = string.Empty;
             if (rejected > 0)
@@ -742,24 +839,13 @@ namespace BoscaliSummer.Garrisons
                     if (shell != null) shellBounds.Remove(shell.GetInstanceID());
                     if (shell != null) strongpoints.Remove(shell.GetInstanceID());
                 }
-                if (record.Defenses.Count == 0) { emptyKeys.Add(entry.Key); continue; }
-                int peak = nestPeaks.TryGetValue(entry.Key, out int stored) ? stored : record.Defenses.Count;
-                float fraction = Mathf.Clamp01(record.Defenses.Count / (float)Mathf.Max(1, peak));
-                for (int i = 0; i < record.Defenses.Count; i++)
-                {
-                    Building defense = record.Defenses[i];
-                    if (defense == null) continue;
-                    OccupiedBuildingMarking marking = defense.GetComponent<OccupiedBuildingMarking>();
-                    if (marking == null) continue;
-                    marking.SetZoneHealth(fraction);
-                }
+                if (record.Defenses.Count == 0 && !HasCaptureJob(entry.Key)) emptyKeys.Add(entry.Key);
             }
             // An emptied record must not keep a zone "garrisoned" (ScheduleCapture skips it), nor a
             // dead seizure's shell owned by its first faction for the rest of the scene.
             for (int i = 0; i < emptyKeys.Count; i++)
             {
                 records.Remove(emptyKeys[i]);
-                nestPeaks.Remove(emptyKeys[i]);
                 seizedKeys.Remove(emptyKeys[i]);
             }
             emptyKeys.Clear();
@@ -771,7 +857,6 @@ namespace BoscaliSummer.Garrisons
             // Detach first so a failed teardown can never pin the record into every later reset.
             records.Remove(key);
             CancelCaptureJob(key);
-            nestPeaks.Remove(key);
             for (int i = 0; i < record.Defenses.Count; i++) DestroyNetworked(record.Defenses[i]);
             for (int i = 0; i < record.Shells.Count; i++)
             {
@@ -786,6 +871,13 @@ namespace BoscaliSummer.Garrisons
                     shellBuilding.NetworkHQ = null;
                 GarrisonOccupancy.Clear(shell, record.Owner);
             }
+        }
+
+        private bool HasCaptureJob(int key)
+        {
+            foreach (CaptureJob job in captureJobs)
+                if (job.Key == key) return true;
+            return false;
         }
 
         private void CancelCaptureJob(int key)

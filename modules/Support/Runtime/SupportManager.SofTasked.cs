@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             out int baselinePrice, out bool charge, out int detail)
         {
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
-            if (!GameAccess.IsServer() || credits == null || sof == null || settings == null || !settings.SofEnabled.Value || !sof.HasSof(owner) ||
+            if (!GameAccess.IsServer() || sof == null || settings == null || !settings.SofEnabled.Value || !sof.HasSof(owner) ||
                 (playerId == SpaceContacts.WatchOfficerId && claiming) || !SofPosts.IsPost(action)) return TaskedOutcome.Unavailable;
             Player player = playerId == SpaceContacts.WatchOfficerId ? null : FindPlayer(owner, playerId);
             if (playerId != SpaceContacts.WatchOfficerId && (player == null || player.HQ != owner)) return TaskedOutcome.Unavailable;

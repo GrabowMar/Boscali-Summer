@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     {
         private const float DwellCheckSeconds = .5f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         /// <summary>Everything one launch needs, copied out of the context so a delayed launch can outlive the call.</summary>
         private sealed class Shot
@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
                 return SupportResult.InvalidTarget;
             // A claimed TASKED call aims at its post's fixed MARK point, already confirmed by the host from a reveal
-            // window, so the pilot-range and fresh-intel gates of a free-aimed rod do not apply to it.
+            // window, so the pilot-range gate of a free-aimed rod do not apply to it.
             TaskedLaunchJob tasked = context.Tasked;
             if (tasked == null)
             {
@@ -66,18 +66,13 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
                         return SupportResult.OutOfRange;
                 }
-                if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
-                {
-                    context.Logger.LogInfo("[Support] Rod from God refused: stale intel at the grid.");
-                    return SupportResult.StaleIntel;
-                }
             }
-            // The impact is chosen once: TASKED from its fixed confirmed MARK, STANDARD with the 120 m CEP around the pick.
+            // The impact is chosen once: TASKED from its fixed confirmed MARK, STANDARD with the 120 m CEP around the pick (25/30 m disk when the pick snapped to a MARK).
             // Aimed in global coordinates so a floating-origin shift during a dwell cannot move it.
             SpaceImpact impact;
             bool sampled = tasked != null
                 ? SpaceFireControl.TrySampleAim(tasked.Aim, Random.value, Random.value, out impact)
-                : SpaceFireControl.TrySample(context.Target.x, context.Target.z, false, false, Random.value, Random.value, out impact);
+                : SpaceFireControl.TrySample(context.Target.x, context.Target.z, context.MarkSnapped, context.MarkSar, Random.value, Random.value, out impact);
             if (!sampled) return SupportResult.InvalidTarget;
             if (!SupportTargeting.TryMapPoint(new GlobalPosition(impact.X, context.Target.y, impact.Z), out Vector3 landing))
                 return SupportResult.InvalidTarget;

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// Kit v2 building blocks shared by the STR console and its floating operations room.
+    /// Kit v2 building blocks used by the STR console.
     /// The kit has no wrapped-paragraph part, no stage strip and no tile; these are built from
     /// <see cref="AvPart"/>/<see cref="AvText"/>/<see cref="AvLay"/>/<see cref="AvFrame"/> exactly as the
     /// kit's own parts are, and every one that changes its own text or height reports it through
@@ -289,60 +289,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bar.Track = AvInk.Hairline;
             bar.FillColor = bar.FillEnd = c;
             bar.SetVerticesDirty();
-        }
-    }
-
-    /// <summary>
-    /// A vertical stack of parts that is itself one part, so a two-column flow row can hold "a card, its
-    /// empty-state note and a button" in one column. Hidden children collapse; a child's Changed() reaches
-    /// the flow through the stack; children with <see cref="AvPart.Grow"/> share the height the row gives
-    /// the stack beyond its natural height.
-    /// </summary>
-    internal sealed class StrStack : AvPart
-    {
-        private const float Gap = 8f;
-        private readonly System.Collections.Generic.List<AvPart> children = new System.Collections.Generic.List<AvPart>(4);
-
-        public StrStack(RectTransform parent) => Rect = AvLay.Child(parent, "Stack");
-
-        public T Add<T>(T part) where T : AvPart
-        {
-            part.Parent = this;
-            children.Add(part);
-            part.Rect.SetParent(Rect, false);
-            return part;
-        }
-
-        public override float Measure(float width)
-        {
-            float h = 0f;
-            for (int i = 0; i < children.Count; i++)
-                if (children[i].Shown) h += children[i].Measure(width) + Gap;
-            return Mathf.Max(0f, h - Gap);
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            // A column that is shorter than its row hands the leftover height to its growing children.
-            float weights = 0f;
-            for (int i = 0; i < children.Count; i++)
-                if (children[i].Shown) weights += children[i].Grow;
-            float extra = weights > 0f ? Mathf.Max(0f, s.H - Measure(s.W)) : 0f;
-            float y = 0f;
-            for (int i = 0; i < children.Count; i++)
-            {
-                AvPart c = children[i];
-                if (!c.Shown) continue;
-                float h = c.Measure(s.W) + (extra > 0f ? extra * c.Grow / weights : 0f);
-                c.Place(new AvSlot(0f, y, s.W, h));
-                y += h + Gap;
-            }
-        }
-
-        public override void Restyle()
-        {
-            for (int i = 0; i < children.Count; i++) children[i].Restyle();
         }
     }
 }

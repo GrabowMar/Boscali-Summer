@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- Host helpers ---------------------------------------------------------------------
 
-        internal int FactionKeyOf(FactionHQ hq) => credits != null ? credits.FactionKey(hq) : 0;
+        internal int FactionKeyOf(FactionHQ hq) => hq == null ? 0 : hq.GetInstanceID();
 
         internal Player FindTaskedPlayer(FactionHQ owner, ulong id) => FindPlayer(owner, id);
 
@@ -132,6 +132,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             cyberMirror.ResetLink();
             sofMirror.ResetLink();
             opsMirror.ResetLink();
+            frontMirror.ResetLink();
             ResetSpaceMirror();
         }
 
@@ -142,6 +143,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             cyberMirror.Reset();
             sofMirror.Reset();
             opsMirror.Reset();
+            frontMirror.Reset();
             inProcessReplies.Clear();
             spaceFeedWanted = false;
             mirrorFaction = 0;
@@ -157,7 +159,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (key != mirrorFaction)
                 {
                     // Faction change: the old faction's rows must never outlive the switch.
-                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); }
+                    if (mirrorFaction != 0) { spaceMirror.Reset(); cyberMirror.Reset(); sofMirror.Reset(); opsMirror.Reset(); frontMirror.Reset(); }
                     mirrorFaction = key;
                 }
             }
@@ -165,7 +167,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             CyberFeed.Update(network);
             SofFeed.Update(network);
             OpsFeed.Update(network);
+            FrontFeed.Want(true); // readiness gates every perk tile, so the client always wants its faction's fronts
+            FrontFeed.Update(network);
             Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
+            Visuals.FrontEffectVisuals.Tick(frontMirror, MissionNow());
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {

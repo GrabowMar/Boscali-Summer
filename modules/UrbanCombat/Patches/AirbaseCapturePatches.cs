@@ -27,8 +27,10 @@ namespace BoscaliSummer.Garrisons
             if (__instance != null &&
                 !string.IsNullOrEmpty(__instance.NetworkUniqueName) &&
                 __instance.NetworkUniqueName.StartsWith(ZoneGarrisonManager.NamePrefix, System.StringComparison.Ordinal))
+            {
                 GarrisonVisual.Apply(__instance);
                 NestRegistry.Add(__instance);
+            }
         }
     }
 }

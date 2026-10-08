@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly bool[] dead = new bool[SpaceRules.BirdCount];
         private readonly float[] buildEndsAt = new float[SpaceRules.BirdCount];
         private readonly RebuildBar[] bars = { new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal) };
+        private readonly GeoBird[] geo = { new GeoBird(0.40f, 0.50f, 100f), new GeoBird(0.50f, 0.50f, 100f), new GeoBird(0.60f, 0.50f, 100f) };
+        private readonly float[] homeU = { 0.40f, 0.50f, 0.60f }, homeV = { 0.50f, 0.50f, 0.50f };
         private float allDownAt = float.PositiveInfinity;
         private int nextToken;
         private bool retired;
@@ -77,7 +79,31 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool BirdDown(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && dead[(byte)bird];
 
-        /// <summary>Bit i set while bird i (OPTICAL, RADAR, KINETIC) is dead.</summary>
+        /// <summary>The bird's geostationary state (position, burn under way, fuel).</summary>
+        public GeoBird Geo(BirdKind bird) => geo[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
+
+        /// <summary>The default parked points (over the faction's side of the front): every bird is placed there with a full tank. A relaunched bird returns to its own point.</summary>
+        public void SetHomes(float[] u, float[] v)
+        {
+            for (int i = 0; i < SpaceRules.BirdCount && i < u.Length && i < v.Length; i++) { homeU[i] = u[i]; homeV[i] = v[i]; geo[i] = new GeoBird(u[i], v[i], 100f); }
+        }
+
+        /// <summary>Starts a burn of one bird to map point (u,v). Fuel is spent up front; nothing changes when it is refused.</summary>
+        public GeoSpace.Refusal Relocate(BirdKind bird, float now, float u, float v)
+        {
+            if ((byte)bird >= SpaceRules.BirdCount || !SpaceRules.MissionTime(now) || !float.IsFinite(u) || !float.IsFinite(v)) return GeoSpace.Refusal.Dead;
+            int i = (int)bird;
+            GeoSpace.Refusal why = GeoSpace.Check(geo[i], !dead[i], now, u, v);
+            if (why == GeoSpace.Refusal.None) geo[i] = geo[i].Relocate(now, u, v);
+            return why;
+        }
+
+        /// <summary>The bird is alive and its footprint covers the map point: the gate for a perk that needs a satellite over its target.</summary>
+        public bool Covers(BirdKind bird, float now, float u, float v) => HasBird(bird) && geo[(int)bird].Covers(now, u, v, GeoSpace.Reach[(int)bird]);
+
+        private void Reset(int i) => geo[i] = new GeoBird(homeU[i], homeV[i], 100f);
+
+        /// <summary>Bit i set (OPTICAL, RADAR, KINETIC) is dead.</summary>
         public byte DownMask
         {
             get { byte m = 0; for (int i = 0; i < dead.Length; i++) if (dead[i]) m |= (byte)(1 << i); return m; }
@@ -105,6 +131,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
+        /// <summary>OPS FRONTS S1b: a LAUNCH SATELLITE programme finished (its own build time has run): the lowest dead bird is on station at once. Returns it, or -1 when none is down.</summary>
+        public int RestoreBird()
+        {
+            for (int i = 0; i < dead.Length; i++)
+            {
+                if (!dead[i]) continue;
+                dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
+                return i;
+            }
+            return -1;
+        }
+
         /// <summary>Starts the build once a dead bird's bar is full and finishes it after 6 minutes. Returns the mask of birds restored by this call.</summary>
         public byte TickBirds(float now)
         {
@@ -116,7 +154,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 if (buildEndsAt[i] <= 0f && bars[i].Complete) buildEndsAt[i] = now + SpaceRules.BirdBuildSeconds;
                 if (buildEndsAt[i] > 0f && now >= buildEndsAt[i])
                 {
-                    dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset();
+                    dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
                     restored |= (byte)(1 << i);
                 }
             }

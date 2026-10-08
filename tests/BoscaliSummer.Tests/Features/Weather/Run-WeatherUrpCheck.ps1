@@ -7,7 +7,7 @@ if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists:
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/Core/Math/Deterministic.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs', 'WeatherCloudPass.cs') {
@@ -41,4 +41,11 @@ $displayResult = Get-Content "$fixture/result.txt" -Raw
 Copy-Item "$fixture/result.txt" "$fixture/backbuffer-result.txt"
 Write-Output $displayResult
 if ($display.ExitCode -ne 0 -or $displayResult -match '(?m)^FAIL ') { throw "Backbuffer fixture failed: $fixture/backbuffer.log" }
-Set-Content "$fixture/result.txt" ($result + $displayResult)
+# The real display loop also covers post-follow camera motion against a parented cube.
+$loop = Invoke-UnityPlayer "$fixture/Player/WeatherUrpCheck.exe" @('-loopinterp-only', '-screen-fullscreen', '0', '-screen-width', '1920', '-screen-height', '1080', '-logFile', ('"' + "$fixture/loopinterp.log" + '"')) $fixture `
+    -TimeoutSeconds 180 -TimeoutMessage "Loop-interp fixture timeout: $fixture/loopinterp.log"
+$loopResult = Get-Content "$fixture/result.txt" -Raw
+Copy-Item "$fixture/result.txt" "$fixture/loopinterp-result.txt"
+Write-Output $loopResult
+if ($loop.ExitCode -ne 0 -or $loopResult -match '(?m)^FAIL ') { throw "Loop-interp fixture failed: $fixture/loopinterp.log" }
+Set-Content "$fixture/result.txt" ($result + $displayResult + $loopResult)

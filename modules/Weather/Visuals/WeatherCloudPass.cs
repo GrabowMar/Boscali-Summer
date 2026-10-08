@@ -64,6 +64,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (volume != null) volume.forceRenderingOff = rendering != camera;
             if (rendering != camera) return;
             if (!reduced) { beforeRender?.Invoke(rendering, rendering.worldToCameraMatrix, rendering.projectionMatrix); return; }
+            // The camera rides the interpolated aircraft hierarchy: it moves after LateUpdate,
+            // and culling bakes the composite cube's matrix. Re-follow here, pre-cull, or the
+            // marched sky composites through a stale screen mapping and clouds trail the camera.
+            if (volume != null) volume.transform.position = rendering.worldToCameraMatrix.inverse.GetColumn(3);
             if (march == null || composite == null) return;
             UniversalAdditionalCameraData data = rendering.GetUniversalAdditionalCameraData();
             if (data == null || data.renderType != CameraRenderType.Base || data.scriptableRenderer == null) return;
@@ -79,7 +83,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (ExecutedFrame != Time.frameCount - 1) targets.InvalidateHistory();
             // URP has installed this camera's matrices and depth target now. Other begin-
             // camera subscribers may finish changing its pose after our enqueue callback.
-            beforeRender?.Invoke(camera, renderingData.cameraData.GetViewMatrix(), renderingData.cameraData.GetProjectionMatrix());
+            // Live properties, not the cameraData snapshot: the interpolation sync can land
+            // after the snapshot, and the march must track the raster pose.
+            beforeRender?.Invoke(camera, camera.worldToCameraMatrix, renderingData.cameraData.GetProjectionMatrix());
 
             CommandBuffer cmd = CommandBufferPool.Get("Boscali Clouds");
             try

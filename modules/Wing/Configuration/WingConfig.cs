@@ -39,12 +39,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<SpacingPreset> DefaultSpacing { get; }
         public ConfigEntry<int> MaxWingmen { get; }
         public ConfigEntry<string> CallAirframe { get; }
-        public ConfigEntry<bool> ShowHud { get; }
         public ConfigEntry<bool> ShowWmc { get; }
         public ConfigEntry<bool> ReduceMotion { get; }
         public ConfigEntry<HighlightMode> MapMarkers { get; }
-        public ConfigEntry<float> HudX { get; }
-        public ConfigEntry<float> HudY { get; }
         public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
         public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
@@ -155,15 +152,15 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "(targets of opportunity, long range), or a custom line guard,response,interval,spread,targets,reach. Cycle it " +
                 "from the radial Combat page.", null, new ConfigurationManagerAttributes { Order = 87 }));
             Radio = c.Bind("Radio", "Level", RadioLevel.Full, new ConfigDescription(
-                "Wingman radio calls: Off, Essential (emergencies, tactical and status calls) or Full (also chatter such as " +
-                "touchdowns).", null, new ConfigurationManagerAttributes { Order = 80 }));
-            RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.FollowGame, new ConfigDescription(
+                "Battlefield radio: Off, Essential (urgent, tactical and status reports) or Full (also sparse, contextual " +
+                "pilot exchanges during quiet flight).", null, new ConfigurationManagerAttributes { Order = 80 }));
+            RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.Off, new ConfigDescription(
                 "Speak wingman calls with the game's text-to-speech: Off, On, or FollowGame (on when the game's chat " +
                 "text-to-speech is on; its speed and volume are used either way).", null, new ConfigurationManagerAttributes { Order = 79 }));
             VoicePacks = c.Bind("Radio", "VoicePacks", "", new ConfigDescription(
-                "Yappinator-format voice packs for wingman calls, comma-separated (wingman #2 uses the first, #3 the second, " +
-                "round robin). Packs are folders under config/WingCommand/v1/voicepacks or Yappinator's plugins/WSOYappinator/audio. " +
-                "Calls a pack has no clip for use the text-to-speech. Empty: no packs.", null, new ConfigurationManagerAttributes { Order = 77 }));
+                "Yappinator-compatible voice packs, comma-separated (one stable pack per pilot, round robin). Folders under " +
+                "config/BoscaliSummer/voicepacks, config/WingCommand/v1/voicepacks or plugins/WSOYappinator/audio. " +
+                "Missing clips keep subtitles and use TTS only when Voice enables it. No Yappinator DLL required.", null, new ConfigurationManagerAttributes { Order = 77 }));
             VoicePackVolume = c.Bind("Radio", "VoicePackVolume", 0.8f, new ConfigDescription(
                 "Voice pack volume.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 76 }));
             ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(
@@ -176,16 +173,6 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "The livery each airframe's wingmen wear (airframe|token; B = built in, A = app-data skin, W = workshop item). " +
                 "Clear it for every faction's standard livery.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 59 }));
 
-            ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
-                "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));
-            // Renamed from OffsetX/OffsetY: the shared file already has Hud/OffsetX as an int,
-            // and a same-key re-bind with another type throws.
-            HudX = c.Bind("Hud", "WingOffsetX", 0f, new ConfigDescription(
-                "Move the wing strip right (+) or left (-), in HUD pixels.", new AcceptableValueRange<float>(-1500f, 1500f),
-                new ConfigurationManagerAttributes { Order = 79 }));
-            HudY = c.Bind("Hud", "WingOffsetY", 0f, new ConfigDescription(
-                "Move the wing strip up (+) or down (-), in HUD pixels.", new AcceptableValueRange<float>(-1000f, 1000f),
-                new ConfigurationManagerAttributes { Order = 78 }));
             ShowWmc = c.Bind("Wmc", "Show", true, new ConfigDescription(
                 "Show the WMC panel on a map bezel button (maximized map).", null, new ConfigurationManagerAttributes { Order = 70 }));
             ReduceMotion = c.Bind("Wmc", "ReduceMotion", false, new ConfigDescription(

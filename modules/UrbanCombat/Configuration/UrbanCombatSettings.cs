@@ -27,9 +27,9 @@ namespace BoscaliSummer.Modules.UrbanCombat.Configuration
                     new AcceptableValueRange<int>(0, 6)));
             TroopsPerDeploy = config.Bind("Air Assault", "InfantryPerInsertion", 8,
                 new ConfigDescription(
-                    "Infantry deployed per transport paradrop, in one stick out the cargo access. Capped at the Ibis " +
-                    "fast-rope squad size of eight. Vanilla defense emplacements provide the authoritative combat behavior.",
-                    new AcceptableValueRange<int>(2, 8)));
+                    "HALO paratroopers per release, in one stick out the ramp; every four form a wingsuit fireteam. " +
+                    "Vanilla defense emplacements provide the authoritative combat behavior.",
+                    new AcceptableValueRange<int>(2, 16)));
             SiegeEnabled = config.Bind("Garrisons", "UrbanSiege", true,
                 "Cities resist capture: urban zones gain capture defense from their size and intact rooftop nests, " +
                 "and control cannot drain past the strongpoint floor until the nests fall. Requires zone garrisons. " +

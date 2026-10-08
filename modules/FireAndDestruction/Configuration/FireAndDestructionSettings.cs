@@ -26,7 +26,6 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Configuration
         public float ForestCellSize => 32f;
         public bool FireSpreadEnabled => FiresEnabled.Value;
         public float FireSpreadInterval => 11f / (0.88f + 0.12f * FireIntensity.Value);
-        public float FireSpreadDistance => 95f * (0.90f + 0.10f * FireIntensity.Value);
         public int FireSpreadGenerations => 3;
         public int MaximumPersistentRuins => 256;
         public int MaximumRuinSmokeVisuals => 24;

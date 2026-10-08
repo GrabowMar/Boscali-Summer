@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
@@ -62,6 +63,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private readonly List<CyberNode> held = new List<CyberNode>(CyberRules.MaxHeldPerFaction);
         private readonly List<int> scratch = new List<int>(MaxBackoffs);
         private float restUntil, burnBackoffUntil, clock, lastBurnAt = float.NegativeInfinity;
+
+        /// <summary>The CYBER front's directive and focus pin (the host sets it every tick; neutral = BALANCED, the rule as it always was).</summary>
+        public DirectorBias Bias = DirectorBias.Neutral(Front.Cyber);
 
         public int Hops, Deepers, Burns, Drops, Failures, Thinks;
         public CyberWatchPlan Last { get; private set; }
@@ -183,13 +187,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         private CyberWatchPlan DeeperPlan(CyberDesk desk, CyberIntrusion mine, float factor, float window, float now)
         {
-            if (mine.HeldCount >= MaxHeldByOverlord || mine.HeldCount == 0) return CyberWatchPlan.Idle(CyberWatchWhy.Holding);
+            if (mine.HeldCount >= Math.Min(MaxHeldByOverlord, Bias.MaxHeld) || mine.HeldCount == 0) return CyberWatchPlan.Idle(CyberWatchWhy.Holding);
             int bar = 0;
-            foreach (HeldNode h in mine.Held) bar = Math.Max(bar, Priority(h.Kind));
+            foreach (HeldNode h in mine.Held) bar = Math.Max(bar, Bias.NodePriority(h.Kind));
             CyberNode pick = default; bool found = false;
             foreach (CyberNode n in desk.Visible)
             {
-                if (desk.Network.IsEngaged(n.Id) || Backed(n.Id) || Priority(n.Kind) <= bar) continue;
+                if (desk.Network.IsEngaged(n.Id) || Backed(n.Id) || Bias.NodePriority(n.Kind) <= bar) continue;
                 if (!CyberGraph.Reachable(n, null, held, out _, out int via) || via == 0) continue;
                 if (AfterHop(mine.Trace, mine.HeldCount, n.Kind, CyberRules.Exploit(n.Kind), factor, window) > HopBudgetTrace) continue;
                 if (!found || Better(n, pick)) { pick = n; found = true; }
@@ -241,7 +245,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 default: Drops++; break;
             }
             // A burned or dropped intrusion rests before the next one: effects come in bursts, not as a permanent state.
-            if (plan.Action != CyberWatchAction.Hop && desk.Network.Of(Me) == null) restUntil = now + (aiFaction ? AiRestSeconds : RestSeconds);
+            if (plan.Action != CyberWatchAction.Hop && desk.Network.Of(Me) == null) restUntil = now + (aiFaction ? AiRestSeconds : RestSeconds) * Bias.RestScale;
             return new CyberWatchPlan(plan.Action, CyberWatchWhy.None, plan.NodeId, plan.Kind, plan.Code, plan.A, plan.B, r.Outcome);
         }
 
@@ -250,10 +254,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private static int Pct(float trace) => (int)Math.Max(0, Math.Min(100, Math.Round(trace)));
 
         /// <summary>Higher priority first; closer to the front next; the lower id last (a stable choice).</summary>
-        private static bool Better(in CyberNode a, in CyberNode b)
+        private bool Better(in CyberNode a, in CyberNode b)
         {
-            int pa = Priority(a.Kind), pb = Priority(b.Kind);
+            int pa = Bias.NodePriority(a.Kind), pb = Bias.NodePriority(b.Kind);
             if (pa != pb) return pa > pb;
+            bool na = Bias.Near(a.X, a.Z), nb = Bias.Near(b.X, b.Z);
+            if (na != nb) return na; // the focus pin breaks a tie between nodes of one kind
             if (a.FrontDistance != b.FrontDistance) return a.FrontDistance < b.FrontDistance;
             return a.Id < b.Id;
         }

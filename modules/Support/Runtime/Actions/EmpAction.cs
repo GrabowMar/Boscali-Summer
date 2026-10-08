@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float DischargeDelay = SupportEffectPolicy.EmpDelay;
         private const float JamAmount = 1000f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -37,14 +37,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
             }
 
-            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
-            {
-                context.Logger.LogInfo("[Support] EMP shock refused: stale intel at the grid.");
-                return SupportResult.StaleIntel;
-            }
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
-            float radius = Mathf.Min(context.Settings.EmpRadius.Value, SupportEffectPolicy.MaxEmpRadius);
-            float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration, 60f); // EXPLOIT x1.5 while a node is held
+            float radius = Mathf.Min(context.Settings.EmpRadius.Value * context.Quality, SupportEffectPolicy.MaxEmpRadius);
+            float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration * context.Quality, 60f); // EXPLOIT x1.5 while a node is held
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");

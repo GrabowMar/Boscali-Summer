@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     {
         public const float DamagedHealth = 0.5f, GraceSeconds = 120f;
         public const float EwReach = 18000f, DamagedReachFactor = 0.6f;
-        public const float RebuildTruck = 100f, RebuildDataCenter = 300f, AutoFundPerMinute = 40f;
+        public const float RebuildTruck = 100f, RebuildDataCenter = 300f, TimerPerMinute = 40f;
         public const float TraceLockSeconds = 90f, TraceRevealSeconds = 120f;
         public const int MaxTrucks = 2, MaxDataCenters = 2;
 
@@ -24,10 +24,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public static float Reach(AnchorHealth health) =>
             health == AnchorHealth.Live ? EwReach : health == AnchorHealth.Damaged ? EwReach * DamagedReachFactor : 0f;
 
+        /// <summary>The plain rebuild timer of OPS FRONTS S0: bar progress for a stretch of seconds (40 units a minute, so a truck is back in 2.5 minutes after its grace).</summary>
+        public static float TimerProgress(float seconds) =>
+            float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f ? 0f : TimerPerMinute / 60f * Math.Min(seconds, 60f);
+
         public static float RebuildGoal(AnchorKind kind) => kind == AnchorKind.EwTruck ? RebuildTruck : RebuildDataCenter;
     }
 
-    /// <summary>Core §7 restore fund: filled by the treasury at up to 40 CR per minute (an AI faction gets a flat seed instead).</summary>
+    /// <summary>Core §7 restore bar: a plain timer in S0 (40 units a minute), funded by the front budget from S1.</summary>
     internal sealed class RebuildBar
     {
         public RebuildBar(float goal) { Goal = goal > 0f && !float.IsNaN(goal) && !float.IsInfinity(goal) ? goal : 1f; }
@@ -46,15 +50,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return take;
         }
 
-        /// <summary>Auto-fund for <paramref name="seconds"/>: the treasury pays what the bar takes unless <paramref name="flatSeed"/>. Returns the amount taken from the treasury.</summary>
-        public float AutoFund(float seconds, float treasury, bool flatSeed)
-        {
-            if (float.IsNaN(seconds) || seconds <= 0f || float.IsNaN(treasury)) return 0f;
-            float want = AnchorRules.AutoFundPerMinute / 60f * Math.Min(seconds, 60f);
-            if (!flatSeed) want = Math.Min(want, Math.Max(0f, treasury));
-            float took = Fund(want);
-            return flatSeed ? 0f : took;
-        }
+        /// <summary>One timer step: <see cref="AnchorRules.TimerProgress"/> for <paramref name="seconds"/>. Returns what the bar took.</summary>
+        public float Tick(float seconds) => Fund(AnchorRules.TimerProgress(seconds));
 
         public void Reset() { Value = 0f; }
     }

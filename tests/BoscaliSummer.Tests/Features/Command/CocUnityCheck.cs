@@ -20,7 +20,7 @@ using static UnityCheckHarness;
 /// <summary>
 /// Standalone render check for the STR console — SITUATION (threat ladder, force balance, air tasking
 /// order, readout tiles), COMMAND (org chart, dossier, staff log) and OPERATIONS (op card, proposal cards,
-/// front rows, posture) pages, plus the operations-room floating window — all on kit v2 with the STR
+/// front rows, posture) pages — all on kit v2 with the STR
 /// module's own parts. The run FAILS on text overflow, 11 px floor breaches, gutter entry, contrast below
 /// 4.5 or overlapping parts (the same gate as the kit gallery). None of this can be exercised
 /// by the pure net8 tests. This check builds the real console and the real page builders from
@@ -116,53 +116,6 @@ public static class CocUnityCheck
                 Object.DestroyImmediate(ops);
             }
 
-            var mapRoot = new GameObject("MapCheck");
-            DynamicMap liveMap = mapRoot.AddComponent<DynamicMap>();
-            liveMap.mapImage = new GameObject("MapImage", typeof(RectTransform), typeof(Image))
-                .GetComponent<Image>();
-            liveMap.mapImage.transform.SetParent(mapRoot.transform, false);
-            var mapTexture = new Texture2D(64, 48, TextureFormat.RGBA32, false);
-            var mapPixels = new Color32[64 * 48];
-            for (int py = 0; py < 48; py++)
-                for (int px = 0; px < 64; px++)
-                    mapPixels[py * 64 + px] = new Color32(
-                        (byte)(18 + px / 3), (byte)(35 + py / 4),
-                        (byte)(48 + (px + py) / 5), 255);
-            mapTexture.SetPixels32(mapPixels);
-            mapTexture.Apply();
-            liveMap.mapImage.sprite = Sprite.Create(mapTexture,
-                new Rect(0f, 0f, 64f, 48f), new Vector2(.5f, .5f));
-            SceneSingleton<DynamicMap>.i = liveMap;
-
-            foreach (WarMode mode in new[] { WarMode.Rich, WarMode.Idle, WarMode.Unavailable })
-            {
-                string tag = mode.ToString().ToLowerInvariant();
-                StrPlanningWindow room = StrPlanningWindow.Create(new WarStub(mode), new ComMapOverlay());
-                room.Show();
-                var roomWindow = (AvWindow)GetFieldValue(room, "window");
-                for (int i = 0; i < 4; i++) roomWindow.Ticker.TickNow();
-                Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
-                    t.text.Contains("OPERATIONS ROOM")), "Room must keep the AvWindow title chrome.");
-                if (mode == WarMode.Rich)
-                {
-                    Check(Array.Exists(room.GetComponentsInChildren<TMP_Text>(true), t =>
-                        t.text.Contains("NORTH RIDGE")), "Room must name the active operation.");
-                    object mapPart = GetFieldValue(room, "map");
-                    Image[] frontPins = (Image[])mapPart.GetType().GetField("frontMarkers", Private).GetValue(mapPart);
-                    Check(frontPins[0].enabled && !frontPins[1].enabled,
-                        "Only observed fronts may receive an exact map marker.");
-                }
-                CaptureWindow(room, "war-room-" + tag + "-1920.png");
-                GateWindow(room, "war-room-" + tag);
-                if (mode == WarMode.Rich) CaptureWindow(room, "war-room-rich-1280.png", 1280f, 720f);
-                room.Close();
-                Check(!StrPlanningWindow.IsOpen, "Closing the room must release the input guard.");
-                Object.DestroyImmediate(room.gameObject);
-            }
-            SceneSingleton<DynamicMap>.i = null;
-            Object.DestroyImmediate(mapRoot);
-            Object.DestroyImmediate(mapTexture);
-
             if (Failures.Count > 0)
             {
                 File.WriteAllText("result.txt", "FAIL: " + Failures.Count + " gate failure(s)\n" + string.Join("\n", Failures));
@@ -171,8 +124,8 @@ public static class CocUnityCheck
             }
 
             var report = new System.Text.StringBuilder();
-            report.AppendLine("PASS: the real STR console pages and live operations room rendered offline on kit v2; gate clean (" + checkedTexts + " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part overlap).");
-            report.AppendLine(captures + " captures: COMMAND allied/hostile/sealed/no-post/no-staff, SITUATION populated+empty, OPERATIONS rich/basic/idle/unavailable, operations room x3 modes.");
+            report.AppendLine("PASS: the real STR console pages rendered offline on kit v2; gate clean (" + checkedTexts + " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part overlap).");
+            report.AppendLine(captures + " captures: COMMAND allied/hostile/sealed/no-post/no-staff, SITUATION populated+empty, OPERATIONS rich/basic/idle/unavailable.");
             report.AppendLine("Content is bound after Finish() and advanced with Ticker.TickNow(), as the game does; the stub IHighCommandView records Highlight(id) and every COMMAND scenario asserts it matches the open file.");
             report.AppendLine("Renders (path | bytes | setup):");
             foreach (string note in Notes) report.AppendLine(note);
@@ -238,6 +191,10 @@ public static class CocUnityCheck
 
         public bool Available => mode != WarMode.Unavailable;
         public bool CanCommand => mode != WarMode.Unavailable;
+        public bool HasSnapshot => mode != WarMode.Unavailable;
+        public float SnapshotAgeSeconds => 2f;
+        public bool CommandPending => false;
+        public string CommandStatus => "";
         public TheaterWarPosture Posture => mode == WarMode.Rich ? TheaterWarPosture.Bold : TheaterWarPosture.Steady;
         public IReadOnlyList<TheaterFrontView> Fronts { get; }
         public IReadOnlyList<TheaterProposalView> Proposals { get; }
@@ -436,18 +393,6 @@ public static class CocUnityCheck
         return path;
     }
 
-    private static void CaptureWindow(StrPlanningWindow window, string file,
-        float width = 1920f, float height = 1080f)
-    {
-        Canvas canvas = window.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.WorldSpace;
-        canvas.GetComponent<CanvasScaler>().enabled = false;
-        canvas.transform.localScale = Vector3.one;
-        canvas.transform.position = Vector3.zero;
-        ((RectTransform)canvas.transform).sizeDelta = new Vector2(width, height);
-        Capture(window.gameObject, height, file, width, canvas.transform.position);
-    }
-
     private static object GetFieldValue(object target, string field)
     {
         FieldInfo info = target.GetType().GetField(field, Private);
@@ -471,16 +416,6 @@ public static class CocUnityCheck
         foreach (Transform s in con.Root.GetComponentsInChildren<Transform>(true))
             if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
                 Failures.Add(where + ": section without icon " + s.name);
-    }
-
-    private static void GateWindow(StrPlanningWindow room, string where)
-    {
-        var window = (AvWindow)GetFieldValue(room, "window");
-        GateTexts(window.Root, where, float.MaxValue, window.Root);
-        PartOverlap(window.Body.Content, where);
-        RectTransform root = window.Root;
-        if (root.rect.width > 1880.5f || root.rect.height > 1040.5f)
-            Failures.Add(where + ": window " + root.rect.size + " does not fit the 1080p reference screen");
     }
 
     private static void GateTexts(RectTransform scope, string where, float gutterLeft, RectTransform space)

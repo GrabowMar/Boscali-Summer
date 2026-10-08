@@ -22,6 +22,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public bool Answer;
         /// <summary>The speaker's voice (a voice pack is dealt by it; it stays with the member when slots renumber).</summary>
         public int Voice;
+        public int MemberId;
+        /// <summary>Exact authored audio event; null uses the call key. No generic Idle fallback for dialogue.</summary>
+        public string ClipKey;
     }
 
     /// <summary>Spec M7 §1.2: the wing's one radio channel.
@@ -43,7 +46,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float EmergencyAge = 2f, TacticalAge = 4f, StatusAge = 10f, ChatterAge = 20f;
         /// <summary>A hold (the voice still speaking) lasts at most this long past the line's airtime: a voice that never
         /// reports done must not silence the radio.</summary>
-        public static float MaxHold = 10f;
+        public static float MaxHold = 30f;
         public const int Capacity = 16, MaxSpeakers = 16, RecentCapacity = 32;
 
         private struct Recent
@@ -85,6 +88,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return false;
         }
         public bool Busy(float now) => now < busyUntil;
+
+        public void CancelChatter()
+        {
+            for (int i = count - 1; i >= 0; i--)
+                if (lines[i].Class == RadioClass.Chatter && !lines[i].Answer) RemoveAt(i);
+        }
 
         public static float Airtime(string text)
         {

@@ -24,15 +24,11 @@ namespace BoscaliSummer.Tests.Features.Comms
             ShapesAreClosedWhereTheyShouldBe();
             TeamPostsNeverReachTheOtherSide();
             PlacementIsValidated();
+            RemovedSocialActionsAreRejected();
             AuthorBudgetRetiresOldest();
             OnlyAuthorOrHostErases();
             RateLimitStopsSpam();
             CallsDropAPingAtTheCaller();
-            PollsCountOneBallotPerVoter();
-            PollsCloseOnTime();
-            DuelThrowStaysSecretAndResolves();
-            DirectDuelsBuildRivalry();
-            HuntRanksAndRevealsOnlyAtTheEnd();
             SnapshotShowsOnlyWhatTheViewerMaySee();
             ClientAppliesTheWholeLifecycle();
             ClientMutesAndSkipsSelfNoise();
@@ -42,7 +38,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             CallPingsHaveTheirOwnSlotAndWords();
             RemovalsStayWithTheirAudience();
             OtherSideIsQuietAndLabelled();
-            RefusalsReachTheHudAndUndoVotes();
+            RefusalsReachTheHud();
         }
 
         private static void CatalogIsWellFormed()
@@ -140,7 +136,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void TeamPostsNeverReachTheOtherSide()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), 0f, output);
             TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Item, "team ping becomes one item");
@@ -161,7 +157,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void PlacementIsValidated()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             var bad = Ping(99, CommsChannel.Team);
             host.Handle(Wing, bad, 0f, output);
@@ -198,7 +194,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void AuthorBudgetRetiresOldest()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             int budget = CommsBoard.AuthorBudget(CommsItemKind.Ping);
             for (int i = 0; i < budget; i++) host.Handle(Wing, Ping(0, CommsChannel.Team), i * 5f, output);
@@ -213,7 +209,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void OnlyAuthorOrHostErases()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
             uint id = output[0].Envelope.Id;
@@ -247,7 +243,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void RateLimitStopsSpam()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             int refused = 0;
             for (int i = 0; i < 40; i++)
@@ -267,7 +263,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void CallsDropAPingAtTheCaller()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             int needSupport = Array.FindIndex(CommsCatalog.Calls, c => c.Code == "NEED SUPPORT");
             host.Handle(Wing, new CommsIntent { Op = CommsOp.Call, Style = (byte)needSupport, Points = new[] { 50, 60 } }, 0f, output);
@@ -286,175 +282,13 @@ namespace BoscaliSummer.Tests.Features.Comms
             TestAssert.That(output.Count == 1 && output[0].Envelope.Points == null, "an unlocated call never leaks a position");
         }
 
-        private static void PollsCountOneBallotPerVoter()
-        {
-            var host = new CommsAuthority(7);
-            var output = new List<CommsOutbound>();
-            host.Handle(Wing, new CommsIntent
-            {
-                Op = CommsOp.PollCreate, Text = "push now?", Items = new[] { "push", "hold", "PUSH" }, Size = 1,
-            }, 0f, output);
-            CommsEnvelope created = output[0].Envelope;
-            TestAssert.That(created.Event == CommsEvent.Poll && created.Items.Length == 2 && created.Text == "PUSH NOW?",
-                "the poll is cleaned and deduplicated");
-            TestAssert.That(Math.Abs(created.Ttl - CommsCatalog.PollDurations[1]) < 0.01f, "duration comes from the table");
-
-            output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "again?", Items = new[] { "a", "b" } }, 1f, output);
-            TestAssert.That(Refused(output), "one open poll per author");
-
-            output.Clear();
-            host.Handle(Wing, Vote(created.Id, 0), 1f, output);
-            host.Handle(Third, Vote(created.Id, 0), 1f, output);
-            host.Handle(Third, Vote(created.Id, 1), 2f, output);
-            host.Handle(Third, Vote(created.Id, 1), 3f, output);
-            CommsEnvelope last = output[output.Count - 1].Envelope;
-            TestAssert.That(output.Count == 3, "an unchanged ballot sends nothing");
-            TestAssert.That(last.Values[0] == 1 && last.Values[1] == 1, "a changed mind moves one vote");
-
-            output.Clear();
-            host.Handle(Bandit, Vote(created.Id, 0), 4f, output);
-            TestAssert.That(Refused(output), "the other side cannot vote in a team poll");
-            host.Handle(Wing, Vote(created.Id, 9), 4f, output);
-
-            output.Clear();
-            host.Handle(Third, new CommsIntent { Op = CommsOp.PollClose, Target = created.Id }, 5f, output);
-            TestAssert.That(Refused(output), "only the asker or host closes a poll");
-            output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollClose, Target = created.Id }, 5f, output);
-            TestAssert.That((output[0].Envelope.Flags & CommsFlags.Closed) != 0 && host.Polls.Count == 0, "the asker closes it");
-
-            output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "?", Items = new[] { "only" } }, 30f, output);
-            TestAssert.That(Refused(output), "one option is not a poll");
-        }
-
-        private static void PollsCloseOnTime()
-        {
-            var host = new CommsAuthority(7);
-            var output = new List<CommsOutbound>();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "rtb?", Items = new[] { "rtb", "stay" }, Size = 0 }, 0f, output);
-            output.Clear();
-            host.Tick(10f, output);
-            TestAssert.That(output.Count == 0, "an open poll stays open");
-            host.Tick(CommsCatalog.PollDurations[0] + 0.1f, output);
-            TestAssert.That(output.Count == 1 && (output[0].Envelope.Flags & CommsFlags.Closed) != 0, "it closes on time with a verdict");
-            TestAssert.That(!output[0].Reaches(Bandit.Id, Bandit.Faction), "and the verdict stays on its side");
-
-            var poll = new CommsPoll { Options = new[] { "A", "B" }, Tally = new[] { 2, 2 } };
-            TestAssert.That(poll.Leader == -1 && poll.Verdict().StartsWith("TIE"), "a tie has no leader");
-            poll.Tally = new[] { 0, 0 };
-            TestAssert.That(poll.Verdict() == "NO VOTES", "no votes says so");
-            poll.Tally = new[] { 1, 3 };
-            TestAssert.That(poll.Leader == 1 && poll.Verdict() == "B 3/4", "a winner is named with its share");
-        }
-
-        private static void DuelThrowStaysSecretAndResolves()
-        {
-            TestAssert.That(RpsChallenge.Resolve(0, 2) == 1 && RpsChallenge.Resolve(1, 0) == 1 && RpsChallenge.Resolve(2, 1) == 1,
-                "rock blunts scissors, paper wraps rock, scissors cut paper");
-            TestAssert.That(RpsChallenge.Resolve(0, 1) == -1 && RpsChallenge.Resolve(2, 2) == 0, "losses and draws");
-
-            var host = new CommsAuthority(7);
-            var output = new List<CommsOutbound>();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsChallenge, Style = 0 }, 0f, output);
-            CommsEnvelope open = output[0].Envelope;
-            TestAssert.That(open.Values == null && open.Style == 0 && open.Items == null, "the challenge carries no throw");
-
-            output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsAccept, Target = open.Id, Style = 1 }, 1f, output);
-            TestAssert.That(Refused(output), "you cannot duel yourself");
-            output.Clear();
-            host.Handle(Bandit, new CommsIntent { Op = CommsOp.RpsAccept, Target = open.Id, Style = 1 }, 1f, output);
-            TestAssert.That(Refused(output), "the other side cannot take a team challenge");
-
-            output.Clear();
-            host.Handle(Third, new CommsIntent { Op = CommsOp.RpsAccept, Target = open.Id, Style = 1 }, 2f, output);
-            CommsEnvelope result = output[0].Envelope;
-            TestAssert.That((result.Flags & CommsFlags.Closed) != 0 && result.Values[2] == -1, "paper beats rock");
-            TestAssert.That(output[1].Envelope.Event == CommsEvent.Scores && host.Scores.PointsOf(Third.Id) == 2, "the winner scores");
-
-            output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsChallenge, Style = 2 }, 3f, output);
-            output.Clear();
-            host.Tick(3f + CommsAuthority.DuelSeconds + 1f, output);
-            TestAssert.That(output.Count == 1 && (output[0].Envelope.Flags & CommsFlags.Lapsed) != 0, "an untaken challenge lapses");
-        }
-
-        private static void DirectDuelsBuildRivalry()
-        {
-            var host = new CommsAuthority(7);
-            var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
-            var output = new List<CommsOutbound>();
-            for (int round = 0; round < 3; round++)
-            {
-                output.Clear();
-                host.Handle(Wing, new CommsIntent { Op = CommsOp.RpsChallenge, Style = 0,
-                    Text = Third.Id.ToString() }, round * 100f, output);
-                uint id = output[0].Envelope.Id;
-                TestAssert.That(output[0].Envelope.Players[0] == Third.Id && output[0].Envelope.Values == null,
-                    "a direct invite names only its recipient and keeps the throw secret");
-                Deliver(output, client, Third, round * 100f);
-                TestAssert.That(client.Duels[0].TargetPlayer == Third.Id, "the invite is addressed on the client");
-                output.Clear();
-                host.Handle(Host, new CommsIntent { Op = CommsOp.RpsAccept, Target = id, Style = 1 }, round * 100f + 1f, output);
-                TestAssert.That(Refused(output), "a bystander cannot take a direct invite");
-                output.Clear();
-                host.Handle(Third, new CommsIntent { Op = CommsOp.RpsAccept, Target = id, Style = 2 }, round * 100f + 2f, output);
-                Deliver(output, client, Third, round * 100f + 2f);
-            }
-            TestAssert.That(client.Rivalries.Count == 1 && client.Rivalries[0].FirstWins == 3 &&
-                client.Rivalries[0].Streak == 3 && client.Duels.Count == 0,
-                "three settled duels make one bounded rivalry and clear the invites");
-            TestAssert.That(client.Feed[client.Feed.Count - 1].RematchPlayer == Wing.Id,
-                "the result offers the opponent as a rematch target");
-        }
-
-        private static void HuntRanksAndRevealsOnlyAtTheEnd()
-        {
-            var host = new CommsAuthority(7);
-            var output = new List<CommsOutbound>();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.HuntStart, Points = StrokeCodec.Point(10000f, 10000f), Size = 0 }, 0f, output);
-            CommsEnvelope open = output[0].Envelope;
-            TestAssert.That(open.Points == null, "the hidden point never leaves the host early");
-
-            output.Clear();
-            host.Handle(Wing, Guess(open.Id, 10000f, 10000f), 1f, output);
-            TestAssert.That(Refused(output), "the hider cannot guess");
-            output.Clear();
-            host.Handle(Third, Guess(open.Id, 12000f, 10000f), 1f, output);
-            TestAssert.That(output.Count == 2 && output[0].Envelope.Values[0] == 1 && output[1].Route == CommsRoute.One,
-                "a guess bumps the count and is confirmed privately");
-            output.Clear();
-            host.Handle(Third, Guess(open.Id, 10000f, 10000f), 2f, output);
-            TestAssert.That(Refused(output), "one guess per hunt");
-            output.Clear();
-            host.Handle(Host, Guess(open.Id, 10500f, 10000f), 2f, output);
-            output.Clear();
-            host.Handle(Bandit, Guess(open.Id, 10000f, 10000f), 2f, output);
-            TestAssert.That(Refused(output), "the other side cannot join a team hunt");
-
-            output.Clear();
-            host.Tick(CommsCatalog.HuntDurations[0] + 1f, output);
-            CommsEnvelope reveal = output[0].Envelope;
-            TestAssert.That((reveal.Flags & CommsFlags.Revealed) != 0 && reveal.Points.Length == 6, "the reveal carries point and guesses");
-            TestAssert.That(reveal.Items[0] == "HOST" && reveal.Values[0] == 500 && reveal.Values[1] == 4,
-                "closest first, with a bullseye bonus");
-            TestAssert.That(reveal.Values[3] == 2, "second place scores two");
-            TestAssert.That(host.Hunts.Count == 0, "the round ends");
-        }
-
         private static void SnapshotShowsOnlyWhatTheViewerMaySee()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
             host.Handle(Wing, Ping(1, CommsChannel.All), 0f, output);
             host.Handle(Bandit, Ping(2, CommsChannel.Team), 0f, output);
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "q", Items = new[] { "a", "b" } }, 0f, output);
-            uint pollId = output[output.Count - 1].Envelope.Id;
-            host.Handle(Third, Vote(pollId, 1), 0f, output);
-
             output.Clear();
             host.Snapshot(Bandit, 1f, output);
             int items = 0, polls = 0;
@@ -468,13 +302,7 @@ namespace BoscaliSummer.Tests.Features.Comms
                 "it starts with a full reset");
             TestAssert.That(items == 2 && polls == 0, "the enemy sees their own post and the ALL post, not ours");
 
-            output.Clear();
-            host.Snapshot(Third, 1f, output);
-            foreach (CommsOutbound o in output)
-                if (o.Envelope.Event == CommsEvent.Poll)
-                    TestAssert.That(o.Envelope.Style == 2, "a rejoining voter gets their own ballot back");
-
-            var crowded = new CommsAuthority(7);
+            var crowded = new CommsAuthority();
             var senders = new CommsSender[40];
             for (int i = 0; i < senders.Length; i++)
                 senders[i] = new CommsSender { Id = (ulong)(100 + i), Name = "P" + i, Faction = Blue };
@@ -499,16 +327,15 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void ClientAppliesTheWholeLifecycle()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var client = new CommsClientState { LocalId = Third.Id };
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), 0f, output);
             host.Handle(Wing, Stroke(new[] { 0, 0, 100, 100, 200, 0 }), 0f, output);
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.Roll, Style = 2 }, 0f, output);
             Deliver(output, client, Third, 0f);
 
             TestAssert.That(client.Board.Count == 2, "the peer holds both items");
-            TestAssert.That(client.Feed.Count == 2 && client.Feed[0].Text.StartsWith("SAM THREAT"), "the ping and the roll are logged");
+            TestAssert.That(client.Feed.Count == 1 && client.Feed[0].Text.StartsWith("SAM THREAT"), "the ping is logged");
             var arrivals = new List<CommsArrival>();
             client.DrainArrivals(arrivals);
             TestAssert.That(arrivals.Count == 1 && arrivals[0].Sound && arrivals[0].Tone == CommsTone.Danger &&
@@ -519,35 +346,6 @@ namespace BoscaliSummer.Tests.Features.Comms
                 "the peer expires the ping on its own clock and keeps the drawing");
 
             output.Clear();
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "rtb?", Items = new[] { "rtb", "stay" } }, 70f, output);
-            Deliver(output, client, Third, 70f);
-            TestAssert.That(client.Polls.Count == 1 && !client.Polls[0].Closed, "the poll arrives open");
-            client.NoteLocalVote(client.Polls[0].Id, 1);
-            output.Clear();
-            host.Handle(Third, Vote(client.Polls[0].Id, 1), 71f, output);
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollClose, Target = client.Polls[0].Id }, 72f, output);
-            Deliver(output, client, Third, 72f);
-            TestAssert.That(client.Polls[0].Closed && client.Polls[0].LocalVote == 1 && client.Polls[0].Tally[1] == 1,
-                "the tally, the close and this peer's own ballot all land");
-            client.Tick(72f + CommsClientState.ClosedPollSeconds + 1f);
-            TestAssert.That(client.Polls.Count == 0, "a closed poll leaves the panel after a while");
-
-            output.Clear();
-            client.NoteLocalHide(0f, 0f);
-            host.Handle(Third, new CommsIntent { Op = CommsOp.HuntStart, Points = StrokeCodec.Point(500f, 500f) }, 200f, output);
-            Deliver(output, client, Third, 200f);
-            TestAssert.That(client.Hunts.Count == 1 && client.Hunts[0].HasLocalGuess, "the hider sees their own hidden point");
-            output.Clear();
-            host.Handle(Wing, Guess(client.Hunts[0].Id, 600f, 500f), 201f, output);
-            host.Tick(200f + CommsCatalog.HuntDurations[0] + 1f, output);
-            Deliver(output, client, Third, 240f);
-            TestAssert.That(client.Hunts[0].Revealed && client.Hunts[0].Placings.Count == 1 &&
-                            client.Hunts[0].Placings[0].Name == "WING", "the reveal lands with its placings");
-            TestAssert.That(client.Scores.PointsOf(Wing.Id) > 0, "and the leaderboard follows");
-            client.Tick(240f + CommsClientState.RevealSeconds + 1f);
-            TestAssert.That(client.Hunts.Count == 0, "the reveal clears itself");
-
-            output.Clear();
             host.Snapshot(Third, 300f, output);
             Deliver(output, client, Third, 300f);
             TestAssert.That(client.Board.Count == host.Board.Count, "a snapshot rebuilds the board exactly");
@@ -555,7 +353,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void ClientMutesAndSkipsSelfNoise()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var client = new CommsClientState { LocalId = Wing.Id };
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
@@ -599,11 +397,10 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void SnapshotReplaysSilently()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), 0f, output);
-            host.Handle(Wing, new CommsIntent { Op = CommsOp.PollCreate, Text = "rtb?", Items = new[] { "rtb", "stay" } }, 0f, output);
             output.Clear();
             host.Snapshot(Third, 10f, output);
             foreach (CommsOutbound o in output)
@@ -613,14 +410,14 @@ namespace BoscaliSummer.Tests.Features.Comms
             Deliver(output, client, Third, 10f);
             var arrivals = new List<CommsArrival>();
             client.DrainArrivals(arrivals);
-            TestAssert.That(client.Board.Count == 1 && client.Polls.Count == 1, "a replay still lands");
+            TestAssert.That(client.Board.Count == 1 && client.Polls.Count == 0, "a replay still lands");
             TestAssert.That(client.Feed.Count == 0 && arrivals.Count == 0, "but is neither logged nor announced again");
             TestAssert.That(10f - client.Board.Items[0].Created > 8f, "and does not pulse as if it were new");
         }
 
         private static void SyncSkipsTheBucketButIsGated()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             for (int i = 0; i < 40; i++) host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
             output.Clear();
@@ -643,7 +440,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void CallPingsHaveTheirOwnSlotAndWords()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             for (int i = 0; i < CommsBoard.AuthorBudget(CommsItemKind.Ping); i++)
                 host.Handle(Wing, Ping(CommsCatalog.PingSam, CommsChannel.Team), i, output);
@@ -679,7 +476,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void RemovalsStayWithTheirAudience()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var output = new List<CommsOutbound>();
             host.Handle(Wing, Ping(0, CommsChannel.Team), 0f, output);
             uint id = output[0].Envelope.Id;
@@ -688,7 +485,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Remove &&
                             !output[0].Reaches(Bandit.Id, Bandit.Faction), "a team mark's removal never reaches the other side");
 
-            var crowded = new CommsAuthority(7);
+            var crowded = new CommsAuthority();
             crowded.Handle(Bandit, Ping(0, CommsChannel.Team), 0f, output);
             uint enemyMark = output[output.Count - 1].Envelope.Id;
             for (int i = 0; i < CommsBoard.MaxPerAudience + 5; i++)
@@ -699,7 +496,7 @@ namespace BoscaliSummer.Tests.Features.Comms
 
         private static void OtherSideIsQuietAndLabelled()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var client = new CommsClientState { LocalId = Wing.Id, LocalFaction = Blue };
             var output = new List<CommsOutbound>();
             host.Handle(Bandit, Ping(CommsCatalog.PingSam, CommsChannel.All), 0f, output);
@@ -711,9 +508,9 @@ namespace BoscaliSummer.Tests.Features.Comms
                 "an ALL ping from the other side is labelled, calm and silent");
         }
 
-        private static void RefusalsReachTheHudAndUndoVotes()
+        private static void RefusalsReachTheHud()
         {
-            var host = new CommsAuthority(7);
+            var host = new CommsAuthority();
             var client = new CommsClientState { LocalId = Wing.Id, LocalFaction = Blue };
             var output = new List<CommsOutbound>();
             var arrivals = new List<CommsArrival>();
@@ -731,17 +528,47 @@ namespace BoscaliSummer.Tests.Features.Comms
             client.DrainArrivals(arrivals);
             TestAssert.That(arrivals.Count == 0 && client.NoticeIsError, "later refusals stay on the status strip");
 
+        }
+
+        private static void RemovedSocialActionsAreRejected()
+        {
+            var host = new CommsAuthority();
+            var output = new List<CommsOutbound>();
+            foreach (CommsOp op in new[] { CommsOp.PollCreate, CommsOp.PollVote, CommsOp.PollClose,
+                CommsOp.Roll, CommsOp.RpsChallenge, CommsOp.RpsAccept, CommsOp.RpsCancel,
+                CommsOp.HuntStart, CommsOp.HuntGuess })
+            {
+                output.Clear();
+                host.Handle(Wing, new CommsIntent { Op = op, Text = "TEST", Items = new[] { "A", "B" },
+                    Points = new[] { 0, 0 } }, (int)op * 100f, output);
+                TestAssert.That(output.Count == 1 && Refused(output) && output[0].Player == Wing.Id,
+                    "removed action is refused privately: " + op);
+            }
             output.Clear();
-            host.Handle(Third, new CommsIntent { Op = CommsOp.PollCreate, Text = "q", Items = new[] { "a", "b" } }, 30f, output);
-            Deliver(output, client, Wing, 30f);
-            uint poll = client.Polls[0].Id;
-            host.Handle(Third, new CommsIntent { Op = CommsOp.PollClose, Target = poll }, 31f, output);
-            client.NoteLocalVote(poll, 1);
-            TestAssert.That(client.Polls[0].LocalVote == 1, "a vote shows at once");
+            host.Handle(Wing, new CommsIntent { Op = CommsOp.Place, Kind = (byte)CommsItemKind.Sticker,
+                Points = new[] { 0, 0 } }, 2000f, output);
+            TestAssert.That(Refused(output) && host.Board.Count == 0, "stickers cannot reach the board");
             output.Clear();
-            host.Handle(Wing, Vote(poll, 1), 32f, output);
-            Deliver(output, client, Wing, 32f);
-            TestAssert.That(client.Polls[0].LocalVote == -1, "and springs back when the host refuses it");
+            host.Snapshot(Wing, 2001f, output);
+            TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Reset,
+                "removed actions leave no replay state");
+            host.Tick(3000f, output);
+            TestAssert.That(output.Count == 1, "removed actions produce no delayed results");
+
+            var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };
+            foreach (CommsEvent kind in new[] { CommsEvent.Poll, CommsEvent.Rps, CommsEvent.Hunt, CommsEvent.Scores })
+                client.Apply(new CommsEnvelope { Event = kind, Id = 1, Author = Wing.Id,
+                    Items = new[] { "A", "B" }, Values = new[] { 1, 2 } }, 0f);
+            client.Apply(new CommsEnvelope { Event = CommsEvent.Item, Kind = (byte)CommsItemKind.Sticker,
+                Id = 2, Author = Wing.Id, Points = new[] { 0, 0 }, Ttl = 60 }, 0f);
+            client.Apply(new CommsEnvelope { Event = CommsEvent.Feed, Kind = (byte)CommsFeedKind.Roll,
+                Author = Wing.Id, Text = "DICE" }, 0f);
+            TestAssert.That(client.Board.Count == 0 && client.Feed.Count == 0 && client.Polls.Count == 0 &&
+                client.Duels.Count == 0 && client.Hunts.Count == 0 && client.Scores.Rows.Count == 0,
+                "legacy social envelopes cannot restore removed content");
+            var arrivals = new List<CommsArrival>();
+            client.DrainArrivals(arrivals);
+            TestAssert.That(arrivals.Count == 0, "legacy social content is silent on the HUD");
         }
 
         // ---- helpers -----------------------------------------------------------------------
@@ -756,12 +583,6 @@ namespace BoscaliSummer.Tests.Features.Comms
         {
             Op = CommsOp.Place, Kind = (byte)CommsItemKind.Stroke, Style = 1, Size = 1, Points = points,
         };
-
-        private static CommsIntent Vote(uint poll, int option) =>
-            new CommsIntent { Op = CommsOp.PollVote, Target = poll, Style = (byte)option };
-
-        private static CommsIntent Guess(uint hunt, float x, float z) =>
-            new CommsIntent { Op = CommsOp.HuntGuess, Target = hunt, Points = StrokeCodec.Point(x, z) };
 
         private static bool Refused(List<CommsOutbound> output) =>
             output.Count > 0 && output[output.Count - 1].Envelope.Event == CommsEvent.Notice &&

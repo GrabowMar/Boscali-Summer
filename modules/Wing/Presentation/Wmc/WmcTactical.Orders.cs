@@ -249,11 +249,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             RefreshWholeWing(c);
         }
 
-        /// <summary>A word of why a key is off, in the width of its corner.</summary>
+        /// <summary>A word of why a key is off, in the width of its corner. None while the whole card is off for one reason (a client):
+        /// the fine-tune status above says it once instead of on every key.</summary>
         private static string WhyCode(in GridCell cell, WmcContext c)
         {
             if (!cell.Built) return "SOON";
-            if (!c.CanOrder) return "HOST";
+            if (!c.CanOrder) return "";
             if (c.Count == 0 && cell.Order != GridOrder.Call) return "NO AC";
             return "SELECT";
         }

@@ -157,9 +157,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // ---- SABOTAGE and NETWORK TAP -----------------------------------------------------------------------
 
         /// <summary>The anchor's main unit is destroyed through the vanilla damage path; the CYBER, SPACE and camp services then see it DOWN and start its rebuild clock.</summary>
-        private bool Sabotage(FactionSof f, AnchorSub sub, uint key)
+        private bool Sabotage(FactionSof f, AnchorSub sub, uint key) =>
+            f.Obs.TryUnit(key, out Unit target) && SabotageUnit(f, sub, target);
+
+        private bool SabotageUnit(FactionSof f, AnchorSub sub, Unit unit)
         {
-            if (!f.Obs.TryUnit(key, out Unit unit) || unit.disabled) return false;
+            if (unit == null || unit.disabled) return false;
             try
             {
                 List<UnitPart> parts = unit.GetAllParts();

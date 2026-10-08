@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
@@ -122,6 +123,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     // Every target id, valid or not, takes the same path; the host answers NO TARGET for unknown, hidden and foreign ids alike.
                     OpResult did = ports.Ops(player, c);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)did.Outcome, (int)did.Kind, did.Charged, did.Detail);
+                case SpaceCommandKind.FrontDirective:
+                case SpaceCommandKind.FrontPriority:
+                case SpaceCommandKind.FrontFocus:
+                case SpaceCommandKind.FrontQueue:
+                case SpaceCommandKind.FrontDonate:
+                    // The faction comes from the transport, never from the message; a lock names who holds it in the claimant slot.
+                    FrontResult fronted = ports.Front(player, c);
+                    return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)fronted.Outcome, 0, fronted.Charged, fronted.Detail, false, SpaceWire.Clean(fronted.By, SpaceReply.MaxClaimant));
                 default:
                     return ForTasked(c.Kind, c.RequestId, ports.Claim(player, c.RequestId, c.Target));
             }
@@ -151,6 +160,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (c.IsOpsVerb)
                 return new SpaceReply(protocol, c.Kind, c.RequestId,
                     (byte)(why == RefusalKind.Limited ? OpOutcome.RateLimited : why == RefusalKind.Changed ? OpOutcome.NoTarget : OpOutcome.Unavailable));
+            if (c.IsFrontVerb)
+                return new SpaceReply(protocol, c.Kind, c.RequestId,
+                    (byte)(why == RefusalKind.Limited ? FrontOutcome.RateLimited : why == RefusalKind.Changed ? FrontOutcome.BadAmount : FrontOutcome.Unavailable));
             if (c.Kind == SpaceCommandKind.Mark)
                 return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)(why == RefusalKind.Limited ? MarkVerdict.RateLimited : MarkVerdict.NoContact));
             return new SpaceReply(protocol, c.Kind, c.RequestId,

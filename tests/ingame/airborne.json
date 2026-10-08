@@ -1,0 +1,49 @@
+{
+  "name": "airborne",
+  "mods": ["boscalisummer"],
+  "timeout_s": 330,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "VL-49 Tarantula", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 3000, "speed": 90, "heading": 0 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "atmosphere", "time_of_day": 12, "conditions": 0.1, "cloud_height": 6000, "wind_speed": 2, "wind_turbulence": 0, "wind_heading": 90, "moon_phase": 14 },
+    { "op": "wait", "seconds": 6 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "catalog" }, "store": "catalog" },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "halo", "ahead": 4000 }, "store": "halo" },
+
+    { "op": "wait", "seconds": 4 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_3", "distance": 9, "height": 2 }, "store": "w_exit" },
+    { "op": "capture", "name": "halo-exit", "hide_ui": true },
+
+    { "op": "wait", "seconds": 25 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_1", "distance": 45, "height": 12 }, "store": "w_vee" },
+    { "op": "capture", "name": "halo-vee", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_2", "distance": 7, "height": 1.5 }, "store": "w_track" },
+    { "op": "capture", "name": "halo-track", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "status" }, "store": "glide" },
+
+    { "op": "wait", "seconds": 113 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_5", "distance": 22, "height": 3 }, "store": "w_pull" },
+    { "op": "capture", "name": "halo-pull", "hide_ui": true },
+
+    { "op": "wait", "seconds": 20 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_1", "distance": 24, "height": 4 }, "store": "w_canopy" },
+    { "op": "capture", "name": "halo-canopy", "hide_ui": true },
+
+    { "op": "wait", "seconds": 30 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "child": "Jumper_1", "distance": 14, "height": 3 }, "store": "w_final" },
+    { "op": "capture", "name": "halo-final", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "status" }, "store": "late" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "catalog.haloMount", "min": 0.5 },
+    { "check": "result_above", "path": "catalog.tarantulaBays", "min": 0.5 },
+    { "check": "result_above", "path": "catalog.jumperShapes", "min": 6.5 },
+    { "check": "result_above", "path": "catalog.trooperShapes", "min": 6.5 },
+    { "check": "result_above", "path": "catalog.canopyShapes", "min": 1.5 },
+    { "check": "result_below", "path": "halo.lowDrop", "max": 0.5 },
+    { "check": "result_below", "path": "halo.miss", "max": 5 },
+    { "check": "result_above", "path": "glide.jumpers", "min": 7.5 }
+  ]
+}

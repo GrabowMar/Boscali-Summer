@@ -4,170 +4,155 @@ using System.IO;
 using BepInEx;
 using UnityEngine;
 using UnityEngine.Networking;
-
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Configuration;
+
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
-    /// <summary>Spec M7 §5: Yappinator-format voice packs for wingman calls. The packs named in Radio/VoicePacks are found
-    /// under Wing Command's voicepacks folder or Yappinator's own audio folder, their clips loaded without blocking
-    /// (polled each frame), dealt one pack per wingman round robin, and played on one radio audio source (a new line
-    /// stops the last: an emergency cuts in as the TTS does).</summary>
+    /// <summary>Local Yappinator pack adapter. One asynchronous decode at a time; no plugin dependency.</summary>
     internal static class VoicePacks
     {
+        public const int MaxPacks = 8, MaxClipsPerPack = 256;
+        public const long MaxFileBytes = 16 * 1024 * 1024, MaxDecodedBytes = 128 * 1024 * 1024;
+        public const float MaxClipSeconds = 20f;
         private sealed class Pack
         {
-            public string Name;
             public readonly VoicePackIndex Index = new VoicePackIndex();
             public readonly List<string> Files = new List<string>();
+            public readonly Dictionary<string, int> Next = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             public AudioClip[] Clips;
-            public int Next;
         }
-
-        private struct Loading
-        {
-            public Pack Pack;
-            public int File;
-            public UnityWebRequest Request;
-        }
-
         private static readonly List<Pack> packs = new List<Pack>();
-        private static readonly List<Loading> loading = new List<Loading>();
         private static AudioSource source;
-        private static string loadedSetting;
+        private static UnityWebRequest request;
+        private static int loadingPack, loadingFile;
+        private static long decodedBytes;
         private static bool failed;
-
         public static bool Playing => source != null && source.isPlaying;
-
-        /// <summary>Silence the pack voice (the TTS is about to speak).</summary>
-        public static void Stop()
-        {
-            if (source != null && source.isPlaying) source.Stop();
-        }
+        public static void Stop() { if (source != null) source.Stop(); }
 
         private static IEnumerable<string> Roots()
         {
+            yield return Path.Combine(Paths.ConfigPath, "BoscaliSummer", "voicepacks");
             yield return Path.Combine(WingConfig.DataRoot, "voicepacks");
             yield return Path.Combine(Paths.PluginPath, "WSOYappinator", "audio");
+            yield return Path.Combine(Paths.PluginPath, "WSO Yappinator", "audio");
         }
 
-        /// <summary>At each mission start: (re)load the packs named in the setting when it changed.</summary>
         public static void Activate()
         {
-            string setting = WingSettings.Instance.VoicePacks.Value ?? "";
-            if (setting == loadedSetting) return;
-            Clear();
-            foreach (string raw in setting.Split(','))
+            Deactivate();
+            failed = false;
+            foreach (string raw in (WingSettings.Instance.VoicePacks.Value ?? "").Split(','))
             {
+                if (packs.Count >= MaxPacks) break;
                 string name = raw.Trim();
                 if (name.Length == 0) continue;
-                // One bad pack never takes the radio down with it (review M7d I3).
-                try
-                {
-                    Load(name);
-                }
-                catch (Exception e)
-                {
-                    WingLog.Logger.LogWarning($"[Radio] voice pack \"{name}\" could not be read: {e.Message}");
-                }
+                try { Load(name); }
+                catch (Exception e) { WingLog.Logger.LogWarning("[Radio] pack unavailable: " + name + ": " + e.Message); }
             }
-            loadedSetting = setting;
+        }
+
+        private static string Find(string name)
+        {
+            // A configured name is a single folder, never an arbitrary path.
+            if (name == "." || name == ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+                name.IndexOf('/') >= 0 || name.IndexOf('\\') >= 0) return null;
+            foreach (string root in Roots())
+            {
+                if (!Directory.Exists(root)) continue;
+                foreach (string folder in Directory.EnumerateDirectories(root))
+                    if (string.Equals(Path.GetFileName(folder), name, StringComparison.OrdinalIgnoreCase) &&
+                        (File.GetAttributes(folder) & FileAttributes.ReparsePoint) == 0) return folder;
+            }
+            return null;
         }
 
         private static void Load(string name)
         {
             string folder = Find(name);
-            if (folder == null)
+            if (folder == null) { WingLog.Logger.LogWarning("[Radio] pack not found: " + name); return; }
+            var pack = new Pack();
+            // Flat event-tagged files are the upstream format. Metadata is optional for Boscali:
+            // eventPriorities.txt cannot promote an idle clip over an emergency on this channel.
+            int inspected = 0;
+            foreach (string file in Directory.EnumerateFiles(folder))
             {
-                WingLog.Logger.LogWarning($"[Radio] voice pack \"{name}\" not found under {string.Join(" or ", Roots())}");
-                return;
-            }
-            var pack = new Pack { Name = name };
-            foreach (string file in Directory.GetFiles(folder))
-            {
-                AudioType type = TypeOf(file);
-                if (type == AudioType.UNKNOWN) continue;
-                int index = pack.Files.Count;
-                pack.Files.Add(file);
+                if (++inspected > 4096 || pack.Files.Count >= MaxClipsPerPack) break;
+                var info = new FileInfo(file);
+                if (TypeOf(file) == AudioType.UNKNOWN || (info.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                    info.Length <= 0 || info.Length > MaxFileBytes) continue;
                 int before = pack.Index.Count;
-                pack.Index.Add(index, Path.GetFileNameWithoutExtension(file));
-                if (pack.Index.Count == before) continue;
-                // The raw path, as Yappinator: Unity turns a Windows path into a file URI itself ('#' and '+' survive).
-                UnityWebRequest req = UnityWebRequestMultimedia.GetAudioClip(file, type);
-                req.SendWebRequest();
-                loading.Add(new Loading { Pack = pack, File = index, Request = req });
+                pack.Index.Add(pack.Files.Count, Path.GetFileNameWithoutExtension(file));
+                if (pack.Index.Count > before) pack.Files.Add(file);
             }
             pack.Clips = new AudioClip[pack.Files.Count];
-            packs.Add(pack);
-            WingLog.Logger.LogInfo($"[Radio] voice pack \"{name}\": {pack.Index.Count} clips for wingman calls");
-        }
-
-        private static string Find(string name)
-        {
-            foreach (string root in Roots())
-            {
-                if (!Directory.Exists(root)) continue;
-                foreach (string dir in Directory.GetDirectories(root))
-                    if (string.Equals(Path.GetFileName(dir), name, StringComparison.OrdinalIgnoreCase) &&
-                        File.Exists(Path.Combine(dir, "eventPriorities.txt"))) return dir;
-            }
-            return null;
+            packs.Add(pack); // Preserve configured voice assignment even for an empty but valid pack.
+            WingLog.Logger.LogInfo("[Radio] " + name + ": " + pack.Files.Count + " compatible clips");
         }
 
         private static AudioType TypeOf(string file)
         {
             switch (Path.GetExtension(file).ToLowerInvariant())
-            {
-                case ".wav": return AudioType.WAV;
-                case ".ogg": return AudioType.OGGVORBIS;
-                case ".mp3": return AudioType.MPEG;
-                default: return AudioType.UNKNOWN;
-            }
+            { case ".wav": return AudioType.WAV; case ".ogg": return AudioType.OGGVORBIS;
+              case ".mp3": return AudioType.MPEG; default: return AudioType.UNKNOWN; }
         }
 
-        private static void Clear()
+        public static void Deactivate()
         {
-            foreach (Loading l in loading) l.Request.Dispose();
-            loading.Clear();
-            foreach (Pack p in packs)
-                if (p.Clips != null)
-                    foreach (AudioClip c in p.Clips)
-                        if (c != null) UnityEngine.Object.Destroy(c);
+            Stop();
+            if (request != null) { request.Abort(); request.Dispose(); request = null; }
+            if (source != null) { UnityEngine.Object.Destroy(source.gameObject); source = null; }
+            foreach (Pack pack in packs)
+                foreach (AudioClip clip in pack.Clips) if (clip != null) UnityEngine.Object.Destroy(clip);
             packs.Clear();
+            loadingPack = loadingFile = 0;
+            decodedBytes = 0;
         }
 
-        /// <summary>Every frame: finish the loads that are done.</summary>
         public static void Tick()
         {
-            for (int i = loading.Count - 1; i >= 0; i--)
+            if (source != null) source.volume = Mathf.Clamp01(WingSettings.Instance.VoicePackVolume.Value);
+            if (request != null)
             {
-                Loading l = loading[i];
-                if (!l.Request.isDone) continue;
-                loading.RemoveAt(i);
+                if (!request.isDone) return;
+                AudioClip clip = null;
                 try
                 {
-                    AudioClip clip = l.Request.result == UnityWebRequest.Result.Success ? DownloadHandlerAudioClip.GetContent(l.Request) : null;
-                    // Only a decoded clip plays; anything else falls back to the TTS (review M7d I4).
-                    if (clip != null && clip.loadState == AudioDataLoadState.Loaded) l.Pack.Clips[l.File] = clip;
-                    else
-                    {
-                        if (clip != null) UnityEngine.Object.Destroy(clip);
-                        WingLog.Logger.LogWarning($"[Radio] {l.Pack.Files[l.File]}: {(l.Request.error ?? "could not be decoded")}");
-                    }
+                    if (request.result == UnityWebRequest.Result.Success) clip = DownloadHandlerAudioClip.GetContent(request);
+                    long bytes = clip == null ? 0 : (long)clip.samples * clip.channels * sizeof(float);
+                    if (clip != null && clip.loadState == AudioDataLoadState.Loaded && clip.length > 0f &&
+                        clip.length <= MaxClipSeconds && bytes > 0 && decodedBytes + bytes <= MaxDecodedBytes)
+                    { packs[loadingPack].Clips[loadingFile] = clip; decodedBytes += bytes; clip = null; }
+                }
+                catch (Exception e) { WingLog.Logger.LogWarning("[Radio] clip decode failed: " + e.Message); }
+                finally
+                {
+                    if (clip != null) UnityEngine.Object.Destroy(clip);
+                    request.Dispose(); request = null; loadingFile++;
+                }
+            }
+            if (decodedBytes >= MaxDecodedBytes) return;
+            while (loadingPack < packs.Count)
+            {
+                Pack pack = packs[loadingPack];
+                if (loadingFile >= pack.Files.Count) { loadingPack++; loadingFile = 0; continue; }
+                try
+                {
+                    string file = pack.Files[loadingFile];
+                    request = UnityWebRequestMultimedia.GetAudioClip(new Uri(file).AbsoluteUri, TypeOf(file));
+                    request.timeout = 10;
+                    request.SendWebRequest();
+                    return;
                 }
                 catch (Exception e)
                 {
-                    WingLog.Logger.LogWarning($"[Radio] {l.Pack.Files[l.File]}: {e.Message}");
-                }
-                finally
-                {
-                    l.Request.Dispose();
+                    request?.Dispose(); request = null; loadingFile++;
+                    WingLog.Logger.LogWarning("[Radio] clip load failed: " + e.Message);
                 }
             }
         }
 
-        /// <summary>Plays wingman #<paramref name="number"/>'s pack clip for <paramref name="call"/>. False when there is
-        /// none (the caller speaks it with the TTS).</summary>
         public static bool TryPlay(int number, string call)
         {
             if (failed || packs.Count == 0) return false;
@@ -175,11 +160,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             foreach (string evt in VoicePackIndex.EventsFor(call))
             {
                 IReadOnlyList<int> files = pack.Index.Clips(evt);
+                pack.Next.TryGetValue(evt, out int next);
                 for (int k = 0; k < files.Count; k++)
                 {
-                    AudioClip clip = pack.Clips[files[(pack.Next + k) % files.Count]];
+                    int index = (int)(((uint)next + (uint)k) % (uint)files.Count);
+                    AudioClip clip = pack.Clips[files[index]];
                     if (clip == null) continue;
-                    pack.Next++;
+                    pack.Next[evt] = (index + 1) % files.Count;
                     return Play(clip);
                 }
             }
@@ -192,22 +179,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 if (source == null)
                 {
-                    var go = new GameObject("WingCommandRadioVoice") { hideFlags = HideFlags.HideAndDontSave };
+                    var go = new GameObject("BoscaliChatterVoice") { hideFlags = HideFlags.HideAndDontSave };
                     UnityEngine.Object.DontDestroyOnLoad(go);
                     source = go.AddComponent<AudioSource>();
-                    source.spatialBlend = 0f;
-                    source.playOnAwake = false;
+                    source.spatialBlend = 0f; source.playOnAwake = false;
                 }
-                source.Stop();
-                source.volume = Mathf.Clamp01(WingSettings.Instance.VoicePackVolume.Value);
-                source.clip = clip;
-                source.Play();
-                return true;
+                source.Stop(); source.volume = Mathf.Clamp01(WingSettings.Instance.VoicePackVolume.Value);
+                source.clip = clip; source.Play(); return true;
             }
             catch (Exception e)
             {
                 failed = true;
-                WingLog.Logger.LogWarning($"[Radio] voice pack playback failed; packs are off until restart: {e.Message}");
+                WingLog.Logger.LogWarning("[Radio] pack playback unavailable this mission: " + e.Message);
                 return false;
             }
         }

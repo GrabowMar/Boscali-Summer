@@ -9,14 +9,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// Event art, loaded first from loose PNGs a player drops into
-    /// <c>BepInEx/plugins/BoscaliSummer/Events/</c>, then cropped from one bundled atlas.
+    /// <c>BepInEx/plugins/BoscaliSummer/Events/</c>, then from a distinct bundled image for each event.
     /// Everything still renders without art
     /// (the vector glyph is the fallback), so this is decoration, never a dependency: a
     /// missing file, an oversized poster or a bad header just means the glyph shows.
     ///
     /// <para>Bounded and cached like the radio icon cache: PNG signature plus header
     /// dimensions checked before decode, one texture and sprite per key, hard byte and
-    /// pixel ceilings, cleared on scene reset. The atlas is the only bundled texture.</para>
+    /// pixel ceilings, cleared on scene reset. Bundled images are loaded on demand.</para>
     /// </summary>
     internal static class EventArtCache
     {
@@ -35,22 +35,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
             new Dictionary<string, Entry>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Texture2D> Thumbs =
             new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
-        private static Sprite[] tiles;
-        private static bool atlasAttempted;
 
         private static string root;
         private static bool prepared;
 
         /// <summary>
         /// The poster for the first key that has one, falling back to <c>default.png</c>.
-        /// Returns null when the player has drawn nothing, and then the caller draws the
+        /// Returns null when neither an override nor bundled art loads, and then the caller draws the
         /// vector mark instead.
         /// </summary>
         public static Sprite Get(string artKey, string fallbackKey)
         {
             Sprite sprite = Load(artKey);
-            if (sprite != null) return sprite;
-            sprite = AtlasTile(artKey);
             if (sprite != null) return sprite;
             sprite = Load(fallbackKey);
             return sprite != null ? sprite : Load("default");
@@ -58,7 +54,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         /// <summary>
         /// A small square, centre-cropped copy of the poster for <see cref="Get"/>, for row badges
-        /// (a tile of the shared atlas cannot be shown by texture alone). Null when there is no art
+        /// Null when there is no art
         /// or the GPU copy is unavailable; bounded and cleared with the rest of the cache.
         /// </summary>
         public static Texture Thumb(string artKey, string fallbackKey)
@@ -105,12 +101,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             foreach (Texture2D thumb in Thumbs.Values)
                 if (thumb != null) UnityEngine.Object.Destroy(thumb);
             Thumbs.Clear();
-            if (tiles != null)
-            {
-                for (int i = 0; i < tiles.Length; i++)
-                    if (tiles[i] != null) UnityEngine.Object.Destroy(tiles[i]);
-                tiles = null;
-            }
             foreach (Entry entry in Entries.Values)
             {
                 if (entry == null) continue;
@@ -118,63 +108,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 if (entry.Texture != null) UnityEngine.Object.Destroy(entry.Texture);
             }
             Entries.Clear();
-            atlasAttempted = false;
-        }
-
-        private static Sprite AtlasTile(string key)
-        {
-            if (string.IsNullOrEmpty(key)) return null;
-            if (tiles == null && !atlasAttempted)
-            {
-                atlasAttempted = true;
-                Entry atlas = Read("event_atlas");
-                if (atlas?.Texture == null) return null;
-                const int columns = 4;
-                const int rows = 4;
-                int width = atlas.Texture.width / columns;
-                int height = atlas.Texture.height / rows;
-                tiles = new Sprite[columns * rows];
-                for (int i = 0; i < tiles.Length; i++)
-                {
-                    int column = i % columns;
-                    int row = i / columns;
-                    tiles[i] = Sprite.Create(atlas.Texture,
-                        new Rect(column * width, (rows - row - 1) * height, width, height),
-                        new Vector2(0.5f, 0.5f), 100f);
-                }
-                Entries["event_atlas"] = atlas;
-            }
-            if (tiles == null) return null;
-            return tiles[TileIndex(key)];
-        }
-
-        private static int TileIndex(string key)
-        {
-            switch (key)
-            {
-                case "monsoon_season": case "air_corridor_closure": return 0;
-                case "munitions_crisis": case "depot_refit": case "stocktaking_hold":
-                case "captured_depot": return 1;
-                case "industrial_surge": case "parts_standardization": return 2;
-                case "partisan_supply_raid": case "rail_embargo": return 3;
-                case "emergency_withdrawal": return 4;
-                case "ceasefire_rumors": case "diplomatic_sanctions":
-                case "press_censorship": case "quartermaster_audit":
-                case "insurance_premium_hike": case "currency_devaluation": return 5;
-                case "dockworker_strike": case "harbor_insurance_spike": return 6;
-                case "salvage_boom": case "scrap_drive": return 7;
-                case "allied_intervention": case "volunteer_logistics_corps":
-                case "merchant_fleet_charter": return 8;
-                case "fuel_depot_fire": case "fuel_rationing": return 9;
-                case "homefront_rally": case "radio_relay_lease": return 10;
-                case "forward_workshop": case "veteran_contractor_influx": return 11;
-                case "ceasefire_ultimatum": case "holiday_stand_down": return 12;
-                case "emergency_appropriation": case "war_bond_drive":
-                case "emergency_procurement": case "local_donations":
-                case "strategic_reserve_release": return 13;
-                case "dust_storm": case "storm_grounding": return 14;
-                default: return 15;
-            }
         }
 
         private static Sprite Load(string key)

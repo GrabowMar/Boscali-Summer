@@ -19,7 +19,7 @@ namespace BoscaliSummer.Core.Config
         public static ConfigEntryBase[] Entries(ModConfiguration s) => new ConfigEntryBase[]
         {
             s.Comms.PingSeconds, s.Comms.StickerSeconds, s.Comms.DrawingSeconds,
-            s.Comms.AllowAllChannel, s.Comms.AllowDrawing, s.Comms.AllowGames,
+            s.Comms.AllowAllChannel, s.Comms.AllowDrawing,
 
             s.DynamicOperations.RewardMultiplier,
 
@@ -42,12 +42,12 @@ namespace BoscaliSummer.Core.Config
             s.Squad.PilotLives, s.Squad.EnemyAceHunts, s.Squad.DamageThreshold, s.Squad.HuntCooldown,
 
             s.Support.ReconEnabled, s.Support.FortifyEnabled, s.Support.ArtilleryEnabled,
-            s.Support.EmpEnabled, s.Support.ElintEnabled, s.Support.MtiEnabled,
+            s.Support.EmpEnabled, s.Support.ElintEnabled,
             s.Support.FlareBarrageEnabled, s.Support.SarSceneRadius,
             s.Support.SatCameraEnabled, s.Support.OpticalSceneRadius,
             s.Support.ElintRadius, s.Support.EmpRadius, s.Support.FlareBarrageRadius, s.Support.FlareBarrageCount,
-            s.Support.FlareBarrageDuration, s.Support.MaximumRange, s.Support.RequestCooldown,
-            s.Support.PriceKnob, s.Support.EarnKnob,
+            s.Support.FlareBarrageDuration, s.Support.MaximumRange,
+            s.Support.PerkPriceScale,
 
             s.TheaterOps.FrontlineTacticsEnabled,
 

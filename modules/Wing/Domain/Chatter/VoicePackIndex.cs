@@ -12,21 +12,26 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static readonly string[] Events =
         {
             "fireFox2", "fireFox3", "fireMissile", "killAircraft", "killGeneric", "RwrOnFox3", "RwrOn", "RwrOff", "fuelLow",
-            "Touchdown", "Spawn",
+            "Touchdown", "Spawn", "fireARM", "fireAGM", "takeDamage", "engineDamage", "Eject", "Rearm",
         };
 
         private static readonly Dictionary<string, string> Tokens = BuildTokens();
-        private static readonly Dictionary<string, string[]> Calls = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        private static readonly Dictionary<string, string[]> Calls = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
             { "FOX2", new[] { "fireFox2", "fireMissile" } },
             { "FOX3", new[] { "fireFox3", "fireMissile" } },
-            { "SPLASH", new[] { "killAircraft", "killGeneric" } },
-            { "PANIC", new[] { "RwrOnFox3", "RwrOn" } },
+            { "SPLASH", new[] { "killGeneric" } },
+            { "PANIC", new[] { "RwrOn" } },
             { "DEFENSIVECLEAR", new[] { "RwrOff" } },
             { "BINGO", new[] { "fuelLow" } },
             { "JOKER", new[] { "fuelLow" } },
             { "DOWN", new[] { "Touchdown" } },
             { "AIRBORNEREJOINING", new[] { "Spawn" } },
+            { "MAGNUM", new[] { "fireARM", "fireMissile" } },
+            { "RIFLE", new[] { "fireAGM", "fireMissile" } },
+            { "DAMAGED", new[] { "takeDamage" } },
+            { "CRITICAL", new[] { "takeDamage" } },
+            { "RECOVERED", new[] { "Rearm" } },
         };
 
         private readonly Dictionary<string, List<int>> clips = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +50,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             d["kill"] = "killGeneric";
             d["rwr"] = "RwrOn";
             d["spawn"] = "Spawn";
+            d["damage"] = "takeDamage";
+            // Exact Boscali keys extend the format without changing Yappinator's event semantics.
+            foreach (string call in ChatterDialogue.EventKeys) if (!d.ContainsKey(call)) d[call] = call;
+            for (int i = 0; i < ChatterDialogue.AmbientCount; i++)
+            {
+                d["AMBIENT" + i] = "AMBIENT" + i;
+                d["AMBIENTREPLY" + i] = "AMBIENTREPLY" + i;
+            }
             return d;
         }
 
@@ -82,8 +95,13 @@ namespace BoscaliSummer.Modules.Wing.Domain
             evt != null && clips.TryGetValue(evt, out List<int> list) ? (IReadOnlyList<int>)list : Array.Empty<int>();
 
         /// <summary>The events a wingman call may play, first found first (empty: none).</summary>
-        public static IReadOnlyList<string> EventsFor(string call) =>
-            call != null && Calls.TryGetValue(call, out string[] e) ? e : Array.Empty<string>();
+        public static IEnumerable<string> EventsFor(string call)
+        {
+            if (string.IsNullOrEmpty(call)) yield break;
+            if (Tokens.TryGetValue(call, out string exact)) yield return exact;
+            if (Calls.TryGetValue(call, out string[] fallbacks))
+                foreach (string evt in fallbacks) if (!string.Equals(evt, exact, StringComparison.OrdinalIgnoreCase)) yield return evt;
+        }
 
         /// <summary>The pack for wingman #<paramref name="number"/> (#2 the first), round robin; -1 with none.</summary>
         public static int PackFor(int number, int packCount) =>

@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.C2;
-using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -17,8 +16,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 {
     /// <summary>
     /// The one owner of the SPACE operator feed. It reads the faction mirror (never a client registry), drives the optical imager
-    /// and the SAR collector, builds one <see cref="SpaceFeedView"/> and paints it onto whichever surfaces are showing: the
-    /// compact page on the OPS MFD and the full-screen window. Every action is a request to the host through
+    /// and the SAR collector and builds one <see cref="SpaceFeedView"/> for the ORBIT room of the SPACE front window (the
+    /// <see cref="Fronts.FrontController"/> reads it). Every action is a request to the host through
     /// <see cref="SupportManager"/> and <see cref="CallsController"/>; nothing here spends, grants or decides.
     ///
     /// <para>In-process SPACE replies arrive on the next Update, so a request id is registered here as soon as the request call
@@ -26,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// </summary>
     internal sealed class SpaceFeedController : MonoBehaviour, ISceneService, ISpaceFeedActions
     {
-        private const float RefreshCompact = 0.15f, RefreshFull = 0.08f, RequestTimeout = 6f, WordsHold = 10f;
+        private const float RefreshFull = 0.08f, RequestTimeout = 6f, WordsHold = 10f;
         private const float OpticalWidth = 640f, OpticalHeight = 400f;
         private const float RadarAltitude = 600000f;
 
@@ -37,19 +36,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly FeedDraft draft = new FeedDraft();
         private readonly SpaceFeedView view = new SpaceFeedView();
         private readonly List<FeedEntry> entries = new List<FeedEntry>(SpaceWire.MaxContacts + SpaceWire.MaxMarks);
-        private readonly List<int> postOrder = new List<int>(SpaceWire.MaxPosts);
         private readonly int[] sendIds = new int[SpaceCommand.MaxIds];
 
-        private readonly C2ChromeView chrome = new C2ChromeView();
-        private C2Feed c2;
-        private Action<C2ChromeView> chromeFill;
-        private int pageRows = SpaceFeedRules.ContactsPerPage;
-        private float nextChrome;
-        private SpaceFeedPanel compact;
-        private BoardPage board;
-        private bool boardVisible;
-        private SpaceFeedWindow window;
-        private bool compactVisible, leaseOpen, dirty;
+        private int pageRows = SpaceFeedLayout.Tiles6;
+        private bool visible, leaseOpen, dirty;
         private float nextRefresh, nextActivity, failedUntil;
         private int lastFaction;
 
@@ -64,8 +54,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private AvState feedTone = AvState.Inert;
         private float feedWordsAt = -100f;
 
-        public bool WindowOpen => window != null && window.IsOpen;
+        public bool Visible => visible;
         public FeedDraft Draft => draft;
+        /// <summary>The view the ORBIT room paints; rebuilt while <see cref="SetVisible"/> says the room is on screen.</summary>
+        internal SpaceFeedView View => view;
 
         public void Configure(SupportManager manager, CallsController calls, SupportSettings settings)
         {
@@ -75,43 +67,22 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (manager != null) manager.SpaceReplied += OnReply;
         }
 
-        /// <summary>
-        /// The OPS console hands over the one host console of this client and the way to fill the shared C2 chrome, so the station
-        /// shows the same banner, session line and console as the MFD pages without a second source of either.
-        /// </summary>
-        internal void AttachConsole(C2Feed console, Action<C2ChromeView> fillChrome) { c2 = console; chromeFill = fillChrome; dirty = true; }
-
-        /// <summary>The ORBIT page of the OPS console; null until it is built.</summary>
-        internal void AttachCompact(SpaceFeedPanel panel) { compact = panel; dirty = true; }
-
-        /// <summary>The BOARD page of the OPS console; null until it is built.</summary>
-        internal void AttachBoard(BoardPage page) { board = page; dirty = true; }
-
-        /// <summary>The OPS console says whether the BOARD page is on screen (it needs the posts, not the sensors).</summary>
-        internal void SetBoardVisible(bool visible)
+        /// <summary>The ORBIT room is on screen (the SPACE front window is open): the feed lease is held and the view is rebuilt.</summary>
+        internal void SetVisible(bool on)
         {
-            if (boardVisible == visible) return;
-            boardVisible = visible;
-            if (visible) draft.Touch(SupportManager.MissionNow());
-            dirty = true;
-        }
-
-        /// <summary>The OPS console says whether the SPACE page is on screen.</summary>
-        internal void SetCompactVisible(bool visible)
-        {
-            if (compactVisible == visible) return;
-            compactVisible = visible;
-            if (visible) draft.Touch(SupportManager.MissionNow());
+            if (visible == on) return;
+            visible = on;
+            float now = SupportManager.MissionNow();
+            if (on) { if (!draft.CanRestore(now)) draft.Clear(); draft.Touch(now); }
+            else draft.Close(now);
             dirty = true;
         }
 
         public void ResetForScene()
         {
-            CloseWindow(FeedCloseReason.UserExit, quiet: true);
             ClearView();
             leaseOpen = false;
-            compactVisible = false;
-            boardVisible = false;
+            visible = false;
             baselined = false;
             SpaceCockpitThreatProbe.ResetForScene();
             DisposeSensors();
@@ -120,7 +91,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void OnDestroy()
         {
             if (manager != null) manager.SpaceReplied -= OnReply;
-            CloseWindow(FeedCloseReason.UserExit, quiet: true);
             DisposeSensors();
             SpaceCockpitThreatProbe.ResetForScene();
         }
@@ -168,7 +138,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             WatchFaction();
             ExpireRequests(now);
 
-            bool wanted = compactVisible || WindowOpen || boardVisible;
+            bool wanted = visible;
             leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
@@ -188,7 +158,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 catch (Exception e) { FailFeed(e, wall); }
                 return;
             }
-            nextRefresh = wall + (WindowOpen ? RefreshFull : RefreshCompact);
+            nextRefresh = wall + RefreshFull;
             dirty = false;
             try { Refresh(now); }
             catch (Exception e) { FailFeed(e, wall); }
@@ -196,10 +166,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void FailFeed(Exception e, float wall)
         {
-            failedUntil = wall + 2f; // latch: CallsPanel re-shows the compact feed every frame, so a flag alone cannot hold
+            failedUntil = wall + 2f; // latch: a flag alone would be re-set by the next refresh
             Plugin.Logger?.LogError("SPACE feed refresh failed: " + e);
-            compactVisible = false;
-            CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
+            visible = false;
         }
 
         /// <summary>A faction change clears the old mirror and draft before anything repaints.</summary>
@@ -212,7 +181,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             lastFaction = key;
             if (!switched) return;
             ClearView();
-            if (WindowOpen) CloseWindow(FeedCloseReason.InvalidOperator, quiet: false);
         }
 
         private void ExpireRequests(float now)
@@ -229,27 +197,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
             SpaceFeedState state = mirror.State;
             bool known = mirror.Known;
 
-            if (!compactVisible && !WindowOpen)
-            {
-                // Only the BOARD page is showing: the posts and the words, never the sensors.
-                if (imager != null) imager.Visible = false;
-                if (sar != null) sar.Visible = false;
-                view.Console = c2?.Console;
-                FillPosts(state, now);
-                FillWords(now);
-                PaintBoard();
-                return;
-            }
-
             SpaceFeedEntries.Build(state.Contacts, state.Marks, now, entries);
-            // The station lists six tracks per page, the ORBIT page as many as its box holds; one page index serves whichever shows.
-            pageRows = WindowOpen ? SpaceFeedLayout.Tiles6 : compact != null ? Math.Min(SpaceFeedLayout.Tiles6, compact.Layout.TrackRows) : SpaceFeedLayout.Tiles6;
             view.Pages = SpaceFeedRules.PageCount(entries.Count, pageRows);
             draft.Page = SpaceFeedRules.ClampPage(draft.Page, entries.Count, pageRows);
             if (draft.Selected != 0 && IndexOf(draft.Selected) < 0) draft.Selected = 0;
             view.Page = draft.Page;
             view.SelectedId = draft.Selected;
-            view.Console = c2?.Console;
             view.Source = draft.Source;
             view.Zoom = draft.Zoom;
             view.ZoomEnabled = draft.Source == BirdKind.Optical;
@@ -263,26 +216,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FillTiles();
             FillNoContacts(state, known, now);
             FillActions(state, known);
-            FillPosts(state, now);
             FillWords(now);
-
-            if (compactVisible && compact != null)
-            {
-                view.TaskedCaption = SpaceFeedRules.CaptionOf(postOrder.Count, compact.Layout.CardCount);
-                compact.Paint(view);
-            }
-            if (WindowOpen)
-            {
-                view.TaskedCaption = SpaceFeedRules.CaptionOf(postOrder.Count, window.Panel.Layout.CardCount);
-                if (Time.unscaledTime >= nextChrome) { nextChrome = Time.unscaledTime + 0.25f; chromeFill?.Invoke(chrome); } // identity strings: no need at 12 Hz
-                window.Paint(view, chrome);
-            }
-            PaintBoard();
-        }
-
-        private void PaintBoard()
-        {
-            if (boardVisible && board != null) board.Paint(view, settings != null && settings.QuietNotices.Value);
         }
 
         private int IndexOf(int id)
@@ -395,7 +329,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (SupportTargeting.TryMapPoint(aim, out Vector3 ground)) aimLocal = ground;
             imager.Visible = true;
             imager.SetApprovedContacts(state.Contacts);
-            imager.Aim(aimLocal, SatelliteSky.LineOfSight(BirdKind.Optical), Vector3.forward, footprint, WindowOpen ? 8f : 4f);
+            imager.Aim(aimLocal, SatelliteSky.LineOfSight(BirdKind.Optical), Vector3.forward, footprint, 8f);
             view.ImageKind = FeedImageKind.Optical;
             view.Image = imager.Output;
             view.ImageAspect = OpticalWidth / OpticalHeight;
@@ -515,118 +449,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 : "Post your live MARKs as one TASKED call to the board. The first pilot to claim it fires.";
         }
 
-        private void FillPosts(SpaceFeedState state, float now)
-        {
-            List<FeedPost> posts = state.Posts;
-            postOrder.Clear();
-            for (int i = 0; i < posts.Count; i++)
-            {
-                int at = postOrder.Count;
-                while (at > 0 && Before(posts[i], posts[postOrder[at - 1]], now)) at--;
-                postOrder.Insert(at, i);
-            }
-            view.CardCount = Math.Min(view.Cards.Length, postOrder.Count);
-            view.PostsLive = view.PostsStale = 0;
-            for (int i = 0; i < posts.Count; i++)
-                if (SpaceFeedRules.PostStatusOf(posts[i], now) == PostStatus.Stale) view.PostsStale++; else view.PostsLive++;
-            for (int i = 0; i < view.CardCount; i++) view.Cards[i] = Card(posts[postOrder[i]], state, now);
-        }
-
-        /// <summary>Open cards first, then launching, then stale; yours before others; soonest to expire first.</summary>
-        private static bool Before(in FeedPost a, in FeedPost b, float now)
-        {
-            int ra = (int)SpaceFeedRules.PostStatusOf(a, now), rb = (int)SpaceFeedRules.PostStatusOf(b, now);
-            if (ra != rb) return ra < rb;
-            if (a.Own != b.Own) return a.Own;
-            return a.Expires < b.Expires;
-        }
-
-        private FeedCardView Card(in FeedPost post, SpaceFeedState state, float now)
-        {
-            PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
-            int points = post.Points != null ? post.Points.Length : 0;
-            string label = TaskedKinds.Label(post.Action);
-            bool cyber = post.Domain != TaskedDomain.Space; // a CYBER package or a SOF post: no target count, no bird
-            bool sof = post.Domain == TaskedDomain.Sof;
-            string longTitle = label + " · " + points + " TARGET" + (points == 1 ? "" : "S") + (post.Payoff > 0 ? " · PAYOFF " + post.Payoff + " CR" : "");
-            BirdKind source = points > 0 ? post.Points[0].Source : BirdKind.Radar;
-            int left = Mathf.Max(0, Mathf.FloorToInt(post.Expires - now));
-            // The source is who posted it: OVERLORD (the watch officer), an OPERATOR by name, or your own call.
-            string sub = (sof ? "SOF" : cyber ? "NET" : source == BirdKind.Optical ? "OPTICAL" : "RADAR") + " · " +
-                (post.WatchOfficer ? "OVERLORD" : post.Own ? "YOUR CALL" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker) + " · " +
-                (left / 60) + ":" + (left % 60).ToString("00");
-            var card = new FeedCardView
-            {
-                Present = true, PostId = post.CallId, Title = label + " · " + points + " TGT", Chip = post.Payoff > 0 ? "+" + post.Payoff + " CR" : "",
-                Sub = sub, Price = post.Price > 0 ? post.Price + " CR" : "FREE", Enabled = true, Button = "CLAIM", Slab = TaskedKinds.Slab(post.Domain)
-            };
-            if (cyber) card.Title = label;
-            if (sof) { card.Title = SofPosts.Title(post.Action, TeamMarkOf(post)); longTitle = card.Title + " · " + SofPosts.Payoff(post.Action); }
-            string detail;
-            if (status == PostStatus.Stale) { card.State = "STALE"; detail = "STALE · NO LONGER OPEN"; card.Tone = AvState.Inert; card.Enabled = false; card.Price = ""; card.Button = "CLOSED"; }
-            else if (calls != null && calls.TaskedPending && calls.ClaimingPost == post.CallId)
-            { card.State = post.Launching ? "LAUNCH" : "PENDING"; detail = post.Launching ? "LAUNCHING" : "PENDING · WAITING FOR THE HOST"; card.Tone = AvState.Info; card.Enabled = false; card.Button = "WAIT"; }
-            else if (status == PostStatus.Launching)
-            {
-                card.State = "LAUNCH";
-                detail = string.IsNullOrEmpty(post.Claimant) ? "LAUNCHING" : "LAUNCHING · " + post.Claimant;
-                card.Tone = AvState.Info; card.Enabled = false; card.Button = "WAIT";
-            }
-            else if (calls != null && calls.ArmedTasked == post.CallId)
-            { card.State = "ARMED"; detail = "ARMED — PRESS EXECUTE AGAIN TO FIRE"; card.Tone = AvState.Caution; card.Armed = true; card.Button = "EXECUTE"; }
-            else if (state.Gate != TaskedOutcome.None && !cyber) // the gate is the rod's (a busy KINETIC bird): a CYBER package has no bird
-            { card.State = GateShort(state); detail = GateWord(state); card.Tone = AvState.Caution; } // still pressable: the press answers with the host's NEGATIVE words
-            else if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
-            { card.State = "LOW CR"; detail = "NEED " + post.Price + " CR"; card.Tone = AvState.Danger; }
-            else { card.State = SpaceFeedRules.PostWord(status); detail = SpaceFeedRules.PostWord(status) + " · CLAIM TO ARM, EXECUTE TO FIRE"; card.Tone = AvState.Ready; }
-            card.Detail = longTitle + " · " + sub + " · " + detail;
-            return card;
-        }
-
-        /// <summary>The mark id a SOF post carries is its team slot + 1; the client finds the team by the post's one fixed point (the team's position when it was posted).</summary>
-        private int TeamMarkOf(in FeedPost post)
-        {
-            SofStateData s = manager.SofMirror.State;
-            if (post.Points == null || post.Points.Length == 0 || !manager.SofMirror.Known) return 0;
-            int best = 0; float near = 600f;
-            foreach (SofTeamRow t in s.Teams)
-            {
-                float d = SofRules.Distance(t.X, t.Z, post.Points[0].X, post.Points[0].Z);
-                float lase = SofRules.Distance(t.TargetX, t.TargetZ, post.Points[0].X, post.Points[0].Z);
-                if (Mathf.Min(d, lase) < near) { near = Mathf.Min(d, lase); best = t.Slot + 1; }
-            }
-            return best;
-        }
-
-        private static string GateWord(SpaceFeedState state)
-        {
-            switch (state.Gate)
-            {
-                case TaskedOutcome.Cooldown: return "COOLDOWN";
-                case TaskedOutcome.Frozen: return "CREDIT FROZEN";
-                case TaskedOutcome.Locked: return "LOCKED";
-                case TaskedOutcome.BirdBusy: return "BIRD BUSY";
-                case TaskedOutcome.UplinkDown: return "UPLINK DOWN";
-                case TaskedOutcome.LowCredit: return "LOW CREDIT";
-                default: return "UNAVAILABLE";
-            }
-        }
-
-        /// <summary>The same refusal in the eight characters a row's state column holds; the full word rides the hover help.</summary>
-        private static string GateShort(SpaceFeedState state)
-        {
-            switch (state.Gate)
-            {
-                case TaskedOutcome.Cooldown: return "COOLDOWN";
-                case TaskedOutcome.Frozen: return "FROZEN";
-                case TaskedOutcome.Locked: return "LOCKED";
-                case TaskedOutcome.BirdBusy: return "BUSY";
-                case TaskedOutcome.UplinkDown: return "UPL DOWN";
-                case TaskedOutcome.LowCredit: return "LOW CR";
-                default: return "N/A";
-            }
-        }
-
         private void FillWords(float now)
         {
             string words = ""; AvState tone = AvState.Inert;
@@ -652,7 +474,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             feedWords = words ?? "";
             feedTone = tone;
             feedWordsAt = SupportManager.MissionNow();
-            c2?.Add(feedWords, C2Cap.LineTone(feedWords)); // a real feed event: it belongs on the host console too
             AvUiSound.Play(cue);
             dirty = true;
         }
@@ -711,13 +532,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Say("TRANSMIT SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
         }
 
-        public void PressCard(int postId) => calls?.PressTasked(postId);
-
-        public void ToggleFull()
-        {
-            if (WindowOpen) CloseWindow(FeedCloseReason.UserExit, quiet: false);
-            else OpenWindow();
-        }
 
         private void OnReply(SpaceReply reply)
         {
@@ -738,46 +552,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
         }
 
-        // ---- Window ----------------------------------------------------------------------------------------------------
-
-        private void OpenWindow()
-        {
-            if (manager == null) return;
-            if (window == null) window = SpaceFeedWindow.Create(transform, this);
-            if (window == null) return;
-            float now = SupportManager.MissionNow();
-            if (!draft.CanRestore(now) && !compactVisible) draft.Clear();
-            draft.Touch(now);
-            dirty = true;
-            chromeFill?.Invoke(chrome);
-            if (!window.Open(view, chrome)) Say("NEGATIVE: FEED UNAVAILABLE — SPAWN OR TAKE A SEAT", AvState.Danger, AvUiCue.Caution);
-        }
-
-        internal void CloseWindow(FeedCloseReason reason, bool quiet)
-        {
-            if (window == null || !window.IsOpen) return;
-            window.Close(reason);
-            if (!quiet) Say("FEED CLOSED · " + CloseWords(reason), AvState.Info, AvUiCue.Release);
-        }
-
-        /// <summary>The window has closed (by any path): the draft's two-minute restore clock starts.</summary>
-        internal void OnWindowClosed(FeedCloseReason reason)
-        {
-            draft.Close(SupportManager.MissionNow());
-            if (reason == FeedCloseReason.InvalidOperator) ClearView();
-            dirty = true;
-        }
-
-        private static string CloseWords(FeedCloseReason reason)
-        {
-            switch (reason)
-            {
-                case FeedCloseReason.Idle: return "NO INPUT FOR 8 S";
-                case FeedCloseReason.InvalidOwnship: return "AIRCRAFT LOST";
-                case FeedCloseReason.FocusLost: return "WINDOW LOST FOCUS";
-                case FeedCloseReason.InvalidOperator: return "NO OPERATOR OR FACTION CHANGED";
-                default: return "CLOSED BY YOU";
-            }
-        }
     }
 }

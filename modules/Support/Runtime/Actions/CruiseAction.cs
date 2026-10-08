@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float Standoff = 8000f;
         private const float LateralStep = 400f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -39,11 +39,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (Vector3.Distance(player, ground) > context.Settings.MaximumRange.Value)
                     return SupportResult.OutOfRange;
                 origin = player;
-            }
-            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
-            {
-                context.Logger.LogInfo("[Support] Cruise refused: stale intel at the grid.");
-                return SupportResult.StaleIntel;
             }
             int salvo = Mathf.Clamp(context.Settings.CruiseSalvo.Value, 1, 8);
             int live = CountLive(context.Owner);

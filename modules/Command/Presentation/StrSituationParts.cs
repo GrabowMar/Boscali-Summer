@@ -203,10 +203,4 @@ namespace BoscaliSummer.Modules.Command.Presentation
             c.Bar.SetVerticesDirty();
         }
     }
-
-    /// <summary>
-    /// The contested-ground list, sized by the page: it shows as many single-line rows as the slot it is given
-    /// can hold (its natural height is three rows) and pages past that. A short bay pages, a tall bay lists.
-    /// Natural height never depends on the fitted count, so a re-fit cannot re-lay the page.
-    /// </summary>
-  }
+}

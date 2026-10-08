@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch (command.Kind)
             {
                 case SpaceCommandKind.SofRaise:
-                    return f.Desk.Raise(op);
+                    return new SofResult(SofOutcome.TrainOnly); // teams come from the TRAIN TEAM programme (OPS FRONTS S2)
                 case SpaceCommandKind.SofOrder:
                     return SofCodes.TryUnpackOrder(command.Target, out int slot, out TeamVerb verb) ? f.Desk.Order(op, slot, verb) : new SofResult(SofOutcome.BadOrder);
                 case SpaceCommandKind.SofMission:

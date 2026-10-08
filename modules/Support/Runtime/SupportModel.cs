@@ -5,6 +5,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// <summary>Wire ids. Stable: they are the only action identity that crosses the network.</summary>
     internal enum SupportActionId : byte
     {
+        /// <summary>RECON PASS (OPS FRONTS S0): the former RADAR SCAN, now revealing static and moving contacts.</summary>
         Recon = 4,
         Fortify = 5,
         Artillery = 6,
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         HackHijack = 22,
         /// <summary>Retired with the old OPS; never reuse.</summary>
         HackOverload = 23,
+        /// <summary>Retired by OPS FRONTS S0: merged into RECON PASS (<see cref="Recon"/>). Never reuse.</summary>
         MtiSweep = 24,
         /// <summary>Retired with the old OPS; never reuse.</summary>
         SpecSkywatch = 25,
@@ -58,7 +60,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         CyberBlackout = 37,
         /// <summary>SOF team posts (TASKED board only; never CALL rows). Appended after the highest id (37).</summary>
         SofCover = 38,
-        SofLase = 39
+        SofLase = 39,
+        /// <summary>OPS FRONTS S0 perks (CALL rows). Appended after the highest id (39); never reuse retired ids.</summary>
+        ReconTeam = 40,
+        SabotageStrike = 41,
+        RadarBlind = 42,
+        SamNetDown = 43
     }
 
     internal enum SupportResult : byte
@@ -177,7 +184,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>No hostile unit (or no lased one, for UNLASE) inside the mark radius.</summary>
         NoMarkTarget = 45,
 
-        /// <summary>The HQ-known position at the target is missing or older than the intel window.</summary>
+        /// <summary>Retired by OPS FRONTS S0 (the intel-freshness gate is gone); never reuse.</summary>
         StaleIntel = 46,
 
         /// <summary>Retired with the old OPS; never reuse.</summary>
@@ -198,7 +205,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>The OPTICAL bird has no night picture (the game has no thermal path); RADAR still works.</summary>
         OpticalNight = 132,
         /// <summary>No sky state is available to size or refuse the optical window.</summary>
-        SkyUnknown = 133
+        SkyUnknown = 133,
+        /// <summary>OPS FRONTS S0: a SOF perk needs a live camp.</summary>
+        NoCamp = 134,
+        /// <summary>OPS FRONTS S0: SABOTAGE STRIKE found no enemy anchor near the aim.</summary>
+        NoAnchor = 135,
+        /// <summary>OPS FRONTS S0: the front readiness is below the perk rung.</summary>
+        NeedsReadiness = 136
     }
 
     /// <summary>
@@ -209,7 +222,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private sealed class PlayerState
         {
-            public float LastAccepted = float.MinValue;
+            /// <summary>Last accepted time per action id: each perk has its own cooldown, per pilot.</summary>
+            public readonly Dictionary<byte, float> LastAccepted = new Dictionary<byte, float>();
             public readonly Queue<int> AcceptedOrder = new Queue<int>();
             public readonly HashSet<int> Accepted = new HashSet<int>();
             public readonly Queue<float> Attempts = new Queue<float>();
@@ -235,27 +249,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        public bool IsCoolingDown(ulong playerId, float now, float cooldown)
-        {
-            PlayerState state = Get(playerId);
-            return state.LastAccepted > float.MinValue && now - state.LastAccepted < cooldown;
-        }
+        public bool IsCoolingDown(ulong playerId, byte action, float now, float cooldown) =>
+            CooldownRemaining(playerId, action, now, cooldown) > 0f;
 
-        public float CooldownRemaining(ulong playerId, float now, float cooldown)
+        public float CooldownRemaining(ulong playerId, byte action, float now, float cooldown)
         {
             PlayerState state = Get(playerId);
-            if (state.LastAccepted <= float.MinValue) return 0f;
-            float remaining = cooldown - (now - state.LastAccepted);
+            if (!state.LastAccepted.TryGetValue(action, out float last)) return 0f;
+            float remaining = cooldown - (now - last);
             return remaining > 0f ? remaining : 0f;
         }
 
-        /// <summary>Starts the player's request cooldown without remembering any request id (TASKED fires use their own receipts).</summary>
-        public void StartCooldown(ulong playerId, float now) => Get(playerId).LastAccepted = now;
+        /// <summary>Starts the pilot's cooldown of one perk without remembering any request id (TASKED fires use their own receipts).</summary>
+        public void StartCooldown(ulong playerId, byte action, float now) => Get(playerId).LastAccepted[action] = now;
 
-        public void Accept(ulong playerId, int requestId, float now, bool startCooldown = true)
+        public void Accept(ulong playerId, int requestId, byte action, float now, bool startCooldown = true)
         {
             PlayerState state = Get(playerId);
-            if (startCooldown) state.LastAccepted = now;
+            if (startCooldown) state.LastAccepted[action] = now;
             if (!state.Accepted.Add(requestId)) return;
             state.AcceptedOrder.Enqueue(requestId);
             while (state.AcceptedOrder.Count > historyLimit)

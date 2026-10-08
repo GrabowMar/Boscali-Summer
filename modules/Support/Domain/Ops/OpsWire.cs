@@ -55,7 +55,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public bool Active, CyberOps, SofOps;
         /// <summary>Bit i set while the faction's satellite i (OPTICAL, RADAR, KINETIC) is dead; <see cref="BirdPercent"/> is its rebuild progress.</summary>
         public byte BirdsDown;
+        /// <summary>Same bits for the strongest enemy's constellation (alive or dead is public: its launches are visible); rides in the BirdsDown byte's bits 3..5.</summary>
+        public byte EnemyBirdsDown;
         public readonly byte[] BirdPercent = new byte[SpaceRules.BirdCount];
+        /// <summary>Each satellite's geostationary state: indices 0..2 the viewer's own birds, 3..5 the strongest enemy's (public: a geostationary bird is visible to all).</summary>
+        public readonly GeoBird[] Geo = new GeoBird[OpsWire.GeoCount];
         public readonly List<OpsRow> Rows = new List<OpsRow>();
         public readonly List<OpsPingRow> Pings = new List<OpsPingRow>();
         public readonly List<OpsEventRow> Events = new List<OpsEventRow>();
@@ -65,8 +69,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
 
         public override OpsStateData Clone()
         {
-            var c = new OpsStateData { Protocol = Protocol, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown };
+            var c = new OpsStateData { Protocol = Protocol, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
+            Array.Copy(Geo, c.Geo, Geo.Length);
             c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Log.AddRange(Log);
             return c;
         }
@@ -80,9 +85,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
         public override bool SameAs(OpsStateData o)
         {
-            if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown ||
+            if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown || EnemyBirdsDown != o.EnemyBirdsDown ||
                 Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Log.Count != o.Log.Count) return false;
             for (int i = 0; i < BirdPercent.Length; i++) if (BirdPercent[i] != o.BirdPercent[i]) return false;
+            for (int i = 0; i < Geo.Length; i++) if (!OpsWire.SameGeo(Geo[i], o.Geo[i])) return false;
             for (int i = 0; i < Rows.Count; i++)
             {
                 OpsRow a = Rows[i], b = o.Rows[i];
@@ -107,6 +113,33 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxName = 12, MaxLog = WatchLogRing.Capacity;
         private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinLogBytes = 4;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
+        public const int GeoCount = SpaceRules.BirdCount * 2;
+        private const int GeoBytes = 11;
+
+        private static int Cell(float x) => (int)Math.Round(Math.Max(0f, Math.Min(1f, x)) * 65535f);
+        private static void Put16(ISpaceWriter w, int v) { w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); }
+
+        /// <summary>The same wire image: positions to 1/65535, the burn start to the second, the fuel to a percent.</summary>
+        public static bool SameGeo(in GeoBird a, in GeoBird b) =>
+            Cell(a.FromU) == Cell(b.FromU) && Cell(a.FromV) == Cell(b.FromV) && Cell(a.ToU) == Cell(b.ToU) && Cell(a.ToV) == Cell(b.ToV) &&
+            Math.Round(a.Fuel) == Math.Round(b.Fuel) && (a.Length <= 0f || SpaceMirror.SameExpiry(a.DepartAt, b.DepartAt));
+
+        private static void WriteGeo(ISpaceWriter w, in GeoBird g, float now)
+        {
+            Put16(w, Cell(g.FromU)); Put16(w, Cell(g.FromV)); Put16(w, Cell(g.ToU)); Put16(w, Cell(g.ToV));
+            Put16(w, g.Length > 0f ? (int)Math.Max(0d, Math.Min(ushort.MaxValue, Math.Round(now - g.DepartAt))) : 0); // seconds since the burn began
+            w.WriteByte((byte)Math.Max(0, Math.Min(100, (int)Math.Round(g.Fuel))));
+        }
+
+        private static bool ReadGeo(ISpaceReader r, float now, out GeoBird g)
+        {
+            g = default;
+            var v = new int[5];
+            for (int i = 0; i < 5; i++) { if (!r.TryReadByte(out byte lo) || !r.TryReadByte(out byte hi)) return false; v[i] = lo | (hi << 8); }
+            if (!r.TryReadByte(out byte fuel) || fuel > 100) return false;
+            g = new GeoBird(v[0] / 65535f, v[1] / 65535f, v[2] / 65535f, v[3] / 65535f, now - v[4], fuel);
+            return true;
+        }
 
         public static void WriteState(ISpaceWriter w, OpsStateData s)
         {
@@ -115,8 +148,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
             SpaceWire.WriteFloat(w, s.Now);
             if (!s.Active) { WriteLog(w, s); return; } // OVERLORD's log still reaches the faction console when OPERATIONS is off
-            w.WriteByte(s.BirdsDown);
+            w.WriteByte((byte)((s.BirdsDown & 7) | ((s.EnemyBirdsDown & 7) << 3)));
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
+            for (int i = 0; i < GeoCount; i++) WriteGeo(w, s.Geo[i], s.Now);
             int n = Math.Min(s.Rows.Count, MaxRows);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
@@ -195,8 +229,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
             s.Active = (flags & FlagActive) != 0; s.CyberOps = (flags & FlagCyber) != 0; s.SofOps = (flags & FlagSof) != 0; s.Seq = seq; s.Now = now;
             if (!s.Active) return ReadLog(r, s) ? s : Bad();
-            if (!r.TryReadByte(out s.BirdsDown) || (s.BirdsDown & ~7) != 0) return Bad();
+            if (!r.TryReadByte(out byte birds) || (birds & ~63) != 0) return Bad();
+            s.BirdsDown = (byte)(birds & 7); s.EnemyBirdsDown = (byte)(birds >> 3);
             for (int i = 0; i < s.BirdPercent.Length; i++) if (!r.TryReadByte(out s.BirdPercent[i]) || s.BirdPercent[i] > 100) return Bad();
+            if (r.Remaining < GeoCount * GeoBytes) return Bad();
+            for (int i = 0; i < GeoCount; i++) if (!ReadGeo(r, now, out s.Geo[i])) return Bad();
             if (!r.TryReadByte(out byte n) || n > MaxRows || r.Remaining < n * MinRowBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
@@ -257,6 +294,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < copy.Rows.Count; i++) { OpsRow r = copy.Rows[i]; if (r.EndsAt > 0f) r.EndsAt += offset; copy.Rows[i] = r; }
             for (int i = 0; i < copy.Pings.Count; i++) { OpsPingRow p = copy.Pings[i]; if (p.Until > 0f) p.Until += offset; copy.Pings[i] = p; }
             for (int i = 0; i < copy.Flights.Count; i++) { OpsFlightRow f = copy.Flights[i]; if (f.EndsAt > 0f) f.EndsAt += offset; copy.Flights[i] = f; }
+            for (int i = 0; i < copy.Geo.Length; i++) { GeoBird g = copy.Geo[i]; copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel); }
             return copy;
         }
 

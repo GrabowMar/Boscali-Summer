@@ -1,57 +1,69 @@
+using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Calls
 {
-    /// <summary>Player-facing weight class of a CALL (core §2a: LIGHT / HEAVY / STRATEGIC).</summary>
-    internal enum CallTier : byte { Light = 0, Heavy = 1, Strategic = 2 }
-
-    /// <summary>The OPS domain a CALL belongs to (core §4).</summary>
-    internal enum CallFamily : byte { Space = 0, Cyber = 1, Sof = 2 }
-
     internal readonly struct CallRow
     {
         public readonly SupportActionId Id;
-        public readonly CallTier Tier;
-        public readonly CallFamily Family;
+        public readonly Front Front;
+        /// <summary>1..5: the front readiness a pilot needs, which also sets the price and the per-perk cooldown.</summary>
+        public readonly int Rung;
         public readonly string Label;
 
-        public CallRow(SupportActionId id, CallTier tier, CallFamily family, string label)
+        public CallRow(SupportActionId id, Front front, int rung, string label)
         {
             Id = id;
-            Tier = tier;
-            Family = family;
+            Front = front;
+            Rung = rung;
             Label = label;
         }
+
+        public string FrontWord => Front == Front.Space ? "SPACE" : Front == Front.Cyber ? "CYBER" : "SOF";
+
+        /// <summary>E.g. <c>SPACE R3</c>.</summary>
+        public string RungWord => FrontWord + " R" + Rung;
     }
 
     /// <summary>
-    /// The STANDARD calls of M0: every fire action that survives the old OPS. FLARE BARRAGE and FORTIFY are interim
-    /// rows until the CYBER (M3) and SOF (M5) specs replace them.
+    /// The perk catalogue (OPS FRONTS spec 3.6): 14 perks by front and rung, priced in vanilla allocation, one cooldown each per pilot.
+    /// Adding a perk is one row here, one <c>SupportCatalog</c> row and one action file. JTAC UNLASE is the free recovery half of JTAC LASE and has no row.
     /// </summary>
     internal static class CallSheet
     {
-        public const int LightPrice = 25, HeavyPrice = 70, StrategicPrice = 400;
+        public const int MaxRung = 5;
+        private static readonly int[] prices = { 4, 6, 10, 16, 30 };
+        private static readonly float[] cooldowns = { 30f, 45f, 60f, 120f, 300f };
 
         private static readonly CallRow[] rows =
         {
-            new CallRow(SupportActionId.Recon, CallTier.Light, CallFamily.Space, "RADAR SCAN"),
-            new CallRow(SupportActionId.Prsm, CallTier.Light, CallFamily.Space, "PRSM"),
-            new CallRow(SupportActionId.JtacMark, CallTier.Light, CallFamily.Sof, "JTAC LASE"),
-            new CallRow(SupportActionId.MtiSweep, CallTier.Heavy, CallFamily.Space, "MTI SWEEP"),
-            new CallRow(SupportActionId.SatCamera, CallTier.Heavy, CallFamily.Space, "SAT CAMERA"),
-            new CallRow(SupportActionId.ElintSweep, CallTier.Heavy, CallFamily.Space, "ELINT SWEEP"),
-            new CallRow(SupportActionId.Cruise, CallTier.Heavy, CallFamily.Space, "CRUISE SALVO"),
-            new CallRow(SupportActionId.FlareMissile, CallTier.Heavy, CallFamily.Cyber, "FLARE BARRAGE"),
-            new CallRow(SupportActionId.Fortify, CallTier.Heavy, CallFamily.Sof, "FORTIFY"),
-            new CallRow(SupportActionId.Artillery, CallTier.Strategic, CallFamily.Space, "ORBITAL ROD"),
-            new CallRow(SupportActionId.Emp, CallTier.Strategic, CallFamily.Cyber, "EMP"),
+            new CallRow(SupportActionId.Recon, Front.Space, 1, "RECON PASS"),
+            new CallRow(SupportActionId.SatCamera, Front.Space, 2, "SAT CAMERA"),
+            new CallRow(SupportActionId.Prsm, Front.Space, 3, "PRSM"),
+            new CallRow(SupportActionId.Cruise, Front.Space, 4, "CRUISE SALVO"),
+            new CallRow(SupportActionId.Artillery, Front.Space, 5, "ORBITAL ROD"),
+            new CallRow(SupportActionId.ElintSweep, Front.Cyber, 1, "ELINT SWEEP"),
+            new CallRow(SupportActionId.FlareMissile, Front.Cyber, 2, "DECOY BARRAGE"),
+            new CallRow(SupportActionId.RadarBlind, Front.Cyber, 3, "RADAR BLIND"),
+            new CallRow(SupportActionId.SamNetDown, Front.Cyber, 4, "SAM NET DOWN"),
+            new CallRow(SupportActionId.Emp, Front.Cyber, 5, "EMP"),
+            new CallRow(SupportActionId.JtacMark, Front.Sof, 1, "JTAC LASE"),
+            new CallRow(SupportActionId.ReconTeam, Front.Sof, 2, "RECON TEAM"),
+            new CallRow(SupportActionId.Fortify, Front.Sof, 3, "FORTIFY"),
+            new CallRow(SupportActionId.SabotageStrike, Front.Sof, 4, "SABOTAGE STRIKE"),
         };
 
         public static IReadOnlyList<CallRow> Rows => rows;
 
-        public static int BasePrice(CallTier tier) =>
-            tier == CallTier.Strategic ? StrategicPrice : tier == CallTier.Heavy ? HeavyPrice : LightPrice;
+        /// <summary>Allocation price of a rung before any scale or modifier (R1 4, R2 6, R3 10, R4 16, R5 30).</summary>
+        public static int BasePrice(int rung) => prices[Clamp(rung) - 1];
+
+        /// <summary>Seconds one pilot waits before using the same perk again (R1 30, R2 45, R3 60, R4 120, R5 300).</summary>
+        public static float Cooldown(int rung) => cooldowns[Clamp(rung) - 1];
+
+        private static int Clamp(int rung) => Math.Max(1, Math.Min(MaxRung, rung));
 
         public static bool TryGet(SupportActionId id, out CallRow row)
         {

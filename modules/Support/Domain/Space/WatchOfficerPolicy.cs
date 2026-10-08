@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -96,6 +97,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly WatchTarget[] picks = new WatchTarget[MaxTargets];
         private float nextThinkAt, lastHumanAt = float.NegativeInfinity, noTargetSince = float.NaN;
 
+        /// <summary>The SPACE front's directive and focus pin (the host sets it every tick; neutral = RECON, the rule as it always was).</summary>
+        public DirectorBias Bias = DirectorBias.Neutral(Front.Space);
+
         // ---- Idle rule ---------------------------------------------------------------------------
 
         /// <summary>
@@ -112,10 +116,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         /// <summary>
-        /// Solo (one human): OVERLORD works SPACE unless that human did a domain verb in the last 60 s. Two or more humans: it stays
-        /// out for 300 s after any human verb. A faction with no humans always has OVERLORD (it feeds the AI pilots' board).
+        /// OPS FRONTS S2: the director is always on. A human at the SPACE desk no longer sends it away (it posts beside the human, inside the board reserve and its own post cap);
+        /// the human's own MARKs and posts simply take their slots first. Kept as a method so the idle numbers stay documented and tested.
         /// </summary>
-        public bool Idle(int humans, float now)
+        public bool Idle(int humans, float now) => true;
+
+        /// <summary>The old idle rule (solo 60 s, company 300 s after a human domain verb), kept for the record and for the tests that pin its numbers.</summary>
+        public bool QuietOfHumans(int humans, float now)
         {
             if (humans <= 0) return true;
             return now - lastHumanAt >= (humans == 1 ? SoloIdleSeconds : GroupIdleSeconds);
@@ -177,13 +184,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 WatchTarget t = targets[i];
                 if (!Usable(t, now)) continue;
-                float score = Score(t);
+                float score = Weighted(t);
                 if (score > bestScore || (score == bestScore && t.Id < targets[best].Id)) { best = i; bestScore = score; }
             }
             if (best < 0) return NoTarget(inputs, sites, now, gate);
             noTargetSince = float.NaN;
             return gate != WatchWhy.None ? WatchPlan.Idle(gate) : Strike(inputs, targets, best, now);
         }
+
+        /// <summary>The score the director ranks by: the neutral score, x1.5 near the focus pin, x1.25 on air defence and armour under STRIKE.</summary>
+        private float Weighted(in WatchTarget t) => Score(t) * Bias.Focus(t.X, t.Z) * Bias.HighValue(t.Kind);
 
         private bool Usable(in WatchTarget t, float now) =>
             // A point the wire cannot carry is never posted: the pilots could not see that card.
@@ -197,9 +207,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private WatchWhy Gate(in WatchInputs inputs, float now)
         {
             if (remembered.Count >= MaxRemembered) return WatchWhy.Waiting; // full memory refuses: never forget a live post
-            if (inputs.OverlordPosts >= MaxOverlordPosts) return WatchWhy.OverlordCap;
+            if (inputs.OverlordPosts >= Bias.MaxPosts) return WatchWhy.OverlordCap;
             if (inputs.BoardCount + 1 > inputs.BoardCapacity - ReserveBoardSlots) return WatchWhy.BoardFull;
-            if (!(inputs.RodReadyIn <= RodWindowSeconds)) return WatchWhy.RodNotReady;
+            if (!(inputs.RodReadyIn <= RodWindowSeconds * Bias.RodWindowScale)) return WatchWhy.RodNotReady;
             if (SpaceContacts.MaxMarks - ReserveHumanMarks - inputs.LiveMarks < 1) return WatchWhy.MarkRoom;
             if (MarksPerMinute - MarksInWindow(now) < 1) return WatchWhy.MarkRate;
             return WatchWhy.None;
@@ -208,7 +218,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private WatchPlan NoTarget(in WatchInputs inputs, IReadOnlyList<WatchSite> sites, float now, WatchWhy gate)
         {
             if (float.IsNaN(noTargetSince)) noTargetSince = now;
-            if (now - noTargetSince < NoContactSeconds) return WatchPlan.Idle(WatchWhy.Waiting);
+            if (now - noTargetSince < NoContactSeconds * Bias.NoContactScale) return WatchPlan.Idle(WatchWhy.Waiting);
             if (gate != WatchWhy.None) return WatchPlan.Idle(gate);
             int site = -1;
             float oldest = float.PositiveInfinity;
@@ -248,7 +258,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                     if (!Usable(t, now) || Taken(t.Id, count)) continue;
                     float dx = t.X - lead.X, dz = t.Z - lead.Z;
                     if (dx * dx + dz * dz > ClusterMeters * ClusterMeters) continue;
-                    float score = Score(t);
+                    float score = Weighted(t);
                     if (score > nextScore || (score == nextScore && t.Id < targets[next].Id)) { next = i; nextScore = score; }
                 }
                 if (next < 0) break;

@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] traceLengths = new int[FrontlineTraceLimits.MaximumTraces];
         private readonly float[] tracePressure = new float[FrontlineTraceLimits.MaximumTraces];
+        private readonly float[] pointDistance = new float[FrontlineTraceLimits.MaximumPoints];
+        private readonly int[] pointOrder = new int[FrontlineTraceLimits.MaximumPoints];
+        private readonly List<Vector2> ownGround = new List<Vector2>(256);
         private readonly List<WarOffer> choices = new List<WarOffer>(LivingWarRules.MaximumOffers);
         private readonly Dictionary<string, FactionWar> wars = new Dictionary<string, FactionWar>(MaximumFactions);
         private readonly List<FactionHQ> hqs = new List<FactionHQ>(MaximumFactions);
@@ -308,7 +311,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (war.Active?.Objective == true)
                 AddObjective(war, MissionManager.Objectives?.GetObjective(war.Active.Key), active);
             for (int i = 0; i < war.Proposals.Count; i++)
-                AddObjective(war, MissionManager.Objectives?.GetObjective(war.Proposals[i].TargetKey), active);
+                if (!war.Proposals[i].TargetKey.StartsWith("S:", StringComparison.Ordinal))   // front sectors are not missions; GetObjective throws on them
+                    AddObjective(war, MissionManager.Objectives?.GetObjective(war.Proposals[i].TargetKey), active);
             if (active.Count == 0) return;
             int inspected = 0;
             while (inspected < Math.Min(active.Count, MaximumObjectiveScan) && war.Candidates.Count < 4)
@@ -348,14 +352,24 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (territory == null) return;
             int count = Mathf.Clamp(territory.CopyFrontlineTraces(war.HQ.GetInstanceID(),
                 tracePoints, traceLengths, tracePressure), 0, FrontlineTraceLimits.MaximumTraces);
+            CollectOwnGround(war);
+            // Pin the live operation's and the offers' sector fronts where they were offered, as SenseObjectives does for
+            // objectives: the samples below follow moving units, and Pick / AdvanceOperation look the front up by key.
+            if (war.Active != null && !war.Active.Objective) Pin(war, war.Active.Key, war.Active.Label, war.Active.X, war.Active.Z);
+            for (int i = 0; i < war.Proposals.Count; i++)
+                if (war.Proposals[i].TargetKey.StartsWith("S:", StringComparison.Ordinal))
+                    Pin(war, war.Proposals[i].TargetKey, war.Proposals[i].Label, war.Proposals[i].X, war.Proposals[i].Z);
             int start = 0;
             for (int trace = 0; trace < count && war.Candidates.Count < LivingWarRules.MaximumFronts; trace++)
             {
                 int length = Mathf.Clamp(traceLengths[trace], 0, tracePoints.Length - start);
-                for (int part = 1; part <= 3 && war.Candidates.Count < LivingWarRules.MaximumFronts; part++)
+                // Sample the stretches nearest our own ground forces: fixed quarter points along a 100+ km
+                // line almost never fall inside the 3 km presence radius, so the staff never saw anyone.
+                int tries = OrderByOwnGround(start, length);
+                for (int k = 0, added = 0; k < tries && added < 3 && war.Candidates.Count < LivingWarRules.MaximumFronts; k++)
                 {
                     if (length < 2) break;
-                    FrontlineTracePoint point = tracePoints[start + (length - 1) * part / 4];
+                    FrontlineTracePoint point = tracePoints[pointOrder[k]];
                     if (!float.IsFinite(point.X) || !float.IsFinite(point.Z)) continue;
                     int gx = Mathf.FloorToInt(point.X / LocalSectorSize);
                     int gz = Mathf.FloorToInt(point.Z / LocalSectorSize);
@@ -365,16 +379,71 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         if (war.Candidates[i].Key == key ||
                             (!war.Candidates[i].Objective &&
                              Scalar.Distance2DSquared(war.Candidates[i].X, war.Candidates[i].Z,
-                                point.X, point.Z) < 2000f * 2000f)) { duplicate = true; break; }
+                                point.X, point.Z) < 2000f * 2000f))
+                        {
+                            duplicate = true;   // a pinned front takes the pressure of the trace running through it
+                            if (!war.Candidates[i].Objective)
+                                war.Candidates[i].Pressure = Mathf.Max(war.Candidates[i].Pressure, Mathf.Clamp01(tracePressure[trace]));
+                            break;
+                        }
                     if (duplicate) continue;
                     war.Candidates.Add(new FrontCandidate
                     {
                         Key = key, Label = "FRONT " + gx + "/" + gz,
                         X = point.X, Z = point.Z, Pressure = Mathf.Clamp01(tracePressure[trace]),
                     });
+                    added++;
                 }
                 start += length;
             }
+        }
+
+        private static void Pin(FactionWar war, string key, string label, float x, float z)
+        {
+            if (war.Candidates.Count >= LivingWarRules.MaximumFronts || !float.IsFinite(x) || !float.IsFinite(z)) return;
+            for (int i = 0; i < war.Candidates.Count; i++) if (war.Candidates[i].Key == key) return;
+            war.Candidates.Add(new FrontCandidate { Key = key, Label = label, X = x, Z = z });
+        }
+
+        private void CollectOwnGround(FactionWar war)
+        {
+            ownGround.Clear();
+            List<Unit> all = UnitRegistry.allUnits;
+            if (all == null) return;
+            int cap = Math.Min(all.Count, MaximumUnitScan);
+            for (int i = 0; i < cap; i++)
+            {
+                Unit unit = all[i];
+                if (!(unit is GroundVehicle) || unit.disabled || !ReferenceEquals(unit.NetworkHQ, war.HQ)) continue;
+                GlobalPosition position = unit.GlobalPosition();
+                if (float.IsFinite(position.x) && float.IsFinite(position.z)) ownGround.Add(new Vector2(position.x, position.z));
+            }
+        }
+
+        /// <summary>Fills <see cref="pointOrder"/> with this trace's point indices, nearest own ground first; with no own
+        /// ground it is the old quarter points. Returns how many entries to try.</summary>
+        private int OrderByOwnGround(int start, int length)
+        {
+            if (length < 2) return 0;
+            if (ownGround.Count == 0)
+            {
+                for (int part = 1; part <= 3; part++) pointOrder[part - 1] = start + (length - 1) * part / 4;
+                return 3;
+            }
+            // ponytail: at most 64 evenly spaced points per trace (~2.5 km apart on a 160 km line) x own vehicles per
+            // 10 s review; a spatial index would be the upgrade if factions field thousands of vehicles.
+            int stride = Mathf.Max(1, length / 64), n = 0;
+            for (int i = 0; i < length; i += stride, n++)
+            {
+                FrontlineTracePoint point = tracePoints[start + i];
+                float best = float.MaxValue;
+                for (int u = 0; u < ownGround.Count; u++)
+                    best = Mathf.Min(best, Scalar.Distance2DSquared(point.X, point.Z, ownGround[u].x, ownGround[u].y));
+                pointDistance[n] = float.IsFinite(point.X) && float.IsFinite(point.Z) ? best : float.MaxValue;
+                pointOrder[n] = start + i;
+            }
+            Array.Sort(pointDistance, pointOrder, 0, n);
+            return n;
         }
 
         private static void CountUnits(FactionWar war)
@@ -407,8 +476,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 for (int j = 0; j < war.Candidates.Count; j++)
                 {
                     FrontCandidate front = war.Candidates[j];
-                    if (Scalar.Distance2DSquared(position.x, position.z, front.X, front.Z) >
-                        PresenceRadius * PresenceRadius) continue;
+                    // Own forces count within the radius an operation assigns from (they hold ~10 km behind the line);
+                    // hostiles only at the fix itself, so "resistance" stays local.
+                    float reach = friendly ? AssignmentRadius : PresenceRadius;
+                    if (Scalar.Distance2DSquared(position.x, position.z, front.X, front.Z) > reach * reach) continue;
                     if (friendly) front.Friendly++; else front.Hostile++;
                 }
             }
@@ -455,7 +526,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static string RiskOf(WarFrontRead front) => !front.Observed ? "UNKNOWN"
             : front.Hostile > front.Friendly ? "HIGH" : "MODERATE";
 
-        private static string ForcesOf(WarFrontRead front) => front.Friendly + " nearby friendly units / " +
+        private static string ForcesOf(WarFrontRead front) =>
+            front.Friendly + (front.Friendly == 1 ? " friendly unit" : " friendly units") + " / " +
             (front.Observed ? front.Hostile + " tracked hostile" : "resistance unknown");
 
         private static string AimOf(string kind, string key, bool objective) =>
@@ -492,7 +564,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 string brief = AimOf(offer.Kind, offer.Front.Key, offer.Front.Objective);
                 war.Proposals.Add(new TheaterProposalView(war.NextId++, war.Revision,
                     offer.Kind, offer.Front.Label, offer.Front.Key, offer.Front.X, offer.Front.Z,
-                    brief + ". Native convoy <=35% pool /120s.", RiskOf(offer.Front), ForcesOf(offer.Front),
+                    brief + ".", RiskOf(offer.Front), ForcesOf(offer.Front),
                     Mathf.Max(0f, war.OfferDeadline - now)));
             }
             war.OfferedOnce = true;

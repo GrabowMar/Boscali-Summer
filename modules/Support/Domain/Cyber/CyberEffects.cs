@@ -156,12 +156,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public readonly NodeKind Node;
         public readonly SupportActionId Action;
         public readonly string Label;
-        public readonly CallTier Tier;
         public readonly EffectKind Effect;
         public readonly float Seconds, Radius, Factor;
 
-        public PackageDef(NodeKind node, SupportActionId action, string label, CallTier tier, EffectKind effect, float seconds, float radius, float factor)
-        { Node = node; Action = action; Label = label; Tier = tier; Effect = effect; Seconds = seconds; Radius = radius; Factor = factor; }
+        public PackageDef(NodeKind node, SupportActionId action, string label, EffectKind effect, float seconds, float radius, float factor)
+        { Node = node; Action = action; Label = label; Effect = effect; Seconds = seconds; Radius = radius; Factor = factor; }
 
         /// <summary>The payoff line of a posted package, e.g. <c>HOLDS SAM LAUNCH 3 KM · 1:00</c>.</summary>
         public string Payoff(bool exploit)
@@ -194,11 +193,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         private static readonly PackageDef[] all =
         {
-            new PackageDef(NodeKind.Radar, SupportActionId.CyberJamRadar, "JAM RADAR", CallTier.Light, EffectKind.RadarJam, 90f, 1500f, CyberEffectBook.RadarFactor),
-            new PackageDef(NodeKind.SamC2, SupportActionId.CyberSamNetDown, "SAM NET DOWN", CallTier.Heavy, EffectKind.SamBlock, 60f, 3000f, 1f),
-            new PackageDef(NodeKind.Relay, SupportActionId.CyberSpoofIff, "SPOOF IFF", CallTier.Heavy, EffectKind.HoldFire, 60f, 3000f, 1f),
-            new PackageDef(NodeKind.Uplink, SupportActionId.CyberBirdJam, "BIRD JAM", CallTier.Heavy, EffectKind.BirdJam, 180f, 0f, CyberEffectBook.BirdCooldownFactor),
-            new PackageDef(NodeKind.DataCenter, SupportActionId.CyberBlackout, "BLACKOUT", CallTier.Heavy, EffectKind.RadarJam, 45f, 12000f, CyberEffectBook.RadarFactor),
+            new PackageDef(NodeKind.Radar, SupportActionId.CyberJamRadar, "JAM RADAR", EffectKind.RadarJam, 90f, 1500f, CyberEffectBook.RadarFactor),
+            new PackageDef(NodeKind.SamC2, SupportActionId.CyberSamNetDown, "SAM NET DOWN", EffectKind.SamBlock, 60f, 3000f, 1f),
+            new PackageDef(NodeKind.Relay, SupportActionId.CyberSpoofIff, "SPOOF IFF", EffectKind.HoldFire, 60f, 3000f, 1f),
+            new PackageDef(NodeKind.Uplink, SupportActionId.CyberBirdJam, "BIRD JAM", EffectKind.BirdJam, 180f, 0f, CyberEffectBook.BirdCooldownFactor),
+            new PackageDef(NodeKind.DataCenter, SupportActionId.CyberBlackout, "BLACKOUT", EffectKind.RadarJam, 45f, 12000f, CyberEffectBook.RadarFactor),
         };
 
         public static IReadOnlyList<PackageDef> All => all;
@@ -237,11 +236,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public static CyberEffect Tap(int owner, int sourceId, float seconds, float now) =>
             new CyberEffect(EffectKind.TraceCut, EffectSource.Package, sourceId, owner, owner, 0f, 0f, 0f, 0u, CyberEffectBook.TraceCutFactor, now + seconds);
 
-        /// <summary>The effect of a fired package: area effects centred on the posted node point, against every other faction, for the package seconds (x1.5 EXPLOIT).</summary>
-        public static CyberEffect Package(in PackageDef def, int callId, float x, float z, int owner, bool exploit, float now)
+        /// <summary>The effect of a fired package (or a RADAR BLIND / SAM NET DOWN perk, with the front <paramref name="quality"/> on radius and duration): area effects centred on the posted node point, against every other faction, for the package seconds (x1.5 EXPLOIT).</summary>
+        public static CyberEffect Package(in PackageDef def, int callId, float x, float z, int owner, bool exploit, float now, float quality = 1f)
         {
-            float seconds = exploit ? def.Seconds * ExploitDurationFactor : def.Seconds;
-            return new CyberEffect(def.Effect, EffectSource.Package, callId, owner, 0, x, z, def.Radius, 0u, def.Factor, now + seconds);
+            float seconds = (exploit ? def.Seconds * ExploitDurationFactor : def.Seconds) * quality;
+            return new CyberEffect(def.Effect, EffectSource.Package, callId, owner, 0, x, z, def.Radius * quality, 0u, def.Factor, now + seconds);
         }
     }
 }

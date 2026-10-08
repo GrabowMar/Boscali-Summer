@@ -343,12 +343,8 @@ public static class SettingsUnityCheck
 
         clientCon.SetPage(CCockpit);
         Settle(clientCon);
-        Click(FindRowByName(cockpitContent, "HUD ELEMENT"));
-        Check(!hud.Enabled, "HUD switch must write through its public settings seam");
-        Click(FindControl(cockpitContent, "RESET STATUS LAYOUT"));
-        Check(hud.Enabled && hud.Resets == 1, "HUD reset must remain usable while the overlay is disabled");
-        Click(FindRowByName(cockpitContent, "TARGET CAMERA"));
-        Check(!hud.CameraFeedEnabled, "TARGET CAMERA must write through the HUD board seam");
+        Check(!Array.Exists(cockpitContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "HUD ELEMENT" || t.text == "TARGET CAMERA"),
+            "The HUD ships unconfigurable: no HUD rows on the cockpit page");
         Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
 
@@ -469,8 +465,6 @@ public static class SettingsUnityCheck
 
     private static void Click(AvControl control) => Click(control.transform);
 
-    private static void Check(bool condition, string message) { if (!condition) throw new Exception(message); }
-
     private static void Render(Camera camera, Canvas canvas, int height, string tag)
     {
         // executeMethod freezes time; capture the settled page after its transition cover/reveals.
@@ -496,6 +490,7 @@ public static class SettingsUnityCheck
         }
         float gutterLeft = AvTokens.PanelWidth - AvGridTokens.Pad - AvGridTokens.Gutter + 0.5f;
         var rects = new List<KeyValuePair<TMP_Text, Rect>>();
+        // Hidden pages keep their GameObjects active; only their canvas is off.
         foreach (TMP_Text t in canvas.GetComponentsInChildren<TMP_Text>(false))
         {
             if (!t.isActiveAndEnabled || t.text.Length == 0 || !CanvasOn(t)) continue;
@@ -560,17 +555,6 @@ public static class SettingsUnityCheck
         Vector3 min = canvas.transform.InverseTransformPoint(t.transform.TransformPoint(b.min));
         Vector3 max = canvas.transform.InverseTransformPoint(t.transform.TransformPoint(b.max));
         return Rect.MinMaxRect(Mathf.Min(min.x, max.x), Mathf.Min(min.y, max.y), Mathf.Max(min.x, max.x), Mathf.Max(min.y, max.y));
-    }
-
-    // Hidden pages keep their GameObjects active; only their canvas is off.
-    private static bool CanvasOn(TMP_Text t)
-    {
-        for (Transform x = t.transform; x != null; x = x.parent)
-        {
-            var c = x.GetComponent<Canvas>();
-            if (c != null && !c.enabled) return false;
-        }
-        return true;
     }
 
     private sealed class HostFixture : IHostSettingsView
@@ -648,23 +632,9 @@ public static class SettingsUnityCheck
 
     private sealed class HudFixture : IHudBoard
     {
-        public int Resets;
-        public bool Enabled { get; set; } = true;
-        public int ScaleStep { get; set; } = 1;
-        public int OpacityStep { get; set; }
-        public int MaxRows { get; set; } = 4;
-        public bool NoticesEnabled { get; set; } = true;
-        public float NoticeSeconds { get; set; } = 8;
-        public int Contrast { get; set; } = 1;
-        public bool ShowDetails { get; set; } = true;
-        public int OffsetX { get; set; }
-        public int OffsetY { get; set; }
-        public System.Collections.Generic.IReadOnlyList<IHudChannel> Channels => Array.Empty<IHudChannel>();
         public void DeclareChannel(string key, string label) { }
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
-        public bool CameraFeedEnabled { get; set; } = true;
-        public void ResetLayout() { Enabled = true; Resets++; }
     }
 }
 #endif

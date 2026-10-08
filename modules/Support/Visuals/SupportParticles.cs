@@ -116,26 +116,73 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 }, 1);
         }
 
+        /// <summary>
+        /// The kinetic-strike blast, cinematic scale: a blinding flash, a rolling fireball, a wide dust and debris skirt running out along the ground, a condensation front,
+        /// ballistic embers, and a column of dark smoke that keeps feeding for several seconds and then spreads into a cap high above, hanging for ~25 s. ~950 particles in seven layers.
+        /// </summary>
         public static void Impact(Transform parent)
         {
-            var flash = Layer(parent, "White-hot impact", true, 24, 0.65f, 100f, new Color(4f, 2.4f, 1.2f));
-            flash.Emit(16);
-            var fire = Layer(parent, "Rolling fireball", true, 100, 2.5f, 55f, new Color(1.5f, 0.5f, 0.08f));
-            Plume(fire, 100, 50f, 35f);
-            var column = Layer(parent, "Soil and smoke column", false, 180, 8f, 26f, new Color(0.3f, 0.25f, 0.2f, 0.85f), 0.6f);
-            Plume(column, 180, 38f, 115f);
-            var dust = Layer(parent, "Ground pressure dust", false, 192, 6f, 28f, new Color(0.46f, 0.37f, 0.27f, 0.65f));
-            Ring(dust, 192, 12f, 68f, 3f);
-            var vapor = Layer(parent, "Condensation front", false, 128, 1.1f, 35f, new Color(0.9f, 0.93f, 0.96f, 0.4f));
-            Ring(vapor, 128, 10f, 360f, 10f);
-            var ejecta = Layer(parent, "Ballistic incandescent debris", true, 96, 3f, 3f, new Color(3f, 1.1f, 0.2f), 2f);
-            Plume(ejecta, 96, 85f, 90f);
+            var flash = Layer(parent, "White-hot impact", true, 24, 0.8f, 260f, new Color(4f, 2.6f, 1.3f));
+            flash.Emit(14);
+            var fire = Layer(parent, "Rolling fireball", true, 120, 3.2f, 110f, new Color(1.5f, 0.5f, 0.08f));
+            Plume(fire, 120, 90f, 55f);
+            var embers = Layer(parent, "Ballistic incandescent debris", true, 140, 4.5f, 4f, new Color(3f, 1.1f, 0.2f), 1.6f);
+            Plume(embers, 140, 150f, 160f);
+            var dust = Layer(parent, "Ground pressure dust", false, 192, 9f, 55f, new Color(0.42f, 0.34f, 0.25f, 0.6f));
+            Ring(dust, 192, 25f, 95f, 5f);
+            var vapor = Layer(parent, "Condensation front", false, 128, 1.4f, 70f, new Color(0.92f, 0.95f, 1f, 0.35f));
+            Ring(vapor, 128, 20f, 420f, 12f);
+            var stem = Layer(parent, "Soil and smoke stem", false, 220, 24f, 60f, new Color(0.14f, 0.12f, 0.1f, 0.85f), -0.01f);
+            var cap = Layer(parent, "Smoke cap", false, 120, 22f, 110f, new Color(0.3f, 0.27f, 0.24f, 0.7f), -0.01f);
+            Plume(stem, 60, 40f, 110f);
+            parent.gameObject.AddComponent<ImpactPlume>().Begin(stem, cap);
         }
 
         public static void Reset()
         {
             Object.Destroy(glow); Object.Destroy(smoke); Object.Destroy(lightning);
             glow = smoke = lightning = null;
+        }
+    }
+
+    /// <summary>Feeds the strike's smoke stem for a few seconds, then blooms the cap at the top of it. Lives on the impact object, which owns the particle systems.</summary>
+    internal sealed class ImpactPlume : MonoBehaviour
+    {
+        private ParticleSystem stem, cap;
+        private float born, nextStem;
+        private bool bloomed;
+
+        public void Begin(ParticleSystem stemLayer, ParticleSystem capLayer) { stem = stemLayer; cap = capLayer; born = Time.time; }
+
+        private void Update()
+        {
+            float age = Time.time - born;
+            if (age < 7f && age >= nextStem)
+            {
+                nextStem = age + 0.07f;
+                for (int i = 0; i < 2; i++)
+                    stem.Emit(new ParticleSystem.EmitParams
+                    {
+                        position = UnityEngine.Random.insideUnitSphere * 18f + Vector3.up * 10f,
+                        velocity = new Vector3(UnityEngine.Random.Range(-5f, 5f), UnityEngine.Random.Range(55f, 85f) * (1f - age / 12f), UnityEngine.Random.Range(-5f, 5f)),
+                        rotation = UnityEngine.Random.Range(0f, 360f)
+                    }, 1);
+            }
+            if (!bloomed && age >= 5f)
+            {
+                bloomed = true;
+                for (int i = 0; i < 90; i++)
+                {
+                    float a = i * Mathf.PI * 2f / 90f;
+                    var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    cap.Emit(new ParticleSystem.EmitParams
+                    {
+                        position = Vector3.up * UnityEngine.Random.Range(420f, 560f) + dir * UnityEngine.Random.Range(10f, 40f),
+                        velocity = dir * UnityEngine.Random.Range(14f, 30f) + Vector3.up * UnityEngine.Random.Range(-2f, 8f),
+                        rotation = UnityEngine.Random.Range(0f, 360f)
+                    }, 1);
+                }
+            }
         }
     }
 }

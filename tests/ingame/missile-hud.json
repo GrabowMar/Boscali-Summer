@@ -1,0 +1,161 @@
+{
+  "name": "missile-hud",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          8000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "record",
+      "ids": [
+        "player",
+        "bandit"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Fire",
+      "args": {},
+      "store": "fire1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Fire",
+      "args": {},
+      "store": "fire2"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Missiles",
+      "args": {},
+      "store": "msl"
+    },
+    {
+      "op": "capture",
+      "name": "missile-cockpit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Menu",
+      "args": {},
+      "store": "menu"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.View",
+      "args": {
+        "action": "enter"
+      },
+      "store": "view_enter"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "missile-view"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.View",
+      "args": {
+        "action": "next"
+      },
+      "store": "view_next"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "missile-next"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.View",
+      "args": {
+        "action": "prev"
+      },
+      "store": "view_prev"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.View",
+      "args": {
+        "action": "exit"
+      },
+      "store": "view_exit"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "missile-exit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Missiles",
+      "args": {},
+      "store": "msl_end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "player"
+      ]
+    },
+    {
+      "check": "result_above",
+      "path": "msl.count",
+      "min": 1
+    }
+  ]
+}

@@ -143,6 +143,34 @@ Shader "Boscali/FlightCloudComposite"
                     lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x), uv.y);
             }
 
+            // Depth-tested bilinear history at a target position. Bilinear history must
+            // reject foreground neighbours; testing only one depth texel would still let
+            // their empty colour bleed through interpolation.
+            float4 HistoryAt(float2 position, float pointDepth, out float weight)
+            {
+                float2 historyPixel = position * _CloudLowResSize.xy - 0.5;
+                float2 historyBase = floor(historyPixel), fraction = frac(historyPixel);
+                float4 history = 0.0;
+                weight = 0.0;
+                [unroll]
+                for (int y = 0; y <= 1; y++)
+                {
+                    [unroll]
+                    for (int x = 0; x <= 1; x++)
+                    {
+                        float2 huv = (historyBase + float2(x, y) + 0.5) * _CloudLowResSize.zw;
+                        float depth = min(tex2Dlod(_CloudHistoryDepth, float4(huv, 0, 0)).r, pointDepth);
+                        float difference = abs(depth - pointDepth) / max(1.0, min(depth, pointDepth));
+                        if (difference >= 0.1) continue;
+                        float w = (x == 0 ? 1.0 - fraction.x : fraction.x) *
+                            (y == 0 ? 1.0 - fraction.y : fraction.y);
+                        history += tex2Dlod(_CloudHistoryTex, float4(huv, 0, 0)) * w;
+                        weight += w;
+                    }
+                }
+                return weight > 1e-5 ? history / weight : 0.0;
+            }
+
             ResolveOut Resolved(float4 colour, float sceneDepth, float cloudEye)
             {
                 ResolveOut o;
@@ -168,8 +196,8 @@ Shader "Boscali/FlightCloudComposite"
                 float2 freshData = tex2Dlod(_CloudQuarterData, float4(quv, 0, 0)).rg;
                 // A checker sample may hit the aircraft while this half-resolution pixel
                 // sees sky. Reconstruct only from fresh samples on the same side of depth.
-                float4 upsampled = 0.0, low = 1e5, high = -1e5;
-                float total = 0.0, distanceSum = 0.0, distanceWeight = 0.0;
+                float4 upsampled = 0.0, low = 1e5, high = -1e5, soft = 0.0;
+                float total = 0.0, softTotal = 0.0, distanceSum = 0.0, distanceWeight = 0.0;
                 [unroll]
                 for (int y = -1; y <= 1; y++)
                 {
@@ -188,6 +216,11 @@ Shader "Boscali/FlightCloudComposite"
                         float2 offset = sampleBlock * 2.0 + _CloudChecker.xy - texel;
                         float w = exp(-dot(offset, offset) * 0.275) / (0.02 + difference);
                         upsampled += n * w;
+                        // Wider kernel for texels with no usable history (disocclusion behind a
+                        // moving aircraft): a soft fill instead of quarter-resolution blocks.
+                        float ws = exp(-dot(offset, offset) * 0.09) / (0.02 + difference);
+                        soft += n * ws;
+                        softTotal += ws;
                         // Empty rays carry a far fallback, not a cloud point. Weight
                         // depth by visible opacity so sky cannot drag edge parallax away.
                         float cloudWeight = n.a > 0.002 ? n.a * w : 0.0;
@@ -199,6 +232,7 @@ Shader "Boscali/FlightCloudComposite"
                     }
                 }
                 upsampled /= max(1e-5, total);
+                soft /= max(1e-5, softTotal);
                 if (total <= 1e-5) return Resolved(0.0, sceneDepth, sceneDepth);
                 float distance = distanceWeight > 1e-5 ? distanceSum / distanceWeight : freshData.g;
                 if (fresh) { upsampled = freshVal; distance = freshData.g; }
@@ -212,35 +246,25 @@ Shader "Boscali/FlightCloudComposite"
                 float3 ray = view / viewLength;
                 float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta.xyz, 1.0));
                 float2 previous = clip.xy / clip.w * 0.5 + 0.5;
-                if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) return Resolved(upsampled, sceneDepth, cloudDepth);
-                // Bilinear history must also reject foreground neighbours; testing only one
-                // depth texel would still let its empty colour bleed through interpolation.
-                float2 historyPixel = previous * _CloudLowResSize.xy - 0.5;
-                float2 historyBase = floor(historyPixel), fraction = frac(historyPixel);
-                float4 history = 0.0;
-                float historyWeight = 0.0;
-                [unroll]
-                for (int y = 0; y <= 1; y++)
+                float4 fallback = fresh ? upsampled : soft;
+                if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) return Resolved(fallback, sceneDepth, cloudDepth);
+                // clip.w is this cloud point's previous eye depth. A changed terrain distance
+                // behind it cannot invalidate the visible cloud.
+                float pointDepth = upsampled.a > 0.002 ? clip.w : sceneDepth;
+                float historyWeight;
+                float4 history = HistoryAt(previous, pointDepth, historyWeight);
+                // Sky streaming out from the point the camera flies toward was hidden behind
+                // the followed aircraft last frame: every frame those texels lost history and
+                // drew single-frame fallback, a fan of radial streaks from the aircraft. Use
+                // the accumulated history at this texel's own position instead (a few pixels
+                // of lag) and refresh it harder below.
+                bool occludedHistory = false;
+                if (historyWeight <= 1e-5)
                 {
-                    [unroll]
-                    for (int x = 0; x <= 1; x++)
-                    {
-                        float2 huv = (historyBase + float2(x, y) + 0.5) * _CloudLowResSize.zw;
-                        float depth = tex2Dlod(_CloudHistoryDepth, float4(huv, 0, 0)).r;
-                        // clip.w is this cloud point's previous eye depth. A changed
-                        // terrain distance behind it cannot invalidate the visible cloud.
-                        float pointDepth = upsampled.a > 0.002 ? clip.w : sceneDepth;
-                        depth = min(depth, pointDepth);
-                        float difference = abs(depth - pointDepth) / max(1.0, min(depth, pointDepth));
-                        float w = (x == 0 ? 1.0 - fraction.x : fraction.x) *
-                            (y == 0 ? 1.0 - fraction.y : fraction.y);
-                        if (difference >= 0.1) continue;
-                        history += tex2Dlod(_CloudHistoryTex, float4(huv, 0, 0)) * w;
-                        historyWeight += w;
-                    }
+                    history = HistoryAt(uv, pointDepth, historyWeight);
+                    occludedHistory = true;
                 }
-                if (historyWeight <= 1e-5) return Resolved(upsampled, sceneDepth, cloudDepth);
-                history /= historyWeight;
+                if (historyWeight <= 1e-5) return Resolved(fallback, sceneDepth, cloudDepth);
                 float4 carried = clamp(history, low, high);
                 // A single representative depth cannot reproject all the material in a
                 // nearby volume. Reduce history when translation is large relative to it.
@@ -251,6 +275,7 @@ Shader "Boscali/FlightCloudComposite"
                 motion = max(motion, 0.5 * saturate(length((previous - uv) * _CloudLowResSize.xy)));
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
+                if (occludedHistory) motion = max(motion, 0.5);
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames; dense texels track the

@@ -65,7 +65,7 @@ public static class ImmersionDisplayOwnershipCheck
             bind = ownerType.GetMethod("TryBindDisplay", All); bindOpaque = ownerType.GetMethod("TryBindOpaque", All);
             apply = ownerType.GetMethod("Apply", All);
             restore = ownerType.GetMethod("Restore", All); active = ownerType.GetProperty("Active", All);
-            CheckMainDisplay(); CheckEmissionDisplay(); CheckBaseDisplay(); CheckOpaqueSurface(); CheckNativeDamageOwnership();
+            CheckTexturelessMaterial(); CheckMainDisplay(); CheckEmissionDisplay(); CheckBaseDisplay(); CheckOpaqueSurface(); CheckNativeDamageOwnership();
         }
         catch (Exception e) { failure = e; }
         // Real deferred Unity destruction, rather than manually destroying the owner's clones.
@@ -135,6 +135,29 @@ public static class ImmersionDisplayOwnershipCheck
         MeshRenderer emptyRenderer = Renderer(native, other); owner = Bind(emptyRenderer, native, 0); clone = emptyRenderer.sharedMaterials[0];
         Apply(owner, 1.1f); Restore(owner); Restore(owner); disposed.Add(clone);
         Check(Empty(emptyRenderer, -1) && Empty(emptyRenderer, 0), "Originally empty MPBs remain empty after glow cleanup");
+    }
+
+    private static void CheckTexturelessMaterial()
+    {
+        Shader shader = Shader.Find("Hidden/Internal-Colored");
+        Check(shader != null, "Textureless shader fixture exists");
+        Material native = Fixture(new Material(shader));
+        Check(!native.HasProperty("_MainTex"), "Fixture has no default main texture property");
+        MeshRenderer renderer = Renderer(native);
+        int errors = 0;
+        Application.LogCallback observe = (message, trace, type) =>
+        {
+            if (type == LogType.Error || type == LogType.Exception) errors++;
+        };
+        Application.logMessageReceived += observe;
+        try
+        {
+            Check(Bind(renderer, native, 0) == null, "Textureless canopy is rejected as a display");
+            object owner = BindOpaque(renderer, native, 0);
+            if (owner != null) Restore(owner);
+            Check(errors == 0, "Inspecting a textureless material emits no Unity errors");
+        }
+        finally { Application.logMessageReceived -= observe; }
     }
 
     private static void CheckEmissionDisplay()

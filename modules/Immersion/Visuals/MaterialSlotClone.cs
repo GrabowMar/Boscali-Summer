@@ -105,7 +105,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             bool emissionDisplay = IsDisplayTexture(source, EmissionMapId);
             if (emissionDisplay && source.HasProperty(EmissionId)) return EmissionId;
             bool baseDisplay = IsDisplayTexture(source, BaseMapId);
-            bool mainDisplay = source.mainTexture is RenderTexture || IsDisplayTexture(source, MainTexId);
+            bool mainDisplay = IsDisplayTexture(source, MainTexId);
             if (baseDisplay && source.HasProperty(BaseColorId)) return BaseColorId;
             if (mainDisplay && source.HasProperty(ColorId)) return ColorId;
             if ((baseDisplay || mainDisplay) && source.HasProperty(BaseColorId)) return BaseColorId;
@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (HasNativeMaterialWriter(source)) return -1;
             // GetTag marshals a managed string: validate it at binding/shader change only.
             if (source.renderQueue >= 2500 || (validateTag && source.GetTag("RenderType", false) != "Opaque") ||
-                source.IsKeywordEnabled("_EMISSION") || source.mainTexture is RenderTexture ||
+                source.IsKeywordEnabled("_EMISSION") ||
                 IsDisplayTexture(source, MainTexId) || IsDisplayTexture(source, BaseMapId) ||
                 IsDisplayTexture(source, EmissionMapId)) return -1;
             if (source.HasProperty(EmissionId))

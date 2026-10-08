@@ -227,17 +227,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildCockpitPage(AvFlow flow, int page)
         {
-            ModuleServices.TryGet(out IHudBoard board);
-            flow.Section(AvIcon.Camera, "COCKPIT", "TARGETING · HUD");
+            flow.Section(AvIcon.Camera, "COCKPIT", "TARGETING");
             AvCellGrid switches = flow.Grid(2);
-            ToggleCell(flow, switches, page, "TARGET CAMERA",
-                "Show the native target camera feed inset on the status panel while a target is selected.",
-                () => board != null && board.CameraFeedEnabled, v => { if (board != null) board.CameraFeedEnabled = v; },
-                () => board != null, () => "HUD service unavailable in this scene.");
             ToggleCell(flow, switches, page, "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
-            BuildHudRows(flow, page, board, switches);
         }
     }
 }

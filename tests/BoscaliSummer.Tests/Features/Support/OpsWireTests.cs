@@ -35,9 +35,6 @@ namespace BoscaliSummer.Tests.Features.Support
         private static byte[] Rep(SpaceReply r) { var w = new BufW(); SpaceWire.WriteReply(w, r); return w.Bytes.ToArray(); }
         private static byte[] Sta(OpsStateData d) { var w = new BufW(); OpsWire.WriteState(w, d); return w.Bytes.ToArray(); }
 
-        private static void Eq<T>(T actual, T expected, string message) =>
-            TestAssert.That(Equals(actual, expected), message + " (got " + actual + ", want " + expected + ")");
-
         public static void Run()
         {
             Commands();
@@ -65,7 +62,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(SpaceWire.ReadCommand(new BufR(bytes), 34).Protocol == P && SpaceWire.ReadCommand(new BufR(bytes), 34).Kind == SpaceCommandKind.None, "a protocol-34 host sees the byte alone");
             byte[] cut = Cmd(new SpaceCommand(P, SpaceCommandKind.OpPlan, 5, 0, new[] { 2, 321 }));
             for (int n = 0; n < cut.Length; n++) TestAssert.That(SpaceWire.ReadCommand(new BufR(cut, n), P).Protocol == 0 || n < 2, "truncation at " + n + " is inert");
-            Eq(new SpaceCommand(P, SpaceCommandKind.OpPlan, 5, 0, new[] { 2, 321 }).Fingerprint() == new SpaceCommand(P, SpaceCommandKind.OpPlan, 5, 0, new[] { 2, 322 }).Fingerprint(), false, "a changed payload changes the fingerprint");
+            TestAssert.Eq(new SpaceCommand(P, SpaceCommandKind.OpPlan, 5, 0, new[] { 2, 321 }).Fingerprint() == new SpaceCommand(P, SpaceCommandKind.OpPlan, 5, 0, new[] { 2, 322 }).Fingerprint(), false, "a changed payload changes the fingerprint");
 
             foreach (OpOutcome o in new[] { OpOutcome.Started, OpOutcome.Funded, OpOutcome.NoTarget, OpOutcome.Offline })
             {
@@ -80,7 +77,8 @@ namespace BoscaliSummer.Tests.Features.Support
         private static OpsStateData Full()
         {
             var s = new OpsStateData { Protocol = P, Active = true, CyberOps = true, SofOps = true, Seq = 9, Now = 500f, BirdsDown = 0b101 };
-            s.BirdPercent[0] = 40; s.BirdPercent[2] = 77;
+            s.EnemyBirdsDown = 0b010; s.BirdPercent[0] = 40; s.BirdPercent[2] = 77;
+            s.Geo[1] = new GeoBird(0.30f, 0.60f, 0.70f, 0.40f, 480f, 62f); s.Geo[4] = new GeoBird(0.80f, 0.20f, 55f);
             s.Rows.Add(new OpsRow { Domain = OpDomain.Cyber, Kind = OpKind.Asat, State = OpState.Execute, HasTarget = true, Percent = 100, WorkPercent = 31, Goal = 940, TargetId = 1, MyCr = 275, X = 1200.5f, Z = -800f, EndsAt = 548f });
             s.Rows.Add(new OpsRow { Domain = OpDomain.Sof, Kind = OpKind.Fob, State = OpState.Funding, Paused = true, HasTarget = true, Percent = 62, WorkPercent = 12, Goal = 625, TargetId = 3, MyCr = 100, X = -3000f, Z = 4000.2f, EndsAt = 0f });
             s.Pings.Add(new OpsPingRow { Kind = OpKind.Asat, Phase = OpPingPhase.Half, Seq = 4, Until = 560f, Name = "BOSCALI" });
@@ -99,24 +97,26 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             OpsStateData s = Full();
             byte[] bytes = Sta(s);
-            TestAssert.That(bytes.Length < 200, "a full OPERATIONS message stays small (" + bytes.Length + " B)");
-            Eq(OpsWire.StateSize(s), bytes.Length, "size counter agrees");
+            TestAssert.That(bytes.Length < 300, "a full OPERATIONS message stays small (" + bytes.Length + " B)");
+            TestAssert.Eq(OpsWire.StateSize(s), bytes.Length, "size counter agrees");
             OpsStateData r = OpsWire.ReadState(new BufR(bytes), P);
-            TestAssert.That(r.Protocol == P && r.Active && r.CyberOps && r.SofOps && r.Seq == 9 && r.BirdsDown == 5 && r.BirdPercent[0] == 40 && r.BirdPercent[2] == 77, "header and birds");
-            Eq(r.Rows.Count, 2, "rows");
+            TestAssert.That(r.Protocol == P && r.Active && r.CyberOps && r.SofOps && r.Seq == 9 && r.BirdsDown == 5 && r.EnemyBirdsDown == 2 && r.BirdPercent[0] == 40 && r.BirdPercent[2] == 77, "header and birds");
+            TestAssert.That(Math.Abs(r.Geo[1].ToU - 0.70f) < 0.001f && Math.Abs(r.Geo[1].FromV - 0.60f) < 0.001f && Math.Abs(r.Geo[1].DepartAt - 480f) < 0.01f && r.Geo[1].Fuel == 62f && r.Geo[1].Moving(490f), "an own bird mid-burn survives (from, to, departure, fuel)");
+            TestAssert.That(Math.Abs(r.Geo[4].U(500f) - 0.80f) < 0.001f && !r.Geo[4].Moving(500f) && r.Geo[4].Fuel == 55f, "an enemy bird parks where it was seen");
+            TestAssert.Eq(r.Rows.Count, 2, "rows");
             OpsRow a = r.Rows[0], b = r.Rows[1];
             TestAssert.That(a.Domain == OpDomain.Cyber && a.Kind == OpKind.Asat && a.State == OpState.Execute && a.HasTarget && !a.Paused && a.Percent == 100 && a.WorkPercent == 31 &&
                 a.Goal == 940 && a.TargetId == 1 && a.MyCr == 275 && Math.Abs(a.EndsAt - 548f) < 0.2f && Math.Abs(a.X - 1200.5f) < 0.11f, "row 0");
             TestAssert.That(b.Domain == OpDomain.Sof && b.Kind == OpKind.Fob && b.State == OpState.Funding && b.Paused && b.Percent == 62 && b.EndsAt == 0f, "row 1");
-            Eq(r.Pings.Count, 3, "pings"); Eq(r.Pings[0].Name, "BOSCALI", "ping name"); Eq(r.Pings[1].Phase, OpPingPhase.Execute, "ping phase");
+            TestAssert.Eq(r.Pings.Count, 3, "pings"); TestAssert.Eq(r.Pings[0].Name, "BOSCALI", "ping name"); TestAssert.Eq(r.Pings[1].Phase, OpPingPhase.Execute, "ping phase");
             TestAssert.That(r.Pings[2].Phase == OpPingPhase.Loss && r.Pings[2].Detail == 2, "a loss ping names the bird");
-            Eq(r.Events.Count, 2, "events"); Eq(r.Events[1].Kind, OpEventKind.Broken, "event kind"); Eq(r.Events[1].Domain, OpDomain.Sof, "event domain");
-            Eq(r.Log.Count, 3, "OVERLORD log rows");
+            TestAssert.Eq(r.Events.Count, 2, "events"); TestAssert.Eq(r.Events[1].Kind, OpEventKind.Broken, "event kind"); TestAssert.Eq(r.Events[1].Domain, OpDomain.Sof, "event domain");
+            TestAssert.Eq(r.Log.Count, 3, "OVERLORD log rows");
             TestAssert.That(r.Log[0].Seq == 4 && r.Log[0].Domain == WatchDomain.Cyber && r.Log[0].Code == WatchCode.CyberHop && r.Log[0].A == 1 && r.Log[0].B == 0, "log row 0");
             TestAssert.That(r.Log[1].Domain == WatchDomain.Sof && r.Log[1].Code == WatchCode.SofSabotage && r.Log[1].A == 5 && r.Log[1].B == 65, "log row 1");
             TestAssert.That(r.Log[2].Seq == 130 && r.Log[2].Domain == WatchDomain.Ops && r.Log[2].Code == WatchCode.OpFund, "a sequence over 127 survives the varint");
-            Eq(WatchWords.Line(r.Log[1]), "OVERLORD · SABOTAGE EW TRUCK — B-1, ODDS 65 %", "the console words come from the mirrored row alone");
-            Eq(r.Flights.Count, 1, "flights"); TestAssert.That(r.Flights[0].Id == 3 && r.Flights[0].Seconds == 60 && Math.Abs(r.Flights[0].EndsAt - 560f) < 0.2f, "flight");
+            TestAssert.Eq(WatchWords.Line(r.Log[1]), "OVERLORD · SABOTAGE EW TRUCK — B-1, ODDS 65 %", "the console words come from the mirrored row alone");
+            TestAssert.Eq(r.Flights.Count, 1, "flights"); TestAssert.That(r.Flights[0].Id == 3 && r.Flights[0].Seconds == 60 && Math.Abs(r.Flights[0].EndsAt - 560f) < 0.2f, "flight");
             TestAssert.That(r.TryRow(OpDomain.Sof, out OpsRow sof) && sof.Kind == OpKind.Fob && !new OpsStateData().TryRow(OpDomain.Cyber, out _), "TryRow finds a domain");
 
             var idle = new OpsStateData { Protocol = P, Active = false, Seq = 2, Now = 10f };
@@ -133,17 +133,17 @@ namespace BoscaliSummer.Tests.Features.Support
                 TestAssert.That(OpsWire.ReadState(new BufR(bytes, n), P).Protocol == 0 || n < 1, "truncation at " + n + " is inert");
             // Out-of-range bytes: a bird mask above 7, a kind 3 ping 0, a row count of 3.
             byte[] bad = (byte[])bytes.Clone(); // header: P, flags, seq (1 byte), now (4) => the bird mask is byte 7
-            bad[7] = 0x08;
-            Eq(OpsWire.ReadState(new BufR(bad), P).Protocol, (byte)0, "a bird mask above 7 is refused");
+            bad[7] = 0x40;
+            TestAssert.Eq(OpsWire.ReadState(new BufR(bad), P).Protocol, (byte)0, "a bird mask above 63 (own 3 bits + enemy 3 bits) is refused");
             // A log row with a domain or a code that does not exist is refused whole, never guessed at.
             byte[] logBytes = Sta(s);
             int logAt = logBytes.Length - 13; // rows of 4, 4 and 5 bytes (the third sequence needs a two-byte varint): the first row starts here
             byte[] badDomain = (byte[])logBytes.Clone(); badDomain[logAt + 1] = (byte)(3 | ((int)WatchCode.CyberHop << 2));
-            Eq(OpsWire.ReadState(new BufR(badDomain), P).Protocol, (byte)0, "log domain 3 is refused");
+            TestAssert.Eq(OpsWire.ReadState(new BufR(badDomain), P).Protocol, (byte)0, "log domain 3 is refused");
             byte[] badCode = (byte[])logBytes.Clone(); badCode[logAt + 1] = (byte)(0 | (63 << 2));
-            Eq(OpsWire.ReadState(new BufR(badCode), P).Protocol, (byte)0, "an unknown reason code is refused");
+            TestAssert.Eq(OpsWire.ReadState(new BufR(badCode), P).Protocol, (byte)0, "an unknown reason code is refused");
             byte[] zeroSeq = (byte[])logBytes.Clone(); zeroSeq[logAt] = 0;
-            Eq(OpsWire.ReadState(new BufR(zeroSeq), P).Protocol, (byte)0, "log sequence 0 is refused");
+            TestAssert.Eq(OpsWire.ReadState(new BufR(zeroSeq), P).Protocol, (byte)0, "log sequence 0 is refused");
             var worst = Full();
             while (worst.Pings.Count < 4) worst.Pings.Add(new OpsPingRow { Kind = OpKind.Fob, Phase = OpPingPhase.Half, Seq = 10 + worst.Pings.Count, Until = 600f, Name = "ABCDEFGHIJKL" });
             while (worst.Events.Count < 3) worst.Events.Add(new OpsEventRow { Seq = 20, Kind = OpEventKind.Half, Domain = OpDomain.Cyber, Op = OpKind.ZeroDay });
@@ -157,7 +157,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(mirror.BirdUp(BirdKind.Optical), "an unknown mirror says every bird is up");
             OpsStateData s = Full();
             TestAssert.That(mirror.Apply(s, P, 520f), "a first state applies");
-            Eq(mirror.State.Now, 520f, "re-based onto the client clock");
+            TestAssert.Eq(mirror.State.Now, 520f, "re-based onto the client clock");
             TestAssert.That(Math.Abs(mirror.State.Rows[0].EndsAt - 568f) < 0.01f && Math.Abs(mirror.State.Pings[0].Until - 580f) < 0.01f && Math.Abs(mirror.State.Flights[0].EndsAt - 580f) < 0.01f, "deadlines shift by the clock offset");
             TestAssert.That(!mirror.BirdUp(BirdKind.Optical) && mirror.BirdUp(BirdKind.Radar) && !mirror.BirdUp(BirdKind.Kinetic), "dead birds read from the mask");
             TestAssert.That(mirror.State.Log.Count == 3 && mirror.State.Log[2].Seq == 130, "the log rides the mirror");
@@ -188,7 +188,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(subs.Next(7, 2, changed, 505f, 13f) != null, "a faction change forces one");
             TestAssert.That(subs.Next(0, 1, changed, 505f, 14f) == null, "player 0 is refused");
             subs.Prune(new HashSet<ulong>());
-            Eq(subs.Count, 0, "pruned members are forgotten");
+            TestAssert.Eq(subs.Count, 0, "pruned members are forgotten");
         }
 
         private static void Notices()
@@ -205,44 +205,44 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(p.Kind == OpsNoticeKind.None, "the ping was consumed by the gap (notices are edges, not a queue)");
             s.Pings.Add(new OpsPingRow { Kind = OpKind.Asat, Phase = OpPingPhase.Half, Seq = 7, Until = 600f, Name = "RED" });
             OpsNotice q = t.Observe(true, s, 509f, false);
-            Eq(q.Text, "RED IS DECRYPTING YOUR SATELLITE TRACK", "the enemy ping words");
+            TestAssert.Eq(q.Text, "RED IS DECRYPTING YOUR SATELLITE TRACK", "the enemy ping words");
             s.Pings.Add(new OpsPingRow { Kind = OpKind.Fob, Phase = OpPingPhase.Execute, Seq = 8, Until = 600f, Name = "RED" });
             TestAssert.That(t.Observe(true, s, 520f, true).Kind == OpsNoticeKind.None, "QUIET silences notices");
-            Eq(t.Observe(false, s, 521f, false).Kind, OpsNoticeKind.None, "no mirror, no notice");
+            TestAssert.Eq(t.Observe(false, s, 521f, false).Kind, OpsNoticeKind.None, "no mirror, no notice");
             TestAssert.That(t.Observe(true, s, 600f, false).Kind == OpsNoticeKind.None, "and the first sight after a reset is silent again");
         }
 
         private static void Words()
         {
             var r = new OpsRow { Domain = OpDomain.Cyber, Kind = OpKind.Asat, State = OpState.Funding, Percent = 40, Goal = 940, TargetId = 1 };
-            Eq(OpsPageWords.Line(r, 0f), "ASAT · FUNDING · 40 % OF 940 CR", "funding line");
+            TestAssert.Eq(OpsPageWords.Line(r, 0f), "ASAT · FUNDING · 40 % OF 940 CR", "funding line");
             r.Paused = true;
             TestAssert.That(OpsPageWords.Line(r, 0f).EndsWith("PAUSED: DATA CENTER DOWN"), "paused line");
             r.State = OpState.Execute; r.EndsAt = 140f;
-            Eq(OpsPageWords.Line(r, 100f), "ASAT · EXECUTE T-40 · PROTECT THE DATA CENTER", "countdown line");
+            TestAssert.Eq(OpsPageWords.Line(r, 100f), "ASAT · EXECUTE T-40 · PROTECT THE DATA CENTER", "countdown line");
             r.State = OpState.Done; r.EndsAt = 190f;
-            Eq(OpsPageWords.Line(r, 100f), "ASAT · DONE · IN FLIGHT 1:30", "in-flight line");
-            Eq(OpsPageWords.Line(default, 0f), "NO OPERATION RUNNING", "idle line");
+            TestAssert.Eq(OpsPageWords.Line(r, 100f), "ASAT · DONE · IN FLIGHT 1:30", "in-flight line");
+            TestAssert.Eq(OpsPageWords.Line(default, 0f), "NO OPERATION RUNNING", "idle line");
             var d = new OpsRow { Domain = OpDomain.Cyber, Kind = OpKind.ZeroDay, State = OpState.Funding, Percent = 40, WorkPercent = 12, Goal = 540, MyCr = 75 };
-            Eq(OpsPageWords.Detail(d, 0f), "40 % OF 540 CR · YOURS 75 CR · WORK 12 %", "funding detail");
+            TestAssert.Eq(OpsPageWords.Detail(d, 0f), "40 % OF 540 CR · YOURS 75 CR · WORK 12 %", "funding detail");
             d.Paused = true;
             TestAssert.That(OpsPageWords.Detail(d, 0f).EndsWith("PAUSED: DATA CENTER DOWN"), "paused detail");
             d.State = OpState.Broken; d.Paused = false;
             TestAssert.That(OpsPageWords.Detail(d, 0f).EndsWith("BROKEN, FUND TO RESUME"), "broken detail");
             d.Kind = OpKind.Asat; d.State = OpState.Execute;
-            Eq(OpsPageWords.Detail(d, 0f), "PROTECT THE DATA CENTER AND THE LAUNCHER", "countdown detail");
+            TestAssert.Eq(OpsPageWords.Detail(d, 0f), "PROTECT THE DATA CENTER AND THE LAUNCHER", "countdown detail");
             d.State = OpState.Done; d.EndsAt = 75f;
-            Eq(OpsPageWords.Detail(d, 15f), "ASCENT 1:00", "ascent detail");
+            TestAssert.Eq(OpsPageWords.Detail(d, 15f), "ASCENT 1:00", "ascent detail");
             d.Kind = OpKind.Fob; d.EndsAt = 1215f;
-            Eq(OpsPageWords.Detail(d, 15f), "FOB UP 20:00", "FOB detail");
-            Eq(OpsPageWords.Detail(default, 0f), "", "idle detail is empty");
+            TestAssert.Eq(OpsPageWords.Detail(d, 15f), "FOB UP 20:00", "FOB detail");
+            TestAssert.Eq(OpsPageWords.Detail(default, 0f), "", "idle detail is empty");
             TestAssert.That(OpsWords.Hint(OpKind.Fob).Contains("20 MIN") && OpsWords.Hint(OpKind.None) == "" && OpsWords.NeedTarget(OpKind.ZeroDay).Contains("SAM"), "hints");
             var s = new OpsStateData { Protocol = P, Active = true, BirdsDown = 0b011 };
             s.BirdPercent[0] = 30; s.BirdPercent[1] = 80;
-            Eq(OpsPageWords.Birds(s), "SAT OPTICAL LOST 30 % · RADAR LOST 80 %", "bird line");
-            Eq(OpsPageWords.Birds(new OpsStateData { Active = true }), "", "no dead bird, no line");
-            Eq(OpsWords.TargetWord(OpKind.Asat, 2), "KINETIC", "bird target word");
-            Eq(OpsWords.TargetWord(OpKind.Fob, 3), "HELD H3", "held target word");
+            TestAssert.Eq(OpsPageWords.Birds(s), "SAT OPTICAL LOST 30 % · RADAR LOST 80 %", "bird line");
+            TestAssert.Eq(OpsPageWords.Birds(new OpsStateData { Active = true }), "", "no dead bird, no line");
+            TestAssert.Eq(OpsWords.TargetWord(OpKind.Asat, 2), "KINETIC", "bird target word");
+            TestAssert.Eq(OpsWords.TargetWord(OpKind.Fob, 3), "HELD H3", "held target word");
         }
     }
 }

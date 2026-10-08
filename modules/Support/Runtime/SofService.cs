@@ -82,6 +82,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CyberService cyber;
         private float nextTick, nextCleanup, nextWarning;
         private bool loggedNoCampKeys;
+        private readonly HashSet<FactionHQ> loggedNoSite = new HashSet<FactionHQ>();
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickEffects(FactionSof f, float now);
@@ -109,6 +110,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             nextAttempt.Clear();
             nextTick = 0f;
             loggedNoCampKeys = false;
+            loggedNoSite.Clear();
             spawner.ResetForScene();
         }
 
@@ -121,6 +123,23 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // ---- Reads ---------------------------------------------------------------------------------
 
         internal bool HasSof(FactionHQ owner) => owner != null && factions.ContainsKey(owner);
+
+        /// <summary>CAMP programme finished: the first dead camp has its restore bar filled and the existing rebuild raises it again. False when no camp is down.</summary>
+        internal bool CompleteCampRebuild(FactionHQ owner)
+        {
+            if (owner == null || !factions.TryGetValue(owner, out FactionSof f)) return false;
+            foreach (CampSlot slot in f.Slots)
+            {
+                if (f.Camps.Health(slot.Index) != AnchorHealth.Down || slot.Bar.Complete) continue;
+                slot.Bar.Fund(slot.Bar.Goal);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>TRAIN TEAM programme finished: one team is raised at the camp (or the FOB) for free, up to the front cap of four. The refusal says why when none could be.</summary>
+        internal SofResult TrainTeam(FactionHQ owner) =>
+            owner != null && factions.TryGetValue(owner, out FactionSof f) ? f.Desk.Raise(Domain.Space.SpaceContacts.WatchOfficerId, Domain.Fronts.FrontRules.TeamCap) : new SofResult(SofOutcome.Unavailable);
 
         internal bool TryDesk(FactionHQ owner, out SofDesk desk)
         {
@@ -159,7 +178,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (Time.unscaledTime >= nextCleanup) { nextCleanup = Time.unscaledTime + 1f; spawner.RetryCleanup(); }
                 return;
             }
-            if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
+            if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
+                (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
             if (now < nextTick) return;
             nextTick = now + 1f;
@@ -213,6 +233,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void RefreshTargets(FactionSof f)
         {
+            FillEnemyAnchors(f);
+            f.Desk.CollectKeep(f.Keep);
+            f.Obs.Build(f.Owner, u => spawner.Owns(u) || (cyber != null && cyber.IsAnchorUnit(u)) || (space != null && space.Spawner.Owns(u)), enemyAnchors, f.Keep, f.Seeds);
+            f.Desk.Refresh(f.Seeds);
+        }
+
+        /// <summary>Every other faction's camps, EW trucks, data centers and uplinks, in <see cref="enemyAnchors"/>.</summary>
+        private void FillEnemyAnchors(FactionSof f)
+        {
             enemyAnchors.Clear();
             foreach (var pair in factions)
             {
@@ -230,9 +259,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         foreach (Unit unit in space.UplinksFor(hq)) if (unit != null) enemyAnchors.Add(new KeyValuePair<AnchorSub, Unit>(AnchorSub.Uplink, unit));
                     }
             }
-            f.Desk.CollectKeep(f.Keep);
-            f.Obs.Build(f.Owner, u => spawner.Owns(u) || (cyber != null && cyber.IsAnchorUnit(u)) || (space != null && space.Spawner.Owns(u)), enemyAnchors, f.Keep, f.Seeds);
-            f.Desk.Refresh(f.Seeds);
         }
 
         private void OnEvent(FactionSof f, SofEvent e)
@@ -267,9 +293,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!f.Camps.PastGrace(slot.Index, now)) { slot.LastFund = now; continue; }
                 float dt = Mathf.Clamp(now - slot.LastFund, 0f, 5f);
                 slot.LastFund = now;
-                bool flat = manager.HumanCount(f.Owner) == 0;
-                float took = slot.Bar.AutoFund(dt, manager.CyberTreasury(f.Owner), flat);
-                if (took > 0f) manager.CyberTreasurySpend(f.Owner, took);
+                slot.Bar.Fund(manager.CampRebuildFunding(f.Owner, dt));
                 if (!slot.Bar.Complete || now < slot.NextRebuildTry) continue;
                 slot.NextRebuildTry = now + RelocateRetrySeconds;
                 spawner.DiscardGroup(slot.Unit);
@@ -316,7 +340,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!spawner.TryCreateCamp(owner, slots.Count, sites[id].Anchor, sites[id].Parent, out Unit camp)) continue;
                 slots.Add(new CampSlot(slots.Count, camp, sites[id].Anchor, sites[id].Parent));
             }
-            if (slots.Count == 0) return false;
+            if (slots.Count == 0)
+            {
+                // Once per faction per mission: an offline SOF must say why (no held airbase, no legal ground on the rings, or the spawn failed).
+                if (loggedNoSite.Add(owner))
+                    Plugin.Logger?.LogWarning("[Support.Sof] " + owner.name + ": no camp placed (" + cands.Count + " legal site(s) on the 6.5/7.5 km airbase rings, " +
+                        picks.Count + " picked): SOF stays offline, retrying every " + (int)RelocateRetrySeconds + " s.");
+                return false;
+            }
             var camps = new SofCampSet(slots.Count);
             made = new FactionSof { Owner = owner, Key = manager.FactionKeyOf(owner), Camps = camps, Rng = new System.Random(unchecked(owner.GetInstanceID() * 7919 + 17)) };
             made.Slots.AddRange(slots);
