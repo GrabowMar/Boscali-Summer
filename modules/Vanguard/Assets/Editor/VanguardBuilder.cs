@@ -454,7 +454,11 @@ namespace Vanguard
             g.name = json;
             HideRenderers(g);
             var station = g.GetComponentsInChildren<MountedCargo>(true).First();
-            Visual(station.transform.parent, "SkywellKit", materials).transform.localPosition = station.transform.localPosition;
+            // The cargo donor's frame is pitched -90 deg about X relative to the aircraft (sim probe: kit length axis
+            // came out vertical), so the kit is pitched back to lie flat on the bay floor, nose forward.
+            var kitVisual = Visual(station.transform.parent, "SkywellKit", materials).transform;
+            kitVisual.localPosition = station.transform.localPosition;
+            kitVisual.localRotation = Quaternion.Euler(90f, 0f, 0f) * kitVisual.localRotation;
             Edit(station, s => P(s, "info").objectReferenceValue = info);
             Edit(mount, s => P(s, "ammo").intValue = 1);
             SaveMount(g, mount, json, info, donor);

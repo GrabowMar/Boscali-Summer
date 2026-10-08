@@ -50,6 +50,33 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
+    // SKYWELL: "firing" the kit toggles it on the owner peer. Cargo stations launch through LaunchMount, which
+    // also advances the weapon index, so the whole call is skipped and the single round stays fireable.
+    [HarmonyPatch(typeof(WeaponStation), nameof(WeaponStation.LaunchMount))]
+    internal static class SkywellLaunchPatch
+    {
+        private static bool Prefix(WeaponStation __instance, Unit owner) =>
+            !SkywellFire.Intercept(__instance, owner);
+    }
+
+    [HarmonyPatch(typeof(MountedCargo), nameof(MountedCargo.Fire))]
+    internal static class SkywellFirePatch
+    {
+        private static bool Prefix(Unit owner, WeaponStation weaponStation) =>
+            !SkywellFire.Intercept(weaponStation, owner);
+    }
+
+    internal static class SkywellFire
+    {
+        public static bool Intercept(WeaponStation station, Unit owner)
+        {
+            if (station?.WeaponInfo == null || !station.WeaponInfo.name.Contains(VanguardKeys.SkywellInfo)) return false;
+            // AI tankers are deployed by SkywellService; their trigger is swallowed.
+            if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null) Networking.SkywellNet.RequestToggle(aircraft);
+            return true;
+        }
+    }
+
     // ORCA underwater: skip vanilla water drag/detonation and run the torpedo instead (server-side flights only).
     [HarmonyPatch(typeof(Missile), "DetectCollisions")]
     internal static class TorpedoCollisionsPatch

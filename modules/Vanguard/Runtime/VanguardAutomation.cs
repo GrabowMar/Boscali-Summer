@@ -66,6 +66,9 @@ namespace BoscaliSummer.Vanguard
                 case "strike":
                     Modules.Vanguard.Runtime.DroneOrders.Order(lead, bandit);
                     return Status(lead);
+                case "equip": return Equip();
+                case "skyview": return SkyView(Text(args, "angle") ?? "side");
+                case "drain": return Drain(receiver, Number(args, "fuel", 0.3f));
                 case "status": return Status(lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
@@ -141,6 +144,86 @@ namespace BoscaliSummer.Vanguard
             camera.allowInputs = false;
             camera.SetDesiredFoV(angle == "close" ? 40f : 60f, angle == "close" ? 40f : 60f);
             return new Dictionary<string, object> { ["ok"] = true };
+        }
+
+        // ---- SKYWELL: an AI Tarantula with the kit ahead of the lead; the lead (AI) is drained and called in.
+
+        private static Aircraft tanker, receiver;
+        private static readonly System.Reflection.FieldInfo LeakRate =
+            typeof(FuelTank).GetField("leakRate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+
+        private static Dictionary<string, object> Equip()
+        {
+            tanker = receiver = null;
+            foreach (Aircraft a in UnityEngine.Object.FindObjectsOfType<Aircraft>())
+            {
+                if (a.disabled || a.definition == null) continue;
+                if (a.definition.unitName.IndexOf("Tarantula", StringComparison.OrdinalIgnoreCase) >= 0) tanker = a;
+                else if (a.definition.unitName.IndexOf("FS-20", StringComparison.OrdinalIgnoreCase) >= 0) receiver = a;
+            }
+            WeaponMount kit = null;
+            foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
+                if (w != null && w.jsonKey == VanguardKeys.SkywellMount) kit = w;
+            if (tanker == null || receiver == null || kit == null) return Failure("VanguardAutomation", "equip", "need a Tarantula, an FS-20 and the kit");
+            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
+            for (int i = 0; i < tanker.weaponManager.hardpointSets.Length; i++) loadout.weapons.Add(i == 0 ? kit : null);
+            tanker.Networkloadout = loadout;
+            NuclearOption.SavedMission.Loadout armed = null;
+            foreach (StandardLoadout sl in receiver.definition.aircraftParameters.StandardLoadouts ?? Array.Empty<StandardLoadout>())
+                if (armed == null && sl?.loadout?.weapons != null && sl.loadout.weapons.Exists(w => w != null)) armed = sl.loadout;
+            if (armed != null) receiver.Networkloadout = armed;
+            return new Dictionary<string, object> { ["ok"] = true,
+                ["kit"] = Modules.Vanguard.Runtime.SkywellBoard.KitStation(tanker) != null ? 1 : 0,
+                ["armed"] = armed != null ? 1 : 0 };
+        }
+
+        private static Dictionary<string, object> SkyView(string angle)
+        {
+            if (tanker == null) return Failure("VanguardAutomation", "skyview", "equip first");
+            SkyChase.Offset = angle == "off" ? (Vector3?)null
+                : angle == "rear" ? new Vector3(6f, 4f, -45f)
+                : angle == "close" ? new Vector3(14f, -3f, -8f) : new Vector3(38f, 0f, -16f);
+            SkyChase.Target = tanker;
+            if (SkyChase.Offset != null && UnityEngine.Object.FindObjectOfType<SkyChase>() == null)
+                new GameObject("SkywellChase").AddComponent<SkyChase>();
+            return new Dictionary<string, object> { ["ok"] = true,
+                ["mountFromTanker"] = tanker.transform.InverseTransformPoint(Modules.Vanguard.Runtime.SkywellBoard.Mount(tanker).position).ToString("F1"),
+                ["rig"] = Modules.Vanguard.Presentation.SkywellVisuals.Probe };
+        }
+
+        /// <summary>Sim-only chase camera, re-posed every frame after the floating-origin shift.</summary>
+        [DefaultExecutionOrder(2000)]
+        private sealed class SkyChase : MonoBehaviour
+        {
+            public static Aircraft Target;
+            public static Vector3? Offset;
+
+            private void LateUpdate()
+            {
+                CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
+                if (camera == null || Target == null || Offset == null) return;
+                Transform t = Target.transform;
+                Vector3 mount = Modules.Vanguard.Runtime.SkywellBoard.Mount(Target).position;
+                Vector3 eye = mount + t.rotation * Offset.Value;
+                Vector3 look = mount + t.rotation * new Vector3(0f, -6f, -14f);
+                camera.SetCameraPosition(eye.ToGlobalPosition(), Quaternion.LookRotation(look - eye, t.up));
+                camera.cameraVelocity = Vector3.zero;
+            }
+        }
+
+        private static Dictionary<string, object> Drain(Aircraft lead, float fuel)
+        {
+            if (lead == null) return Failure("VanguardAutomation", "drain", "no friendly aircraft");
+            foreach (FuelTank t in lead.GetFuelTanks()) t.Refuel(fuel);
+            int fired = 0;
+            foreach (WeaponStation s in lead.weaponStations)
+                if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.gun && s.Ammo > 0 && fired < 2)
+                {
+                    s.LaunchMount(lead, null, lead.GlobalPosition() + lead.transform.forward * 3000f);
+                    fired++;
+                }
+            return new Dictionary<string, object> { ["ok"] = true, ["fired"] = fired, ["fuel"] = lead.GetFuelLevel(),
+                ["missing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(lead) };
         }
 
         private static Aircraft FindAircraft(string faction)
@@ -272,6 +355,53 @@ namespace BoscaliSummer.Vanguard
             state["seductions"] = Modules.Vanguard.Runtime.VanguardStats.Seductions;
             state["ugvsSpawned"] = Modules.Vanguard.Runtime.VanguardStats.UgvsSpawned;
             state["ugvsAlive"] = Modules.Vanguard.Runtime.PayloadLifetime.Alive;
+            state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
+            state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
+            if (tanker != null)
+            {
+                state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);
+                state["skywellStockKg"] = Modules.Vanguard.Runtime.SkywellService.StockKg(tanker);
+                state["tankerAlive"] = tanker.disabled ? 0 : 1;
+                int tLeaks = 0, tDetached = 0;
+                foreach (FuelTank tank in tanker.GetFuelTanks())
+                    if (LeakRate?.GetValue(tank) is float rate && rate > 0f) tLeaks++;
+                var detachedNames = new List<string>();
+                foreach (UnitPart part in tanker.partLookup)
+                    if (part != null && part.IsDetached())
+                    {
+                        tDetached++;
+                        if (detachedNames.Count < 6) detachedNames.Add(part.name);
+                    }
+                state["tankerDetachedNames"] = string.Join(",", detachedNames);
+                state["tankerLeaks"] = tLeaks;
+                state["tankerDetached"] = tDetached;
+                state["tankerUp"] = Vector3.Dot(tanker.transform.up, Vector3.up);
+                state["tankerAlt"] = (float)tanker.GlobalPosition().y;
+                if (Modules.Vanguard.Runtime.SkywellBoard.Views.TryGetValue(tanker.persistentID.Id, out var view))
+                {
+                    state["skywellActive"] = view.Active ? 1 : 0;
+                    state["skywellPhase"] = view.Phase.ToString();
+                }
+                if (receiver != null) state["receiverToContact"] = Vector3.Distance(
+                    Modules.Vanguard.Runtime.SkywellBoard.ProbePoint(receiver), Modules.Vanguard.Runtime.SkywellBoard.ContactPoint(tanker));
+            }
+            if (receiver != null)
+            {
+                state["receiverAlive"] = receiver.disabled ? 0 : 1;
+                state["receiverFuel"] = receiver.GetFuelLevel();
+                int leaking = 0;
+                foreach (FuelTank tank in receiver.GetFuelTanks())
+                    if (LeakRate?.GetValue(tank) is float rate && rate > 0f) leaking++;
+                state["receiverLeaks"] = leaking;
+                int rDetached = 0;
+                foreach (UnitPart part in receiver.partLookup)
+                    if (part != null && part.IsDetached()) rDetached++;
+                state["receiverDetached"] = rDetached;
+                Bounds rb = Modules.Vanguard.Runtime.SkywellBoard.LocalBounds(receiver);
+                state["receiverBounds"] = rb.center.ToString("F1") + "/" + rb.size.ToString("F1");
+                state["rail"] = Modules.Vanguard.Presentation.SkywellVisuals.RailProbe;
+                state["receiverMissing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(receiver);
+            }
             foreach (KeyValuePair<string, float> death in Deaths) state[death.Key] = death.Value;
             if (threat != null && !threat.disabled)
                 state["threatOnLead"] = lead != null && threat.targetID.Id == lead.persistentID.Id ? 1 : 0;

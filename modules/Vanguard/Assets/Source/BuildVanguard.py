@@ -1232,7 +1232,8 @@ def xcyl(name, r, length, loc, mat, verts=20):
 
 
 SKYWELL_ARMS = [("", 1.05, "Nozzle"), ("2", -1.05, "Cassette2")]  # (suffix, x, end effector)
-TELE_STAGES = 4
+TELE_STAGES = 6  # 3 m stages, ~2.7 m run each: ~16 m of telescope per arm
+DECK_SLIDE = 3.2  # the rear pallet rides out over the ramp
 
 
 def skywell(m):
@@ -1257,13 +1258,21 @@ def skywell(m):
                 crisp(f"{name}Fin{f}{fy:.2f}", (0.01, fl, fh), (x + (r + fh / 2) * math.cos(a_), fy, z + (r + fh / 2) * math.sin(a_)),
                       mat, rot=(0, -a_ + math.pi / 2, 0), ch=0.003)
 
-    for k, cy in enumerate((1.4, -1.4)):
+    def pallet(k, cy):
         crisp(f"Pallet{k}", (2.24, 2.74, 0.05), (0.0, cy, 0.025), m[SKIN], ch=0.008)
         for side in (1, -1):
             crisp(f"RailX{k}{side}", (0.05, 2.74, 0.05), (side * 1.095, cy, 0.075), m[SKIN], ch=0.006)
             crisp(f"RailY{k}{side}", (2.24, 0.05, 0.05), (0.0, cy + side * 1.345, 0.075), m[SKIN], ch=0.006)
             for t in range(5):
                 crisp(f"Ring{k}{side}{t}", (0.07, 0.04, 0.03), (side * 1.06, cy - 1.1 + t * 0.55, 0.11), m[DARK], ch=0.004)
+
+    pallet(0, 1.4)
+    # Rear deck: pallet plus sled rails; carries both arm bases out over the ramp when the kit deploys.
+    with seg("Deck", None, (0.0, -1.4, 0.0)):
+        pallet(1, -1.4)
+        for side in (1, -1):
+            crisp(f"Sled{side}", (0.12, 2.9, 0.06), (side * 0.7, -1.4, -0.0), m[DARK], ch=0.006)
+            crisp(f"DeckLight{side}", (0.03, 0.4, 0.02), (side * 1.12, -2.7, 0.09), m[GLOW], ch=0.003)
     tank = [(0.45, 0.12), (0.5, 0.3), (0.62, 0.42), (0.8, 0.46), (2.0, 0.46), (2.18, 0.42), (2.3, 0.3), (2.35, 0.12)]
     ycyl("Tank", [(y, r, 0.0, 0.62) for y, r in tank], m[SKIN], n=24)
     for y in (0.95, 1.85):
@@ -1314,7 +1323,7 @@ def skywell(m):
     for suf, x, tip in SKYWELL_ARMS:
         sx = 1 if x > 0 else -1
         x = sx * 0.95
-        with seg("Base" + suf, None, (x, -2.2, 0.05)):
+        with seg("Base" + suf, "Deck", (x, -2.2, 0.05)):
             cylinder("Pedestal" + suf, 0.26, 0.3, (x, -2.2, 0.2), m[SKIN], verts=20)
             cylinder("SlewRing" + suf, 0.3, 0.06, (x, -2.2, 0.38), m[DARK], verts=24)
             cylinder("Turret" + suf, 0.24, 0.22, (x, -2.2, 0.52), m[SKIN], verts=20)
@@ -1345,10 +1354,10 @@ def skywell(m):
             ycyl("ForeConduit" + suf, [(0.75, 0.025, x, 1.33), (-1.9, 0.025, x, 1.33)], m[DARK], n=8)
         parent = "Forearm" + suf
         for k in range(TELE_STAGES):
-            w = 0.075 - 0.007 * k
+            w = 0.078 - 0.0065 * k
             name = f"Tele{k + 1}{suf}"
             with seg(name, parent, (x, -2.0, 1.2)):
-                loft(f"Stage{k}" + suf, [(-2.0, w, w, w, 1.2, 3, 3, 3), (0.5, w, w, w, 1.2, 3, 3, 3)],
+                loft(f"Stage{k}" + suf, [(-2.0, w, w, w, 1.2, 3, 3, 3), (1.0, w, w, w, 1.2, 3, 3, 3)],
                      m[SKIN], rings=3, n=12, tip=False).location.x = x  # loft has no X offset
                 ycyl(f"Wiper{k}" + suf, [(-2.04, w + 0.012, x, 1.2), (-1.98, w + 0.012, x, 1.2)], m[DARK], n=12)
             parent = name
@@ -1383,11 +1392,12 @@ def skywell(m):
 
     def pose(stow=False):
         objs = bpy.data.objects
+        objs["Deck"].location.y = 0.0 if stow else -DECK_SLIDE
         for suf, x, tip in SKYWELL_ARMS:
             objs["Shoulder" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(-155), 0.0, 0.0)
             objs["Forearm" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(140), 0.0, 0.0)
             for k in range(TELE_STAGES):
-                objs[f"Tele{k + 1}{suf}"].location.y = 0.0 if stow else -2.2
+                objs[f"Tele{k + 1}{suf}"].location.y = 0.0 if stow else -2.7
         bpy.context.view_layer.update()
 
     return {

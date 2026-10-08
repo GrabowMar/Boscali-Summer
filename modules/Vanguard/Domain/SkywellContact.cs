@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>SKYWELL probe contact: capture zone behind the ramp, phase timings and abort rule (tanker frame).</summary>
     internal static class SkywellContact
     {
-        public static readonly Vector3 ContactOffset = new Vector3(0f, -7f, -34f);
+        public static readonly Vector3 ContactOffset = new Vector3(0f, -10f, -24f); // from the kit mount, tanker axes
         public const float CaptureRadius = 90f;
         public const float MaxClosing = 30f;
         public const float ReachSeconds = 3f;
