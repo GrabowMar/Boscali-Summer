@@ -79,6 +79,7 @@ namespace Vanguard
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
             AegisPod(infos["VG_AegisDart"], materials);
             AleXPod(infos["VG_AleX"], materials);
+            SkywellKit(materials);
             Lance(materials);
             AssetDatabase.SaveAssets();
             OpReferenceIndex.Refresh();
@@ -243,7 +244,9 @@ namespace Vanguard
             var skin = Skin(model);
             foreach (var r in g.GetComponentsInChildren<MeshRenderer>(true))
             {
-                var mat = materials.TryGetValue(r.name, out var shared) ? shared : skin;
+                // Articulated models keep per-joint children ("Glow.001", "Dark.003"): match on the base name.
+                string key = r.name.IndexOf('.') > 0 ? r.name.Substring(0, r.name.IndexOf('.')) : r.name;
+                var mat = materials.TryGetValue(key, out var shared) ? shared : skin;
                 r.sharedMaterials = Enumerable.Repeat(mat, r.sharedMaterials.Length).ToArray();
             }
             return g;
@@ -430,6 +433,45 @@ namespace Vanguard
             }
             Edit(mount, s => P(s, "ammo").intValue = AleXCells.Length);
             SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
+        }
+
+        // SKYWELL: cargo-hold refuel/rearm kit on the FuelContainer1x1 cargo mount (a MountedCargo). Firing it never
+        // drops anything: SkywellFirePatch toggles the kit. The articulated visual keeps its joint names (runtime API).
+        static void SkywellKit(Dictionary<string, Material> materials)
+        {
+            const string donor = "FuelContainer1x1";
+            const string json = "VG_Skywell_Kit";
+            var info = Copy<WeaponInfo>("FuelContainer1_info", "WI_VG_Skywell");
+            Edit(info, s =>
+            {
+                P(s, "weaponName").stringValue = "SKYWELL Refuel/Rearm Kit";
+                P(s, "shortName").stringValue = "SKYWELL";
+                P(s, "description").stringValue = "Roll-on robotic tanker kit. Fire to open the ramp and deploy two telescoping arms: friendly aircraft holding position behind the ramp are docked, refuelled and re-armed from an 8 t fuel / 1.5 t munitions stock. Fire again to stow.";
+                P(s, "weaponIcon").objectReferenceValue = Icon("SkywellKit");
+            });
+            var mount = Copy<WeaponMount>(donor, "WM_" + json);
+            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
+            g.name = json;
+            HideRenderers(g);
+            var station = g.GetComponentsInChildren<MountedCargo>(true).First();
+            Visual(station.transform.parent, "SkywellKit", materials).transform.localPosition = station.transform.localPosition;
+            Edit(station, s => P(s, "info").objectReferenceValue = info);
+            Edit(mount, s => P(s, "ammo").intValue = 1);
+            SaveMount(g, mount, json, info, donor);
+            // Third-party Aryx MC-260 Chimera cargo bays (as AirborneBuilder); Blueprinter only warns if it is absent.
+            // Carriers are exactly the VL-49 Tarantula's cargo / mission bays and the Aryx Chimera (not the donor's Ibis).
+            var op = Load<OpAddWeaponToHardpoint>(R + "Op_" + json + ".asset");
+            op.aircraft.Clear();
+            var tarantula = Load<AircraftDefinition>(D + "MonoBehaviour/QuadVTOL1_PLACEHOLDER.asset");
+            var sets = tarantula.unitPrefab.GetComponentInChildren<WeaponManager>(true).hardpointSets;
+            var bays = Enumerable.Range(0, sets.Length).Where(i => sets[i].name.IndexOf("Cargo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                sets[i].name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            if (bays.Count == 0) throw new Exception("Tarantula has no cargo bay");
+            op.aircraft.Add(new OpAddWeaponToHardpoint.AircraftTarget { aircraftJsonKey = tarantula.jsonKey, hardpointIndices = bays });
+            if (!op.aircraft.Any(a => a.aircraftJsonKey == "Aryx_CargoPlane1"))
+                op.aircraft.Add(new OpAddWeaponToHardpoint.AircraftTarget { aircraftJsonKey = "Aryx_CargoPlane1", hardpointIndices = new List<int> { 1, 2, 3 } });
+            EditorUtility.SetDirty(op);
+            Debug.Log("[Vanguard] SKYWELL carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
         }
 
         static void Lance(Dictionary<string, Material> materials)
