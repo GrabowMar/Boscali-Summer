@@ -239,7 +239,9 @@ namespace Vanguard
             g.name = "VanguardVisual";
             g.transform.SetParent(parent, false);
             g.transform.localPosition = Vector3.zero;
-            g.transform.localRotation = Quaternion.identity;
+            // The Blender FBX (nose +Y, up +Z) arrives axis-baked with its nose along the root's +Y; pitch it +90 deg so
+            // the nose lies along the mount's +Z (forward) and its top faces +Y. Identity here stood every model on end.
+            g.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
             foreach (var t in g.GetComponentsInChildren<Transform>(true)) t.gameObject.layer = parent.gameObject.layer;
             var skin = Skin(model);
             foreach (var r in g.GetComponentsInChildren<MeshRenderer>(true))
@@ -454,11 +456,7 @@ namespace Vanguard
             g.name = json;
             HideRenderers(g);
             var station = g.GetComponentsInChildren<MountedCargo>(true).First();
-            // The cargo donor's frame is pitched -90 deg about X relative to the aircraft (sim probe: kit length axis
-            // came out vertical), so the kit is pitched back to lie flat on the bay floor, nose forward.
-            var kitVisual = Visual(station.transform.parent, "SkywellKit", materials).transform;
-            kitVisual.localPosition = station.transform.localPosition;
-            kitVisual.localRotation = Quaternion.Euler(90f, 0f, 0f) * kitVisual.localRotation;
+            Visual(station.transform.parent, "SkywellKit", materials).transform.localPosition = station.transform.localPosition;
             Edit(station, s => P(s, "info").objectReferenceValue = info);
             Edit(mount, s => P(s, "ammo").intValue = 1);
             SaveMount(g, mount, json, info, donor);
