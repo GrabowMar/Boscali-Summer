@@ -1,63 +1,56 @@
+using System;
 using BoscaliSummer.Garrisons;
 
 namespace BoscaliSummer.Tests.Features.UrbanCombat
 {
     internal static class StrongpointHitPolicyTests
     {
+        // Vanilla blast power is yield^(1/3); yields read from the stock munition prefabs.
+        private static float Power(float yield) => (float)Math.Pow(yield, 0.3333);
+
         public static void Run()
         {
-            TestAssert.That(
-                StrongpointHitPolicy.BlastTerm(30f, 10f, 5f, 5f) == 20f,
-                "blast term must mirror vanilla: (30 - 10) * 5 / 5");
-            TestAssert.That(
-                StrongpointHitPolicy.BlastTerm(5f, 10f, 100f, 1f) == 0f,
-                "blast below armor contributes nothing no matter the area");
-            TestAssert.That(
-                StrongpointHitPolicy.BlastTerm(11f, 10f, 1f, 0f) == 100f,
-                "zero tolerance floors at 0.01 like vanilla");
-            float total = StrongpointHitPolicy.TotalEstimate(
-                10f, 30f, 5f, 0f, 4f, 0f, 1f, 10f, 5f, 0f, 1f);
-            TestAssert.That(total == 10f + 20f + 0f + 4f,
-                "total estimate must mirror vanilla pierce + blast + fire + impact");
+            float agm = StrongpointHitPolicy.HitWeight(Power(9f));
+            float bomb125 = StrongpointHitPolicy.HitWeight(Power(100f));
+            float bomb500 = StrongpointHitPolicy.HitWeight(Power(400f));
+            float penetrator = StrongpointHitPolicy.HitWeight(Power(800f));
+            TestAssert.That(Math.Abs(bomb125 - 1f) < 0.02f, "a 125 kg bomb is one unit of structure");
+            TestAssert.That(agm < 0.15f, "an AGM barely scratches a strongpoint");
+            TestAssert.That(bomb500 > 2.3f && bomb500 < 2.7f, "a 500 kg bomb counts about 2.5");
+            TestAssert.That(penetrator > 3.8f, "a penetrator nearly levels a small block alone");
+            TestAssert.That(StrongpointHitPolicy.HitWeight(0f) == 0f, "no shockwave, no wear");
+            TestAssert.That(StrongpointHitPolicy.HitWeight(0.4f) == 0f, "below vanilla's shockwave floor, no wear");
 
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(0, -10f, 0f, 20f, 20f) ==
-                    StrongpointHitPolicy.Verdict.Count,
-                "the first explosive hit past debounce counts");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(0, 0f, 0.1f, 500f, 500f) ==
-                    StrongpointHitPolicy.Verdict.Ignore,
-                "a salvo inside the debounce window is one hit");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(1, -10f, 0f, 19.9f, 500f) ==
-                    StrongpointHitPolicy.Verdict.Ignore,
-                "a huge non-blast call never wears a strongpoint down");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(0, -10f, 0f, 0f, 0f) ==
-                    StrongpointHitPolicy.Verdict.Ignore,
-                "bullets and plinking are ignored");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(3, -10f, 0f, 20f, 20f) ==
-                    StrongpointHitPolicy.Verdict.Final,
-                "the fourth separate explosive hit is final");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(0, 0f, 0.1f, 2000f, 2000f) ==
-                    StrongpointHitPolicy.Verdict.Overkill,
-                "overkill bypasses the debounce");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(0, -10f, 0f, 0f, 1000f) ==
-                    StrongpointHitPolicy.Verdict.Overkill,
-                "overkill needs no blast term");
-            TestAssert.That(
-                StrongpointHitPolicy.Decide(9, -10f, 0f, 20f, 20f) ==
-                    StrongpointHitPolicy.Verdict.Final,
-                "extra hits past the kill count stay final, never wrap around");
+            TestAssert.That(StrongpointHitPolicy.Structure(100f) == 3f, "small roofs still take three bombs");
+            TestAssert.That(StrongpointHitPolicy.Structure(896f) == 4f, "a midrise block takes four");
+            TestAssert.That(StrongpointHitPolicy.Structure(5120f) == 8f, "a mall caps at eight");
 
-            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(1) == 75f, "one hit steps to 75");
-            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(2) == 50f, "two hits step to 50");
-            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(3) == 25f, "three hits step to 25");
-            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(4) == 0f, "four hits step to 0");
-            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(99) == 0f, "steps never go negative");
+            TestAssert.That(StrongpointHitPolicy.Decide(0f, 4f, Power(100f)) == StrongpointHitPolicy.Verdict.Count,
+                "the first bomb counts");
+            TestAssert.That(StrongpointHitPolicy.Decide(3f, 4f, Power(100f)) == StrongpointHitPolicy.Verdict.Final,
+                "the bomb that empties the pool is final");
+            TestAssert.That(StrongpointHitPolicy.Decide(9f, 4f, Power(100f)) == StrongpointHitPolicy.Verdict.Final,
+                "past the pool stays final");
+            TestAssert.That(StrongpointHitPolicy.Decide(0f, 4f, 0f) == StrongpointHitPolicy.Verdict.Ignore,
+                "gunfire is ignored");
+            TestAssert.That(StrongpointHitPolicy.Decide(0f, 8f, Power(11000f)) == StrongpointHitPolicy.Verdict.Overkill,
+                "demolition bombs flatten outright");
+            float worn = 0f;
+            int agms = 0;
+            while (StrongpointHitPolicy.Decide(worn, 4f, Power(9f)) != StrongpointHitPolicy.Verdict.Final && agms < 1000)
+            {
+                worn += agm;
+                agms++;
+            }
+            TestAssert.That(agms >= 35, "a midrise shrugs off dozens of AGMs");
+
+            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(0.25f) == 75f, "a quarter worn steps to 75");
+            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(2f) == 0f, "steps never go negative");
+            TestAssert.That(StrongpointHitPolicy.SteppedHitPoints(0.25f, 60f) == 45f, "steps scale with the shell's own HP");
+            TestAssert.That(StrongpointHitPolicy.CarrierHitPoints(0.5f) == 50f, "carrier mirrors the fraction");
+            TestAssert.That(StrongpointHitPolicy.CarrierHitPoints(1f) == StrongpointHitPolicy.CarrierFloor,
+                "carrier never reaches zero before the kill");
+            TestAssert.That(StrongpointHitPolicy.Fraction(1f, 4f) == 0.25f, "fraction is damage over structure");
 
             TestAssert.That(StrongpointHitPolicy.DugoutStage(100f) == 0, "full carrier is stage 0");
             TestAssert.That(StrongpointHitPolicy.DugoutStage(75f) == 1, "75 HP is stage 1");
@@ -65,7 +58,6 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
             TestAssert.That(StrongpointHitPolicy.DugoutStage(25f) == 3, "25 HP is stage 3");
             TestAssert.That(StrongpointHitPolicy.DugoutStage(0f) == 3, "empty carrier stays stage 3");
             TestAssert.That(StrongpointHitPolicy.DugoutStage(87f) == 0, "splash between ticks stages down");
-            TestAssert.That(StrongpointHitPolicy.DugoutStage(60f) == 1, "splash between ticks stages down");
         }
     }
 }

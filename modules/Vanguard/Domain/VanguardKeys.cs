@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string Orca = "VG_Orca";
         public const string AleX = "VG_AleX";
         public const string AegisInfo = "WI_VG_Aegis"; // WeaponInfo asset name of the AEGIS pod
+        public const string LanceInfo = "WI_VG_Lance";   // RG-12 LANCE railgun pod WeaponInfo
         public const string SkywellInfo = "WI_VG_Skywell";   // SKYWELL kit WeaponInfo (cargo MountedMissile)
         public const string SkywellMount = "VG_Skywell_Kit";
 
@@ -35,15 +36,5 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             }
         }
 
-        /// <summary>Vanilla vehicle jsonKey a GLAIVE carrier deploys (two per carrier), or null.</summary>
-        public static string PayloadOf(string jsonKey)
-        {
-            switch (jsonKey)
-            {
-                case Glaive2A: return "UGV1_grenade";  // Hexhound GMG
-                case Glaive2S: return "UGV1_SAMx1";    // Hexhound SAM
-                default: return null;
-            }
-        }
     }
 }

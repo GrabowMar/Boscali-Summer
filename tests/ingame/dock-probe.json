@@ -1,0 +1,52 @@
+{
+  "name": "dock-probe",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 180,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "player"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Dock",
+      "args": {},
+      "store": "dock"
+    },
+    {
+      "op": "capture",
+      "name": "dock-fit"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "player"
+      ]
+    }
+  ]
+}

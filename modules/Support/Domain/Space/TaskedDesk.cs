@@ -29,8 +29,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case TaskedOutcome.NotPosted: return "NEGATIVE: NOT POSTED — MARK AGAIN OR WAIT FOR A FREE SLOT";
                 case TaskedOutcome.ClaimedByOther: return "NEGATIVE: ANOTHER PILOT HAS THIS CALL — IT REOPENS IF THEIR LAUNCH FAILS";
                 case TaskedOutcome.Busy: return CallWords.Refusal(CallRefusal.Busy);
-                case TaskedOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: detail);
-                case TaskedOutcome.Frozen: return CallWords.Refusal(CallRefusal.Frozen, seconds: detail);
+                case TaskedOutcome.LowCredit: return CallWords.Refusal(CallRefusal.LowCredit, need: detail); // no longer produced for a claim (free); kept for the wire ids
+                case TaskedOutcome.Frozen: return CallWords.Refusal(CallRefusal.Unavailable); // retired: the CR wallet freeze is gone; the value stays so the wire ids do not shift
                 case TaskedOutcome.Locked: return CallWords.Refusal(CallRefusal.Locked);
                 case TaskedOutcome.Cooldown: return CallWords.Refusal(CallRefusal.Cooldown, seconds: detail);
                 case TaskedOutcome.BirdBusy: return "NEGATIVE: BIRD BUSY — WAIT FOR THE NEXT TASK";
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>One reserved claim's immutable launch work. Only the final launch receipt settles it.</summary>
     internal sealed class TaskedLaunchJob
     {
-        public readonly int CallId, RequestId, Escrow;
+        public readonly int CallId, RequestId;
         public readonly ulong Pilot;
         public readonly SupportActionId Action;
         public readonly TaskedAim Aim;
@@ -133,9 +133,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         internal readonly TaskedCall Call;
 
         internal TaskedLaunchJob(TaskedDesk desk, ITaskedSlot slot, in TaskedClaim claim, TaskedCall call,
-            ulong pilot, int requestId, int escrow, float launchedAt)
+            ulong pilot, int requestId, float launchedAt)
         {
-            Desk = desk; Slot = slot; Claim = claim; Call = call; Pilot = pilot; RequestId = requestId; Escrow = escrow;
+            Desk = desk; Slot = slot; Claim = claim; Call = call; Pilot = pilot; RequestId = requestId;
             LaunchedAt = launchedAt; CallId = call.Id; Action = call.Action;
             // A post is a host snapshot of fixed ground points taken at SEND: the rod flies at the first one for the post's whole
             // 600 s life, whether or not the MARK it came from has since lapsed.
@@ -179,7 +179,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     }
 
     /// <summary>
-    /// One faction's host-authoritative TASKED path: SEND, atomic CLAIM, escrow, launch receipt and fee settlement.
+    /// One faction's host-authoritative TASKED path: SEND, atomic CLAIM, launch receipt and the bird slot.
     /// Every request id replays its exact receipt; no client supplies a price, weight or outcome.
     /// </summary>
     internal sealed class TaskedDesk
@@ -202,10 +202,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private sealed class Contender { public ulong Pilot; public int RequestId; }
         private sealed class Waiting { public int CallId; public float FirstAt; public readonly List<Contender> Contenders = new List<Contender>(); }
 
-        private readonly int faction;
         private readonly ITaskedPorts ports;
         private readonly ITaskedLauncher launcher;
-        private readonly TaskedWallets wallets;
         private readonly TaskedBoard board = new TaskedBoard();
         private readonly Dictionary<Key, Receipt> receipts = new Dictionary<Key, Receipt>();
         private readonly Queue<Key> order = new Queue<Key>();
@@ -216,9 +214,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private int nextCallId;
         private bool retired, advancing;
 
-        public TaskedDesk(int faction, ITaskedPorts ports, ITaskedLauncher launcher, TaskedWallets wallets)
+        public TaskedDesk(ITaskedPorts ports, ITaskedLauncher launcher)
         {
-            this.faction = faction; this.ports = ports; this.launcher = launcher; this.wallets = wallets;
+            this.ports = ports; this.launcher = launcher;
         }
 
         public TaskedBoard Board => board;
@@ -237,7 +235,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         /// <summary>
         /// WATCH OFFICER OVERLORD's SEND: the same builder a human uses, but the post is labelled WATCH OFFICER, carries no effort
-        /// tokens and its fee (when there is one) goes 100 % to HQ FUND on a physical fire. It has no wallet and earns nothing.
+        /// tokens. It earns nothing.
         /// </summary>
         public TaskedResult SendWatchOfficer(int requestId, int[] markIds) =>
             SendGuarded(SpaceContacts.WatchOfficerId, requestId, markIds, true);
@@ -318,8 +316,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         /// <summary>
         /// WATCH OFFICER OVERLORD's CYBER BURN package or SOF team post: the same one-point host post a human operator makes, labelled WATCH OFFICER, with no effort tokens (it earns nothing), at
-        /// most <see cref="MaxWatchPostsPerDomain"/> live per domain and never into the last <see cref="WatchReserveSlots"/> board slots (they stay for humans). A pilot who fires it pays the tier fee
-        /// and the whole fee goes to HQ FUND. Posted / NotPosted (no room, the domain's post is still up, or a duplicate) / Unavailable (not a host post).
+        /// most <see cref="MaxWatchPostsPerDomain"/> live per domain and never into the last <see cref="WatchReserveSlots"/> board slots (they stay for humans). A pilot who fires it pays nothing. Posted / NotPosted (no room, the domain's post is still up, or a duplicate) / Unavailable (not a host post).
         /// </summary>
         public TaskedResult PostWatchOfficerPackage(SupportActionId action, int nodeId, float x, float z)
         {
@@ -396,7 +393,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float now = ports.Now;
             if (!SpaceRules.MissionTime(now)) return new TaskedResult(TaskedOutcome.Unavailable, callId, requestId);
             if (!board.TryGet(callId, out TaskedCall call)) return Remember(key, TaskedOutcome.NoCall, callId, 0, 0);
-            TaskedOutcome refusal = Judge(player, call, now, out _, out int detail);
+            TaskedOutcome refusal = Judge(player, call, out int detail);
             if (refusal != TaskedOutcome.None) return Remember(key, refusal, callId, 0, detail);
             Waiting queue = FindWaiting(callId);
             if (queue != null)
@@ -509,39 +506,28 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             var key = new Key(winner.Pilot, winner.RequestId, Kind.Claim);
             ITaskedSlot slot = null;
-            int spent = 0;
             TaskedLaunchJob job = null;
             try
             {
-                // Revalidate everything the host decides, then take the money only after the bird is ours.
-                TaskedOutcome refusal = Judge(winner.Pilot, call, now, out int fee, out int detail);
+                // Revalidate everything the host decides. A claim is free: nothing is taken, so nothing needs undoing but the bird and the claim.
+                TaskedOutcome refusal = Judge(winner.Pilot, call, out int detail);
                 if (refusal != TaskedOutcome.None) { board.Release(claim); Finish(key, refusal, call.Id, 0, detail); return false; }
                 slot = ports.Reserve(winner.Pilot, call, out refusal);
                 if (slot == null) { board.Release(claim); Finish(key, refusal == TaskedOutcome.None ? TaskedOutcome.BirdBusy : refusal, call.Id, 0, 0); return false; }
-                if (fee > 0)
-                {
-                    if (!wallets.TrySpend(winner.Pilot, fee, now))
-                    {
-                        slot.Cancel(); board.Release(claim);
-                        Finish(key, TaskedOutcome.LowCredit, call.Id, 0, fee);
-                        return false;
-                    }
-                    spent = fee;
-                }
                 if (!board.BeginLaunch(claim, now))
                 {
-                    Undo(winner.Pilot, spent, slot, claim);
+                    Undo(slot, claim);
                     Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0);
                     return false;
                 }
-                job = new TaskedLaunchJob(this, slot, claim, call, winner.Pilot, winner.RequestId, fee, now);
+                job = new TaskedLaunchJob(this, slot, claim, call, winner.Pilot, winner.RequestId, now);
                 inflight.Add(job);
             }
             catch (Exception e)
             {
                 Warn("Start threw: " + e.Message);
                 if (job != null) Fail(job, TaskedOutcome.DeliveryFailed);
-                else { Undo(winner.Pilot, spent, slot, claim); Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0); }
+                else { Undo(slot, claim); Finish(key, TaskedOutcome.DeliveryFailed, call.Id, 0, 0); }
                 return false;
             }
             try { launcher.Launch(job); }
@@ -553,10 +539,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        /// <summary>Returns exactly what a failed start took: the escrow, the bird and the claim. Each step is isolated.</summary>
-        private void Undo(ulong pilot, int spent, ITaskedSlot slot, in TaskedClaim claim)
+        /// <summary>Returns exactly what a failed start took: the bird and the claim. Each step is isolated.</summary>
+        private void Undo(ITaskedSlot slot, in TaskedClaim claim)
         {
-            if (spent > 0) try { wallets.Refund(pilot, spent); } catch (Exception e) { Warn("Refund threw: " + e.Message); }
             if (slot != null) try { slot.Cancel(); } catch (Exception e) { Warn("Bird release threw: " + e.Message); }
             try { board.Release(claim); } catch (Exception e) { Warn("Claim release threw: " + e.Message); }
         }
@@ -610,10 +595,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             bool committed = false;
             try { committed = job.Slot.Commit(); } catch (Exception e) { Warn("Bird commit threw: " + e.Message); }
             if (!committed) Warn("Physical launch accepted but the bird commit was refused.");
-            // The rod is live and the board/bird are committed: a settlement fault is logged, never undone.
-            try { Settle(job, now); } catch (Exception e) { Warn("Settlement threw after a physical launch: " + e.Message); }
             try { ports.Fired(job); } catch (Exception e) { Warn("Fired callback threw: " + e.Message); }
-            Finish(new Key(job.Pilot, job.RequestId, Kind.Claim), TaskedOutcome.Fired, job.CallId, job.Escrow, 0);
+            Finish(new Key(job.Pilot, job.RequestId, Kind.Claim), TaskedOutcome.Fired, job.CallId, 0, 0);
             return true;
         }
 
@@ -623,64 +606,25 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             Fail(job, reason == TaskedOutcome.None || reason == TaskedOutcome.Fired ? TaskedOutcome.DeliveryFailed : reason);
         }
 
-        /// <summary>No physical launch: the escrow returns exactly once, the claim releases and nobody is paid.</summary>
+        /// <summary>No physical launch: the claim releases exactly once.</summary>
         private void Fail(TaskedLaunchJob job, TaskedOutcome outcome)
         {
             if (job.Final) return;
             job.Final = true;
             inflight.Remove(job);
-            Undo(job.Pilot, job.Escrow, job.Slot, job.Claim);
+            Undo(job.Slot, job.Claim);
             Finish(new Key(job.Pilot, job.RequestId, Kind.Claim), outcome, job.CallId, 0, 0);
-        }
-
-        /// <summary>
-        /// Exactly-once fee settlement on the physical receipt: original weighted shares first, then the firer, switched,
-        /// frozen and capped portions go to HQ FUND without being redistributed. Total in equals total out.
-        /// </summary>
-        private void Settle(TaskedLaunchJob job, float now)
-        {
-            if (job.Escrow <= 0) return;
-            TaskedCall call = job.Call;
-            FeeSettlement split = TaskedFees.Split(job.Escrow, call.WatchOfficer, call.CopyShares(), call.HumanProfile);
-            float hq = split.Hq;
-            foreach (ContributorPayout payout in split.Payouts)
-            {
-                if (payout.Player == job.Pilot) { hq += payout.Amount; continue; } // no firer share
-                try { hq += wallets.EarnContributor(payout.Player, faction, payout.Amount, now).Unapplied; }
-                catch (Exception e)
-                {
-                    Warn("Contributor payout threw: " + e.Message);
-                    hq += payout.Amount;
-                }
-            }
-            wallets.AddHq(faction, hq);
         }
 
         // ---- Judgement -------------------------------------------------------------------------
 
-        /// <summary>Host authority plus the wallet rule. A free call still needs a real, correct-faction, unfrozen wallet.</summary>
-        private TaskedOutcome Judge(ulong player, TaskedCall call, float now, out int fee, out int detail)
-        {
-            fee = 0; detail = 0;
-            TaskedOutcome refusal = ports.Authorize(player, call.Action, true, out int baseline, out bool charge, out detail);
-            if (refusal != TaskedOutcome.None || !charge) return refusal;
-            bool own = !call.WatchOfficer && call.Maker == player;
-            int quote = TaskedFees.Quote(call.Action, baseline, call.HumanProfile, own);
-            if (quote < 0) return TaskedOutcome.Unavailable;
-            if (!wallets.IsActive(player, faction, now))
-            {
-                float frozen = wallets.FrozenRemaining(player, now);
-                detail = (int)Math.Ceiling(frozen);
-                return frozen > 0f ? TaskedOutcome.Frozen : TaskedOutcome.Unavailable;
-            }
-            if (quote > 0 && wallets.Balance(player) + .001f < quote) { detail = quote; return TaskedOutcome.LowCredit; }
-            fee = quote;
-            return TaskedOutcome.None;
-        }
+        /// <summary>Host authority (perk, readiness, cooldown, uplinks) re-judged at the moment of the claim. A claim costs nothing.</summary>
+        private TaskedOutcome Judge(ulong player, TaskedCall call, out int detail) =>
+            ports.Authorize(player, call.Action, true, out _, out _, out detail);
 
         // ---- Lifecycle -------------------------------------------------------------------------
 
-        /// <summary>Scene or space teardown: in-flight escrow returns once, queued claims end, every old callback is inert.</summary>
+        /// <summary>Scene or space teardown: in-flight launches fail once, queued claims end, every old callback is inert.</summary>
         public void Retire()
         {
             if (retired) return;

@@ -1,0 +1,259 @@
+{
+  "name": "cloud-fixcheck",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 200,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -13000,
+          0
+        ]
+      },
+      "altitude": 1000,
+      "speed": 250,
+      "heading": 90
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "fixture",
+      "args": {
+        "regime": "Broken",
+        "conditions": 0.9,
+        "cloudHeight": 2200,
+        "seed": 91,
+        "follow": "lead"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View",
+      "store": "view",
+      "args": {
+        "view": "orbit",
+        "follow": "lead"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-0-m0",
+      "args": {
+        "name": "w-0-m0",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-1-m2",
+      "args": {
+        "name": "w-1-m2",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-2-m0",
+      "args": {
+        "name": "w-2-m0",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-3-m1",
+      "args": {
+        "name": "w-3-m1",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-4-m0",
+      "args": {
+        "name": "w-4-m0",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-5-m8",
+      "args": {
+        "name": "w-5-m8",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 8
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-6-m0",
+      "args": {
+        "name": "w-6-m0",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-7-m2",
+      "args": {
+        "name": "w-7-m2",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-8-m0",
+      "args": {
+        "name": "w-8-m0",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": false,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.CloudMotionProbe.Run",
+      "store": "w-restore",
+      "args": {
+        "name": "w-restore",
+        "frames": 2,
+        "step": 0,
+        "tilt": -12,
+        "tint": false,
+        "temporal": true,
+        "half": true,
+        "mode": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    }
+  ]
+}

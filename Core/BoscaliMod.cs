@@ -14,6 +14,7 @@ using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.AirSurvival;
 using BoscaliSummer.Modules.Autopilot;
 using BoscaliSummer.Modules.Command;
+using BoscaliSummer.Modules.Cinematography;
 using BoscaliSummer.Modules.Comms;
 using BoscaliSummer.Modules.DynamicOperations;
 using BoscaliSummer.Modules.Events;
@@ -151,6 +152,8 @@ namespace BoscaliSummer.Core
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
+            if (settings.Cinematography.Enabled.Value && !Application.isBatchMode)
+                modules.Add(new CinematographyModule());
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             return modules.ToArray();
         }

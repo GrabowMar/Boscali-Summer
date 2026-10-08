@@ -31,11 +31,11 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         // Dive starts once the target is within ~1.2x the current altitude (a ~40 deg terminal dive).
         public static float TerminalRange(float altitude) => Mathf.Max(15000f, altitude * 1.2f);
 
-        public static GlidePlan Plan(float time, float groundRange, float altitude)
+        public static GlidePlan Plan(float time, float groundRange, float altitude, float seed = 0f)
         {
             if (groundRange < TerminalRange(altitude)) return new GlidePlan(GlidePhase.Terminal, 0f, 0f);
             if (time < BoostTime) return new GlidePlan(GlidePhase.Boost, Ceiling, 0f);
-            float t = time - BoostTime;
+            float t = time - BoostTime + seed * 17.3f; // per-missile skip/weave phase
             // Weave fades out over the last 30 km so the dive starts on bearing.
             float fade = Mathf.Clamp01((groundRange - TerminalRange(altitude)) / 30000f);
             return new GlidePlan(GlidePhase.Glide,

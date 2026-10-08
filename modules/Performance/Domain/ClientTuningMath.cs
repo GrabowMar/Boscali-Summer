@@ -31,7 +31,17 @@ namespace BoscaliSummer.Modules.Performance.Domain
         public static int PlanFrameRate(int current, bool enabled)
         {
             if (!enabled) return current;
-            return FrameRateCapFps;
+            return current > 0 ? Math.Min(current, FrameRateCapFps) : FrameRateCapFps;
         }
+
+        // Restore only a value we still own; a new game preset becomes the next baseline.
+        public static float RestoreLodBias(float original, float current) =>
+            current == PlanLodBias(original, true) ? original : current;
+
+        public static float RestoreShadowDistance(float original, float current) =>
+            current == PlanShadowDistance(original, true) ? original : current;
+
+        public static int RestoreFrameRate(int original, int current) =>
+            current == PlanFrameRate(original, true) ? original : current;
     }
 }

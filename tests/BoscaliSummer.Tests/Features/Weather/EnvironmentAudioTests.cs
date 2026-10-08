@@ -19,10 +19,27 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Sheltered cockpit glass gets no incoming rain impact sound");
             TestAssert.That(EnvironmentAudioMath.Rain(0f, false, 250f, 0f, 1f, 0f).gain == 0f &&
                 EnvironmentAudioMath.Rain(0f, true, 250f, 0f, 1f, 0f).gain == 0f,
-                "Dry ground and cloud condensation cannot create falling-rain sound");
+                "Dry air with no rain or cloud cannot create rain sound");
             TestAssert.That(EnvironmentAudioMath.Rain(1f, true, 250f, 2f, 1f, 0f).gain >
                 EnvironmentAudioMath.Rain(1f, true, 0f, 2f, 1f, 0f).gain,
                 "Canopy impact energy increases gently with incoming slipstream");
+            TestAssert.That(EnvironmentAudioMath.Rain(1f, true, 0f, 2f, 1f, 0f).gain > 0.25f,
+                "Hovering in heavy rain stays above engine masking instead of vanishing");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, true, 250f, 0f, 1f, 0f, 1f).gain > 0.05f,
+                "Fast flight through cloud patters on the canopy without falling rain");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, true, 0f, 0f, 1f, 0f, 1f).gain == 0f,
+                "Hovering in cloud is silent: suspended droplets need slipstream to strike");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, false, 250f, 0f, 1f, 0f, 1f).gain == 0f,
+                "Exterior cloud alone creates no ground-impact rain sound");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, true, 250f, 0f, 0f, 0f, 1f).gain == 0f,
+                "Sheltered cockpit glass gets no cloud impact sound");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, true, 250f, 0f, 1f, 0f, 1f).gain >
+                EnvironmentAudioMath.Rain(0f, true, 100f, 0f, 1f, 0f, 1f).gain,
+                "Cloud patter strengthens with slipstream like rain impact");
+            TestAssert.That(EnvironmentAudioMath.Rain(0f, true, 250f, 0f, 1f, 0f, float.NaN).gain == 0f,
+                "Invalid cloud moisture cannot reach an AudioSource");
+            TestAssert.That(EnvironmentAudioMath.Rain(1f, true, 250f, 0f, 1f, 0f, 1f).gain < 0.60f,
+                "Combined rain and cloud retain source headroom instead of stacking");
             TestAssert.That(EnvironmentAudioMath.Rain(1f, false, 0f, float.NaN, 1f, 0f).gain < ground.gain * 0.2f,
                 "Unknown terrain distance uses quiet free-air sound rather than ground impacts");
             TestAssert.That(EnvironmentAudioMath.Rain(float.NaN, false, 0f, 0f, 1f, 0f).gain == 0f,
@@ -40,8 +57,11 @@ namespace BoscaliSummer.Tests.Features.Weather
                 foreach (bool cockpit in new[] { false, true })
                 {
                     var mix = EnvironmentAudioMath.Rain(1f, cockpit, 900f, 0f, 1f, time);
-                    TestAssert.That(mix.gain >= 0f && mix.gain < 0.31f && mix.cutoff >= 900f && mix.cutoff <= 7500f,
+                    TestAssert.That(mix.gain >= 0f && mix.gain < 0.60f && mix.cutoff >= 900f && mix.cutoff <= 7500f,
                         "Irregular rain modulation retains source headroom and bounded spectral range");
+                    var cloudy = EnvironmentAudioMath.Rain(0f, cockpit, 900f, 0f, 1f, time, 1f);
+                    TestAssert.That(cloudy.gain >= 0f && cloudy.gain < 0.50f && cloudy.cutoff >= 900f && cloudy.cutoff <= 7500f,
+                        "Cloud patter modulation retains source headroom and bounded spectral range");
                 }
             }
             TestAssert.That(EnvironmentAudioMath.ThunderCutoff(100f, false) >

@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Events.Networking
 
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.MessageHandler;
             ServerHandlers.Swap(server);
@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Events.Networking
             float effectStrength, IReadOnlyDictionary<int, byte> factionResponses)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             int count = Math.Min(8, factionResponses?.Count ?? 0);
             var hashes = new int[count];
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.Events.Networking
             }
 
             if (Time.unscaledTime < nextSend || pending) return;
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active)
             {
                 manager.ReportOffline();

@@ -331,10 +331,5 @@ public static class RailUnityCheck
 
         CapturePng(camera, width, height, file);
     }
-
-    private static void Check(bool condition, string message)
-    {
-        if (!condition) throw new Exception(message);
-    }
 }
 #endif

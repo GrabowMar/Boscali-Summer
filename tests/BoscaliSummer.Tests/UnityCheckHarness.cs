@@ -18,6 +18,21 @@ public static class UnityCheckHarness
 {
     public const BindingFlags All = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
 
+    public static void Check(bool condition, string message)
+    {
+        if (!condition) throw new Exception(message);
+    }
+
+    public static bool CanvasOn(Component c)
+    {
+        for (Transform x = c.transform; x != null; x = x.parent)
+        {
+            Canvas canvas = x.GetComponent<Canvas>();
+            if (canvas != null && !canvas.enabled) return false;
+        }
+        return true;
+    }
+
     /// <summary>True when the TMP shaders exist. Otherwise imports them and calls <paramref name="rerun"/> afterwards (return false and stop).</summary>
     public static bool EnsureTmpEssentials(Action rerun)
     {

@@ -24,9 +24,10 @@ namespace BoscaliSummer.Garrisons
     }
 
     /// <summary>
-    /// Server-side strongpoint rule: an occupied shell under URBAN SIEGE takes four
-    /// separate explosive hits; overwhelming blasts still kill outright. Non-final
-    /// hits assert stepped HP and skip vanilla so the existing staging sees progress.
+    /// Server-side strongpoint rule: an occupied shell under URBAN SIEGE has a structure
+    /// pool sized by its roof that only explosions wear, weighted by warhead blast power,
+    /// so bombs level it and missiles barely scratch it. Worn hits assert stepped HP and
+    /// skip vanilla; the final one levels the shell through vanilla's destroy path.
     /// </summary>
     [HarmonyPatch]
     internal static class StrongpointDamagePatch
@@ -34,29 +35,70 @@ namespace BoscaliSummer.Garrisons
         private static MethodBase TargetMethod() => AccessTools.Method(typeof(MapBuilding), "TakeDamage");
         private static bool Prepare() => TargetMethod() != null && GameAccess.MapBuildingHitPointsAvailable;
 
-        private static bool Prefix(
-            MapBuilding __instance,
-            float pierceDamage, float blastDamage, float amountAffected,
-            float fireDamage, float impactDamage)
+        private static bool Prefix(MapBuilding __instance)
         {
-            if (!GameAccess.IsServer()) return true;
+            if (ZoneGarrisonManager.SelfDamage || !GameAccess.IsServer()) return true;
             try
             {
                 if (__instance == null || !ZoneGarrisonManager.MightBeStrongpointHit(__instance)) return true;
-                ArmorProperties armor = __instance.GetArmorProperties();
-                if (armor == null) return true;
-                float blastTerm = StrongpointHitPolicy.BlastTerm(
-                    blastDamage, armor.blastArmor, amountAffected, armor.blastTolerance);
-                float total = StrongpointHitPolicy.TotalEstimate(
-                    pierceDamage, blastDamage, amountAffected, fireDamage, impactDamage,
-                    armor.pierceArmor, armor.pierceTolerance,
-                    armor.blastArmor, armor.blastTolerance,
-                    armor.fireArmor, armor.fireTolerance);
-                return ZoneGarrisonManager.ApplyStrongpointHit(__instance, blastTerm, total);
+                return ZoneGarrisonManager.ApplyShellHit(__instance);
             }
             catch (Exception e)
             {
                 PatchGuard.Report("Garrisons.StrongpointDamage", e);
+                return true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records each server shockwave's blast power for the damage call vanilla makes on the
+    /// same target right after it (MapBuilding's own TakeShockwave is empty).
+    /// </summary>
+    [HarmonyPatch]
+    internal static class ShellShockwavePatch
+    {
+        private static MethodBase TargetMethod() => AccessTools.Method(typeof(MapBuilding), "TakeShockwave");
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Prefix(MapBuilding __instance, UnityEngine.Vector3 origin, float blastPower)
+        {
+            if (GameAccess.IsServer()) ZoneGarrisonManager.NoteShockwave(__instance, origin, blastPower);
+        }
+    }
+
+    [HarmonyPatch]
+    internal static class PartShockwavePatch
+    {
+        private static MethodBase TargetMethod() => AccessTools.Method(typeof(UnitPart), "TakeShockwave");
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Prefix(UnitPart __instance, UnityEngine.Vector3 origin, float blastPower)
+        {
+            if (GameAccess.IsServer()) ZoneGarrisonManager.NoteShockwave(__instance, origin, blastPower);
+        }
+    }
+
+    /// <summary>
+    /// Server-side: a strongpoint nest never takes damage itself; hits on it wear its
+    /// shell's structure, so clearing an occupied building means levelling it.
+    /// </summary>
+    [HarmonyPatch]
+    internal static class NestDamageRedirectPatch
+    {
+        private static MethodBase TargetMethod() => AccessTools.Method(typeof(UnitPart), "TakeDamage");
+        private static bool Prepare() => TargetMethod() != null && GameAccess.MapBuildingHitPointsAvailable;
+
+        private static bool Prefix(UnitPart __instance)
+        {
+            if (ZoneGarrisonManager.SelfDamage || !ZoneGarrisonManager.SiegeActive) return true;
+            try
+            {
+                return ZoneGarrisonManager.ApplyNestHit(__instance);
+            }
+            catch (Exception e)
+            {
+                PatchGuard.Report("Garrisons.NestDamageRedirect", e);
                 return true;
             }
         }

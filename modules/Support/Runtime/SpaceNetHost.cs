@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
@@ -31,6 +32,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly StateFeed<CyberStateData> cyberFeed;
         private readonly StateFeed<SofStateData> sofFeed;
         private readonly StateFeed<OpsStateData> opsFeed;
+        private readonly StateFeed<FrontStateData> frontFeed;
         private readonly IStateFeed[] feeds;
         private int cyberRound;
         private readonly HashSet<ulong> rosterIds = new HashSet<ulong>();
@@ -58,7 +60,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             opsFeed = new StateFeed<OpsStateData>(this, "Ops", () => manager.Ops != null,
                 (p, d) => manager.Ops.FillState(p, d),
                 (p, d) => net.SendFactionState(p, d, manager.OpsFeed, new OpsStateMessage { Data = d }));
-            feeds = new IStateFeed[] { cyberFeed, sofFeed, opsFeed };
+            frontFeed = new StateFeed<FrontStateData>(this, "Fronts", () => manager.Fronts != null && manager.Fronts.Running,
+                (p, d) => manager.Fronts.FillState(p, d),
+                (p, d) => { if (d.Protocol == SupportNet.ProtocolVersion) net.SendFactionState(p, d, manager.FrontFeed, new FrontStateMessage { Data = d }); });
+            feeds = new IStateFeed[] { cyberFeed, sofFeed, opsFeed, frontFeed };
             Salt = NewSalt();
         }
 
@@ -119,6 +124,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     case SpaceCommandKind.SofSync:
                         // A client that lost its SOF mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
                         if (commands.Admit(id, wall)) sofFeed.Subs.Resync(id);
+                        break;
+                    case SpaceCommandKind.FrontSync:
+                        // A client that lost its front mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
+                        if (commands.Admit(id, wall)) frontFeed.Subs.Resync(id);
                         break;
                     case SpaceCommandKind.OpSync:
                         // A client that lost its OPERATIONS mirror asks for a fresh state: the next poll sends one. Rate limited like every command.
@@ -315,6 +324,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public OpResult Ops(ulong player, in SpaceCommand command) =>
             Is(player) ? manager.RunOpsVerb(current, command) : new OpResult(OpOutcome.Unavailable);
+
+        // ---- FRONTS ---------------------------------------------------------------------------
+
+        public FrontResult Front(ulong player, in SpaceCommand command) =>
+            Is(player) ? manager.RunFrontVerb(current, command) : new FrontResult(FrontOutcome.Unavailable);
 
         private bool Is(ulong player) => current != null && PlayerIdentity.Of(current) == player;
     }

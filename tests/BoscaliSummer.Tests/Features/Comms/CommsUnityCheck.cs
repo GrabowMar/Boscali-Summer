@@ -63,17 +63,8 @@ public static class CommsUnityCheck
             "Expires", now + 60f + i), false, null);
         var feed = (IList)Get(state, "feed");
         for (int i = 0; i < 30; i++) feed.Add(Record("CommsFeedLine", "Author", 2UL, "AuthorName", "Long Callsign Overwatch",
-            "Time", now - i * 2f, "Kind", Enum.ToObject(T("Domain.CommsFeedKind"), i % 3),
+            "Time", now - i * 2f, "Kind", Enum.ToObject(T("Domain.CommsFeedKind"), i % 2 == 0 ? 0 : 5),
             "Text", "SAM CONTACT NORTH · CHECK TARGET BEFORE COMMIT", "X", 1000f, "Z", 2000f));
-        ((IList)Get(state, "polls")).Add(Record("CommsPoll", "Id", 1U, "Author", 2UL, "AuthorName", "Long Callsign Overwatch",
-            "Question", "Next sortie: low level strike or combat air patrol?", "Options", new[] { "LOW LEVEL STRIKE", "COMBAT AIR PATROL", "REARM AND REFUEL", "HOLD POSITION" },
-            "Tally", new[] { 3, 12, 2, 1 }, "Closes", now + 90f));
-        ((IList)Get(state, "duels")).Add(Record("DuelView", "Id", 1U, "Challenger", 2UL, "ChallengerName", "Long Callsign Overwatch", "Expires", now + 45f));
-        ((IList)Get(state, "hunts")).Add(Record("HuntView", "Id", 1U, "Author", 3UL, "AuthorName", "VIPER 3", "Ends", now + 60f, "GuessCount", 8));
-        ((IList)Get(state, "rivalries")).Add(Record("RivalryView", "First", 1UL, "Second", 2UL,
-            "FirstName", "YOU", "SecondName", "Long Callsign Overwatch", "FirstWins", 7, "SecondWins", 5, "Draws", 2));
-        object scores = Get(state, "Scores");
-        for (ulong i = 1; i <= 14; i++) Call(scores, "Award", i, i == 1 ? "YOU" : "Long Callsign Overwatch " + i, 90 - (int)i, true);
     }
 
     private static void Render(string state, AvThemeId theme, float height, bool pictures)
@@ -103,15 +94,15 @@ public static class CommsUnityCheck
         Call(panel, "Configure", settings, manager, null);
         if (state != "empty") Populate(Get(manager, "State"));
         if (state == "stale") Set(manager, "<HostSilent>k__BackingField", true);
-        var con = AvConsole.Build(host, "COM", "MULTIPLAYER COMMS", 5, AvTokens.PanelWidth, height);
+        var con = AvConsole.Build(host, "COM", "MULTIPLAYER COMMS", 2, AvTokens.PanelWidth, height);
         Set(panel, "console", con);
         Set(panel, "chips", con.Chips(3));
         if (T("Presentation.CommsMfdPanel").GetMethod("BindAudienceChip", All) != null) Call(panel, "BindAudienceChip");
-        con.Tabs((AvIcon.Map2, "MAP"), (AvIcon.Message2, "CALL"), (AvIcon.QuestionMark, "POLL"), (AvIcon.UsersGroup, "CREW"), (AvIcon.ListDetails, "LOG"));
-        string[] builders = { "BuildMapPage", "BuildCallPage", "BuildPollPage", "BuildGamePage", "BuildLogPage" };
-        for (int i = 0; i < builders.Length; i++) Call(panel, builders[i], con.Page(i));
+        con.Tabs((AvIcon.Map2, "MAP"), (AvIcon.Message2, "COMMS"));
+        Call(panel, "BuildMapPage", con.Page(0));
+        Call(panel, "BuildCommsPage", con.Page(1));
         con.Finish();
-        for (int page = 0; page < 5; page++)
+        for (int page = 0; page < 2; page++)
         {
             con.SetPage(page);
             for (int i = 0; i < 4; i++) { con.Ticker.TickNow(); Call(panel, "Refresh"); }
@@ -247,16 +238,6 @@ public static class CommsUnityCheck
         foreach (Transform s in con.Root.GetComponentsInChildren<Transform>(true))
             if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
                 Failures.Add(where + ": section without icon " + s.name);
-    }
-
-    private static bool CanvasOn(TMP_Text t)
-    {
-        for (Transform x = t.transform; x != null; x = x.parent)
-        {
-            var c = x.GetComponent<Canvas>();
-            if (c != null && !c.enabled) return false;
-        }
-        return true;
     }
 
     private static Color BackgroundOf(TMP_Text t, Color ground)

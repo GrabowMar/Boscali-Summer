@@ -79,7 +79,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             for (int i = 0; i < Phases.Length; i++)
                 if (string.Equals(Phases[i], phase, StringComparison.OrdinalIgnoreCase)) return i;
-            return -1;
+            // DEFEND and RECON operations report HOLDING / SCOUTING in place of ADVANCING.
+            return string.Equals(phase, "HOLDING", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(phase, "SCOUTING", StringComparison.OrdinalIgnoreCase) ? 1 : -1;
         }
 
         public static AvState PhaseState(string phase)

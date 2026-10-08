@@ -13,7 +13,8 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi", "$repo/AvionicsUi/Pure" -Filter '
 Get-ChildItem -LiteralPath "$repo/AvionicsUi/Fui" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/avionics.fui.avss", "$repo/AvionicsUi/avionics.steel.avss", "$repo/AvionicsUi/avionics.ace.avss", "$repo/AvionicsUi/avionics.phosphor.avss", "$repo/AvionicsUi/avionics.fieldops.avss", "$repo/AvionicsUi/avionics.amber.avss", "$repo/AvionicsUi/avionics.glass.avss", "$repo/AvionicsUi/avionics.nightops.avss" -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/"
-Copy-Item -LiteralPath "$repo/modules/Events/Assets/event_atlas.png" -Destination "$PreviewDirectory/BepInEx/plugins/BoscaliSummer/Events/"
+Get-ChildItem -LiteralPath "$repo/modules/Events/Assets/Posters" -Filter '*.png' | Copy-Item -Destination "$PreviewDirectory/BepInEx/plugins/BoscaliSummer/Events/"
+Copy-Item -LiteralPath "$repo/Core/Util/EmbeddedResources.cs", "$repo/Core/Util/PngSprites.cs", "$repo/Core/Util/PngSprites.Unity.cs" -Destination "$PreviewDirectory/Assets/"
 # The module's own presentation (no alert / tone), its pure domain, settings and the two shared files it reads.
 Get-ChildItem -LiteralPath "$repo/modules/Events/Presentation" -Filter '*.cs' |
     Where-Object { $_.Name -notin @('SuperEventAlert.cs', 'EventAlertTone.cs') } |

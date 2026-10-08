@@ -35,7 +35,8 @@ namespace BoscaliSummer.Fire
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
 
-        private void Awake() => Instance = this;
+        private void Awake() { Instance = this; debrisPool.Landing = collapsePool.EmitLanding; }
+        private void Start() { if (!GameManager.IsHeadless) collapsePool.Warm(); }
 
         private void OnDestroy()
         {
@@ -43,11 +44,13 @@ namespace BoscaliSummer.Fire
             if (Instance == this) Instance = null;
         }
 
-        public void ResetForScene() => Clear();
+        public void ResetForScene() { Clear(); if (isActiveAndEnabled) Start(); }
+        internal void LandingDust(GlobalPosition position) => collapsePool.EmitLanding(position, Vector3.up, 3f);
+        internal void SectionDust(GlobalPosition position, float size) => collapsePool.EmitLanding(position, Vector3.up, size);
 
         internal void RegisterRuin(
             GlobalPosition position, Vector2 halfExtents, float ageSeconds = 0f,
-            bool broadcast = false, bool collapseBurst = true)
+            bool broadcast = false, bool collapseBurst = true, bool genericDebris = true)
         {
             for (int i = 0; i < ruins.Count; i++)
                 if ((ruins[i].Position - position).sqrMagnitude < 64f) return;
@@ -62,15 +65,15 @@ namespace BoscaliSummer.Fire
                 Born = Time.timeSinceLevelLoad - Mathf.Max(0f, ageSeconds)
             };
             ruins.Add(site);
-            debrisPool.Place(position, halfExtents);
+            if (genericDebris) debrisPool.Place(position, halfExtents, collapseBurst && ageSeconds < 2f);
             if (collapseBurst && ageSeconds < 2f) collapsePool.Emit(position, halfExtents);
             if (broadcast) ModNet.BroadcastRuin(position, halfExtents);
             nextSelection = 0f;
         }
 
         internal GameObject AttachFacade(
-            GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, int buildingId) =>
-            debrisPool.AttachShell(position, pieces, buildingId);
+            GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, int buildingId, bool nativeRubble = false) =>
+            debrisPool.AttachShell(position, pieces, buildingId, nativeRubble);
 
         /// <summary>
         /// A shot near a wreck. The slab eases over a third of a second. A blast that
@@ -79,13 +82,14 @@ namespace BoscaliSummer.Fire
         internal void Poke(Vector3 point, float power)
         {
             if (GameManager.IsHeadless) return;
-            if (!debrisPool.Nudge(point, power, out bool struck, out Transform shell,
-                    out Vector3 holePoint, out Vector3 holeNormal, out float holeSize))
+            if (BuildingCarver.Instance != null && BuildingCarver.Instance.Poke(point, power))
+            {
+                collapsePool.EmitImpact(point.ToGlobalPosition(), Vector3.up, 6f);
                 return;
-            if (shell != null)
-                BuildingHitLedger.Instance?.StampRuinHole(shell, holePoint, holeNormal, holeSize);
-            if (struck && power >= HitEscalation.MinBlastPower)
-                collapsePool.Emit(point.ToGlobalPosition(), new Vector2(6f, 6f));
+            }
+            if (!debrisPool.Nudge(point, power)) return;
+            if (power >= HitEscalation.MinBlastPower)
+                collapsePool.EmitImpact(point.ToGlobalPosition(), Vector3.up, 6f);
         }
 
         internal void SendSnapshot(Mirage.INetworkPlayer player)

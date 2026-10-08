@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             }
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
             ServerHandlers.Swap(server);
@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 manager.Apply(manager.Snapshot(player));
                 return;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active)
             {
                 manager.SetLocalStatus("Connect to a host with the chain-of-command layer enabled.");

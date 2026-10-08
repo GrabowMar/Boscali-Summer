@@ -51,14 +51,9 @@ namespace BoscaliSummer.Vanguard
                     Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
                     Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
                     return Status(lead);
-                case "pk":
-                    Modules.Vanguard.Runtime.VanguardFlight.InterceptKillChance = Number(args, "chance", 0.7f);
-                    return Status(lead);
+                case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
                 case "snapg":
                     Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
-                    return Status(lead);
-                case "battery":
-                    Modules.Vanguard.Runtime.PayloadLifetime.BatterySeconds = Number(args, "seconds", 240f);
                     return Status(lead);
                 case "ground": return Ground(lead, Number(args, "range", 12000f));
                 case "ship": return SpawnTestShip(lead, Number(args, "range", 14000f), Text(args, "type") ?? "Frigate1", (int)Number(args, "from", 0f));
@@ -363,7 +358,9 @@ namespace BoscaliSummer.Vanguard
             state["shipHits"] = Modules.Vanguard.Runtime.VanguardStats.ShipHits;
             state["seductions"] = Modules.Vanguard.Runtime.VanguardStats.Seductions;
             state["ugvsSpawned"] = Modules.Vanguard.Runtime.VanguardStats.UgvsSpawned;
-            state["ugvsAlive"] = Modules.Vanguard.Runtime.PayloadLifetime.Alive;
+            state["turretsDeployed"] = Modules.Vanguard.Runtime.VanguardStats.TurretsDeployed;
+            state["turretShots"] = Modules.Vanguard.Runtime.VanguardStats.TurretShots;
+            state["ugvsAlive"] = 0; // Compatibility telemetry: ground-vehicle delivery is retired.
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             if (tanker != null)

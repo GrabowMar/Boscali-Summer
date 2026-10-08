@@ -308,6 +308,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// folds every other faction's book into this port; the desk only multiplies. Null reads as 1.
         /// </summary>
         public Func<float, float> EnemyTraceFactor { get; set; }
+
+        /// <summary>The enemy SOF front's counter pressure on trace (1 = none, 1.3 = SOF leads by 40 or more). The host sets it.</summary>
+        public float CounterTrace { get; set; } = 1f;
         /// <summary>Raised once per intrusion event after the desk has applied it (console lines, notices, the mirror's event ring).</summary>
         public event Action<CyberEvent> Happened;
 
@@ -466,7 +469,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         {
             float f = Anchors.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f;
             float enemy = EnemyTraceFactor != null ? EnemyTraceFactor(now) : 1f;
-            return CyberRules.ClampFactor(f * (float.IsNaN(enemy) || enemy < 1f ? 1f : enemy) * Effects.TraceCut(ports.Owner, now));
+            return CyberRules.ClampFactor(f * (float.IsNaN(enemy) || enemy < 1f ? 1f : enemy) * Effects.TraceCut(ports.Owner, now) * (float.IsNaN(CounterTrace) || CounterTrace < 1f ? 1f : CounterTrace));
         }
 
         /// <summary>The scene ended: every intrusion ends and every effect clears.</summary>

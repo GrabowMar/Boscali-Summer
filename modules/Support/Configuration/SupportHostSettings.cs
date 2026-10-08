@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
     /// module's managers.
     ///
     /// <para>What earns a row here is a decision a host makes while a mission is running:
-    /// which call-ins exist, and what they cost in allocation and in patience. The ordnance
+    /// which call-ins exist, and what they cost in allocation. The ordnance
     /// dimensions behind them - blast radii, flare counts and similar tuning - are balance, set once and left alone, and live in the
     /// config file and the F1 window's advanced half instead of on a page a host scrolls
     /// mid-sortie.</para>
@@ -17,9 +17,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
     {
         public static HostSettingsTable Build(SupportSettings settings) =>
             new HostSettingsTable("SUPPORT CALL-INS")
-                .Toggle(1, settings.ReconEnabled, "RADAR SCAN",
-                    "Images a scene and reveals stationary ground contacts. Spawns nothing.")
-                .Toggle(2, settings.FortifyEnabled, "ZONE FORTIFICATION",
+                .Toggle(1, settings.ReconEnabled, "RECON PASS",
+                    "Radar scan and MTI sweep in one: reveals static and moving ground contacts in a scene. Spawns nothing.")
+                .Toggle(2, settings.FortifyEnabled, "FORTIFY",
                     "Reinforce a friendly controlled zone. Refused, and nothing charged, when defenders cannot be placed.")
                 .Toggle(3, settings.ArtilleryEnabled, "ORBITAL ROD",
                     "Orbital kinetic strike: one high-velocity projectile onto the mark.")
@@ -27,30 +27,31 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "High-altitude airburst: the prompt pulse upsets electronics, the geomagnetic phase jams radars across a wide area.")
                 .Toggle(5, settings.ElintEnabled, "ELINT SWEEP",
                     "Locates emitting enemy ground and ship radars near the mark.")
-                .Toggle(6, settings.FlareBarrageEnabled, "FLARE BARRAGE",
+                .Toggle(6, settings.FlareBarrageEnabled, "DECOY BARRAGE",
                     "An airburst countermeasure rocket that disperses intense flares, seducing and misguiding hostile IR missiles in the area.")
-                .Number(11, settings.RequestCooldown, "REQUEST COOLDOWN",
-                    "Cooldown after an accepted request, per player and shared across all actions.",
-                    5f, v => v.ToString("0") + " s")
-                .Toggle(13, settings.MtiEnabled, "MTI SWEEP",
-                    "Tracks moving enemy ground contacts near the mark. Shares the radar scan recharge.")
                 .Toggle(16, settings.SatCameraEnabled, "SAT CAMERA",
                     "The OPTICAL bird images the mark by day and reveals ground units in its window. Refuses at night.")
                 .Toggle(17, settings.WatchOfficerEnabled, "WATCH OFFICER",
-                    "OVERLORD staffs SPACE, CYBER and SOF while no human is working them: scans and TASKED calls from revealed contacts, intrusions on revealed nodes, one SOF team on revealed targets.")
+                    "OVERLORD directs SPACE, CYBER and SOF for a faction with humans, always, following the front posture: scans and TASKED calls from revealed contacts, intrusions on revealed nodes, one SOF team on revealed targets. It spends nothing.")
                 .Toggle(18, settings.CyberEnabled, "CYBER / EW",
                     "EW trucks and data centers, node intrusion (hop, hold, burn, drop) and the CYBER BURN packages on the TASKED board.")
                 .Toggle(19, settings.SofEnabled, "SOF / JTAC",
                     "A camp, abstract teams (raise, route, push, hold, divert, exfil), the five odds-resolved missions, held buildings and the helicopter lift.")
                 .Toggle(20, settings.OpsEnabled, "OPERATIONS",
-                    "Faction projects: DECRYPT SATELLITE TRACK (an ASAT strike), ZERO-DAY SAM NET FAIL and the FORWARD OPERATING BASE. Funded by any member; needs CYBER or SOF.")
+                    "The effects behind the ASAT, ZERO-DAY and FORWARD OPERATING BASE programmes. The programmes themselves are paid from the fronts; needs CYBER or SOF.")
                 .Toggle(21, settings.AiFactionsEnabled, "AI FACTIONS",
-                    "A faction with no humans works CYBER and SOF itself (one domain action every 30 s) and, leading with a treasury over 500 CR, plans and funds operations. Never targets what it has not revealed.")
-                .Number(14, settings.PriceKnob, "CALL PRICES",
-                    "Scales every CALL price. 1.0 charges the spec prices.",
+                    "A faction with no humans works CYBER and SOF itself (one domain action every 30 s) and queues its own front programmes from its share of the treasury. Never targets what it has not revealed.")
+                .Number(14, settings.PerkPriceScale, "PERK PRICES",
+                    "Scales every perk price in allocation. 1.0 charges the rung table (4 / 6 / 10 / 16 / 30).",
                     0.05f, v => v.ToString("0.00") + "x")
-                .Number(15, settings.EarnKnob, "CREDIT EARNINGS",
-                    "Scales every CR payout. 1.0 pays the spec rates.",
+                .Number(22, settings.FrontShare, "FRONT SHARE",
+                    "The share of each faction's funds that flows into its three fronts every minute. 0 % leaves fronts to donations only.",
+                    0.005f, v => (v * 100f).ToString("0.0") + " %")
+                .Number(24, settings.FrontShareCap, "FRONT SHARE CAP",
+                    "The most funds per minute a faction's fronts take, however large its treasury. 250 raises a front from READINESS 1 to 5 in about 40 minutes.",
+                    25f, v => v.ToString("0") + " / MIN")
+                .Number(23, settings.ProgrammeCostScale, "PROGRAMME COSTS",
+                    "Scales every front programme's cost. 1.0 charges the table (READINESS 150 x rung, LAUNCH SATELLITE 300, ASAT 900 ...).",
                     0.05f, v => v.ToString("0.00") + "x");
     }
 }

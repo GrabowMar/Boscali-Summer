@@ -11,15 +11,17 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class ElintAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
             try
             {
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
-                    context.Settings.ElintRadius.Value, context.Logger, RevealFilter.Emitters);
+                    context.Settings.ElintRadius.Value * context.Quality, context.Logger, RevealFilter.Emitters);
                 context.Host.ReportContacts(context.RequestId, contacts);
+                try { Visuals.AreaFx.Pulse(Visuals.AreaFx.At(context.Target), context.Settings.ElintRadius.Value * context.Quality, context.Owner); }
+                catch (Exception e) { context.Logger.LogDebug("[Support] ELINT pulse visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }
             catch (Exception e)

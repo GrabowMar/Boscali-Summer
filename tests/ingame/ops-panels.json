@@ -1,0 +1,477 @@
+{
+  "name": "ops-panels",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 520,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "boot",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "readiness",
+      "args": {
+        "verb": "readiness",
+        "floor": 5
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "fronts",
+      "args": {
+        "tab": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "sync",
+      "args": {
+        "verb": "sync"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "fronts_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "fronts"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "perks",
+      "args": {
+        "tab": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "perks_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "perks"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "orbit_open",
+      "args": {
+        "front": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "win_orbit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "scan",
+      "args": {
+        "verb": "scan",
+        "unit": "player"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_scan",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "orbit_scan"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "mark",
+      "args": {
+        "verb": "mark"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_mark",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "rod",
+      "args": {
+        "verb": "rod",
+        "action": "rod"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_rod_req",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "send",
+      "args": {
+        "verb": "send"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_send",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "orbit_send"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "claim",
+      "args": {
+        "verb": "claim"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_claim",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "directive",
+      "args": {
+        "verb": "directive",
+        "front": 0,
+        "directive": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_directive",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "win_orbit_directive"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "queue",
+      "args": {
+        "verb": "queue",
+        "front": 0,
+        "programme": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_queue",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "donate",
+      "args": {
+        "verb": "donate",
+        "front": 0,
+        "programme": 0,
+        "amount": 25
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_donate",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "win_orbit_programme"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_rod",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "rod_effect"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "win_net",
+      "args": {
+        "front": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "net_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "win_network"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "hop",
+      "args": {
+        "verb": "hop"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_hop",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "win_network_hop"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "win_sof",
+      "args": {
+        "front": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "sof_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "win_shadow"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "win_closed",
+      "args": {
+        "close": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_close",
+      "args": {}
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "fronts_state.front0Readiness",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "fronts_state.perksTotal",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "orbit_open.windowOpenN",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_scan.spaceContacts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_mark.spaceMarks",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_send.spacePosts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_directive.front0Directive",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_queue.front0Queue",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "net_state.windowOpenN",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "sof_state.windowOpenN",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_hop.cyberNodes",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "after_close.windowOpenN",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_scan.spaceContacts",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_scan.spentSinceVerb",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_donate.front0Pct",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "rod.request",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_rod_req.spentSinceVerb",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_rod.budgetTotal",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "after_rod.rodTargetAlive",
+      "max": 0.5
+    }
+  ]
+}

@@ -17,20 +17,9 @@ namespace BoscaliSummer.Core.Storage
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 File.WriteAllText(tmp, text ?? "");
                 if (!File.Exists(path)) File.Move(tmp, path);
-                else
-                {
-                    try
-                    {
-                        File.Replace(tmp, path, null);
-                    }
-                    catch (Exception)
-                    {
-                        // ponytail: Mono's Replace can refuse some filesystems; the routes pattern leaves a crash window between the
-                        // delete and the move. Upgrade when a write-through rename exists on every platform we ship to.
-                        File.Delete(path);
-                        File.Move(tmp, path);
-                    }
-                }
+                // If atomic replacement is unavailable or refused, report the failure
+                // and preserve the original rather than delete it before a second move.
+                else File.Replace(tmp, path, null);
                 return true;
             }
             catch (Exception e)

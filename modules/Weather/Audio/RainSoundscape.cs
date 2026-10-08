@@ -79,10 +79,12 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 patter.outputAudioMixerGroup = mixer;
             }
             if (!enabled || mixer == null) { Stop(); return; }
-            // Condensation has no impact sound. Rain is unexposed water; shelter is applied
-            // here so a hangar retains the quiet surrounding rain without canopy patter.
+            // Rain and cloud are unexposed incoming water; shelter is applied here so a
+            // hangar retains the quiet surrounding rain without canopy patter. Residual
+            // glass wetness is silent: only striking droplets make sound.
+            _ = glassMoisture;
             var target = EnvironmentAudioMath.Rain(rain, cockpit, airspeedMps,
-                heightAboveGroundM, exposure01, Time.unscaledTime);
+                heightAboveGroundM, exposure01, Time.unscaledTime, cloud);
             float dt = Mathf.Clamp(Time.deltaTime, 0f, 0.05f);
             AudioSource selected = cockpit ? patter : rush;
             AudioLowPassFilter selectedFilter = cockpit ? patterFilter : rushFilter;
@@ -172,7 +174,7 @@ namespace BoscaliSummer.Modules.Weather.Audio
             int frames = seconds * SampleRate;
             var samples = new float[frames * 2];
             var random = new System.Random(77129);
-            for (int hit = 0; hit < seconds * 42; hit++)
+            for (int hit = 0; hit < seconds * 84; hit++)
             {
                 int start = random.Next(frames);
                 float size = (float)random.NextDouble();
@@ -188,7 +190,7 @@ namespace BoscaliSummer.Modules.Weather.Audio
                     float t = (float)i / SampleRate;
                     float attack = Math.Min(1f, t * 400f);
                     float value = filtered * attack * (float)Math.Exp(-t * (65f - 30f * size))
-                        * (0.25f + size * 0.35f);
+                        * (0.32f + size * 0.42f);
                     int index = ((start + i) % frames) * 2;
                     samples[index] += value * left;
                     samples[index + 1] += value * right;

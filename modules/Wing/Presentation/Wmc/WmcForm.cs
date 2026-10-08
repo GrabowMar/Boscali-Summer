@@ -472,7 +472,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 ids = controls;
                 apply = applied;
-                window = AvWindow.Build(root, "wmc-shapes", "FORMATION / ALL SHAPES", 440f, 420f, 220);
+                window = AvWindow.Build(root, "wmc-shapes", "FORMATION / ALL SHAPES", 440f, 560f, 220);
                 AvFlow body = window.Body;
                 title = body.Section(AvIcon.LayersSubtract, "FAMILY", "");
                 familyTabs = body.Add(new WmcButtonGrid(body.Content, MaxFamilies, MaxFamilies, i => new AvControl.Spec("", () => PickFamilyTab(i))));

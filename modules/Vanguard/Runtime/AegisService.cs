@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// </summary>
     internal sealed class AegisService : MonoBehaviour, ISceneService
     {
-        private const float ScanInterval = 0.25f;
+        private const float ScanInterval = 0.15f;
 
         private static AegisService instance;
         private readonly Dictionary<Aircraft, InterceptPicker> watched = new Dictionary<Aircraft, InterceptPicker>();
@@ -20,12 +20,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly List<Missile> threats = new List<Missile>();
         private readonly List<Aircraft> drop = new List<Aircraft>();
         private float nextScan;
+        private readonly Dictionary<Missile,float> confirmed = new Dictionary<Missile,float>();
+        private readonly List<Missile> stale = new List<Missile>();
 
         private void Awake() => instance = this;
 
         public void ResetForScene()
         {
             watched.Clear();
+            confirmed.Clear();
             VanguardRegistry.Clear();
             DroneOrders.Clear();
             VanguardStats.Clear();
@@ -52,6 +55,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (watched.Count == 0 || Time.timeSinceLevelLoad < nextScan || !GameAccess.IsServer()) return;
             nextScan = Time.timeSinceLevelLoad + ScanInterval;
+            stale.Clear();
+            foreach (var pair in confirmed)
+                if (pair.Key == null || pair.Key.disabled || Time.timeSinceLevelLoad-pair.Value > 10f) stale.Add(pair.Key);
+            foreach (var missile in stale) confirmed.Remove(missile);
             drop.Clear();
             foreach (KeyValuePair<Aircraft, InterceptPicker> pair in watched)
                 if (!Scan(pair.Key, pair.Value)) drop.Add(pair.Key);
@@ -62,31 +69,37 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool Scan(Aircraft aircraft, InterceptPicker picker)
         {
             if (aircraft == null || aircraft.disabled) return false;
-            MissileWarning warning = aircraft.GetMissileWarningSystem();
             WeaponStation station = AegisStation(aircraft);
-            if (warning == null || station == null || warning.knownMissiles.Count == 0) return false;
+            if (station == null) return false;
 
             views.Clear();
-            threats.Clear();
+            ThreatScan.Inbound(aircraft, threats); // Server warning lists can be empty for client-owned aircraft.
+            if (threats.Count == 0) return false;
             GlobalPosition self = aircraft.GlobalPosition();
             Vector3 selfVel = aircraft.rb.velocity;
-            foreach (Missile m in warning.knownMissiles)
+            float now = Time.timeSinceLevelLoad;
+            foreach (Missile m in threats)
             {
-                if (m == null || m.disabled) continue;
+                if (m == null || m.disabled || m.NetworkHQ == aircraft.NetworkHQ || m.owner == aircraft) continue;
                 Vector3 rel = self - m.GlobalPosition();
                 float range = rel.magnitude;
                 float closing = Vector3.Dot(m.rb.velocity - selfVel, rel / Mathf.Max(range, 1f));
+                bool visible=range <= InterceptPicker.MaxRange && !Physics.Linecast(
+                    aircraft.transform.position-aircraft.transform.up*.5f,m.transform.position,(int)PhysicsLayers.StaticsMask);
+                if (!visible) { confirmed.Remove(m); continue; }
+                if (!confirmed.TryGetValue(m,out float acquired)) { confirmed[m]=now; continue; }
+                if (now-acquired < AegisEnvelope.SensorConfirmSeconds) continue;
                 views.Add(new ThreatView(m.GetInstanceID(), range, closing));
-                threats.Add(m);
             }
-            float now = Time.timeSinceLevelLoad;
             int pick = picker.Pick(now, views);
             if (pick < 0) return true;
             Missile threat = null;
-            for (int i = 0; i < views.Count; i++)
-                if (views[i].Id == pick) threat = threats[i];
+            for (int i = 0; i < threats.Count; i++)
+                if (threats[i] != null && threats[i].GetInstanceID() == pick) threat = threats[i];
+            if (threat == null) return true;
+            int ammo = station.Ammo;
             station.LaunchMount(aircraft, threat, threat.GlobalPosition());
-            picker.Fired(now, pick);
+            if (station.Ammo < ammo) picker.Fired(now, pick);
             return true;
         }
     }

@@ -1,139 +1,120 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Modules.FireAndDestruction.Configuration;
-using BoscaliSummer.Modules.FireAndDestruction.Domain;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Modules.FireAndDestruction.Domain;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Fire
 {
-    /// <summary>
-    /// Client-local visible building damage: every counted explosive or gun hit stamps a
-    /// torn breach card on the wall plus a dust burst, the second hit adds a smoke wisp and
-    /// the third makes it a heavier plume. Collapses lay a ground scar and keep the cards
-    /// on the fallen facade. A later shot on the wreck shoves a slab and can punch one
-    /// more hole. No HP tracking, no networking; the server never sees any of this.
-    /// </summary>
+    /// <summary>Bounded local impact residue and concrete bursts. Never edits native meshes or damage.</summary>
     internal sealed class BuildingHitLedger : MonoBehaviour, ISceneService
     {
-        private sealed class HitRecord
-        {
-            public int Hits;
-            public float LastHitAt;
-            public float WispBorn;
-            public FuelDepotSmokePool.Visual Wisp;
-        }
-
+        private struct Mark { internal GameObject Object; internal int Owner; }
         public static BuildingHitLedger Instance { get; private set; }
-
-        private const int MaxTracked = 128;
-        private const int MaxBreachDecals = 48;
-        private const int MaxGroundScars = 32;
-        private const int MaxDustBursts = 6;
-        private const int MaxWisps = 8;
-        private const int GunQueueCap = 32;
-        private const int GunPerFrame = 2;
-        private const int SeedSalt = 0xb171e5;
-
-        private readonly Dictionary<int, HitRecord> records = new Dictionary<int, HitRecord>(MaxTracked);
-        private readonly List<GameObject> breachMarks = new List<GameObject>(MaxBreachDecals);
-        private readonly List<int> breachOwners = new List<int>(MaxBreachDecals);
-        private int breachHead;
+        internal GlobalPosition LastImpact { get; private set; }
+        internal Vector3 LastImpactNormal { get; private set; }
+        internal int ImpactMarks { get { int count = 0; foreach (Mark mark in marks)
+            if (mark.Object != null && mark.Object.activeSelf) count++; return count; } }
+        private const int MaxTracked = 128, MaxMarks = 48, MaxGroundScars = 32, GunQueueCap = 32, SeedSalt = 0xb171e5;
+        private readonly Dictionary<int, float> hits = new Dictionary<int, float>(MaxTracked);
+        private readonly List<Mark> marks = new List<Mark>(MaxMarks);
         private readonly List<GameObject> scarMarks = new List<GameObject>(MaxGroundScars);
-        private int scarHead;
-        private readonly List<GameObject> dustBursts = new List<GameObject>(MaxDustBursts);
-        private readonly List<ParticleSystem[]> dustSystems = new List<ParticleSystem[]>(MaxDustBursts);
-        private readonly List<float> dustExpiry = new List<float>(MaxDustBursts);
-        private readonly FuelDepotSmokePool wispPool = new FuelDepotSmokePool(MaxWisps);
-        private readonly BreachCards cards = new BreachCards();
-        private readonly BurnScarPool ashPool = new BurnScarPool();
         private readonly Queue<GlobalPosition> gunHits = new Queue<GlobalPosition>(GunQueueCap);
-        private readonly Collider[] overlapBuffer = new Collider[8];
-        private static readonly List<Collider> colliderBuffer = new List<Collider>(8);
-        private float nextWispTick;
-        private bool loggedFirstBreach;
-        private bool loggedFirstScar;
-
-        private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
-        private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
-
+        private readonly Collider[] overlaps = new Collider[8];
+        private readonly List<Collider> colliders = new List<Collider>(8);
+        private readonly CollapseBurstPool dust = new CollapseBurstPool(6);
+        private readonly BurnScarPool ashPool = new BurnScarPool();
+        private int markHead, scarHead;
+        private static BoscaliSummer.Modules.FireAndDestruction.Configuration.FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private void Awake() => Instance = this;
+        private void Start() { if (Fire.ImpactScorchEnabled.Value && !GameManager.IsHeadless) dust.Warm(); }
+        private void OnDestroy() { Clear(); if (Instance == this) Instance = null; }
+        public void ResetForScene() { Clear(); if (isActiveAndEnabled) Start(); }
+        internal void EmitDebrisDust(GlobalPosition position) => dust.EmitImpact(position, Vector3.up, 3f);
 
-        private void OnDestroy()
+        internal void SubmitShockwave(MapBuilding building, Vector3 origin, float power)
         {
-            Clear();
-            if (Instance == this) Instance = null;
+            if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value || power < HitEscalation.MinBlastPower) return;
+            RuinAftermathManager.Instance?.Poke(origin, power);
+            if (building == null) return;
+            colliders.Clear(); building.GetComponentsInChildren(false, colliders);
+            bool found = false; float nearest = float.MaxValue; RaycastHit surface = default;
+            foreach (Collider collider in colliders)
+            {
+                if (collider == null || collider.isTrigger) continue;
+                // Native collider rays give a real point and normal. Aim at the nearest point of the
+                // collider's box, not its centre, so a blast high on a tower marks the tower up there.
+                Vector3 direction = collider.ClosestPointOnBounds(origin) - origin;
+                if (direction.sqrMagnitude < 0.25f) direction = collider.bounds.center - origin;
+                if (direction.sqrMagnitude < 0.001f) continue;
+                if (collider.Raycast(new Ray(origin, direction.normalized), out RaycastHit hit, direction.magnitude + collider.bounds.size.magnitude)
+                    && hit.distance < nearest) { surface = hit; nearest = hit.distance; found = true; }
+            }
+            colliders.Clear();
+            if (found) Impact(building, surface.point, surface.normal, HitEscalation.BreachSize(power));
         }
 
-        public void ResetForScene() => Clear();
-
-        /// <summary>
-        /// Records a frag-trace shockwave on a building. Called from the TakeShockwave
-        /// postfix on every peer; vanilla's method body is empty, so this call is purely
-        /// the mod's per-hit notification with vanilla's origin and blast power.
-        /// </summary>
-        internal void SubmitShockwave(MapBuilding building, Vector3 origin, float blastPower)
-        {
-            if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value) return;
-            if (blastPower >= HitEscalation.MinBlastPower)
-                RuinAftermathManager.Instance?.Poke(origin, blastPower);
-            if (building == null || blastPower < HitEscalation.MinBlastPower) return;
-            int id = building.GetInstanceID();
-            if (!ShouldCount(id)) return;
-
-            Vector3 point;
-            Vector3 normal;
-            if (!TryResolveHit(building, origin, out point, out normal)) return;
-            RecordHit(id);
-            CountHit(id, point, normal, HitEscalation.BreachSize(blastPower));
-        }
-
-        /// <summary>
-        /// Queues a gun impact for a small breach mark. Bullets outnumber blasts by two
-        /// orders of magnitude, so the wall lookup is deferred to the bounded per-frame
-        /// drain instead of running inside the bullet patch.
-        /// </summary>
         internal void SubmitGunHit(GlobalPosition position)
         {
-            if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value) return;
-            if (gunHits.Count >= GunQueueCap) return;
-            gunHits.Enqueue(position);
+            if (!GameManager.IsHeadless && Fire.ImpactScorchEnabled.Value && gunHits.Count < GunQueueCap) gunHits.Enqueue(position);
         }
-
-        /// <summary>
-        /// Releases the ledger record, wisp, round scorch marks, and — unless the fallen
-        /// facade is keeping them — the torn breach cards. Called from Destruct on every
-        /// peer, including late-join replay, and when the hit table evicts an old building.
-        /// </summary>
-        internal void Forget(int buildingId, bool keepCards = false)
+        private void Update()
         {
-            if (records.TryGetValue(buildingId, out HitRecord record))
+            for (int budget = 0; budget < 2 && gunHits.Count > 0; budget++)
             {
-                if (record.Wisp != null) wispPool.Release(record.Wisp);
-                records.Remove(buildingId);
-            }
-            for (int i = 0; i < breachMarks.Count; i++)
-            {
-                if (i < breachOwners.Count && breachOwners[i] == buildingId)
+                Vector3 point = gunHits.Dequeue().ToLocalPosition();
+                RuinAftermathManager.Instance?.Poke(point, 0f);
+                int count = Physics.OverlapSphereNonAlloc(point, 4f, overlaps, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
+                for (int i = 0; i < count; i++)
                 {
-                    breachOwners[i] = 0;
-                    if (breachMarks[i] != null) breachMarks[i].SetActive(false);
+                    Collider collider = overlaps[i];
+                    MapBuilding building = collider != null ? collider.GetComponentInParent<MapBuilding>() : null;
+                    if (building == null) continue;
+                    Vector3 direction = (collider.bounds.center - point).normalized;
+                    if (collider.Raycast(new Ray(point - direction * 0.5f, direction), out RaycastHit hit, 5f))
+                        Impact(building, hit.point, hit.normal, HitEscalation.GunBreachSize);
+                    break;
                 }
             }
-            if (!keepCards) cards.Hide(buildingId);
-            ImpactScorchManager.Instance?.ReleaseForBuilding(buildingId);
+            dust.Update(Time.timeSinceLevelLoad);
         }
-
-        internal void HideBreaches(int buildingId) => cards.Hide(buildingId);
-
-        internal void AdoptBreaches(int buildingId, Transform parent) => cards.Adopt(buildingId, parent);
-
-        internal void StampRuinHole(Transform shell, Vector3 point, Vector3 normal, float size) =>
-            cards.Stamp(shell, point, normal, size);
-
-        /// <summary>Lays a ground scar where walls fell. Ring of 32, oldest recycled.</summary>
+        private void Impact(MapBuilding building, Vector3 point, Vector3 normal, float size)
+        {
+            int owner = building.GetInstanceID(); float now = Time.timeSinceLevelLoad;
+            if (hits.TryGetValue(owner, out float previous) && !HitEscalation.ShouldCount(previous, now)) return;
+            if (!hits.ContainsKey(owner) && hits.Count >= MaxTracked)
+            {
+                int oldest = 0; float age = float.MaxValue;
+                foreach (var entry in hits) if (entry.Value < age) { age = entry.Value; oldest = entry.Key; }
+                Forget(oldest);
+            }
+            hits[owner] = now; LastImpact = point.ToGlobalPosition(); LastImpactNormal = normal;
+            BuildingCarver.Instance?.Hit(building, point, normal, size);
+            dust.EmitImpact(LastImpact, normal, size);
+            Material material = ScorchDecalMaterialResolver.Resolve();
+            if (material == null || GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
+            Mark mark;
+            int slot;
+            if (marks.Count < MaxMarks)
+            {
+                mark = new Mark { Object = Object.Instantiate(GameAssets.i.scorchMarkDecal, Datum.origin, false) };
+                slot = marks.Count; marks.Add(mark);
+            }
+            else { slot = markHead; markHead = (markHead + 1) % MaxMarks; mark = marks[slot]; }
+            mark.Owner = owner; marks[slot] = mark;
+            if (mark.Object == null) return;
+            mark.Object.name = "BoscaliSummer.ImpactResidue"; mark.Object.SetActive(true);
+            // Thin projection prevents a front-wall impact staining floors or the opposite wall.
+            ConfigureProjector(mark.Object, point, normal, Mathf.Clamp(size * 0.65f, 0.35f, 7f), 0.6f, material);
+            mark.Object.GetComponent<DecalProjector>().fadeFactor = 0.48f;
+        }
+        internal void Forget(int owner)
+        {
+            hits.Remove(owner);
+            foreach (Mark mark in marks) if (mark.Owner == owner && mark.Object != null) mark.Object.SetActive(false);
+            ImpactScorchManager.Instance?.ReleaseForBuilding(owner);
+        }
         internal void StampGroundScar(Vector3 localPosition, float footprintX, float footprintZ)
         {
             if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value) return;
@@ -141,12 +122,10 @@ namespace BoscaliSummer.Fire
             if (mark == null) return;
             float size = HitEscalation.GroundScarDiameter(footprintX, footprintZ);
             ConfigureProjector(mark, localPosition, Vector3.up, size,
-                Mathf.Clamp(size * 0.12f, 2f, 6f), CraterDecalMaterialResolver.Resolve());
-            if (!loggedFirstScar && Diagnostics.VerboseLogging.Value)
-            {
-                loggedFirstScar = true;
-                Plugin.Logger.LogInfo($"Ruin scar: first ground scar stamped at {localPosition} (size {size:0.#}m).");
-            }
+                Mathf.Clamp(size * 0.12f, 2f, 6f), ScorchDecalMaterialResolver.Resolve());
+            DecalProjector residue = mark.GetComponent<DecalProjector>();
+            if (residue != null) residue.fadeFactor = 0.28f;
+
         }
 
         /// <summary>Tree rows burn to an ash bed, not a building scar.</summary>
@@ -154,262 +133,6 @@ namespace BoscaliSummer.Fire
         {
             if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value) return;
             ashPool.Stamp(position, HitEscalation.TreeRowAshDiameter(footprintX, footprintZ));
-        }
-
-        private void Update()
-        {
-            int budget = GunPerFrame;
-            while (budget-- > 0 && gunHits.Count > 0)
-                ProcessGunHit(gunHits.Dequeue());
-
-            float now = Time.timeSinceLevelLoad;
-            for (int i = dustBursts.Count - 1; i >= 0; i--)
-            {
-                if (dustBursts[i] == null)
-                {
-                    dustBursts.RemoveAt(i);
-                    dustSystems.RemoveAt(i);
-                    dustExpiry.RemoveAt(i);
-                }
-                else if (now >= dustExpiry[i] && dustBursts[i].activeSelf)
-                    dustBursts[i].SetActive(false);
-            }
-
-            if (now < nextWispTick) return;
-            nextWispTick = now + 0.25f;
-            if (records.Count == 0) return;
-            Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
-                ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
-                : Vector3.zero;
-            foreach (KeyValuePair<int, HitRecord> entry in records)
-            {
-                HitRecord record = entry.Value;
-                if (record.Wisp == null) continue;
-                record.Wisp.SetPhase(Mathf.Max(0f, now - record.WispBorn), 1f, wind);
-            }
-        }
-
-        private void ProcessGunHit(GlobalPosition position)
-        {
-            Vector3 local = position.ToLocalPosition();
-            RuinAftermathManager.Instance?.Poke(local, 0f);
-            int count = Physics.OverlapSphereNonAlloc(
-                local, 4f, overlapBuffer, PhysicsLayers.StaticsMask,
-                QueryTriggerInteraction.Collide);
-            MapBuilding building = null;
-            Collider shell = null;
-            for (int i = 0; i < count; i++)
-            {
-                if (overlapBuffer[i] == null) continue;
-                MapBuilding candidate = overlapBuffer[i].GetComponentInParent<MapBuilding>();
-                if (candidate == null) continue;
-                building = candidate;
-                shell = overlapBuffer[i];
-                break;
-            }
-            if (building == null || shell == null) return;
-            int id = building.GetInstanceID();
-            if (!ShouldCount(id)) return;
-            RecordHit(id);
-
-            // The impact point sits on the surface; cast a short ray at the shell to
-            // recover the wall normal for the decal.
-            Vector3 toCenter = (shell.bounds.center - local).normalized;
-            if (toCenter.sqrMagnitude < 0.01f) toCenter = Vector3.forward;
-            Vector3 normal = -toCenter;
-            if (Physics.Raycast(local - toCenter * 0.5f, toCenter, out RaycastHit hit,
-                    30f, PhysicsLayers.StaticsMask))
-                normal = hit.normal;
-            CountHit(id, local, normal, HitEscalation.GunBreachSize);
-        }
-
-        private bool ShouldCount(int id)
-        {
-            return !records.TryGetValue(id, out HitRecord record) ||
-                HitEscalation.ShouldCount(record.LastHitAt, Time.timeSinceLevelLoad);
-        }
-
-        private void RecordHit(int id)
-        {
-            if (!records.TryGetValue(id, out HitRecord record))
-            {
-                if (records.Count >= MaxTracked) EvictOldest();
-                record = new HitRecord();
-                records[id] = record;
-            }
-            record.LastHitAt = Time.timeSinceLevelLoad;
-            record.Hits++;
-        }
-
-        /// <summary>
-        /// Releases the oldest wisp so the newest hit still smokes. Only runs when the
-        /// 8-visual pool is exhausted.
-        /// </summary>
-        private bool StealOldestWisp(int exceptId)
-        {
-            int oldest = 0;
-            float oldestAt = float.MaxValue;
-            foreach (KeyValuePair<int, HitRecord> entry in records)
-            {
-                if (entry.Key == exceptId || entry.Value.Wisp == null) continue;
-                if (entry.Value.WispBorn < oldestAt)
-                {
-                    oldestAt = entry.Value.WispBorn;
-                    oldest = entry.Key;
-                }
-            }
-            if (oldest == 0 || !records.TryGetValue(oldest, out HitRecord record)) return false;
-            wispPool.Release(record.Wisp);
-            record.Wisp = null;
-            return true;
-        }
-
-        private void EvictOldest()
-        {
-            int oldest = 0;
-            float oldestAt = float.MaxValue;
-            bool found = false;
-            foreach (KeyValuePair<int, HitRecord> entry in records)
-            {
-                if (entry.Value.LastHitAt < oldestAt)
-                {
-                    oldestAt = entry.Value.LastHitAt;
-                    oldest = entry.Key;
-                    found = true;
-                }
-            }
-            if (found) Forget(oldest);
-        }
-
-        private void CountHit(int id, Vector3 point, Vector3 normal, float size)
-        {
-            HitRecord record = records[id];
-            bool card = cards.Place(id, point, normal, size);
-            GameObject mark = null;
-            if (!card)
-            {
-                mark = AcquireRingMark(breachMarks, ref breachHead, MaxBreachDecals);
-                if (mark != null)
-                {
-                    int slot = breachMarks.IndexOf(mark);
-                    if (slot >= 0)
-                    {
-                        while (breachOwners.Count <= slot) breachOwners.Add(0);
-                        breachOwners[slot] = id;
-                    }
-                    ConfigureProjector(mark, point, normal, size,
-                        Mathf.Clamp(size * 0.22f, 1.6f, 4f), CraterDecalMaterialResolver.Resolve());
-                }
-            }
-            EmitDust(point, normal);
-            if (HitEscalation.HasWisp(record.Hits))
-            {
-                if (record.Wisp == null)
-                {
-                    record.Wisp = wispPool.Acquire(point.ToGlobalPosition(),
-                        new Vector2(2.5f, 2.5f), FuelDepotSmokePool.SmokeProfile.Ruin);
-                    if (record.Wisp == null && StealOldestWisp(id))
-                        record.Wisp = wispPool.Acquire(point.ToGlobalPosition(),
-                            new Vector2(2.5f, 2.5f), FuelDepotSmokePool.SmokeProfile.Ruin);
-                    if (record.Wisp != null) record.WispBorn = Time.timeSinceLevelLoad;
-                }
-                if (record.Wisp != null)
-                {
-                    // The wisp always rises from the latest breach.
-                    record.Wisp.SetPosition(point.ToGlobalPosition());
-                    record.Wisp.ExternalIntensity = HitEscalation.WispIntensity(record.Hits);
-                }
-            }
-            if (!loggedFirstBreach && Diagnostics.VerboseLogging.Value && (card || mark != null))
-            {
-                loggedFirstBreach = true;
-                Plugin.Logger.LogInfo(
-                    $"Building hit: first breach mark placed at {point} (size {size:0.#}m).");
-            }
-        }
-
-        private void EmitDust(Vector3 point, Vector3 normal)
-        {
-            if (GameAssets.i == null || GameAssets.i.contactDust == null) return;
-            GameObject burst = null;
-            int slot = -1;
-            float oldest = float.MaxValue;
-            int oldestSlot = -1;
-            for (int i = 0; i < dustBursts.Count; i++)
-            {
-                if (dustBursts[i] == null) continue;
-                if (!dustBursts[i].activeSelf) { slot = i; break; }
-                if (dustExpiry[i] < oldest) { oldest = dustExpiry[i]; oldestSlot = i; }
-            }
-            if (slot < 0)
-            {
-                if (dustBursts.Count < MaxDustBursts)
-                {
-                    burst = Object.Instantiate(GameAssets.i.contactDust, Datum.origin, false);
-                    burst.name = "BoscaliSummer.HitDust";
-                    dustBursts.Add(burst);
-                    dustSystems.Add(burst.GetComponentsInChildren<ParticleSystem>(true));
-                    dustExpiry.Add(0f);
-                    slot = dustBursts.Count - 1;
-                }
-                else if (oldestSlot >= 0) slot = oldestSlot;
-                else return;
-                burst = dustBursts[slot];
-            }
-            else burst = dustBursts[slot];
-            if (burst == null) return;
-            burst.transform.position = point + normal * 0.5f;
-            burst.SetActive(true);
-            ParticleSystem[] systems = dustSystems[slot];
-            if (systems != null)
-                for (int i = 0; i < systems.Length; i++)
-                    if (systems[i] != null)
-                    {
-                        systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-                        systems[i].Play(true);
-                    }
-            dustExpiry[slot] = Time.timeSinceLevelLoad + HitEscalation.DustSeconds;
-        }
-
-        /// <summary>
-        /// Re-casts vanilla's frag ray against the building's own colliders to recover the
-        /// wall point and normal FragTrace saw. Falls back to the closest surface point so
-        /// a hit is never dropped because the ray started inside the collider.
-        /// </summary>
-        private static bool TryResolveHit(
-            MapBuilding building, Vector3 origin, out Vector3 point, out Vector3 normal)
-        {
-            point = building.transform.position;
-            normal = Vector3.up;
-            colliderBuffer.Clear();
-            building.GetComponentsInChildren(false, colliderBuffer);
-            bool found = false;
-            float nearest = float.MaxValue;
-            for (int i = 0; i < colliderBuffer.Count; i++)
-            {
-                Collider collider = colliderBuffer[i];
-                if (collider == null || collider.isTrigger) continue;
-                Vector3 toShell = collider.transform.position - origin;
-                float distance = toShell.magnitude;
-                if (distance < 0.01f) continue;
-                Ray ray = new Ray(origin, toShell / distance);
-                RaycastHit hit;
-                if (collider.Raycast(ray, out hit, distance + 5f) && hit.distance < nearest)
-                {
-                    nearest = hit.distance;
-                    point = hit.point;
-                    normal = hit.normal;
-                    found = true;
-                }
-            }
-            colliderBuffer.Clear();
-            if (found) return true;
-            Collider fallback = building.GetComponentInChildren<Collider>();
-            if (fallback == null) return false;
-            point = fallback.ClosestPoint(origin);
-            Vector3 away = point - origin;
-            normal = away.sqrMagnitude > 0.01f ? away.normalized * -1f : Vector3.up;
-            return true;
         }
 
         private static GameObject AcquireRingMark(List<GameObject> ring, ref int head, int maximum)
@@ -459,32 +182,13 @@ namespace BoscaliSummer.Fire
             if (material != null) projector.material = material;
         }
 
+
         private void Clear()
         {
-            foreach (KeyValuePair<int, HitRecord> entry in records)
-                if (entry.Value.Wisp != null) wispPool.Release(entry.Value.Wisp);
-            records.Clear();
-            for (int i = 0; i < breachMarks.Count; i++)
-                if (breachMarks[i] != null) Object.Destroy(breachMarks[i]);
-            breachMarks.Clear();
-            breachOwners.Clear();
-            breachHead = 0;
-            for (int i = 0; i < scarMarks.Count; i++)
-                if (scarMarks[i] != null) Object.Destroy(scarMarks[i]);
-            scarMarks.Clear();
-            scarHead = 0;
-            for (int i = 0; i < dustBursts.Count; i++)
-                if (dustBursts[i] != null) Object.Destroy(dustBursts[i]);
-            dustBursts.Clear();
-            dustSystems.Clear();
-            dustExpiry.Clear();
-            gunHits.Clear();
-            wispPool.Clear();
-            ashPool.Clear();
-            cards.Clear();
-            nextWispTick = 0f;
-            loggedFirstBreach = loggedFirstScar = false;
-            CraterDecalMaterialResolver.ResetForScene();
+            foreach (Mark mark in marks) if (mark.Object != null) Object.Destroy(mark.Object);
+            foreach (GameObject scar in scarMarks) if (scar != null) Object.Destroy(scar);
+            marks.Clear(); scarMarks.Clear(); hits.Clear(); gunHits.Clear(); colliders.Clear();
+            dust.Clear(); ashPool.Clear(); markHead = scarHead = 0;
         }
     }
 }

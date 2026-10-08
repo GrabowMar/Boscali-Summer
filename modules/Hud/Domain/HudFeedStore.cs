@@ -7,6 +7,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct HudMessage
     {
         public HudTone Tone;
+        /// <summary>The publishing feed's key (e.g. "fuel"), so the board can draw its symbol.</summary>
+        public string Channel;
         public string Text, Detail;
         public float Bar;
         public bool Notice;
@@ -47,11 +49,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
             limit = Math.Min(output.Length, Math.Max(0, limit));
             float now = clock(); notices.Expire(now);
             foreach (Line line in lines)
-                if (line.Live(now) && enabled(line.Channel)) Insert(output, ref count, limit, line.Message);
+                if (line.Live(now) && enabled(line.Channel))
+                {
+                    HudMessage message = line.Message;
+                    message.Channel = line.Channel;
+                    Insert(output, ref count, limit, message);
+                }
             if (showNotices)
                 for (int i = 0; i < notices.Count; i++)
                     if (notices.TryGet(i, out HudTone tone, out string text, out string detail))
-                        Insert(output, ref count, limit, new HudMessage { Tone = tone, Text = text, Detail = detail, Notice = true });
+                        Insert(output, ref count, limit, new HudMessage
+                        { Tone = tone, Channel = notices.ChannelAt(i), Text = text, Detail = detail, Notice = true });
             return count;
         }
         private static void Insert(HudMessage[] output, ref int count, int limit, HudMessage message)

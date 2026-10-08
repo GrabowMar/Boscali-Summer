@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BepInEx.Configuration;
 
 namespace BoscaliSummer.Modules.Support.Configuration
@@ -11,7 +12,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<bool> PrsmEnabled { get; }
         public ConfigEntry<bool> CruiseEnabled { get; }
         public ConfigEntry<bool> EmpEnabled { get; }
-        public ConfigEntry<bool> MtiEnabled { get; }
         public ConfigEntry<bool> SatCameraEnabled { get; }
         public ConfigEntry<bool> ElintEnabled { get; }
         public ConfigEntry<bool> FlareBarrageEnabled { get; }
@@ -28,8 +28,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
 
         public ConfigEntry<int> CruiseSalvo { get; }
         public ConfigEntry<int> CruiseLiveCap { get; }
-        public ConfigEntry<float> IntelFreshSeconds { get; }
-        public ConfigEntry<float> IntelGateRadius { get; }
         public ConfigEntry<float> EmpRadius { get; }
         public ConfigEntry<float> FlareBarrageRadius { get; }
         public ConfigEntry<int> FlareBarrageCount { get; }
@@ -37,14 +35,18 @@ namespace BoscaliSummer.Modules.Support.Configuration
         public ConfigEntry<float> JtacMarkDuration { get; }
 
         public ConfigEntry<float> MaximumRange { get; }
-        public ConfigEntry<float> RequestCooldown { get; }
 
         public ConfigEntry<KeyboardShortcut> CallKey1 { get; }
         public ConfigEntry<KeyboardShortcut> CallKey2 { get; }
         public ConfigEntry<KeyboardShortcut> CallKey3 { get; }
         public ConfigEntry<KeyboardShortcut> CallKey4 { get; }
-        public ConfigEntry<float> PriceKnob { get; }
-        public ConfigEntry<float> EarnKnob { get; }
+        /// <summary>Host: scales every perk price in allocation (1 = the rung table: 4 / 6 / 10 / 16 / 30).</summary>
+        public ConfigEntry<float> PerkPriceScale { get; }
+        /// <summary>Host only: the share of the faction's funds that flows into its three fronts every minute (0 .. 0.10; default 0.03).</summary>
+        public ConfigEntry<float> FrontShare { get; }
+        public ConfigEntry<float> FrontShareCap { get; }
+        /// <summary>Host only: scales every front programme's cost (0.25 .. 4; default 1).</summary>
+        public ConfigEntry<float> ProgrammeCostScale { get; }
 
         public ConfigEntry<string> ArtilleryDefinitionKey { get; }
         public ConfigEntry<string> PrsmDefinitionKey { get; }
@@ -60,8 +62,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "Host-authoritative: on a server, only the host's value applies.");
 
             ReconEnabled = config.Bind("Support", "ReconSweep", true,
-                "Radar scan: images a scene and the host " +
-                "reveals stationary ground contacts in it. Spawns nothing.");
+                "RECON PASS (radar scan + MTI sweep): images a scene and the host " +
+                "reveals static and moving ground contacts in it. Spawns nothing.");
             FortifyEnabled = config.Bind("Support", "Fortification", true,
                 "Reinforce a friendly controlled zone. Requires the Garrisons feature; the " +
                 "request is refused, and nothing is charged, when it cannot place defenders.");
@@ -69,11 +71,10 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "Orbital kinetic strike: one high-velocity projectile onto " +
                 "the mark. Uses the FireMissionDefinitionKey missile.");
             PrsmEnabled = config.Bind("Support", "PrsmStrike", true,
-                "PRSM strike: one offboard ballistic missile onto the mark. Needs fresh HQ intel " +
-                "at the target. Uses the PrsmDefinitionKey missile.");
+                "PRSM strike: one offboard ballistic missile onto the mark. Uses the PrsmDefinitionKey missile.");
             CruiseEnabled = config.Bind("Support", "CruiseStrike", true,
                 "Cruise strike: a bounded salvo of offboard cruise missiles onto the mark, separated " +
-                "by the seeker's native formation spacing. Needs fresh HQ intel at the target. Uses the CruiseDefinitionKey missile.");
+                "by the seeker's native formation spacing. Uses the CruiseDefinitionKey missile.");
             EmpEnabled = config.Bind("Support", "EmpShock", true,
                 "EMP shock: a high-altitude airburst. The prompt pulse upsets electronics; the " +
                 "geomagnetic disturbance jams hostile radars across a wide area while friendly " +
@@ -82,14 +83,11 @@ namespace BoscaliSummer.Modules.Support.Configuration
             ElintEnabled = config.Bind("Support", "ElintSweep", true,
                 "ELINT sweep: locates enemy ground and ship " +
                 "radars that are emitting near the mark. Spawns nothing.");
-            MtiEnabled = config.Bind("Support", "MtiSweep", true,
-                "MTI sweep: tracks moving enemy ground " +
-                "contacts near the mark. Shares the radar scan tasking. Spawns nothing.");
             SatCameraEnabled = config.Bind("Support", "SatCamera", true,
                 "SAT CAMERA: the OPTICAL bird looks at the mark in daylight; ground units inside its window are revealed to the " +
                 "faction. Refuses at night and with no sky state. Spawns nothing.");
             FlareBarrageEnabled = config.Bind("Support", "FlareBarrage", true,
-                "Flare barrage: launches an airburst countermeasure missile that disperses a cluster of " +
+                "DECOY BARRAGE (the former flare barrage): launches an airburst countermeasure missile that disperses a cluster of " +
                 "intense pyrotechnic flares, seducing and misguiding hostile IR-seeking missiles in the area. " +
                 "Friendly missiles fly through.");
 
@@ -108,15 +106,15 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "Needs CYBER or SOF. Host-authoritative: on a server, only the host's value applies.");
             AiFactionsEnabled = config.Bind("Support", "AiFactions", true,
                 "AI-controlled factions (no humans) work CYBER and SOF through the same host paths as an operator (one domain action every 30 s, no recon) and, while they lead and their " +
-                "treasury is over 500 CR, plan and fund operations (one tap a minute). They never target what they have not revealed. Host-authoritative: on a server, only the host's value applies.");
+                "treasury is over 500, plan and fund operations (one tap a minute). They never target what they have not revealed. Host-authoritative: on a server, only the host's value applies.");
             QuietNotices = config.Bind("Support", "QuietNotices", false,
                 "Client: silence the TASKED call and ENEMY INTENT notices (their chime and toast). Inbound warnings (a rod warning, " +
                 "RWR, missile, terrain) are never silenced.");
 
             SarSceneRadius = config.Bind("Support", "SarSceneRadiusMeters", 1000f,
                 new ConfigDescription(
-                    "Half-width of a radar scan scene. " +
-                    "Stationary ground contacts inside it are revealed; movers faster than 4 m/s smear and are not.",
+                    "Half-width of a RECON PASS scene. " +
+                    "Ground contacts inside it, static and moving, are revealed.",
                     new AcceptableValueRange<float>(400f, 4000f)));
             OpticalSceneRadius = config.Bind("Support", "OpticalSceneRadiusMeters", 1000f,
                 new ConfigDescription(
@@ -136,15 +134,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Most cruise missiles of one faction alive at once, counted on the HQ registry. " +
                     "A salvo that would pass it is refused. Host-authoritative.",
                     new AcceptableValueRange<int>(1, 32)));
-            IntelFreshSeconds = config.Bind("Support", "IntelFreshSeconds", 120f,
-                new ConfigDescription(
-                    "Seconds an HQ track near the grid stays fresh enough to release a strike. " +
-                    "Older intel denies with STALE INTEL naming the sweep. Host-authoritative.",
-                    new AcceptableValueRange<float>(10f, 600f)));
-            IntelGateRadius = config.Bind("Support", "IntelGateRadiusMeters", 1000f,
-                new ConfigDescription(
-                    "Radius around the grid searched for a fresh HQ track before a strike releases.",
-                    new AcceptableValueRange<float>(100f, 10000f)));
             EmpRadius = config.Bind("Support", "EmpShockRadiusMeters", 12000f,
                 new ConfigDescription(
                     "Radius around the mark whose hostile radars are jammed by the geomagnetic phase of " +
@@ -172,12 +161,6 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "Furthest a designated grid may be from your aircraft for an action that " +
                     "delivers something physical - strikes. You must be in an aircraft to request one.",
                     new AcceptableValueRange<float>(1000f, 200000f)));
-            RequestCooldown = config.Bind("Support", "RequestCooldownSeconds", 30f,
-                new ConfigDescription(
-                    "Cooldown after an accepted request, per player and shared across all actions. " +
-                    "The OPS page counts it down on the request button.",
-                    new AcceptableValueRange<float>(5f, 600f)));
-
             ArtilleryDefinitionKey = config.Bind("Support", "FireMissionDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by Rod from God and EMP shock. Empty auto-picks " +
                 "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
@@ -196,10 +179,14 @@ namespace BoscaliSummer.Modules.Support.Configuration
             CallKey2 = BindCallKey(config, 2);
             CallKey3 = BindCallKey(config, 3);
             CallKey4 = BindCallKey(config, 4);
-            PriceKnob = config.Bind("Support", "CallPriceScale", 1f,
-                new ConfigDescription("Host: scales every CALL price (1 = spec prices).", new AcceptableValueRange<float>(0.25f, 4f)));
-            EarnKnob = config.Bind("Support", "CreditEarnScale", 1f,
-                new ConfigDescription("Host: scales every CR payout (1 = spec rates).", new AcceptableValueRange<float>(0.25f, 4f)));
+            PerkPriceScale = config.Bind("Support", "PerkPriceScale", 1f,
+                new ConfigDescription("Host: scales every perk price in allocation (1 = the rung table).", new AcceptableValueRange<float>(0.25f, 4f)));
+            FrontShare = config.Bind("Support", "FrontShare", 0.03f,
+                new ConfigDescription("Host: the share of a faction's funds that flows into its SPACE, CYBER and SOF fronts every 60 s (0 = fronts live on donations only).", new AcceptableValueRange<float>(0f, 0.10f)));
+            FrontShareCap = config.Bind("Support", "FrontShareCap", FrontRules.DefaultShareCap,
+                new ConfigDescription("Host: the most funds one faction's fronts take per 60 s tick, however rich the treasury (default 250: READINESS 1 to 5 in about 40 minutes, a satellite relaunch in about 8).", new AcceptableValueRange<float>(0f, FrontRules.MaxShareCap)));
+            ProgrammeCostScale = config.Bind("Support", "ProgrammeCostScale", 1f,
+                new ConfigDescription("Host: scales every front programme's cost (1 = the table: READINESS 150 x rung, LAUNCH SATELLITE 300, ASAT 900 ...).", new AcceptableValueRange<float>(0.25f, 4f)));
         }
 
         private static ConfigEntry<KeyboardShortcut> BindCallKey(ConfigFile config, int slot) =>

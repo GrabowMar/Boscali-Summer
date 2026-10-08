@@ -245,6 +245,12 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         public void Apply(CommsEnvelope e, float now)
         {
+            // Reserved legacy wire values must not restore removed social content.
+            if ((e.Event == CommsEvent.Item && e.Kind == (byte)CommsItemKind.Sticker) ||
+                e.Event == CommsEvent.Poll || e.Event == CommsEvent.Rps ||
+                e.Event == CommsEvent.Hunt || e.Event == CommsEvent.Scores ||
+                (e.Event == CommsEvent.Feed && e.Kind != (byte)CommsFeedKind.Call && e.Kind != (byte)CommsFeedKind.System)) return;
+
             if (e.Author != 0UL && !string.IsNullOrEmpty(e.AuthorName) && e.Author != LocalId)
                 seen[e.Author] = CommsText.Name(e.AuthorName);
 

@@ -93,7 +93,10 @@ Shader "Hidden/BoscaliCanopyDroplets"
                 float2 center = float2(hash12(cell + seed + 3.1), hash12(cell + seed + 7.7)) - 0.5;
                 float d = length(frac(grid) - 0.5 - center * 0.5);
                 float sizeMul = 0.7 + 0.6 * hash12(cell + seed + 13.7);
-                water += gate * smoothstep(0.34 * sizeMul, 0.12 * sizeMul, d) * 0.8;
+                // Paraboloid profile: a flat-topped bump renders as a ring with a dead
+                // centre; a dome keeps a slope everywhere so beads read as lenses.
+                float r = saturate(d / (0.34 * sizeMul));
+                water += gate * (1.0 - r * r) * 0.8;
 
                 // Dry air and slipstream evaporate the film.
                 water *= exp(-dt * (0.10 + 0.8 * (1.0 - _Rain) + 1.5 * _SpeedN));

@@ -36,51 +36,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(queue.Count == 1 && queue.TryGet(0, out _, out string text, out _) && text == "Visible notice",
                 "Muting a feed must remove already queued notices without touching other feeds");
             FeedStore();
-            Layout();
             Notices();
-        }
-
-        /// <summary>
-        /// The presentation ladder the settings page labels and the board applies. Every step is
-        /// reachable from both directions and every value is inside its bound. The element hangs
-        /// at one fixed dock below the native weapon panel since the 2026-09-28 minimal rebuild,
-        /// so there is no anchor preset to test any more.
-        /// </summary>
-        private static void Layout()
-        {
-            for (int i = 0; i < HudLayout.ScaleCount; i++)
-            {
-                TestAssert.That(HudLayout.Cycle(i, HudLayout.ScaleCount, 1) == (i + 1) % HudLayout.ScaleCount,
-                    "Next from scale step " + i + " is reachable");
-                TestAssert.That(HudLayout.Cycle(i, HudLayout.ScaleCount, -1) ==
-                    (i + HudLayout.ScaleCount - 1) % HudLayout.ScaleCount,
-                    "Previous from scale step " + i + " is reachable");
-            }
-
-            TestAssert.That(HudLayout.ClampScale(-5) == 0 && HudLayout.ClampScale(99) == HudLayout.ScaleCount - 1,
-                "An out-of-range size step clamps");
-            TestAssert.That(HudLayout.ClampOpacity(99) == HudLayout.OpacityCount - 1,
-                "An out-of-range opacity step clamps");
-            TestAssert.That(HudLayout.ClampRows(0) == HudLayout.MinRows && HudLayout.ClampRows(99) == HudLayout.MaxRows,
-                "The row cap is bounded at both ends");
-            TestAssert.That(HudLayout.ClampNoticeSeconds(float.NaN) == HudLayout.DefaultNoticeSeconds,
-                "A nonfinite notice dwell falls back to the default instead of NaN");
-            TestAssert.That(HudLayout.ClampNoticeSeconds(-1f) == HudLayout.MinNoticeSeconds &&
-                HudLayout.ClampNoticeSeconds(9999f) == HudLayout.MaxNoticeSeconds,
-                "The notice dwell is bounded at both ends");
-
-            for (int step = 1; step < HudLayout.ScaleCount; step++)
-            {
-                TestAssert.That(HudLayout.Scale(step) > HudLayout.Scale(step - 1),
-                    "Size steps grow monotonically");
-            }
-            TestAssert.That(HudLayout.Opacity(0) > HudLayout.Opacity(1) &&
-                HudLayout.Opacity(1) > HudLayout.Opacity(2),
-                "Opacity steps recede monotonically");
-            TestAssert.That(HudLayout.Opacity(HudLayout.OpacityCount - 1) == 0f,
-                "The last opacity step is OFF, which hides the element");
-            TestAssert.That(HudLayout.Opacity(0) <= 1f && HudLayout.Opacity(0) > 0f,
-                "FULL is fully solid but never over-bright");
         }
 
         /// <summary>

@@ -1,18 +1,5 @@
-using System.Collections.Generic;
-
 namespace BoscaliSummer.Core.Contracts
 {
-    /// <summary>
-    /// One named feed on the common HUD element. Declared by its owning feature and switched
-    /// on and off by the pilot from SET.
-    /// </summary>
-    internal interface IHudChannel
-    {
-        string Label { get; }
-        bool Enabled { get; }
-        void Toggle();
-    }
-
     /// <summary>
     /// One line held on the common HUD element for as long as its condition is true. The owning
     /// feature refreshes it from its own tick and releases it when the condition ends.
@@ -32,16 +19,13 @@ namespace BoscaliSummer.Core.Contracts
 
     /// <summary>
     /// The one cockpit HUD element Boscali presentation features draw their held status lines
-    /// and transient notices through. The board owns the canvas, the independent typography and
-    /// palette, the stacking, the bounds and every presentation setting; a feature owns only
-    /// its own words and its own cell art.
+    /// and transient notices through. The board owns the look, the stacking and the bounds; a
+    /// feature owns only its own words. Since 2026-10-07 nothing about the element is
+    /// configurable: it ships one tuned out-of-the-box presentation.
     /// </summary>
     internal interface IHudBoard
     {
-        /// <summary>
-        /// Declare a feed. Idempotent; the first writer's label wins. A consumer calls this
-        /// before acquiring a line on the channel.
-        /// </summary>
+        /// <summary>Name a feed. Kept so publishers stay unchanged; the board shows every feed.</summary>
         void DeclareChannel(string key, string label);
 
         /// <summary>
@@ -52,34 +36,9 @@ namespace BoscaliSummer.Core.Contracts
         IHudLine Acquire(string owner, string channel, string key);
 
         /// <summary>
-        /// Show one transient line for the pilot's notice time. Re-pushing the same channel and
-        /// text refreshes the dwell instead of stacking a duplicate.
+        /// Show one transient line for <see cref="HudLayout.NoticeSeconds"/>. Re-pushing the same
+        /// channel and text refreshes the dwell instead of stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
-
-        // ------------------------------------------------------------------ presentation
-        /// <summary>Draw the element at all. Off keeps every consumer running, silently.</summary>
-        bool Enabled { get; set; }
-
-        int ScaleStep { get; set; }
-        int OpacityStep { get; set; }
-        int MaxRows { get; set; }
-        bool NoticesEnabled { get; set; }
-        float NoticeSeconds { get; set; }
-        int Contrast { get; set; }
-        bool ShowDetails { get; set; }
-        int OffsetX { get; set; }
-        int OffsetY { get; set; }
-        void ResetLayout();
-
-        /// <summary>
-        /// Show the native target camera feed inset on the status panel while a target is
-        /// selected in the native target camera and its mode is not landing. Persisted under
-        /// the pre-existing key <c>Avionics.ThirdPersonCameraEnabled</c>.
-        /// </summary>
-        bool CameraFeedEnabled { get; set; }
-
-        /// <summary>Every declared feed, in declaration order, for the settings page to list.</summary>
-        IReadOnlyList<IHudChannel> Channels { get; }
     }
 }

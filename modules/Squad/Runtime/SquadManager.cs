@@ -491,7 +491,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 DebugSpawn = debugTier != 0 };
             hunts.Add(hunt); career.Rules.Begin();
             Notice(career, hunt.Symbol + " " + hunt.Wing + " / " + callsign + " — HUNT ACTIVE. Tier " + tier + ", " + aircraft.Length + " aircraft.",
-                callsign, returns > 0 ? "Remember me? This time you are not getting away." : "We have your signature. Wing, concentrate on the marked aircraft.");
+                callsign, returns > 0 ? "Same aircraft signature. We finish the intercept this time. Stay together." : "Priority aircraft assigned. Flight, maintain pursuit. Do not split the formation.");
             Plugin.Logger?.LogInfo("[Squad] Ace hunt spawned: " + hunt.Wing + ", tier " + tier + ", members " + aircraft.Length + ".");
             return true;
         }
@@ -517,7 +517,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 hunt.ReturnCandidate = !hunt.DebugSpawn && hunt.Returns < 3;
                 Notice(hunt.Owner, hunt.Symbol + " " + hunt.Wing + " ace defeated." +
                     (hunt.Owner.Rules.BonusPoints > previousBonus ? " +1 bonus perk point." : credit ? " Bonus budget complete." : " No player damage credit."),
-                    hunt.Callsign, "Wing, break off. You have command.");
+                    hunt.Wing, hunt.Alive > 0 ? "Lead is down. Remaining aircraft, break off and regroup." : "");
             }
             if (hunt.Outcome == HuntOutcome.Hunting)
             {
@@ -527,12 +527,12 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 {
                     End(hunt, HuntOutcome.TargetLost, now, false);
                     Notice(hunt.Owner, hunt.Wing + " hunt ended. Survivors resume normal operations.", hunt.Callsign,
-                        "Marked aircraft is gone. Resume the mission.");
+                        "Priority aircraft no longer available. End pursuit. Resume assigned tasking.");
                 }
                 else if (!Flyable(leader) || now - hunt.Began >= AceCareer.LifetimeSeconds)
                 {
                     End(hunt, HuntOutcome.Expired, now, false);
-                    Notice(hunt.Owner, hunt.Wing + " disengaged. No ace kill confirmed.", hunt.Callsign, "Disengage. Return to normal tasking.");
+                    Notice(hunt.Owner, hunt.Wing + " disengaged. No ace kill confirmed.", hunt.Wing, "Intercept terminated. Break off. Resume assigned tasking.");
                 }
                 else
                 {
@@ -541,8 +541,8 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                     {
                         hunt.NextChatter = now + 60f; hunt.ChatterCount++;
                         Notice(hunt.Owner, hunt.Symbol + " " + hunt.Wing + " — HUNT ACTIVE. " + hunt.Alive + " aircraft remaining.",
-                            hunt.Callsign, hunt.ChatterCount == 1 ? "Keep pressure on the marked aircraft. Make them turn." :
-                            hunt.Alive < hunt.SpawnedCount ? "We lost a wingman. Stay focused on the target." : "You cannot run forever. Wing, close the distance.");
+                            hunt.Callsign, hunt.ChatterCount == 1 ? "Maintain pursuit on the priority aircraft. Keep mutual support." :
+                            hunt.Alive < hunt.SpawnedCount ? "We have lost an aircraft. Close the formation. Maintain pursuit." : "Priority remains unchanged. Continue the intercept. Stay together.");
                     }
                 }
             }

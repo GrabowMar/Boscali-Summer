@@ -171,7 +171,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
                     string payment = quote.Cost > 0 ? AvNum.Fixed(quote.Cost, 0) + " " + quote.Unit : quote.Unit;
                     string scope = quote.Shared ? "FACTION-WIDE" : "PERSONAL";
-                    string note = chosen ? "IN FORCE" : quote.Reason ?? "";
+                    string note = chosen ? "" : quote.Reason ?? "";
                     string help = chosen ? "This response is in force for the rest of the event." :
                         quote.Available ? quote.Label + " costs " + payment +
                             " and changes this side's support price to x" +
@@ -188,10 +188,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
             /// <summary>One route: name, scope, price it would set, cost, reason and the CHOOSE action.</summary>
             private sealed class ChoiceCard
             {
-                private const float PadX = 10f, ButtonHeight = 28f;
+                private const float PadX = 8f, ButtonHeight = 24f, ButtonWidth = 72f;
                 private readonly AvFrame frame;
                 private readonly Image rail;
-                private readonly TMP_Text name, scope, effect, effectKey, cost, note;
+                private readonly TMP_Text name, scope, effect, cost, note;
                 private readonly AvControl button;
                 private bool chosen, enabled;
 
@@ -205,10 +205,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     rail = AvLay.Solid(Root, "Rail", Color.clear);
                     name = AvText.Make(Root, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
                     scope = AvText.Make(Root, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
-                    effect = AvText.Make(Root, "Effect", AvTextRole.Display, "", TextAlignmentOptions.MidlineRight);
+                    effect = AvText.Make(Root, "Effect", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
                     AvText.Fit(effect, false);
-                    effectKey = AvText.Make(Root, "EffectKey", AvTextRole.Micro, "SUPPORT", TextAlignmentOptions.MidlineRight);
-                    AvText.Fit(effectKey, false);
                     cost = AvText.Make(Root, "Cost", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineLeft, true);
                     note = AvText.Make(Root, "Note", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                     button = AvControl.Make(Root, new AvControl.Spec("CHOOSE", onChoose, AvButtonStyle.Primary));
@@ -235,37 +233,38 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     return grew;
                 }
 
-                // Name and scope stack on the left; the price it would set is the big number on the right.
-                private float PriceWidth => Mathf.Ceil(Mathf.Max(AvText.Width(effect), AvText.Width(effectKey))) + 4f;
+                // Compact quote above a cost row with a small action on its right.
+                private float PriceWidth => Mathf.Ceil(AvText.Width(effect)) + 4f;
 
                 public float Measure(float width)
                 {
                     float w = width - 2f * PadX;
                     float nameW = Mathf.Max(30f, w - PriceWidth - 6f);
-                    float head = Mathf.Max(46f, AvText.Height(name, nameW) + 1f + AvText.Height(scope, nameW));
-                    float h = 8f + head + 2f + 16f;
-                    if (note.text.Length > 0) h += 2f + AvText.Height(note, w);
-                    return h + 6f + ButtonHeight + 8f;
+                    float head = Mathf.Max(16f, AvText.Height(name, nameW)) + 1f + AvText.Height(scope, w);
+                    float row = Mathf.Max(ButtonHeight, AvText.Height(cost, w - ButtonWidth - 6f));
+                    float h = 6f + head + 4f + row;
+                    if (note.text.Length > 0) h += 4f + AvText.Height(note, w);
+                    return h + 6f;
                 }
 
                 public void Place(float x, float y, float width, float height)
                 {
                     AvLay.Place(Root, x, y, width, height);
-                    float w = width - 2f * PadX, cy = 8f;
+                    float w = width - 2f * PadX, cy = 6f;
                     AvLay.Place(rail.rectTransform, 0f, 0f, 2f, height);
                     float pw = PriceWidth, nameW = Mathf.Max(30f, w - pw - 6f);
-                    float nh = AvText.Height(name, nameW), sh = AvText.Height(scope, nameW);
-                    float head = Mathf.Max(46f, nh + 1f + sh);
+                    float nh = Mathf.Max(16f, AvText.Height(name, nameW)), sh = AvText.Height(scope, w);
+                    float head = nh + 1f + sh;
                     AvLay.Place(name.rectTransform, PadX, cy, nameW, nh);
-                    AvLay.Place(scope.rectTransform, PadX, cy + nh + 1f, nameW, sh);
-                    AvLay.Place(effectKey.rectTransform, PadX + w - pw, cy, pw, 14f);
-                    AvLay.Place(effect.rectTransform, PadX + w - pw, cy + 14f, pw, 32f);
-                    cy += head + 2f;
-                    AvLay.Place(cost.rectTransform, PadX, cy, w, 16f);
-                    cy += 16f;
+                    AvLay.Place(scope.rectTransform, PadX, cy + nh + 1f, w, sh);
+                    AvLay.Place(effect.rectTransform, PadX + w - pw, cy, pw, 16f);
+                    cy += head + 4f;
+                    float row = Mathf.Max(ButtonHeight, AvText.Height(cost, w - ButtonWidth - 6f));
+                    AvLay.Place(cost.rectTransform, PadX, cy, w - ButtonWidth - 6f, row);
+                    AvLay.Place(button.Rect, PadX + w - ButtonWidth, cy, ButtonWidth, ButtonHeight);
+                    cy += row;
                     float noteH = note.text.Length > 0 ? AvText.Height(note, w) : 0f;
-                    AvLay.Place(note.rectTransform, PadX, cy + (noteH > 0f ? 2f : 0f), w, noteH);
-                    AvLay.Place(button.Rect, PadX, height - 8f - ButtonHeight, w, ButtonHeight);
+                    AvLay.Place(note.rectTransform, PadX, cy + (noteH > 0f ? 4f : 0f), w, noteH);
                 }
 
                 public void Restyle()
@@ -275,7 +274,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                     rail.color = chosen ? AvStyleHost.FuiColor("select", AvTheme.Accent)
                         : enabled ? AvStyleHost.FuiColor("info", AvTheme.RailInfo) : AvStyleHost.FuiColor("inert", AvTheme.RailInert);
-                    effectKey.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     name.color = enabled || chosen ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     scope.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                     effect.color = chosen ? AvStyleHost.FuiColor("select", AvTheme.Accent)

@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         internal static void BroadcastGeometry(TrenchLine line)
         {
             if (!GameAccess.IsServer() || line == null || line.Curve == null || line.Curve.Length < 2) return;
-            NetworkManagerNuclearOption.i.Server.SendToAll(ToGeometry(line),
+            GameAccess.NetworkManagerOrNull.Server.SendToAll(ToGeometry(line),
                 authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
@@ -109,7 +109,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         internal static void BroadcastState(TrenchLine line)
         {
             if (!GameAccess.IsServer() || line == null) return;
-            NetworkManagerNuclearOption.i.Server.SendToAll(ToState(line),
+            GameAccess.NetworkManagerOrNull.Server.SendToAll(ToState(line),
                 authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         internal static void BroadcastRemoved(int lineId)
         {
             if (!GameAccess.IsServer() || lineId <= 0) return;
-            NetworkManagerNuclearOption.i.Server.SendToAll(
+            GameAccess.NetworkManagerOrNull.Server.SendToAll(
                 new TrenchLineRemovedMessage { Protocol = ProtocolVersion, LineId = lineId },
                 authenticatedOnly: true, excludeLocalPlayer: true);
         }
@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
         private void RegisterLiveEndpoints()
         {
             NetworkManagerNuclearOption service;
-            try { service = NetworkManagerNuclearOption.i; }
+            try { service = GameAccess.NetworkManagerOrNull; }
             catch { return; }
             if (service == null) return;
 

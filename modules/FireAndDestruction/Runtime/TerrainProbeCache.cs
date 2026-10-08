@@ -38,7 +38,13 @@ namespace BoscaliSummer.Fire
             long key = Deterministic.CellKey(position.x, position.z, CellSize);
             if (probes.TryGetValue(key, out Probe cached))
             {
-                point = cached.Point;
+                // Reuse the cached tangent plane, not the old query's x/z. Returning the
+                // original hit moved adjacent seeds into the same 24 m cache location.
+                float y = cached.Point.y;
+                if (cached.Ok && cached.Normal.y > 0.25f)
+                    y -= ((position.x - cached.Point.x) * cached.Normal.x +
+                          (position.z - cached.Point.z) * cached.Normal.z) / cached.Normal.y;
+                point = new GlobalPosition(position.x, y, position.z);
                 normal = cached.Normal;
                 return cached.Ok;
             }

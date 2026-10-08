@@ -58,6 +58,8 @@ namespace BoscaliSummer.Core.Game
 
         public ManualLogSource Log;
         public MFDScreen Screen;
+        /// <summary>The claimed bezel button; pressing it shows <see cref="Screen"/> (automation).</summary>
+        public Button Bezel;
         public GameObject Root;
         public bool Failed;
 
@@ -109,6 +111,7 @@ namespace BoscaliSummer.Core.Game
                 }
 
                 Screen = Build(template, buttons[slot]);
+                Bezel = buttons[slot];
                 if (Screen == null)
                 {
                     Reset();
@@ -170,6 +173,7 @@ namespace BoscaliSummer.Core.Game
             if (Root != null) UnityEngine.Object.Destroy(Root);
             Root = null;
             Screen = null;
+            Bezel = null;
             Failed = false;
             nextAttempt = 0f;
         }

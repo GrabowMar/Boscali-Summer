@@ -553,18 +553,17 @@ public static class PresentationUnityCheck
         Type cache = TypeOf("BoscaliSummer.Modules.Events.Presentation.EventArtCache");
         Type catalog = TypeOf("BoscaliSummer.Modules.Events.Domain.EventCatalog");
         Array entries = (Array)catalog.GetField("All", All).GetValue(null);
-        MethodInfo atlasTile = cache.GetMethod("AtlasTile", All);
-        Texture2D sharedTexture = null;
+        MethodInfo getArt = cache.GetMethod("Get", All);
+        var eventTextures = new HashSet<Texture>();
         for (int i = 0; i < entries.Length; i++)
         {
             string key = (string)entries.GetValue(i).GetType().GetProperty("IconKey", All)
                 .GetValue(entries.GetValue(i));
-            Sprite tile = (Sprite)atlasTile.Invoke(null, new object[] { key });
-            Check(tile != null && tile.rect.width == 192f && tile.rect.height == 108f,
-                "Every event must resolve a 192x108 atlas tile.");
-            if (sharedTexture == null) sharedTexture = tile.texture;
-            Check(ReferenceEquals(sharedTexture, tile.texture),
-                "All event tiles must share one decoded atlas texture.");
+            Sprite posterArt = (Sprite)getArt.Invoke(null, new object[] { key, "default" });
+            Check(posterArt != null && posterArt.rect.width == 1024f && posterArt.rect.height == 576f,
+                "Every event must resolve a 1024x576 embedded image: " + key);
+            Check(posterArt != null && eventTextures.Add(posterArt.texture),
+                "Every event must own a distinct decoded image: " + key);
         }
         Sprite poster = (Sprite)cache.GetMethod("Get", All).Invoke(null,
             new object[] { "ceasefire_ultimatum", "tier_super" });

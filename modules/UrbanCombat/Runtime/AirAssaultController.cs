@@ -10,7 +10,7 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Fires Chimera paratroops and Ibis fast-rope from the troops weapon trigger. Only the
+    /// Fires HALO paratroopers (Airborne.nobp mount) and Ibis fast-rope from the troops weapon trigger. Only the
     /// server decides where a stick ends up; every peer with a screen just watches it drop.
     /// </summary>
     internal sealed class AirAssaultController : MonoBehaviour, ISceneService, IAirAssaultObservation
@@ -29,28 +29,27 @@ namespace BoscaliSummer.Garrisons
 
         private readonly Dictionary<int, float> nextDropTimes = new Dictionary<int, float>();
         private int pendingDrops;
-        private int doorWaits;
         private int rappelWaves;
         private const int MaximumTrackedAircraft = 64;
         private const int MaximumPendingDrops = 16;
-        private const int MaximumDoorWaits = 8;
         private const int MaximumRappelWaves = 4;
         private const float MinFireInterval = 0.8f;
-        private const float DoorOpenTimeout = 3.5f;
         private const float CargoDoorHoldSeconds = 10f;
-        private const float FastRopeMaxHeight = 45f;
-        /// <summary>The last pair of a squad leaves the door about this long after the first.</summary>
-        private const float FastRopeStaggerSeconds = 2.5f;
+        /// <summary>Exfil picks up a friendly position within this of the point below the helicopter.</summary>
+        private const float ExfilRadius = 70f;
+        private const float ExfilMaxSpeed = 8f;
         private static Airbase[] cachedAirbases;
 
-        private void Awake()
-        {
-            Instance = this;
-            // A module switched on after boot missed Encyclopedia.AfterLoad. WeaponLookup is only
-            // set once that ran, and registering again is a no-op.
-            if (Encyclopedia.WeaponLookup != null)
-                ChimeraInfantryLoadoutAdapter.Register(Encyclopedia.i);
-        }
+        /// <summary>
+        /// The HALO paratrooper mount from Airborne.nobp (modules/UrbanCombat/Assets/Editor/AirborneBuilder.cs).
+        /// Blueprinter registers it and adds it to the Tarantula and Aryx Chimera cargo bays; without
+        /// Blueprinter it does not exist.
+        /// </summary>
+        internal const string HaloMountKey = "AB_Paratroopers_x16";
+        /// <summary>Ramp opening before the first pair goes; every peer and the server add the same lead.</summary>
+        private const float HaloRampSeconds = 2.5f;
+
+        private void Awake() => Instance = this;
 
         private void OnDestroy() { if (Instance == this) Instance = null; }
 
@@ -58,7 +57,6 @@ namespace BoscaliSummer.Garrisons
         {
             StopAllCoroutines();
             pendingDrops = 0;
-            doorWaits = 0;
             rappelWaves = 0;
             nextDropTimes.Clear();
             cachedAirbases = null;
@@ -70,7 +68,7 @@ namespace BoscaliSummer.Garrisons
         /// CmdLaunchMissile, observers through RpcLaunchMissile (twice for a remote owner). The
         /// per-aircraft window takes one stick per trigger, so every peer books the same troops.
         /// </summary>
-        public void DeployFromWeaponStation(Aircraft aircraft, MountedTroops mountedTroops, WeaponStation station)
+        public void DeployFromWeaponStation(Aircraft aircraft, MountedTroops mountedTroops, WeaponStation station, Unit target, GlobalPosition aimpoint)
         {
             if (aircraft == null || !TroopAccountingAvailable) return;
 
@@ -80,17 +78,19 @@ namespace BoscaliSummer.Garrisons
             AircraftDefinition def = aircraft.definition as AircraftDefinition;
             string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : aircraft.name ?? "";
 
-            bool isChimera = IsChimeraCarrier(name, def);
-            if (!isChimera && !IsIbis(name, def)) return;
-
             if (mountedTroops == null)
                 mountedTroops = aircraft.GetComponentInChildren<MountedTroops>();
 
+            // The mount decides: HALO sticks jump from anything carrying them; vanilla troop
+            // benches only fast-rope from the Ibis and otherwise keep vanilla landing capture.
+            bool halo = IsHalo(mountedTroops);
+            if (!halo && !IsIbis(name, def)) return;
+
             // Vanilla keeps its station index on the first troop mount, even when empty.
-            int needed = isChimera ? 1 : TroopDeploymentMath.DefaultSquadSize;
+            int needed = halo ? 1 : TroopDeploymentMath.DefaultSquadSize;
             if (station != null)
                 foreach (Weapon weapon in station.Weapons)
-                    if (weapon is MountedTroops troops && troops.IsAttached() && troops.ammo >= needed)
+                    if (weapon is MountedTroops troops && troops.IsAttached() && troops.ammo >= needed && IsHalo(troops) == halo)
                     {
                         mountedTroops = troops;
                         break;
@@ -102,38 +102,67 @@ namespace BoscaliSummer.Garrisons
                 return;
             }
 
-            if (isChimera)
-                DeployParadrop(aircraft, mountedTroops, station, aboard);
+            if (halo)
+                DeployHalo(aircraft, mountedTroops, station, aboard, target, aimpoint);
             else
                 DeployFastRope(aircraft, mountedTroops, station);
         }
 
-        private void DeployParadrop(Aircraft aircraft, MountedTroops troops, WeaponStation station, int aboard)
+        private static readonly FieldInfo WeaponMountField = HarmonyLib.AccessTools.Field(typeof(Weapon), "mount");
+
+        private static bool IsHalo(MountedTroops troops) =>
+            troops != null && WeaponMountField?.GetValue(troops) is WeaponMount mount && mount.jsonKey == HaloMountKey;
+
+        private void DeployHalo(Aircraft aircraft, MountedTroops troops, WeaponStation station, int aboard, Unit target, GlobalPosition aimpoint)
         {
-            // MC-260/Tarantula: one stick out the rear cargo access.
-            int desired = Mathf.Clamp(Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value, 2, TroopDeploymentMath.DefaultSquadSize);
-            int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, desired);
-            Vector3 exit = ComputeCargoDropExitPosition(aircraft, dropCount);
+            int dropCount = TroopDeploymentMath.ComputeDropSize(aboard, Mathf.Clamp(Plugin.Settings.UrbanCombat.TroopsPerDeploy.Value, 2, HaloGlidePlan.MaxJumpers));
+            Vector3 velocity = aircraft.rb != null ? aircraft.rb.velocity : aircraft.transform.forward * 60f;
+            // Every peer predicts the same ramp point from replicated state; the stick leaves it once the ramp is down.
+            Vector3 exit = ComputeCargoDropExitPosition(aircraft, dropCount) + velocity * HaloRampSeconds;
+            Vector3? aim = HaloAim(aircraft, target, aimpoint);
+            HaloGlidePlan plan = HaloGlidePlan.Build(exit.ToGlobalPosition().AsVector3(), velocity, aim, HaloGroundAt, dropCount);
             ConsumeTroops(aircraft, troops, station, dropCount);
             Throttle(aircraft, MinFireInterval);
-            Plugin.Logger.LogInfo($"[CHIMERA] Paratrooper stick of {dropCount} exiting the rear cargo access at ({exit.x:0}, {exit.y:0}, {exit.z:0}). {troops.ammo} infantry remaining aboard.");
+            Vector3 landing = plan.StickLanding;
+            Plugin.Logger.LogInfo($"[AIRBORNE] HALO stick of {dropCount} away from {aircraft.name}: " +
+                (aim.HasValue ? "gliding onto the designated target" : "no designation, gliding down the heading") +
+                $" ({(plan.LowDrop ? "low drop, canopies off the ramp" : "wingsuit glide")}), on the ground in {plan.TotalSeconds:0} s. {troops.ammo} aboard.");
 
             if (GameAccess.IsServer())
             {
-                // Server state only: straight down from the exit plus the mission wind the
-                // canopies drift on, resolved once the slowest canopy is down.
-                float ground = Physics.Raycast(exit, Vector3.down, out RaycastHit below, 6000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
-                    ? below.point.y : Datum.LocalSeaY;
-                float descent = TroopDeploymentMath.DescentSeconds(exit.y - ground, TroopDeploymentMath.ParachuteDescentRate);
-                LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
-                Vector3 wind = level != null ? level.GetWind() : Vector3.zero;
-                GlobalPosition landing = (exit + new Vector3(wind.x, 0f, wind.z) * (0.75f * descent)).ToGlobalPosition();
                 FactionHQ owner = aircraft.NetworkHQ;
                 Airbase airbase = FindNearestAirbase(aircraft.transform.position);
-                Schedule(descent, () => ResolveParadrop(landing, owner, airbase, dropCount));
+                var ground = new GlobalPosition(landing.x, landing.y, landing.z);
+                Schedule(HaloRampSeconds + plan.TotalSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount));
             }
 
-            ShowDrop(aircraft, troops, true, dropCount, default);
+            if (GameManager.IsHeadless) return;
+            BeginCargoAccess(aircraft, ResolveCargoDoors(aircraft, troops));
+            AirAssaultVisuals.SpawnHaloDrop(plan, HaloRampSeconds);
+        }
+
+        /// <summary>The designated target in global coordinates, if any.</summary>
+        private static Vector3? HaloAim(Aircraft aircraft, Unit target, GlobalPosition aimpoint)
+        {
+            if (target != null && !target.disabled)
+                return target.GlobalPosition().AsVector3();
+            // A point designation arrives as an aimpoint; an unset one sits at the origin or on the aircraft.
+            Vector3 point = aimpoint.AsVector3();
+            Vector3 self = aircraft.GlobalPosition().AsVector3();
+            if (point.sqrMagnitude > 1f && new Vector2(point.x - self.x, point.z - self.z).sqrMagnitude > 200f * 200f)
+                return point;
+            return null;
+        }
+
+        /// <summary>Roof or ground height under a global point (sea level over water), in global metres.</summary>
+        internal static float HaloGroundAt(Vector3 global)
+        {
+            Vector3 local = new GlobalPosition(global.x, global.y, global.z).ToLocalPosition();
+            float sea = new Vector3(local.x, Datum.LocalSeaY, local.z).ToGlobalPosition().AsVector3().y;
+            var from = new Vector3(local.x, Datum.LocalSeaY + 9000f, local.z);
+            if (Physics.Raycast(from, Vector3.down, out RaycastHit hit, 12000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                return Mathf.Max(sea, hit.point.ToGlobalPosition().AsVector3().y);
+            return sea;
         }
 
         private static void ResolveParadrop(GlobalPosition landing, FactionHQ owner, Airbase airbase, int troopCount)
@@ -165,38 +194,42 @@ namespace BoscaliSummer.Garrisons
 
         private void DeployFastRope(Aircraft aircraft, MountedTroops troops, WeaponStation station)
         {
-            // UH-90 Ibis: fast-rope a squad from a low hover over a building or LZ.
+            // UH-90 Ibis: fast-rope (to 45 m) or rappel (to 120 m) a squad from a hover.
             Vector3 origin = aircraft.transform.position;
-            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 500f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+            if (DeckBelow(aircraft, out Ship ship, out Vector3 deck))
+            {
+                TryShipBoarding(aircraft, ship, deck);
+                return;
+            }
+            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, FastRopePlan.RappelMaxHeight + 400f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
             {
                 Plugin.Logger.LogInfo("[Air Assault] Aborted: No surface detected below helicopter.");
                 return;
             }
-
             if (hit.point.y <= Datum.LocalSeaY + 1f)
             {
-                Plugin.Logger.LogInfo("[Air Assault] Aborted: Cannot fast-rope over open water.");
+                Plugin.Logger.LogInfo("[Air Assault] Aborted: Cannot rope down over open water.");
                 return;
             }
 
             float height = origin.y - hit.point.y;
-            if (height > FastRopeMaxHeight)
+            RopeMode? mode = FastRopePlan.ModeFor(height);
+            if (mode == null)
             {
-                Plugin.Logger.LogInfo($"[Air Assault] Altitude too high for fast-rope ({height:0}m). Fast-rope operations require hovering below {FastRopeMaxHeight:0}m. Descend closer to the rooftop or ground.");
+                Plugin.Logger.LogInfo($"[Air Assault] {height:0} m is out of rope range: fast-rope below {FastRopePlan.FastRopeMaxHeight:0} m, rappel below {FastRopePlan.RappelMaxHeight:0} m.");
                 return;
             }
 
             GameObject shell = ResolveCivilianBuilding(hit.collider);
             int dropCount = TroopDeploymentMath.DefaultSquadSize;
             ConsumeTroops(aircraft, troops, station, dropCount);
-            // One rappel at a time: the helicopter holds until its squad is on the ground.
-            float descent = TroopDeploymentMath.DescentSeconds(height, TroopDeploymentMath.FastRopeDescentRate) + FastRopeStaggerSeconds;
-            Throttle(aircraft, descent);
-
-            if (shell != null)
-                Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to ({hit.point.x:0}, {hit.point.z:0}) on {shell.name}. {troops.ammo} infantry remaining aboard.");
-            else
-                Plugin.Logger.LogInfo($"[IBIS] Fast-rope rappelling squadron of {dropCount} infantry descending to LZ ({hit.point.x:0}, {hit.point.z:0}). {troops.ammo} infantry remaining aboard.");
+            float descent = FastRopePlan.InsertionSeconds(mode.Value, height, dropCount);
+            // One insertion at a time: the helicopter holds until its squad is off the ropes.
+            Throttle(aircraft, descent + 1f);
+            HoverHold.Engage(aircraft, descent + 1f);
+            string how = mode == RopeMode.FastRope ? "Fast-roping" : "Rappelling";
+            Plugin.Logger.LogInfo($"[IBIS] {how} {dropCount} infantry {height:0} m down to ({hit.point.x:0}, {hit.point.z:0})" +
+                (shell != null ? $" on {shell.name}" : "") + $"; off the ropes in {descent:0} s. {troops.ammo} infantry remaining aboard.");
 
             GlobalPosition landing = hit.point.ToGlobalPosition();
             if (GameAccess.IsServer())
@@ -207,7 +240,98 @@ namespace BoscaliSummer.Garrisons
                 Schedule(descent, () => ResolveFastRope(aircraft, owner, airbase, landing, shell, landingShellId));
             }
 
-            ShowDrop(aircraft, troops, false, dropCount, landing);
+            if (GameManager.IsHeadless) return;
+            BeginCargoAccess(aircraft, ResolveCargoDoors(aircraft, troops));
+            AirAssaultVisuals.SpawnRopeInsertion(aircraft, mode.Value, height, hit.point, shell, dropCount);
+        }
+
+        /// <summary>The first thing under the helicopter (its own colliders skipped) is a ship's deck.</summary>
+        private static bool DeckBelow(Aircraft aircraft, out Ship ship, out Vector3 deck)
+        {
+            ship = null;
+            deck = default;
+            RaycastHit[] hits = Physics.RaycastAll(aircraft.transform.position, Vector3.down, FastRopePlan.RappelMaxHeight + 10f,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            foreach (RaycastHit hit in hits)
+            {
+                if (hit.collider.GetComponentInParent<Aircraft>() == aircraft) continue;
+                ship = hit.collider.GetComponentInParent<Ship>();
+                deck = hit.point;
+                return ship != null;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Future: roping boarding parties onto cargo and disabled ships. Not implemented yet, so
+        /// the squad stays aboard and no troops are spent.
+        /// </summary>
+        private static bool TryShipBoarding(Aircraft aircraft, Ship ship, Vector3 deck)
+        {
+            Plugin.Logger.LogInfo($"[Air Assault] Ship boarding ({ship.name}) is not available yet; the squad stays aboard {aircraft.name}.");
+            return false;
+        }
+
+        /// <summary>The vanilla troop bench with room for a squad, if this helicopter has one.</summary>
+        private static MountedTroops Bench(Aircraft aircraft)
+        {
+            foreach (MountedTroops troops in aircraft.GetComponentsInChildren<MountedTroops>())
+                if (troops.IsAttached() && !IsHalo(troops) && troops.ammo < TroopDeploymentMath.DefaultSquadSize) return troops;
+            return null;
+        }
+
+        /// <summary>Any peer: a slow Ibis in rope range with room on a troop bench.</summary>
+        public bool CanExfil(Aircraft aircraft)
+        {
+            if (aircraft == null || aircraft.disabled || aircraft.rb == null || !TroopAccountingAvailable) return false;
+            AircraftDefinition def = aircraft.definition as AircraftDefinition;
+            string name = def != null ? (def.unitName ?? def.jsonKey ?? "") : aircraft.name ?? "";
+            return IsIbis(name, def) && aircraft.rb.velocity.magnitude < ExfilMaxSpeed &&
+                FastRopePlan.ModeFor(aircraft.radarAlt) != null && Bench(aircraft) != null;
+        }
+
+        /// <summary>
+        /// Server: strikes the nearest friendly encampment or held building below and hands back
+        /// where the squad comes from (global), how many board and the rope length.
+        /// </summary>
+        public bool TryExfil(Aircraft aircraft, out Vector3 site, out int count, out float height)
+        {
+            site = default;
+            count = 0;
+            height = 0f;
+            if (!GameAccess.IsServer() || !CanExfil(aircraft)) return false;
+            Vector3 origin = aircraft.transform.position;
+            if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, FastRopePlan.RappelMaxHeight + 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                return false;
+            FactionHQ owner = aircraft.NetworkHQ;
+            int troops = TroopDeploymentMath.DefaultSquadSize;
+            bool found = InfantryEncampmentBuilder.TryRelease(hit.point, ExfilRadius, owner, out Vector3 centre, out troops) ||
+                (ZoneGarrisonManager.Instance != null && ZoneGarrisonManager.Instance.TryReleaseOccupation(hit.point, ExfilRadius, owner, out centre));
+            if (!found)
+            {
+                Plugin.Logger.LogInfo($"[Air Assault] Exfil: no friendly squad position within {ExfilRadius:0} m below {aircraft.name}.");
+                return false;
+            }
+            height = origin.y - hit.point.y;
+            count = Mathf.Min(TroopDeploymentMath.DefaultSquadSize - Bench(aircraft).ammo, Mathf.Max(1, troops));
+            site = centre.ToGlobalPosition().AsVector3();
+            Plugin.Logger.LogInfo($"[IBIS] Exfil: {count} infantry clipping onto the ropes of {aircraft.name}; their position is abandoned.");
+            return true;
+        }
+
+        /// <summary>Every peer: the squad boards (bench refilled locally, as vanilla never syncs ammo) and rides up.</summary>
+        public void PlayExfil(Aircraft aircraft, Vector3 site, int count, float height)
+        {
+            MountedTroops bench = aircraft != null ? Bench(aircraft) : null;
+            if (bench == null || count <= 0) return;
+            RefillTroops(aircraft, bench, count);
+            float seconds = height / FastRopePlan.ReelSpeed + 25f;
+            Throttle(aircraft, seconds);
+            HoverHold.Engage(aircraft, seconds);
+            if (GameManager.IsHeadless) return;
+            BeginCargoAccess(aircraft, ResolveCargoDoors(aircraft, bench));
+            AirAssaultVisuals.SpawnRopeExtraction(aircraft, new GlobalPosition(site.x, site.y, site.z).ToLocalPosition(), count, height);
         }
 
         private void ResolveFastRope(Aircraft aircraft, FactionHQ owner, Airbase airbase, GlobalPosition landing, GameObject shell, int landingShellId)
@@ -283,56 +407,6 @@ namespace BoscaliSummer.Garrisons
             outcome();
         }
 
-        private void ShowDrop(Aircraft aircraft, MountedTroops troops, bool paradrop, int count, GlobalPosition landing)
-        {
-            if (GameManager.IsHeadless) return;
-
-            // Cosmetic: the troops are already booked. Doors animate open, then the stick exits.
-            BayDoor[] doors = ResolveCargoDoors(aircraft, troops);
-            if (doorWaits >= MaximumDoorWaits || IsCargoDoorOpen(aircraft, doors) || !BeginCargoAccess(aircraft, doors))
-            {
-                SpawnDropVisual(aircraft, paradrop, count, landing);
-                return;
-            }
-            doorWaits++;
-            StartCoroutine(OpenCargoAccessThenShow(aircraft, doors, paradrop, count, landing));
-        }
-
-        private IEnumerator OpenCargoAccessThenShow(Aircraft aircraft, BayDoor[] doors, bool paradrop, int count, GlobalPosition landing)
-        {
-            float deadline = Time.unscaledTime + DoorOpenTimeout;
-            while (Time.unscaledTime < deadline && aircraft != null && !aircraft.disabled && !IsCargoDoorOpen(aircraft, doors))
-                yield return new WaitForSeconds(0.1f);
-            doorWaits--;
-            if (aircraft != null && !aircraft.disabled)
-                SpawnDropVisual(aircraft, paradrop, count, landing);
-        }
-
-        private static void SpawnDropVisual(Aircraft aircraft, bool paradrop, int count, GlobalPosition landing)
-        {
-            if (paradrop)
-            {
-                Vector3 exitVel = (aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero) - aircraft.transform.forward * 8f;
-                AirAssaultVisuals.SpawnParatrooperCargoDrop(aircraft, ComputeCargoDropExitPosition(aircraft, count), exitVel, count);
-            }
-            else
-            {
-                AirAssaultVisuals.SpawnFastRopeRappelling(aircraft, landing.ToLocalPosition(), count);
-            }
-        }
-
-        private static bool IsChimeraCarrier(string name, AircraftDefinition def)
-        {
-            if (string.IsNullOrEmpty(name)) return false;
-            return name.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   name.IndexOf("mc260", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   name.IndexOf("mc-260", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   name.IndexOf("tarantula", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   name.IndexOf("tarantulla", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   name.IndexOf("aryx", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                   (def != null && def.jsonKey != null && def.jsonKey.IndexOf("chimera", StringComparison.OrdinalIgnoreCase) >= 0);
-        }
-
         private static readonly FieldInfo CaptureStrengthField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "captureStrength");
         private static readonly FieldInfo CaptureActiveField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "captureActive");
         private static readonly FieldInfo TroopMassField = HarmonyLib.AccessTools.Field(typeof(MountedTroops), "mass");
@@ -366,6 +440,25 @@ namespace BoscaliSummer.Garrisons
                     renderer.enabled = false;
             station?.AccountAmmo();
         }
+
+        private static void RefillTroops(Aircraft aircraft, MountedTroops troops, int count)
+        {
+            troops.ammo += count;
+            float addedMass = count * (troops.info != null ? troops.info.massPerRound : 0f);
+            TroopMassField.SetValue(troops, (float)TroopMassField.GetValue(troops) + addedMass);
+            Hardpoint hardpoint = TroopHardpointField.GetValue(troops) as Hardpoint;
+            if (hardpoint != null) hardpoint.ModifyMass(addedMass);
+            if (GameAccess.IsServer())
+            {
+                CaptureStrengthField.SetValue(troops, (float)troops.ammo);
+                if ((bool)CaptureActiveField.GetValue(troops)) aircraft.ModifyCaptureStrength(count);
+            }
+            foreach (Renderer renderer in troops.GetComponentsInChildren<Renderer>(true))
+                renderer.enabled = true;
+            (TroopStationField?.GetValue(troops) as WeaponStation)?.AccountAmmo();
+        }
+
+        private static readonly FieldInfo TroopStationField = HarmonyLib.AccessTools.Field(typeof(Weapon), "weaponStation");
 
         private static Vector3 ComputeCargoDropExitPosition(Aircraft aircraft, int dropCount)
         {
@@ -427,7 +520,7 @@ namespace BoscaliSummer.Garrisons
                    (def != null && def.CanSlingLoad);
         }
 
-        private static GameObject ResolveCivilianBuilding(Collider col)
+        internal static GameObject ResolveCivilianBuilding(Collider col)
         {
             if (col == null) return null;
             MapBuilding mb = col.GetComponentInParent<MapBuilding>();
@@ -474,10 +567,6 @@ namespace BoscaliSummer.Garrisons
             return best;
         }
 
-        private static readonly FieldInfo BayDoorOpenAmountField =
-            typeof(BayDoor).GetField("openAmount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-        private static readonly FieldInfo CargoRampOpenAmountField =
-            typeof(CargoRamp).GetField("openAmount", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
         private static readonly MethodInfo BayDoorOpenDoorMethod =
             typeof(BayDoor).GetMethod("OpenDoor", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
@@ -530,32 +619,6 @@ namespace BoscaliSummer.Garrisons
             }
 
             return false;
-        }
-
-        private static bool IsCargoDoorOpen(Aircraft aircraft, BayDoor[] doors)
-        {
-            if (aircraft == null) return true;
-
-            // CargoRamp animates its own hinge; the inherited openAmount stays unused.
-            CargoRamp ramp = aircraft.GetComponentInChildren<CargoRamp>(true);
-            if (ramp != null)
-            {
-                float amt = CargoRampOpenAmountField != null ? (float)CargoRampOpenAmountField.GetValue(ramp) : 1f;
-                return amt >= 0.85f || ramp.IsOpen();
-            }
-
-            if (doors != null && doors.Length > 0)
-            {
-                for (int i = 0; i < doors.Length; i++)
-                {
-                    if (doors[i] == null) continue;
-                    float amt = BayDoorOpenAmountField != null ? (float)BayDoorOpenAmountField.GetValue(doors[i]) : 1f;
-                    if (amt >= 0.8f) return true;
-                }
-                return false;
-            }
-
-            return true;
         }
     }
 }

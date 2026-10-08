@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
         private void Update()
         {
             float now = Time.unscaledTime;
-            NetworkClient currentClient = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient currentClient = GameAccess.NetworkManagerOrNull?.Client;
             bool factionChanged = requestedHq != null &&
                 (!GameManager.GetLocalPlayer<Player>(out Player currentPlayer) || currentPlayer == null || currentPlayer.HQ != requestedHq);
             bool connectionChanged = requestedClient != null &&
@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             }
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
             ServerHandlers.Swap(server);
@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 if (result != null) manager.EndAction(result);
                 return;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)
             {
                 manager.SetLocalStatus("Connect to a host with dynamic operations enabled.");
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
         private void ReceiveSnapshot(INetworkPlayer sender, OperationsSnapshot snapshot)
         {
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             bool currentConnection = client != null && ReferenceEquals(client, requestedClient) && client.Active && client.IsConnected &&
                 sender != null && sender.IsAuthenticated && sender.IsConnected &&
                 ReferenceEquals(sender, requestedPeer) && ReferenceEquals(sender, client.Player);

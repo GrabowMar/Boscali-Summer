@@ -19,9 +19,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>AEGIS fire control: nearest closing threat in range, one interceptor per threat, global cooldown.</summary>
     internal sealed class InterceptPicker
     {
-        public const float MaxRange = 2000f;
-        public const float MinRange = 250f; // the dart needs room to drop, turn and light
-        public const float Cooldown = 3f;
+        public const float MaxRange = 1100f;
+        public const float MinRange = 120f; // Very close arrivals can beat the drop-and-turn delay.
+        public const float Cooldown = 2.2f;
         public const float EngagementMemory = 8f;
 
         private readonly Dictionary<int, float> engaged = new Dictionary<int, float>();
@@ -32,14 +32,16 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         {
             if (now < nextShot) return -1;
             int best = -1;
-            float bestRange = float.MaxValue;
+            float bestTime = float.MaxValue;
             for (int i = 0; i < threats.Count; i++)
             {
                 ThreatView t = threats[i];
-                if (t.Closing <= 0f || t.Range > MaxRange || t.Range < MinRange || t.Range >= bestRange) continue;
+                if (t.Closing < 40f || t.Range > MaxRange || t.Range < MinRange) continue;
+                float time=t.Range/t.Closing;
+                if (time < .45f || time > 6f || time >= bestTime) continue;
                 if (engaged.TryGetValue(t.Id, out float until) && now < until) continue;
                 best = t.Id;
-                bestRange = t.Range;
+                bestTime = time;
             }
             return best;
         }

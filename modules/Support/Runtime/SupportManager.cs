@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Networking;
 using BoscaliSummer.Modules.Support.Presentation;
@@ -56,11 +57,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
-        private CreditService credits;
+        private IFrontReadiness readiness = new DefaultFrontReadiness();
         private SpaceService space;
         private int sceneGeneration = 1;
-        private float nextCreditTick;
-        private float lastCreditTick;
         private ManualLogSource logger;
         private ConfigEntry<bool> bypassRequirements;
         private ConfigEntry<bool> disableCooldowns;
@@ -70,7 +69,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private int nextRequestId;
         private float pendingSince;
         private bool pending;
-        private float localCooldownUntil;
+        /// <summary>Per perk: the mission time the local pilot may use it again (the host sent the length with the accepted reply).</summary>
+        private readonly Dictionary<SupportActionId, float> localCooldownUntil = new Dictionary<SupportActionId, float>();
 
         private string inboundStrikeName;
         private float inboundStrikeImpactTime;
@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (eta >= soonest) continue;
                 soonest = eta;
                 secondsToImpact = eta;
-                label = strike.ActionId == SupportActionId.FlareMissile ? "FLARE BARRAGE"
+                label = strike.ActionId == SupportActionId.FlareMissile ? "DECOY BARRAGE"
                     : strike.ActionId == SupportActionId.Artillery ? "KINETIC ROD"
                     : strike.ActionId == SupportActionId.Prsm ? "PRSM"
                     : strike.ActionId == SupportActionId.Cruise ? "CRUISE" : "EMP STRIKE";
@@ -140,7 +140,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportActionId.Emp:
                     return Mathf.Min(SupportEffectPolicy.MaxEmpRadius,
                         settings != null ? settings.EmpRadius.Value : 12000f);
-                case SupportActionId.MtiSweep:
                 case SupportActionId.Recon:
                     return settings != null ? settings.SarSceneRadius.Value : 1000f;
                 case SupportActionId.SatCamera:
@@ -149,6 +148,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return settings != null ? settings.ElintRadius.Value : 8000f;
                 case SupportActionId.FlareMissile:
                     return settings != null ? settings.FlareBarrageRadius.Value : 4000f;
+                case SupportActionId.RadarBlind:
+                    return 1500f;
+                case SupportActionId.SamNetDown:
+                    return 3000f;
+                case SupportActionId.ReconTeam:
+                    return 2000f;
+                case SupportActionId.SabotageStrike:
+                    return 1000f;
                 case SupportActionId.Fortify:
                     return 650f; // Selection radius; the overlay resolves the actual owned zone.
                 default:
@@ -240,14 +247,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal MarkVerdict ConfirmSpaceMark(Player player, int id)
         {
             if (!GameAccess.IsServer() || player == null || player.HQ == null) return MarkVerdict.NoContact;
-            bool recent = credits != null && credits.Activity.IsActive(PlayerIdentity.Of(player), false, MissionNow());
-            return space?.ObservationsFor(player.HQ)?.Mark(PlayerIdentity.Of(player), id, recent) ?? MarkVerdict.NoContact;
+            return space?.ObservationsFor(player.HQ)?.Mark(PlayerIdentity.Of(player), id, true) ?? MarkVerdict.NoContact;
         }
         internal bool TryGetSpaceState(FactionHQ owner, out SpaceState state)
         {
             state = null;
             return space != null && space.TryGetState(owner, out state);
         }
+        /// <summary>The viewer faction's bird in its geostationary slot: the host's state on the host, the OPS mirror's on a client. False until it is known.</summary>
+        internal bool TryOwnGeo(FactionHQ owner, int bird, out GeoBird geo)
+        {
+            geo = default;
+            if (bird < 0 || bird >= SpaceRules.BirdCount) return false;
+            if (GameAccess.IsServer()) { if (!TryGetSpaceStateCoarse(owner, out SpaceState state)) return false; geo = state.Geo((BirdKind)bird); return true; }
+            if (!opsMirror.Known || !opsMirror.State.Active) return false;
+            geo = opsMirror.State.Geo[bird];
+            return true;
+        }
+
         /// <summary>Display read of the host's SPACE state (quotes, panels, sky): the 1 Hz world state, no native re-sample.</summary>
         internal bool TryGetSpaceStateCoarse(FactionHQ owner, out SpaceState state)
         {
@@ -256,7 +273,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
-        public bool BypassRequirements => bypassRequirements != null && bypassRequirements.Value;
+        public bool BypassRequirements => !OpsAutomation.Strict && bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
         public bool RequestPending => pending;
         internal void AbandonPending() => pending = false;
@@ -269,8 +286,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Active = this;
             perks = playerPerks;
             network = net;
-            credits = new CreditService(net);
-            credits.PriceFactors = HostPriceFactors;
             logger = log;
             catalog = new SupportCatalog(supportSettings, fortifications);
         }
@@ -290,23 +305,23 @@ namespace BoscaliSummer.Modules.Support.Runtime
             sof?.ResetForScene();
             ops?.ResetForScene();
             Visuals.OpsFlightVisuals.Reset();
+            Visuals.FrontEffectVisuals.Reset();
+            Visuals.AreaFx.Reset();
+            Visuals.StagedBlastFx.Reset();
+            Visuals.LaseFx.Reset();
             ResetSpaceMirror();
             Visuals.EmpVisualEffect.Reset();
             Visuals.KineticRodStrikeVisuals.Reset();
             RodGuard.Reset();
             Visuals.FlareMissileBurstVisuals.Reset();
+            Visuals.FlareFx.Reset();
+            Visuals.CineFx.Reset();
             Visuals.SupportParticles.Reset();
             inboundStrikeName = null;
             inboundStrikeImpactTime = 0f;
             inboundStrikeConfirmedUntil = 0f;
             ledger.Clear();
-            credits?.Clear();
-            LocalCredit = 0f;
-            LocalFrozenSeconds = 0;
-            LocalEventFactor = 1f;
-            LocalSilentFactor = 1f;
-            nextCreditTick = 0f;
-            lastCreditTick = 0f;
+            census.Clear();
             contactReplies.Clear();
             ttiReplies.Clear();
             if (cruiseTasking != null) cruiseTasking.Clear();
@@ -316,7 +331,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Array.Clear(fallbackJobs, 0, fallbackJobs.Length);
             StopAllCoroutines();
             pending = false;
-            localCooldownUntil = 0f;
+            localCooldownUntil.Clear();
             ArmedAction = null;
             localPick = null;
             ArmedFrame = 0;
@@ -331,57 +346,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (Active == this) Active = null;
             ResetForScene();
             SupportMapMode.GestureArmed = false;
-        }
-
-        /// <summary>Non-kill earnings (capture, recon, jamming, support). Kills arrive through <see cref="CreditFromKill"/>.</summary>
-        internal void CreditFromReward(Player player, Unit target, float rewardAllocation, FactionHQ.RewardType type)
-        {
-            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null) return;
-            EarnKind kind = KindOf(type);
-            if (kind == EarnKind.None || kind == EarnKind.Kill) return;
-            float earned = EarningRules.FromReward(kind, rewardAllocation, false, false) * settings.EarnKnob.Value;
-            credits.Earn(player, earned, MissionNow());
-        }
-
-        /// <summary>
-        /// One call per contributor from vanilla <c>ReportKillAction</c>; <paramref name="damageShare"/> is that
-        /// contributor's share of the damage, so every contributor is paid their share of the target value.
-        /// </summary>
-        internal void CreditFromKill(Player player, Unit target, float damageShare)
-        {
-            if (credits == null || settings == null || !GameAccess.IsServer() || player == null || player.HQ == null ||
-                target == null) return;
-            float now = MissionNow();
-            sof?.NoteKillBy(player, target); // a pilot's kill near a pinned SOF team (the only thing a COVER claim pays for)
-            // The held-node kill assist now rides CyberUnitKilledPatch (Unit.ReportKilled), which also sees AI and indirect kills.
-            ulong id = PlayerIdentity.Of(player);
-            bool repeat = credits.Repeats.Record(id, target.definition != null ? target.definition.unitName : "", now);
-            GlobalPosition at = target.GlobalPosition();
-            bool assisted = credits.Assists.IsAssisted(credits.FactionKey(player.HQ), (float)at.x, (float)at.z, now);
-            float unitValue = target.definition != null ? target.definition.value : 0f;
-            float earned = EarningRules.FromKill(unitValue, damageShare, repeat, assisted) * settings.EarnKnob.Value;
-            credits.Earn(player, earned, now);
-            if (Plugin.Settings?.Diagnostics.VerboseLogging.Value == true)
-                logger.LogInfo("[Support.Credit] target=" + (target.definition?.unitName ?? "unknown") +
-                    " value=" + unitValue + " share=" + damageShare + " CR=" + earned +
-                    " repeat=" + repeat + " assisted=" + assisted + " earnScale=" + settings.EarnKnob.Value);
-        }
-
-        private static EarnKind KindOf(FactionHQ.RewardType type)
-        {
-            switch (type)
-            {
-                case FactionHQ.RewardType.Kill: return EarnKind.Kill;
-                case FactionHQ.RewardType.CaptureLocation: return EarnKind.Capture;
-                case FactionHQ.RewardType.Recon: return EarnKind.Recon;
-                case FactionHQ.RewardType.Jamming: return EarnKind.Jamming;
-                case FactionHQ.RewardType.Supply:
-                case FactionHQ.RewardType.Refuel:
-                case FactionHQ.RewardType.Repair:
-                case FactionHQ.RewardType.RescuePilots:
-                case FactionHQ.RewardType.CapturePilots: return EarnKind.Support;
-                default: return EarnKind.None; // RewardType.None: DynamicOperations' own payouts, not OPS earnings
-            }
         }
 
         private static readonly MissionClock Clock = new MissionClock();
@@ -417,39 +381,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return Clock.Read(raw, valid, Time.frameCount);
         }
 
-        private static bool ActivityScene =>
-            GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer;
-
-        internal void RecordAircraftInput(Aircraft aircraft, ActivityControls controls)
-        {
-            if (!ActivityScene || credits == null || GameplayUI.GameIsPaused || !Application.isFocused || aircraft == null ||
-                !GameManager.GetLocalPlayer<Player>(out Player player) || !ReferenceEquals(player, aircraft.Player)) return;
-            if (credits.RecordAircraftInput(aircraft, controls, MissionNow()) && !GameAccess.IsServer()) network?.SendActivityPulse();
-        }
-
-        private void RecordLocalInput()
-        {
-            if (credits == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
-            if (GameAccess.IsServer()) credits.RecordInput(player, MissionNow());
-            else network?.SendActivityPulse();
-        }
-
-        internal void ReceiveActivityPulse(Player player)
-        {
-            if (ActivityScene && GameAccess.IsServer()) credits?.RecordPulse(player, MissionNow(), Time.unscaledTime);
-        }
-
         private void Update()
         {
             UpdateSpaceMirror();
-            if (ActivityScene && !GameplayUI.GameIsPaused && Application.isFocused && Input.anyKeyDown) RecordLocalInput();
-            if (credits != null && GameAccess.IsServer() && Time.unscaledTime >= nextCreditTick)
-            {
-                float missionNow = MissionNow();
-                credits.Tick(missionNow, Mathf.Max(0f, missionNow - lastCreditTick));
-                lastCreditTick = missionNow;
-                nextCreditTick = Time.unscaledTime + 1f;
-            }
 
             // Prune expired active strikes
             float now = MissionNow();
@@ -538,28 +472,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         // ---- Client view -----------------------------------------------------------------
-        public float LocalCredit { get; private set; }
-        public int LocalFrozenSeconds { get; private set; }
-        public float LocalEventFactor { get; private set; } = 1f;
-        public float LocalSilentFactor { get; private set; } = 1f;
 
-        internal void ReceiveCredit(CreditStateMessage message)
-        {
-            LocalCredit = message.Balance;
-            LocalFrozenSeconds = message.FrozenSeconds;
-            LocalEventFactor = SaneFactor(message.EventFactor);
-            LocalSilentFactor = SaneFactor(message.SilentFactor);
-        }
+        /// <summary>The local pilot's vanilla allocation: what a perk costs is paid from it (the host re-checks on every request).</summary>
+        public float LocalAllocation =>
+            GameManager.GetLocalPlayer<Player>(out Player player) && player != null && float.IsFinite(player.Allocation) ? player.Allocation : 0f;
 
-        /// <summary>The host's combined knob x events x perk factor for one player.</summary>
-        private (float eventFactor, float silentFactor) HostPriceFactors(Player player) =>
-            player == null ? (1f, 1f)
-                : (EventsCostMultiplier(player),
-                   settings.PriceKnob.Value * perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost));
-
-        private static float SaneFactor(float f) => float.IsNaN(f) || float.IsInfinity(f) || f <= 0f ? 1f : f;
-
-        /// <summary>CR price of one CALL for the local player (host runs the same QuoteFor).</summary>
+        /// <summary>The allocation price of one perk for the local player (the host runs the same QuoteFor).</summary>
         internal CallQuote Quote(SupportActionId id)
         {
             SupportActionDefinition def = catalog != null ? catalog.Find(id) : null;
@@ -568,39 +486,73 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return QuoteFor(def, player);
         }
 
-        /// <summary>Whether the local player's faction has earned this tier; unlockText names the next goal.</summary>
-        internal bool Unlocked(SupportActionId id, out string unlockText)
+        /// <summary>
+        /// Why the local pilot cannot use this perk right now, or "" when nothing blocks it: the progression qualification
+        /// (NEEDS STRIKE QUALIFICATION) first, then the front readiness (NEEDS READINESS 3).
+        /// </summary>
+        internal string LockReason(SupportActionId id)
         {
-            unlockText = "";
-            if (!CallSheet.TryGet(id, out CallRow row) ||
-                !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null)
-                return false;
-            ObjectiveCount census = credits.Census(player.HQ);
-            float minutes = MissionNow() / 60f;
-            bool open = CallFloors.Unlocked(row.Tier, census.held, census.n, minutes, 1f);
-            if (!open) unlockText = CallFloors.NextUnlock(census.held, census.n, minutes, 1f);
-            return open;
+            if (!CallSheet.TryGet(id, out CallRow row) || catalog == null) return "";
+            SupportActionDefinition def = catalog.Find(id);
+            if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
+            if (!IsAuthorised(def)) return "NEEDS " + QualificationName(def.Capability);
+            if (!BypassRequirements && readiness.Readiness(player.HQ, row.Front) < row.Rung && row.Rung > OpsAutomation.ReadinessFloor) return "NEEDS READINESS " + row.Rung;
+            if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
+            return "";
         }
+
+        /// <summary>Client view: the OPS mirror says the satellite the perk needs is alive (true while the mirror is unknown).</summary>
+        private bool BirdsUpFor(SpaceBirdRequirement r) => r switch
+        {
+            SpaceBirdRequirement.Optical => opsMirror.BirdUp(BirdKind.Optical),
+            SpaceBirdRequirement.Radar => opsMirror.BirdUp(BirdKind.Radar),
+            SpaceBirdRequirement.Kinetic => opsMirror.BirdUp(BirdKind.Kinetic),
+            SpaceBirdRequirement.OpticalOrRadar => opsMirror.BirdUp(BirdKind.Optical) || opsMirror.BirdUp(BirdKind.Radar),
+            _ => true
+        };
+
+        /// <summary>The qualification that authorises a capability, in words (read through <see cref="IProgressionView"/>; a fixed name when it is not installed).</summary>
+        private static string QualificationName(string capability)
+        {
+            string lane = capability == SupportCapabilities.Artillery ? "STRIKE"
+                : capability == SupportCapabilities.Emp ? "SIGNALS"
+                : capability == SupportCapabilities.Fortify ? "ENGINEER" : "RECON";
+            if (ModuleServices.TryGet<IProgressionView>(out IProgressionView view) && view != null)
+            {
+                try
+                {
+                    PerkView[] list = view.GetPerks();
+                    for (int i = 0; list != null && i < list.Length; i++)
+                    {
+                        string name = list[i].Name;
+                        if (!string.IsNullOrEmpty(name) && name.EndsWith("Qualification", StringComparison.OrdinalIgnoreCase) &&
+                            name.StartsWith(lane, StringComparison.OrdinalIgnoreCase)) return name.ToUpperInvariant();
+                    }
+                }
+                catch (Exception) { /* a view that is not ready yet falls back to the fixed name */ }
+            }
+            return lane + " QUALIFICATION";
+        }
+
+        /// <summary>Host: the front readiness gate for one perk; the dev bypass opens everything.</summary>
+        private bool ReadinessOpen(Player player, in CallRow row) =>
+            BypassRequirements || readiness.Readiness(player.HQ, row.Front) >= row.Rung || row.Rung <= OpsAutomation.ReadinessFloor;
+
+        /// <summary>S1 replaces the default (every front fully built, neutral quality) with the live front state.</summary>
+        internal void ConfigureReadiness(IFrontReadiness source) => readiness = source ?? new DefaultFrontReadiness();
 
         /// <summary>True when this peer is the host or has a live client link to one.</summary>
-        public bool Online => GameAccess.IsServer() || NetworkManagerNuclearOption.i?.Client?.Active == true;
+        public bool Online => GameAccess.IsServer() || GameAccess.NetworkManagerOrNull?.Client?.Active == true;
 
-        /// <summary>The local faction's next tier goal in words, or "" when everything is open.</summary>
-        public string NextUnlockText()
-        {
-            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || credits == null) return "";
-            ObjectiveCount census = credits.Census(player.HQ);
-            return CallFloors.NextUnlock(census.held, census.n, MissionNow() / 60f, 1f);
-        }
-
-        public float LocalCooldownRemaining =>
-            DisableCooldowns ? 0f : Mathf.Max(0f, localCooldownUntil - MissionNow());
+        /// <summary>Seconds until the local pilot may use this perk again (the host enforces its own clock).</summary>
+        public float LocalCooldownRemaining(SupportActionId id) =>
+            DisableCooldowns || !localCooldownUntil.TryGetValue(id, out float until) ? 0f : Mathf.Max(0f, until - MissionNow());
 
         public bool IsAuthorised(SupportActionDefinition action)
         {
-            if (BypassRequirements) return true;
+            if (BypassRequirements || OpsAutomation.ReadinessFloor > 0) return true; // the floor is the sim's test-only gate opener
             if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return false;
-            return perks.Grants(PlayerIdentity.Of(player), action.Capability);
+            return QualificationOpen(player, action);
         }
 
         /// <summary>
@@ -614,14 +566,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// The cooldown the host will apply to this player's next request. Scaled by the
-        /// requester's re-tasking perk, and used for both the check and the reply, so the
+        /// The cooldown the host will apply to this player's next use of one perk: the rung's table value (R1 30 s .. R5 300 s),
+        /// per pilot and per perk. Scaled by the requester's re-tasking perk, and used for both the check and the reply, so the
         /// countdown a client shows is the one the host enforced.
         /// </summary>
-        private float CooldownFor(Player player)
+        private float CooldownFor(Player player, SupportActionId action)
         {
-            if (DisableCooldowns || player == null) return 0f;
-            return settings.RequestCooldown.Value *
+            if (DisableCooldowns || player == null || !CallSheet.TryGet(action, out CallRow row)) return 0f;
+            return CallSheet.Cooldown(row.Rung) *
                    perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCooldown) *
                    EventsCooldownMultiplier(player);
         }
@@ -752,26 +704,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return 0;
             }
 
-            if (!IsAuthorised(def))
+            bool free = action == SupportActionId.JtacUnlase; // no cooldown, no charge
+            if (free && !IsAuthorised(def))
             {
                 Status = CallWords.Refusal(CallRefusal.Unavailable);
                 return 0;
             }
 
-            bool free = action == SupportActionId.JtacUnlase; // no cooldown, no freeze, no charge
-            if (!free && LocalCooldownRemaining > 0.5f)
+            if (!free && LocalCooldownRemaining(action) > 0.5f)
             {
-                Status = CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(LocalCooldownRemaining));
+                Status = CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(LocalCooldownRemaining(action)));
                 return 0;
             }
 
-            if (!free && !BypassRequirements && LocalFrozenSeconds > 0)
+            string locked = free ? "" : LockReason(action);
+            if (locked.Length > 0)
             {
-                Status = CallWords.Refusal(CallRefusal.Frozen, seconds: LocalFrozenSeconds);
+                Status = CallWords.Refusal(CallRefusal.Locked, unlock: locked);
                 return 0;
             }
 
-            if (!BypassRequirements && LocalCredit + 0.001f < cost)
+            if (!free && !BypassRequirements && LocalAllocation + 0.001f < cost)
             {
                 Status = CallWords.Refusal(CallRefusal.LowCredit, need: Mathf.CeilToInt(cost));
                 return 0;
@@ -805,11 +758,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportResult.InsufficientAllocation: return CallWords.Refusal(CallRefusal.LowCredit, need: Quote((SupportActionId)r.Action).Cost);
                 case SupportResult.Cooldown:
                     return CallWords.Refusal(CallRefusal.Cooldown,
-                        seconds: Mathf.CeilToInt(r.CooldownSeconds > 0.01f ? r.CooldownSeconds : LocalCooldownRemaining));
+                        seconds: Mathf.CeilToInt(r.CooldownSeconds > 0.01f ? r.CooldownSeconds : LocalCooldownRemaining((SupportActionId)r.Action)));
                 case SupportResult.NotUnlocked:
-                    Unlocked((SupportActionId)r.Action, out string unlock);
-                    return CallWords.Refusal(CallRefusal.Locked, unlock: unlock);
+                    return CallWords.Refusal(CallRefusal.Locked, unlock: LockReason((SupportActionId)r.Action));
                 case SupportResult.OutOfRange: return CallWords.Refusal(CallRefusal.OutOfRange);
+                case SupportResult.OutOfCoverage:
+                    int bird = Presentation.Fronts.FrontViews.PerkBird((SupportActionId)r.Action);
+                    return "NEGATIVE: " + SupportWords.OutsideFootprint(bird >= 0 ? GeoSpace.Names[bird] : "SATELLITE");
                 case SupportResult.InvalidTarget: return SupportWords.Refusal(SupportResult.InvalidTarget);
                 case SupportResult.RateLimited:
                 case SupportResult.Busy: return CallWords.Refusal(CallRefusal.Busy);
@@ -825,26 +780,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
             string name = action != null ? action.Name : "Support";
             calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
+            if (ModuleServices.TryGet<IChatterChannel>(out var chatter))
+                chatter.Report("SUPPORT CONTROL", "SUPPORT:" + message.RequestId,
+                    result == SupportResult.Accepted ? name + " authorised. Request accepted." :
+                    name + ": " + CallWordsFor(message), ChatterUrgency.Status);
             if (result == SupportResult.Accepted)
             {
                 if ((SupportActionId)message.Action != SupportActionId.JtacUnlase)
-                    localCooldownUntil = DisableCooldowns ? 0f : MissionNow() + message.CooldownSeconds;
+                    localCooldownUntil[(SupportActionId)message.Action] = DisableCooldowns ? 0f : MissionNow() + message.CooldownSeconds;
                 bool sweep = action != null &&
                     (action.Id == SupportActionId.Recon || action.Id == SupportActionId.ElintSweep ||
-                     action.Id == SupportActionId.MtiSweep || action.Id == SupportActionId.SatCamera);
+                     action.Id == SupportActionId.SatCamera);
                 Status = sweep
                     ? name + " complete: " + Mathf.Max(0, message.Contacts) + " contact(s)."
                     : name + " accepted.";
                 if (action != null && action.Id == SupportActionId.ElintSweep)
                     Status = name + " complete: " + Mathf.Max(0, message.Contacts) + " emitting radar(s) located.";
-                if (action != null && (action.Id == SupportActionId.Recon || action.Id == SupportActionId.MtiSweep) &&
+                if (action != null && action.Id == SupportActionId.Recon &&
                     float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     RadarScanTarget = new GlobalPosition(message.X, message.Y, message.Z);
                     RadarScanContacts = Mathf.Max(0, message.Contacts);
                     RadarScanSerial++;
-                    Status = name + " accepted: imaging, " + RadarScanContacts +
-                        (action.Id == SupportActionId.MtiSweep ? " moving contact(s) tracked." : " stationary contact(s) exploited.");
+                    Status = name + " accepted: imaging, " + RadarScanContacts + " contact(s) revealed.";
                 }
                 if (action != null && action.Id == SupportActionId.SatCamera && float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
@@ -901,21 +859,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!HasRequiredBird(spaceState, action.RequiredBird)) return SupportResult.CapabilityUnavailable;
                 if (action.SpaceTask.HasValue && !spaceState.CanStart(action.SpaceTask.Value, now)) return SupportResult.BirdNotReady;
             }
-            // JTAC UNLASE is free and floor-less: it is the recovery half of a paid mark, not a CALL of its own.
+            // A perk that needs a satellite over its target: the bird's footprint must hold the aim (a relocation moves it).
+            if (!bypass && TryGeoBird(action.RequiredBird, out BirdKind geoBird))
+            {
+                Vector2 span = TheaterFrame.Resolve();
+                if (!spaceState.Covers(geoBird, now, GeoSpace.U(request.X, span.x), GeoSpace.V(request.Z, span.y))) return SupportResult.OutOfCoverage;
+            }
+            // JTAC UNLASE is free and gate-less: it is the recovery half of a paid mark, not a perk of its own.
             bool free = action.Id == SupportActionId.JtacUnlase;
-            if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
+            if (!free && !DisableCooldowns && ledger.IsCoolingDown(playerId, (byte)action.Id, now, CooldownFor(player, action.Id)))
                 return SupportResult.Cooldown;
 
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
-            float missionNow = now;
-            if (!free)
-            {
-                ObjectiveCount census = credits.Census(player.HQ);
-                if (!bypass && !CallFloors.Unlocked(row.Tier, census.held, census.n, missionNow / 60f, 1f))
-                    return SupportResult.NotUnlocked;
-            }
+            if (!free && !ReadinessOpen(player, row)) return SupportResult.NeedsReadiness;
+            float quality = free ? 1f : readiness.Quality(player.HQ, row.Front);
 
             SpaceActionTransaction transaction = null;
             if (action.SpaceTask.HasValue)
@@ -924,13 +883,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return SupportResult.BirdNotReady;
                 transaction = new SpaceActionTransaction(space, player.HQ, spaceState, receipt, action.TaskSeconds);
             }
-            if (!bypass && !free && !credits.TrySpend(player, cost, missionNow))
+            if (!bypass && !free && !TrySpendAllocation(player, cost))
             {
                 transaction?.Cancel();
                 return SupportResult.InsufficientAllocation;
             }
-            var context = new SupportContext(player, new GlobalPosition(request.X, request.Y, request.Z),
-                request.RequestId, this, transaction);
+            GlobalPosition aim = new GlobalPosition(request.X, request.Y, request.Z);
+            bool snapped = false, sar = false;
+            if (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise)
+            {
+                // Spec 3.7: operator MARKs are map marks; a strike aimed within 300 m of a fresh own-faction mark lands on it, tight.
+                SpaceMark mark = default;
+                if (space != null && space.TryNearestMark(player.HQ, request.X, request.Z, now, out mark))
+                {
+                    aim = new GlobalPosition(mark.X, request.Y, mark.Z);
+                    snapped = true; sar = mark.Source == BirdKind.Radar;
+                    logger.LogInfo("[Support] " + action.Name + " snapped to MARK " + mark.Id + ".");
+                }
+            }
+            var context = new SupportContext(player, aim, request.RequestId, this, transaction, quality: quality, markSnapped: snapped, markSar: sar);
             if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
 
             SupportResult result;
@@ -948,13 +919,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (result != SupportResult.Accepted)
             {
                 transaction?.Cancel();
-                if (!bypass && !free) credits.Refund(player, cost, missionNow);
+                if (!bypass && !free) RefundAllocation(player, cost);
                 logger.LogWarning("[Support] " + action.Name + " request " + request.RequestId +
                     " rejected: " + result + ".");
                 return result;
             }
 
-            ledger.Accept(playerId, request.RequestId, now, startCooldown: !free);
+            ledger.Accept(playerId, request.RequestId, (byte)action.Id, now, startCooldown: !free);
             // An accepted scan or camera tasking is a human working SPACE: OVERLORD steps back. Replays, refusals,
             // rods and every other CALL are not.
             if (WatchOfficerPolicy.CountsAsHumanWork(action.Id))
@@ -962,17 +933,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 try { space?.NoteHumanSpaceVerb(player); }
                 catch (Exception e) { logger.LogError(e); }
             }
-            credits?.RecordInput(player, missionNow);
-            try
-            {
-                credits.Assists.Record(credits.FactionKey(player.HQ), context.Target.x, context.Target.z,
-                    GetEffectRadius(action.Id, player.HQ), missionNow);
-            }
-            catch (Exception e) { logger.LogError(e); }
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target +
-                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " CR." : "."));
+                (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " allocation." : "."));
             return SupportResult.Accepted;
+        }
+
+        /// <summary>RECON PASS = RADAR, SAT CAMERA = OPTICAL, ORBITAL ROD = KINETIC need their bird over the aim; PRSM and CRUISE (either bird) do not.</summary>
+        internal static bool TryGeoBird(SpaceBirdRequirement requirement, out BirdKind bird)
+        {
+            bird = requirement == SpaceBirdRequirement.Radar ? BirdKind.Radar : requirement == SpaceBirdRequirement.Kinetic ? BirdKind.Kinetic : BirdKind.Optical;
+            return requirement == SpaceBirdRequirement.Radar || requirement == SpaceBirdRequirement.Kinetic || requirement == SpaceBirdRequirement.Optical;
         }
 
         private static bool HasRequiredBird(SpaceState state, SpaceBirdRequirement requirement) => requirement switch
@@ -985,14 +956,35 @@ namespace BoscaliSummer.Modules.Support.Runtime
         };
 
         private bool HostAuthorised(Player player, SupportActionDefinition action) =>
-            perks.Grants(PlayerIdentity.Of(player), action.Capability);
+            OpsAutomation.ReadinessFloor > 0 || QualificationOpen(player, action);
 
-        internal float ServerCooldownFor(Player player) => CooldownFor(player);
+        /// <summary>Single-player ready: a rung-1 perk needs no progression qualification (a fresh pilot has none), so every front opens with one usable perk; R2 and up still need it.</summary>
+        private bool QualificationOpen(Player player, SupportActionDefinition action) =>
+            (CallSheet.TryGet(action.Id, out CallRow row) && row.Rung <= 1) || perks.Grants(PlayerIdentity.Of(player), action.Capability);
 
-        /// <summary>Seconds left on this player's host cooldown; what a Cooldown refusal tells the client.</summary>
-        internal float ServerCooldownRemaining(Player player) =>
+        internal float ServerCooldownFor(Player player, SupportActionId action) => CooldownFor(player, action);
+
+        /// <summary>Seconds left on this player's host cooldown of one perk; what a Cooldown refusal tells the client.</summary>
+        internal float ServerCooldownRemaining(Player player, SupportActionId action) =>
             player == null || DisableCooldowns ? 0f
-                : ledger.CooldownRemaining(PlayerIdentity.Of(player), MissionNow(), CooldownFor(player));
+                : ledger.CooldownRemaining(PlayerIdentity.Of(player), (byte)action, MissionNow(), CooldownFor(player, action));
+
+        // ---- Allocation (the perk currency) -------------------------------------------------
+
+        /// <summary>Host: takes the price from the pilot's vanilla allocation. False (nothing taken) when they cannot afford it.</summary>
+        internal bool TrySpendAllocation(Player player, float cost)
+        {
+            if (player == null) return false;
+            if (!AllocationRules.CanAfford(player.Allocation, cost)) return false;
+            player.SetAllocation(AllocationRules.AfterSpend(player.Allocation, cost));
+            return true;
+        }
+
+        /// <summary>Host: gives a failed perk's price back (also the pay for operator work).</summary>
+        internal void RefundAllocation(Player player, float amount)
+        {
+            if (player != null && amount > 0f) player.SetAllocation(AllocationRules.AfterRefund(player.Allocation, amount));
+        }
 
         /// <summary>
         /// Price for one player. No action prices itself from the target, so costing uses a
@@ -1001,20 +993,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal CallQuote QuoteFor(SupportActionDefinition action, Player player)
         {
             // BaseCost <= 0 still means "this action is not available on this map".
-            if (player == null || credits == null || !CallSheet.TryGet(action.Id, out CallRow row) ||
+            if (player == null || !CallSheet.TryGet(action.Id, out CallRow row) ||
                 action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
                 return new CallQuote(0, "");
-            ObjectiveCount census = credits.Census(player.HQ);
             // The host reads its own SPACE state; a client reads the faction mirror, so both quote the same +40 % when degraded.
             bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
                 TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
-            var inputs = new PriceInputs(CallFloors.Share(census.held, census.contested, census.n), census.n,
-                degraded, "UPLINK DOWN", row.Family == CallFamily.Cyber && CyberExploit(player.HQ),
-                // Clients quote with the factor the host sent, so the panel matches what the host charges.
-                GameAccess.IsServer() ? EventsCostMultiplier(player) : LocalEventFactor,
-                GameAccess.IsServer() ? perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost) : LocalSilentFactor,
-                GameAccess.IsServer() ? settings.PriceKnob.Value : 1f);
-            return CallPricing.Quote(row.Tier, inputs);
+            // Every factor is readable on a client too (the Events and Progression mirrors, and the host's replicated PerkPriceScale), so the panel quotes what the host charges.
+            var inputs = new PriceInputs(degraded, "UPLINK DOWN", row.Front == Front.Cyber && CyberExploit(player.HQ),
+                EventsCostMultiplier(player), perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost),
+                settings.PerkPriceScale.Value);
+            return CallPricing.Quote(row.Rung, inputs);
         }
 
         // ---- Host services ---------------------------------------------------------------

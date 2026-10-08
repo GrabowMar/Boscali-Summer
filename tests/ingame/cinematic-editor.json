@@ -1,0 +1,33 @@
+{
+  "name": "cinematic-editor",
+  "mods": ["boscalisummer"],
+  "timeout_s": 120,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "FS-20 Vortex", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 1500, "speed": 160, "heading": 0 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "wait", "seconds": 3 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "schema" }, "store": "schema" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "detach" }, "store": "detach" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "new", "id": "scripted-take" }, "store": "newshot" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "capture" }, "store": "pose" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "options", "json": "{\"playbackRate\":0.5,\"simulationRate\":1,\"realtimeClock\":true,\"letterbox\":0.1,\"fadeIn\":1,\"fadeOut\":1,\"shakeDegrees\":0.4,\"title\":\"OPERATION CLEAR WINDOW\"}" }, "store": "options" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "play" }, "store": "play" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "pause" }, "store": "pause" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "seek", "seconds": 4 }, "store": "seek" },
+    { "op": "wait", "seconds": 0.5 },
+    { "op": "capture", "name": "cinematic-editor-pose", "hide_ui": false },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "bookmark", "label": "inspected-pose" }, "store": "bookmark" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "stop" }, "store": "stop" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "schema.api_version", "min": 0.5 },
+    { "check": "result_above", "path": "detach.ok", "min": 0.5 },
+    { "check": "result_above", "path": "play.playing", "min": 0.5 },
+    { "check": "result_above", "path": "pause.camera_paused", "min": 0.5 },
+    { "check": "result_below", "path": "seek.world_rewound", "max": 0.5 },
+    { "check": "result_below", "path": "stop.playing", "max": 0.5 }
+  ]
+}

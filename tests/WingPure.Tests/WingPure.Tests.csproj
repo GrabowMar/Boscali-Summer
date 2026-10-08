@@ -10,5 +10,6 @@
   <ItemGroup>
     <Compile Include="..\..\modules\Wing\Domain\Pure\*.cs" LinkBase="Pure" />
     <Compile Include="..\..\Core\Util\MiniJson.cs" Link="MiniJson.cs" />
+    <Compile Include="..\BoscaliSummer.Tests\TestAssert.cs" Link="TestAssert.cs" />
   </ItemGroup>
 </Project>

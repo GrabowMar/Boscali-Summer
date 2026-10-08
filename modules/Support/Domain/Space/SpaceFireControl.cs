@@ -11,6 +11,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal static class SpaceFireControl
     {
         public const float StandardCep = 120f, OpticalRadius = 25f, SarRadius = 30f;
+        /// <summary>A perk aimed within this many metres of a fresh own-faction MARK snaps to it (spec 3.7).</summary>
+        public const float MarkSnapRadius = 300f;
         private const float LargestUnitSample = .99999994f;
 
         /// <summary>Only the host's immutable confirmed MARK provenance may select the optical/SAR disk.</summary>
@@ -47,6 +49,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The impact for a host-created TASKED aim: its fixed ground point and confirmed-MARK provenance.</summary>
         public static bool TrySampleAim(in TaskedAim aim, float angleSample, float radiusSample, out SpaceImpact impact) =>
             TrySample(aim.X, aim.Z, aim.ConfirmedMark, aim.SarOnly, angleSample, radiusSample, out impact);
+
+        /// <summary>The nearest live mark within <see cref="MarkSnapRadius"/> of the aim point, or false.</summary>
+        public static bool TryNearestMark(System.Collections.Generic.IReadOnlyList<SpaceMark> marks, float x, float z, float now, out SpaceMark nearest)
+        {
+            nearest = default;
+            double best = (double)MarkSnapRadius * MarkSnapRadius;
+            bool found = false;
+            for (int i = 0; marks != null && i < marks.Count; i++)
+            {
+                if (now >= marks[i].ExpiresAt) continue;
+                double dx = (double)marks[i].X - x, dz = (double)marks[i].Z - z, d = dx * dx + dz * dz;
+                if (d > best) continue;
+                best = d; nearest = marks[i]; found = true;
+            }
+            return found;
+        }
 
         private static double DistanceSquared(in SpaceImpact impact, float x, float z)
         {

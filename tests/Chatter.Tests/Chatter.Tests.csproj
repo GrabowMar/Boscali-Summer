@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../modules/Wing/Domain/Chatter/ChatterLogic.cs" Link="ChatterLogic.cs" />
+    <Compile Include="../../modules/Wing/Domain/Chatter/ChatterPacing.cs" Link="ChatterPacing.cs" />
+    <Compile Include="../../modules/Wing/Domain/Chatter/RadioQueue.cs" Link="RadioQueue.cs" />
+    <Compile Include="../../modules/Wing/Domain/Chatter/RadioLog.cs" Link="RadioLog.cs" />
+    <Compile Include="../../modules/Wing/Domain/Chatter/VoicePackIndex.cs" Link="VoicePackIndex.cs" />
+  </ItemGroup>
+</Project>

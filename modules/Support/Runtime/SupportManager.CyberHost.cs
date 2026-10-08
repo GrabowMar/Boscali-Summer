@@ -1,12 +1,13 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using NuclearOption.Networking;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
-    /// The host seam of the CYBER desk: the wallet (an intrusion start and its upkeep), the restore fund (HQ FUND) and the TASKED board
-    /// (BURN packages). Intrusion CR goes to HQ FUND, which pays for the EW truck and data center restore bars; the dev bypass charges nothing.
+    /// The host seam of the CYBER desk: the allocation an intrusion start and its upkeep cost, and the TASKED board (BURN packages).
+    /// The dev bypass charges nothing.
     /// </summary>
     internal sealed partial class SupportManager
     {
@@ -16,41 +17,28 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal void AttachCyber(CyberService service) => cyber = service;
 
+        /// <summary>An operator verb (an intrusion start, a node's upkeep) costs the operator's vanilla allocation 1:1 with the CR figure the desk quotes. OVERLORD pays nothing; the dev bypass charges nothing.</summary>
         internal CyberOutcome CyberSpend(FactionHQ owner, ulong op, int cr, out int detail)
         {
             detail = 0;
             if (cr <= 0 || BypassRequirements) return CyberOutcome.None;
-            // WATCH OFFICER OVERLORD has no wallet, exactly like SPACE's: its starts, its upkeep and its raises are free, bounded by the pacing and the caps instead of by CR.
+            // WATCH OFFICER OVERLORD has no wallet, exactly like SPACE's: its starts, its upkeep and its raises are free, bounded by the pacing and the caps instead.
             if (op == SpaceContacts.WatchOfficerId) return CyberOutcome.None;
-            if (credits == null) return CyberOutcome.Unavailable;
-            float now = MissionNow();
-            int key = credits.FactionKey(owner);
-            if (!credits.Tasked.IsActive(op, key, now))
-            {
-                float frozen = credits.Tasked.FrozenRemaining(op, now);
-                detail = (int)Math.Ceiling(frozen);
-                return frozen > 0f ? CyberOutcome.Frozen : CyberOutcome.Unavailable;
-            }
-            if (credits.Tasked.Balance(op) + 0.001f < cr) { detail = cr; return CyberOutcome.LowCredit; }
-            if (!credits.Tasked.TrySpend(op, cr, now)) { detail = cr; return CyberOutcome.LowCredit; }
-            credits.Tasked.AddHq(key, cr);
-            return CyberOutcome.None;
+            Player player = FindPlayer(owner, op);
+            if (player == null) return CyberOutcome.Unavailable;
+            if (TrySpendAllocation(player, cr)) return CyberOutcome.None;
+            detail = cr;
+            return CyberOutcome.LowCredit;
         }
 
         internal void CyberRefund(FactionHQ owner, ulong op, int cr)
         {
-            if (cr <= 0 || BypassRequirements || credits == null || op == SpaceContacts.WatchOfficerId) return; // OVERLORD paid nothing, so nothing comes back
-            // The refund comes out of HQ FUND (where the start cost went): if the fund no longer holds it, nothing is minted.
-            if (!credits.Fund.TrySpend(credits.FactionKey(owner), cr)) { Plugin.Logger?.LogWarning("[Support.Cyber] Refund of " + cr + " CR skipped: HQ FUND is short."); return; }
-            credits.Tasked.Refund(op, cr);
+            if (cr <= 0 || BypassRequirements || op == SpaceContacts.WatchOfficerId) return; // OVERLORD paid nothing, so nothing comes back
+            RefundAllocation(FindPlayer(owner, op), cr);
         }
 
-        internal float CyberTreasury(FactionHQ owner) => credits != null ? credits.Fund.Balance(credits.FactionKey(owner)) : 0f;
-
-        internal void CyberTreasurySpend(FactionHQ owner, float amount)
-        {
-            if (credits != null) credits.Fund.TrySpend(credits.FactionKey(owner), amount);
-        }
+        /// <summary>The faction's vanilla funds: what an AI faction's OVERLORD spends on operations.</summary>
+        internal float CyberTreasury(FactionHQ owner) => owner != null && float.IsFinite(owner.factionFunds) ? owner.factionFunds : 0f;
 
         /// <summary>Posts a BURN package on the faction's TASKED board. False when the faction has no SPACE desk or the board has no room.</summary>
         internal CyberOutcome PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)

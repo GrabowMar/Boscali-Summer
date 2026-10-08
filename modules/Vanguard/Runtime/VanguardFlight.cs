@@ -13,18 +13,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     {
         private const float PlanInterval = 0.2f;
         private const float EffectInterval = 0.5f;
-        private const float InterceptKillRadius = 12f;
-        internal static float InterceptKillChance = 0.7f; // the nomodkit sim pins it to 1 for a deterministic check
         // Cold launch: the dart falls clear unpowered (motor delayTimer in the bundle), slewing its nose
         // onto the intercept point so it lights already pointed at threats from any direction.
-        private const float DropPhase = 0.55f;
-        private const float DropSlewDegPerSec = 540f;
+        private const float DropPhase = AegisEnvelope.SlewEnd;
+        private const float DropSlewDegPerSec = 1000f;
         private const float JamRange = 25000f;
         private const float JamConeCos = 0.5f; // 60 deg half-angle
 
         private readonly Missile missile;
         private readonly VanguardRole role;
         private readonly Unit launcher;
+        private readonly float seed; // 0..1 per-missile variation, from the instance id
         private readonly int slot;
         private readonly GlobalPosition launchPos;
         private readonly GlobalPosition fallbackAim;
@@ -32,6 +31,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly float cruiseAltitude;
         private Unit target;
         private bool fins;
+        private GlaiveTurret gunPod;
+        private Vector3 previousInterceptRelative;
+        private bool hasInterceptSample;
         private float nextPlan;
         private float nextEffect;
         private bool underwater;
@@ -54,6 +56,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             this.role = role;
             this.target = target;
             this.slot = slot;
+            seed = unchecked((uint)missile.GetInstanceID()) % 997 / 997f;
             launcher = missile.owner;
             fallbackAim = aimpoint;
             launchPos = missile.GlobalPosition();
@@ -66,6 +69,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public VanguardRole Role => role;
         public Unit Launcher => launcher;
         public Missile Missile => missile;
+        public bool GunDeployed => gunPod != null && gunPod.Deployed;
+        public void TickGun() => gunPod?.TickHost();
 
         public void Tick()
         {
@@ -78,7 +83,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Towed) HoldTow();
             if (role == VanguardRole.Interceptor)
             {
-                if (missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
+                if (missile.timeSinceSpawn >= AegisEnvelope.DropClearSeconds && missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
                 CheckIntercept();
             }
             float now = Time.timeSinceLevelLoad;
@@ -100,7 +105,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
             if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            if (age > Lifetime() || (age > 10f && missile.speed < 60f && role != VanguardRole.Towed && !underwater)) Detonate();
+            if (age > Lifetime() || (age > 10f && missile.speed < 60f && role != VanguardRole.Towed && !underwater && !GunDeployed)) Detonate();
         }
 
         private float Lifetime()
@@ -147,7 +152,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             GlobalPosition aim = TargetPosition(out Vector3 targetVel);
             Vector3 to = aim - pos;
             Vector3 flat = new Vector3(to.x, 0f, to.z);
-            GlidePlan plan = GlideProfile.Plan(age, flat.magnitude, pos.y);
+            GlidePlan plan = GlideProfile.Plan(age, flat.magnitude, pos.y, seed);
             if (plan.Phase == GlidePhase.Terminal)
             {
                 missile.SetAimpoint(aim, targetVel);
@@ -168,7 +173,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (DecoyRoute.Outbound(travelled))
             {
                 Vector3 right = new Vector3(bearing.z, 0f, -bearing.x);
-                point = launchPos + bearing * (travelled + DecoyRoute.Lookahead) + right * DecoyRoute.Lateral(travelled);
+                point = launchPos + bearing * (travelled + DecoyRoute.Lookahead) + right * DecoyRoute.Lateral(travelled, seed);
             }
             else
             {
@@ -239,27 +244,36 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void CheckIntercept()
         {
             if (target == null || target.disabled) return;
-            if (!FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), InterceptKillRadius)) return;
-            if (target is Missile threat && Random.value < InterceptKillChance) threat.Detonate(Vector3.up, false, false);
-            Detonate();
+            Vector3 relative = target.GlobalPosition()-missile.GlobalPosition();
+            if (target is Missile threat && missile.IsServer && missile.timeSinceSpawn >= AegisEnvelope.ArmSeconds &&
+                hasInterceptSample && AegisEnvelope.Contact(previousInterceptRelative,relative,
+                    AegisEnvelope.ContactRadius(threat.definition.width,threat.definition.height)))
+            {
+                float speed=(threat.rb.velocity-missile.rb.velocity).magnitude;
+                float damage=missile.pierceDamage*Mathf.Clamp(speed/300f,1f,4f);
+                threat.TakeDamage(damage,0f,1f,0f,0f,launcher != null ? launcher.persistentID : missile.persistentID);
+                Detonate();
+                return;
+            }
+            previousInterceptRelative=relative;
+            hasInterceptSample=true;
         }
 
-        // Shallow glide to the target, 40 m over the last 1.5 km, then deploy two UGVs and scuttle the shell.
+        // Ingress overhead, then brake under a canopy and become a suspended gun turret.
         private void PlanCarrier(GlobalPosition pos)
         {
             GlobalPosition aim = TargetPosition(out _);
             Vector3 to = aim - pos;
             float flat = new Vector2(to.x, to.z).magnitude;
-            if (CarrierProfile.ShouldRelease(flat, missile.radarAlt))
+            if (GlaiveProfile.ShouldDeploy(flat, missile.radarAlt, missile.timeSinceSpawn))
             {
-                int placed = PayloadRelease.Drop(VanguardKeys.PayloadOf(missile.definition.jsonKey), pos,
-                    missile.rb.velocity, missile.NetworkHQ, CarrierProfile.PayloadCount);
-                if (placed == 0) Plugin.Logger?.LogInfo("[Vanguard] GLAIVE release found no dry flat ground; carrier scuttled");
-                Detonate();
+                gunPod = GlaiveTurret.Attach(missile);
+                if (gunPod == null) Detonate(); // Old/incomplete bundle fails closed, never restores UGV delivery.
+                else gunPod.Deploy(target);
                 return;
             }
             GlobalPosition point = aim;
-            point.y = aim.y + CarrierProfile.Height(flat);
+            point.y = aim.y + GlaiveProfile.Height(flat);
             missile.SetAimpoint(point, Vector3.zero);
         }
 
@@ -315,7 +329,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Detonate();
                 return;
             }
-            swimHeading = Quaternion.Euler(0f, WaterRun.SnakeYaw(searchFor) * PlanInterval, 0f) * swimHeading;
+            swimHeading = Quaternion.Euler(0f, WaterRun.SnakeYaw(searchFor, seed) * PlanInterval, 0f) * swimHeading;
         }
 
         /// <summary>Called from Missile.DetectCollisions. True when the torpedo owns this physics tick (underwater).</summary>
@@ -388,7 +402,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 return;
             }
             Transform h = host.transform;
-            Vector3 want = h.position + TowedTrail.Offset(h.forward, h.up);
+            Vector3 want = TowedTrail.TrailPoint(TowAnchor.RootFor(missile, host), h.forward, h.up);
             Rigidbody rb = missile.rb;
             rb.MovePosition(Vector3.Lerp(missile.transform.position, want, 0.25f));
             rb.velocity = host.rb != null ? host.rb.velocity : rb.velocity;
@@ -463,7 +477,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             FactionHQ own = missile.NetworkHQ;
             GlobalPosition self = missile.GlobalPosition();
-            Vector3 fwd = missile.transform.forward;
+            // The jam cone sweeps +/-10 deg so coverage breathes instead of sitting on fixed radars.
+            Vector3 fwd = Quaternion.AngleAxis(Mathf.Sin(missile.timeSinceSpawn * 1.1f) * 10f, missile.transform.up) *
+                missile.transform.forward;
             foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
                 if (hq == null || hq == own) continue;

@@ -159,14 +159,17 @@ namespace BoscaliSummer.Fire
         }
 
         public bool Contains(float px, float pz)
+            => ContainsWithin(px, pz, 18f);
+
+        public bool ContainsWithin(float px, float pz, float hitRadius)
         {
             if (!Ready) return false;
-            const float hitRadius = 18f;
-            const float hitRadiusSq = hitRadius * hitRadius;
+            float hitRadiusSq = hitRadius * hitRadius;
             int cx = (int)Math.Floor(px / cellSize);
             int cz = (int)Math.Floor(pz / cellSize);
-            for (int x = cx - 1; x <= cx + 1; x++)
-            for (int z = cz - 1; z <= cz + 1; z++)
+            int reach = (int)Math.Ceiling(hitRadius / cellSize);
+            for (int x = cx - reach; x <= cx + reach; x++)
+            for (int z = cz - reach; z <= cz + reach; z++)
             {
                 long key = ((long)x << 32) ^ (uint)z;
                 if (!occupied.TryGetValue(key, out CellSpan span)) continue;

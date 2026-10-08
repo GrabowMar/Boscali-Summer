@@ -11,18 +11,8 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
-    /// <summary>
-    /// "COM" — the multiplayer comms screen. Five pages, one job each: MAP arms the pen, the
-    /// shapes, pings, stickers and labels; CALL sends brevity calls; POLL asks and answers
-    /// questions; CREW holds the dice, rock-paper-scissors and the map hunt with its
-    /// leaderboard; LOG is the record of all of it plus the mute list.
-    ///
-    /// <para>The chip rail always says the connection state, which audience a post will reach
-    /// (TEAM or ALL) and what the left mouse button will do on the map right now; the footer
-    /// gives the armed tool's instructions or the host's latest refusal. Nothing here decides
-    /// anything: every verb goes through <see cref="CommsManager"/>, and the host has the last
-    /// word.</para>
-    /// </summary>
+    /// <summary>COM: two pages for shared map annotations and team communications.
+    /// All actions pass through CommsManager and remain host-authoritative.</summary>
     internal sealed partial class CommsMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
@@ -30,18 +20,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private const float NoticeSeconds = 6f;
 
         private const int TabMap = 0;
-        private const int TabCall = 1;
-        private const int TabPoll = 2;
-        private const int TabGame = 3;
-        private const int TabLog = 4;
+        private const int TabComms = 1;
 
         private static readonly (AvIcon Icon, string Label)[] TabSpecs =
         {
             (AvIcon.Map2, "MAP"),
-            (AvIcon.Message2, "CALL"),
-            (AvIcon.QuestionMark, "POLL"),
-            (AvIcon.UsersGroup, "CREW"),
-            (AvIcon.ListDetails, "LOG"),
+            (AvIcon.Message2, "COMMS"),
         };
 
         private CommsSettings settings;
@@ -76,8 +60,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             viewOpen = false;
             nextRefresh = 0f;
             ResetMap();
-            ResetTalk();
-            ResetGames();
             ResetLog();
         }
 
@@ -121,10 +103,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             console.PageChanged += _ => nextRefresh = 0f;
 
             BuildMapPage(console.Page(TabMap));
-            BuildCallPage(console.Page(TabCall));
-            BuildPollPage(console.Page(TabPoll));
-            BuildGamePage(console.Page(TabGame));
-            BuildLogPage(console.Page(TabLog));
+            BuildCommsPage(console.Page(TabComms));
             console.Finish();
             console.SetPage(TabMap);
             return null;
@@ -150,10 +129,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             switch (console.CurrentPage)
             {
                 case TabMap: RefreshMap(); break;
-                case TabCall: RefreshCalls(now); break;
-                case TabPoll: RefreshPolls(now); break;
-                case TabGame: RefreshGames(now); break;
-                case TabLog: RefreshLog(now); break;
+                case TabComms: RefreshLog(now); break;
             }
 
             string alert = comms.HostSilent
@@ -179,10 +155,9 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private string Ambient(CommsClientState state)
         {
-            int open = 0;
-            for (int i = 0; i < state.Polls.Count; i++) if (!state.Polls[i].Closed) open++;
             string line = AvNum.Fixed(state.Board.CountOf(CommsItemKind.Ping), 0) + " PINGS · " +
-                          AvNum.Fixed(open, 0) + " POLLS OPEN · " + AvNum.Fixed(state.Duels.Count, 0) + " CHALLENGES";
+                          AvNum.Fixed(state.Board.CountOf(CommsItemKind.Stroke), 0) + " DRAWINGS · " +
+                          AvNum.Fixed(state.Board.CountOf(CommsItemKind.Label), 0) + " LABELS";
             KeyCode hold = settings.DrawHoldKey.Value;
             return hold != KeyCode.None ? line + " · HOLD " + KeyName(hold) + " + DRAG TO DRAW" : line;
         }
@@ -192,8 +167,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             switch (tool)
             {
                 case CommsTool.None: return "MAP FREE";
-                case CommsTool.HuntHide: return "HIDING";
-                case CommsTool.HuntGuess: return "GUESSING";
                 case CommsTool.Label: return "TEXT";
                 default: return tool.ToString().ToUpperInvariant();
             }

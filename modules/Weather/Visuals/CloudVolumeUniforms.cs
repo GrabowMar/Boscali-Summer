@@ -207,7 +207,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
             material.SetVector(WindDirId, new Vector2(windX, windZ));
             // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
-            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.Cumulus * 0.3f + sky.Convective * 0.2f)));
+            // An overcast deck continues past the march: rays that reach its base beyond 220 km
+            // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
+            // The shader still opens it ahead of a frontal boundary (SplitShare).
+            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover,
+                Mathf.Max(sky.Cumulus * 0.3f + sky.Convective * 0.2f, sky.Overcast * 0.9f))));
             material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + Mathf.Max(300f, sky.LayerDepth) * 0.4f);
             material.SetFloat(HorizonDepthId, Mathf.Max(300f, sky.LayerDepth));
             // The frontal boundary: one side of the map under the deck, the other opening up.

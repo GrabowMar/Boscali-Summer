@@ -127,8 +127,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public void UpdateRain(
             Vector3 aircraftVelocity, Vector3 worldWind, float rainIntensity, Camera currentCam,
-            float density = 1f, float gust = 1f, float lightLevel = 1f)
+            float density = 1f, float gust = 1f, float lightLevel = 1f, float cloudMist = 0f)
         {
+            // Inside cloud the same streaks become fine mist: hanging droplets (no fall), paler
+            // and fainter than rain, so speed reads inside an otherwise featureless murk.
+            float mist = Mathf.Clamp01(cloudMist) * 0.55f;
+            float mistShare = Mathf.Clamp01((mist - rainIntensity) / 0.15f);
+            rainIntensity = Mathf.Max(rainIntensity, mist);
             if (currentCam != targetCamera) { positioned = false; if (ps != null) ps.Clear(); }
             if (currentCam != null) targetCamera = currentCam;
             if (targetCamera == null || ps == null) return;
@@ -148,7 +153,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             positioned = true;
 
             // Calculate apparent relative wind velocity: V_rel = (V_wind - 9j) - V_aircraft
-            Vector3 rainWorldVelocity = worldWind - (Vector3.up * RainTerminalVelocity);
+            Vector3 rainWorldVelocity = worldWind - (Vector3.up * RainTerminalVelocity * (1f - mistShare));
             Vector3 apparentVelocity = rainWorldVelocity - aircraftVelocity;
             float apparentSpeed = apparentVelocity.magnitude;
             ApparentSpeedNow = apparentSpeed;
@@ -190,9 +195,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             main.startLifetime = lifetime;
 
             // Streaks take the fog colour so they read as part of the haze, kept under bloom.
-            float alpha = RainVisualMath.StreakAlpha(rainIntensity);
+            float alpha = RainVisualMath.StreakAlpha(rainIntensity) * (1f - 0.45f * mistShare);
             RainSkyMath.StreakColor(fogTint.r, fogTint.g, fogTint.b, Mathf.Clamp(lightLevel, 0.04f, 1f),
                 out float r, out float g, out float b);
+            float pale = 0.45f * mistShare * Mathf.Clamp01(lightLevel);
+            r = Mathf.Lerp(r, 0.9f, pale); g = Mathf.Lerp(g, 0.92f, pale); b = Mathf.Lerp(b, 0.95f, pale);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(r, g, b, alpha * 0.75f), new Color(r, g, b, alpha));
 

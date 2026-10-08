@@ -47,6 +47,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         Call,
         Preset,
         Confirm,
+        Wing,
+        Target,
     }
 
     /// <summary>How the state line under a label reads: plain, engaged, needs a look, or dangerous.</summary>

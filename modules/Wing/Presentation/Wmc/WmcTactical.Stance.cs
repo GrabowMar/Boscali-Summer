@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     ids.Add("tac.posture." + TuneKeys[a] + "." + TuneOptionKeys[a][i], tuneRows[a].Options[i]);
                 }
             }
-            tuneBox = f.Add(new WmcTuneBox(f.Content, ResetStance, SaveStance, EditStance, tuneRows));
+            tuneBox = f.Add(new WmcTuneBox(f.Content, ResetStance, SaveStance, EditStance, tuneRows, () => flow.RequestRelayout()));
             tuneBox.Reset.Help = "Fly the stance's own settings again.";
             tuneBox.Save.Help = "Keep these settings as a new stance in the next free slot.";
             tuneBox.Edit.Help = "BEHAVIOUR: write and edit stances.";

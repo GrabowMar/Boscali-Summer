@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                         entry["renderQueue"] = material.renderQueue;
                         entry["renderType"] = material.GetTag("RenderType", false);
                         entry["emissionKeyword"] = material.IsKeywordEnabled("_EMISSION");
-                        entry["mainTexture"] = TextureKind(material.mainTexture);
+                        entry["mainTexture"] = TextureKind(material.HasProperty("_MainTex") ? material.GetTexture("_MainTex") : null);
                         DescribeTexture(entry, material, "_BaseMap");
                         DescribeTexture(entry, material, "_MainTex");
                         DescribeTexture(entry, material, "_EmissionMap");

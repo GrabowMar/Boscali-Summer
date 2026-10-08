@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             if (network == null) return;
             // Unlike the other modules, a missing handler keeps the current registrations.
             if (network.Server != null && network.Server.Active && network.Server.MessageHandler != null)
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
                     aircraft.persistentID.Id);
                 return;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client != null && client.Active)
                 client.Send(new PlaneTuneRequest { Protocol = ProtocolVersion,
                     AircraftId = aircraft.persistentID.Id, Mode = (byte)mode });
@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
             lastTuneChange[owner] = Time.unscaledTime;
             if (tunes.Count >= 128 && !tunes.ContainsKey(aircraftId)) tunes.Clear();
             tunes[aircraftId] = mode;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server != null && server.Active)
                 server.SendToAll(new PlaneTuneState { Protocol = ProtocolVersion,
                     AircraftId = aircraftId, Mode = mode, Accepted = 1 },
@@ -207,7 +207,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
                 manager.Apply(manager.Handle(local, perkId), PlayerIdentity.Of(local));
                 return;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active)
             {
                 manager.ReportOffline();

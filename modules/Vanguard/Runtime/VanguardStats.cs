@@ -7,9 +7,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static int ShipHits;
         public static int Seductions;
         public static int UgvsSpawned;
+        public static int TurretsDeployed;
+        public static int TurretShots;
         public static int Refuels;
         public static int Rearms;
 
-        public static void Clear() => WaterEntries = ShipHits = Seductions = UgvsSpawned = Refuels = Rearms = 0;
+        public static void Clear() => WaterEntries = ShipHits = Seductions = UgvsSpawned = TurretsDeployed = TurretShots = Refuels = Rearms = 0;
     }
 }

@@ -12,16 +12,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public readonly SupportActionId Action;
         public readonly TaskedDomain Domain;
-        public readonly CallTier Tier;
         public readonly string Label;
 
-        public TaskedKind(SupportActionId action, TaskedDomain domain, CallTier tier, string label)
-        { Action = action; Domain = domain; Tier = tier; Label = label; }
+        public TaskedKind(SupportActionId action, TaskedDomain domain, string label)
+        { Action = action; Domain = domain; Label = label; }
     }
 
     /// <summary>
     /// Everything that may ride the TASKED board: the CALL sheet's actions (SPACE rod and friends) and the CYBER BURN packages, which
-    /// are never CALL rows. One lookup for validity, fee tier, label and domain, so the board, the fee table and the wire agree.
+    /// are never CALL rows. One lookup for validity, label and domain, so the board and the wire agree.
     /// </summary>
     internal static class TaskedKinds
     {
@@ -29,18 +28,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (CyberPackages.TryOfAction(action, out PackageDef def))
             {
-                kind = new TaskedKind(action, TaskedDomain.Cyber, def.Tier, def.Label);
+                kind = new TaskedKind(action, TaskedDomain.Cyber, def.Label);
                 return true;
             }
             if (SofPosts.IsPost(action))
             {
-                kind = new TaskedKind(action, TaskedDomain.Sof, CallTier.Light, SofPosts.Label(action));
+                kind = new TaskedKind(action, TaskedDomain.Sof, SofPosts.Label(action));
                 return true;
             }
             if (CallSheet.TryGet(action, out CallRow row))
             {
-                kind = new TaskedKind(action, row.Family == CallFamily.Cyber ? TaskedDomain.Cyber : row.Family == CallFamily.Sof ? TaskedDomain.Sof : TaskedDomain.Space,
-                    row.Tier, row.Label);
+                kind = new TaskedKind(action, row.Front == Fronts.Front.Cyber ? TaskedDomain.Cyber : row.Front == Fronts.Front.Sof ? TaskedDomain.Sof : TaskedDomain.Space,
+                    row.Label);
                 return true;
             }
             kind = default;

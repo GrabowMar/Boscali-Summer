@@ -453,10 +453,6 @@ if (!priorityDistanceNames.SequenceEqual(new[] { "factionHQ", "transform", "dist
     throw new MissingMemberException(
         "MissionPosition.TryGetClosestDistance parameters changed: " + string.Join(", ", priorityDistanceNames));
 
-// The Chimera paratrooper mount registers after vanilla indexing; AfterLoad is overloaded
-// (a static Action<Encyclopedia> wrapper), so pin the parameterless instance method.
-if (gameAssembly.GetType("Encyclopedia", true)!.GetMethod("AfterLoad", AllMembers, null, Type.EmptyTypes, null) is not { IsStatic: false })
-    throw new MissingMethodException("Encyclopedia", "AfterLoad()");
 Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
 if (levelInfo.GetProperty("LoadedMapSettings", AllMembers) == null)
     throw new MissingMemberException("LevelInfo.LoadedMapSettings");
@@ -510,9 +506,11 @@ string[] patchTypes =
     "BoscaliSummer.Garrisons.ShellDamagePatch",
     "BoscaliSummer.Garrisons.ShellDestructPatch",
     "BoscaliSummer.Garrisons.StrongpointDamagePatch",
+    "BoscaliSummer.Garrisons.ShellShockwavePatch",
+    "BoscaliSummer.Garrisons.PartShockwavePatch",
+    "BoscaliSummer.Garrisons.NestDamageRedirectPatch",
     "BoscaliSummer.Garrisons.StrongpointClientGuardPatch",
     "BoscaliSummer.Garrisons.DestroyCommandGuardPatch",
-    "BoscaliSummer.Garrisons.ChimeraMountRegistrationPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaQueueMusicPatch",
@@ -535,7 +533,6 @@ string[] patchTypes =
     "BoscaliSummer.Modules.Support.Patches.SupportMissileDetonatePatch",
     "BoscaliSummer.Modules.Support.Patches.SupportMissileAuthorityPatch",
     "BoscaliSummer.Modules.Support.Patches.SupportMissileDescentPatch",
-    "BoscaliSummer.Modules.Support.Patches.CreditRewardPatch",
     "BoscaliSummer.Modules.Support.Patches.CyberLaunchMountPatch",
     "BoscaliSummer.Modules.Support.Patches.CyberLaunchFirePatch",
     "BoscaliSummer.Modules.Support.Patches.CyberDetectScopePatch",
@@ -680,11 +677,6 @@ using (Stream pilotResource = pluginAssembly.GetManifestResourceStream("BoscaliS
     ,("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", "Result", typeof(byte))
     ,("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", "CooldownSeconds", typeof(float))
     ,("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", "Contacts", typeof(int))
-    ,("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", "Protocol", typeof(byte))
-    ,("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", "Balance", typeof(int))
-    ,("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", "FrozenSeconds", typeof(int))
-    ,("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", "EventFactor", typeof(float))
-    ,("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", "SilentFactor", typeof(float))
     ,("BoscaliSummer.Modules.HighCommand.Networking.HighCommandQuery", "Protocol", typeof(byte))
     ,("BoscaliSummer.Modules.HighCommand.Networking.HighCommandQuery", "Scene", typeof(uint))
 ,("BoscaliSummer.Modules.HighCommand.Networking.HighCommandQuery", "Token", typeof(uint))
@@ -916,7 +908,6 @@ foreach (string type in new[] {
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.IHudBoard",
-    "BoscaliSummer.Core.Contracts.IHudChannel",
     "BoscaliSummer.Core.Contracts.IHudLine",
     "BoscaliSummer.Core.Contracts.HudLayout",
     "BoscaliSummer.Modules.Hud.Presentation.HudBoard",
@@ -965,7 +956,6 @@ if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValu
 foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
     ("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "Result:System.Byte", "CooldownSeconds:System.Single", "Radius:System.Single", "Duration:System.Single", "Contacts:System.Int32", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
-    ("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", new[] { "Protocol:System.Byte", "Balance:System.Int32", "FrozenSeconds:System.Int32", "EventFactor:System.Single", "SilentFactor:System.Single" }),
     ("BoscaliSummer.Modules.Support.Networking.CruiseWaypointMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "X:System.Single", "Z:System.Single", "Clear:System.Boolean" }),
     ("BoscaliSummer.Modules.Support.Networking.CruiseLegsMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "OwnerId:System.UInt64", "Result:System.Byte", "FactionName:System.String", "LegCount:System.Byte", "X:System.Single[]", "Z:System.Single[]", "Dive:System.Boolean", "Tti:System.Single" }),
     ("BoscaliSummer.Modules.DynamicOperations.Networking.OperationsQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "OperationId:System.Int32", "Action:System.Byte" }),
@@ -1418,7 +1408,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 36)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 39)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -1469,13 +1459,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)36); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)39); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)36); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)39); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -1484,15 +1474,10 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     if ((int)Get(resultBack, "Contacts") != 48)
         throw new InvalidOperationException("Support result lost the sweep contact count");
 
-    Type creditType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CreditStateMessage", true)!;
-    object credit = Activator.CreateInstance(creditType)!;
-    Set(credit, "Protocol", (byte)36); Set(credit, "Balance", 420);
-    Set(credit, "FrozenSeconds", 12); Set(credit, "EventFactor", 1.5f); Set(credit, "SilentFactor", 0.8f);
-    Roundtrip(creditType, credit, "owner credit state");
     // Request parsing preserves its header; the host rejects it in Evaluate after decoding.
     Set(request, "Protocol", (byte)27);
     Roundtrip(requestType, request, "retired request header");
-    foreach (Type type in new[] { resultType, creditType })
+    foreach (Type type in new[] { resultType })
     {
         object rejected = Decode(type, new byte[] { 27 });
         if ((byte)Get(rejected, "Protocol") != 27 ||
@@ -1502,7 +1487,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type waypointType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseWaypointMessage", true)!;
     object waypoint = Activator.CreateInstance(waypointType)!;
-    Set(waypoint, "Protocol", (byte)36); Set(waypoint, "RequestId", 913);
+    Set(waypoint, "Protocol", (byte)39); Set(waypoint, "RequestId", 913);
     Set(waypoint, "X", 1234.5f); Set(waypoint, "Z", -3456.5f); Set(waypoint, "Clear", true);
     object waypointBack = Roundtrip(waypointType, waypoint, "cruise waypoint");
     if ((int)Get(waypointBack, "RequestId") != 913 || !(bool)Get(waypointBack, "Clear"))
@@ -1512,7 +1497,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type legsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseLegsMessage", true)!;
     object legs = Activator.CreateInstance(legsType)!;
-    Set(legs, "Protocol", (byte)36); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
+    Set(legs, "Protocol", (byte)39); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
     Set(legs, "Result", (byte)1); Set(legs, "FactionName", "BOSCALI"); Set(legs, "LegCount", (byte)2);
     Set(legs, "X", new float[] { 1000f, 2000f, 0f, 0f, 0f, 0f });
     Set(legs, "Z", new float[] { -1000f, -2000f, 0f, 0f, 0f, 0f });
@@ -1528,12 +1513,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type cyberType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CyberStateMessage", true)!;
     Type cyberDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Cyber.CyberStateData", true)!;
     object cyberData = Activator.CreateInstance(cyberDataType)!;
-    Set(cyberData, "Protocol", (byte)36); Set(cyberData, "Active", true); Set(cyberData, "Seq", 7);
+    Set(cyberData, "Protocol", (byte)39); Set(cyberData, "Active", true); Set(cyberData, "Seq", 7);
     Set(cyberData, "Now", 12.5f); Set(cyberData, "IntrusionCap", (byte)2); Set(cyberData, "HeldTotal", (byte)1);
     object cyberMessage = Activator.CreateInstance(cyberType)!;
     Set(cyberMessage, "Data", cyberData);
     object cyberBack = Get(Decode(cyberType, Encode(cyberType, cyberMessage)), "Data");
-    if ((byte)Get(cyberBack, "Protocol") != 36 || (int)Get(cyberBack, "Seq") != 7 || !(bool)Get(cyberBack, "Active") ||
+    if ((byte)Get(cyberBack, "Protocol") != 39 || (int)Get(cyberBack, "Seq") != 7 || !(bool)Get(cyberBack, "Active") ||
         Math.Abs((float)Get(cyberBack, "Now") - 12.5f) > 0.001f || (byte)Get(cyberBack, "IntrusionCap") != 2 || (byte)Get(cyberBack, "HeldTotal") != 1)
         throw new InvalidOperationException("CYBER state roundtrip failed");
     object cyberForeign = Get(Decode(cyberType, new byte[] { 27 }), "Data");
@@ -1546,12 +1531,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type sofType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SofStateMessage", true)!;
     Type sofDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Sof.SofStateData", true)!;
     object sofData = Activator.CreateInstance(sofDataType)!;
-    Set(sofData, "Protocol", (byte)36); Set(sofData, "Active", true); Set(sofData, "Seq", 9);
+    Set(sofData, "Protocol", (byte)39); Set(sofData, "Active", true); Set(sofData, "Seq", 9);
     Set(sofData, "Now", 20.5f); Set(sofData, "TeamCap", (byte)3); Set(sofData, "TapIntrusions", (byte)2);
     object sofMessage = Activator.CreateInstance(sofType)!;
     Set(sofMessage, "Data", sofData);
     object sofBack = Get(Decode(sofType, Encode(sofType, sofMessage)), "Data");
-    if ((byte)Get(sofBack, "Protocol") != 36 || (int)Get(sofBack, "Seq") != 9 || !(bool)Get(sofBack, "Active") ||
+    if ((byte)Get(sofBack, "Protocol") != 39 || (int)Get(sofBack, "Seq") != 9 || !(bool)Get(sofBack, "Active") ||
         Math.Abs((float)Get(sofBack, "Now") - 20.5f) > 0.001f || (byte)Get(sofBack, "TeamCap") != 3 || (byte)Get(sofBack, "TapIntrusions") != 2)
         throw new InvalidOperationException("SOF state roundtrip failed");
     object sofForeign = Get(Decode(sofType, new byte[] { 33 }), "Data");
@@ -1563,12 +1548,12 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type opsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.OpsStateMessage", true)!;
     Type opsDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Ops.OpsStateData", true)!;
     object opsData = Activator.CreateInstance(opsDataType)!;
-    Set(opsData, "Protocol", (byte)36); Set(opsData, "Active", true); Set(opsData, "CyberOps", true); Set(opsData, "Seq", 11);
+    Set(opsData, "Protocol", (byte)39); Set(opsData, "Active", true); Set(opsData, "CyberOps", true); Set(opsData, "Seq", 11);
     Set(opsData, "Now", 30.5f); Set(opsData, "BirdsDown", (byte)5);
     object opsMessage = Activator.CreateInstance(opsType)!;
     Set(opsMessage, "Data", opsData);
     object opsBack = Get(Decode(opsType, Encode(opsType, opsMessage)), "Data");
-    if ((byte)Get(opsBack, "Protocol") != 36 || (int)Get(opsBack, "Seq") != 11 || !(bool)Get(opsBack, "Active") || !(bool)Get(opsBack, "CyberOps") ||
+    if ((byte)Get(opsBack, "Protocol") != 39 || (int)Get(opsBack, "Seq") != 11 || !(bool)Get(opsBack, "Active") || !(bool)Get(opsBack, "CyberOps") ||
         Math.Abs((float)Get(opsBack, "Now") - 30.5f) > 0.001f || (byte)Get(opsBack, "BirdsDown") != 5)
         throw new InvalidOperationException("OPERATIONS state roundtrip failed");
     object opsForeign = Get(Decode(opsType, new byte[] { 34 }), "Data");
@@ -1577,7 +1562,25 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     if ((byte)Get(Get(Decode(opsType, new byte[0]), "Data"), "Protocol") != 0)
         throw new InvalidOperationException("An empty OPERATIONS message must read inert");
 
-    Console.WriteLine("  Support protocol-36 serializers: requests, results, owner credits, cruise waypoints/legs, the faction-only CYBER, SOF and OPERATIONS states and retired-header rejection");
+    Type frontType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.FrontStateMessage", true)!;
+    Type frontDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Fronts.FrontStateData", true)!;
+    object frontData = Activator.CreateInstance(frontDataType)!;
+    Set(frontData, "Protocol", (byte)39); Set(frontData, "Seq", 13); Set(frontData, "Now", 41.5f); Set(frontData, "PriorityBy", "VIPER-2");
+    // The reader rejects a directive the front does not offer; a default row is Recon, which CYBER lacks.
+    Type directiveType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Fronts.FrontDirective", true)!;
+    Set(((Array)Get(frontData, "Fronts")).GetValue(1)!, "Directive", Enum.ToObject(directiveType, (byte)2));
+    object frontMessage = Activator.CreateInstance(frontType)!;
+    Set(frontMessage, "Data", frontData);
+    object frontBack = Get(Decode(frontType, Encode(frontType, frontMessage)), "Data");
+    if ((byte)Get(frontBack, "Protocol") != 39 || (int)Get(frontBack, "Seq") != 13 || Math.Abs((float)Get(frontBack, "Now") - 41.5f) > 0.001f)
+        throw new InvalidOperationException("FRONT state roundtrip failed");
+    object frontForeign = Get(Decode(frontType, new byte[] { 37 }), "Data");
+    if ((byte)Get(frontForeign, "Protocol") != 37)
+        throw new InvalidOperationException("FRONT state did not leave a foreign header unread");
+    if ((byte)Get(Get(Decode(frontType, new byte[0]), "Data"), "Protocol") != 0)
+        throw new InvalidOperationException("An empty FRONT message must read inert");
+
+    Console.WriteLine("  Support protocol-39 serializers: requests, results, cruise waypoints/legs, the faction-only CYBER, SOF, OPERATIONS and FRONT states and retired-header rejection");
 }
 
 static void ProbeEventsSerialization(Assembly plugin, Assembly mirage)

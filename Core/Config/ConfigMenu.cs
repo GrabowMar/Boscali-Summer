@@ -14,6 +14,7 @@ namespace BoscaliSummer.Core.Config
         public string DispName;
         public int? Order;
         public bool? ReadOnly;
+        public bool? Browsable;
     }
 
     /// <summary>
@@ -70,12 +71,12 @@ namespace BoscaliSummer.Core.Config
                 settings.UrbanCombat.GarrisonsEnabled,
                 settings.FireAndDestruction.FiresEnabled,
                 settings.Radio.Enabled,
-                settings.Hud.Enabled,
                 settings.Autopilot.Enabled,
                 settings.QoL.Enabled,
                 settings.Immersion.Enabled,
                 settings.Weather.Enabled,
                 settings.Performance.Enabled,
+                settings.Cinematography.Enabled,
             };
             string[] names =
             {
@@ -92,12 +93,12 @@ namespace BoscaliSummer.Core.Config
                 "Zone garrisons",
                 "Fire ignition and spread",
                 "Cockpit radio",
-                "Common HUD element",
                 "Autopilot",
                 "Quality of life",
                 "Cockpit immersion & effects",
                 "Dynamic weather and ENV screen",
-                "Adaptive cosmetic performance"
+                "Adaptive cosmetic performance",
+                "Private cinematic shot tools"
             };
 
             var hints = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(ordered.Length);
@@ -136,6 +137,18 @@ namespace BoscaliSummer.Core.Config
                 // they are left alone rather than hidden behind a checkbox that does not name
                 // them.
                 if (entry.SettingType == typeof(KeyCode)) continue;
+
+#if PUBLIC_RELEASE
+                // Public builds (-p:PublicRelease=true): cheats and dev tools in [Debug] are
+                // forced off and dropped from the window. The log switches stay for bug reports.
+                string key = bound.Key.Key;
+                if (bound.Key.Section == "Debug" && !key.Contains("Verbose") && key != "ExportLogs")
+                {
+                    if (entry.SettingType == typeof(bool)) entry.BoxedValue = false;
+                    Tag(description, entry, new ConfigurationManagerAttributes { Browsable = false });
+                    continue;
+                }
+#endif
 
                 ConfigurationManagerAttributes hint;
                 if (!switches.TryGetValue(entry, out hint))

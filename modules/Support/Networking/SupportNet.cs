@@ -2,6 +2,7 @@ using System;
 using System.Reflection;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
@@ -39,22 +40,6 @@ namespace BoscaliSummer.Modules.Support.Networking
         public float X;
         public float Y;
         public float Z;
-    }
-
-    [NetworkMessage]
-    internal struct CreditStateMessage
-    {
-        public byte Protocol;
-        public int Balance;
-        public int FrozenSeconds;
-        public float EventFactor;
-        public float SilentFactor;
-    }
-
-    [NetworkMessage]
-    internal struct ActivityPulseMessage
-    {
-        public byte Protocol;
     }
 
     [NetworkMessage]
@@ -106,12 +91,16 @@ namespace BoscaliSummer.Modules.Support.Networking
     [NetworkMessage]
     internal struct OpsStateMessage { public OpsStateData Data; }
 
+    /// <summary>Host to members of one faction only: that faction's three fronts (readiness, superiority, budget, posture, funding weights, focus pin, programme queue, log). Always a full snapshot, sent on change.</summary>
+    [NetworkMessage]
+    internal struct FrontStateMessage { public FrontStateData Data; }
+
     internal sealed class SupportNet : MonoBehaviour
     {
 
         /// <summary>
         /// Protocol 29 adds a coalesced player input intent so parked remote operators can earn the active trickle.
-        /// The host derives receipt time and limits pulses; the intent carries no credit or client timestamp.
+        /// The host derives receipt time and limits pulses; the intent carries no credit or client timestamp (removed again by protocol 37).
         /// Older peers must not interpret the retired action and result ids.
         /// Protocol 31 adds the faction-only SPACE mirror: SpaceCommand / SpaceReply / SpaceState messages. Every one carries this
         /// byte and a mismatched byte decodes to an empty message. No faction, price, class or favourite is ever sent by a client.
@@ -126,8 +115,15 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// OpsStateMessage (own bars and satellites, enemy pings only, ASAT flights for everyone).
         /// Protocol 36 adds WATCH OFFICER OVERLORD for CYBER and SOF and the AI factions: no new message or command, one field on the OpsStateMessage, the faction's last three OVERLORD
         /// actions (a sequence, a domain, a reason code and two argument bytes each, rebuilt into words on the client), which also rides a state with OPERATIONS off.
+        /// Protocol 37 (OPS FRONTS S0) pays perks in vanilla allocation: CreditStateMessage and ActivityPulseMessage are removed (the client reads Player.Allocation natively),
+        /// RADAR SCAN and MTI SWEEP merge into RECON PASS (the MTI id retires) and four perk ids are appended (RECON TEAM, SABOTAGE STRIKE, RADAR BLIND, SAM NET DOWN).
+        /// Protocol 38 (OPS FRONTS S1b) adds the fronts: six SpaceCommand kinds (FrontDirective, FrontPriority, FrontFocus, FrontQueue, FrontDonate and FrontSync; a front and a posture or
+        /// programme id, three weights, a packed focus point or an allocation amount, never a price or a faction), the faction-only FrontStateMessage and the front verdict bytes on the
+        /// SpaceReply. OperationFund, plan and cancel are refused by the host (the programmes replace the OPERATIONS bars).
+        /// Protocol 39 (GEO) makes every satellite a station-keeping GeoBird: one SpaceCommand kind (RelocateBird: a bird and a packed map point; the host judges fuel, burn state and distance and answers with a front verdict byte),
+        /// and the OpsStateMessage carries each own and enemy bird's from / to point, burn start and fuel (11 bytes a bird). RECON PASS, SAT CAMERA and ORBITAL ROD are refused outside their bird's footprint.
         /// </summary>
-        internal const byte ProtocolVersion = 36;
+        internal const byte ProtocolVersion = 39;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
@@ -137,7 +133,6 @@ namespace BoscaliSummer.Modules.Support.Networking
         private MessageHandler serverHandler;
         private MessageHandler clientHandler;
         private float nextRegistration;
-        private float nextActivityPulse;
 
         public void Configure(SupportManager support)
         {
@@ -149,42 +144,40 @@ namespace BoscaliSummer.Modules.Support.Networking
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             if (network == null) return;
             if (network.Server != null && network.Server.Active &&
                 network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
             {
                 serverHandler?.UnregisterHandler<SupportRequestMessage>();
                 serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
-                serverHandler?.UnregisterHandler<ActivityPulseMessage>();
                 serverHandler?.UnregisterHandler<SpaceCommandMessage>();
                 queries.Clear();
                 serverHandler = network.Server.MessageHandler;
                 serverHandler.RegisterHandler<SupportRequestMessage>(ReceiveRequest, false);
                 serverHandler.RegisterHandler<CruiseWaypointMessage>(ReceiveWaypoint, false);
-                serverHandler.RegisterHandler<ActivityPulseMessage>(ReceiveActivityPulse, false);
                 serverHandler.RegisterHandler<SpaceCommandMessage>(ReceiveSpaceCommand, false);
             }
             if (network.Client?.MessageHandler != null && network.Client.MessageHandler != clientHandler)
             {
                 clientHandler?.UnregisterHandler<SupportResultMessage>();
-                clientHandler?.UnregisterHandler<CreditStateMessage>();
                 clientHandler?.UnregisterHandler<CruiseLegsMessage>();
                 clientHandler?.UnregisterHandler<SpaceReplyMessage>();
                 clientHandler?.UnregisterHandler<SpaceStateMessage>();
                 clientHandler?.UnregisterHandler<CyberStateMessage>();
                 clientHandler?.UnregisterHandler<SofStateMessage>();
                 clientHandler?.UnregisterHandler<OpsStateMessage>();
+                clientHandler?.UnregisterHandler<FrontStateMessage>();
                 clientHandler = network.Client.MessageHandler;
                 manager?.OnSpaceLinked(); // a fresh link: nothing from an earlier session may be shown
                 clientHandler.RegisterHandler<SupportResultMessage>(ReceiveResult, false);
-                clientHandler.RegisterHandler<CreditStateMessage>(ReceiveCredit, false);
                 clientHandler.RegisterHandler<CruiseLegsMessage>(ReceiveCruiseLegs, false);
                 clientHandler.RegisterHandler<SpaceReplyMessage>(ReceiveSpaceReply, false);
                 clientHandler.RegisterHandler<SpaceStateMessage>(ReceiveSpaceState, false);
                 clientHandler.RegisterHandler<CyberStateMessage>(ReceiveCyberState, false);
                 clientHandler.RegisterHandler<SofStateMessage>(ReceiveSofState, false);
                 clientHandler.RegisterHandler<OpsStateMessage>(ReceiveOpsState, false);
+                clientHandler.RegisterHandler<FrontStateMessage>(ReceiveFrontState, false);
             }
         }
 
@@ -192,15 +185,14 @@ namespace BoscaliSummer.Modules.Support.Networking
         {
             serverHandler?.UnregisterHandler<SupportRequestMessage>();
             serverHandler?.UnregisterHandler<CruiseWaypointMessage>();
-            serverHandler?.UnregisterHandler<ActivityPulseMessage>();
             serverHandler?.UnregisterHandler<SpaceCommandMessage>();
             clientHandler?.UnregisterHandler<SpaceReplyMessage>();
             clientHandler?.UnregisterHandler<SpaceStateMessage>();
             clientHandler?.UnregisterHandler<CyberStateMessage>();
             clientHandler?.UnregisterHandler<SofStateMessage>();
             clientHandler?.UnregisterHandler<OpsStateMessage>();
+            clientHandler?.UnregisterHandler<FrontStateMessage>();
             clientHandler?.UnregisterHandler<SupportResultMessage>();
-            clientHandler?.UnregisterHandler<CreditStateMessage>();
             clientHandler?.UnregisterHandler<CruiseLegsMessage>();
             queries.Clear();
         }
@@ -225,11 +217,11 @@ namespace BoscaliSummer.Modules.Support.Networking
             if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 SupportResult result = manager.Evaluate(local, message);
-                manager.ReceiveResult(Reply(message, result, manager.ServerCooldownFor(local), local));
+                manager.ReceiveResult(Reply(message, result, manager.ServerCooldownFor(local, action), local));
                 return;
             }
 
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active)
             {
                 manager.ReportOffline();
@@ -259,7 +251,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 Protocol = ProtocolVersion, RequestId = request.RequestId, Action = request.Action,
                 Result = (byte)result, CooldownSeconds = action == SupportActionId.JtacUnlase ? 0f
                     : result == SupportResult.Accepted ? cooldown
-                    : result == SupportResult.Cooldown ? manager.ServerCooldownRemaining(player) : 0f,
+                    : result == SupportResult.Cooldown ? manager.ServerCooldownRemaining(player, action) : 0f,
                 Radius = radius, X = target.x, Y = target.y, Z = target.z,
                 Contacts = contacts < 0 ? 0 : contacts,
                 Duration = action == SupportActionId.Prsm || action == SupportActionId.Cruise ? ClampTti(tti) :
@@ -278,48 +270,12 @@ namespace BoscaliSummer.Modules.Support.Networking
                 !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
             SupportResult result = manager.Evaluate(player, request);
-            sender.Send(Reply(request, result, manager.ServerCooldownFor(player), player));
+            sender.Send(Reply(request, result, manager.ServerCooldownFor(player, (SupportActionId)request.Action), player));
         }
 
         private void ReceiveResult(INetworkPlayer _, SupportResultMessage result)
         {
             if (result.Protocol == ProtocolVersion) manager.ReceiveResult(result);
-        }
-
-        private void ReceiveCredit(INetworkPlayer _, CreditStateMessage message)
-        {
-            if (message.Protocol == ProtocolVersion) manager.ReceiveCredit(message);
-        }
-
-        /// <summary>One input intent per real second at most; the host alone stamps mission time and pays CR.</summary>
-        internal void SendActivityPulse()
-        {
-            if (Time.unscaledTime < nextActivityPulse) return;
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
-            if (client == null || !client.Active) return;
-            nextActivityPulse = Time.unscaledTime + 1f;
-            client.Send(new ActivityPulseMessage { Protocol = ProtocolVersion });
-        }
-
-        private void ReceiveActivityPulse(INetworkPlayer sender, ActivityPulseMessage message)
-        {
-            if (message.Protocol != ProtocolVersion || !GameAccess.IsServer() || sender == null || !sender.IsAuthenticated ||
-                !sender.TryGetPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
-            manager?.ReceiveActivityPulse(player);
-        }
-
-        /// <summary>Server to owner: the player's CR balance and wallet freeze.</summary>
-        internal bool SendCredit(Player player, int balance, int frozenSeconds, float eventFactor, float silentFactor)
-        {
-            var message = new CreditStateMessage { Protocol = ProtocolVersion, Balance = balance, FrozenSeconds = frozenSeconds, EventFactor = eventFactor, SilentFactor = silentFactor };
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && ReferenceEquals(local, player))
-            {
-                manager.ReceiveCredit(message); // the host's own player is served in-process
-                return true;
-            }
-            if (player?.Owner == null) return false;
-            player.Owner.Send(message);
-            return true;
         }
 
         // ---- SPACE (faction-only mirror and replayed MARK / SEND / CLAIM) ---------------------------
@@ -335,7 +291,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 manager.SpaceNet?.Receive(local, command);
                 return true;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active) return false;
             client.Send(new SpaceCommandMessage { Command = command });
             return true;
@@ -382,6 +338,8 @@ namespace BoscaliSummer.Modules.Support.Networking
 
         private void ReceiveOpsState(INetworkPlayer _, OpsStateMessage message) => manager.OpsFeed.Receive(message.Data);
 
+        private void ReceiveFrontState(INetworkPlayer _, FrontStateMessage message) => manager.FrontFeed.Receive(message.Data);
+
         private void ReceiveSofState(INetworkPlayer _, SofStateMessage message) => manager.SofFeed.Receive(message.Data);
 
         private void ReceiveCyberState(INetworkPlayer _, CyberStateMessage message) => manager.CyberFeed.Receive(message.Data);
@@ -406,7 +364,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         public void BroadcastCruiseLegs(CruiseLegsMessage message)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             server.SendToAll(message, authenticatedOnly: true, excludeLocalPlayer: true);
         }
@@ -493,22 +451,6 @@ namespace BoscaliSummer.Modules.Support.Networking
                     X = reader.ReadSingle(), Y = reader.ReadSingle(), Z = reader.ReadSingle()
                 };
             });
-            SetWriter<CreditStateMessage>((w, v) =>
-            {
-                w.WriteByte(v.Protocol);
-                w.WriteInt32(v.Balance);
-                w.WriteInt32(v.FrozenSeconds);
-                w.WriteSingle(v.EventFactor);
-                w.WriteSingle(v.SilentFactor);
-            });
-            SetReader<CreditStateMessage>(r =>
-            {
-                byte protocol = r.ReadByte();
-                if (protocol != ProtocolVersion) return new CreditStateMessage { Protocol = protocol };
-                return new CreditStateMessage { Protocol = protocol, Balance = r.ReadInt32(), FrozenSeconds = r.ReadInt32(), EventFactor = r.ReadSingle(), SilentFactor = r.ReadSingle() };
-            });
-            SetWriter<ActivityPulseMessage>((w, v) => w.WriteByte(v.Protocol));
-            SetReader<ActivityPulseMessage>(r => new ActivityPulseMessage { Protocol = r.ReadByte() });
             SetWriter<CruiseWaypointMessage>((w, v) =>
             {
                 w.WriteByte(v.Protocol);
@@ -608,10 +550,10 @@ namespace BoscaliSummer.Modules.Support.Networking
                 SofWire.WriteState, SofWire.ReadState);
             SetStateCodec<OpsStateMessage, OpsStateData>(v => v.Data, d => new OpsStateMessage { Data = d }, () => new OpsStateData { Protocol = ProtocolVersion },
                 OpsWire.WriteState, OpsWire.ReadState);
+            SetStateCodec<FrontStateMessage, FrontStateData>(v => v.Data, d => new FrontStateMessage { Data = d }, () => new FrontStateData { Protocol = ProtocolVersion },
+                FrontWire.WriteState, FrontWire.ReadState);
             MessagePacker.RegisterMessage<SupportRequestMessage>();
             MessagePacker.RegisterMessage<SupportResultMessage>();
-            MessagePacker.RegisterMessage<CreditStateMessage>();
-            MessagePacker.RegisterMessage<ActivityPulseMessage>();
             MessagePacker.RegisterMessage<CruiseWaypointMessage>();
             MessagePacker.RegisterMessage<CruiseLegsMessage>();
             MessagePacker.RegisterMessage<SpaceCommandMessage>();
@@ -620,6 +562,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             MessagePacker.RegisterMessage<CyberStateMessage>();
             MessagePacker.RegisterMessage<SofStateMessage>();
             MessagePacker.RegisterMessage<OpsStateMessage>();
+            MessagePacker.RegisterMessage<FrontStateMessage>();
         }
 
         // Mirage reads and writes go through these two adapters so the SPACE codec stays engine-free and testable.

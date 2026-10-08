@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Host authority for TASKED calls. The desk (Domain) owns the accounting; this half supplies the live facts it
-    /// cannot know: perks, tier floors, cooldowns, the KINETIC bird, and the native rod launch.
+    /// cannot know: perks, readiness, cooldowns, the KINETIC bird, and the native rod launch.
     /// </summary>
     internal sealed partial class SupportManager
     {
@@ -22,9 +22,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal TaskedDesk CreateTaskedDesk(SpaceService service, FactionHQ owner, SpaceObservations observations)
         {
-            if (credits == null || service == null || owner == null) return null;
+            if (service == null || owner == null) return null;
             var host = new TaskedFactionHost(this, service, owner, observations);
-            return new TaskedDesk(credits.FactionKey(owner), host, host, credits.Tasked);
+            return new TaskedDesk(host, host);
         }
 
         internal TaskedResult SendTasked(Player player, int[] markIds, int requestId) =>
@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (SofPosts.IsPost(action)) return AuthorizeSofTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
             if (TaskedKinds.DomainOf(action) == TaskedDomain.Cyber && CyberPackages.TryOfAction(action, out _))
                 return AuthorizeCyberTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
-            if (!GameAccess.IsServer() || catalog == null || credits == null || !TaskedSupported(action)) return TaskedOutcome.Unavailable;
+            if (!GameAccess.IsServer() || catalog == null || !TaskedSupported(action)) return TaskedOutcome.Unavailable;
             SupportActionDefinition definition = catalog.Find(action);
             // WATCH OFFICER OVERLORD has no Player: it may SEND (a live uplink and the bird are all it needs) but it never claims.
             bool overlord = playerId == SpaceContacts.WatchOfficerId;
@@ -87,20 +87,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!claiming) return TaskedOutcome.None;
             float now = MissionNow();
             if (!BypassRequirements && !HostAuthorised(player, definition)) return TaskedOutcome.Locked;
+            if (!BypassRequirements && CallSheet.TryGet(action, out CallRow gate) && !ReadinessOpen(player, gate)) return TaskedOutcome.Locked;
             if (definition.SpaceTask.HasValue && !state.CanStart(definition.SpaceTask.Value, now)) return TaskedOutcome.BirdBusy;
-            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, now, CooldownFor(player)))
+            if (!DisableCooldowns && ledger.IsCoolingDown(playerId, (byte)action, now, CooldownFor(player, action)))
             {
-                detail = Mathf.CeilToInt(ledger.CooldownRemaining(playerId, now, CooldownFor(player)));
+                detail = Mathf.CeilToInt(ledger.CooldownRemaining(playerId, (byte)action, now, CooldownFor(player, action)));
                 return TaskedOutcome.Cooldown;
             }
             CallQuote price = QuoteFor(definition, player);
-            if (price.Cost <= 0 || !CallSheet.TryGet(action, out CallRow row)) return TaskedOutcome.Unavailable;
-            baselinePrice = price.Cost;
-            if (!BypassRequirements)
-            {
-                ObjectiveCount census = credits.Census(owner);
-                if (!CallFloors.Unlocked(row.Tier, census.held, census.n, now / 60f, 1f)) return TaskedOutcome.Locked;
-            }
+            if (price.Cost <= 0) return TaskedOutcome.Unavailable;
+            baselinePrice = price.Cost; // informational: a TASKED claim is free
             return TaskedOutcome.None;
         }
 
@@ -157,17 +153,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             float now = MissionNow();
             // TASKED receipts live only in the desk; the CALLS ledger gets the cooldown, never this request id. A SOF post is a service: no cooldown.
-            if (!SofPosts.IsPost(job.Action)) ledger.StartCooldown(job.Pilot, now);
-            Player pilot = FindPlayer(owner, job.Pilot);
-            if (pilot != null) credits?.RecordInput(pilot, now);
-            // A CYBER package is not a strike: no OPS-assisted-kill window (its radius is not a blast radius).
-            if (!TaskedKinds.IsHostPost(job.Action))
-            {
-                try { credits.Assists.Record(credits.FactionKey(owner), job.Aim.X, job.Aim.Z, GetEffectRadius(job.Action, owner), now); }
-                catch (Exception e) { logger.LogError(e); }
-            }
-            logger.LogInfo("[Support] TASKED call " + job.CallId + " fired by " + job.Pilot + " request " + job.RequestId +
-                (job.Escrow > 0 ? " for " + job.Escrow + " CR." : "."));
+            if (!SofPosts.IsPost(job.Action)) ledger.StartCooldown(job.Pilot, (byte)job.Action, now);
+            logger.LogInfo("[Support] TASKED call " + job.CallId + " fired by " + job.Pilot + " request " + job.RequestId + " (free claim).");
         }
 
         private sealed class TaskedSlot : ITaskedSlot

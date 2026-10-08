@@ -6,7 +6,6 @@ using BoscaliSummer.Modules.DynamicOperations.Configuration;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using BoscaliSummer.Modules.HighCommand.Configuration;
-using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Intel.Configuration;
 using BoscaliSummer.Modules.Progression.Configuration;
@@ -21,6 +20,7 @@ using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Modules.Cinematography.Configuration;
 
 namespace BoscaliSummer.Core.Config
 {
@@ -47,11 +47,11 @@ namespace BoscaliSummer.Core.Config
         public CommsSettings Comms { get; }
         public QoLSettings QoL { get; }
         public AutopilotSettings Autopilot { get; }
-        public HudSettings Hud { get; }
         public ImmersionSettings Immersion { get; }
         public DiagnosticSettings Diagnostics { get; }
         public WeatherSettings Weather { get; }
         public PerformanceSettings Performance { get; }
+        public CinematographySettings Cinematography { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -76,11 +76,11 @@ namespace BoscaliSummer.Core.Config
                 Comms = new CommsSettings(config);
                 QoL = new QoLSettings(config);
                 Autopilot = new AutopilotSettings(config);
-                Hud = new HudSettings(config);
                 Immersion = new ImmersionSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 Weather = new WeatherSettings(config);
                 Performance = new PerformanceSettings(config);
+                Cinematography = new CinematographySettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into the
                 // F1 window's plain and advanced halves.

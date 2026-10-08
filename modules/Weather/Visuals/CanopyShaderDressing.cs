@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int RefractId = Shader.PropertyToID("_Refract");
         private static readonly int FrostId = Shader.PropertyToID("_Frost");
         private static readonly int PaneBoundsId = Shader.PropertyToID("_PaneBounds");
+        private static readonly int SceneTexId = Shader.PropertyToID("_SceneTex");
 
         private const float PatternDensity = 3f; // tiles/m, mirrors the shader
         private const float GravityTiles = 0.08f; // parked beads creep; airflow drives fast runoff
@@ -38,6 +39,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Color sunColor = Color.black;
         private Color fogColor = new Color(0.55f, 0.6f, 0.68f, 1f);
         private bool refract;
+        private Texture scene;
         private float recentLiquid, frost;
         internal float Frost => frost;
 
@@ -70,6 +72,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             fogColor = fog;
             refract = sceneRefraction;
         }
+
+        /// <summary>The finished world frame behind the glass (CanopySceneCopy),
+        /// or null when it is not current: the glass then falls back to a fog-coloured body.</summary>
+        internal void SetScene(Texture sceneTexture) => scene = sceneTexture;
 
         internal void SetColdMoisture(float temperatureC, float deposition, float dt)
         {
@@ -123,7 +129,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             properties.SetVector(SunDirId, new Vector4(sunDirection.x, sunDirection.y, sunDirection.z, 0f));
             properties.SetColor(SunColorId, sunColor);
             properties.SetColor(FogColorId, fogColor);
-            properties.SetFloat(RefractId, refract ? 1f : 0f);
+            bool refracting = refract && scene != null;
+            properties.SetFloat(RefractId, refracting ? 1f : 0f);
+            if (refracting) properties.SetTexture(SceneTexId, scene);
             properties.SetFloat(FrostId, frost);
             bool drawn = false;
             for (int i = 0; i < surfaces.Count; i++)

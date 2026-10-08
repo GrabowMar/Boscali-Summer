@@ -5,13 +5,11 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
-using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
-using BoscaliSummer.Modules.Support.Domain.Sof;
-using BoscaliSummer.Modules.Support.Domain.Space;
-using BoscaliSummer.Modules.Support.Presentation.C2;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Presentation.Fronts;
+using BoscaliSummer.Modules.Support.Presentation.Ops;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using NuclearOption.MissionEditorScripts;
@@ -20,140 +18,98 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {
+    /// <summary>The two tabs of the OPS bezel page.</summary>
+    internal enum OpsTab : byte { Fronts = 1, Perks = 2 }
+
     /// <summary>
-    /// The OPS bezel page, drawn as the SATCOM C2 terminal: the shared <see cref="C2Chrome"/> (banner, header, session line, tabs),
-    /// one page per tab and the <see cref="C2Footer"/> that also carries the hover help of every row and button.
-    /// [1] CAP is the CALL page (<see cref="CapPage"/>); [2] ORBIT hosts the SPACE feed (<see cref="SpaceFeedPanel"/>);
-    /// [5] BOARD lists the live TASKED posts (<see cref="BoardPage"/>); [3] NET (<see cref="CyberNetPage"/>) and [4] SOF (<see cref="SofPage"/>) are the faction-mirror pages; each falls back to honest NO LINK words. Keys 1-5 switch tabs only while the pointer is over the page or the full-screen station is open. The panel owns no policy: every figure comes from
-    /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="SpaceFeedController"/>.
+    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, four metrics, two icon
+    /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards with an OPEN button each
+    /// (the windows are <see cref="FrontController"/>'s); PERKS lists the pilot's perks by front with ARM / FIRE, the ORDER row and four quick
+    /// keys. Keys 1-2 switch tabs only while the pointer is over the page. The panel owns no policy: every figure comes from
+    /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="FrontController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const float RefreshInterval = 0.15f;
+        private const float RefreshInterval = 0.2f;
 
+        private readonly OpsPageView view = new OpsPageView();
         private readonly List<CallTile> tiles = new List<CallTile>(16);
-        private readonly CapView view = new CapView();
-        private readonly C2Feed c2 = new C2Feed();
-        private readonly RectTransform[] pages = new RectTransform[5];
 
         private SupportManager manager;
         private CallsController calls;
-        private SpaceFeedController feed;
-        private SpaceFeedPanel spacePanel;
+        private FrontController fronts;
         private ManualLogSource logger;
 
         private readonly MfdPanelInstaller installer =
             new MfdPanelInstaller(MfdSlots.Ops, "OPS", "BoscaliOperations.Screen", preferLeft: true);
         private MFDScreen screen => installer.Screen;
-        private RectTransform consoleRoot;
-        private AvTicker ticker;
-        private C2Chrome chrome;
-        private C2Footer footer;
-        private CapPage cap;
-        private BoardPage boardPage;
-        private CyberNetPage netPage;
-        private SofPage sofPage;
-        private C2Tab tab = C2Tab.Cap;
-        private int sceneGeneration;
+        private AvConsole console;
+        private AvMetric[] metrics;
+        private readonly FrontCardPart[] cards = new FrontCardPart[FrontRules.FrontCount];
+        private readonly Dictionary<SupportActionId, PerkRowPart> perkRows = new Dictionary<SupportActionId, PerkRowPart>(16);
+        private AvRow order;
+        private AvControl execute, abort;
+        private readonly AvControl[] quick = new AvControl[OpsPageView.FavouriteSlots];
+        private AvSection[] groups;
+        private OpsTab tab = OpsTab.Fronts;
 
         private float nextRefresh, failedUntil;
-        private int factionEpoch;
+        private bool refreshFaulted;
         private Canvas pageCanvas;
         private int aimCellX = int.MinValue, aimCellZ;
         private string aimGrid = "";
-        private string chromeKey = "", footerKey = "";
+        private SupportActionId armedId;
 
-        public void Configure(SupportManager supportManager, CallsController callsController, SpaceFeedController feedController = null)
+        public void Configure(SupportManager supportManager, CallsController callsController, FrontController frontController)
         {
             manager = supportManager;
             calls = callsController;
-            feed = feedController;
+            fronts = frontController;
             logger = installer.Log = ((ISupportHost)supportManager).Logger;
             installer.Builder = BuildScreen;
-            c2.Attach(manager, calls);
-            feed?.AttachConsole(c2, FillChrome);
         }
 
         public void ResetForScene()
         {
             installer.Reset();
-            consoleRoot = null;
-            ticker = null;
-            chrome = null;
-            footer = null;
-            cap = null;
-            boardPage = null;
-            netPage = null;
-            sofPage = null;
-            spacePanel = null;
-            tab = C2Tab.Cap;
-            manager?.CyberFeed.Want(false);
-            sceneGeneration++;
-            c2.Clear();
-            chromeKey = footerKey = "";
-            feed?.SetCompactVisible(false);
-            feed?.SetBoardVisible(false);
-            feed?.AttachBoard(null);
-            nextRefresh = 0f;
-            failedUntil = 0f;
-            factionEpoch = c2.FactionEpoch;
+            console = null;
+            metrics = null;
+            order = null; execute = abort = null; groups = null;
+            for (int i = 0; i < cards.Length; i++) cards[i] = null;
+            perkRows.Clear();
+            tab = OpsTab.Fronts;
+            nextRefresh = failedUntil = 0f;
             pageCanvas = null;
         }
 
-        private void OnDestroy()
-        {
-            ResetForScene();
-            c2.Detach();
-        }
+        private void OnDestroy() => ResetForScene();
+
+        private RectTransform ConsoleRootOrNull => console != null ? console.Root : null;
 
         private void Update()
         {
             if (installer.Failed || manager == null || calls == null) return;
             if (!installer.Tick()) return;
+            if (Time.unscaledTime < failedUntil) return; // a fault backs the page off for a moment instead of killing it
 
-            if (Time.unscaledTime < failedUntil) return; // a console fault backs the page off for a moment instead of killing it
-            bool visible = screen.isActive &&
-                SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            feed?.SetCompactVisible(visible && consoleRoot != null && tab == C2Tab.Orbit);
-            feed?.SetBoardVisible(visible && consoleRoot != null && tab == C2Tab.Board);
-            try
-            {
-                // The cockpit threat probe is polled only while the page or the station is on screen.
-                c2.Tick((visible && consoleRoot != null) || (feed != null && feed.WindowOpen));
-                if (c2.FactionEpoch != factionEpoch)
-                {
-                    factionEpoch = c2.FactionEpoch;
-                    if (tab != C2Tab.Cap && consoleRoot != null) SelectTab(C2Tab.Cap); // the old faction's page is not the new faction's
-                }
-            }
-            catch (Exception e)
-            {
-                failedUntil = Time.unscaledTime + 2f; // a console fault must not throw every frame
-                feed?.SetCompactVisible(false);
-                feed?.SetBoardVisible(false);
-                logger?.LogError("OPS C2 console failed: " + e);
-                return;
-            }
-            if (visible && consoleRoot != null) PollTabKeys();
-            if (!visible || consoleRoot == null || Time.unscaledTime < nextRefresh) return;
+            bool visible = console != null && screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
+            if (visible) PollTabKeys();
+            if (!visible || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
-            try { Refresh(); }
+            try { Refresh(); refreshFaulted = false; }
             catch (Exception e)
             {
-                installer.Failed = true; // a refresh fault must not throw every frame
-                logger?.LogError("OPS CALLS refresh failed: " + e);
+                failedUntil = Time.unscaledTime + 2f;
+                if (!refreshFaulted) logger?.LogError("OPS refresh failed: " + e);
+                refreshFaulted = true;
             }
         }
 
         // ---- Tab keys ---------------------------------------------------------------------------------
 
-        /// <summary>
-        /// Digit keys 1-5 pick a tab, but only with the pointer over the page (never in flight: the keys belong to the weapons), never
-        /// while typing and never with Ctrl, Alt or Shift held. The cheap <c>anyKeyDown</c> test comes first, so a frame without a
-        /// key press never touches the canvas. The station has no tabs, so it never takes them.
-        /// </summary>
+        /// <summary>Digit keys 1-2 pick a tab, only with the pointer over the page (in flight the keys belong to the weapons), never while typing or with a modifier held.</summary>
         private void PollTabKeys()
         {
             if (!Input.anyKeyDown) return;
@@ -161,21 +117,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) return;
             if (GameplayUI.GameIsPaused || !Application.isFocused) return;
             if (!C2Tabs.KeyAllowed(PointerOverPage(), false, InputFieldChecker.InsideInputField)) return;
-            for (int d = 1; d <= 5; d++)
+            for (int d = 1; d <= 2; d++)
             {
                 if (!Input.GetKeyDown(KeyCode.Alpha0 + d) && !Input.GetKeyDown(KeyCode.Keypad0 + d)) continue;
-                C2Tab next = C2Tabs.FromKey(d);
-                if (next != tab) SelectTab(next);
+                if ((OpsTab)d != tab) console.SetPage(d - 1);
                 return;
             }
         }
 
         private bool PointerOverPage()
         {
-            if (consoleRoot == null || !consoleRoot.gameObject.activeInHierarchy) return false;
-            if (pageCanvas == null) pageCanvas = consoleRoot.GetComponentInParent<Canvas>();
+            RectTransform root = ConsoleRootOrNull;
+            if (root == null || !root.gameObject.activeInHierarchy) return false;
+            if (pageCanvas == null) pageCanvas = root.GetComponentInParent<Canvas>();
             Camera cam = pageCanvas != null && pageCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? pageCanvas.worldCamera : null;
-            return RectTransformUtility.RectangleContainsScreenPoint(consoleRoot, Input.mousePosition, cam);
+            return RectTransformUtility.RectangleContainsScreenPoint(root, Input.mousePosition, cam);
         }
 
         // ---- Installation ----------------------------------------------------------------
@@ -183,7 +139,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
             BuildConsole(rootRect, height);
-            return consoleRoot;
+            return console.Root;
         }
 
         /// <summary>Builds the whole page into <paramref name="root"/> without an MFD (offline render harness).</summary>
@@ -191,275 +147,175 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void BuildConsole(RectTransform host, float height)
         {
-            consoleRoot = AvLay.Child(host, "C2 Terminal");
-            AvLay.Place(consoleRoot, 0f, 0f, Width, height);
-            AvLay.Nest(consoleRoot, true);
-            ticker = consoleRoot.gameObject.AddComponent<AvTicker>();
-
-            AvFrame back = AvFrame.Add(consoleRoot, "Frame", default(AvChamfer));
-            AvLay.Fill(back.rectTransform);
-
-            chrome = Reg(new C2Chrome(consoleRoot, SelectTab));
-            chrome.Place(new AvSlot(0f, 0f, Width, C2Chrome.Height));
-
-            float pageH = height - C2Chrome.Height - C2Footer.Height;
-            for (int i = 0; i < pages.Length; i++)
+            console = AvConsole.Build(host, "OPS", "SUPPORT OPERATIONS", 2, Width, height);
+            AvTabBar tabs = console.Tabs((AvIcon.Flag, "FRONTS"), (AvIcon.Target, "PERKS"));
+            string[] hints =
             {
-                pages[i] = AvLay.Child(consoleRoot, "Page " + (i + 1));
-                AvLay.Place(pages[i], 0f, C2Chrome.Height, Width, pageH);
+                "[1] The three fronts: readiness, superiority, posture, what is being built. OPEN a front for its window.",
+                "[2] Your perks by front: arm one, aim it, fire it. The ORDER row and the quick keys."
+            };
+            AvControl[] tabButtons = tabs.Rect.GetComponentsInChildren<AvControl>(true);
+            for (int i = 0; i < tabButtons.Length && i < hints.Length; i++) tabButtons[i].Help = hints[i];
+            metrics = console.Metrics("ALLOCATION", "PERKS READY", "FRONTS AHEAD", "ALERTS");
+            console.PageChanged += OnPage;
+
+            // FRONTS: three cards.
+            AvFlow p0 = console.Page(0);
+            for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront));
+
+            // PERKS: ORDER, quick keys, then the perks grouped by front.
+            AvFlow p1 = console.Page(1);
+            p1.Section(AvIcon.Target, "ORDER", "ARM A PERK · AIM · FIRE");
+            order = p1.Add(new AvRow(p1.Content));
+            execute = order.AddTrailing(OpsKit.Spec("FIRE", () => { if (view.Armed) calls?.Press(armedId); }, AvButtonStyle.Danger));
+            abort = order.AddTrailing(OpsKit.Spec("ABORT", () => calls?.Disarm(), AvButtonStyle.Quiet));
+            execute.Help = "Fire the armed perk at the aim shown. The host spends and answers.";
+            abort.Help = "Disarm the armed perk. Nothing is spent.";
+            var specs = new AvControl.Spec[quick.Length];
+            for (int i = 0; i < quick.Length; i++) { int slot = i; specs[i] = OpsKit.Spec("", () => PressQuick(slot), AvButtonStyle.Default); }
+            AvButtons qb = p1.Buttons(specs);
+            for (int i = 0; i < quick.Length; i++) { quick[i] = qb.Controls[i]; quick[i].SingleLine(); }
+
+            groups = new AvSection[FrontRules.FrontCount];
+            for (int f = 0; f < FrontRules.FrontCount; f++)
+            {
+                var front = (Front)f;
+                groups[f] = p1.Section(f == 0 ? AvIcon.Satellite : f == 1 ? AvIcon.Antenna : AvIcon.UsersGroup, FrontRules.Name(front) + " PERKS");
+                foreach (CallRow r in CallSheet.Rows)
+                    if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, id => calls?.Press(id), r.Id));
             }
 
-            AvTicker t = ticker;
-            cap = new CapPage(pages[(int)C2Tab.Cap - 1], Width, pageH, calls, p => t.Register(p));
-            spacePanel = new SpaceFeedPanel(pages[(int)C2Tab.Orbit - 1], feed, Width, pageH, false);
-            AvLay.Place(spacePanel.Rect, 0f, 0f, Width, pageH);
-            ticker.Register(spacePanel);
-            feed?.AttachCompact(spacePanel);
-            netPage = new CyberNetPage(pages[(int)C2Tab.Net - 1], Width, pageH, calls, p => t.Register(p),
-                id => manager?.CyberHop(id), id => manager?.CyberBurn(id), id => manager?.CyberDrop(id), OpsActions());
-            sofPage = new SofPage(pages[(int)C2Tab.Sof - 1], Width, pageH, calls, p => t.Register(p), new SofPageActions
-            {
-                Raise = () => manager?.SofRaise(),
-                Order = (slot, verb) => manager?.SofOrder(slot, verb),
-                Divert = (slot, x, z) => manager?.SofDivert(slot, x, z),
-                Mission = (slot, kind, id, x, z) => manager?.SofMission(slot, kind, id, x, z),
-                Pick = (label, onPick) => manager != null && manager.ArmLocalPick(label, point => onPick((float)point.x, (float)point.z)),
-                Ops = OpsActions()
-            });
-            boardPage = new BoardPage(pages[(int)C2Tab.Board - 1], Width, pageH, id => calls?.PressTasked(id), ToggleQuiet, p => t.Register(p));
-            feed?.AttachBoard(boardPage);
-
-            footer = Reg(new C2Footer(consoleRoot, () => calls?.Disarm()));
-            footer.Place(new AvSlot(0f, height - C2Footer.Height, Width, C2Footer.Height));
-            consoleRoot.gameObject.AddComponent<AvHelpScope>().Sink = footer.SetHint;
-
-            CapPage capPage = cap;
-            ticker.Register(new Hook(() => { back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame); capPage.Restyle(); boardPage?.Restyle(); netPage?.Restyle(); sofPage?.Restyle(); }));
-            back.Paint(AvStyleHost.FuiColor("ground", Color.black), AvInk.Frame);
-            chromeKey = footerKey = "";
-            SelectTab(C2Tab.Cap);
+            console.Finish();
+            console.SetPage(0);
+            OnPage(0);
         }
 
-        /// <summary>The OPERATION box's three requests, sent through the manager (a press is a request, never an effect).</summary>
-        private OpsBoxActions OpsActions() => new OpsBoxActions
+        private void OpenFront(Front front)
         {
-            Fund = (domain, large) => manager?.OpsFund(domain, large),
-            Plan = (kind, target) => manager?.OpsPlan(kind, target),
-            Cancel = domain => manager?.OpsCancel(domain)
-        };
+            fronts?.Open(front);
+        }
 
-        /// <summary>The QUIET switch of the BOARD page: flips the existing client QuietNotices setting.</summary>
-        private void ToggleQuiet()
+        private void PressQuick(int slot)
+        {
+            if (calls == null || slot >= calls.Favourites.Length) return;
+            SupportActionId? id = calls.Favourites[slot];
+            if (id.HasValue) calls.Press(id.Value);
+        }
+
+        private string KeyName(int slot)
         {
             SupportSettings s = manager?.Settings;
-            if (s != null) s.QuietNotices.Value = !s.QuietNotices.Value;
+            var key = slot == 0 ? s?.CallKey1 : slot == 1 ? s?.CallKey2 : slot == 2 ? s?.CallKey3 : s?.CallKey4;
+            if (key == null || key.Value.MainKey == KeyCode.None) return (slot + 1).ToString();
+            return key.Value.ToString().Replace("Alpha", "").Replace("Keypad", "NUM ").ToUpperInvariant();
+        }
+
+        private void OnPage(int page)
+        {
+            tab = (OpsTab)(page + 1);
             nextRefresh = 0f;
         }
 
-        private T Reg<T>(T part) where T : AvPart
+        /// <summary>Maximize the map, press the OPS bezel and open <paramref name="next"/>, as the player would (automation).</summary>
+        internal void OpenForAutomation(OpsTab next)
         {
-            ticker.Register(part);
-            return part;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized) map.Maximize();
+            if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
+            SelectTab(next);
         }
 
-        private sealed class Hook : AvPart
-        {
-            private readonly Action restyle;
-            public Hook(Action restyle) { this.restyle = restyle; }
-            public override void Restyle() => restyle?.Invoke();
-            public override void Place(AvSlot slot) { }
-        }
+        internal void SelectTab(OpsTab next) => console?.SetPage((int)next - 1);
 
-        private void SelectTab(C2Tab next)
-        {
-            tab = next;
-            manager?.CyberFeed.Want(next == C2Tab.Net); // the NET page is the only reader of the CYBER mirror: it asks the host for a state while it is open
-            manager?.SofFeed.Want(next == C2Tab.Sof); // likewise the SOF page for the SOF mirror
-            manager?.OpsFeed.Want(next == C2Tab.Net || next == C2Tab.Sof); // and both for the OPERATIONS mirror (their OPERATION box)
-            for (int i = 0; i < pages.Length; i++)
-                if (pages[i] != null) pages[i].gameObject.SetActive(i == (int)next - 1);
-            chromeKey = footerKey = "";
-            nextRefresh = 0f;
-            if (chrome != null) PaintChrome(tab, view);
-        }
-        internal BoardPage Board => boardPage;
-        internal AvTicker Ticker => ticker;
-        internal RectTransform ConsoleRoot => consoleRoot;
+        internal bool Installed => screen != null;
+        internal bool ScreenActive => screen != null && screen.isActive;
+        internal OpsTab Tab => tab;
+        internal AvTicker Ticker => console?.Ticker;
+        internal RectTransform ConsoleRoot => ConsoleRootOrNull;
+        /// <summary>The figures last painted (automation reads them back).</summary>
+        internal OpsPageView View => view;
 
         // ---- Refresh and paint ------------------------------------------------------------
 
         private void Refresh()
         {
+            float now = SupportManager.MissionNow();
             tiles.Clear();
-            int frozen = manager.LocalFrozenSeconds;
             foreach (CallRow row in CallSheet.Rows)
+                tiles.Add(CallsView.Tile(row, manager.Quote(row.Id), manager.LockReason(row.Id), manager.LocalAllocation,
+                    manager.LocalCooldownRemaining(row.Id), calls.Armed == row.Id, false, !manager.Online));
+            view.Allocation = (int)manager.LocalAllocation;
+            OpsPageViews.Perks(view, tiles);
+            FrontMirror fm = manager.FrontMirror;
+            OpsPageViews.Cards(view, fm.State, fm.Known, now);
+            OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, view.Allocation);
+            for (int i = 0; i < view.Favourites.Length; i++)
             {
-                bool unlocked = manager.Unlocked(row.Id, out string unlock);
-                // A pending CALL cannot be tied to one tile from here: the footer carries PENDING, tiles stay as they are.
-                CallTile t = CallsView.Tile(row, manager.Quote(row.Id), unlocked, unlock, manager.LocalCredit,
-                    manager.LocalCooldownRemaining, calls.Armed == row.Id, false, !manager.Online);
-                if (frozen > 0 && t.State != CallState.Offline)
-                {
-                    int minutes = Mathf.Max(1, Mathf.CeilToInt(frozen / 60f));
-                    t = new CallTile(t.Id, t.Label, t.TierWord, t.CostText, t.Reason, CallState.Cooldown,
-                        "FROZEN " + minutes + " MIN", false);
-                }
-                tiles.Add(t);
+                view.Favourites[i] = null;
+                SupportActionId? id = i < calls.Favourites.Length ? calls.Favourites[i] : null;
+                if (!id.HasValue) continue;
+                foreach (CallTile t in tiles) if (t.Id == id.Value) { view.Favourites[i] = t; break; }
             }
-
-            FillView();
+            view.FrontWords = fronts != null && SupportManager.MissionNow() - fronts.LastWordsAt < 8f ? fronts.LastWords : "";
+            view.FrontWordsTone = fronts != null ? fronts.LastWordsTone : AvState.Inert;
             Paint(view);
         }
 
-        private void FillView()
-        {
-            view.Tiles.Clear();
-            view.Tiles.AddRange(tiles);
-            view.NextUnlock = manager.NextUnlockText();
-            view.Words = calls.LastWords;
-            view.Pending = calls.Pending;
-            for (int i = 0; i < view.Favourites.Length; i++) view.Favourites[i] = i < calls.Favourites.Length ? calls.Favourites[i] : null;
-            view.Aim = calls.AimNow;
-            view.AimGrid = AimGridNow();
-            view.LastDelta = c2.LastDelta;
-            view.Cyber = manager.CyberMirror.State;
-            view.CyberKnown = manager.CyberMirror.Known;
-            view.Sof = manager.SofMirror.State;
-            view.SofKnown = manager.SofMirror.Known;
-            view.Ops = manager.OpsMirror.State;
-            view.OpsKnown = manager.OpsMirror.Known;
-            FillChrome(view);
-        }
-
-        /// <summary>The armed call's aim as a grid string, rebuilt only when the aim moves into another 100 m cell (the text shows 0.1 km).</summary>
         private string AimGridNow()
         {
             if (!calls.Armed.HasValue || !calls.TryAimPoint(out GlobalPosition p)) { aimCellX = int.MinValue; aimGrid = ""; return ""; }
             int cx = Mathf.RoundToInt((float)(p.x / 100.0)), cz = Mathf.RoundToInt((float)(p.z / 100.0));
-            if (cx != aimCellX || cz != aimCellZ) { aimCellX = cx; aimCellZ = cz; aimGrid = TheaterGrid.Kilometres(p.x, p.z); }
+            if (cx != aimCellX || cz != aimCellZ) { aimCellX = cx; aimCellZ = cz; aimGrid = OpsKit.Grid((float)p.x, (float)p.z); }
             return aimGrid;
         }
 
-        /// <summary>Everything the shared C2 chrome shows (identity, ledger, session line, board count), for the MFD pages and the station.</summary>
-        private void FillChrome(C2ChromeView v)
+        /// <summary>Paints the metrics, the open page and the footer from <paramref name="v"/> (the harness feeds fixtures here).</summary>
+        internal void Paint(OpsPageView v)
         {
-            v.Credit = (int)manager.LocalCredit;
-            v.Console = c2.Console;
-            v.Alert = c2.Alert;
-            v.Link = manager.Online;
+            if (console == null) return;
+            metrics[0].Set(v.Allocation.ToString(), "ALLOC", Mathf.Clamp01(v.Allocation / 100f), v.Allocation > 0 ? AvState.Ready : AvState.Caution);
+            metrics[1].Set(v.PerksReady + "/" + v.PerksTotal, "READY", v.PerksTotal > 0 ? v.PerksReady / (float)v.PerksTotal : 0f, v.PerksReady > 0 ? AvState.Ready : AvState.Caution);
+            metrics[2].Set(v.FrontsAhead + "/" + FrontRules.FrontCount, "AHEAD", v.FrontsAhead / (float)FrontRules.FrontCount, v.FrontsAhead > 0 ? AvState.Ready : AvState.Caution);
+            metrics[3].Set(v.Alerts.ToString(), v.Alerts == 1 ? "ALERT" : "ALERTS", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
 
-            float now = SupportManager.MissionNow();
-            v.KeyRot = C2Words.KeyRotation(now);
-            if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null)
-            {
-                v.Faction = player.HQ != null && player.HQ.faction != null ? player.HQ.faction.factionName : "";
-                v.Callsign = Callsign(player);
-                v.Session = C2Words.Session(PlayerIdentity.Of(player), sceneGeneration);
-            }
+            for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
 
-            SpaceFeedMirror mirror = manager.SpaceMirror;
-            SpaceFeedState state = mirror.State;
-            if (mirror.Known && state.Active)
+            armedId = default;
+            foreach (PerkRowView p in v.Perks)
             {
-                v.Uplinks = state.UplinksLive + "/" + state.UplinksTotal;
-                v.UplinkTone = state.UplinksTotal > 0 && state.UplinksLive >= state.UplinksTotal ? AvState.Ready
-                    : state.UplinksLive == 0 ? AvState.Danger : AvState.Caution;
-                v.Space = C2Feed.SpaceWord(state.Family);
-                int open = 0;
-                for (int i = 0; i < state.Posts.Count; i++)
-                    if (SpaceFeedRules.PostStatusOf(state.Posts[i], now) != PostStatus.Stale) open++; // live = not stale: the badge, the header and the LIVE POSTS box agree
-                v.BoardCount = open;
+                if (p.Armed) armedId = p.Id;
+                if (perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
             }
-            else
+            order.Set(v.ArmedName, v.AimLine, v.OrderRight, v.Armed ? AvState.Caution : v.Pending ? AvState.Info : AvState.Ready);
+            order.Armed = v.Armed;
+            OpsKit.Enable(execute, v.Armed);
+            OpsKit.Enable(abort, v.Armed);
+            for (int i = 0; i < quick.Length; i++)
             {
-                v.Uplinks = v.Space = "";
-                v.UplinkTone = AvState.Inert;
-                v.BoardCount = 0;
+                CallTile? t = v.Favourites[i];
+                string key = KeyName(i);
+                if (t.HasValue)
+                {
+                    OpsKit.Label(quick[i], "[" + key + "] " + t.Value.Label);
+                    OpsKit.Enable(quick[i], t.Value.Enabled);
+                    quick[i].Armed = t.Value.State == CallState.Armed;
+                }
+                else
+                {
+                    OpsKit.Label(quick[i], "[" + key + "] EMPTY");
+                    OpsKit.Enable(quick[i], false);
+                    quick[i].Armed = false;
+                }
             }
-        }
+            int[] ready = new int[FrontRules.FrontCount];
+            foreach (PerkRowView p in v.Perks) if (p.Enabled) ready[(int)p.Front]++;
+            for (int f = 0; f < groups.Length; f++) groups[f].SetCaption(ready[f] + " READY");
 
-        private static string Callsign(Player player)
-        {
-            try { return (player.GetDisplayName(PlayerNameContext.ChatOrLeaderboard) ?? "").ToUpperInvariant(); }
-            catch (Exception) { return ""; }
-        }
-
-        /// <summary>Paints the chrome, the footer and the CAP page from <paramref name="v"/> (the harness feeds fixtures here).</summary>
-        internal void Paint(CapView v)
-        {
-            if (consoleRoot == null) return;
-            PaintChrome(tab, v);
-            if (tab == C2Tab.Cap) cap.Paint(v);
-            else if (tab == C2Tab.Net) netPage?.Paint(v);
-            else if (tab == C2Tab.Sof) sofPage?.Paint(v);
-            PaintFooter(v);
-        }
-
-        private void PaintChrome(C2Tab t, CapView v)
-        {
-            string key = string.Concat((int)t, "|", v.Faction, "|", v.Alert, "|", v.Credit, "|", v.Callsign, "|", v.Session, "|", v.KeyRot, "|",
-                v.Uplinks, "|", (int)v.UplinkTone, "|", v.Space, "|", v.Link ? "1" : "0", "|", v.BoardCount, "|", C2Cap.CallsReady(v.Tiles), "|", v.CyberKnown && v.Cyber != null ? v.Cyber.Seq : -1, "|", v.SofKnown && v.Sof != null ? v.Sof.Seq : -1, "|", v.OpsKnown && v.Ops != null ? v.Ops.Seq : -1);
-            if (key == chromeKey) return;
-            chromeKey = key;
-
-            C2Area area = t == C2Tab.Net ? C2Area.Cyber : t == C2Tab.Sof ? C2Area.Sof : C2Area.Orbital;
-            bool alert = v.Alert.Length > 0;
-            chrome.SetBanner(C2Words.Banner(v.Faction, area), alert ? AvState.Danger : AvState.Caution);
-            string title, sub;
-            if (t == C2Tab.Net) { title = "NETWORK OPERATIONS"; sub = CyberNetWords.Sub(v.CyberKnown ? v.Cyber : null); }
-            else if (t == C2Tab.Sof) { title = "SPECIAL OPERATIONS"; sub = SofPageWords.Sub(v.SofKnown ? v.Sof : null); }
-            else if (t == C2Tab.Board) { title = "TASKED BOARD"; sub = "LIVE POSTS · " + v.BoardCount; }
-            else if (t == C2Tab.Orbit) { title = "ORBITAL SUPPORT"; sub = "ORBIT · SENSOR, TRACK FILE, TASKED"; }
-            else { title = "ORBITAL SUPPORT"; sub = "CAP · " + C2Cap.CallsReady(v.Tiles) + " CALLS READY"; }
-            chrome.SetHeader(title, sub, alert ? C2Words.Fit(v.Alert, 18) : null);
-            chrome.SetLedger(v.Credit);
-            chrome.SetSession(v.Callsign, v.Session, v.KeyRot, v.Uplinks, v.UplinkTone, v.Space, v.Link);
-            chrome.SetTabs(t, v.BoardCount);
-        }
-
-        private void PaintFooter(CapView v)
-        {
-            string slab, words;
-            AvState tone;
-            bool armed = false;
-            foreach (CallTile t in v.Tiles) if (t.State == CallState.Armed) { armed = true; break; }
-            if (tab == C2Tab.Cap)
-            {
-                slab = C2Cap.Slab(armed, v.Pending, v.Words);
-                words = C2Cap.FooterWords(v.Words, v.NextUnlock);
-                tone = armed ? AvState.Caution : v.Pending ? AvState.Info : C2Cap.StartsNegative(v.Words) ? AvState.Danger : AvState.Ready;
-            }
-            else if (tab == C2Tab.Orbit)
-            {
-                // The ORBIT page's words (a verdict, a refusal, the enemy intent, a hint) ride the shared footer.
-                string said = spacePanel != null ? spacePanel.Words : "";
-                tone = spacePanel != null && said.Length > 0 ? spacePanel.WordsTone : AvState.Ready;
-                words = said.Length > 0 ? said : "ORBIT FEED · OPEN FULL FOR THE TASKING STATION";
-                slab = C2Kit.SlabWord(tone);
-            }
-            else if (tab == C2Tab.Board && boardPage != null)
-            {
-                tone = boardPage.WordsTone;
-                words = boardPage.Words.Length > 0 ? boardPage.Words : "BOARD CLEAR \u00B7 WAITING FOR A POSTED CALL";
-                slab = C2Kit.SlabWord(tone);
-            }
-            else if (tab == C2Tab.Net || tab == C2Tab.Sof)
-            {
-                // The domain is offline, but its real CALL rows work: a refusal from one of them replaces the standing (info) words.
-                string said = v.Words ?? "";
-                string standing = (tab == C2Tab.Net ? netPage?.Words : sofPage?.Words) ?? "";
-                bool refused = C2Cap.StartsNegative(said) || C2Cap.StartsNegative(standing); // the page's own standing words may be a NEGATIVE too (CYBER OFFLINE)
-                slab = refused ? "NEG" : "INFO";
-                tone = refused ? AvState.Danger : AvState.Info;
-                words = C2Cap.StartsNegative(said) ? said : standing;
-            }
-            else { slab = "INT"; tone = AvState.Info; words = ""; }
-            // ABORT rides the footer on every page that has no abort of its own (CAP has one in the EXECUTE box) while a call is armed.
-            footer.ShowAbort(armed && tab != C2Tab.Cap);
-            string key = slab + "|" + (int)tone + "|" + words;
-            if (key == footerKey) return;
-            footerKey = key;
-            footer.Set(slab, tone, words);
+            string words; AvState tone;
+            if (tab == OpsTab.Perks) { words = v.Words.Length > 0 ? v.Words : "ARM A PERK, AIM, THEN FIRE"; tone = v.WordsTone; }
+            else if (v.FrontWords.Length > 0) { words = v.FrontWords; tone = v.FrontWordsTone; }
+            else { words = "OPEN A FRONT FOR ITS MAP, PROGRAMMES AND PERKS"; tone = AvState.Ready; }
+            console.Footer.Set(words, tone);
         }
     }
 }

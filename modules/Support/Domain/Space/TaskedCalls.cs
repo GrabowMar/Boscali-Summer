@@ -411,13 +411,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool Deadline(float now, float seconds, out float deadline) { deadline = now + seconds; return float.IsFinite(deadline) && deadline > now; }
     }
 
-    internal readonly struct ContributorPayout
-    {
-        public readonly ulong Player;
-        public readonly float Amount;
-        public ContributorPayout(ulong player, float amount) { Player = player; Amount = amount; }
-    }
-
     /// <summary>Adjacent census boundaries (1/2, 4/5, 16/17) must stay crossed for sixty mission seconds.</summary>
     internal sealed class TaskedHumanProfile
     {
@@ -447,54 +440,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static int Category(int humans) => humans == 1 ? 0 : humans <= 4 ? 1 : humans <= 16 ? 2 : 3;
     }
 
-    internal readonly struct FeeSettlement
-    {
-        public readonly float Hq;
-        public readonly ContributorPayout[] Payouts;
-        public FeeSettlement(float hq, ContributorPayout[] payouts) { Hq = hq; Payouts = payouts; }
-    }
-
+    /// <summary>The human-census rules of the board (a claim itself is free since OPS FRONTS S0).</summary>
     internal static class TaskedFees
     {
-        public static int Quote(SupportActionId action, int hostBaselinePrice, int humanProfile, bool ownCall)
-        {
-            if (SofPosts.IsPost(action)) return ValidProfile(humanProfile) ? 0 : -1; // a SOF post is a service: free to claim
-            if (hostBaselinePrice <= 0 || !ValidProfile(humanProfile) || !TaskedKinds.TryGet(action, out TaskedKind row)) return -1;
-            if ((humanProfile == 1 && ownCall) || (humanProfile >= 2 && humanProfile <= 4)) return 0;
-            return action == SupportActionId.Artillery ? Math.Max(1, (int)Math.Round(hostBaselinePrice * .25d, MidpointRounding.AwayFromZero)) :
-                row.Tier == CallTier.Light ? 10 : row.Tier == CallTier.Heavy ? 25 : 120;
-        }
-
-        public static FeeSettlement Split(int chargedFee, bool watchOfficer, EffortShare[] verifiedShares, int humanProfile = 5)
-        {
-            if (chargedFee <= 0) return new FeeSettlement(0, Array.Empty<ContributorPayout>());
-            if (watchOfficer || !ValidProfile(humanProfile) || humanProfile <= 4 || verifiedShares == null ||
-                verifiedShares.Length == 0 || verifiedShares.Length > TaskedBoard.MaxMarks)
-                return new FeeSettlement(chargedFee, Array.Empty<ContributorPayout>());
-            var players = new List<ulong>(TaskedBoard.MaxMarks);
-            var weights = new List<double>(TaskedBoard.MaxMarks);
-            double total = 0;
-            foreach (EffortShare share in verifiedShares)
-            {
-                if (share.Player == 0 || !float.IsFinite(share.Effort) || share.Effort < 0)
-                    return new FeeSettlement(chargedFee, Array.Empty<ContributorPayout>());
-                if (share.Effort == 0) continue;
-                int index = players.IndexOf(share.Player);
-                if (index < 0) { players.Add(share.Player); weights.Add(share.Effort); }
-                else weights[index] += share.Effort;
-                total += share.Effort;
-            }
-            if (total <= 0) return new FeeSettlement(chargedFee, Array.Empty<ContributorPayout>());
-            var payouts = new ContributorPayout[players.Count];
-            float distributed = 0;
-            for (int i = 0; i < payouts.Length; i++)
-            {
-                float amount = (float)(chargedFee * .7d * weights[i] / total);
-                payouts[i] = new ContributorPayout(players[i], amount); distributed += amount;
-            }
-            return new FeeSettlement(chargedFee - distributed, payouts);
-        }
-
         internal static bool ValidProfile(int humanProfile) => humanProfile > 0 && humanProfile <= SpaceContacts.MaxPlayers;
     }
 }

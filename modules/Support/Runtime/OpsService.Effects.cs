@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using UnityEngine;
@@ -47,6 +48,34 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        /// <summary>
+        /// OPS FRONTS S1b: a finished ZERO-DAY, ASAT or FOB programme runs its effect directly, with no operation bar behind it (the programme was the bar). ZERO-DAY takes the faction's nearest
+        /// revealed SAM C2 node, ASAT the first satellite class (RADAR, OPTICAL, KINETIC) an enemy still has up, FOB the first building the faction holds. False when there is nothing to hit.
+        /// </summary>
+        internal bool RunProgramme(FactionHQ owner, ProgrammeId id)
+        {
+            if (!Enabled || owner == null || !factions.TryGetValue(owner, out FactionOps f)) return false;
+            switch (id)
+            {
+                case ProgrammeId.ZeroDay:
+                    return cyber != null && cyber.TryBestSamNode(owner, out int node) && cyber.TryNodeTarget(owner, node, out OpTarget sam) && FireZeroDay(f, sam);
+                case ProgrammeId.Fob:
+                    int held = sof != null ? sof.FirstHeldId(owner) : 0;
+                    return held != 0 && sof.TryHeldTarget(owner, held, out OpTarget spot) && FireFob(f, spot);
+                case ProgrammeId.Asat:
+                    foreach (int cls in new[] { 1, 0, 2 })
+                    {
+                        FactionHQ victim = ChooseVictim(f, (BirdKind)cls);
+                        if (victim == null) continue;
+                        FireAsat(f, new OpTarget(cls, 0f, 0f, manager.FactionKeyOf(victim)));
+                        return true;
+                    }
+                    return false;
+                default:
+                    return false;
+            }
+        }
+
         /// <summary>The countdown started: an ASAT puts its launcher on the ground. Anything that ends the countdown without a launch (BROKEN, a counter-trace, a cancel) removes it.</summary>
         partial void OpEventReact(FactionOps f, OpEvent e)
         {
@@ -72,15 +101,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// The FORWARD OPERATING BASE goes live on the held building: 20 minutes (a second FOB renews it), +1 team cap, teams raised there, and a rearm vehicle (vanilla Rearmer) and a fuel vehicle (vanilla Refueler) beside it when
         /// the encyclopedia allows them. A field spawn point for players is not built (vanilla spawns only at airbases); the page says so. Retaking the building ends it (SofService.TickFob).
         /// </summary>
-        private void FireFob(FactionOps f, in OpTarget target)
+        private bool FireFob(FactionOps f, in OpTarget target)
         {
             if (sof == null || !sof.StartFob(f.Owner, target.Id, out float until))
             {
                 Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " FOB could not start: the held building " + target.Id + " is gone; every member is refunded.");
                 f.Desk.Fail(OpDomain.Sof);
-                return;
+                return false;
             }
             f.Desk.SetEffectEnd(OpDomain.Sof, until);
+            return true;
         }
 
         // ---- ASAT ------------------------------------------------------------------------------------
@@ -165,9 +195,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (space != null && space.TryGetStateCoarse(viewer, out SpaceState state))
             {
                 into.BirdsDown = state.DownMask;
+                for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[i] = state.Geo((BirdKind)i);
                 for (int i = 0; i < SpaceRules.BirdCount; i++)
                     if (state.BirdDown((BirdKind)i)) into.BirdPercent[i] = (byte)Mathf.Clamp(state.RebuildPercent((BirdKind)i, now), 0, 100);
             }
+            var hqs = FactionRegistry.GetAllHQs();
+            if (hqs != null)
+                foreach (FactionHQ enemy in hqs)
+                    if (enemy != null && enemy != viewer && space != null && space.TryGetStateCoarse(enemy, out SpaceState theirs)) { into.EnemyBirdsDown = theirs.DownMask; for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[SpaceRules.BirdCount + i] = theirs.Geo((BirdKind)i); break; }
             foreach (Flight fl in flights)
                 if (into.Flights.Count < OpsWire.MaxFlights && now < fl.EndsAt)
                 {
@@ -177,7 +212,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
         }
 
-        private void FireZeroDay(FactionOps f, in OpTarget target)
+        private bool FireZeroDay(FactionOps f, in OpTarget target)
         {
             float now = SupportManager.MissionNow();
             bool truckNear = cyber != null && cyber.EnemyTruckWithin(target.Victim, target.X, target.Z, OpsRules.EwHalveMetres);
@@ -186,10 +221,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 Plugin.Logger?.LogWarning("[Support.Ops] " + f.Owner.name + " SAM NET FAIL could not be applied (CYBER desk missing or the effect book is full); every member is refunded.");
                 f.Desk.Fail(OpDomain.Cyber);
-                return;
+                return false;
             }
             f.Desk.SetEffectEnd(OpDomain.Cyber, now + seconds);
             Plugin.Logger?.LogInfo("[Support.Ops] " + f.Owner.name + " SAM NET FAIL on node " + target.Id + " for " + (int)seconds + " s" + (truckNear ? " (enemy EW truck within 18 km: halved)." : "."));
+            return true;
         }
     }
 }

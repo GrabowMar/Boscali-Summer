@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
             GlobalPosition position, float remainingLifetime, bool forest, float clusterScale)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkManagerNuclearOption.i.Server.SendToAll(
+            GameAccess.NetworkManagerOrNull.Server.SendToAll(
                 ToFireMessage(position, remainingLifetime, forest, clusterScale),
                 authenticatedOnly: true,
                 excludeLocalPlayer: true);
@@ -102,7 +102,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
         internal static void BroadcastRuin(GlobalPosition position, Vector2 halfExtents)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkManagerNuclearOption.i.Server.SendToAll(
+            GameAccess.NetworkManagerOrNull.Server.SendToAll(
                 ToRuinMessage(position, halfExtents, 0f),
                 authenticatedOnly: true,
                 excludeLocalPlayer: true);
@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Networking
         private void RegisterLiveEndpoints()
         {
             NetworkManagerNuclearOption manager;
-            try { manager = NetworkManagerNuclearOption.i; }
+            try { manager = GameAccess.NetworkManagerOrNull; }
             catch { return; }
             if (manager == null) return;
 

@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     gone.Add(decoy);
                     continue;
                 }
-                pair.Value.SetPosition(0, host.transform.position - host.transform.forward * 6f);
+                pair.Value.SetPosition(0, Runtime.TowAnchor.RootFor(decoy, host));
                 pair.Value.SetPosition(1, decoy.transform.position);
             }
             foreach (Missile m in gone)

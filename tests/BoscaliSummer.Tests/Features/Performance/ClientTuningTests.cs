@@ -36,6 +36,20 @@ namespace BoscaliSummer.Tests.Features.Performance
                 "the cap applies over the platform default");
             TestAssert.That(ClientTuningMath.PlanFrameRate(120, false) == 120,
                 "a disabled cap leaves the game value alone");
+            TestAssert.That(ClientTuningMath.PlanFrameRate(30, true) == 30,
+                "the cap never raises an existing lower frame limit");
+            TestAssert.That(ClientTuningMath.PlanFrameRate(120, true) == 60 &&
+                ClientTuningMath.PlanFrameRate(0, true) == 60,
+                "the cap trims high and platform-default frame limits");
+
+            TestAssert.That(ClientTuningMath.RestoreLodBias(1f, ClientTuningMath.PlanLodBias(1f, true)) == 1f &&
+                ClientTuningMath.RestoreShadowDistance(4000f, ClientTuningMath.PlanShadowDistance(4000f, true)) == 4000f &&
+                ClientTuningMath.RestoreFrameRate(-1, ClientTuningMath.PlanFrameRate(-1, true)) == -1,
+                "a reset restores the baseline before the next scene captures it");
+            TestAssert.That(ClientTuningMath.RestoreLodBias(1f, 2f) == 2f &&
+                ClientTuningMath.RestoreShadowDistance(4000f, 1500f) == 1500f &&
+                ClientTuningMath.RestoreFrameRate(-1, 30) == 30,
+                "restoration preserves a new game graphics preset");
         }
     }
 }

@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class MarkAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -31,9 +31,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (found < 0) return SupportResult.NoMarkTarget;
                 Unit unit = units[found];
                 context.Owner.UpdateLasedState(unit, true);
-                float duration = Mathf.Max(1f, context.Settings.JtacMarkDuration.Value);
+                float duration = Mathf.Max(1f, context.Settings.JtacMarkDuration.Value * context.Quality);
                 context.Host.Run(UnlaseAfter(context.Host, context.Owner, unit, duration));
                 context.Host.ReportContacts(context.RequestId, 1);
+                try { Visuals.LaseFx.Play(unit, context.Owner, duration); }
+                catch (Exception e) { context.Logger.LogDebug("[Support] Lase visual skipped: " + e.Message); }
                 context.Logger.LogInfo("[Support] JTAC mark: " + unit.UniqueName + " lased for " +
                     Mathf.RoundToInt(duration) + "s.");
                 return SupportResult.Accepted;

@@ -1,33 +1,62 @@
-using BoscaliSummer.Modules.Support.Domain.Ops;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime
 {
-    /// <summary>The ledger seams of the AI-controlled factions (spec section 4, core 6.4 and 7a): the flat treasury seed and the objective census the "leading" test reads.</summary>
+    internal readonly struct ObjectiveCount
+    {
+        public readonly int held, contested, n;
+
+        public ObjectiveCount(int held, int contested, int n)
+        {
+            this.held = held;
+            this.contested = contested;
+            this.n = n;
+        }
+    }
+
+    /// <summary>The objective census the "leading" test of the AI factions and the ASAT victim choice read.</summary>
     internal sealed partial class SupportManager
     {
+        private const float CensusSeconds = 2f;
+        private readonly Dictionary<FactionHQ, (float at, ObjectiveCount count)> census =
+            new Dictionary<FactionHQ, (float, ObjectiveCount)>();
+
         /// <summary>
-        /// A faction with no humans has nobody to feed HQ FUND, so it earns a flat seed (40 CR a minute, capped) while it stays without humans. Returns what was added; a faction with a human is
-        /// never seeded (the human-active gate of core 6.4 applies to it).
+        /// Ground airbases (carriers excluded): held by <paramref name="hq"/>, contested (being captured by it), total.
+        /// Capturability is not readable on this build, so every non-carrier airbase counts. Cached for 2 s per faction.
         /// </summary>
-        internal float AiTreasurySeed(FactionHQ owner, float seconds)
+        internal ObjectiveCount Census(FactionHQ hq)
         {
-            if (credits == null || owner == null || HumanCount(owner) > 0) return 0f;
-            int key = credits.FactionKey(owner);
-            float add = AiRules.SeedFor(credits.Fund.Balance(key), seconds);
-            if (add > 0f) credits.Fund.Add(key, add);
-            return add;
+            if (hq == null) return default;
+            float t = Time.unscaledTime;
+            if (census.TryGetValue(hq, out var cached) && t - cached.at < CensusSeconds) return cached.count;
+
+            int held = 0, contested = 0, n = 0;
+            if (FactionRegistry.airbaseLookup != null)
+            {
+                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (airbase == null || airbase.AttachedAirbase || airbase.UnitDestroyed()) continue;
+                    n++;
+                    if (airbase.CurrentHQ == hq) held++;
+                    else if (airbase.capture != null && airbase.capture.capturingHQ == hq) contested++;
+                }
+            }
+            var count = new ObjectiveCount(held, contested, n);
+            census[hq] = (t, count);
+            return count;
         }
 
         /// <summary>
-        /// The faction's share of the counted objectives (the same <see cref="ObjectiveShare"/> the CALL prices and the ASAT victim read: held plus half the contested, over every ground airbase) and the
+        /// The faction's share of the counted objectives (the same <see cref="ObjectiveShare"/> the ASAT victim reads: held plus half the contested, over every ground airbase) and the
         /// best share any other faction holds. NaN when the map has nothing to count: no lead, so no funding.
         /// </summary>
         internal void ObjectiveShares(FactionHQ owner, out float share, out float bestRival)
         {
             share = bestRival = float.NaN;
-            if (credits == null || owner == null) return;
-            ObjectiveCount mine = credits.Census(owner);
+            if (owner == null) return;
+            ObjectiveCount mine = Census(owner);
             if (mine.n <= 0) return;
             share = ObjectiveShare(owner);
             var hqs = FactionRegistry.GetAllHQs();

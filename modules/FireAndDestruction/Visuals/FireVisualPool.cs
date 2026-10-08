@@ -12,6 +12,8 @@ namespace BoscaliSummer.Fire
             public ParticleSystem[] Systems;
             public float[] BaseRates;
             public Vector3[] BaseShapes;
+            public ParticleSystem.MinMaxCurve[] BaseSizes;
+            public ParticleSystem.MinMaxCurve[] BaseLifetimes;
             public Light Light;
             public bool Active;
             public float FlameIntensity;
@@ -27,6 +29,67 @@ namespace BoscaliSummer.Fire
             public bool Sleeping;
             public CloudDeckSorting Deck;
             public bool BehindDeck;
+            public FireFrontCell Cell;
+            public Mesh FrontMesh;
+            private int frontMask = -1;
+            private Vector3 groundNormal = Vector3.up;
+            private readonly List<Vector3> frontVertices = new List<Vector3>(FireFrontCell.MaximumVertices * 4);
+            private readonly List<int> frontTriangles = new List<int>(FireFrontCell.MaximumVertices * 6);
+            private float frontFraction = 1f;
+
+            public void SetForestCell(FireFrontCell cell, Vector3 normal)
+            {
+                Cell = cell;
+                groundNormal = normal;
+                Root.transform.localScale = Vector3.one;
+                Root.transform.rotation = Quaternion.identity;
+                if (FrontMesh == null) FrontMesh = new Mesh { name = "Forest flame front" };
+                frontMask = -1;
+                SetFrontEdges(0);
+            }
+
+            public void SetFrontEdges(int connectedMask)
+            {
+                if (Cell == null || frontMask == connectedMask) return;
+                frontMask = connectedMask;
+                // Build an emission strip on exposed edges only. Shared edges disappear
+                // when another cell ignites, leaving one continuous irregular perimeter.
+                var vertices = frontVertices; vertices.Clear();
+                var triangles = frontTriangles; triangles.Clear();
+                frontFraction = Mathf.Clamp01((Cell.Count - CountEdges(connectedMask)) / (float)Cell.Count);
+                for (int i = 0; i < Cell.Count; i++)
+                {
+                    if ((connectedMask & (1 << i)) != 0) continue;
+                    FireFrontCell.Point a = Cell.Vertices[i], b = Cell.Vertices[(i + 1) % Cell.Count];
+                    int start = vertices.Count;
+                    vertices.Add(GroundVertex(a.X, a.Z));
+                    vertices.Add(GroundVertex(b.X, b.Z));
+                    vertices.Add(GroundVertex(a.X * 0.72f, a.Z * 0.72f));
+                    vertices.Add(GroundVertex(b.X * 0.72f, b.Z * 0.72f));
+                    triangles.Add(start); triangles.Add(start + 2); triangles.Add(start + 1);
+                    triangles.Add(start + 1); triangles.Add(start + 2); triangles.Add(start + 3);
+                }
+                // Detach before rebuilding: clearing a mesh still referenced by live
+                // particle shapes makes Unity validate its temporary empty geometry.
+                for (int i = 0; Systems != null && i < Systems.Length; i++)
+                {
+                    var shape = Systems[i].shape; shape.enabled = false;
+                    shape.shapeType = ParticleSystemShapeType.Box; shape.mesh = null;
+                }
+                FrontMesh.Clear(); FrontMesh.SetVertices(vertices); FrontMesh.SetTriangles(triangles, 0);
+                if (vertices.Count > 0) FrontMesh.RecalculateNormals();
+                for (int i = 0; Systems != null && i < Systems.Length; i++)
+                {
+                    var shape = Systems[i].shape;
+                    shape.enabled = vertices.Count > 0;
+                    shape.shapeType = vertices.Count > 0 ? ParticleSystemShapeType.Mesh : ParticleSystemShapeType.Box;
+                    shape.meshShapeType = ParticleSystemMeshShapeType.Triangle;
+                    shape.mesh = vertices.Count > 0 ? FrontMesh : null; shape.scale = Vector3.one; shape.position = Vector3.zero;
+                }
+            }
+
+            private Vector3 GroundVertex(float x, float z) => new Vector3(x,
+                groundNormal.y > 0.25f ? 0.25f - (x * groundNormal.x + z * groundNormal.z) / groundNormal.y : 0.25f, z);
 
             public void SetSleeping(bool sleep)
             {
@@ -97,6 +160,25 @@ namespace BoscaliSummer.Fire
                 {
                     float scale = forest ? Mathf.Lerp(1.04f, 1.18f, b) : Mathf.Lerp(0.68f, 0.84f, b);
                     Root.transform.localScale = Vector3.one * scale;
+                    if (forest && Cell != null)
+                    {
+                        Root.transform.localScale = Vector3.one;
+                        Root.transform.rotation = Quaternion.identity;
+                    }
+                }
+                for (int i = 0; Systems != null && i < Systems.Length; i++)
+                {
+                    ParticleSystem.MainModule main = Systems[i].main;
+                    bool tongue = forest && i < 3;
+                    main.startSize3D = tongue;
+                    main.startSize = BaseSizes[i];
+                    main.startLifetime = BaseLifetimes[i];
+                    main.startRotation = tongue
+                        ? new ParticleSystem.MinMaxCurve(-0.16f, 0.16f)
+                        : new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+                    ParticleSystem.ShapeModule shape = Systems[i].shape;
+                    shape.position = forest && Cell == null ? Vector3.up * BaseShapes[i].y * 0.5f : Vector3.zero;
+                    if (!forest || Cell == null) { shape.enabled = true; shape.shapeType = ParticleSystemShapeType.Box; shape.mesh = null; }
                 }
             }
 
@@ -109,7 +191,7 @@ namespace BoscaliSummer.Fire
                 float flameEnd = Smooth01(remainingFraction / 0.22f);
                 float flare = 0.76f + Mathf.PerlinNoise(FlickerSeed, Time.timeSinceLevelLoad * 0.38f) * 0.34f;
                 FlameIntensity = (0.018f + growth * 0.982f) * flameEnd * EmissionScale * flare;
-                if (Forest)
+                if (Forest && Cell == null)
                     FlameIntensity *= Mathf.Lerp(1f, 1.30f, (ClusterScale - 1f) / 2f);
                 float spread = Mathf.Lerp(FootprintScale * 0.24f, FootprintScale, growth) *
                     (Forest ? ClusterScale : 1f);
@@ -119,18 +201,50 @@ namespace BoscaliSummer.Fire
                     ParticleSystem system = Systems[i];
                     if (system == null) continue;
                     ParticleSystem.MainModule main = system.main;
-                    main.startLifetimeMultiplier = LifetimeScale;
-                    main.startSizeMultiplier = SizeScale;
+                    bool ember = i == 3;
+                    if (Forest)
+                    {
+                        // Scale from the authored ranges every tick, without accumulating
+                        // size changes when this pooled effect changes phase or owner.
+                        main.startLifetime = new ParticleSystem.MinMaxCurve(
+                            BaseLifetimes[i].constantMin * LifetimeScale,
+                            BaseLifetimes[i].constantMax * LifetimeScale);
+                        float width = SizeScale * (ember ? 0.32f : 0.72f);
+                        var size = new ParticleSystem.MinMaxCurve(
+                            BaseSizes[i].constantMin * width, BaseSizes[i].constantMax * width);
+                        if (ember) main.startSize = size;
+                        else
+                        {
+                            main.startSizeX = size;
+                            main.startSizeZ = size;
+                            float height = i == 2 ? 2.1f : i == 0 ? 1.55f : 1.25f;
+                            main.startSizeY = new ParticleSystem.MinMaxCurve(
+                                size.constantMin * height, size.constantMax * height);
+                        }
+                    }
+                    else
+                    {
+                        main.startLifetimeMultiplier = LifetimeScale;
+                        main.startSizeMultiplier = SizeScale;
+                    }
                     ParticleSystem.EmissionModule emission = system.emission;
-                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity * FxBus.Scales.Particles;
+                    float layerPulse = Forest ? 0.65f + Mathf.PerlinNoise(
+                        FlickerSeed + i * 7.31f, Time.timeSinceLevelLoad * (ember ? 0.45f : 1.1f)) * 0.7f : 1f;
+                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity * layerPulse *
+                        (Cell == null ? 1f : frontFraction) * FxBus.Scales.Particles;
                     ParticleSystem.ShapeModule shape = system.shape;
-                    shape.scale = new Vector3(
+                    shape.scale = Cell != null && Forest ? Vector3.one : new Vector3(
                         BaseShapes[i].x * spread,
                         BaseShapes[i].y,
                         BaseShapes[i].z * spread);
                     ParticleSystem.VelocityOverLifetimeModule velocity = system.velocityOverLifetime;
-                    velocity.x = wind.x * 0.16f;
-                    velocity.z = wind.z * 0.16f;
+                    float drift = Forest && ember ? 0.55f : 0.16f;
+                    float driftX = (Forest ? Mathf.Clamp(wind.x, -18f, 18f) : wind.x) * drift;
+                    float driftZ = (Forest ? Mathf.Clamp(wind.z, -18f, 18f) : wind.z) * drift;
+                    // Unity requires all linear velocity axes to use the same curve mode.
+                    // Vertical rise is TwoConstants; constant X/Z produced a log per step.
+                    velocity.x = new ParticleSystem.MinMaxCurve(driftX, driftX);
+                    velocity.z = new ParticleSystem.MinMaxCurve(driftZ, driftZ);
                 }
             }
 
@@ -138,6 +252,13 @@ namespace BoscaliSummer.Fire
             {
                 value = Mathf.Clamp01(value);
                 return value * value * (3f - 2f * value);
+            }
+
+            private static int CountEdges(int value)
+            {
+                int count = 0;
+                while (value > 0) { count += value & 1; value >>= 1; }
+                return count;
             }
 
             private static float Signature(GlobalPosition position, float xScale, float zScale)
@@ -151,6 +272,7 @@ namespace BoscaliSummer.Fire
         private readonly List<Visual> visuals = new List<Visual>(24);
         private readonly CloudDeckSorting deck = new CloudDeckSorting();
         private Material flameMaterial;
+        private ParticleSystem flameTemplate;
         private bool templatesSearched;
 
         public Visual Acquire(GlobalPosition position, bool forest)
@@ -187,10 +309,14 @@ namespace BoscaliSummer.Fire
         public void Clear()
         {
             for (int i = 0; i < visuals.Count; i++)
+            {
+                if (visuals[i].FrontMesh != null) UnityEngine.Object.Destroy(visuals[i].FrontMesh);
                 if (visuals[i].Root != null) UnityEngine.Object.Destroy(visuals[i].Root);
+            }
             visuals.Clear();
             deck.Clear();
             templatesSearched = false;
+            flameTemplate = null;
             flameMaterial = null;
         }
 
@@ -233,6 +359,14 @@ namespace BoscaliSummer.Fire
             light.shadows = LightShadows.None;
             light.enabled = false;
 
+            var sizes = new ParticleSystem.MinMaxCurve[systems.Count];
+            var lifetimes = new ParticleSystem.MinMaxCurve[systems.Count];
+            for (int i = 0; i < systems.Count; i++)
+            {
+                sizes[i] = systems[i].main.startSize;
+                lifetimes[i] = systems[i].main.startLifetime;
+            }
+
             return new Visual
             {
                 Root = root,
@@ -240,6 +374,8 @@ namespace BoscaliSummer.Fire
                 Deck = deck,
                 BaseRates = rates.ToArray(),
                 BaseShapes = shapes.ToArray(),
+                BaseSizes = sizes,
+                BaseLifetimes = lifetimes,
                 Light = light
             };
         }
@@ -262,11 +398,12 @@ namespace BoscaliSummer.Fire
                     if (path.Contains("fire") || path.Contains("flame"))
                     {
                         int score = ScoreMaterial(path);
-                        if (score > flameScore) { flameScore = score; flameMaterial = renderer.sharedMaterial; }
+                        if (score > flameScore) { flameScore = score; flameMaterial = renderer.sharedMaterial; flameTemplate = systems[i]; }
                     }
                 }
             }
-            Plugin.Logger.LogInfo($"Fire flame material ready: {flameMaterial != null}.");
+            Plugin.Logger.LogInfo($"Fire flame material ready: {flameMaterial != null} " +
+                $"(flipbook {DescribeFlipbook(flameTemplate)}).");
         }
 
         private static int ScoreMaterial(string path)
@@ -280,7 +417,7 @@ namespace BoscaliSummer.Fire
             return score;
         }
 
-        private static void AddFlameLayer(
+        private void AddFlameLayer(
             Transform parent, string name, Material material, Vector3 shapeScale, float rate,
             float lifeMin, float lifeMax, float speedMin, float speedMax, float sizeMin, float sizeMax,
             List<ParticleSystem> systems, List<float> rates, List<Vector3> shapes)
@@ -313,7 +450,7 @@ namespace BoscaliSummer.Fire
             Register(system, shapeScale, rate, systems, rates, shapes);
         }
 
-        private static void AddEmberLayer(
+        private void AddEmberLayer(
             Transform parent, string name, Material material, Vector3 shapeScale, float rate,
             float lifeMin, float lifeMax, float speedMin, float speedMax, float sizeMin, float sizeMax,
             List<ParticleSystem> systems, List<float> rates, List<Vector3> shapes)
@@ -345,7 +482,7 @@ namespace BoscaliSummer.Fire
             Register(system, shapeScale, rate, systems, rates, shapes);
         }
 
-        private static ParticleSystem CreateSystem(
+        private ParticleSystem CreateSystem(
             Transform parent, string name, Material material, Vector3 shapeScale, float rate,
             float lifeMin, float lifeMax, float speedMin, float speedMax, float sizeMin, float sizeMax,
             int maxParticles)
@@ -382,6 +519,8 @@ namespace BoscaliSummer.Fire
             velocity.enabled = true;
             velocity.space = ParticleSystemSimulationSpace.World;
             velocity.y = new ParticleSystem.MinMaxCurve(speedMin, speedMax);
+            velocity.x = new ParticleSystem.MinMaxCurve(0f, 0f);
+            velocity.z = new ParticleSystem.MinMaxCurve(0f, 0f);
 
             ParticleSystemRenderer renderer = gameObject.GetComponent<ParticleSystemRenderer>();
             renderer.sharedMaterial = material;
@@ -389,8 +528,48 @@ namespace BoscaliSummer.Fire
             renderer.alignment = ParticleSystemRenderSpace.View;
             renderer.sortMode = ParticleSystemSortMode.YoungestInFront;
             renderer.sortingFudge = -1f;
+            ApplyTextureSheet(system);
             system.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             return system;
+        }
+
+        private void ApplyTextureSheet(ParticleSystem system)
+        {
+            if (flameTemplate == null) return;
+            ParticleSystem.TextureSheetAnimationModule source = flameTemplate.textureSheetAnimation;
+            ParticleSystem.TextureSheetAnimationModule target = system.textureSheetAnimation;
+            // The vanilla flame texture is a flipbook atlas. Without the template's sheet
+            // animation each billboard shows the whole atlas at once: a grid of dots.
+            target.enabled = source.enabled;
+            if (!source.enabled) return;
+            target.mode = source.mode;
+            target.numTilesX = source.numTilesX;
+            target.numTilesY = source.numTilesY;
+            target.animation = source.animation;
+            target.rowMode = source.rowMode;
+            target.frameOverTime = source.frameOverTime;
+            target.frameOverTimeMultiplier = source.frameOverTimeMultiplier;
+            target.startFrame = source.startFrame;
+            target.startFrameMultiplier = source.startFrameMultiplier;
+            target.cycleCount = source.cycleCount;
+            target.rowIndex = source.rowIndex;
+            // useRandomRow/flipU/flipV are deprecated in Unity 2022: rowMode and renderer.flip carry them.
+            ParticleSystemRenderer sourceRenderer = flameTemplate.GetComponent<ParticleSystemRenderer>();
+            ParticleSystemRenderer targetRenderer = system.GetComponent<ParticleSystemRenderer>();
+            if (sourceRenderer != null && targetRenderer != null) targetRenderer.flip = sourceRenderer.flip;
+            target.uvChannelMask = source.uvChannelMask;
+            target.speedRange = source.speedRange;
+            if (source.mode != ParticleSystemAnimationMode.Sprites) return;
+            for (int i = target.spriteCount - 1; i >= 0; i--) target.RemoveSprite(i);
+            for (int i = 0; i < source.spriteCount; i++) target.AddSprite(source.GetSprite(i));
+        }
+
+        private static string DescribeFlipbook(ParticleSystem template)
+        {
+            if (template == null) return "no template";
+            ParticleSystem.TextureSheetAnimationModule sheet = template.textureSheetAnimation;
+            if (!sheet.enabled) return "disabled";
+            return sheet.numTilesX + "x" + sheet.numTilesY + " " + sheet.mode;
         }
 
         private static AnimationCurve FlameSizeCurve()
@@ -467,6 +646,7 @@ namespace BoscaliSummer.Fire
             visual.Sleeping = false;
             visual.ClusterScale = 1f;
             visual.FlameIntensity = 0f;
+            visual.Cell = null;
             visual.Configure(forest, position);
             visual.Root.SetActive(true);
             visual.SetPosition(position);

@@ -66,7 +66,9 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(wing);
             runtime.Register(new WingPlans());
             runtime.Register(new DebriefService());
-            runtime.Register(new RadioDirector());
+            var chatter = new RadioDirector();
+            runtime.Register(chatter);
+            context.AddService<IChatterChannel>(chatter);
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());
@@ -75,6 +77,7 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(new DevService());
             context.AddComponent<BridgeState>();
             context.AddService<IWingSquad>(new WingSquadService());
+            context.AddService<IWingOrders>(new WingRadialOrders());
 
             context.Logger.LogInfo($"Wing {WingLog.FullVersion} loaded.");
             context.Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));

@@ -548,8 +548,11 @@ Shader "Boscali/FlightCloud"
             {
                 float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
                 float nearDetail = saturate(1.0 - lod);
-                float d2 = nearDetail > 0.0
-                    ? tex3Dlod(_CloudNoiseTex, float4(n2 * 3.1 + 0.21, lod)).g : 0.5;
+                // Cumulus edges take the rounded Worley lobes (B) for the near octave, so
+                // boundaries read as cauliflower billows; sheets keep the stringy erosion (G).
+                float2 d2n = nearDetail > 0.0
+                    ? tex3Dlod(_CloudNoiseTex, float4(n2 * 3.1 + 0.21, lod)).gb : 0.5;
+                float d2 = lerp(d2n.y, d2n.x, sheetBlend);
                 detail = lerp(d1, d1 * 0.72 + d2 * 0.28, nearDetail);
                 float close = saturate(1.0 - gFoot / 3.0);
                 if (close > 0.0 && edge > 0.35)
@@ -559,10 +562,17 @@ Shader "Boscali/FlightCloud"
                 }
             }
             // Erosion only removes the boundary; signed noise used to create detached wisps.
-            float nibble = max(0.0, 0.65 - detail) * _Billow * edge * 0.45;
+            // Heaped cloud is nibbled harder than sheets: crisp lobes instead of soft blobs.
+            // GPU only; CloudBodies is the shape without boundary erosion.
+            float nibble = max(0.0, lerp(0.72, 0.65, sheetBlend) - detail) * _Billow * edge * lerp(0.70, 0.45, sheetBlend);
             layerShape = saturate(layerShape - nibble);
             frontShape = saturate(frontShape - nibble);
             towerShape = saturate(towerShape - nibble);
+            // Heaped cloud gets a steeper boundary ramp after erosion (GPU only, like the
+            // nibble): lobes end in a crisp sunlit rim instead of a soft halo.
+            float crisp = (1.0 - sheetBlend) * 0.5 * edge;
+            layerShape = lerp(layerShape, saturate((layerShape - 0.08) * 1.6), crisp);
+            towerShape = lerp(towerShape, saturate((towerShape - 0.08) * 1.6), crisp);
             float layerDensity = saturate((layerShape - 0.12) / 0.70) * smoothstep(0.02, 0.10, layer);
             float frontDensity = saturate((frontShape - 0.12) / 0.72) * smoothstep(0.04, 0.20, front);
             float towerDensity = towerShape;
@@ -587,11 +597,14 @@ Shader "Boscali/FlightCloud"
             // Near-field carving: filaments and thin slots around the camera, so flying inside
             // is rushing structure instead of flat murk. Inside-out only (never below 0.03 into
             // clear air, never through the densest cores): the CPU mirror and shadows agree.
+            // Dense interiors keep most of their body (CloudBodies mirrors CarveKeep): slots
+            // belong to thin cloud, not tunnels out of a core the aircraft is flying through.
             float carveFade = saturate(1.0 - gFoot / 120.0);
             if (carveFade > 0.01 && field > 0.03 && field < 0.98)
             {
                 float cav = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.71, g.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
-                field = saturate(field - (cav - 0.48) * 1.1 * carveFade);
+                float carveKeep = 1.0 - 0.7 * smoothstep(0.25, 0.6, field);
+                field = saturate(field - (cav - 0.48) * 1.1 * carveFade * carveKeep);
             }
             if (field <= 0.0) gLocalLightingHeight = 0.0;
             return field;
@@ -731,9 +744,14 @@ Shader "Boscali/FlightCloud"
             float2 splitMul)
         {
             SlabLayers result = (SlabLayers)0;
-            if (cover <= 0.005 || abs(ray.y) < 0.0005) return result;
-            float ta = (y0 - ro.y) / ray.y, tb = (y1 - ro.y) / ray.y;
-            float t0 = max(0.0, min(ta, tb)), t1 = min(max(ta, tb), limit);
+            // Inside the layer a level ray must not be skipped (a one-pixel gap at the
+            // horizon) nor stretched to the horizon limit (ten samples over 1200 km drew a
+            // bright speckled line); 60 km of layer is already opaque.
+            bool insideSlab = ro.y > y0 && ro.y < y1;
+            if (cover <= 0.005 || (!insideSlab && abs(ray.y) < 0.0005)) return result;
+            float slope = abs(ray.y) < 0.0005 ? (ray.y < 0.0 ? -0.0005 : 0.0005) : ray.y;
+            float ta = (y0 - ro.y) / slope, tb = (y1 - ro.y) / slope;
+            float t0 = max(0.0, min(ta, tb)), t1 = min(max(ta, tb), insideSlab ? min(limit, 60000.0) : limit);
             if (t1 <= t0) return result;
             float span = t1 - t0;
             // A steep chord through a thin layer is one sample (a 2D texture, in effect);
@@ -1009,7 +1027,7 @@ Shader "Boscali/FlightCloud"
             // sun, and some back scatter.
             // The narrow lobe keeps a silver lining rather than the old 16-degree plateau.
             // Its low weight bounds the combined peak below eight (isotropic = one).
-            float phase = 0.62 * Phase(cosine, 0.58) + 0.04 * Phase(cosine, 0.82) + 0.34 * Phase(cosine, -0.25);
+            float phase = 0.58 * Phase(cosine, 0.58) + 0.08 * Phase(cosine, 0.82) + 0.34 * Phase(cosine, -0.25);
             // One broad secondary lobe per ray; reuse the measured sun optical depth below.
             float secondaryPhase = 0.70 * Phase(cosine, 0.18) + 0.30;
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
@@ -1071,6 +1089,10 @@ Shader "Boscali/FlightCloud"
                     if (s0 > 25000.0) steps *= 0.68;
                 }
                 steps = clamp(floor(steps), 4.0, 96.0);
+                // Resolve the first few hundred metres during entry/exit, including short
+                // upward chords. Fade back to the ordinary budget before distant clouds.
+                float proximity = farSeg || hero ? 0.0 : 1.0 - smoothstep(500.0, 2500.0, s0);
+                steps = max(steps, floor(24.0 * proximity));
                 // Set-pieces: adaptive steps of about 0.6 % of the distance (a fraction of a
                 // tower's width at any range), four at a time through empty air, backing up to
                 // fine steps where cloud begins.
@@ -1082,10 +1104,13 @@ Shader "Boscali/FlightCloud"
                 {
                     if ((hero ? tHero >= s1 : n >= steps) || transmittance < 0.05) break;
                     float a = n / steps, b = (n + 1.0) / steps;
-                    // Near and far pieces space their steps quadratically (fine close in).
+                    // Cubic spacing spends the same bounded budget on nearby filaments;
+                    // distant segments keep quadratic spacing and their existing detail.
                     float fine = clamp(tHero * 0.006, 150.0, 900.0);
-                    float stepLength = hero ? fine : span * (b * b - a * a);
-                    float t = hero ? tHero : s0 + span * lerp(a * a, b * b, jitter);
+                    float sampleStart = lerp(a * a, a * a * a, proximity);
+                    float sampleEnd = lerp(b * b, b * b * b, proximity);
+                    float stepLength = hero ? fine : span * (sampleEnd - sampleStart);
+                    float t = hero ? tHero : s0 + span * lerp(sampleStart, sampleEnd, jitter);
                     float3 world = origin + ray * t;
                     gHeroOnly = t > CLOUD_FAR_LIMIT;
                     gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
@@ -1133,7 +1158,7 @@ Shader "Boscali/FlightCloud"
                         // direct-light occlusion comes from the sun march, without a gain
                         // on dense samples that could flatten the sunlit structure.
                         float powder = 1.0 - exp(-d * 6.0);
-                        direct *= lerp(1.0, lerp(0.72, 1.0, powder), awayFromSun * 0.35);
+                        direct *= lerp(1.0, lerp(0.72, 1.0, powder), awayFromSun * 0.5);
                         // Sky light reaches a point only through the cloud above it, so
                         // bases go dark and tops stay bright. Far away the height says enough.
                         if (farSeg) above = d * (1.0 - h);
@@ -1145,9 +1170,11 @@ Shader "Boscali/FlightCloud"
                         // density-independent sun floor remains inside an opaque storm.
                         float secondaryAccess = lerp(0.35, 1.0, h) * exp(-above * 0.5);
                         float scattered = 0.22 * exp(-optical * 0.24) * secondaryPhase * secondaryAccess;
-                        float3 light = _CloudAmbientColor * skyAccess * 0.72 +
+                        // Shade is lit by blue sky, not grey: a cool tint keeps sunlit lobes and
+                        // shadowed lobes apart, like the reference flight footage.
+                        float3 light = _CloudAmbientColor * float3(0.90, 0.97, 1.10) * skyAccess * 0.72 +
                             _CloudGroundColor * (1.0 - h) * exp(-d) +
-                            _CloudSunColor * (direct * phase * 0.65 + scattered);
+                            _CloudSunColor * (direct * phase * 0.75 + scattered);
                         // Lightning: the bolt's light scattering off the droplets around it. It
                         // reaches the shadowed cores the sun cannot, so the whole storm flickers.
                         if (_CloudFlash > 0.001)
@@ -1167,13 +1194,32 @@ Shader "Boscali/FlightCloud"
                             float3 wg = world + _CloudWorldOffset;
                             float3 wispN = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 1200.0 + 0.47, wg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
                             float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
+                            // Smaller ragged filaments supply parallax as the aircraft crosses
+                            // the volume. Filter them out before a march interval can alias them.
+                            float filamentFade = (1.0 - smoothstep(600.0, 1800.0, t)) *
+                                (1.0 - smoothstep(20.0, 70.0, gFoot));
+                            if (filamentFade > 0.01)
+                            {
+                                float filament = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 360.0 + 0.19,
+                                    wg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
+                                wisp += (filament - 0.5) * 0.55 * filamentFade;
+                            }
                             light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
                         }
                         // Integrate actual density along this ray. A camera-wide multiplier
                         // made the same edge eight times more opaque after entering it.
-                        float absorb = exp(-d * stepLength * 0.003);
+                        // Dense cloud within a few hundred metres closes in: the far-tuned
+                        // extinction left ~2 km of view inside a cumulus core. It depends on
+                        // distance and density only, so nothing pops on entry and slots stay open.
+                        float nearClose = 1.0 + 5.0 * (1.0 - smoothstep(150.0, 900.0, t)) * smoothstep(0.15, 0.45, d);
+                        float absorb = exp(-d * stepLength * 0.003 * nearClose);
                         float contribution = transmittance * (1.0 - absorb);
-                        colour += contribution * light;
+                        // Haze each sample at its own distance: one haze per ray at the
+                        // opacity-weighted distance jumped where that distance jumps (grazing
+                        // rays crossing from the near map to the far map drew a step above
+                        // the horizon under overcast).
+                        float sampleAir = AirTransmittance(t, ro.y, ro.y + ray.y * t);
+                        colour += contribution * lerp(_CloudFogColor, light, sampleAir);
                         weightedDistance += contribution * t;
                         
                         transmittance *= absorb;
@@ -1186,10 +1232,7 @@ Shader "Boscali/FlightCloud"
             // Visible wisps need their real depth too: the composite displays opacity
             // above 0.002, so its reprojection cannot use the empty-ray far fallback.
             cloudDistance = opacity > 0.002 ? weightedDistance / opacity : CLOUD_FAR_LIMIT;
-            float air = AirTransmittance(cloudDistance, ro.y, ro.y + ray.y * cloudDistance);
-            // Opacity-weighted cloud depth puts airlight in front of the visible
-            // cloud surface, with one atmospheric integral per pixel.
-            colour = lerp(_CloudFogColor * opacity, colour, air);
+            // Airlight is already applied per sample inside the march.
 
             RainCurtainLayers rain = MarchRainCurtain(origin, ray, sceneDistance,
                 jitter, phase, cloudDistance);

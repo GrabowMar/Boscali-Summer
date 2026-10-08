@@ -1,0 +1,608 @@
+{
+ "name": "carve-midrise_1d",
+ "mods": [
+  "boscalisummer"
+ ],
+ "timeout_s": 300,
+ "mission": "Free Flight",
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "observer",
+   "type": "FS-20 Vortex",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 2500,
+   "speed": 180
+  },
+  {
+   "op": "observe",
+   "follow": "observer"
+  },
+  {
+   "op": "atmosphere",
+   "time_of_day": 12,
+   "conditions": 0.1,
+   "cloud_height": 5000,
+   "wind_speed": 2,
+   "wind_turbulence": 0,
+   "wind_heading": 90,
+   "moon_phase": 14
+  },
+  {
+   "op": "wait",
+   "seconds": 12
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "select",
+    "mesh": "midrise_1d"
+   },
+   "store": "selected"
+  },
+  {
+   "op": "wait",
+   "seconds": 3
+  },
+  {
+   "op": "capture",
+   "name": "v01-intact",
+   "hide_ui": true
+  },
+  {
+   "op": "perf_window",
+   "store": "intact_perf",
+   "seconds": 3,
+   "warmup": 0
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "hit",
+    "power": 2
+   },
+   "store": "first_hit"
+  },
+  {
+   "op": "wait",
+   "seconds": 1.5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "after_first"
+  },
+  {
+   "op": "capture",
+   "name": "v02-damaged-1",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "breachview",
+    "distance": 16
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v03-close-1",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame"
+   }
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "hit",
+    "power": 4
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1.2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "hit",
+    "power": 7
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 1.2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "hit",
+    "power": 10
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.25
+  },
+  {
+   "op": "capture",
+   "name": "v04a-heavy-blast",
+   "hide_ui": true
+  },
+  {
+   "op": "wait",
+   "seconds": 1.0
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "hit",
+    "power": 3
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "wait",
+   "seconds": 4
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "damaged"
+  },
+  {
+   "op": "capture",
+   "name": "v04-damaged-5",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "breachview",
+    "distance": 12
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v05-close-5",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame",
+    "angle": 40
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v06-damaged-angle",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.5
+  },
+  {
+   "op": "perf_window",
+   "store": "damaged_perf",
+   "seconds": 3,
+   "warmup": 0
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "destroy"
+   },
+   "store": "death"
+  },
+  {
+   "op": "wait",
+   "seconds": 0.5
+  },
+  {
+   "op": "capture",
+   "name": "v07-collapse-05",
+   "hide_ui": true
+  },
+  {
+   "op": "wait",
+   "seconds": 0.7
+  },
+  {
+   "op": "capture",
+   "name": "v08-collapse-12",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "collapse_state"
+  },
+  {
+   "op": "perf_window",
+   "store": "collapse_perf",
+   "seconds": 2,
+   "warmup": 0
+  },
+  {
+   "op": "capture",
+   "name": "v09-collapse-35",
+   "hide_ui": true
+  },
+  {
+   "op": "wait",
+   "seconds": 6
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "ruin"
+  },
+  {
+   "op": "capture",
+   "name": "v10-ruin",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame",
+    "low": 1
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v10b-ruin-low",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame",
+    "distance": 0.7,
+    "angle": 30,
+    "low": 1
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v11-ruin-close",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame",
+    "distance": 0.55,
+    "angle": -60,
+    "low": 1
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 0.6
+  },
+  {
+   "op": "capture",
+   "name": "v12-ruin-side",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "poke"
+   },
+   "store": "poke"
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "followup"
+  },
+  {
+   "op": "capture",
+   "name": "v13-followup",
+   "hide_ui": true
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame",
+    "distance": 30
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "frame"
+   }
+  },
+  {
+   "op": "wait",
+   "seconds": 2
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "status"
+   },
+   "store": "return"
+  },
+  {
+   "op": "capture",
+   "name": "v14-returned",
+   "hide_ui": true
+  },
+  {
+   "op": "perf_window",
+   "store": "ruin_perf",
+   "seconds": 3,
+   "warmup": 0
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "stress"
+   },
+   "store": "stress"
+  },
+  {
+   "op": "wait",
+   "seconds": 2.5
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Fire.DestructionAutomation.Step",
+   "args": {
+    "action": "audit"
+   },
+   "store": "stress_after"
+  },
+  {
+   "op": "perf_window",
+   "store": "stress_perf",
+   "seconds": 3,
+   "warmup": 0
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  },
+  {
+   "check": "result_above",
+   "path": "after_first.lobes",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "after_first.fragments",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "after_first.hiddenNative",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "after_first.nativeVisible",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.lobes",
+   "min": 17
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.nativeAlive",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.landed",
+   "min": 3
+  },
+  {
+   "check": "result_below",
+   "path": "damaged.groundError",
+   "max": 1.0
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.ruins",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.wreckShown",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.wreckCollidersIntact",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.stubTriangles",
+   "min": 200
+  },
+  {
+   "check": "result_below",
+   "path": "ruin.moundBaseError",
+   "max": 0.5
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.groundChecked",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "followup.lobes",
+   "min": 18
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.collisionFree",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.parentShift",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.mound",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "ruin.pendingJobs",
+   "max": 0
+  },
+  {
+   "check": "result_above",
+   "path": "collapse_state.pressureParticles",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "followup.carves",
+   "min": 1
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.fires",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "damaged.firesDrawn",
+   "min": 2
+  },
+  {
+   "check": "result_above",
+   "path": "ruin.fires",
+   "min": 3
+  },
+  {
+   "check": "result_above",
+   "path": "return.ruins",
+   "min": 1
+  },
+  {
+   "check": "result_below",
+   "path": "collapse_perf.frame_p95_ms",
+   "max": 50
+  },
+  {
+   "check": "result_above",
+   "path": "stress.built",
+   "min": 13
+  },
+  {
+   "check": "result_below",
+   "path": "stress_after.owners",
+   "max": 12
+  },
+  {
+   "check": "result_below",
+   "path": "stress_after.ruins",
+   "max": 6
+  },
+  {
+   "check": "result_above",
+   "path": "stress_after.ok",
+   "min": 1
+  }
+ ]
+}

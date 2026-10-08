@@ -5,13 +5,14 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Spec M7 §1.4: the wing's radio. New wing events become calls in the speaker's persona, go through the
     /// <see cref="RadioQueue"/>, and come out as a subtitle in the game's message feed and, with voice on, through the
     /// game's text-to-speech: one voice for the wing, each line purging the one before (a real cut for an emergency), and
     /// the queue held while it still speaks (review M7a I3).</summary>
-    internal sealed class RadioDirector : IWingService
+    internal sealed partial class RadioDirector : IWingService, IChatterChannel
     {
         public static RadioDirector Instance { get; private set; }
 
@@ -25,6 +26,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private WingEventRing ring;
         private int seed, asks;
         private bool voiceBroken;
+        private bool ttsActive;
         private WindowsTTS voice;
 
         /// <summary>Spec M7 §2: new contacts are called once a second.</summary>
@@ -43,17 +45,21 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public RadioDirector()
         {
             Instance = this;
-            WingPilotRoster.Killed += OnKill;
         }
 
         private void OnKill(Aircraft shooter, uint victimId, string victimType)
         {
             WingMember m = WingService.Instance?.MemberOf(shooter);
-            if (m != null && !m.Released) SayKill(m, victimId, victimType);
+            if (active && m != null && !m.Released) SayKill(m, victimId, victimType);
         }
 
         public void Activate()
         {
+            active = true;
+            WingPilotRoster.Killed -= OnKill;
+            ReleaseObservations();
+            WingPilotRoster.Killed += OnKill;
+            StopSpeech();
             Queue = new RadioQueue();
             Log.Clear();
             WingRadioAudio.Reset();
@@ -63,9 +69,23 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             pendingKey = null;
             ring = WingService.Instance?.Events;
             cursor.Seen = ring?.Total ?? 0;
+            contactClock = 0f;
+            ResetScenes(Time.time);
         }
 
-        public void Deactivate() { }
+        public void Deactivate()
+        {
+            active = false;
+            WingPilotRoster.Killed -= OnKill;
+            ReleaseObservations();
+            StopSpeech();
+            VoicePacks.Deactivate();
+            Queue = new RadioQueue();
+            CancelExchange();
+            ring = null;
+        }
+
+        private void StopSpeech() { VoicePacks.Stop(); SilenceTts(); }
 
         public void FixedTick(float dt) { }
 
@@ -80,8 +100,23 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             float now = Time.time;
             VoicePacks.Tick();
+            if (WingSettings.Instance.Radio.Value == RadioLevel.Off)
+            {
+                if (!radioOff)
+                {
+                    StopSpeech();
+                    Queue = new RadioQueue();
+                    CancelExchange();
+                    radioOff = true;
+                }
+                cursor.Seen = ring.Total;
+                return;
+            }
+            radioOff = false;
+            if (WingSettings.Instance.Radio.Value != RadioLevel.Full) CancelExchange();
             while (cursor.Next(ring, out WingEvent e))
             {
+                if (e.Kind == WingEventKind.MemberLost) pacing.Observe(now, true);
                 if (!RadioCalls.For(e, out RadioCall call)) continue;
                 WingMember speaker = SpeakerOf(wing, e.Member);
                 if (speaker == null) continue;
@@ -96,8 +131,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 contactClock = 0f;
                 CallContacts(wing, now);
+                ObserveBattlefield(wing, now);
             }
-            while (Queue.Queued > 0 && Queue.Next(now, out RadioLine line, Speaking())) Transmit(line);
+            TickScenes(wing, now);
+            bool speaking = Speaking();
+            // A small breath after actual playback ends; emergencies still pre-empt the hold.
+            if (wasSpeaking && !speaking) breathUntil = now + 0.8f;
+            wasSpeaking = speaking;
+            if (Queue.Next(now, out RadioLine line, speaking || now < breathUntil)) Transmit(line);
         }
 
         /// <summary>Spec M7 §2.3: new air threats (and, scouting, ground units) called by the flying member nearest them, with
@@ -188,12 +229,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             RadioLevel level = WingSettings.Instance.Radio.Value;
             if (level == RadioLevel.Off || (level == RadioLevel.Essential && cls == RadioClass.Chatter)) return false;
+            if (speaker == null || string.IsNullOrWhiteSpace(text)) return false;
+            if (cls >= RadioClass.Tactical)
+            {
+                CancelExchange();
+                if (IsCombatCall(key)) pacing.Observe(now); else pacing.Suppress(now);
+            }
             WingPilot pilot = WingPilotRoster.Of(speaker);
             string who = pilot != null && !string.IsNullOrEmpty(pilot.Callsign) ? pilot.Callsign : "#" + speaker.Number;
             return Queue.Enqueue(new RadioLine
             {
-                Speaker = speaker.Seat, Class = cls, Key = key, WingWide = wingWide, Text = who + ": " + text, Answer = answer,
-                Voice = speaker.Voice,
+                Speaker = speaker.Seat, Class = cls, Key = key, WingWide = wingWide, Text = Clean(who, 32) + ": " + Clean(text, 240), Answer = answer,
+                Voice = speaker.Voice, MemberId = speaker.Id,
             }, now);
         }
 
@@ -204,7 +251,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingMember first = null;
             foreach (WingMember m in wing.Members)
             {
-                if (m.Released) continue;
+                if (m.Released || !m.Alive) continue;
                 if (m.Seat == slot) return m;
                 if (first == null) first = m;
             }
@@ -213,6 +260,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private void Transmit(in RadioLine line)
         {
+            if (line.Voice >= 0)
+            {
+                bool alive = false;
+                foreach (WingMember member in WingService.Instance.Members)
+                    if (member.Id == line.MemberId && !member.Released && member.Alive) { alive = true; break; }
+                if (!alive) { if (line.Key == openingKey) CancelExchange(); return; }
+            }
+            ExchangeTransmitted(line, Time.time);
             Log.Push(WingService.Instance?.MissionTime ?? 0f, line.Text);
             // Spec M5 §9.3: the game's radio static on every line, a threat warble on an emergency.
             WingRadioAudio.Play(line.Class == RadioClass.Emergency ? WingRadioAudio.Earcon.ThreatAlarm : WingRadioAudio.Earcon.Transmission);
@@ -225,7 +280,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             // A voice pack clip for this call (spec M7 §5) instead of the TTS; either way the other voice stops (review
             // M7d I2: an emergency cutting in must not talk over the line it cut).
-            if (VoicePacks.TryPlay(line.Voice + 2, CallOf(line.Key)))
+            if (line.Voice >= 0 && VoicePacks.TryPlay(line.Voice + 2, line.ClipKey ?? CallOf(line.Key)))
             {
                 SilenceTts();
                 return;
@@ -237,6 +292,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 // The game's voice speaks asynchronously and purges what it was saying (SVSFlagsAsync | SVSFPurgeBeforeSpeak).
                 if (voice == null) voice = new WindowsTTS();
                 voice.Speak(PlayerSettings.chatTtsSpeed, PlayerSettings.chatTtsVolume, line.Text.Replace(": ", ", "), false);
+                ttsActive = true;
             }
             catch (Exception e)
             {
@@ -247,11 +303,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>The voice is still speaking the last line (the queue waits for it, but an emergency cuts in).</summary>
         private void SilenceTts()
         {
-            if (voice == null || voiceBroken) return;
+            if (voice == null || voiceBroken || !ttsActive) return;
             try
             {
                 // The game's Speak purges what it was saying before the (empty) new line.
                 voice.Speak(PlayerSettings.chatTtsSpeed, PlayerSettings.chatTtsVolume, "", false);
+                ttsActive = false;
             }
             catch (Exception e)
             {
@@ -267,13 +324,25 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return colon < 0 ? key : key.Substring(0, colon);
         }
 
+        private static bool IsCombatCall(string key)
+        {
+            switch (CallOf(key))
+            {
+                case "FOX1": case "FOX2": case "FOX3": case "MAGNUM": case "RIFLE":
+                case "SPLASH": case "PANIC": case "BREAKCALL": case "DEFENSIVECLEAR": return true;
+                default: return false;
+            }
+        }
+
         private bool Speaking()
         {
             if (VoicePacks.Playing) return true;
+            if (!VoiceOn()) { SilenceTts(); return false; }
             if (voice == null || voiceBroken) return false;
             try
             {
-                return voice.IsPlaying();
+                ttsActive = voice.IsPlaying();
+                return ttsActive;
             }
             catch (Exception e)
             {
@@ -286,6 +355,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (voiceBroken) return;
             voiceBroken = true;
+            ttsActive = false;
             voice = null;
             WingLog.Logger.LogWarning($"[Radio] text-to-speech failed; voice is off until restart: {e.Message}");
         }

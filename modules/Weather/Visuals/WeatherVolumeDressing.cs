@@ -199,8 +199,16 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 (float)global.y - local.y, (float)global.z - local.z);
             // The mesh only supplies a ray for each screen pixel. Keep its far faces well
             // inside the camera clip plane; the shader intersects the world-anchored volume.
-            root.transform.position = camera.transform.position;
-            root.transform.localScale = Vector3.one * 1000f;
+            // Parent, don't chase: the camera rides the interpolated aircraft hierarchy and
+            // moves after LateUpdate, past the transform sync. A child relationship carries
+            // the cube through the sync, so culling always sees it on the render pose.
+            if (root.transform.parent != camera.transform)
+            {
+                root.transform.SetParent(camera.transform, false);
+                root.transform.localPosition = Vector3.zero;
+                root.transform.localRotation = Quaternion.identity;
+                root.transform.localScale = Vector3.one * 1000f;
+            }
             float mapBlend = FadeWeight(missionTime);
             BlendMaps(mapBlend);
             bool blended = !blendUnavailable && near.BlendReady && far.BlendReady;

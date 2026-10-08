@@ -24,10 +24,6 @@ namespace BoscaliSummer.Garrisons
 
         private static readonly Dictionary<int, Entry> byNest = new Dictionary<int, Entry>(MaxEntries);
         private static readonly Dictionary<int, Entry> byShell = new Dictionary<int, Entry>(MaxEntries);
-        private static readonly Dictionary<string, int> zonePeaks = new Dictionary<string, int>();
-        private struct ZoneHealthSample { public float Value; public float At; }
-        private static readonly Dictionary<string, ZoneHealthSample> zoneHealthCache = new Dictionary<string, ZoneHealthSample>();
-        private const float ZoneHealthCacheSeconds = 2f;
         private static readonly RaycastHit[] rayHits = new RaycastHit[4];
 
         /// <summary>
@@ -64,15 +60,15 @@ namespace BoscaliSummer.Garrisons
             byNest[nestId] = entry;
             if (entry.Shell != null)
                 byShell[entry.Shell.GetInstanceID()] = entry;
-            if (zone != null)
-            {
-                int live = 0;
-                foreach (KeyValuePair<int, Entry> candidate in byNest)
-                    if (candidate.Value.Nest != null && zone.Equals(candidate.Value.Zone, System.StringComparison.Ordinal))
-                        live++;
-                if (!zonePeaks.TryGetValue(zone, out int peak) || live > peak)
-                    zonePeaks[zone] = live;
-            }
+        }
+
+        /// <summary>O(1) nest-to-shell lookup for the server's nest damage redirect.</summary>
+        public static bool TryGetShell(Building nest, out GameObject shell)
+        {
+            shell = null;
+            if (nest == null || !byNest.TryGetValue(nest.GetInstanceID(), out Entry entry)) return false;
+            shell = entry.Shell;
+            return shell != null;
         }
 
         /// <summary>O(1) strongpoint-shell test for the client damage guard.</summary>
@@ -121,29 +117,6 @@ namespace BoscaliSummer.Garrisons
             return intact;
         }
 
-        /// <summary>Live-over-peak zone health for the marking poll. 1 when unknown.</summary>
-        public static float ZoneHealth(string zone)
-        {
-            if (string.IsNullOrEmpty(zone)) return 1f;
-            float now = Time.unscaledTime;
-            if (zoneHealthCache.TryGetValue(zone, out ZoneHealthSample cached) && now - cached.At < ZoneHealthCacheSeconds)
-                return cached.Value;
-            int live = 0;
-            foreach (KeyValuePair<int, Entry> candidate in byNest)
-            {
-                if (candidate.Value.Nest == null || candidate.Value.Nest.disabled) continue;
-                if (zone.Equals(candidate.Value.Zone, System.StringComparison.Ordinal)) live++;
-            }
-            if (!zonePeaks.TryGetValue(zone, out int peak) || peak < 1)
-            {
-                zoneHealthCache[zone] = new ZoneHealthSample { Value = 1f, At = now };
-                return 1f;
-            }
-            float value = Mathf.Clamp01(live / (float)peak);
-            zoneHealthCache[zone] = new ZoneHealthSample { Value = value, At = now };
-            return value;
-        }
-
         /// <summary>Fills the destination with live nests for the dressing rebuild.</summary>
         public static int CopyLiveNests(List<Building> dest, int cap)
         {
@@ -163,7 +136,6 @@ namespace BoscaliSummer.Garrisons
 
         private static readonly List<int> pruneNests = new List<int>(MaxEntries);
         private static readonly List<int> pruneShells = new List<int>(MaxEntries);
-        private static readonly List<string> pruneZones = new List<string>(16);
 
         public static void Prune()
         {
@@ -180,26 +152,12 @@ namespace BoscaliSummer.Garrisons
             foreach (KeyValuePair<int, Entry> candidate in byShell)
                 if (candidate.Value.Shell == null) pruneShells.Add(candidate.Key);
             for (int i = 0; i < pruneShells.Count; i++) byShell.Remove(pruneShells[i]);
-            pruneZones.Clear();
-            foreach (KeyValuePair<string, int> peak in zonePeaks)
-            {
-                bool any = false;
-                foreach (KeyValuePair<int, Entry> candidate in byNest)
-                {
-                    if (candidate.Value.Nest == null) continue;
-                    if (peak.Key.Equals(candidate.Value.Zone, System.StringComparison.Ordinal)) { any = true; break; }
-                }
-                if (!any) pruneZones.Add(peak.Key);
-            }
-            for (int i = 0; i < pruneZones.Count; i++) { zonePeaks.Remove(pruneZones[i]); zoneHealthCache.Remove(pruneZones[i]); }
         }
 
         public static void Reset()
         {
             byNest.Clear();
             byShell.Clear();
-            zonePeaks.Clear();
-            zoneHealthCache.Clear();
         }
 
         private static GameObject ResolveShell(Building nest)

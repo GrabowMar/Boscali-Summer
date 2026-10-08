@@ -105,7 +105,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 AvLay.Fill(back.rectTransform);
                 AvLay.Fill(stripes.rectTransform);
                 AvLay.Fill(art.rectTransform);
-                if (poster != null) art.uvRect = CropUv(SpriteUv(poster), w, h);
+                if (poster != null)
+                    art.uvRect = CropUv(SpriteUv(poster), w / poster.texture.width, h / poster.texture.height);
                 float want = markSize * Mathf.Max(0.1f, MarkScale);
                 float size = Mathf.Min(want, Mathf.Min(w, h) * 0.6f);
                 if (poster == null && Mathf.Abs(want - shownMark) > 0.5f) { shownMark = want; AvIcons.Set(mark, glyphIcon, want); }
@@ -132,19 +133,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
         }
 
         /// <summary>
-        /// The active dispatch, the page's hero. Active: the poster on the left with the tier tag on it, and
-        /// beside it the category and target, the event name and one effect line; below, the consequence flag and
+        /// The active dispatch, the page's hero. Active: a full-width, uncropped poster with
+        /// a fade over its bottom fifth; below it, category, target, title, effect, consequence and
         /// (for a scripted superevent) the beat log. The countdown and its bar live in the LEFT metric tile, and
         /// the price numbers in COST / RESET, so nothing is said twice. Calm: a designed standby banner (stripe
         /// plate, large radar mark) that takes the page's spare height, never an empty box.
         /// </summary>
         private sealed class EventHeroPart : AvPart
         {
-            private const float PlateW = 132f, PlateMin = 96f;
             private const float CalmPlate = 52f;
 
             private readonly AvFrame frame;
-            private readonly Image rail, tagBack;
+            private readonly Image rail, tagBack, artFade, artShade;
             private readonly EventPlateArt plate;
             private readonly TMP_Text tag, kicker, title, effectLine, consequence;
             private readonly TMP_Text[] steps;
@@ -164,7 +164,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 frame.raycastTarget = true;   // the whole card carries the dispatch's plain-words help
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
                 plate = new EventPlateArt(Rect, 30f);
-                tagBack = AvLay.Solid(plate.Root, "TagBack", Color.clear);
+                artFade = AvLay.Solid(Rect, "ArtFade", Color.white);
+                artShade = AvLay.Solid(Rect, "ArtShade", Color.clear);
+                tagBack = AvLay.Solid(Rect, "TagBack", Color.clear);
                 tag = AvText.Make(tagBack.rectTransform, "Tag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
                 kicker = AvText.Make(Rect, "Kicker", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
                 title = AvText.Make(Rect, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
@@ -185,6 +187,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 tagBack.gameObject.SetActive(!isCalm);
                 kicker.gameObject.SetActive(!isCalm);
                 effectLine.gameObject.SetActive(!isCalm);
+                artFade.gameObject.SetActive(!isCalm);
+                artShade.gameObject.SetActive(!isCalm);
             }
 
             /// <summary>Binds a live dispatch. The effect line and the script refresh separately, at refresh cadence.</summary>
@@ -315,21 +319,21 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     return total;
                 }
 
-                float tx = x + PlateW + 12f, tw = width - tx - 12f;
-                float kh = AvText.Height(kicker, tw);
+                float tx = x, tw = w;
+                // Show the entire 16:9 image. Only its bottom fifth blends into the copy.
+                float artworkHeight = (width - 6f) * 9f / 16f;
+                float tagW = Mathf.Min(Mathf.Ceil(AvText.Width(tag)) + 16f, w * 0.4f);
+                float kh = Mathf.Max(20f, AvText.Height(kicker, tw - tagW - 10f));
                 float titleH = AvText.Height(title, tw);
                 float eh = effectLine.text.Length > 0 ? AvText.Height(effectLine, tw) : 0f;
                 float text = kh + 2f + titleH + (eh > 0f ? 6f + eh : 0f);
-                float headH = Mathf.Max(PlateMin, text);
+                y = artworkHeight + 12f;
+                float headH = text;
                 if (place)
                 {
-                    AvLay.Place(plate.Root, x, y, PlateW, headH);
-                    plate.MarkScale = 1f;
-                    plate.Layout(PlateW, headH);
-                    float tagW = Mathf.Ceil(AvText.Width(tag)) + 16f;
-                    AvLay.Place(tagBack.rectTransform, 6f, 6f, Mathf.Min(tagW, PlateW - 12f), 20f);
-                    AvLay.Place(tag.rectTransform, 8f, 0f, Mathf.Min(tagW, PlateW - 12f) - 10f, 20f);
-                    AvLay.Place(kicker.rectTransform, tx, y, tw, kh);
+                    AvLay.Place(tagBack.rectTransform, x, y, tagW, 20f);
+                    AvLay.Place(tag.rectTransform, 8f, 0f, tagW - 10f, 20f);
+                    AvLay.Place(kicker.rectTransform, tx + tagW + 10f, y, tw - tagW - 10f, kh);
                     AvLay.Place(title.rectTransform, tx, y + kh + 2f, tw, titleH);
                     AvLay.Place(effectLine.rectTransform, tx, y + kh + 2f + titleH + 6f, tw, eh);
                 }
@@ -351,7 +355,15 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     y += 6f + sh;
                 }
                 float total2 = y + 12f;
-                if (place) AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total2);
+                if (place)
+                {
+                    AvLay.Place(plate.Root, 3f, 3f, width - 6f, artworkHeight);
+                    plate.MarkScale = 2f;
+                    plate.Layout(width - 6f, artworkHeight);
+                    AvLay.Place(artFade.rectTransform, 3f, 3f + artworkHeight * 0.8f, width - 6f, artworkHeight * 0.2f);
+                    AvLay.Place(artShade.rectTransform, 3f, 3f + artworkHeight, width - 6f, total2 - artworkHeight - 6f);
+                    AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total2);
+                }
                 return total2;
             }
 
@@ -359,6 +371,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             {
                 AvStyle c = AvStyleHost.FuiStyle("card");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                Color shade = AvTheme.Surface.WithAlpha(0.94f);
+                AvSurfaceGradient.Apply(artFade, shade.WithAlpha(0f), shade);
+                artShade.color = shade;
                 rail.color = AvStyleHost.FuiColor(AvStates.Class(tierState), AvTheme.RailInfo);
                 tagBack.color = SlabBack(tierState);
                 tag.color = SlabInk();

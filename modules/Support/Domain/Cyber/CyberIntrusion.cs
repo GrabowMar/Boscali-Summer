@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     /// <summary>Spec §1.3 numbers. Percent per second for trace; mission seconds for time; CR for money.</summary>
     internal static class CyberRules
     {
-        public const int StartCost = 30, StartCostExploit = 23, UpkeepSeconds = 10, UpkeepPerNode = 2, MaxHeldPerFaction = 4, MaxHeldPerIntrusion = 4;
+        public const int StartCost = 6, StartCostExploit = 5, UpkeepSeconds = 10, UpkeepPerNode = 0, MaxHeldPerFaction = 4, MaxHeldPerIntrusion = 4;
         public const float TraceMax = 100f, HeldTraceRate = 0.5f, DataCenterTraceFactor = 0.8f, DataCenterUpkeepFactor = 0.75f;
         public const float ExploitHopFactor = 0.75f, MaxAdvanceSeconds = 5f, MinTraceFactor = 0.25f, MaxTraceFactor = 3f;
 

@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 1.0f;
 
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.MessageHandler;
 
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
         public void Broadcast(WeatherSyncMessage message)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
 
             message.Protocol = ProtocolVersion;

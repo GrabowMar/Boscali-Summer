@@ -14,12 +14,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// WATCH OFFICER OVERLORD for CYBER and SOF, and the AI-controlled factions (spec section 4), the host adapter. It runs only on the host and does nothing a human could not: it works the
-    /// same <see cref="CyberDesk"/> and <see cref="SofDesk"/> a player does, as the reserved WATCH OFFICER identity, and it plans and funds operations through the same OPERATIONS path. All
-    /// decisions live in the pure brains (<see cref="CyberWatchBrain"/>, <see cref="SofWatchBrain"/>, <see cref="AiOpsBrain"/>); this class gathers the few facts the desks do not hold (the
+    /// same <see cref="CyberDesk"/> and <see cref="SofDesk"/> a player does, as the reserved WATCH OFFICER identity. It spends nothing (no allocation, no faction funds): the fronts are funded only through programmes. All
+    /// decisions live in the pure brains (<see cref="CyberWatchBrain"/>, <see cref="SofWatchBrain"/>); this class gathers the few facts the desks do not hold (the
     /// humans, the pilots, the board room, the census) and carries the plans out. Fog of war holds: the brains see only the desks' own lists, which are real sightings.
     /// <list type="bullet">
-    /// <item>A faction with humans is staffed only where no human is working (the idle rule, 60 s alone, 300 s with company; only domain verbs count) and only when WATCH OFFICER is on.</item>
-    /// <item>A faction with no humans is run by the same brains at one domain action every 30 s (one limiter for both domains), plus its operations, when AI FACTIONS is on. CYBER and SOF are
+    /// <item>OPS FRONTS S2: a faction with humans is directed always, at the normal pace and only when WATCH OFFICER is on. Its choices follow the front's directive and focus pin (<c>DirectorBias</c>); a human's live intrusion or team is never fought (an engaged node, a team another raised, one slot kept free).</item>
+    /// <item>A faction with no humans is run by the same brains at one domain action every 30 s (one limiter for both domains) when AI FACTIONS is on; the FrontService queues its programmes. CYBER and SOF are
     /// staffed for it, SPACE is not (an AI-only faction is never staffed, see <c>SpaceWatchOfficer.Tick</c>): a SPACE scan stamps the AI faction's native tracking with the human side's bases, a CYBER hop or a SOF
     /// mission does not (a held node is an effect, a sabotage destroys an anchor the faction has revealed), and the one SOF path that does stamp it, RECON, is off for it.</item>
     /// <item>Every action it takes is logged with its reason string and kept in a three-row ring that reaches the faction's own console through the OPERATIONS mirror.</item>
@@ -34,13 +34,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SpaceService space;
         private CyberService cyber;
         private SofService sof;
-        private OpsService ops;
         private readonly Dictionary<FactionHQ, FactionWatch> runs = new Dictionary<FactionHQ, FactionWatch>();
         private float nextTick, nextWarning;
 
         public void Configure(SupportManager support, SpaceService spaceService, CyberService cyberService, SofService sofService, OpsService opsService)
         {
-            manager = support; space = spaceService; cyber = cyberService; sof = sofService; ops = opsService;
+            manager = support; space = spaceService; cyber = cyberService; sof = sofService; // OPS FRONTS S1b: the programmes pay for operations, so OVERLORD no longer plans or funds them (opsService stays in the signature for the module wiring)
         }
 
         public void ResetForScene()
@@ -126,32 +125,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 return;
             }
             run.Released = false;
-            if (!ai) run.LastSeed = now; // a faction with humans earns no seed, and one that loses its humans starts counting from then
-            if (ai && now >= run.NextSeed)
-            {
-                float dt = Mathf.Clamp(now - run.LastSeed, 0f, 60f);
-                run.LastSeed = now; run.NextSeed = now + 1f;
-                manager.AiTreasurySeed(owner, dt);
-            }
             if (!(s.Cyber && cyber != null && cyber.HasCyber(owner))) run.Pacer.SetUrgent(WatchDomain.Cyber, false);
             if (!(s.Sof && sof != null && sof.HasSof(owner))) run.Pacer.SetUrgent(WatchDomain.Sof, false);
+            FrontService fronts = manager.Fronts;
             if (s.Cyber && cyber != null && cyber.TryDesk(owner, out CyberDesk cyberDesk))
             {
+                if (fronts != null) run.Cyber.Bias = fronts.BiasFor(owner, Domain.Fronts.Front.Cyber); // the CYBER directive and focus pin steer the director
                 CyberWatchPlan p = run.Cyber.Step(cyberDesk, run.CyberWorld, run.Pacer, ai, now);
                 if (p.Action != CyberWatchAction.None) Note(run, WatchDomain.Cyber, p.Code, p.A, p.B, p.Reason);
                 else if (p.Why == CyberWatchWhy.Failed) Plugin.Logger?.LogDebug("[Support.Overlord] " + owner.name + " CYBER " + p.Reason + " refused: " + p.Outcome + ".");
             }
             if (s.Sof && sof != null && sof.TryDesk(owner, out SofDesk sofDesk))
             {
+                if (fronts != null) run.Sof.Bias = fronts.BiasFor(owner, Domain.Fronts.Front.Sof);
                 SofWatchPlan p = run.Sof.Step(sofDesk, run.SofWorld, run.Pacer, ai, now);
                 if (p.Action != SofWatchAction.None) Note(run, WatchDomain.Sof, p.Code, p.A, p.B, p.Reason);
                 else if (p.Why == SofWatchWhy.Failed) Plugin.Logger?.LogDebug("[Support.Overlord] " + owner.name + " SOF " + p.Reason + " refused: " + p.Outcome + ".");
-            }
-            if (ai && s.Ops && ops != null && run.Ai.Due(now))
-            {
-                AiOpsPlan p = run.Ai.Step(run.OpsHost, run.Pacer, now);
-                if (p.Action != AiOpsAction.None) Note(run, WatchDomain.Ops, p.Code, p.A, p.B, p.Reason);
-                else if (run.Ai.LastResult.Outcome != OpOutcome.None && !run.Ai.LastResult.Ok) Plugin.Logger?.LogDebug("[Support.Overlord] " + owner.name + " OPS refused: " + run.Ai.LastResult.Outcome + ".");
             }
         }
 
@@ -200,11 +189,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public readonly WatchPacer Pacer = new WatchPacer();
             public readonly CyberWatchBrain Cyber = new CyberWatchBrain();
             public readonly SofWatchBrain Sof = new SofWatchBrain();
-            public readonly AiOpsBrain Ai = new AiOpsBrain();
             public readonly WatchLogRing Log = new WatchLogRing();
             public readonly CyberWorld CyberWorld;
             public readonly SofWorld SofWorld;
-            public readonly OpsHost OpsHost;
             public readonly List<Vector2> Pilots = new List<Vector2>(MaximumPilots);
             public float NextSeed, LastSeed, PilotsAt;
             public bool Released;
@@ -214,12 +201,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 Owner = owner;
                 CyberWorld = new CyberWorld(service, this);
                 SofWorld = new SofWorld(service, this);
-                OpsHost = new OpsHost(service, this);
             }
 
             public void Reset()
             {
-                Pacer.Reset(); Cyber.Reset(); Sof.Reset(); Ai.Reset(); Log.Clear(); Pilots.Clear();
+                Pacer.Reset(); Cyber.Reset(); Sof.Reset(); Log.Clear(); Pilots.Clear();
                 NextSeed = LastSeed = PilotsAt = 0f; Released = false;
             }
         }
@@ -266,38 +252,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             public bool CyberNear(float x, float z) => service.cyber != null && service.cyber.HoldsNodeNear(run.Owner, x, z, SofRules.RingBoostMetres);
-        }
-
-        /// <summary>An AI-controlled faction's operations, read from its own desks and the objective census, carried out through <see cref="OpsService"/>.</summary>
-        private sealed class OpsHost : IAiOpsHost
-        {
-            private readonly OverlordService service;
-            private readonly FactionWatch run;
-            public OpsHost(OverlordService service, FactionWatch run) { this.service = service; this.run = run; }
-
-            public int Humans => service.manager.HumanCount(run.Owner);
-
-            public bool TryFacts(float now, out AiOpsFacts facts)
-            {
-                facts = default;
-                if (service.ops == null || !service.ops.TryDesk(run.Owner, out OpsDesk desk)) return false;
-                FactionHQ owner = run.Owner;
-                facts.Treasury = service.manager.CyberTreasury(owner);
-                facts.CyberOnline = service.cyber != null && service.cyber.HasCyber(owner);
-                facts.SofOnline = service.sof != null && service.sof.HasSof(owner);
-                facts.DataCenterUp = facts.CyberOnline && service.cyber.DataCenterUp(owner);
-                OpSlot c = desk.Slot(OpDomain.Cyber), f = desk.Slot(OpDomain.Sof);
-                facts.Cyber = new AiSlotView(c.Kind, c.State);
-                facts.Sof = new AiSlotView(f.Kind, f.State);
-                service.manager.ObjectiveShares(owner, out facts.Share, out facts.RivalShare);
-                if (facts.CyberOnline && service.cyber.TryBestSamNode(owner, out int sam)) facts.SamNodeId = sam;
-                if (facts.SofOnline) facts.HeldBuildingId = service.sof.FirstHeldId(owner);
-                return true;
-            }
-
-            public OpResult Plan(OpKind kind, int target) => service.ops.WatchPlan(run.Owner, kind, target);
-
-            public OpResult Fund(OpDomain domain, bool large) => service.ops.WatchFund(run.Owner, domain, large);
         }
 
         /// <summary>Metres to the nearest airborne human pilot of the faction, from positions refreshed every two wall seconds (never a per-call scan of the players).</summary>

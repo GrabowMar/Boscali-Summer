@@ -246,13 +246,12 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             float duration = crossfadeSeconds;
             float elapsed = 0f;
-            float target = volume;
             while (elapsed < duration)
             {
                 elapsed += Time.unscaledDeltaTime;
                 float amount = duration <= 0f ? 1f : Mathf.Clamp01(elapsed / duration);
-                incomingSource.volume = target * amount;
-                if (currentSource != null) currentSource.volume = target * (1f - amount);
+                incomingSource.volume = volume * amount;
+                if (currentSource != null) currentSource.volume = volume * (1f - amount);
                 yield return null;
             }
 
@@ -271,7 +270,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 incomingSource.clip = null;
                 incomingSource.volume = 0f;
             }
-            currentSource.volume = target;
+            currentSource.volume = volume;
             pendingCoroutine = null;
             State = paused ? Transport.Paused : Transport.Playing;
         }

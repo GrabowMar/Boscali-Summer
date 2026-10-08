@@ -1,9 +1,23 @@
 using BoscaliSummer.Modules.Vanguard.Domain;
+using BoscaliSummer.Modules.Vanguard.Presentation;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using HarmonyLib;
 
 namespace BoscaliSummer.Modules.Vanguard.Patches
 {
+    // StartMissile runs on every peer; seeker.Initialize is called only by the simulating peer's LocalStart.
+    [HarmonyPatch(typeof(Missile), "StartMissile")]
+    internal static class VanguardArticulationPatch
+    {
+        private static void Postfix(Missile __instance)
+        {
+            if (__instance == null || __instance.definition == null) return;
+            GlaiveTurret.Attach(__instance); // Cache deployed wing bases before launch presentation folds them.
+            WeaponArticulation.Attach(__instance);
+            if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
+        }
+    }
+
     // Every Vanguard missile is a CruiseMissile1 clone, so one seeker type carries all five behaviours.
     [HarmonyPatch(typeof(OpticalSeekerCruiseMissile), nameof(OpticalSeekerCruiseMissile.Initialize))]
     internal static class VanguardInitializePatch
@@ -41,6 +55,17 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
+    [HarmonyPatch(typeof(Missile), "ServerFixedUpdate")]
+    internal static class GlaiveSuspendedPhysicsPatch
+    {
+        private static bool Prefix(Missile __instance)
+        {
+            if (!VanguardRegistry.TryGet(__instance,out VanguardFlight flight) || !flight.GunDeployed) return true;
+            flight.TickGun();
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.LockedByMissile))]
     internal static class AegisLockPatch
     {
@@ -74,6 +99,19 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             // AI tankers are deployed by SkywellService; their trigger is swallowed.
             if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null) Networking.SkywellNet.RequestToggle(aircraft);
             return true;
+        }
+    }
+
+    // LANCE: the trigger charges the capacitor instead of firing; LanceService fires on release.
+    [HarmonyPatch(typeof(Gun), nameof(Gun.Fire))]
+    internal static class LanceFirePatch
+    {
+        private static bool Prefix(Gun __instance, WeaponStation weaponStation)
+        {
+            if (__instance == null || weaponStation == null || !LanceService.IsLance(__instance)) return true;
+            if (!LanceAccess.Ensure()) return true; // reflection failed: vanilla behaviour
+            LanceService.Hold(__instance, weaponStation);
+            return false;
         }
     }
 

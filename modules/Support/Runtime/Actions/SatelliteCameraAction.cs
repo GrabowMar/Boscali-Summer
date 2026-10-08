@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class SatelliteCameraAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -18,9 +18,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
                 int contacts = context.Host.OpenOpticalWindow(context.Owner, context.Target,
-                    context.Settings.OpticalSceneRadius.Value, out SupportResult refusal);
+                    context.Settings.OpticalSceneRadius.Value * context.Quality, out SupportResult refusal);
                 if (contacts < 0) return refusal == SupportResult.Accepted ? SupportResult.SpawnFailed : refusal;
                 context.Host.ReportContacts(context.RequestId, contacts);
+                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), context.Settings.OpticalSceneRadius.Value * context.Quality, 6f, Visuals.AreaFx.OpticalTint, context.Owner); }
+                catch (Exception e) { context.Logger.LogDebug("[Support] Optical sweep visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }
             catch (Exception e)

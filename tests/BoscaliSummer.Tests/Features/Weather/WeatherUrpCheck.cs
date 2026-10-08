@@ -110,6 +110,14 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         }
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-matrix-only") >= 0)
         { TestRenderedView(); yield break; }
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-precull-only") >= 0)
+        { IEnumerator preCullOnly = TestPreCullVolumeFollow(); while (preCullOnly.MoveNext()) yield return preCullOnly.Current; yield break; }
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-fast-only") >= 0)
+        { IEnumerator fastOnly = TestFastRealClouds(); while (fastOnly.MoveNext()) yield return fastOnly.Current; yield break; }
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-loopinterp-only") >= 0)
+        { IEnumerator loopOnly = TestLoopInterpolationFollow(true); while (loopOnly.MoveNext()) yield return loopOnly.Current; yield break; }
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-loopinterp-nofollow") >= 0)
+        { IEnumerator loopControl = TestLoopInterpolationFollow(false); while (loopControl.MoveNext()) yield return loopControl.Current; yield break; }
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "-edge-only") >= 0)
         { TestBudget(); TestCloudSilhouette(); yield break; }
         TestBudget();
@@ -117,6 +125,8 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         TestCloudShapeRegistration();
         IEnumerator motionChecks = TestMotionOcclusion();
         while (motionChecks.MoveNext()) yield return motionChecks.Current;
+        IEnumerator preCullChecks = TestPreCullVolumeFollow();
+        while (preCullChecks.MoveNext()) yield return preCullChecks.Current;
         IEnumerator materialChecks = TestMaterialOwnership();
         while (materialChecks.MoveNext()) yield return materialChecks.Current;
         TestCameraOwnership();
@@ -242,6 +252,10 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         Check(FxRtPool.UsedBytes == 0, "Rebind teardown leaves no cloud target ledger entries");
         IEnumerator movingRealChecks = TestMovingRealClouds(march, composite, frame, bytes);
         while (movingRealChecks.MoveNext()) yield return movingRealChecks.Current;
+        IEnumerator fastRealChecks = TestFastRealClouds();
+        while (fastRealChecks.MoveNext()) yield return fastRealChecks.Current;
+        IEnumerator loopInterpChecks = TestLoopInterpolationFollow(true);
+        while (loopInterpChecks.MoveNext()) yield return loopInterpChecks.Current;
     }
 
     private IEnumerator TestMovingRealClouds(Material march, Material composite, CloudFrame frame, byte[] noiseBytes)
@@ -324,6 +338,254 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         Destroy(referenceVolume.gameObject); Destroy(referenceComposite); Destroy(mipNoise); Destroy(actual); Destroy(fresh);
         Check(FxRtPool.UsedBytes == 0, "Paired real cloud passes release their target budget");
         Check(worstRgb < .15f, "Moving real cloud volume remains close to a fresh half-resolution URP reference");
+    }
+
+    private IEnumerator TestFastRealClouds()
+    {
+        // The in-game trail regime the slow paired test never exercises: inside the deck,
+        // translating at flight speed while looking around fast. Near volume has huge
+        // per-frame parallax that single-depth reprojection cannot capture; the resolve
+        // must refresh toward the fresh march instead of trailing it.
+        var field = new WeatherField();
+        var key = new WeatherKey(90210u, 0f, false, (byte)WeatherRegimeType.Broken, 5f, 60f);
+        field.Build(key, 900f, 60000f, 60000f, 13f);
+        CloudMaps maps = CloudMaps.Build(key, 900f, 60000f, 60000f, 13f, 105000f, 315000f);
+        var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);
+        Vector3 deckPosition = new Vector3(0f, maps.Bottom + 150f, 0f);
+        Quaternion deckRotation = Quaternion.Euler(-2f, 30f, 0f);
+        var frame = new CloudFrame
+        {
+            CameraPosition = deckPosition, CameraForward = deckRotation * Vector3.forward,
+            FieldOfView = 60f, PixelHeight = 360, Bottom = maps.Bottom, Top = maps.Top,
+            HorizonCover = maps.HorizonCover, SunDirection = new Vector3(.35f, .55f, -.65f),
+            SunColor = new Color(1.9f, 1.8f, 1.6f), Ambient = new Color(.5f, .58f, .7f),
+            Ground = new Color(.12f, .15f, .13f), Fog = new Color(.72f, .8f, .9f), Extinction = .00004f
+        };
+        byte[] bytes = CloudNoise3D.Generate(64, 47);
+        var noise = new Texture3D(64, 64, 64, TextureFormat.RGBA32, false)
+        { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
+        noise.SetPixelData(bytes, 0); noise.Apply(false, true);
+        var march = new Material(Resources.Load<Shader>("FlightCloud"));
+        var composite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        composite.renderQueue = 2997;
+        uniforms.Apply(march, field, frame, noise);
+        CloudVolumeUniforms.ApplySpans(march, 105000f, 315000f);
+        march.SetTexture("_WeatherMapTex", Map(maps.Near, CloudMaps.NearSize));
+        march.SetTexture("_WeatherProfileTex", Map(maps.NearProfiles, CloudMaps.NearSize));
+        march.SetTexture("_WeatherFarMapTex", Map(maps.Far, CloudMaps.FarSize));
+        march.SetTexture("_WeatherFarProfileTex", Map(maps.FarProfiles, CloudMaps.FarSize));
+        march.SetTexture("_WeatherEnvelopeTex", Map(maps.Envelope, CloudMaps.EnvelopeSize));
+        march.SetFloat("_WeatherEnvelopeOn", 1f);
+        var fastTarget = new RenderTexture(1280, 720, 24) { name = "Fast temporal cloud view" };
+        var freshTarget = new RenderTexture(1280, 720, 24) { name = "Fast fresh cloud view" };
+        fastTarget.Create(); freshTarget.Create();
+        var fastMain = CameraAt("Fast cloud camera", fastTarget, 0);
+        var fastOther = CameraAt("Fast clear camera", freshTarget, 1);
+        fastMain.transform.SetPositionAndRotation(deckPosition, deckRotation);
+        fastOther.CopyFrom(fastMain); fastOther.targetTexture = freshTarget;
+        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.name = "Fast cloud volume";
+        cube.transform.position = deckPosition;
+        cube.transform.localScale = Vector3.one * 1000f;
+        var fastVolume = cube.GetComponent<Renderer>();
+        fastVolume.sharedMaterial = composite;
+        fastVolume.shadowCastingMode = ShadowCastingMode.Off;
+        fastVolume.receiveShadows = false;
+        var fastReferenceVolume = Instantiate(fastVolume.gameObject).GetComponent<Renderer>();
+        var referenceComposite = new Material(composite); fastReferenceVolume.sharedMaterial = referenceComposite;
+        var actualView = new CloudVolumeUniforms(); var referenceView = new CloudVolumeUniforms();
+        var temporalPass = new WeatherCloudPass();
+        var freshPass = new WeatherCloudPass();
+        var mipNoise = new Texture3D(64, 64, 64, TextureFormat.RGBA32, true)
+        { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
+        mipNoise.SetPixelData(bytes, 0); mipNoise.Apply(true, true); march.SetTexture("_CloudNoiseTex", mipNoise);
+        march.SetFloat("_CloudPixelAngle", 2f * Mathf.Tan(frame.FieldOfView * .5f * Mathf.Deg2Rad) / 360f);
+        temporalPass.Bind(fastMain, fastVolume, march, composite, true, true,
+            (camera, view, projection) => actualView.ApplyView(camera, camera.transform.position, view, projection, march));
+        freshPass.Bind(fastOther, fastReferenceVolume, march, referenceComposite, true, false,
+            (camera, view, projection) => referenceView.ApplyView(camera, camera.transform.position, view, projection, march));
+        var actual = new Texture2D(640, 360, TextureFormat.RGBAFloat, false, true);
+        var fresh = new Texture2D(640, 360, TextureFormat.RGBAFloat, false, true);
+        float worstRgb = 0, worstAlpha = 0, worstCentroid = 0, worstStoppedVariation = 0;
+        Color[] previousActual = null;
+        for (int step = -12; step < 36; step++)
+        {
+            float phase = step < 0 ? 0 : step < 12 ? step : step < 24 ? 24 - step : 0;
+            fastMain.transform.SetPositionAndRotation(deckPosition + new Vector3(phase * 2f, Mathf.Sin(phase * .3f) * 1f, phase * .6f),
+                Quaternion.Euler(Mathf.Sin(phase * .25f) * 4f, phase * 2f, 0) * deckRotation);
+            fastOther.transform.SetPositionAndRotation(fastMain.transform.position, fastMain.transform.rotation);
+            fastVolume.transform.position = fastMain.transform.position; fastReferenceVolume.transform.position = fastMain.transform.position;
+            if (fastMain.enabled) RenderPipeline.SubmitRenderRequest(fastMain,
+                new UniversalRenderPipeline.SingleCameraRequest { destination = fastTarget });
+            if (fastOther.enabled) RenderPipeline.SubmitRenderRequest(fastOther,
+                new UniversalRenderPipeline.SingleCameraRequest { destination = freshTarget });
+            yield return null;
+            Check(temporalPass.Width == 640 && temporalPass.Height == 360 && freshPass.Width == temporalPass.Width && freshPass.Height == temporalPass.Height,
+                "Paired fast cloud views use equal descriptors within the shared budget " + step);
+            var actualTarget = (RenderTexture)composite.GetTexture("_CloudLowResColour");
+            var freshTargetTex = (RenderTexture)referenceComposite.GetTexture("_CloudLowResColour");
+            Check(actualTarget != null && freshTargetTex != null && actualTarget.width == freshTargetTex.width && actualTarget.height == freshTargetTex.height,
+                "Each fast URP pass owns a matching real cloud target " + step);
+            ReadTarget(actualTarget, actual); ReadTarget(freshTargetTex, fresh);
+            if (step >= 0)
+            {
+                Color[] a = actual.GetPixels(), b = fresh.GetPixels();
+                float aa = 0, ba = 0, rgb = 0, alpha = 0; Vector2 ac = Vector2.zero, bc = Vector2.zero;
+                for (int p = 0; p < a.Length; p++)
+                {
+                    Vector2 pixel = new Vector2(p % actual.width, p / actual.width);
+                    aa += a[p].a; ba += b[p].a; ac += pixel * a[p].a; bc += pixel * b[p].a;
+                    rgb += Delta(a[p], b[p]); alpha += Mathf.Abs(a[p].a - b[p].a);
+                }
+                Check(aa > 100 && ba > 100, "Both paired fast URP views contain real cloud volume " + step);
+                rgb /= a.Length; alpha /= a.Length; float centroid = (ac / aa - bc / ba).magnitude;
+                worstRgb = Mathf.Max(worstRgb, rgb); worstAlpha = Mathf.Max(worstAlpha, alpha); worstCentroid = Mathf.Max(worstCentroid, centroid);
+                if (step >= 30 && previousActual != null)
+                {
+                    float actualVariation = 0;
+                    for (int p = 0; p < a.Length; p++) actualVariation += Delta(a[p], previousActual[p]);
+                    worstStoppedVariation = Mathf.Max(worstStoppedVariation, actualVariation / a.Length);
+                }
+                previousActual = a;
+                log.AppendLine("Fast cloud motion " + step + " rgb=" + rgb.ToString("F5") + " alpha=" + alpha.ToString("F5") +
+                    " centroid=" + centroid.ToString("F3") + " mass=" + aa.ToString("F1") + "/" + ba.ToString("F1"));
+                if (step == 0 || step == 11 || step == 13 || step == 23 || step == 25 || step == 35)
+                {
+                    File.WriteAllBytes("fast-cloud-temporal-" + step + ".png", actual.EncodeToPNG());
+                    File.WriteAllBytes("fast-cloud-fresh-" + step + ".png", fresh.EncodeToPNG());
+                }
+            }
+        }
+        log.AppendLine("Fast cloud motion worst rgb=" + worstRgb.ToString("F5") + " alpha=" + worstAlpha.ToString("F5") +
+            " centroid=" + worstCentroid.ToString("F3") + " stoppedVariation=" + worstStoppedVariation.ToString("F5"));
+        temporalPass.Dispose(); freshPass.Dispose(); fastVolume.enabled = false; fastReferenceVolume.enabled = false;
+        Destroy(fastReferenceVolume.gameObject); Destroy(referenceComposite); Destroy(mipNoise); Destroy(actual); Destroy(fresh);
+        Destroy(fastMain.gameObject); Destroy(fastOther.gameObject); Destroy(cube);
+        Destroy(march); Destroy(composite); Destroy(noise);
+        fastTarget.Release(); freshTarget.Release(); Destroy(fastTarget); Destroy(freshTarget);
+        Check(FxRtPool.UsedBytes == 0, "Paired fast cloud passes release their target budget");
+        Check(worstRgb < .5f, "Fast in-deck temporal clouds stay within a loose probe bound of fresh");
+    }
+
+    private static float SamplePattern(Texture2D marched, Matrix4x4 liveView, Matrix4x4 projection, Vector3 world)
+    {
+        Vector4 clip = projection * liveView * new Vector4(world.x, world.y, world.z, 1f);
+        int tx = Mathf.Clamp(Mathf.RoundToInt((clip.x / clip.w * .5f + .5f) * marched.width), 0, marched.width - 1);
+        int ty = Mathf.Clamp(Mathf.RoundToInt((clip.y / clip.w * .5f + .5f) * marched.height), 0, marched.height - 1);
+        return marched.GetPixel(tx, ty).a;
+    }
+
+    private IEnumerator TestLoopInterpolationFollow(bool parented)
+    {
+        // Real-loop counterpart to the manual-submit pre-cull test: the enabled camera
+        // renders through the loop itself, and Application.onBeforeRender moves it after
+        // our follow write, modelling the interpolated aircraft hierarchy. The assert
+        // reads the marched target (not the composite: occluder centers are
+        // depth-protected there) and projects the occluder with live transform matrices,
+        // because the camera matrix properties only refresh at the transform sync.
+        // parented=false (-loopinterp-nofollow) reads identically: the march is a
+        // fullscreen blit, so this test guards march-pose tracking, not cube parenting.
+        if (Application.isBatchMode)
+        {
+            log.AppendLine("Loop follow skipped in batchmode (needs display-loop rendering).");
+            yield break;
+        }
+        var loopTarget = Target("Loop follow cloud view");
+        var moving = CameraAt("Loop follow cloud camera", loopTarget, 0);
+        Vector3 basePose = Vector3.zero;
+        moving.transform.SetPositionAndRotation(basePose, Quaternion.identity);
+        moving.nearClipPlane = 1; moving.farClipPlane = 20000;
+        moving.enabled = true;
+        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.transform.localScale = Vector3.one * 1000;
+        cube.transform.position = basePose;
+        if (parented)
+        {
+            cube.transform.SetParent(moving.transform, false);
+            cube.transform.localPosition = Vector3.zero;
+            cube.transform.localRotation = Quaternion.identity;
+        }
+        var cloudRenderer = cube.GetComponent<Renderer>();
+        var march = new Material(Resources.Load<Shader>("CloudEdgeFixture"));
+        march.SetFloat("_CloudShapePattern", 1);
+        var composite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        composite.renderQueue = 2997; cloudRenderer.sharedMaterial = composite;
+        cloudRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        // Shape pattern needs no occluders (analytic, depth-independent).
+        var view = new CloudVolumeUniforms();
+        var clouds = new WeatherCloudPass();
+        clouds.Bind(moving, cloudRenderer, march, composite, true, false,
+            (camera, renderedView, projection) => view.ApplyView(camera, camera.transform.position, renderedView, projection));
+        Vector3 jump = new Vector3(20f, 0f, 0f);
+        int beforeRenderCount = 0;
+        UnityEngine.Events.UnityAction jumpHandler = () =>
+        {
+            beforeRenderCount++;
+            moving.transform.position = basePose + jump;
+        };
+        Application.onBeforeRender += jumpHandler;
+        yield return new WaitForEndOfFrame();
+        yield return new WaitForEndOfFrame();
+        log.AppendLine("Loop follow warmup onBeforeRender count " + beforeRenderCount +
+            " marched=" + (composite.GetTexture("_CloudLowResColour") != null));
+        var marched = new Texture2D(960, 540, TextureFormat.RGBA32, false);
+        for (int frame = 0; frame < 12; frame++)
+        {
+            moving.transform.SetPositionAndRotation(basePose, Quaternion.identity);
+            if (!parented) cube.transform.position = basePose;
+            yield return new WaitForEndOfFrame();
+            log.AppendLine("Loop follow frame " + frame + " onBeforeRender count " + beforeRenderCount);
+            var lowres = (RenderTexture)composite.GetTexture("_CloudLowResColour");
+            Check(lowres != null, "Loop cloud pass marched frame " + frame);
+            ReadTarget(lowres, marched);
+            // Live view: the camera is unparented, so its TRS composes the render pose
+            // directly, unlike the sync-cached matrix properties. Cameras render down
+            // -Z (view space), so the rigid inverse needs the Z flip a TRS lacks.
+            Matrix4x4 liveView = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) *
+                Matrix4x4.TRS(moving.transform.position, moving.transform.rotation, Vector3.one).inverse;
+            float center = SamplePattern(marched, liveView, moving.projectionMatrix, new Vector3(-85f, 35f, 800f));
+            float edge = SamplePattern(marched, liveView, moving.projectionMatrix, new Vector3(-21.76f, 35f, 800f));
+            log.AppendLine("Loop follow frame " + frame + " pattern center " + center.ToString("F5") +
+                " edge " + edge.ToString("F5"));
+            Vector3 diagAnchor = new Vector3(-85f, 35f, 800f);
+            Vector4 diagClip = moving.projectionMatrix * liveView * new Vector4(diagAnchor.x, diagAnchor.y, diagAnchor.z, 1f);
+            int diagTx = Mathf.Clamp(Mathf.RoundToInt((diagClip.x / diagClip.w * .5f + .5f) * marched.width), 0, marched.width - 1);
+            int diagTy = Mathf.Clamp(Mathf.RoundToInt((diagClip.y / diagClip.w * .5f + .5f) * marched.height), 0, marched.height - 1);
+            Vector3 diagPos = Shader.GetGlobalVector("_CloudCameraPos");
+            Matrix4x4 diagFrustum = Shader.GetGlobalMatrix("_CloudFrustum");
+            Vector4 diagSize = Shader.GetGlobalVector("_CloudLowResSize");
+            Vector4 diagChecker = Shader.GetGlobalVector("_CloudChecker");
+            log.AppendLine("Loop diag frame " + frame + " size " + diagSize.ToString("F5") +
+                " checker " + diagChecker.ToString("F3") +
+                " checkerOn " + Shader.GetGlobalFloat("_CloudCheckerOn").ToString("F2") +
+                " lowres " + lowres.width + "x" + lowres.height);
+            log.AppendLine("Loop diag frame " + frame + " texel " + diagTx + "," + diagTy +
+                " clip " + diagClip.x.ToString("F2") + "," + diagClip.y.ToString("F2") + "," + diagClip.w.ToString("F2") +
+                " cpos " + diagPos.ToString("F2") +
+                " tpos " + moving.transform.position.ToString("F2") +
+                " c2w " + moving.cameraToWorldMatrix.GetColumn(3).ToString("F2"));
+            log.AppendLine("Loop diag frame " + frame + " frustum " +
+                diagFrustum.GetRow(0).ToString("F3") + " / " + diagFrustum.GetRow(1).ToString("F3") + " / " +
+                diagFrustum.GetRow(2).ToString("F3") + " / " + diagFrustum.GetRow(3).ToString("F3"));
+            string grid = "";
+            for (int gy = -1; gy <= 1; gy++)
+                for (int gx = -1; gx <= 1; gx++)
+                    grid += marched.GetPixel(Mathf.Clamp(diagTx + gx * 8, 0, marched.width - 1),
+                        Mathf.Clamp(diagTy + gy * 8, 0, marched.height - 1)).a.ToString("F2") + " ";
+            log.AppendLine("Loop diag frame " + frame + " grid " + grid);
+            if (frame == 0) File.WriteAllBytes("loop-marched-0.png", marched.EncodeToPNG());
+            Check(Mathf.Abs(center - .9f) < .15f, "Loop pattern sampling is sane frame " + frame);
+            Check(edge < .5f, "Loop march tracks the render pose frame " + frame);
+        }
+        log.AppendLine("Loop follow onBeforeRender count " + beforeRenderCount);
+        Check(beforeRenderCount >= 12, "Loop camera moved after the follow write every frame");
+        Application.onBeforeRender -= jumpHandler;
+        moving.enabled = false;
+        clouds.Dispose();
+        Destroy(moving.gameObject); Destroy(cube);
+        Destroy(march); Destroy(composite); Destroy(marched);
+        loopTarget.Release(); Destroy(loopTarget);
+        Check(FxRtPool.UsedBytes == 0, "Loop follow fixture releases targets");
     }
 
     private void TestBudget()
@@ -706,6 +968,87 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         Destroy(march); Destroy(composite); Destroy(cloudy); Destroy(clear);
         cloudyTarget.Release(); clearTarget.Release(); Destroy(cloudyTarget); Destroy(clearTarget);
         Check(FxRtPool.UsedBytes == 0, "Moving cloud fixture releases targets");
+    }
+
+    private IEnumerator TestPreCullVolumeFollow()
+    {
+        // In-game the camera rides the interpolated aircraft hierarchy, so it moves after
+        // our LateUpdate follow: at cull time the composite cube trails the render pose.
+        // The pass must re-follow pre-cull, or the marched sky composites through a stale
+        // screen mapping and clouds trail the camera. A trailing cube must render exactly
+        // like a fresh one (non-temporal march, so the pair is deterministic).
+        var staleTarget = Target("Trailing cloud view");
+        var freshTarget = Target("Fresh cloud view");
+        var moving = CameraAt("Trailing cloud camera", staleTarget, 0);
+        moving.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+        moving.nearClipPlane = 1; moving.farClipPlane = 20000;
+        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.transform.localScale = Vector3.one * 1000;
+        var cloudRenderer = cube.GetComponent<Renderer>();
+        var march = new Material(Resources.Load<Shader>("CloudEdgeFixture"));
+        var composite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
+        composite.renderQueue = 2997; cloudRenderer.sharedMaterial = composite;
+        cloudRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        var foreground = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        foreground.transform.position = new Vector3(7, 5, 40);
+        foreground.transform.rotation = Quaternion.Euler(10, 25, 17);
+        foreground.transform.localScale = new Vector3(9, 7, 3);
+        foreground.GetComponent<Renderer>().sharedMaterial = Resources.Load<Material>("Occluder");
+        var ridge = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        ridge.transform.position = new Vector3(-8, -5, 60);
+        ridge.transform.rotation = Quaternion.Euler(8, 17, -11);
+        ridge.transform.localScale = new Vector3(22, 5, 6);
+        ridge.GetComponent<Renderer>().sharedMaterial = Resources.Load<Material>("Occluder");
+        var view = new CloudVolumeUniforms();
+        var clouds = new WeatherCloudPass();
+        clouds.Bind(moving, cloudRenderer, march, composite, true, false,
+            (camera, renderedView, projection) => view.ApplyView(camera, camera.transform.position, renderedView, projection));
+        var stale = new Texture2D(1920, 1080, TextureFormat.RGBA32, false);
+        var fresh = new Texture2D(1920, 1080, TextureFormat.RGBA32, false);
+        var trail = new Vector3(20f, 0f, 0f);
+        float worst = 0;
+        // The first manual render never enqueues (URP assigns the camera renderer later
+        // in that same render), so warm up once before comparing.
+        RenderPipeline.SubmitRenderRequest(moving,
+            new UniversalRenderPipeline.SingleCameraRequest { destination = freshTarget });
+        log.AppendLine("Pre-cull follow warmup executed=" + clouds.ExecutedFrame);
+        for (int frame = 0; frame < 12; frame++)
+        {
+            moving.transform.SetPositionAndRotation(new Vector3(frame * .04f, 0, -frame * .02f),
+                Quaternion.Euler(Mathf.Sin(frame * .12f) * 9, Mathf.Sin(frame * .08f) * 5,
+                    Mathf.Sin(frame * .15f) * 14));
+            cube.transform.position = moving.transform.position + trail;
+            RenderPipeline.SubmitRenderRequest(moving,
+                new UniversalRenderPipeline.SingleCameraRequest { destination = staleTarget });
+            int staleExecuted = clouds.ExecutedFrame;
+            ReadTarget(staleTarget, stale);
+            log.AppendLine("Pre-cull follow frame " + frame + " cube=" + cube.transform.position +
+                " camera=" + moving.transform.position);
+            cube.transform.position = moving.transform.position;
+            RenderPipeline.SubmitRenderRequest(moving,
+                new UniversalRenderPipeline.SingleCameraRequest { destination = freshTarget });
+            ReadTarget(freshTarget, fresh);
+            log.AppendLine("Pre-cull follow frame " + frame + " executed=" + staleExecuted + "/" + clouds.ExecutedFrame +
+                " time=" + Time.frameCount);
+            if (frame == 0)
+            {
+                Capture(staleTarget, "precull-stale-0.png");
+                Capture(freshTarget, "precull-fresh-0.png");
+            }
+            float difference = MeanDelta(stale, fresh);
+            worst = Mathf.Max(worst, difference);
+            log.AppendLine("Pre-cull follow frame " + frame + " stale/fresh RGB difference " + difference.ToString("F5"));
+            // Back-to-back submits carry ~0.004 of cross-submit noise; an un-erased
+            // 20 m trail differs by ~0.07.
+            Check(difference < .01f, "Trailing composite cube renders like a fresh one " + frame);
+            yield return null;
+        }
+        log.AppendLine("Pre-cull follow worst stale/fresh RGB difference " + worst.ToString("F5"));
+        clouds.Dispose();
+        Destroy(moving.gameObject); Destroy(cube); Destroy(foreground); Destroy(ridge);
+        Destroy(march); Destroy(composite); Destroy(stale); Destroy(fresh);
+        staleTarget.Release(); freshTarget.Release(); Destroy(staleTarget); Destroy(freshTarget);
+        Check(FxRtPool.UsedBytes == 0, "Pre-cull follow fixture releases targets");
     }
 
     private static void ReadTarget(RenderTexture target, Texture2D image)

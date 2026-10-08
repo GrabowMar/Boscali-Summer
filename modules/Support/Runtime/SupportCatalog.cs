@@ -20,8 +20,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportSettings settings, IZoneFortificationService fortifications)
         {
             actions.Add(new SupportActionDefinition(
-                SupportActionId.Recon, "RADAR SCAN",
-                "RADAR bird reveals stationary ground contacts through a live uplink.",
+                SupportActionId.Recon, "RECON PASS",
+                "RADAR bird reveals static and moving ground contacts through a live uplink.",
                 SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction(),
                 SpaceBirdRequirement.Radar, BirdTask.Scan, SpaceRevealWindow.BirdBusySeconds));
 
@@ -29,12 +29,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportActionId.ElintSweep, "ELINT SWEEP",
                 "Station SIGINT array locates enemy ground radars that are emitting.",
                 SupportCapabilities.Recon, settings.ElintEnabled, new ElintAction()));
-
-            actions.Add(new SupportActionDefinition(
-                SupportActionId.MtiSweep, "MTI SWEEP",
-                "RADAR bird reveals moving ground contacts through a live uplink.",
-                SupportCapabilities.Recon, settings.MtiEnabled, new MtiAction(),
-                SpaceBirdRequirement.Radar, BirdTask.Mti, SpaceRevealWindow.BirdBusySeconds));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.SatCamera, "SAT CAMERA",
@@ -56,7 +50,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Prsm, "PRSM STRIKE",
-                "One offboard ballistic missile onto the mark. Needs fresh HQ intel at the target.",
+                "One offboard ballistic missile onto the mark.",
                 SupportCapabilities.Artillery, settings.PrsmEnabled, new PrsmAction(), SpaceBirdRequirement.OpticalOrRadar));
 
             actions.Add(new SupportActionDefinition(
@@ -70,9 +64,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(
-                SupportActionId.FlareMissile, "FLARE BARRAGE",
+                SupportActionId.FlareMissile, "DECOY BARRAGE",
                 "Airburst IR countermeasure cloud.",
                 SupportCapabilities.Recon, settings.FlareBarrageEnabled, new FlareMissileAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.RadarBlind, "RADAR BLIND",
+                "CYBER package JAM RADAR at the aim: hostile radar range x0.4 within 1.5 km for 90 s.",
+                SupportCapabilities.Emp, settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberJamRadar)));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.SamNetDown, "SAM NET DOWN",
+                "CYBER package SAM NET DOWN at the aim: hostile SAMs cannot launch within 3 km for 60 s.",
+                SupportCapabilities.Emp, settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberSamNetDown)));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.ReconTeam, "RECON TEAM",
+                "A SOF recon team reveals enemy ground units within 2 km of the aim for 5 minutes. Needs a live camp.",
+                SupportCapabilities.Recon, settings.SofEnabled, new ReconTeamAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.SabotageStrike, "SABOTAGE STRIKE",
+                "A SOF team sabotages the nearest enemy anchor within 1 km of the aim. Needs a live camp.",
+                SupportCapabilities.Artillery, settings.SofEnabled, new SabotageStrikeAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.JtacMark, "JTAC MARK",

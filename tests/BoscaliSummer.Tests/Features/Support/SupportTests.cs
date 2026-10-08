@@ -105,41 +105,50 @@ namespace BoscaliSummer.Tests.Features.Support
             TestClickVsDrag();
 
             var ledger = new SupportRequestLedger(4);
+            const byte Prsm = (byte)SupportActionId.Prsm, Rod = (byte)SupportActionId.Artillery;
 
             // Only accepted requests are remembered. A denial must not burn the id, or the
             // client's next legitimate attempt with that id comes back as a duplicate.
             TestAssert.That(!ledger.WasAccepted(10, 1), "an unseen request was marked accepted");
-            ledger.Accept(10, 1, 100f);
+            ledger.Accept(10, 1, Prsm, 100f);
             TestAssert.That(ledger.WasAccepted(10, 1), "an accepted request replay was not detected");
             TestAssert.That(!ledger.WasAccepted(11, 1), "request ids leaked between players");
 
-            TestAssert.That(ledger.IsCoolingDown(10, 105f, 10f), "an active cooldown was ignored");
-            TestAssert.That(!ledger.IsCoolingDown(10, 111f, 10f), "an expired cooldown stayed active");
-            TestAssert.That(ledger.CooldownRemaining(10, 105f, 10f) == 5f, "cooldown countdown is wrong");
-            TestAssert.That(ledger.CooldownRemaining(10, 130f, 10f) == 0f,
+            TestAssert.That(ledger.IsCoolingDown(10, Prsm, 105f, 10f), "an active cooldown was ignored");
+            TestAssert.That(!ledger.IsCoolingDown(10, Prsm, 111f, 10f), "an expired cooldown stayed active");
+            TestAssert.That(ledger.CooldownRemaining(10, Prsm, 105f, 10f) == 5f, "cooldown countdown is wrong");
+            TestAssert.That(ledger.CooldownRemaining(10, Prsm, 130f, 10f) == 0f,
                 "an expired cooldown reported time remaining");
-            TestAssert.That(!ledger.IsCoolingDown(10, 105f, 0f), "zero cooldown was marked cooling down");
-            TestAssert.That(ledger.CooldownRemaining(10, 105f, 0f) == 0f, "zero cooldown reported remaining time");
+            TestAssert.That(!ledger.IsCoolingDown(10, Prsm, 105f, 0f), "zero cooldown was marked cooling down");
+            TestAssert.That(ledger.CooldownRemaining(10, Prsm, 105f, 0f) == 0f, "zero cooldown reported remaining time");
+
+            // OPS FRONTS S0: the cooldown is per pilot and per perk, not shared.
+            TestAssert.That(!ledger.IsCoolingDown(10, Rod, 105f, 300f), "using PRSM must not cool down the rod");
+            TestAssert.That(!ledger.IsCoolingDown(11, Prsm, 105f, 30f), "one pilot's cooldown must not cool down another pilot");
+            ledger.Accept(10, 50, Rod, 110f);
+            TestAssert.That(ledger.IsCoolingDown(10, Rod, 200f, 300f) && ledger.CooldownRemaining(10, Rod, 200f, 300f) == 210f,
+                "the rod runs its own 300 s clock");
+            TestAssert.That(!ledger.IsCoolingDown(10, Prsm, 200f, 30f), "the PRSM clock is independent of the rod");
 
             TestAssert.That(!ledger.IsRateLimited(20, 1f, 2, 1f), "the first request was rate limited");
             TestAssert.That(!ledger.IsRateLimited(20, 1.2f, 2, 1f), "the second request was rate limited");
             TestAssert.That(ledger.IsRateLimited(20, 1.4f, 2, 1f), "a request flood was not rate limited");
             TestAssert.That(!ledger.IsRateLimited(20, 2.1f, 2, 1f), "the rate window did not recover");
 
-            for (int i = 2; i <= 6; i++) ledger.Accept(10, i, 100f);
+            for (int i = 2; i <= 6; i++) ledger.Accept(10, i, Prsm, 100f);
             TestAssert.That(!ledger.WasAccepted(10, 1), "bounded replay history kept an evicted id");
 
             ledger.Clear();
-            TestAssert.That(!ledger.IsCoolingDown(10, 101f, 10f), "a scene reset kept cooldown state");
+            TestAssert.That(!ledger.IsCoolingDown(10, Prsm, 101f, 10f), "a scene reset kept cooldown state");
             TestAssert.That(!ledger.WasAccepted(10, 6) && !ledger.IsRateLimited(20, 1f, 2, 1f),
                 "scene reset clears replay and rate-limit history too");
-            ledger.Accept(10, 7, 200f, startCooldown: false);
-            TestAssert.That(ledger.WasAccepted(10, 7) && ledger.CooldownRemaining(10, 201f, 10f) == 0f,
-                "free UNLASE records replay protection without starting a paid CALL cooldown");
-            ledger.Accept(10, 8, 210f);
-            ledger.Accept(10, 9, 215f, startCooldown: false);
-            TestAssert.That(ledger.CooldownRemaining(10, 216f, 10f) == 4f,
-                "free UNLASE cannot extend the paid CALL cooldown");
+            ledger.Accept(10, 7, Prsm, 200f, startCooldown: false);
+            TestAssert.That(ledger.WasAccepted(10, 7) && ledger.CooldownRemaining(10, Prsm, 201f, 10f) == 0f,
+                "free UNLASE records replay protection without starting a perk cooldown");
+            ledger.Accept(10, 8, Prsm, 210f);
+            ledger.Accept(10, 9, (byte)SupportActionId.JtacUnlase, 215f, startCooldown: false);
+            TestAssert.That(ledger.CooldownRemaining(10, Prsm, 216f, 10f) == 4f,
+                "free UNLASE cannot extend a paid perk cooldown");
         }
     }
 }

@@ -37,9 +37,6 @@ namespace BoscaliSummer.Tests.Features.Support
         private static byte[] Rep(SpaceReply r) { var w = new BufW(); SpaceWire.WriteReply(w, r); return w.Bytes.ToArray(); }
         private static byte[] Sta(SofStateData d) { var w = new BufW(); SofWire.WriteState(w, d); return w.Bytes.ToArray(); }
 
-        private static void Eq<T>(T actual, T expected, string message) =>
-            TestAssert.That(Equals(actual, expected), message + " (got " + actual + ", want " + expected + ")");
-
         public static void Run()
         {
             Commands();
@@ -57,7 +54,7 @@ namespace BoscaliSummer.Tests.Features.Support
             byte[] raise = Cmd(new SpaceCommand(P, SpaceCommandKind.SofRaise, 3));
             SpaceCommand back = SpaceWire.ReadCommand(new BufR(raise), P);
             TestAssert.That(back.Kind == SpaceCommandKind.SofRaise && back.RequestId == 3 && back.Mutating && back.IsSofVerb && !back.IsCyberVerb, "raise roundtrip");
-            Eq(raise.Length, 3, "raise golden size");
+            TestAssert.Eq(raise.Length, 3, "raise golden size");
             back = SpaceWire.ReadCommand(new BufR(Cmd(new SpaceCommand(P, SpaceCommandKind.SofOrder, 4, 2 | ((int)TeamVerb.Exfil << 2)))), P);
             TestAssert.That(back.Kind == SpaceCommandKind.SofOrder && back.Target == (2 | ((int)TeamVerb.Exfil << 2)), "order roundtrip");
             back = SpaceWire.ReadCommand(new BufR(Cmd(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 1 | ((int)MissionKind.Sabotage << 2), 321 }))), P);
@@ -73,7 +70,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(SpaceWire.ReadCommand(new BufR(raise), 33).Protocol == P && SpaceWire.ReadCommand(new BufR(raise), 33).Kind == SpaceCommandKind.None, "a foreign protocol decodes to the byte alone");
             byte[] cut = Cmd(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 321 }));
             for (int n = 0; n < cut.Length; n++) TestAssert.That(SpaceWire.ReadCommand(new BufR(cut, n), P).Protocol == 0 || n < 2, "truncation at " + n + " is inert");
-            Eq(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 321 }).Fingerprint() == new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 322 }).Fingerprint(), false, "a changed payload changes the fingerprint");
+            TestAssert.Eq(new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 321 }).Fingerprint() == new SpaceCommand(P, SpaceCommandKind.SofMission, 5, 0, new[] { 4, 322 }).Fingerprint(), false, "a changed payload changes the fingerprint");
 
             foreach (SofOutcome o in new[] { SofOutcome.Raised, SofOutcome.NoTarget, SofOutcome.Raising })
             {
@@ -106,20 +103,20 @@ namespace BoscaliSummer.Tests.Features.Support
             SofStateData s = Full();
             byte[] bytes = Sta(s);
             TestAssert.That(bytes.Length < 600, "a full SOF message stays small (" + bytes.Length + " B)");
-            Eq(SofWire.StateSize(s), bytes.Length, "size counter agrees");
+            TestAssert.Eq(SofWire.StateSize(s), bytes.Length, "size counter agrees");
             SofStateData r = SofWire.ReadState(new BufR(bytes), P);
             TestAssert.That(r.Protocol == P && r.Active && r.Seq == 7 && r.TeamCap == 3 && r.TapIntrusions == 2, "header");
             TestAssert.That(Math.Abs(r.TapUntil - 540f) < 0.2f, "tap expiry");
-            Eq(r.Camps.Count, 2, "camps"); Eq(r.Camps[0].Health, AnchorHealth.Damaged, "camp health"); Eq(r.Camps[1].Rebuild, (byte)40, "camp rebuild");
+            TestAssert.Eq(r.Camps.Count, 2, "camps"); TestAssert.Eq(r.Camps[0].Health, AnchorHealth.Damaged, "camp health"); TestAssert.Eq(r.Camps[1].Rebuild, (byte)40, "camp rebuild");
             TestAssert.That(Math.Abs(r.Camps[0].X - 1200.5f) < 0.11f && Math.Abs(r.Camps[1].Z - 4000.2f) < 0.11f, "camp points");
-            Eq(r.Teams.Count, 3, "teams");
+            TestAssert.Eq(r.Teams.Count, 3, "teams");
             SofTeamRow t0 = r.Teams[0], t1 = r.Teams[1], t2 = r.Teams[2];
             TestAssert.That(t0.State == TeamState.Moving && t0.Push && t0.HasDest && t0.Exploit && t0.Mission == MissionKind.Sabotage && t0.TargetId == 12 && t0.Exposure == 34 && t0.Ammo == 70 && t0.Odds == 62, "team 0");
             TestAssert.That(t1.Slot == 1 && t1.Lasing && t1.Insert == Insertion.Helicopter && t1.Mission == MissionKind.Lase && Math.Abs(t1.EndsAt - 345f) < 0.2f, "team 1");
             TestAssert.That(t2.Slot == 3 && t2.State == TeamState.Pinned && t2.Wounded && t2.LiftWaiting && t2.Hold && t2.Exposure == 100, "team 3");
-            Eq(r.Targets.Count, 6, "targets"); TestAssert.That(r.Targets[2].Resisted && r.Targets[1].Exploit && r.Targets[0].Kind == TargetKind.Anchor, "target flags");
-            Eq(r.Held.Count, 1, "held"); Eq(r.Enemies.Count, 1, "enemy team");
-            Eq(r.Events.Count, 2, "events"); TestAssert.That(r.Events[1].Kind == SofEventKind.Success && r.Events[1].Mission == MissionKind.Sabotage && r.Events[0].Slot == 3, "event rows");
+            TestAssert.Eq(r.Targets.Count, 6, "targets"); TestAssert.That(r.Targets[2].Resisted && r.Targets[1].Exploit && r.Targets[0].Kind == TargetKind.Anchor, "target flags");
+            TestAssert.Eq(r.Held.Count, 1, "held"); TestAssert.Eq(r.Enemies.Count, 1, "enemy team");
+            TestAssert.Eq(r.Events.Count, 2, "events"); TestAssert.That(r.Events[1].Kind == SofEventKind.Success && r.Events[1].Mission == MissionKind.Sabotage && r.Events[0].Slot == 3, "event rows");
             TestAssert.That(r.SameAs(SofWire.ReadState(new BufR(bytes), P)), "two decodes agree");
             // Inactive: header only.
             byte[] off = Sta(new SofStateData { Protocol = P, Active = false, Seq = 2, Now = 10f });
@@ -178,7 +175,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(subs.Next(11, 1, moved, 108f, 12.6f) != null, "a resync forces one");
             TestAssert.That(subs.Next(11, 2, moved, 109f, 12.7f) != null, "another faction forces one");
             subs.Prune(new HashSet<ulong>());
-            Eq(subs.Count, 0, "members who left are forgotten");
+            TestAssert.Eq(subs.Count, 0, "members who left are forgotten");
         }
 
         private static void Notices()
@@ -187,12 +184,12 @@ namespace BoscaliSummer.Tests.Features.Support
             SofStateData s = Full();
             TestAssert.That(t.Observe(true, s, 100f, false) == SofNoticeKind.None, "the first sight is silent");
             s.Events.Add(new SofEventRow { Seq = 9, Kind = SofEventKind.Pinned, Slot = 1, Mission = MissionKind.None });
-            Eq(t.Observe(true, s, 101f, false), SofNoticeKind.Pinned, "a new pin is announced");
+            TestAssert.Eq(t.Observe(true, s, 101f, false), SofNoticeKind.Pinned, "a new pin is announced");
             s.Events.Add(new SofEventRow { Seq = 10, Kind = SofEventKind.Lost, Slot = 1, Mission = MissionKind.None });
-            Eq(t.Observe(true, s, 102f, false), SofNoticeKind.None, "one notice per 3 s");
+            TestAssert.Eq(t.Observe(true, s, 102f, false), SofNoticeKind.None, "one notice per 3 s");
             s.Events.Add(new SofEventRow { Seq = 11, Kind = SofEventKind.Success, Slot = 0, Mission = MissionKind.Recon });
-            Eq(t.Observe(true, s, 105f, true), SofNoticeKind.None, "QUIET drops them");
-            Eq(t.Observe(false, s, 106f, false), SofNoticeKind.None, "no mirror, no notice");
+            TestAssert.Eq(t.Observe(true, s, 105f, true), SofNoticeKind.None, "QUIET drops them");
+            TestAssert.Eq(t.Observe(false, s, 106f, false), SofNoticeKind.None, "no mirror, no notice");
         }
 
         private static void Posts()
@@ -200,14 +197,13 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(TaskedKinds.TryGet(SupportActionId.SofCover, out TaskedKind cover) && cover.Domain == TaskedDomain.Sof && cover.Label == "COVER TEAM", "cover kind");
             TestAssert.That(TaskedKinds.TryGet(SupportActionId.SofLase, out TaskedKind lase) && lase.Domain == TaskedDomain.Sof && lase.Label == "LASE TARGET", "lase kind");
             TestAssert.That(TaskedKinds.IsHostPost(SupportActionId.SofCover) && TaskedKinds.IsHostPost(SupportActionId.CyberBlackout) && !TaskedKinds.IsHostPost(SupportActionId.Artillery), "host posts");
-            Eq(TaskedFees.Quote(SupportActionId.SofCover, 1, 5, false), 0, "a SOF post is free to claim");
-            Eq(TaskedFees.Quote(SupportActionId.CyberJamRadar, 25, 5, false), 10, "CYBER packages still cost");
-            Eq(SofPosts.Title(SupportActionId.SofCover, 1), "COVER TEAM A-1", "board title");
-            Eq(TaskedKinds.Slab(TaskedDomain.Sof), "SOF", "slab");
-            Eq(Aim.Pick(false, false, true), AimSource.Team, "a lasing team is the last aim source");
-            Eq(Aim.Pick(true, false, true), AimSource.Pod, "the pod wins");
-            Eq(Aim.Pick(false, true, true), AimSource.Map, "a map pick wins over the team");
-            Eq(Aim.Label(AimSource.Team), "AIM: TEAM", "label");
+            TestAssert.That(TaskedFees.ValidProfile(5) && !TaskedFees.ValidProfile(0), "the human census profile rules remain; claims are free");
+            TestAssert.Eq(SofPosts.Title(SupportActionId.SofCover, 1), "COVER TEAM A-1", "board title");
+            TestAssert.Eq(TaskedKinds.Slab(TaskedDomain.Sof), "SOF", "slab");
+            TestAssert.Eq(Aim.Pick(false, false, true), AimSource.Team, "a lasing team is the last aim source");
+            TestAssert.Eq(Aim.Pick(true, false, true), AimSource.Pod, "the pod wins");
+            TestAssert.Eq(Aim.Pick(false, true, true), AimSource.Map, "a map pick wins over the team");
+            TestAssert.Eq(Aim.Label(AimSource.Team), "AIM: TEAM", "label");
         }
 
         private static void Codes()
@@ -241,14 +237,14 @@ namespace BoscaliSummer.Tests.Features.Support
                 if (refusal) TestAssert.That(w.Contains(" — "), "a refusal says what fixes it (" + (SofOutcome)o + ")");
             }
             TestAssert.That(new SofResult(SofOutcome.Raised).Ok && !new SofResult(SofOutcome.NoTarget).Ok, "ok flags");
-            Eq(SpaceRules.Clock(125f), "2:05", "clock"); Eq(SpaceRules.Clock(float.NaN), "0:00", "bad clock");
+            TestAssert.Eq(SpaceRules.Clock(125f), "2:05", "clock"); TestAssert.Eq(SpaceRules.Clock(float.NaN), "0:00", "bad clock");
             var t = new SofTeamRow { Slot = 0, State = TeamState.Moving, X = 0f, Z = 0f, DestX = 3500f, DestZ = 0f, Exposure = 34 };
-            Eq(SofPageWords.TeamLine(t, 0f), "A-1 · MOVING · ETA 6:00 · EXP 34 %", "moving line");
+            TestAssert.Eq(SofPageWords.TeamLine(t, 0f), "A-1 · MOVING · ETA 6:00 · EXP 34 %", "moving line");
             t.Push = true;
-            Eq(SofPageWords.TeamLine(t, 0f), "A-1 · MOVING · PUSH · ETA 4:00 · EXP 34 %", "pushed line");
-            Eq(SofPageWords.TeamLine(new SofTeamRow { Slot = 2, State = TeamState.Raising, EndsAt = 90f }, 0f), "C-1 · RAISING · 1:30", "raising line");
-            Eq(SofPageWords.Sub(null), "NO CAMP STANDING", "no state");
-            Eq(SofPageWords.Sub(Full()), "1 CAMP · 3/3 TEAMS · 1 HELD", "sub line");
+            TestAssert.Eq(SofPageWords.TeamLine(t, 0f), "A-1 · MOVING · PUSH · ETA 4:00 · EXP 34 %", "pushed line");
+            TestAssert.Eq(SofPageWords.TeamLine(new SofTeamRow { Slot = 2, State = TeamState.Raising, EndsAt = 90f }, 0f), "C-1 · RAISING · 1:30", "raising line");
+            TestAssert.Eq(SofPageWords.Sub(null), "NO CAMP STANDING", "no state");
+            TestAssert.Eq(SofPageWords.Sub(Full()), "1 CAMP · 3/3 TEAMS · 1 HELD", "sub line");
             foreach (SofEventKind k in Enum.GetValues(typeof(SofEventKind)))
                 TestAssert.That(SofPageWords.EventLine(new SofEventRow { Kind = k, Slot = 1, Mission = MissionKind.Recon }).Length > 0, "event words " + k);
         }

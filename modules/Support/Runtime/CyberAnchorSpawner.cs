@@ -125,13 +125,40 @@ namespace BoscaliSummer.Modules.Support.Runtime
             VehicleDefinition camp = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
             if (camp == null || guard == null) return false;
             Vector3 origin = anchor.ToLocalPosition();
-            var definitions = new[] { camp, guard, guard };
-            var offsets = new[] { Vector3.zero, new Vector3(28f, 0f, 22f), new Vector3(-28f, 0f, -22f) };
+            // A camp sits 6.5 km out on open country, where the exact ring point is rarely level for a 1 m footprint (in-game probe 2026-10-06:
+            // 74 dry ring points, 5 fit the truck, 0 fit the group): the camp searches 120 m round the point, each escort 15 m round its slot.
             var planned = new GlobalPosition[3];
-            for (int i = 0; i < planned.Length; i++)
-                if (!PlanOne(definitions[i], origin + offsets[i], parent, rotation, out planned[i])) return false;
+            if (!PlanNear(camp, origin, parent, rotation, CampReach, out planned[0])) return false;
+            Vector3 center = planned[0].ToLocalPosition();
+            if (!PlanNear(guard, center + new Vector3(28f, 0f, 22f), parent, rotation, EscortReach, out planned[1]) ||
+                !PlanNear(guard, center + new Vector3(-28f, 0f, -22f), parent, rotation, EscortReach, out planned[2])) return false;
             positions = planned;
             return true;
+        }
+
+        private const float CampReach = 120f, EscortReach = 15f;
+
+        /// <summary>The desired spot first, then 8 bearings at half and full <paramref name="reach"/>, nearest first.</summary>
+        private static readonly Vector2[] Nudges = BuildNudges();
+
+        private static Vector2[] BuildNudges()
+        {
+            var n = new Vector2[17];
+            for (int i = 0; i < 16; i++)
+            {
+                float a = (i % 8) * Mathf.PI / 4f, r = i < 8 ? 0.5f : 1f;
+                n[i + 1] = new Vector2(Mathf.Sin(a) * r, Mathf.Cos(a) * r);
+            }
+            return n;
+        }
+
+        // ponytail: up to 17 footprint tests per spot, only while a faction's camps are planned (once, then every 30 s retry while none fits).
+        private static bool PlanNear(VehicleDefinition definition, Vector3 desired, Airbase parent, Quaternion rotation, float reach, out GlobalPosition planned)
+        {
+            for (int i = 0; i < Nudges.Length; i++)
+                if (PlanOne(definition, desired + new Vector3(Nudges[i].x * reach, 0f, Nudges[i].y * reach), parent, rotation, out planned)) return true;
+            planned = default;
+            return false;
         }
 
         internal bool TryCreateCamp(FactionHQ owner, int ordinal, GlobalPosition anchor, Airbase parent, out Unit camp)

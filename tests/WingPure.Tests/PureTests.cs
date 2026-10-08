@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
+using BoscaliSummer.Tests;
 
 namespace WingPure.Tests
 {

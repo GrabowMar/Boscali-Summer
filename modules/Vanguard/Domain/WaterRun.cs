@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         /// <summary>Under-keel fuze: the run depth passes beneath shallow hulls, so fire when under the ship.</summary>
         public static bool UnderKeel(float flatDistance, float shipRadius) => flatDistance < Mathf.Max(12f, shipRadius * 0.5f);
 
-        public static float SnakeYaw(float t) => SnakeAmplitude * Mathf.Sin(2f * Mathf.PI * t / SnakePeriod);
+        public static float SnakeYaw(float t, float seed = 0f) =>
+            (seed > 0.5f ? -1f : 1f) * SnakeAmplitude * Mathf.Sin(2f * Mathf.PI * t / SnakePeriod + seed * 6.283185f);
     }
 }

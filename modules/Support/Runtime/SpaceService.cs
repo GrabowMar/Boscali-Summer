@@ -76,6 +76,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
         private void OnDestroy() => ResetForScene();
 
+        private readonly List<SpaceMark> snapMarks = new List<SpaceMark>(SpaceContacts.MaxMarks);
+
+        /// <summary>Host: the nearest fresh own-faction MARK within <see cref="SpaceFireControl.MarkSnapRadius"/> of a perk's aim point.</summary>
+        internal bool TryNearestMark(FactionHQ owner, float x, float z, float now, out SpaceMark mark)
+        {
+            mark = default;
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction) || faction.Observations == null) return false;
+            snapMarks.Clear();
+            faction.Observations.Contacts.CopyMarks(now, snapMarks);
+            return SpaceFireControl.TryNearestMark(snapMarks, x, z, now, out mark);
+        }
+
         /// <summary>Authoritative read for host decisions: re-samples the natives first, so a gate sees native loss immediately.</summary>
         public bool TryGetState(FactionHQ owner, out SpaceState state)
         {
@@ -100,6 +112,43 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal IReadOnlyList<Unit> UplinksFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.View : Array.Empty<Unit>();
+
+        // ---- OPS FRONTS programme effects (host) ----------------------------------------------------
+
+        /// <summary>LAUNCH SATELLITE finished: the lowest dead bird is on station. False (nothing changed) when none is down.</summary>
+        internal bool TryLaunchBird(FactionHQ owner, out BirdKind bird)
+        {
+            bird = BirdKind.Optical;
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
+            int restored = faction.State.RestoreBird();
+            if (restored < 0) return false;
+            bird = (BirdKind)restored;
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + bird + " bird launched by its programme and on station.");
+            return true;
+        }
+
+        /// <summary>UPLINK SITE finished: a real uplink site is raised on a rear spot of a held airbase and takes the place of the first dead one. False when none is dead or no legal spot exists.</summary>
+        internal bool TryRebuildUplink(FactionHQ owner)
+        {
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction) || FactionRegistry.airbaseLookup == null) return false;
+            int slot = -1;
+            for (int i = 0; i < faction.Links.Length && slot < 0; i++) if (UplinkSpawner.Down(faction.Links[i], owner)) slot = i;
+            if (slot < 0) return false;
+            float diagonal = TheaterFrame.Resolve().magnitude;
+            int inspected = 0;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                if (++inspected > 128) break;
+                if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
+                if (!TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot) ||
+                    !spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out Unit made)) continue;
+                faction.Links[slot] = made;
+                faction.Baseline[slot] = UplinkSpawner.Health(made);
+                Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " uplink " + slot + " raised again by its programme.");
+                return true;
+            }
+            return false;
+        }
 
         /// <summary>The parts WATCH OFFICER OVERLORD works one faction through. False until the faction has a SPACE.</summary>
         internal bool TryWatchParts(FactionHQ owner, out SpaceState state, out SpaceObservations observations, out TaskedDesk desk)
@@ -281,7 +330,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             // A cooldown or freeze counts down on the client: send its deadline (mission time), not seconds left, so a cooling
             // member is not sent a new value every second.
             // The deadline comes from the unrounded remaining time (the integer detail would flip it by a second every poll).
-            into.GateDetail = into.Gate == TaskedOutcome.Cooldown ? SpaceMirror.GateDeadline(now, manager.ServerCooldownRemaining(viewer))
+            into.GateDetail = into.Gate == TaskedOutcome.Cooldown ? SpaceMirror.GateDeadline(now, manager.ServerCooldownRemaining(viewer, SupportActionId.Artillery))
                 : SpaceMirror.GateIsDeadline(into.Gate) ? SpaceMirror.GateDeadline(now, detail) : detail;
             ulong salt = manager.SpaceNet != null ? manager.SpaceNet.Salt : 0UL;
             ulong viewerId = PlayerIdentity.Of(viewer);
@@ -323,20 +372,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     into.Marks.Add(new FeedMark { Id = marks[i].Id, X = marks[i].X, Z = marks[i].Z, Moving = marks[i].Moving,
                     Source = marks[i].Source, Expires = marks[i].ExpiresAt });
             if (faction.Tasked == null) return true;
-            int baseline = manager.TaskedBaseline(viewer, out bool charge);
             for (int i = 0; i < posts.Count && into.Posts.Count < SpaceWire.MaxPosts; i++)
             {
                 TaskedCall call = posts[i].Call;
                 bool own = !call.WatchOfficer && call.Maker == viewerId;
-                int price = 0, payoff = 0;
-                if (charge)
-                {
-                    price = Math.Max(0, TaskedFees.Quote(call.Action, baseline, call.HumanProfile, own));
-                    FeeSettlement split = TaskedFees.Split(price, call.WatchOfficer, call.CopyShares(), call.HumanProfile);
-                    float shared = 0f;
-                    for (int p = 0; p < split.Payouts.Length; p++) shared += split.Payouts[p].Amount;
-                    payoff = (int)Math.Round(shared);
-                }
+                const int price = 0, payoff = 0; // a TASKED claim is free; the wire still carries the two fields
                 // The post is a host snapshot of fixed ground points taken at SEND; the client shows them for the post's whole life.
                 var points = new FeedPoint[call.MarkCount];
                 bool codable = points.Length > 0;
@@ -418,7 +458,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             nextTick = now + 1f;
             spawner.RetryCleanup();
             // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
-            foreach (var pair in factions) pair.Value.State.JamFactor = CyberService.Active != null ? CyberService.Active.BirdCooldownFactor(pair.Key) : 1f;
+            // The enemy CYBER front's counter pressure (x1.5 when it leads by 40 or more) rides the same multiplier.
+            foreach (var pair in factions)
+                pair.Value.State.JamFactor = (CyberService.Active != null ? CyberService.Active.BirdCooldownFactor(pair.Key) : 1f) * (manager?.Fronts != null ? manager.Fronts.SpaceCooldownFactor(pair.Key) : 1f);
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs == null) return;
             foreach (FactionHQ hq in hqs)
@@ -441,7 +483,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// Space spec 5.2: a bird an ASAT strike killed returns through a 400 CR restore bar (auto-funded from HQ FUND at 40 CR per minute, a flat seed for an AI-only faction, like an anchor)
+        /// Space spec 5.2: a bird an ASAT strike killed returns through a 400-unit restore bar (a plain timer in S0, funded by the front budget from S1)
         /// and then a 6 minute build. The pure <see cref="SpaceState"/> owns the clock; this only pays the bar and says when a bird is back.
         /// </summary>
         private void RebuildBirds(FactionHQ owner, FactionSpace faction, float now)
@@ -450,14 +492,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (down == 0) { faction.BirdFundedAt = now; return; }
             float dt = Mathf.Clamp(now - faction.BirdFundedAt, 0f, 5f);
             faction.BirdFundedAt = now;
-            bool flat = manager.HumanCount(owner) == 0;
             for (int i = 0; i < SpaceRules.BirdCount; i++)
             {
                 if ((down & (1 << i)) == 0) continue;
                 var bar = faction.State.BirdBar((BirdKind)i);
                 if (bar.Complete) continue;
-                float took = bar.AutoFund(dt, manager.CyberTreasury(owner), flat);
-                if (took > 0f) manager.CyberTreasurySpend(owner, took);
+                bar.Fund(manager.BirdRebuildFunding(owner, dt));
             }
             byte back = faction.State.TickBirds(now);
             for (int i = 0; i < SpaceRules.BirdCount; i++)
@@ -542,7 +582,39 @@ namespace BoscaliSummer.Modules.Support.Runtime
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
                 View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
+            SeedGeo(owner, faction.State);
             return true;
+        }
+
+        /// <summary>Parks the faction's three birds over its side of the front: own airbase centroid shifted toward the enemy's.</summary>
+        private static void SeedGeo(FactionHQ owner, SpaceState state)
+        {
+            float ownU = 0f, ownV = 0f, foeU = 0f, foeV = 0f; int own = 0, foe = 0;
+            Vector2 span = TheaterFrame.Resolve();
+            if (FactionRegistry.airbaseLookup != null)
+                foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (a == null || a.AttachedAirbase || a.UnitDestroyed() || a.CurrentHQ == null) continue;
+                    GlobalPosition p = (a.center != null ? a.center : a.transform).GlobalPosition();
+                    float u = GeoSpace.U(p.x, span.x), v = GeoSpace.V(p.z, span.y);
+                    if (a.CurrentHQ == owner) { ownU += u; ownV += v; own++; } else { foeU += u; foeV += v; foe++; }
+                }
+            if (own == 0) { ownU = 0.35f; ownV = 0.5f; } else { ownU /= own; ownV /= own; }
+            if (foe == 0) { foeU = 1f - ownU; foeV = 1f - ownV; } else { foeU /= foe; foeV /= foe; }
+            var hu = new float[3]; var hv = new float[3];
+            GeoSpace.Defaults(ownU, ownV, foeU, foeV, hu, hv);
+            state.SetHomes(hu, hv);
+        }
+
+        /// <summary>Host: one faction's bird burns to a map point (the SPACE director and the RELOCATE command both come here).</summary>
+        internal GeoSpace.Refusal TryRelocate(FactionHQ owner, int bird, float u, float v, float now, out GeoBird after)
+        {
+            after = default;
+            if (owner == null || bird < 0 || bird >= SpaceRules.BirdCount || !factions.TryGetValue(owner, out FactionSpace faction)) return GeoSpace.Refusal.Dead;
+            GeoSpace.Refusal why = faction.State.Relocate((BirdKind)bird, now, u, v);
+            after = faction.State.Geo((BirdKind)bird);
+            if (why == GeoSpace.Refusal.None) Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + GeoSpace.Names[bird] + " bird burns to " + after.ToU.ToString("0.00") + "," + after.ToV.ToString("0.00") + " (fuel " + Mathf.RoundToInt(after.Fuel) + " %).");
+            return why;
         }
 
         private void Create(FactionHQ owner, in Candidate candidate, List<Unit> links)

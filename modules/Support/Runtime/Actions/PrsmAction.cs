@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
     /// PRSM strike: one offboard ballistic missile onto the mark. Gated by allocation,
-    /// cooldown, intel freshness and range — never by a station. Spawns synchronously so
+    /// cooldown and range — never by a station. Spawns synchronously so
     /// the reply carries the live missile's time of flight.
     /// </summary>
     internal sealed class PrsmAction : ISupportAction
@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float ReleaseAltitude = 12000f;
         private const float ReleaseSpeed = 1500f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the price is CallSheet x CallPricing
+        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         public SupportResult Execute(in SupportContext context)
         {
@@ -33,11 +33,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
                     return SupportResult.OutOfRange;
-            }
-            if (!SupportTargeting.IntelFreshAt(context.Owner, ground, context.Settings.IntelFreshSeconds.Value, context.Settings.IntelGateRadius.Value))
-            {
-                context.Logger.LogInfo("[Support] PRSM refused: stale intel at the grid.");
-                return SupportResult.StaleIntel;
             }
             if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 

@@ -242,9 +242,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// Reads the same authority/settings gate as the actual perk hooks.</summary>
         internal static int AbilityMask(Aircraft aircraft) => WingSurvivalPerks.AceAbilityMask(aircraft);
 
-        // ponytail: a toast until the radio returns with comms (M4); context is unused meanwhile.
-        internal static void Chatter(string callsign, string context, string message) =>
-            WingToast.Show(Limit(callsign, 32) + ": " + Limit(message, 240));
+        internal static void Chatter(string callsign, string context, string message)
+        {
+            RadioDirector.Instance?.Report("INTERCEPT / " + Limit(callsign, 24),
+                "ENEMY:" + Limit(callsign, 32) + ":" + Limit(context, 64), message,
+                BoscaliSummer.Core.Contracts.ChatterUrgency.Tactical);
+        }
 
         /// <summary>Enroll while still seated, then read native evidence after ejection.
         /// 0 unknown, 1 living dismounted pilot, 2 returned, 3 dead, 4 captured.</summary>

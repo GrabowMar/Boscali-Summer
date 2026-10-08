@@ -20,16 +20,33 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         public static AceRadialAction Build()
         {
-            var root = new AceRadialAction("root", AircraftName()).WithIcon(AceIcon.Aircraft);
+            var root = new AceRadialAction("root", AircraftName()).WithIcon(AceIcon.Aircraft).WithStatus(CentreStatus);
             root.Add(Flight());
             root.Add(Lights());
             root.Add(Weapons());
+            root.Add(Targets());
             root.Add(Defence());
             root.Add(View());
             root.Add(Support());
             root.Add(Radio());
             root.Add(Comms());
+            root.Add(Wing());
             return root;
+        }
+
+        /// <summary>The centre's live line: fuel, gear, selected targets and wing size at a glance.</summary>
+        private static AceRadialStatus CentreStatus()
+        {
+            if (!TryAircraft(out Aircraft a)) return AceRadialStatus.None;
+            float fuel = Math.Max(0f, Math.Min(1f, a.fuelLevel));
+            string line = "FUEL " + (int)Math.Round(fuel * 100f) + "%";
+            if (a.gearState == LandingGear.GearState.LockedExtended) line += " · GEAR DN";
+            else if (a.gearState == LandingGear.GearState.Extending || a.gearState == LandingGear.GearState.Retracting) line += " · GEAR MOVING";
+            int targets = TargetCount();
+            if (targets > 0) line += " · " + targets + " TGT";
+            int wing = Service<IWingOrders>()?.Members ?? 0;
+            if (wing > 0) line += " · WING " + wing;
+            return new AceRadialStatus(line, fuel < 0.2f ? AceTone.Caution : AceTone.Normal);
         }
 
         // ------------------------------------------------------------------ helpers

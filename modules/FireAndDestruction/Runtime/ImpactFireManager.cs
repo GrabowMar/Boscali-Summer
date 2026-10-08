@@ -31,6 +31,7 @@ namespace BoscaliSummer.Fire
             public float MarkRadius;
             public float TreeClearBlastRadius;
             public float ScarDiameter;
+            public FireFrontCell Cell;
         }
 
         private struct VehicleExplosionEvent
@@ -63,6 +64,12 @@ namespace BoscaliSummer.Fire
             public MapBuilding BurningMapBuilding;
             public FireVisualPool.Visual Visual;
             public FuelDepotSmokePool.Visual BuildingSmoke;
+            public FireFrontCell Cell;
+            public int TriedEdges;
+            public int JoinedEdges;
+            public bool SmokeOwner = true;
+            public GlobalPosition SmokePosition;
+            public Vector2 SmokeExtents;
         }
 
         public static ImpactFireManager Instance { get; private set; }
@@ -96,8 +103,13 @@ namespace BoscaliSummer.Fire
         private ServiceRegistry services;
         private float nextTick;
         private int impactSequence;
-        private int scorchSequence;
         private int spreadBudget;
+        private int spreadCursor;
+        private bool topologyDirty;
+        private readonly int[] componentRoots = new int[FireAndDestructionSettings.MaximumFireSites];
+        private readonly Dictionary<long, int> activeForestCells = new Dictionary<long, int>(FireAndDestructionSettings.MaximumFireSites);
+        private readonly Dictionary<long, float> forestCooldowns = new Dictionary<long, float>(256);
+        private const int MaximumForestHistory = 4096;
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
@@ -129,6 +141,9 @@ namespace BoscaliSummer.Fire
             scorches.Clear();
             cellCooldowns.Clear();
             vehicleCooldowns.Clear();
+            forestCooldowns.Clear();
+            activeForestCells.Clear();
+            spreadCursor = 0; topologyDirty = false;
             for (int i = 0; i < fires.Count; i++)
             {
                 visualPool.Release(fires[i].Visual);
@@ -141,7 +156,6 @@ namespace BoscaliSummer.Fire
             burnScars.Clear();
             TerrainProbeCache.Clear();
             impactSequence = 0;
-            scorchSequence = 0;
             if (indexRoutine != null) StopCoroutine(indexRoutine);
             indexRoutine = StartCoroutine(RebuildIndexDelayed());
         }
@@ -237,7 +251,8 @@ namespace BoscaliSummer.Fire
             {
                 ScorchMark scorch = scorches.Dequeue();
                 burnMarks |= QueueBurnMark(scorch);
-                if (scorch.ScarDiameter > 0f)
+                if (scorch.Cell != null) burnScars.StampForest(scorch.Position, scorch.Cell);
+                else if (scorch.ScarDiameter > 0f)
                     burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
             }
             if (burnMarks) FlushBurnMarks();
@@ -436,18 +451,18 @@ namespace BoscaliSummer.Fire
         private void Ignite(GlobalPosition position, float now, bool forest, int generation = 0,
             bool mergeExisting = true, Building burningBuilding = null, MapBuilding burningMapBuilding = null)
         {
-            if (mergeExisting)
+            long forestKey = 0;
+            if (forest)
             {
-                // Forest spread candidates are deliberately wind-biased and can be farther
-                // apart than the ordinary impact merge radius. Tie the forest window to the
-                // configured spread distance so those candidates feed one expanding front
-                // instead of leaving a row of unrelated columns. Cap it to avoid merging
-                // separate stands across an entire valley on heavily tuned configs.
-                float mergeRadius = forest
-                    ? Mathf.Min(240f, Mathf.Max(
-                        Fire.FireMergeRadius * 1.8f,
-                        Fire.FireSpreadDistance * 1.36f))
-                    : Fire.FireMergeRadius;
+                forestKey = FireFrontCell.Locate(position.x, position.z);
+                FireFrontCell.Point seed = FireFrontCell.Seed((int)(forestKey >> 32), (int)forestKey);
+                var candidate = new GlobalPosition(seed.X, position.y, seed.Z);
+                if (!forestIndex.Contains(candidate) ||
+                    !TrySnapForestFireToGround(candidate, ImpactGroundSnapDrop + FireFrontCell.Spacing, out position)) return;
+            }
+            if (mergeExisting || forest)
+            {
+                float mergeRadius = Fire.FireMergeRadius;
                 float mergeSq = mergeRadius * mergeRadius;
                 for (int i = 0; i < fires.Count; i++)
                 {
@@ -458,27 +473,19 @@ namespace BoscaliSummer.Fire
                         fires[i].BurningBuilding != burningBuilding) continue;
                     if (burningMapBuilding != null && fires[i].BurningMapBuilding != null &&
                         fires[i].BurningMapBuilding != burningMapBuilding) continue;
-                    if ((fires[i].Position - position).sqrMagnitude <= mergeSq)
+                    if (forest ? fires[i].Cell?.Key == forestKey : (fires[i].Position - position).sqrMagnitude <= mergeSq)
                     {
                         fires[i].Expires = Mathf.Max(fires[i].Expires, now + Fire.FireLifetime * 0.65f);
                         if (forest)
                         {
-                            float sourceDistance = (fires[i].Position - position).magnitude;
-                            // Scale from the actual front advance, not merely the number of
-                            // merged events. A 70 m downwind spot fire must visibly widen the
-                            // connected flame bed or it reads as an unchanged point fire.
-                            float distanceScale = Mathf.Clamp(1f + sourceDistance / 62f, 1f, 2.65f);
-                            fires[i].ClusterScale = Mathf.Min(3f,
-                                Mathf.Max(fires[i].ClusterScale + 0.12f, distanceScale));
-                            fires[i].Visual?.SetClusterScale(fires[i].ClusterScale);
-                            fires[i].BuildingSmoke?.SetForestClusterScale(fires[i].ClusterScale);
-                            QueueForestScorch(position, fires[i].ClusterScale);
+                            // Refresh this cell only: impacts in adjacent cells start a real
+                            // new section instead of inflating a distant point emitter.
+                            forestCooldowns[forestKey] = fires[i].Expires + Fire.FireLifetime;
                             ModNet.BroadcastFire(
                                 fires[i].Position, fires[i].Expires - now, true, fires[i].ClusterScale);
                             if (Diagnostics.VerboseLogging.Value)
                                 Plugin.Logger.LogInfo($"Merged forest ignition into fire front at {fires[i].Position}; " +
-                                    $"source distance={(fires[i].Position - position).magnitude:0.0}m, " +
-                                    $"cluster scale={fires[i].ClusterScale:0.00}.");
+                                    $"cell={forestKey}.");
                         }
                         if (burningBuilding != null) fires[i].BurningBuilding = burningBuilding;
                         if (burningMapBuilding != null)
@@ -493,6 +500,14 @@ namespace BoscaliSummer.Fire
                 }
             }
             if (fires.Count >= Fire.MaxActiveFires) return;
+            if (forest && forestCooldowns.TryGetValue(forestKey, out float burnedUntil) && now < burnedUntil) return;
+            if (forest && forestCooldowns.Count >= MaximumForestHistory)
+            {
+                expiredCooldownCells.Clear();
+                foreach (var entry in forestCooldowns) if (entry.Value <= now) expiredCooldownCells.Add(entry.Key);
+                for (int i = 0; i < expiredCooldownCells.Count; i++) forestCooldowns.Remove(expiredCooldownCells[i]);
+                if (forestCooldowns.Count >= MaximumForestHistory) return;
+            }
 
             uint spreadSeed = Deterministic.Hash(
                 Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), generation, 0x2f6e2b1);
@@ -529,10 +544,25 @@ namespace BoscaliSummer.Fire
                 if (site.BurningMapBuilding == null) site.BurningMapBuilding = nearbyMapBuilding;
             }
             fires.Add(site);
-            if (forest) QueueForestScorch(position, 1f);
+            if (forest)
+            {
+                SetupForestCell(site);
+                forestCooldowns[forestKey] = site.Expires + Fire.FireLifetime;
+                QueueForestScorch(site);
+            }
             else QueueScorch(position, 1f);
             ModNet.BroadcastFire(position, Fire.FireLifetime, forest, 1f);
             if (Diagnostics.VerboseLogging.Value) Plugin.Logger.LogInfo("Ignited fire at " + position);
+        }
+
+        private void SetupForestCell(FireSite site)
+        {
+            site.Cell = FireFrontCell.FromKey(FireFrontCell.Locate(site.Position.x, site.Position.z));
+            TerrainProbeCache.TryProbe(site.Position, out _, out Vector3 normal);
+            site.Visual?.SetForestCell(site.Cell, normal);
+            site.SmokePosition = site.Position;
+            site.SmokeExtents = Vector2.one * FireFrontCell.Spacing * 0.5f;
+            topologyDirty = true;
         }
 
         internal void ReceiveIgnition(
@@ -543,14 +573,14 @@ namespace BoscaliSummer.Fire
             float original = Fire.FireLifetime;
             for (int i = 0; i < fires.Count; i++)
             {
-                if ((fires[i].Position - position).sqrMagnitude >= 16f) continue;
+                if (fires[i].Forest != forest || (forest
+                    ? fires[i].Cell?.Key != FireFrontCell.Locate(position.x, position.z)
+                    : (fires[i].Position - position).sqrMagnitude >= 16f)) continue;
                 fires[i].Expires = Mathf.Max(fires[i].Expires, now + remainingLifetime);
                 fires[i].Forest = forest;
                 fires[i].ClusterScale = Mathf.Max(fires[i].ClusterScale, clusterScale);
-                fires[i].Visual?.Configure(forest, fires[i].Position);
                 fires[i].Visual?.SetClusterScale(fires[i].ClusterScale);
                 fires[i].BuildingSmoke?.SetForestClusterScale(fires[i].ClusterScale);
-                if (forest) QueueForestScorch(position, fires[i].ClusterScale);
                 return;
             }
             // A late join can receive fire snapshots before the host setting handshake.
@@ -574,7 +604,7 @@ namespace BoscaliSummer.Fire
             };
             site.Visual?.SetClusterScale(site.ClusterScale);
             fires.Add(site);
-            if (forest) QueueForestScorch(position, site.ClusterScale);
+            if (forest) { SetupForestCell(site); QueueForestScorch(site); }
             else QueueScorch(position, 1f);
         }
 
@@ -589,12 +619,14 @@ namespace BoscaliSummer.Fire
 
         private void UpdateFires()
         {
+            Camera camera = GameManager.IsHeadless ? null : SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+            burnScars.UpdateCulling(camera);
             if (fires.Count == 0) return;
+            if (topologyDirty) RefreshForestTopology();
             float now = Time.timeSinceLevelLoad;
             Vector3 wind = NetworkSceneSingleton<LevelInfo>.i != null
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
                 : Vector3.zero;
-            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
             Vector3 camPos = camera != null ? camera.transform.position : Vector3.zero;
             int nearestA = -1, nearestB = -1, nearestC = -1;
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
@@ -608,12 +640,11 @@ namespace BoscaliSummer.Fire
                 FireSite site = fires[i];
                 if (now >= site.Expires)
                 {
-                    if (site.Forest)
-                        QueueForestScorch(site.Position, site.ClusterScale, wind);
                     DemolishBurnedBuilding(site);
                     visualPool.Release(site.Visual);
                     fuelDepotSmokePool.Release(site.BuildingSmoke);
                     fires.RemoveAt(i);
+                    topologyDirty = true;
                     continue;
                 }
 
@@ -636,7 +667,7 @@ namespace BoscaliSummer.Fire
                         wind);
                     if (site.BuildingSmoke != null)
                     {
-                        site.BuildingSmoke.SetPosition(site.Position);
+                        site.BuildingSmoke.SetPosition(site.Forest ? site.SmokePosition : site.Position);
                         site.BuildingSmoke.SetForestClusterScale(site.ClusterScale);
                         site.BuildingSmoke.SetPhase(
                             Mathf.Max(0f, now - site.Born),
@@ -644,20 +675,17 @@ namespace BoscaliSummer.Fire
                             wind);
                     }
                 }
-                TrySpread(site, now, wind);
-                if (now >= site.NextSmoke)
+                if (site.SmokeOwner && now >= site.NextSmoke)
                 {
                     // A network client can receive an ignition before the building's
                     // colliders finish loading. Retry the association lazily so it still
                     // gets the narrow tall building plume instead of the forest profile.
-                    if (site.BurningBuilding == null && site.BurningMapBuilding == null)
+                    if (!site.Forest && site.BurningBuilding == null && site.BurningMapBuilding == null)
                     {
                         Vector3 local = site.Position.ToLocalPosition();
                         FindBuildings(local, out site.BurningBuilding, out site.BurningMapBuilding);
                     }
                     bool buildingFire = site.BurningBuilding != null || site.BurningMapBuilding != null;
-                    site.Forest = !buildingFire;
-                    site.Visual?.Configure(site.Forest, site.Position);
                     if (site.BuildingSmoke == null && !GameManager.IsHeadless && smokeAcquireBudget > 0 && !shouldSleep)
                     {
                         // Both urban and forest sites now use smoke-only copies of the actual
@@ -665,9 +693,9 @@ namespace BoscaliSummer.Fire
                         // three-source profile rather than the legacy ContactSmoke catalogue.
                         Vector2 halfExtents = buildingFire
                             ? GetBuildingHalfExtents(site.BurningBuilding, site.BurningMapBuilding)
-                            : GetForestSmokeHalfExtents(site.Position);
+                            : site.SmokeExtents;
                         site.BuildingSmoke = fuelDepotSmokePool.Acquire(
-                            site.Position, halfExtents,
+                            site.Forest ? site.SmokePosition : site.Position, halfExtents,
                             site.Forest
                                 ? FuelDepotSmokePool.SmokeProfile.Forest
                                 : FuelDepotSmokePool.SmokeProfile.Building);
@@ -694,67 +722,130 @@ namespace BoscaliSummer.Fire
 
             for (int i = 0; i < fires.Count; i++)
                 fires[i].Visual?.SetLight(i == nearestA || i == nearestB || i == nearestC);
+            // Round-robin keeps newly added/high-index sites from monopolising the probe
+            // budget. Only sites present at tick start may spread in this tick.
+            int count = fires.Count;
+            if (count > 0)
+            {
+                int start = spreadCursor % count, processed = 0;
+                for (; processed < count && spreadBudget > 0; processed++)
+                    TrySpread(fires[(start + processed) % count], now, wind);
+                spreadCursor = (start + Mathf.Max(1, processed)) % count;
+            }
+            if (topologyDirty) RefreshForestTopology();
+        }
+
+        private void RefreshForestTopology()
+        {
+            topologyDirty = false;
+            activeForestCells.Clear();
+            for (int i = 0; i < fires.Count; i++)
+            {
+                componentRoots[i] = i;
+                if (fires[i].Cell != null) activeForestCells[fires[i].Cell.Key] = i;
+            }
+            for (int i = 0; i < fires.Count; i++)
+            {
+                FireSite site = fires[i];
+                if (site.Cell == null) continue;
+                int mask = 0;
+                for (int edge = 0; edge < site.Cell.Count; edge++)
+                {
+                    if (!activeForestCells.TryGetValue(site.Cell.Neighbours[edge], out int j)) continue;
+                    mask |= 1 << edge;
+                    int a = ComponentRoot(i), b = ComponentRoot(j);
+                    if (a != b) componentRoots[Mathf.Max(a, b)] = Mathf.Min(a, b);
+                }
+                // A burnt-out neighbour leaves consumed ground, not a new fuel boundary.
+                // Remember observed joins so the fire does not turn back into its ashes.
+                site.JoinedEdges |= mask;
+                site.Visual?.SetFrontEdges(site.JoinedEdges);
+            }
+            for (int i = 0; i < fires.Count; i++)
+            {
+                FireSite site = fires[i];
+                if (site.Cell == null) continue;
+                site.SmokeOwner = ComponentRoot(i) == i;
+                if (!site.SmokeOwner)
+                {
+                    fuelDepotSmokePool.Release(site.BuildingSmoke); site.BuildingSmoke = null;
+                    continue;
+                }
+                Vector3 sum = Vector3.zero;
+                float minX = float.MaxValue, minZ = float.MaxValue, maxX = float.MinValue, maxZ = float.MinValue;
+                int members = 0;
+                for (int j = 0; j < fires.Count; j++)
+                {
+                    if (ComponentRoot(j) != i || fires[j].Cell == null) continue;
+                    FireSite member = fires[j]; sum += member.Position.ToLocalPosition(); members++;
+                    for (int v = 0; v < member.Cell.Count; v++)
+                    {
+                        float x = member.Position.x + member.Cell.Vertices[v].X;
+                        float z = member.Position.z + member.Cell.Vertices[v].Z;
+                        minX = Mathf.Min(minX, x); maxX = Mathf.Max(maxX, x);
+                        minZ = Mathf.Min(minZ, z); maxZ = Mathf.Max(maxZ, z);
+                    }
+                }
+                site.SmokePosition = (sum / Mathf.Max(1, members)).ToGlobalPosition();
+                site.SmokeExtents = new Vector2((maxX - minX) * 0.5f, (maxZ - minZ) * 0.5f);
+                site.ClusterScale = Mathf.Clamp(1f + Mathf.Sqrt(members - 1) * 0.35f, 1f, 3f);
+                site.BuildingSmoke?.SetForestClusterScale(site.ClusterScale);
+                site.BuildingSmoke?.SetForestFootprint(site.SmokeExtents);
+                if (site.BuildingSmoke == null) site.NextSmoke = Time.timeSinceLevelLoad;
+            }
+        }
+
+        private int ComponentRoot(int index)
+        {
+            while (componentRoots[index] != index) index = componentRoots[index];
+            return index;
         }
 
         private void TrySpread(FireSite source, float now, Vector3 wind)
         {
-            if (!source.Forest || !Fire.FireSpreadEnabled || !GameAccess.IsServer()) return;
-            if (source.Generation >= Fire.FireSpreadGenerations ||
-                source.SpreadAttempts >= 3 || now < source.NextSpread) return;
-            // Leave the attempt unspent when this tick's probe budget is gone; the site is
-            // still due and will be considered again on the next simulation tick.
-            if (spreadBudget <= 0) return;
+            if (source.Cell == null || !Fire.FireSpreadEnabled || !GameAccess.IsServer() ||
+                fires.Count >= Fire.MaxActiveFires || source.Generation >= Fire.FireSpreadGenerations ||
+                source.SpreadAttempts >= 3 || now < source.NextSpread || spreadBudget <= 0) return;
 
-            source.SpreadAttempts++;
-            uint seed = Deterministic.Hash(
-                Mathf.RoundToInt(source.Position.x), Mathf.RoundToInt(source.Position.z),
-                source.Generation, source.SpreadAttempts * 104729);
-            float intervalJitter = 0.82f + Deterministic.UnitFloat(seed ^ 0x9e3779b9u) * 0.48f;
-            source.NextSpread = now + Fire.FireSpreadInterval * intervalJitter;
-
-            Vector3 windDirection = new Vector3(wind.x, 0f, wind.z);
-            if (windDirection.sqrMagnitude < 0.25f)
+            // Exhaust invalid/burnt edges without spending a successful advance. The mask
+            // bounds every cell to one probe per edge; no six-point retry spiral per tick.
+            for (int option = 0; option < source.Cell.Count && spreadBudget > 0; option++)
             {
-                float calmAngle = Deterministic.UnitFloat(seed ^ 0x85ebca6bu) * Mathf.PI * 2f;
-                windDirection = new Vector3(Mathf.Cos(calmAngle), 0f, Mathf.Sin(calmAngle));
-            }
-            else windDirection.Normalize();
-            Vector3 crosswind = new Vector3(-windDirection.z, 0f, windDirection.x);
-
-            float baseDistance = Fire.FireSpreadDistance;
-            for (int option = 0; option < 6; option++)
-            {
-                if (spreadBudget <= 0) return;
+                int best = -1; float score = float.MinValue;
+                for (int edge = 0; edge < source.Cell.Count; edge++)
+                {
+                    if ((source.TriedEdges & (1 << edge)) != 0) continue;
+                    float value = source.Cell.EdgeScore(edge, wind.x, wind.z, source.SpreadAttempts);
+                    if (value > score) { best = edge; score = value; }
+                }
+                if (best < 0) { source.NextSpread = float.MaxValue; return; }
+                source.TriedEdges |= 1 << best;
+                long key = source.Cell.Neighbours[best];
+                if (forestCooldowns.TryGetValue(key, out float burnedUntil) && now < burnedUntil) continue;
                 spreadBudget--;
-                uint optionSeed = Deterministic.Hash((int)seed, option, source.Generation, 0x165667b1);
-                float lateral = Deterministic.UnitFloat(optionSeed) * 2f - 1f;
-                Vector3 direction = (windDirection + crosswind * lateral * 0.9f).normalized;
-                float advance = baseDistance;
-                float distance = advance *
-                    (0.9f + Deterministic.UnitFloat(optionSeed ^ 0xc2b2ae35u) * 0.45f);
-                GlobalPosition candidate = source.Position + direction * distance;
-                if (!forestIndex.Contains(candidate) || !SeparatedFromExisting(candidate, baseDistance * 0.38f)) continue;
-
-                GlobalPosition grounded;
-                if (!TrySnapForestFireToGround(candidate, Fire.FireSpreadDistance, out grounded)) continue;
-                // Spread must create a new visible section of the fire line. Merging here
-                // used the same large radius intended for unrelated impact consolidation,
-                // so every 60-90 m child was swallowed back into its parent and only made
-                // the original particle system slightly larger. The generation/site caps
-                // already bound this to at most seven logical sites per original ignition.
+                FireFrontCell.Point seed = FireFrontCell.Seed((int)(key >> 32), (int)key);
+                FireFrontCell.Point a = source.Cell.Vertices[best], b = source.Cell.Vertices[(best + 1) % source.Cell.Count];
+                float edgeX = source.Position.x + (a.X + b.X) * 0.5f;
+                float edgeZ = source.Position.z + (a.Z + b.Z) * 0.5f;
+                // Require fuel on the crossing as well as in the destination. This makes
+                // gaps, shorelines and cleared strips stop the front instead of being jumped.
+                if (!forestIndex.ContainsWithin(edgeX, edgeZ, 8f) ||
+                    !forestIndex.ContainsWithin((edgeX + seed.X) * 0.5f, (edgeZ + seed.Z) * 0.5f, 12f) ||
+                    !forestIndex.Contains(seed.X, seed.Z)) continue;
+                var candidate = new GlobalPosition(seed.X, source.Position.y, seed.Z);
+                if (!TrySnapForestFireToGround(candidate, FireFrontCell.Spacing * 1.5f, out GlobalPosition grounded)) continue;
+                float slope = (grounded.y - source.Position.y) / FireFrontCell.Spacing;
+                if (Mathf.Abs(slope) > 1.2f) continue;
+                int before = fires.Count;
                 Ignite(grounded, now, true, source.Generation + 1, false);
-                if (Diagnostics.VerboseLogging.Value)
-                    Plugin.Logger.LogInfo($"Fire spread generation {source.Generation + 1} to {grounded}");
+                if (fires.Count == before) return;
+                source.SpreadAttempts++;
+                float uphill = Mathf.Clamp(slope, -0.6f, 0.6f);
+                source.NextSpread = now + Fire.FireSpreadInterval * Mathf.Clamp(1f - score * 0.22f - uphill * 0.3f, 0.55f, 1.5f);
                 return;
             }
-        }
-
-        private bool SeparatedFromExisting(GlobalPosition position, float minimumDistance)
-        {
-            float minimumSq = minimumDistance * minimumDistance;
-            for (int i = 0; i < fires.Count; i++)
-                if ((fires[i].Position - position).sqrMagnitude < minimumSq) return false;
-            return true;
+            // If budget ran out, preserve the still-untried edges for the next fair tick.
+            if (spreadBudget > 0) source.NextSpread = now + Fire.FireSpreadInterval;
         }
 
         private void PruneCellCooldowns(float now)
@@ -783,53 +874,17 @@ namespace BoscaliSummer.Fire
             });
         }
 
-        /// <summary>
-        /// A lobe widens the ash bed and soot footprint around the core without a second
-        /// tree-clearing blast. Keeping removal to one bounded stamp per site is what stops
-        /// a forest fire from consuming a stand far larger than its visible flames.
-        /// </summary>
-        private void QueueScorchLobe(GlobalPosition position, float clusterScale, float sizeScale)
+        private void QueueForestScorch(FireSite site)
         {
-            if (scorches.Count >= MaximumScorchQueue) return;
-            float scale = Mathf.Clamp(clusterScale, 1f, 3f);
+            if (scorches.Count >= MaximumScorchQueue || site.Cell == null) return;
+            // One shared-edge polygon, one small tree-clear and one coarse native ash stamp.
+            // No lobes on ignition/merge/burnout and no repeated persistent decals.
             scorches.Enqueue(new ScorchMark
             {
-                Position = position,
-                MarkRadius = FireScorchPolicy.BurnMarkRadius(scale) * sizeScale,
-                TreeClearBlastRadius = 0f,
-                ScarDiameter = FireScorchPolicy.ScarDiameter(scale) * sizeScale
+                Position = site.Position, Cell = site.Cell,
+                MarkRadius = FireScorchPolicy.BurnMarkRadius(1f),
+                TreeClearBlastRadius = FireScorchPolicy.TreeClearBlastRadius(1f)
             });
-        }
-
-        private void QueueForestScorch(GlobalPosition position, float clusterScale = 1f, Vector3? wind = null)
-        {
-            Vector3 windVec = wind ?? (NetworkSceneSingleton<LevelInfo>.i != null
-                ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
-                : Vector3.zero);
-            Vector3 windDir = new Vector3(windVec.x, 0f, windVec.z);
-            float windMag = windDir.magnitude;
-            if (windMag > 0.1f) windDir /= windMag;
-            else windDir = Vector3.forward;
-            Vector3 crosswind = new Vector3(-windDir.z, 0f, windDir.x);
-
-            float scale = Mathf.Clamp(clusterScale, 1f, 3f);
-            float scar = FireScorchPolicy.ScarDiameter(scale);
-            QueueScorch(position, scale);
-
-            uint seed = Deterministic.Hash(
-                Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), 0x61a7, scorchSequence++);
-
-            // Two lighter lobes stretch the ash bed along and across the wind front. They
-            // carry no tree removal, so the consumed stand stays a compact hole while the
-            // gray burnt soil spreads with the front the way a nuclear stamp does. Offsets
-            // are fractions of the soot decal itself, so the three decals overlap into one
-            // ragged scar instead of scattering across the ash radius.
-            float downwindOffset = scar * FireScorchPolicy.ScarLobeDownwind *
-                Mathf.Lerp(0.8f, 1.2f, Deterministic.UnitFloat(seed));
-            float crossOffset = scar * FireScorchPolicy.ScarLobeCrosswind *
-                Mathf.Lerp(0.8f, 1.2f, Deterministic.UnitFloat(seed ^ 0x9e3779b9u));
-            QueueScorchLobe(position + windDir * downwindOffset, scale, 0.85f);
-            QueueScorchLobe(position + crosswind * crossOffset + windDir * (downwindOffset * 0.35f), scale, 0.78f);
         }
 
         private void FindBuildings(
@@ -954,16 +1009,6 @@ namespace BoscaliSummer.Fire
             }
             visibleRendererBuffer.Clear();
             return found;
-        }
-
-        private static Vector2 GetForestSmokeHalfExtents(GlobalPosition position)
-        {
-            float x = Mathf.PerlinNoise(position.x * 0.017f, position.z * 0.011f);
-            float z = Mathf.PerlinNoise(position.z * 0.019f, position.x * 0.013f);
-            // A wildfire plume rises from an area/front rather than a point source. The
-            // three pooled vanilla smoke cores start across this broader irregular base and
-            // then shear together with the wind as the logical cluster grows.
-            return new Vector2(Mathf.Lerp(22f, 35f, x), Mathf.Lerp(20f, 32f, z));
         }
 
         private void DemolishBurnedBuilding(FireSite site)

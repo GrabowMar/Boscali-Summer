@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace NOAvionics
 {
     /// <summary>
-    /// Floating window chrome (OPS window, event desk, planning window): own root canvas, draggable title bar,
+    /// Floating window chrome (OPS window, event desk): own root canvas, draggable title bar,
     /// close control, blur-behind (opt-in) or frosted glass, scrolling AvFlow body, footer.
     /// </summary>
     public sealed class AvWindow

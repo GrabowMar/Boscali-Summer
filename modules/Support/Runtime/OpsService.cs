@@ -203,6 +203,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ulong op = PlayerIdentity.Of(player);
             if (op == PlayerIdentity.None) return new OpResult(OpOutcome.Unavailable);
             if (!factions.TryGetValue(player.HQ, out FactionOps f)) return new OpResult(OpOutcome.Offline);
+            // OPS FRONTS S1b: the OPERATIONS bars are gone (the ASAT, ZERO-DAY and FOB programmes replace them); the effects stay and are started by the FrontService.
+            if (command.Kind != SpaceCommandKind.None) return new OpResult(OpOutcome.Unavailable);
             switch (command.Kind)
             {
                 case SpaceCommandKind.OpFund:
@@ -251,8 +253,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal bool FillState(Player viewer, OpsStateData into)
         {
-            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0;
+            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 0;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
+            Array.Clear(into.Geo, 0, into.Geo.Length);
             into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Log.Clear();
             if (viewer == null || viewer.HQ == null || !Enabled || !factions.TryGetValue(viewer.HQ, out FactionOps f))
             {

@@ -36,41 +36,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>
-        /// FIRES intel gate: a hostile (or unresolvable) HQ track near the grid spotted
-        /// within the window. Bounded scan with early exit; unknown owner fails closed.
-        /// </summary>
-        public static bool IntelFreshAt(FactionHQ owner, Vector3 local, float windowSeconds, float radiusMeters)
-        {
-            if (owner == null || owner.trackingDatabase == null) return false;
-            if (windowSeconds <= 0f || radiusMeters <= 0f) return false;
-            if (!float.IsFinite(windowSeconds) || !float.IsFinite(radiusMeters)) return false;
-            GlobalPosition grid = local.ToGlobalPosition();
-            float now = Time.timeSinceLevelLoad;
-            float squared = radiusMeters * radiusMeters;
-            int examined = 0;
-            foreach (TrackingInfo track in owner.trackingDatabase.Values)
-            {
-                if (track == null) continue;
-                if (++examined > IntelGate.MaxTracks) break;
-                if (!HostileOrUnknown(owner, track)) continue;
-                float age = now - track.lastSpottedTime;
-                if (age < 0f) age = 0f;
-                if (age > windowSeconds) continue;
-                float dx = track.lastKnownPosition.x - grid.x;
-                float dz = track.lastKnownPosition.z - grid.z;
-                if (dx * dx + dz * dz <= squared) return true;
-            }
-            return false;
-        }
-
-        private static bool HostileOrUnknown(FactionHQ owner, TrackingInfo track)
-        {
-            Unit unit;
-            if (!track.TryGetUnit(out unit) || unit == null) return true;
-            return unit.NetworkHQ != null && unit.NetworkHQ != owner;
-        }
-
         public static Airbase NearestOwnedAirbase(Player player, Vector3 local, out float distance)
         {
             Airbase closest = null;

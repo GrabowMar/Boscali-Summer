@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Core/Math/Deterministic.cs" Link="Deterministic.cs" />
+    <Compile Include="../../modules/FireAndDestruction/Domain/FireFrontCell.cs" Link="FireFrontCell.cs" />
+    <Compile Include="../../modules/FireAndDestruction/Runtime/ForestIndex.cs" Link="ForestIndex.cs" />
+  </ItemGroup>
+</Project>

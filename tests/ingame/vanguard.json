@@ -223,14 +223,6 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "battery",
-        "seconds": 10
-      }
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
         "action": "ground",
         "range": 6000
       },
@@ -412,13 +404,13 @@
     },
     {
       "check": "result_above",
-      "path": "deployed.ugvsSpawned",
+      "path": "deployed.turretsDeployed",
       "min": 1
     },
     {
-      "check": "result_below",
-      "path": "batch2.ugvsAlive",
-      "max": 0
+      "check": "result_above",
+      "path": "deployed.turretShots",
+      "min": 1
     },
     {
       "check": "result_above",

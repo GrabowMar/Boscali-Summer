@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Member(slot, phase, slotErrorM, string.IsNullOrEmpty(bingo) ? binding : string.IsNullOrEmpty(binding) ? bingo : bingo + " " + binding);
 
         public static string Member(int slot, string phase, float slotErrorM, string binding) =>
-            string.Format(CultureInfo.InvariantCulture, "{0}  {1,-6}{2,5:0}m  {3}", slot + 2, phase, slotErrorM, binding)
+            string.Format(CultureInfo.InvariantCulture, "{0}  {1,-6} {2,5:0}m  {3}", slot + 2, phase, slotErrorM, binding)
                 .TrimEnd();
 
         public static string Autopilot(in HoldSpec h, bool lateralOverride, bool verticalOverride) =>

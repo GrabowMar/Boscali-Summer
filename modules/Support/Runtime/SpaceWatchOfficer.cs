@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
 using UnityEngine;
@@ -45,7 +46,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < factions.Count; i++)
             {
                 FactionRun run = RunFor(factions[i]);
-                if (run == null || !run.Brain.Policy.Due(missionNow)) continue;
+                if (run == null) continue;
+                RepositionBirds(factions[i], run, missionNow);
+                if (!run.Brain.Policy.Due(missionNow)) continue;
                 if (run.Host.Humans == 0)
                 {
                     // A faction with no human has no OVERLORD: its scan would stamp the AI faction's native tracking database
@@ -54,6 +57,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     run.Brain.Policy.Defer(missionNow, 2f); // nobody home: look again in two seconds, not every frame
                     continue;
                 }
+                if (manager.Fronts != null) run.Brain.Policy.Bias = manager.Fronts.BiasFor(factions[i], Domain.Fronts.Front.Space); // the SPACE directive and focus pin steer the director
                 try { run.Brain.Step(run.Host, missionNow); }
                 catch (Exception e)
                 {
@@ -62,6 +66,34 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Plugin.Logger?.LogWarning("[Support.Overlord] " + run.Host.Name + " step failed: " + e.Message);
                 }
             }
+        }
+
+        /// <summary>
+        /// The SPACE director moves a bird that does not cover where the faction's effort is: the focus pin, else the centre of the contacts it has revealed. A bird burns at most
+        /// once per <see cref="GeoSpace.DirectorGap"/> and only with fuel above <see cref="GeoSpace.DirectorMinFuel"/> %; every faction (AI included) does it.
+        /// </summary>
+        private void RepositionBirds(FactionHQ owner, FactionRun run, float now)
+        {
+            if (now < run.NextGeoLook) return;
+            run.NextGeoLook = now + 5f;
+            if (!service.TryWatchParts(owner, out SpaceState state, out SpaceObservations observations, out _)) return;
+            float x, z;
+            DirectorBias bias = manager.Fronts != null ? manager.Fronts.BiasFor(owner, Domain.Fronts.Front.Space) : default;
+            if (bias.HasFocus) { x = bias.FocusX; z = bias.FocusZ; }
+            else
+            {
+                run.Reveals.Clear();
+                observations.Contacts.CopyReveals(now, run.Reveals);
+                if (run.Reveals.Count == 0) return;
+                x = z = 0f;
+                for (int i = 0; i < run.Reveals.Count; i++) { x += run.Reveals[i].X; z += run.Reveals[i].Z; }
+                x /= run.Reveals.Count; z /= run.Reveals.Count;
+            }
+            Vector2 span = Core.Game.TheaterFrame.Resolve();
+            float u = GeoSpace.U(x, span.x), v = GeoSpace.V(z, span.y);
+            int bird = GeoSpace.PickBird(state, now, run.RestUntil, u, v);
+            if (bird < 0) return;
+            if (service.TryRelocate(owner, bird, u, v, now, out _) == GeoSpace.Refusal.None) run.RestUntil[bird] = now + GeoSpace.DirectorGap;
         }
 
         public void ResetForScene()
@@ -84,6 +116,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             public readonly WatchOfficerBrain Brain = new WatchOfficerBrain();
             public readonly Host Host;
+            public readonly float[] RestUntil = new float[SpaceRules.BirdCount];
+            public readonly List<SpaceContact> Reveals = new List<SpaceContact>(SpaceContacts.MaxReveals);
+            public float NextGeoLook;
             public FactionRun(SpaceService service, SupportManager manager, FactionHQ owner) { Host = new Host(service, manager, owner); }
         }
 

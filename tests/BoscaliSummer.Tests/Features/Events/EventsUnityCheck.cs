@@ -47,6 +47,17 @@ public static class EventsUnityCheck
             new GameObject("Events", typeof(EventSystem));
             Directory.CreateDirectory("renders");
 
+            var eventTextures = new HashSet<Texture>();
+            foreach (EventDefinition definition in EventCatalog.All)
+            {
+                Sprite art = EventArtCache.Get(definition.IconKey, "default");
+                Check(art != null && art.rect.width == 1024 && art.rect.height == 576,
+                    definition.Id + " must load a high-resolution dispatch image");
+                Check(art != null && eventTextures.Add(art.texture),
+                    definition.Id + " must have its own event texture");
+            }
+            EventArtCache.Clear();
+
             foreach (float height in new[] { 420f, 596f, 896f }) CheckConsole(height);
             CheckArchive(false, new Vector2(1920f, 1080f), "1080");
             CheckArchive(true, new Vector2(1920f, 1080f), "1080");
@@ -227,6 +238,7 @@ public static class EventsUnityCheck
             ev.LocalSupportCooldownMultiplier = Def("industrial_surge").SupportCooldownMultiplier;
             ev.LocalTargeted = true;
             RefreshPanel(f);
+            CheckImageExposure(f);
             Snapshot(f, "active");
             Check(ResponseSectionShown(f), "a priced dispatch must show the response desk");
 
@@ -252,6 +264,7 @@ public static class EventsUnityCheck
             ev.LocalResponse = EventSelector.ResponseKind(superMultiplier) == EventResponseKind.Leverage
                 ? EventResponseKind.Leverage : EventResponseKind.Contain;
             RefreshPanel(f);
+            CheckImageExposure(f);
             Snapshot(f, "super");
             AvControl[] inForce = Array.FindAll(f.Console.Root.GetComponentsInChildren<AvControl>(true), c => c.Label == "IN FORCE");
             Check(inForce.Length >= 1, "the chosen route must read IN FORCE");
@@ -289,6 +302,18 @@ public static class EventsUnityCheck
             Check(!ResponseSectionShown(f), "the response desk must close when the dispatch ends");
         }
         finally { f.Rig.Dispose(); Object.DestroyImmediate(f.Panel.gameObject); Object.DestroyImmediate(f.Events.gameObject); }
+    }
+
+    private static void CheckImageExposure(PanelFixture f)
+    {
+        var hero = (AvPart)typeof(EventsMfdPanel).GetField("hero", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(f.Panel);
+        var plate = (RectTransform)hero.Rect.Find("Plate");
+        var fade = (RectTransform)hero.Rect.Find("ArtFade");
+        var art = plate.Find("Art").GetComponent<RawImage>();
+        Check(art.uvRect.width * art.uvRect.height >= 0.999f,
+            "the active event image must retain its entire source frame");
+        Check((plate.anchoredPosition.y - fade.anchoredPosition.y) / plate.rect.height >= 0.8f - 0.001f,
+            "at least four fifths of the active artwork must remain above the fade");
     }
 
     private static bool ResponseSectionShown(PanelFixture f)
@@ -539,16 +564,6 @@ public static class EventsUnityCheck
         foreach (Transform s in root.GetComponentsInChildren<Transform>(true))
             if (s.name.StartsWith("Section ") && s.Find("Icon None") != null)
                 Failures.Add(where + ": section without icon " + s.name);
-    }
-
-    private static bool CanvasOn(TMP_Text t)
-    {
-        for (Transform x = t.transform; x != null; x = x.parent)
-        {
-            var c = x.GetComponent<Canvas>();
-            if (c != null && !c.enabled) return false;
-        }
-        return true;
     }
 
     private static Color BackgroundOf(TMP_Text t, Color ground)

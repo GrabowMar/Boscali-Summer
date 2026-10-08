@@ -95,20 +95,20 @@ namespace BoscaliSummer.Modules.Support.Presentation
             LastWordsAt = -100f;
         }
 
-        /// <summary>The shared pre-flight: busy, unlocked, thawed, off cooldown, affordable. Says why and returns false.</summary>
+        /// <summary>The shared pre-flight: busy, authorised and ready, off cooldown, affordable. Says why and returns false.</summary>
         private bool Check(SupportActionId id)
         {
-            bool free = id == SupportActionId.JtacUnlase; // UNLASE is free: no cooldown, no freeze
+            bool free = id == SupportActionId.JtacUnlase; // UNLASE is free: no cooldown, no gate
             if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return false; }
-            if (!manager.Unlocked(id, out string unlock)) { Say(CallWords.Refusal(CallRefusal.Locked, unlock: unlock), AvUiCue.Caution); return false; }
-            if (!free && manager.LocalFrozenSeconds > 0) { Say(CallWords.Refusal(CallRefusal.Frozen, seconds: manager.LocalFrozenSeconds), AvUiCue.Caution); return false; }
-            if (!free && manager.LocalCooldownRemaining > 0.5f)
+            string locked = free ? "" : manager.LockReason(id);
+            if (locked.Length > 0) { Say(CallWords.Refusal(CallRefusal.Locked, unlock: locked), AvUiCue.Caution); return false; }
+            if (!free && manager.LocalCooldownRemaining(id) > 0.5f)
             {
-                Say(CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(manager.LocalCooldownRemaining)), AvUiCue.Caution);
+                Say(CallWords.Refusal(CallRefusal.Cooldown, seconds: Mathf.CeilToInt(manager.LocalCooldownRemaining(id))), AvUiCue.Caution);
                 return false;
             }
             int cost = manager.Quote(id).Cost;
-            if (manager.LocalCredit + 0.001f < cost) { Say(CallWords.Refusal(CallRefusal.LowCredit, need: cost), AvUiCue.Caution); return false; }
+            if (!free && !manager.BypassRequirements && manager.LocalAllocation + 0.001f < cost) { Say(CallWords.Refusal(CallRefusal.LowCredit, need: cost), AvUiCue.Caution); return false; }
             return true;
         }
 
@@ -212,7 +212,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Say(TaskedWords.Of(state.Gate, detail), AvUiCue.Caution);
                 return false;
             }
-            if (post.Price > 0 && manager.LocalCredit + 0.001f < post.Price)
+            if (post.Price > 0 && manager.LocalAllocation + 0.001f < post.Price)
             {
                 Say(CallWords.Refusal(CallRefusal.LowCredit, need: post.Price), AvUiCue.Caution);
                 return false;
@@ -237,7 +237,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 arm.Clear();
                 manager.Disarm(); // one armed intent at a time: a STANDARD arm gives way
                 Say("ARMED · TASKED " + (post.Points != null ? post.Points.Length : 0) + " TARGET" +
-                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " CR" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
+                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " ALLOC" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
                 return;
             }
             // No aim is sent: the host claims the post's own stored ground point and prices it itself.
@@ -306,7 +306,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>Host answer: called by SupportManager.ReceiveResult with the request id and the result words.</summary>
         internal void Answer(int requestId, bool accepted, string words)
         {
-            if (!request.Resolve(requestId)) return; // late answer after the local timeout: the credit message is the truth
+            if (!request.Resolve(requestId)) return; // late answer after the local timeout: the host reply is the truth
             Say(accepted ? "SHOT · " + words : words, accepted ? AvUiCue.Confirm : AvUiCue.Caution);
         }
 

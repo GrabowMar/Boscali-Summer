@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 if (sources[i] == null || !sources[i].isPlaying) continue;
                 // A sounding arrival follows the current view, including a cockpit switch.
                 sources[i].volume = Mathf.MoveTowards(sources[i].volume,
-                    LightningMath.ThunderGain(distances[i], cockpit ? 0.38f : 0.7f), dt * 1.5f);
+                    LightningMath.ThunderGain(distances[i], cockpit ? 0.55f : 0.7f), dt * 1.5f);
                 filters[i].cutoffFrequency = Mathf.MoveTowards(filters[i].cutoffFrequency,
                     EnvironmentAudioMath.ThunderCutoff(distances[i], cockpit), dt * 9000f);
             }
@@ -65,8 +65,11 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 source.outputAudioMixerGroup = mixer;
                 distances[free] = arrival.Distance;
                 filters[free].cutoffFrequency = EnvironmentAudioMath.ThunderCutoff(arrival.Distance, cockpit);
-                source.volume = LightningMath.ThunderGain(arrival.Distance, cockpit ? 0.38f : 0.7f);
+                source.volume = LightningMath.ThunderGain(arrival.Distance, cockpit ? 0.55f : 0.7f);
                 source.panStereo = arrival.Pan; source.Play();
+                // Close strikes rumble through the airframe (view-only; also drives the cockpit rattle).
+                float rumble = cockpit ? 1f - Mathf.Clamp01(arrival.Distance / 3000f) : 0f;
+                if (rumble > 0f) SceneSingleton<CameraStateManager>.i?.cockpitState?.AddShake(rumble * 0.3f, rumble * 0.1f);
             }
         }
 

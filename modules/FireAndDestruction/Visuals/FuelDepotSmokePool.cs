@@ -46,6 +46,22 @@ namespace BoscaliSummer.Fire
             public float PulseSeed;
             public float ExternalIntensity = 1f;
             public float ForestClusterScale = 1f;
+            internal Vector2 footprintRadius = Vector2.one;
+
+            public void SetForestFootprint(Vector2 halfExtents)
+            {
+                if (Profile != SmokeProfile.Forest || SourceRoots == null) return;
+                var radius = new Vector2(Mathf.Clamp(halfExtents.x * 0.85f, 2.5f, 36f),
+                    Mathf.Clamp(halfExtents.y * 0.85f, 2.5f, 36f));
+                for (int i = 0; i < SourceRoots.Length; i++)
+                {
+                    if (SourceRoots[i] == null) continue;
+                    Vector3 p = SourceRoots[i].localPosition;
+                    SourceRoots[i].localPosition = new Vector3(p.x * radius.x / footprintRadius.x,
+                        p.y, p.z * radius.y / footprintRadius.y);
+                }
+                footprintRadius = radius;
+            }
             public bool Sleeping;
             public CloudDeckSorting Deck;
             public bool BehindDeck;
@@ -150,12 +166,21 @@ namespace BoscaliSummer.Fire
                     velocity.enabled = true;
                     velocity.space = ParticleSystemSimulationSpace.World;
                     float drift = DriftScale * Mathf.Lerp(0.16f, 0.34f, windStrength / 18f);
-                    velocity.x = new ParticleSystem.MinMaxCurve(
-                        BaseVelocityXMin[i] + wind.x * drift,
-                        BaseVelocityXMax[i] + wind.x * drift);
-                    velocity.z = new ParticleSystem.MinMaxCurve(
-                        BaseVelocityZMin[i] + wind.z * drift,
-                        BaseVelocityZMax[i] + wind.z * drift);
+                    ParticleSystem.MinMaxCurve vertical = velocity.y;
+                    if (vertical.mode == ParticleSystemCurveMode.Constant)
+                        velocity.y = new ParticleSystem.MinMaxCurve(vertical.constant, vertical.constant);
+                    // The native smoke catalogue has constant linear axes. Equal endpoints
+                    // preserve vertical motion while matching our random X/Z curve modes.
+                    // Leave any externally authored animated velocity profile intact.
+                    if (vertical.mode == ParticleSystemCurveMode.Constant || vertical.mode == ParticleSystemCurveMode.TwoConstants)
+                    {
+                        velocity.x = new ParticleSystem.MinMaxCurve(
+                            BaseVelocityXMin[i] + wind.x * drift,
+                            BaseVelocityXMax[i] + wind.x * drift);
+                        velocity.z = new ParticleSystem.MinMaxCurve(
+                            BaseVelocityZMin[i] + wind.z * drift,
+                            BaseVelocityZMax[i] + wind.z * drift);
+                    }
 
                     // Profile-scaled shape and colour: forest plumes read lighter, warmer and
                     // taller than a dark fuel-tank column, and buoyancy keeps the column
@@ -519,20 +544,20 @@ namespace BoscaliSummer.Fire
             float a = Signature(position, 0.013f, 0.029f);
             float b = Signature(position, -0.037f, 0.021f);
             float c = Signature(position, 0.047f, 0.011f);
-            visual.ActiveSourceCount = forest ? 3 : ruin ? (a > 0.58f ? 2 : 1) : (a > 0.46f ? 3 : 2);
+            visual.ActiveSourceCount = forest ? 3 : ruin ? 1 : (a > 0.46f ? 3 : 2);
             // Each source is deliberately lighter and smaller than the previous single
             // column; total emission remains in the same bounded range.
             visual.IntensityScale = forest
                 ? Mathf.Lerp(0.18f, 0.28f, a)
-                : ruin ? Mathf.Lerp(0.10f, 0.16f, a) : Mathf.Lerp(0.16f, 0.24f, a);
+                : ruin ? Mathf.Lerp(0.07f, 0.11f, a) : Mathf.Lerp(0.16f, 0.24f, a);
             visual.DriftScale = forest
                 ? Mathf.Lerp(1.70f, 2.30f, b)
                 : ruin ? Mathf.Lerp(0.82f, 1.28f, b) : Mathf.Lerp(0.72f, 1.22f, b);
             visual.Buoyancy = forest
                 ? Mathf.Lerp(0.9f, 2.2f, b)
                 : ruin ? 0.15f : Mathf.Lerp(0.25f, 0.45f, b);
-            visual.SizeScale = forest ? 1.12f : ruin ? 0.94f : 1f;
-            visual.LifetimeScale = forest ? 1.25f : ruin ? 0.96f : 1.02f;
+            visual.SizeScale = forest ? 1.12f : ruin ? 0.8f : 1f;
+            visual.LifetimeScale = forest ? 1.25f : ruin ? 0.8f : 1.02f;
             visual.GrowthSeconds = forest
                 ? Mathf.Lerp(7f, 13f, c)
                 : ruin ? Mathf.Lerp(7f, 15f, c) : Mathf.Lerp(15f, 27f, c);
@@ -545,8 +570,8 @@ namespace BoscaliSummer.Fire
             // tinting never fights a prefab gradient or random colour mode.
             Color tint = forest
                 ? new Color(0.76f, 0.70f, 0.62f)
-                : ruin ? new Color(0.34f, 0.33f, 0.32f) : new Color(0.15f, 0.145f, 0.14f);
-            float tintAmount = forest ? 0.38f : ruin ? 0.12f : 0.18f;
+                : ruin ? new Color(0.52f, 0.49f, 0.43f) : new Color(0.15f, 0.145f, 0.14f);
+            float tintAmount = forest ? 0.38f : ruin ? 0.60f : 0.18f;
             if (visual.ActiveColors != null && visual.BaseColors != null)
                 for (int i = 0; i < visual.ActiveColors.Length && i < visual.BaseColors.Length; i++)
                     visual.ActiveColors[i] = Tint(visual.BaseColors[i], tint, tintAmount);
@@ -559,6 +584,7 @@ namespace BoscaliSummer.Fire
                 2.5f, forest ? 36f : 16f);
             float radiusZ = Mathf.Clamp(halfExtents.y * (forest ? 0.85f : 0.52f),
                 2.5f, forest ? 36f : 16f);
+            visual.footprintRadius = new Vector2(radiusX, radiusZ);
             float baseAngle = b * Mathf.PI * 2f;
             for (int source = 0; source < visual.SourceRoots.Length; source++)
             {

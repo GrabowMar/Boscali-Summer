@@ -92,6 +92,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         }
 
         /// <summary>Read a live notice, oldest first, so a new one always lands at the bottom.</summary>
+        /// <summary>The feed key of the notice at <paramref name="index"/>, or null.</summary>
+        public string ChannelAt(int index) => index >= 0 && index < Count && entries[index].Active ? entries[index].Channel : null;
+
         public bool TryGet(int index, out HudTone tone, out string text, out string detail)
         {
             if (index < 0 || index >= Count || !entries[index].Active)

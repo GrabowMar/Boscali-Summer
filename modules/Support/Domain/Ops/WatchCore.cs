@@ -109,7 +109,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (SpaceRules.MissionTime(now) && now > lastHumanAt) lastHumanAt = now;
         }
 
-        public bool Idle(int humans, float now)
+        /// <summary>OPS FRONTS S2: the director is always on; a human's live intrusion or team is respected asset by asset (an engaged node, a team another raised), not by silencing the domain.</summary>
+        public bool Idle(int humans, float now) => true;
+
+        /// <summary>The old rule (solo 60 s, company 300 s after a human domain verb), kept for the record and its tests.</summary>
+        public bool QuietOfHumans(int humans, float now)
         {
             if (humans <= 0) return true;
             return now - lastHumanAt >= (humans == 1 ? WatchOfficerPolicy.SoloIdleSeconds : WatchOfficerPolicy.GroupIdleSeconds);
@@ -128,6 +132,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public void RecordHuman(float now) => idle.RecordHuman(now);
 
         public bool Idle(int humans, float now) => idle.Idle(humans, now);
+
+        public bool QuietOfHumans(int humans, float now) => idle.QuietOfHumans(humans, now);
 
         public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
 

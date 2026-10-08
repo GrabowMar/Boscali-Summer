@@ -12,6 +12,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         public static Vector3 Offset(Vector3 forward, Vector3 up) => -forward * Length - up * Drop;
 
+        /// <summary>Where the decoy rides: 100 m behind and 8 m below its pylon anchor.</summary>
+        public static Vector3 TrailPoint(Vector3 anchor, Vector3 forward, Vector3 up) => anchor + Offset(forward, up);
+
         public static bool Snaps(float gForce, float agl) => gForce > SnapG || agl < MinAgl;
 
         /// <summary>Manoeuvre load in g from a velocity change over dt (gravity excluded, as vanilla gForce).</summary>

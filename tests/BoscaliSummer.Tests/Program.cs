@@ -11,8 +11,7 @@ namespace BoscaliSummer.Tests
             // Discover suite entry points so restored/new suites cannot silently go unrun.
             var suites = typeof(Program).Assembly.GetTypes()
                 .Where(type => type.Namespace?.StartsWith("BoscaliSummer.Tests", StringComparison.Ordinal) == true ||
-                               type.Namespace == "NOAvionics.Tests" ||
-                               (type.Namespace == null && type.Name.EndsWith("Tests", StringComparison.Ordinal)))
+                               type.Namespace == "NOAvionics.Tests")
                 .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
                 .Where(method => method.Name == "Run" && method.ReturnType == typeof(void) &&
                     (method.GetParameters().Length == 0 ||

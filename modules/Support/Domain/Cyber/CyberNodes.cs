@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 for (int i = 0; i < order.Count; i++)
                 {
                     SourceUnit seed = order[i];
-                    if (seed.Class != SourceClass.SamRadar || !float.IsFinite(seed.X) && float.IsFinite(seed.Z) || claimed.Contains(seed.UnitId)) continue;
+                    if (seed.Class != SourceClass.SamRadar || !(float.IsFinite(seed.X) && float.IsFinite(seed.Z)) || claimed.Contains(seed.UnitId)) continue;
                     claimed.Add(seed.UnitId);
                     for (int take = 1; take < SamClusterMax; take++)
                     {
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                         for (int j = 0; j < order.Count; j++)
                         {
                             SourceUnit c = order[j];
-                            if (c.Class != SourceClass.SamLauncher || claimed.Contains(c.UnitId) || !float.IsFinite(c.X) && float.IsFinite(c.Z)) continue;
+                            if (c.Class != SourceClass.SamLauncher || claimed.Contains(c.UnitId) || !(float.IsFinite(c.X) && float.IsFinite(c.Z))) continue;
                             double dx = (double)c.X - seed.X, dz = (double)c.Z - seed.Z, d = dx * dx + dz * dz;
                             if (d < bestD || (best < 0 && d == bestD)) { best = j; bestD = d; }
                         }

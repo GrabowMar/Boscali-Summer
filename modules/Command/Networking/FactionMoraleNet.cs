@@ -86,12 +86,12 @@ namespace BoscaliSummer.Modules.Command.Networking
             if (Time.unscaledTime >= nextRegistration)
             {
                 nextRegistration = Time.unscaledTime + 0.5f;
-                if (ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler)) remote.Clear();
+                if (ClientHandlers.Swap(GameAccess.NetworkManagerOrNull?.Client?.MessageHandler)) remote.Clear();
             }
             if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
                 Time.unscaledTime < nextBroadcast || owner == null) return;
             nextBroadcast = Time.unscaledTime + BroadcastInterval;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             var factions = FactionRegistry.GetAllHQs();
             if (factions == null) return;

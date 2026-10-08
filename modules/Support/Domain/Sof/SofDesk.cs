@@ -11,12 +11,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         None = 0, Raised = 1, Ordered = 2, Sent = 3, Diverted = 4,
         NoTarget = 5, NoCamp = 6, CampDown = 7, TeamCap = 8, NoTeam = 9, NotReady = 10, Pinned = 11, Wounded = 12, NoAmmo = 13,
-        LowCredit = 14, Frozen = 15, RateLimited = 16, Unavailable = 17, BadOrder = 18, OutOfTheater = 19, Raising = 20
+        LowCredit = 14, Frozen = 15, RateLimited = 16, Unavailable = 17, BadOrder = 18, OutOfTheater = 19, Raising = 20,
+        /// <summary>OPS FRONTS S2: an operator can no longer raise a team; the TRAIN TEAM programme does.</summary>
+        TrainOnly = 21
     }
 
     internal static class SofOutcomeWords
     {
-        public const byte MaxOutcome = (byte)SofOutcome.Raising;
+        public const byte MaxOutcome = (byte)SofOutcome.TrainOnly;
 
         public static string Of(SofOutcome outcome, int detail = 0)
         {
@@ -42,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.BadOrder: return "NEGATIVE: ORDER NOT POSSIBLE NOW — CHECK THE TEAM STATE";
                 case SofOutcome.OutOfTheater: return "NEGATIVE: OUT OF THE THEATER — PICK A POINT ON THE MAP";
                 case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SpaceRules.Clock(detail);
+                case SofOutcome.TrainOnly: return "NEGATIVE: TEAMS COME FROM THE TRAIN TEAM PROGRAMME — FUND IT FROM THE SOF FRONT";
                 default: return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING";
             }
         }
@@ -186,6 +189,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public IReadOnlyList<HeldBuilding> Held => held;
         /// <summary>M6a FORWARD OPERATING BASE: while on, teams are raised at this point (a held building) instead of the camp, even with the camp down. The runtime sets it.</summary>
         public bool FobActive { get; set; }
+        /// <summary>The enemy SPACE front's counter pressure on exposure (1 = none, 1.5 = SPACE leads by 40 or more). The host sets it.</summary>
+        public float ExposureScale { get; set; } = 1f;
         public float FobX { get; set; }
         public float FobZ { get; set; }
         /// <summary>Raised once per event after the desk applied it.</summary>
@@ -306,7 +311,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         // ---- Verbs --------------------------------------------------------------------------------
 
-        public SofResult Raise(ulong op)
+        /// <summary>Raises a team at the best camp (or the FOB). <paramref name="teamCap"/> above 0 replaces the usual cap (the TRAIN TEAM programme raises up to 4).</summary>
+        public SofResult Raise(ulong op, int teamCap = 0)
         {
             float now = ports.Now;
             float cx, cz;
@@ -317,7 +323,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (Camps.Count == 0) return new SofResult(SofOutcome.NoCamp);
                 if (!Camps.TryBest(out _, out cx, out cz, out health)) return new SofResult(SofOutcome.CampDown);
             }
-            if (ActiveCount >= SofRules.TeamCap(ports.Humans, ports.Fob)) return new SofResult(SofOutcome.TeamCap);
+            if (ActiveCount >= (teamCap > 0 ? teamCap : SofRules.TeamCap(ports.Humans, ports.Fob))) return new SofResult(SofOutcome.TeamCap);
             int slot = -1;
             for (int i = 0; i < Teams.Length && slot < 0; i++) if (!Teams[i].Active) slot = i;
             if (slot < 0) return new SofResult(SofOutcome.TeamCap);
@@ -504,7 +510,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (!ports.TargetAlive(t.TargetKind, t.TargetSub, t.ExemptKey)) t.ExemptKey = 0; // truly dead (the host keeps the key resolving whatever the fog says)
                 else if (exposers > 0 && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
             }
-            t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt)));
+            t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt, ExposureScale)));
             t.Odds = SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
             if (t.Exposure >= SofRules.PinExposure && (moving || t.State == TeamState.OnSite))

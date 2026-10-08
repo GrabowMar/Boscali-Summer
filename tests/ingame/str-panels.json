@@ -1,0 +1,199 @@
+{
+  "name": "str-panels",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "store": "boot",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "store": "situation",
+      "args": {
+        "tab": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "shot_situation"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "store": "command",
+      "args": {
+        "tab": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "shot_command"
+    },
+    {
+      "op": "wait",
+      "seconds": 100
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "store": "operations",
+      "args": {
+        "tab": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "shot_operations"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Verb",
+      "store": "posture",
+      "args": {
+        "verb": "posture"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "store": "after_posture",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "shot_after_posture"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Verb",
+      "store": "pick",
+      "args": {
+        "verb": "pick"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "store": "after_pick",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "shot_after_pick"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Verb",
+      "store": "replan",
+      "args": {
+        "verb": "replan"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "store": "after_replan",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "shot_after_replan"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Verb",
+      "store": "pick_after_replan",
+      "args": {
+        "verb": "pick"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "store": "final",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "shot_final"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "posture.staffPosts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "posture.frontlineMetres",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "posture.fronts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "replan.proposals",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "final.opsLog",
+      "min": 0
+    }
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "name": "weather-incloud",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "a0",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -13000,
+          0
+        ]
+      },
+      "altitude": 3400,
+      "speed": 220,
+      "heading": 90
+    },
+    {
+      "op": "fly",
+      "id": "a0",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "spawn",
+      "id": "a1",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          -13000,
+          3000
+        ]
+      },
+      "altitude": 3700,
+      "speed": 220,
+      "heading": 90
+    },
+    {
+      "op": "fly",
+      "id": "a1",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "a0"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "fixture",
+      "args": {
+        "regime": "Overcast",
+        "conditions": 0.95,
+        "cloudHeight": 900,
+        "seed": 91,
+        "follow": "a0"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View",
+      "store": "v0cockpit",
+      "args": {
+        "view": "cockpit",
+        "follow": "a0"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "r3400cockpit"
+    },
+    {
+      "op": "capture",
+      "name": "cockpit-3400",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View",
+      "store": "v0orbit",
+      "args": {
+        "view": "orbit",
+        "follow": "a0"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "r3400orbit"
+    },
+    {
+      "op": "capture",
+      "name": "orbit-3400",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View",
+      "store": "v1cockpit",
+      "args": {
+        "view": "cockpit",
+        "follow": "a1"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "r3700cockpit"
+    },
+    {
+      "op": "capture",
+      "name": "cockpit-3700",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View",
+      "store": "v1orbit",
+      "args": {
+        "view": "orbit",
+        "follow": "a1"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "r3700orbit"
+    },
+    {
+      "op": "capture",
+      "name": "orbit-3700",
+      "hide_ui": true
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    }
+  ]
+}

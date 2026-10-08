@@ -27,16 +27,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private AvSection staffLogSection;
         private StrLogBoard staffLog;
         private StrNote staffLogNote;
-        private AvControl openRoomButton, replanButton;
-        private StrPlanningWindow cmdPlanningWindow;
+        private AvButtons replanRow;
+        private AvControl replanButton;
         private TheaterWarPosture selectedPosture;
         private StrNote staffState, postureNote;
         private int paintedActiveId, paintedActiveRevision;
 
         private void ResetCmd()
         {
-            if (cmdPlanningWindow != null) Destroy(cmdPlanningWindow.gameObject);
-            cmdPlanningWindow = null;
             opSection = null;
             operationCard = null;
             operationNote = null;
@@ -50,7 +48,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             staffLogSection = null;
             staffLog = null;
             staffLogNote = null;
-            openRoomButton = replanButton = null;
+            replanRow = null;
+            replanButton = null;
             staffState = postureNote = null;
             paintedActiveId = paintedActiveRevision = 0;
         }
@@ -61,12 +60,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             opSection = p.Section(AvIcon.Flag, "LIVE OPERATION", "STAFF DIRECTED");
             operationCard = p.Add(new StrOpCard(p.Content));
             operationNote = p.Add(new StrNote(p.Content, AvIcon.Flag));
-            AvButtons ops = p.Buttons(
-                new AvControl.Spec("ROOM", OpenCmdPlanning, AvButtonStyle.Default, AvIcon.Maximize),
+            replanRow = p.Buttons(
                 new AvControl.Spec("REPLAN", CancelCmdOperation, AvButtonStyle.Danger, AvIcon.X));
-            openRoomButton = ops.Controls[0];
-            replanButton = ops.Controls[1];
-            openRoomButton.Help = "Open the operations room: the live theater map beside the operation, the staff's offers and the fronts.";
+            replanButton = replanRow.Controls[0];
             replanButton.Help = "Ask the host to call off the displayed operation and return its groups to staff tasking.";
 
             proposalSection = p.Section(AvIcon.ListDetails, "STAFF PROPOSALS", "PICK");
@@ -85,9 +81,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             postureNote = p.Add(new StrNote(p.Content, AvIcon.Flag));
 
             // The staff's own log is the page's growing element: newest line first, as many as fit.
-            staffLogSection = p.Section(AvIcon.ListDetails, "STAFF LOG", "NEWEST FIRST");
+            staffLogSection = p.Section(AvIcon.ListDetails, "OPERATIONS LOG", "NEWEST FIRST");
             staffLog = p.Add(new StrLogBoard(p.Content, StaffLogRows, null, 2), 1f);
-            staffLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails), 1f);
+            staffLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
         }
 
         private void BindCmdFront(int index, StrFrontBoard.Row row)
@@ -126,7 +122,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
         }
 
-        /// <summary>Fill the proposal deck; shared by the console page and the operations room.</summary>
+        /// <summary>Fill the proposal deck.</summary>
         internal static void FillProposals(StrProposalDeck deck, IReadOnlyList<TheaterProposalView> list,
             int slots, bool canCommand, bool current = true)
         {
@@ -147,6 +143,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
             ITheaterWarView war = theaterWar;
             bool ready = war != null && war.Available && war.HasSnapshot;
             FillStaffState(staffState, war);
+            // Without a report every block below would only repeat "awaiting the host"; the status note says it once.
+            foreach (AvPart part in new AvPart[] { opSection, replanRow, proposalSection, frontsSection, postureControl, postureNote, staffLogSection })
+                part.SetShown(ready);
+            if (!ready)
+            {
+                foreach (AvPart part in new AvPart[] { operationCard, operationNote, proposals, proposalNote, frontBoard, frontsNote, staffLog, staffLogNote })
+                    part.SetShown(false);
+                paintedActiveId = paintedActiveRevision = 0;
+                return;
+            }
             TheaterLiveOperationView active = ready ? war.ActiveOperation : null;
 
             opSection.SetCaption(!ready ? "NO CURRENT REPORT" : "ONE PRIMARY");
@@ -209,7 +215,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         internal static void FillStaffState(StrNote note, ITheaterWarView war)
         {
-            if (war == null || !war.Available) { note.Set("STAFF DISABLED", "Living Front is unavailable for this faction."); return; }
+            if (war == null) { note.Set("THEATER OPS OFF", "Enable TheaterOps in F1 module settings and restart."); return; }
+            if (!war.Available) { note.Set("STAFF DISABLED", "Living Front is unavailable for this faction."); return; }
             string status = war.CommandStatus ?? "";
             bool unconfirmed = status.StartsWith("UNCONFIRMED", StringComparison.OrdinalIgnoreCase);
             if (!war.HasSnapshot)
@@ -252,13 +259,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             theaterWar.RequestPosture(posture);
             nextRefresh = 0f;
             RefreshCmd();
-        }
-
-        private void OpenCmdPlanning()
-        {
-            if (cmdPlanningWindow == null)
-                cmdPlanningWindow = StrPlanningWindow.Create(theaterWar, overlay);
-            cmdPlanningWindow.Show();
         }
     }
 }

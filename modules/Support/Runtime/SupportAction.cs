@@ -50,6 +50,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>Appends a later salvo missile to its strike record.</summary>
         void AddCruiseMissile(int requestId, Missile missile);
+
+        /// <summary>
+        /// Starts a CYBER package effect (RADAR BLIND = JAM RADAR, SAM NET DOWN) at the point for the faction, against every other faction.
+        /// <paramref name="quality"/> scales its radius and duration. False when the faction has no CYBER desk or its effect book is full.
+        /// </summary>
+        bool StartCyberPerk(FactionHQ owner, SupportActionId package, GlobalPosition target, float quality);
+
+        /// <summary>RECON TEAM: a reveal of enemy ground units around the point. NoCamp unless the faction has a live camp.</summary>
+        SupportResult StartSofRecon(FactionHQ owner, GlobalPosition target, float quality);
+
+        /// <summary>SABOTAGE STRIKE: the nearest enemy anchor within 1 km of the point goes down. NoCamp without a live camp, NoAnchor with no target.</summary>
+        SupportResult StartSofSabotage(FactionHQ owner, GlobalPosition target);
     }
 
     internal readonly struct SupportContext
@@ -62,10 +74,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly SpaceActionTransaction SpaceTask;
         /// <summary>Set only for a claimed TASKED call: the action must report its physical launch to this job.</summary>
         public readonly TaskedLaunchJob Tasked;
+        /// <summary>The perk's front quality (<see cref="IFrontReadiness.Quality"/>): multiplies a radius or duration.</summary>
+        public readonly float Quality;
+        /// <summary>The aim was snapped to a fresh own-faction MARK: the strike uses the tight optical/SAR disk, not the standard CEP.</summary>
+        public readonly bool MarkSnapped, MarkSar;
 
         public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
-            SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null)
+            SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null, float quality = 1f, bool markSnapped = false, bool markSar = false)
         {
+            MarkSnapped = markSnapped; MarkSar = markSar;
+            Quality = float.IsNaN(quality) || float.IsInfinity(quality) || quality <= 0f ? 1f : quality;
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;
