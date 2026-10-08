@@ -25,14 +25,32 @@ sys.path.insert(0, os.environ.get("NOMOD_BLENDER_PYLIBS", os.path.join(
 from PIL import Image, ImageDraw, ImageFont
 
 TEX = 1024
-MODEL_TEX = {"Remora": 2048, "HawcX": 2048, "Lance": 2048, "Glaive": 2048}  # 4-7 m airframes get double density
+MODEL_TEX = {"Remora": 2048, "HawcX": 2048, "Lance": 2048, "Glaive": 2048, "SkywellKit": 2048}  # 4-7 m airframes get double density
 ICON_TMP = os.path.join(tempfile.gettempdir(), "vanguard_icon_lines")  # build scratch, never shipped
 SKIN, GLOW, GLASS, DARK = "Skin", "Vanguard_Glow", "Vanguard_Glass", "Vanguard_Dark"
 
 
 # ================================================================ scene + materials
 
+SEGMENTS = []  # articulated models: [{"name", "parent", "pivot", "objs"}] in build order
+
+
+class seg:
+    """Collect every object created inside the block into a named joint (pivot, parent) of an articulated model."""
+    def __init__(self, name, parent=None, pivot=(0.0, 0.0, 0.0)):
+        self.name, self.parent, self.pivot = name, parent, pivot
+
+    def __enter__(self):
+        self.before = set(bpy.data.objects)
+        return self
+
+    def __exit__(self, *exc):
+        objs = [o for o in bpy.data.objects if o not in self.before and o.type == "MESH"]
+        SEGMENTS.append({"name": self.name, "parent": self.parent, "pivot": self.pivot, "objs": objs})
+
+
 def clear_scene():
+    SEGMENTS.clear()
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
@@ -294,7 +312,22 @@ def unwrap(o):
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def unwrap_many(objs):
+    """One shared UV layout across several objects (articulated skins share one atlas)."""
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.006, area_weight=1.0)
+    bpy.ops.uv.pack_islands(rotate=True, margin=0.004)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
 def bake_pass(o, kind, float_buf, samples=1, **kw):
+    objs = o if isinstance(o, list) else [o]
+    o = objs[0]
     img = bpy.data.images.new("bake_" + kind, TEX, TEX, alpha=False, float_buffer=float_buf)
     mat = o.data.materials[0]
     nt = mat.node_tree
@@ -303,7 +336,8 @@ def bake_pass(o, kind, float_buf, samples=1, **kw):
     nt.nodes.active = node
     bpy.context.scene.cycles.samples = samples
     bpy.ops.object.select_all(action="DESELECT")
-    o.select_set(True)
+    for each in objs:
+        each.select_set(True)
     bpy.context.view_layer.objects.active = o
     bpy.ops.object.bake(type=kind, margin=6, use_clear=True, **kw)
     nt.nodes.remove(node)
@@ -312,7 +346,8 @@ def bake_pass(o, kind, float_buf, samples=1, **kw):
     return a.reshape(TEX, TEX, 4)
 
 
-def bake_maps(o):
+def bake_maps(objs):
+    o = objs[0] if isinstance(objs, list) else objs
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
     sc.cycles.device = "CPU"
@@ -322,18 +357,18 @@ def bake_maps(o):
     nt = o.data.materials[0].node_tree
     bsdf = nt.nodes["Principled BSDF"]
     out = nt.nodes["Material Output"]
-    # Position pass: emission = object-space coordinate, straight into a float image.
-    coord = nt.nodes.new("ShaderNodeTexCoord")
+    # Position pass: emission = model-space coordinate (world; parts sit untransformed at bake time).
+    coord = nt.nodes.new("ShaderNodeNewGeometry")
     emit = nt.nodes.new("ShaderNodeEmission")
-    nt.links.new(coord.outputs["Object"], emit.inputs["Color"])
+    nt.links.new(coord.outputs["Position"], emit.inputs["Color"])
     link = nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
-    pos = bake_pass(o, "EMIT", True)
+    pos = bake_pass(objs, "EMIT", True)
     nt.links.remove(link)
     nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
     nt.nodes.remove(coord)
     nt.nodes.remove(emit)
-    nrm = bake_pass(o, "NORMAL", True, normal_space="OBJECT")
-    ao = bake_pass(o, "AO", True, samples=48)
+    nrm = bake_pass(objs, "NORMAL", True, normal_space="OBJECT")
+    ao = bake_pass(objs, "AO", True, samples=48)
     return pos[..., :3], nrm[..., :3] * 2 - 1, ao[..., 0]
 
 
@@ -540,20 +575,56 @@ def textured_skin(o, model, outdir):
 # ================================================================ finish / export / preview
 
 def finish(model, spec, outdir):
-    objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    segmented = {id(o) for sg in SEGMENTS for o in sg["objs"]}
+    objs = [o for o in bpy.context.scene.objects if o.type == "MESH" and id(o) not in segmented]
     groups = {}
     for o in objs:
         groups.setdefault(o.data.materials[0].name, []).append(o)
     parts = []
-    skin = None
+    skins = []
     for mname, members in groups.items():
         j = join(members, "Skin" if mname.startswith("Skin_") else mname.replace("Vanguard_", ""))
         smooth(j, spec.get("smooth_angle", 38))
         if mname.startswith("Skin_"):
-            skin = j
+            skins.append(j)
         parts.append(j)
+    # Articulated joints: one skin mesh per joint, origin at its pivot, other materials as named children.
+    joints = {}
+    for sg in SEGMENTS:
+        by_mat = {}
+        for o in sg["objs"]:
+            by_mat.setdefault(o.data.materials[0].name, []).append(o)
+        skin_parts = [o for name, members in by_mat.items() if name.startswith("Skin_") for o in members]
+        assert skin_parts, f"{model}: joint {sg['name']} has no skin geometry"
+        j = join(skin_parts, sg["name"])
+        smooth(j, spec.get("smooth_angle", 38))
+        bpy.context.scene.cursor.location = sg["pivot"]
+        bpy.ops.object.select_all(action="DESELECT")
+        j.select_set(True)
+        bpy.context.view_layer.objects.active = j
+        bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+        joints[sg["name"]] = j
+        skins.append(j)
+        parts.append(j)
+        for name, members in by_mat.items():
+            if name.startswith("Skin_"):
+                continue
+            c = join(members, name.replace("Vanguard_", ""))
+            smooth(c, spec.get("smooth_angle", 38))
+            unwrap(c)
+            c.parent = j
+            c.matrix_parent_inverse = j.matrix_world.inverted()
+            parts.append(c)
+    for sg in SEGMENTS:
+        if sg["parent"]:
+            child, parent = joints[sg["name"]], joints[sg["parent"]]
+            child.parent = parent
+            child.matrix_parent_inverse = parent.matrix_world.inverted()
+    unwrap_many(skins)
     for p in parts:
-        unwrap(p)
+        if p not in skins and not p.data.uv_layers:
+            unwrap(p)
+    skin = skins[0]
     tris = sum(sum(len(f.vertices) - 2 for f in p.data.polygons) for p in parts)
     assert tris <= 16000, f"{model}: {tris} triangles exceeds the weapon budget"
     for p in parts:
@@ -561,14 +632,15 @@ def finish(model, spec, outdir):
         assert p.data.uv_layers, f"{model}: missing UVs"
         assert all(math.isfinite(v) for vert in p.data.vertices for v in vert.co), f"{model}: invalid vertex"
 
-    pos, nrm, ao = bake_maps(skin)
+    pos, nrm, ao = bake_maps(skins)
     compose(model, spec, pos, nrm, ao, outdir)
     textured_skin(skin, model, outdir)
 
     root = bpy.data.objects.new(model, None)
     bpy.context.collection.objects.link(root)
     for p in parts:
-        p.parent = root
+        if p.parent is None:
+            p.parent = root
     bpy.ops.wm.save_as_mainfile(filepath=os.path.join(outdir, model + ".blend"))
     bpy.ops.export_scene.fbx(filepath=os.path.join(outdir, model + ".fbx"), use_selection=False,
         axis_forward="-Z", axis_up="Y", apply_scale_options="FBX_SCALE_NONE",
@@ -583,6 +655,10 @@ def finish(model, spec, outdir):
             if o.parent is None:
                 o.location = loc
     preview(os.path.join(outdir, model + ".png"), spec.get("view", (1.0, 0.75, 0.5)))
+    if "pose" in spec:  # articulated: second preview in the deployed pose (never exported)
+        spec["pose"]()
+        preview(os.path.join(outdir, model + "_Extended.png"), spec.get("pose_view", spec.get("view", (1.0, 0.75, 0.5))))
+        spec["pose"](stow=True)
     icon(os.path.join(outdir, model + "_Icon.png"))
     print(f"[vanguard] {model}: {len(parts)} parts, {tris} tris")
     points = [p.matrix_world @ v.co for p in parts for v in p.data.vertices]
@@ -1146,6 +1222,109 @@ def alex_pod(m):
     }
 
 
+def xcyl(name, r, length, loc, mat, verts=20):
+    """Cylinder along X."""
+    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=length, location=loc, rotation=(0.0, math.pi / 2, 0.0))
+    o = bpy.context.active_object
+    o.name = name
+    o.data.materials.append(mat)
+    return o
+
+
+SKYWELL_ARMS = [("", 1.05, "Nozzle"), ("2", -1.05, "Cassette2")]  # (suffix, x, end effector)
+TELE_STAGES = 4
+
+
+def skywell(m):
+    """SKYWELL roll-on refuel/rearm kit: pallet, hose-drum unit, munitions rack and two articulated telescoping
+    arms (FuelArm, CargoArm) that reach out of the open ramp. Nose +Y, ramp -Y. Joint names are runtime API."""
+    def crisp(name, size, loc, mat, rot=(0, 0, 0), ch=0.012):
+        return box(name, size, loc, mat, rot, chamfer=ch)
+
+    # Pallet deck, rails, tie-downs
+    crisp("Deck", (2.6, 4.4, 0.22), (0.0, 0.0, 0.11), m[SKIN], ch=0.02)
+    for side in (1, -1):
+        crisp(f"Rail{side}", (0.07, 4.4, 0.08), (side * 1.27, 0.0, 0.26), m[DARK])
+        for k in range(5):
+            crisp(f"TieDown{side}{k}", (0.12, 0.08, 0.05), (side * 1.18, -1.8 + k * 0.9, 0.245), m[DARK])
+    # Hose-drum unit (forward): drum, hose wrap, flanges, frame, pump
+    xcyl("Drum", 0.55, 1.5, (0.0, 1.55, 0.85), m[SKIN], verts=28)
+    xcyl("HoseWrap", 0.585, 1.3, (0.0, 1.55, 0.85), m[DARK], verts=28)
+    for side in (1, -1):
+        xcyl(f"Flange{side}", 0.66, 0.06, (side * 0.76, 1.55, 0.85), m[SKIN], verts=28)
+        crisp(f"DrumFrame{side}", (0.08, 1.45, 1.25), (side * 0.86, 1.55, 0.74), m[SKIN])
+    crisp("Pump", (1.3, 0.55, 0.5), (0.0, 0.55, 0.47), m[SKIN])
+    crisp("PumpGrille", (1.1, 0.02, 0.32), (0.0, 0.27, 0.47), m[DARK])
+    # Munitions rack: 4 cassettes in a frame, mid-deck
+    for i, (cx, cz) in enumerate(((0.33, 0.43), (-0.33, 0.43), (0.33, 0.8), (-0.33, 0.8))):
+        crisp(f"Cassette{i}", (0.5, 1.3, 0.32), (cx, -0.75, cz), m[SKIN])
+        crisp(f"CassetteRail{i}", (0.52, 1.32, 0.04), (cx, -0.75, cz + 0.17), m[DARK])
+    for y in (-1.42, -0.08):
+        crisp(f"RackFrame{y}", (1.25, 0.08, 1.05), (0.0, y, 0.62), m[SKIN])
+    # Two articulated arms
+    for suf, x, tip in SKYWELL_ARMS:
+        sx = 1 if x > 0 else -1
+        with seg("Base" + suf, None, (x, -1.75, 0.22)):
+            cylinder("BaseDrum" + suf, 0.32, 0.34, (x, -1.75, 0.39), m[SKIN], verts=24)
+            cylinder("BaseRing" + suf, 0.35, 0.05, (x, -1.75, 0.56), m[DARK], verts=24)
+            crisp("ClevisL" + suf, (0.05, 0.36, 0.5), (x + 0.2, -1.75, 0.8), m[SKIN])
+            crisp("ClevisR" + suf, (0.05, 0.36, 0.5), (x - 0.2, -1.75, 0.8), m[SKIN])
+        with seg("Shoulder" + suf, "Base" + suf, (x, -1.75, 0.9)):
+            xcyl("ShoulderHub" + suf, 0.2, 0.36, (x, -1.75, 0.9), m[SKIN])
+            xcyl("ShoulderCap" + suf, 0.12, 0.42, (x, -1.75, 0.9), m[DARK])
+        with seg("UpperArm" + suf, "Shoulder" + suf, (x, -1.75, 0.9)):
+            crisp("UpperBeam" + suf, (0.26, 3.4, 0.3), (x, 0.0, 0.9), m[SKIN])
+            tube("RamBody" + suf, [(-1.45, 0.075, x + sx * 0.2, 0.78), (0.3, 0.075, x + sx * 0.2, 0.78)], m[DARK], n=12)
+            tube("RamRod" + suf, [(0.3, 0.04, x + sx * 0.2, 0.78), (1.35, 0.04, x + sx * 0.2, 0.78)], m[SKIN], n=10)
+            tube("UpperCable" + suf, [(-1.6, 0.025, x - sx * 0.1, 1.08), (1.6, 0.025, x - sx * 0.1, 1.08)], m[DARK], n=8)
+        with seg("Forearm" + suf, "UpperArm" + suf, (x, 1.75, 1.25)):
+            xcyl("ElbowHub" + suf, 0.19, 0.4, (x, 1.75, 1.25), m[SKIN])
+            crisp("Sleeve" + suf, (0.26, 3.4, 0.26), (x, 0.05, 1.25), m[SKIN])
+            crisp("SleeveGlow" + suf, (0.01, 2.6, 0.04), (x + sx * 0.131, 0.0, 1.25), m[GLOW], ch=0.002)
+            tube("ForeCable" + suf, [(1.6, 0.022, x, 1.4), (-1.5, 0.022, x, 1.4)], m[DARK], n=8)
+        parent = "Forearm" + suf
+        for k in range(TELE_STAGES):  # nested telescope stages, hidden in the sleeve when stowed
+            w = 0.2 - 0.03 * k
+            name = f"Tele{k + 1}{suf}"
+            with seg(name, parent, (x, -1.5, 1.25)):
+                crisp(f"TeleTube{k}{suf}", (w, 3.0, w), (x, 0.0, 1.25), m[SKIN], ch=0.006)
+            parent = name
+        with seg("Wrist" + suf, parent, (x, -1.5, 1.25)):
+            box("WristKnuckle" + suf, (0.22, 0.22, 0.22), (x, -1.62, 1.25), m[SKIN], chamfer=0.02)
+            xcyl("WristPin" + suf, 0.05, 0.3, (x, -1.62, 1.25), m[DARK])
+        if tip == "Nozzle":
+            with seg("Nozzle", "Wrist", (x, -1.62, 1.25)):
+                tube("NozzleBody", [(-1.75, 0.12, x, 1.25), (-2.35, 0.09, x, 1.25), (-2.55, 0.06, x, 1.25)], m[SKIN], n=16)
+                tube("NozzleRing", [(-2.38, 0.13, x, 1.25), (-2.43, 0.13, x, 1.25)], m[GLOW], n=16)
+                tube("NozzleTip", [(-2.55, 0.05, x, 1.25), (-2.62, 0.035, x, 1.25)], m[DARK], n=12)
+        else:
+            with seg("Cassette2", "Wrist2", (x, -1.62, 1.25)):
+                crisp("GripPlate", (0.42, 0.1, 0.34), (x, -1.78, 1.25), m[SKIN])
+                for side in (1, -1):
+                    crisp(f"Prong{side}", (0.05, 0.55, 0.06), (x + side * 0.18, -2.08, 1.25), m[DARK])
+                crisp("Payload", (0.3, 0.5, 0.24), (x, -2.1, 1.25), m[SKIN])
+
+    def pose(stow=False):
+        """Deployed preview pose: arms swing up and back out of the ramp, telescopes run out."""
+        objs = bpy.data.objects
+        for suf, x, tip in SKYWELL_ARMS:
+            objs["Shoulder" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(-160), 0.0, 0.0)
+            objs["Forearm" + suf].rotation_euler = (0.0, 0.0, 0.0) if stow else (math.radians(150), 0.0, 0.0)
+            for k in range(TELE_STAGES):
+                objs[f"Tele{k + 1}{suf}"].location.y = 0.0 if stow else -2.6
+        bpy.context.view_layer.update()
+
+    return {
+        "color": (0.42, 0.44, 0.45), "metal": 0.15, "smooth": 0.32, "grime": 0.12, "wear": (0.62, 0.62, 0.6),
+        "patches": [((-3, -3.2, 0.95), (3, -2.3, 1.6), (0.85, 0.66, 0.08)),              # hazard yellow end effectors
+                    ((-0.8, 1.0, 0.25), (0.8, 2.2, 1.5), (0.34, 0.36, 0.33))],          # drum olive drab
+        "lines": [plane_y(y) for y in (-1.2, 0.0, 1.2)] + [((0, 1, 0), y, (-3, y - 0.05, 0.85), (3, y + 0.05, 1.6))
+                                                               for y in (-2.0, -2.15, -2.3)],
+        "stencils": [("SKYWELL", 1.0, 2.1, 0.55, 1.15, 0.8, (0.85, 0.66, 0.08))],
+        "smooth_angle": 30, "view": (1.0, -0.9, 0.7), "pose": pose, "pose_view": (1.2, -1.0, 0.45),
+    }
+
+
 MODELS = {
     "Remora": remora,
     "MaldX": mald,
@@ -1157,6 +1336,7 @@ MODELS = {
     "Orca": orca,
     "AleX": alex,
     "AleXPod": alex_pod,
+    "SkywellKit": skywell,
 }
 
 
