@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Domain
@@ -16,5 +17,31 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             range > FinalRange ? Mathf.Clamp(range * 0.08f, 150f, 3000f) : ReleaseHeight;
 
         public static bool ShouldRelease(float range, float agl) => range < ReleaseRange && agl < ReleaseMaxAgl;
+
+        public const float DropSearchRadius = 150f;
+        public const float DropSpacing = 20f;
+
+        /// <summary>Ground offsets (metres, x = right, y = forward) tried for UGV placement: the release point, then rings out to 150 m.</summary>
+        public static List<Vector2> DropCandidates()
+        {
+            var spots = new List<Vector2> { Vector2.zero };
+            for (float r = 25f; r <= DropSearchRadius; r += 25f)
+            {
+                int n = Mathf.Max(6, Mathf.RoundToInt(2f * Mathf.PI * r / 25f));
+                for (int i = 0; i < n; i++)
+                {
+                    float a = 2f * Mathf.PI * i / n;
+                    spots.Add(new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r);
+                }
+            }
+            return spots;
+        }
+
+        public static bool Spaced(Vector2 spot, List<Vector2> taken)
+        {
+            for (int i = 0; i < taken.Count; i++)
+                if ((taken[i] - spot).sqrMagnitude < DropSpacing * DropSpacing) return false;
+            return true;
+        }
     }
 }

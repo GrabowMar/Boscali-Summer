@@ -1,12 +1,15 @@
+using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
-    /// <summary>Server: puts GLAIVE's UGVs on dry, flat ground 60 m short of the release point, 25 m apart.</summary>
+    /// <summary>Server: puts GLAIVE's UGVs on the nearest dry, flat ground around a point 60 m short of the release point, 20 m apart.</summary>
     internal static class PayloadRelease
     {
         private static int serial;
+        private static readonly List<Vector2> Candidates = CarrierProfile.DropCandidates();
 
         /// <returns>How many vehicles were actually placed (0 over water or steep ground).</returns>
         public static int Drop(string unitKey, GlobalPosition over, Vector3 heading, FactionHQ hq, int count)
@@ -20,10 +23,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Quaternion rotation = Quaternion.LookRotation(fwd);
             Vector3 centre = over.ToLocalPosition() - fwd * 60f;
             int placed = 0;
-            for (int i = 0; i < count; i++)
+            var taken = new List<Vector2>(count);
+            for (int i = 0; i < Candidates.Count && placed < count; i++)
             {
-                Vector3 desired = centre + right * ((i - (count - 1) * 0.5f) * 25f);
+                Vector2 c = Candidates[i];
+                if (!CarrierProfile.Spaced(c, taken)) continue;
+                Vector3 desired = centre + right * c.x + fwd * c.y;
                 if (!GroundPlacement.TryPlace(definition, desired, rotation, out Vector3 point)) continue;
+                taken.Add(c);
                 Unit unit = spawner.SpawnVehicle(definition.unitPrefab, point.ToGlobalPosition(), rotation, Vector3.zero, hq,
                     "VG_UGV_" + (++serial), 1f, false, null);
                 if (unit == null) continue;

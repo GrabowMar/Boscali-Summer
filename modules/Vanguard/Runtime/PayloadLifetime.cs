@@ -44,13 +44,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
         }
 
+        // Same teardown as CyberAnchorSpawner.Remove: native Destroy silently returns for an unregistered identity.
         private static void Scuttle(Unit unit)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            unit.Networkdisabled = true;
-            unit.gameObject.SetActive(false);
-            if (spawner != null && spawner.IsServer && spawner.ServerObjectManager != null)
-                spawner.ServerObjectManager.Destroy(unit.gameObject);
+            try
+            {
+                unit.Networkdisabled = true;
+                unit.gameObject.SetActive(false);
+                if (spawner != null && spawner.IsServer && spawner.ServerObjectManager != null)
+                    spawner.ServerObjectManager.Destroy(unit.gameObject);
+            }
+            catch (System.Exception e)
+            {
+                Plugin.Logger?.LogWarning("[Vanguard] UGV scuttle: " + e.Message);
+            }
+            finally
+            {
+                if (unit != null) Destroy(unit.gameObject);
+            }
         }
     }
 }

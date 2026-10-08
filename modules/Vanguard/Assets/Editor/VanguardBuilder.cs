@@ -307,6 +307,9 @@ namespace Vanguard
                 P(s, "pierceDamage").floatValue = spec.Pierce;
                 P(s, "gLimit").floatValue = spec.GLimit;
                 P(s, "maxTurnRate").floatValue = spec.TurnRate;
+                // Donor aero is a 900 kg cruise missile's (finArea 3). finArea is lift as well as drag, so winged bodies
+                // keep it; only the AEGIS dart (a rocket that turns on thrust and torque) gets area ~ mass^(2/3).
+                if (spec.Key == "VG_AegisDart") P(s, "finArea").floatValue *= Mathf.Pow(spec.Mass / 900f, 2f / 3f);
                 if (spec.Key == "VG_HawcX") P(s, "supersonicDrag").floatValue = 0.35f; // waverider: holds Mach 8 in the glide
                 P(s, "foldingFins").arraySize = 0;
                 var motor = P(s, "motors").GetArrayElementAtIndex(0);
@@ -314,6 +317,11 @@ namespace Vanguard
                 motor.FindPropertyRelative("burnTime").floatValue = spec.BurnTime;
                 // AEGIS darts cold-launch: they fall clear unpowered while VanguardFlight slews them.
                 if (spec.Key == "VG_AegisDart") motor.FindPropertyRelative("delayTimer").floatValue = 0.45f;
+                // Motor.Thrust burns fuelMass off the rigidbody mass. The CruiseMissile1 donor's 400 kg would drive the
+                // light Vanguard bodies (25 kg dart, 140 kg MALD) negative and blow up their physics: cap fuel at 40 %
+                // of the airframe, none for unpowered bodies (ALE-X).
+                var fuel = motor.FindPropertyRelative("fuelMass");
+                fuel.floatValue = spec.Thrust <= 0f ? 0f : Mathf.Min(fuel.floatValue, spec.Mass * 0.4f);
             });
             var seeker = g.GetComponent<OpticalSeekerCruiseMissile>();
             if (!seeker) throw new Exception("CruiseMissile1 donor lost its OpticalSeekerCruiseMissile");

@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     {
         public const float Speed = 90f;
         public const float Depth = -6f;
-        public const float EntryRange = 2000f;   // glide to the water this far from the ship
+        public const float EntryRange = 5000f;   // glide to the water this far out, clear of the ship's point defence
         public const float StopLeadRange = 300f; // the last stretch runs straight at the hull: hard turns can beat it
         public const float LostLimit = 3f;       // seconds without a track before the snake starts
         public const float SearchTime = 10f;     // snake duration before the torpedo scuttles
@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static float VerticalAccel(float globalY, float vy) => (Depth - globalY) * 4f - vy * 3f;
 
         public static bool Accepts(bool isShip) => isShip;
+
+        /// <summary>Under-keel fuze: the run depth passes beneath shallow hulls, so fire when under the ship.</summary>
+        public static bool UnderKeel(float flatDistance, float shipRadius) => flatDistance < Mathf.Max(12f, shipRadius * 0.5f);
 
         public static float SnakeYaw(float t) => SnakeAmplitude * Mathf.Sin(2f * Mathf.PI * t / SnakePeriod);
     }

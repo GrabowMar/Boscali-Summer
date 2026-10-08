@@ -15,7 +15,13 @@ namespace BoscaliSummer.Vanguard
     {
         private static readonly Dictionary<string, Missile> Launched = new Dictionary<string, Missile>();
         private static readonly Dictionary<string, float> TopSpeed = new Dictionary<string, float>();
+        private static readonly Dictionary<string, float> Deaths = new Dictionary<string, float>();
         private static Missile threat;
+        private static Unit groundTarget;
+        private static Unit testShip;
+        private static FactionHQ enemyHq;
+        private static int launchCount;
+        private static Aircraft trackedLead;
         private static int threatsGone;
 
         public static Dictionary<string, object> Step(Dictionary<string, object> args)
@@ -25,11 +31,38 @@ namespace BoscaliSummer.Vanguard
                 return Failure("VanguardAutomation", "Step", "requires a hosted single-player nomodkit scenario");
             Aircraft lead = FindAircraft(Text(args, "faction") ?? "Boscali");
             Aircraft bandit = FindAircraft(Text(args, "enemy") ?? "Primeva");
+            if (bandit != null) enemyHq = bandit.NetworkHQ; // REMORA STRIKE may kill the bandit before batch-2 steps
+            if (lead != null && lead != trackedLead)
+            {
+                trackedLead = lead;
+                lead.onDisableUnit += _ =>
+                {
+                    Deaths["lead_deathTime"] = Time.timeSinceLevelLoad;
+                    Deaths["lead_deathAltitude"] = (float)lead.GlobalPosition().y;
+                };
+            }
             switch (Text(args, "action"))
             {
                 case "catalog": return Catalog();
-                case "launch": return Launch(Text(args, "key"), lead, Text(args, "at") == "threat" ? threat : (Unit)bandit);
-                case "threat": return Threat(bandit, lead, Number(args, "range", 5000f));
+                case "launch":
+                    string at = Text(args, "at");
+                    return Launch(Text(args, "key"), lead, at == "threat" ? threat : at == "ground" ? groundTarget : at == "ship" ? testShip : (Unit)bandit);
+                case "lure":
+                    Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
+                    Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
+                    return Status(lead);
+                case "pk":
+                    Modules.Vanguard.Runtime.VanguardFlight.InterceptKillChance = Number(args, "chance", 0.7f);
+                    return Status(lead);
+                case "snapg":
+                    Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
+                    return Status(lead);
+                case "battery":
+                    Modules.Vanguard.Runtime.PayloadLifetime.BatterySeconds = Number(args, "seconds", 240f);
+                    return Status(lead);
+                case "ground": return Ground(lead, Number(args, "range", 12000f));
+                case "ship": return SpawnTestShip(lead, Number(args, "range", 14000f), Text(args, "type") ?? "Frigate1", (int)Number(args, "from", 0f));
+                case "threat": return Threat(bandit, lead, Number(args, "range", 5000f), Text(args, "seeker") ?? "ARH", Number(args, "climb", 200f));
                 case "strike":
                     Modules.Vanguard.Runtime.DroneOrders.Order(lead, bandit);
                     return Status(lead);
@@ -143,31 +176,103 @@ namespace BoscaliSummer.Vanguard
             MissileDefinition def = Find(m => m.jsonKey == key);
             if (def == null) return Failure("VanguardAutomation", "launch", "unknown missile " + key);
             Transform t = lead.transform;
-            Missile missile = NetworkSceneSingleton<Spawner>.i.SpawnMissile(def, t.position - t.up * 3f + t.forward * 10f,
+            // Stagger launches sideways: back-to-back spawns at one point collide once they turn tangible (1.5 s).
+            Vector3 slot = t.right * (((launchCount++ % 3) - 1) * 20f);
+            Missile missile = NetworkSceneSingleton<Spawner>.i.SpawnMissile(def, t.position - t.up * 3f + t.forward * 10f + slot,
                 t.rotation, lead.rb.velocity, target, lead);
             Launched[key] = missile;
+            Unit aimed = target;
+            missile.onDisableUnit += _ =>
+            {
+                Deaths[key + "_deathAge"] = missile.timeSinceSpawn;
+                Deaths[key + "_deathAltitude"] = (float)missile.GlobalPosition().y;
+                Deaths[key + "_deathAgl"] = missile.radarAlt;
+                Deaths[key + "_deathSpeed"] = missile.speed;
+                if (aimed != null) Deaths[key + "_deathRange"] = FastMath.Distance(missile.GlobalPosition(), aimed.GlobalPosition());
+            };
             TopSpeed[key] = 0f;
             return Status(lead);
         }
 
+        // An enemy Hexhound on dry, flat ground `range` ahead of the lead (sweeps +/-60 deg and +6 km until one fits).
+        private static Dictionary<string, object> Ground(Aircraft lead, float range)
+        {
+            if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "ground", "need lead and an enemy HQ");
+            if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
+                return Failure("VanguardAutomation", "ground", "UGV1_grenade not in Encyclopedia.Lookup");
+            Vector3 fwd = lead.transform.forward;
+            fwd.y = 0f;
+            fwd.Normalize();
+            for (float d = range; d <= range + 6000f; d += 1000f)
+                for (int b = -60; b <= 60; b += 15)
+                {
+                    Vector3 dir = Quaternion.Euler(0f, b, 0f) * fwd;
+                    Vector3 desired = lead.transform.position + dir * d;
+                    desired.y = Datum.LocalSeaY + 1400f; // DryGround probes from +500 m: start above any hill
+                    if (!GroundPlacement.TryPlace(def, desired, Quaternion.LookRotation(-dir), out Vector3 point)) continue;
+                    groundTarget = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, point.ToGlobalPosition(),
+                        Quaternion.LookRotation(-dir), Vector3.zero, enemyHq, "VG_TestTarget", 1f, true, null);
+                    return new Dictionary<string, object> { ["ok"] = groundTarget != null, ["range"] = d, ["bearing"] = b };
+                }
+            return Failure("VanguardAutomation", "ground", "no dry flat ground ahead");
+        }
+
+        // An enemy ship (default Argus frigate) on deep water near `range` from the lead (sweeps 16 bearings).
+        private static Dictionary<string, object> SpawnTestShip(Aircraft lead, float range, string type, int from)
+        {
+            if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "ship", "need lead and an enemy HQ");
+            if (!Encyclopedia.Lookup.TryGetValue(type, out UnitDefinition def))
+                return Failure("VanguardAutomation", "ship", type + " not in Encyclopedia.Lookup");
+            for (float d = range; d <= range + 8000f; d += 2000f)
+                for (int b = from; b < from + 360; b += 22)
+                {
+                    Vector3 p = lead.transform.position + Quaternion.Euler(0f, b, 0f) * lead.transform.forward * d;
+                    p.y = Datum.LocalSeaY + 3000f; // probe from above any hill
+                    bool land = Physics.Raycast(p, Vector3.down, out RaycastHit hit, 3500f, (int)PhysicsLayers.StaticsMask) &&
+                        hit.point.y > Datum.LocalSeaY - 15f;
+                    if (land) continue;
+                    p.y = Datum.LocalSeaY;
+                    testShip = NetworkSceneSingleton<Spawner>.i.SpawnShip(def.unitPrefab, p.ToGlobalPosition(),
+                        Quaternion.Euler(0f, b + 90f, 0f), enemyHq, "VG_TestShip", 1f, false);
+                    return new Dictionary<string, object> { ["ok"] = testShip != null, ["range"] = d, ["bearing"] = b };
+                }
+            return Failure("VanguardAutomation", "ship", "no deep water near the lead");
+        }
+
         // An enemy radar AAM fired at the lead from behind, for the decoy / drone / AEGIS checks.
-        private static Dictionary<string, object> Threat(Aircraft bandit, Aircraft lead, float range)
+        private static Dictionary<string, object> Threat(Aircraft bandit, Aircraft lead, float range, string seeker, float climb)
         {
             if (lead == null || bandit == null) return Failure("VanguardAutomation", "threat", "need lead and bandit");
+            bool ir = seeker == "IR"; // IR threats ignore lures, so the AEGIS check cannot be stolen by MALD/REMORA
             MissileDefinition def = Find(m => m.jsonKey.StartsWith("AAM", StringComparison.Ordinal) &&
-                m.unitPrefab.GetComponent<ARHSeeker>() != null);
-            if (def == null) return Failure("VanguardAutomation", "threat", "no ARH air-to-air missile");
+                (ir ? m.unitPrefab.GetComponent<IRSeeker>() != null : m.unitPrefab.GetComponent<ARHSeeker>() != null));
+            if (def == null) return Failure("VanguardAutomation", "threat", "no " + seeker + " air-to-air missile");
             Transform t = lead.transform;
-            Vector3 from = t.position - t.forward * range + Vector3.up * 200f;
+            Vector3 from = t.position - t.forward * range + Vector3.up * climb;
             threat = NetworkSceneSingleton<Spawner>.i.SpawnMissile(def, from, Quaternion.LookRotation(t.position - from),
                 (t.position - from).normalized * 600f, lead, bandit);
-            threat.onDisableUnit += _ => threatsGone++;
+            Missile shot = threat;
+            Aircraft victim = lead;
+            threat.onDisableUnit += _ =>
+            {
+                threatsGone++;
+                if (victim != null) Deaths["threat_toLead"] = FastMath.Distance(shot.GlobalPosition(), victim.GlobalPosition());
+                if (Launched.TryGetValue(VanguardKeys.AleX, out Missile decoy) && decoy != null)
+                    Deaths["threat_toDecoy"] = FastMath.Distance(shot.GlobalPosition(), decoy.GlobalPosition());
+                Deaths["threat_time"] = Time.timeSinceLevelLoad;
+            };
             return Status(lead);
         }
 
         private static Dictionary<string, object> Status(Aircraft lead)
         {
-            var state = new Dictionary<string, object> { ["ok"] = true, ["threatsGone"] = threatsGone };
+            var state = new Dictionary<string, object> { ["ok"] = true, ["threatsGone"] = threatsGone, ["time"] = Time.timeSinceLevelLoad };
+            state["waterEntries"] = Modules.Vanguard.Runtime.VanguardStats.WaterEntries;
+            state["shipHits"] = Modules.Vanguard.Runtime.VanguardStats.ShipHits;
+            state["seductions"] = Modules.Vanguard.Runtime.VanguardStats.Seductions;
+            state["ugvsSpawned"] = Modules.Vanguard.Runtime.VanguardStats.UgvsSpawned;
+            state["ugvsAlive"] = Modules.Vanguard.Runtime.PayloadLifetime.Alive;
+            foreach (KeyValuePair<string, float> death in Deaths) state[death.Key] = death.Value;
             if (threat != null && !threat.disabled)
                 state["threatOnLead"] = lead != null && threat.targetID.Id == lead.persistentID.Id ? 1 : 0;
             foreach (KeyValuePair<string, Missile> pair in Launched)

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float PlanInterval = 0.2f;
         private const float EffectInterval = 0.5f;
         private const float InterceptKillRadius = 12f;
-        private const float InterceptKillChance = 0.7f;
+        internal static float InterceptKillChance = 0.7f; // the nomodkit sim pins it to 1 for a deterministic check
         // Cold launch: the dart falls clear unpowered (motor delayTimer in the bundle), slewing its nose
         // onto the intercept point so it lights already pointed at threats from any direction.
         private const float DropPhase = 0.55f;
@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Vector3 swimHeading;
         private float lostFor;
         private float searchFor = -1f;
+        private readonly System.Collections.Generic.List<Missile> captured = new System.Collections.Generic.List<Missile>();
 
         public VanguardFlight(Missile missile, VanguardRole role, Unit target, GlobalPosition aimpoint, int slot)
         {
@@ -265,8 +266,19 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             GlobalPosition aim = TargetPosition(out Vector3 tVel);
             Vector3 to = aim - pos;
             float flat = new Vector2(to.x, to.z).magnitude;
-            GlobalPosition point = aim + tVel * (flat / 250f);
-            point.y = flat > WaterRun.EntryRange ? Mathf.Clamp(flat * 0.05f, 30f, 2000f) : -5f;
+            GlobalPosition point;
+            if (flat > WaterRun.EntryRange)
+            {
+                point = aim + tVel * (flat / 250f);
+                point.y = Mathf.Clamp(flat * 0.05f, 30f, 2000f);
+            }
+            else
+            {
+                // Inside the entry range: dive into the sea just ahead, not at the ship (that line meets the water at the hull).
+                Vector3 dir = flat > 1f ? new Vector3(to.x, 0f, to.z) / flat : missile.transform.forward;
+                point = pos + dir * 300f;
+                point.y = -20f;
+            }
             missile.SetAimpoint(point, tVel);
         }
 
@@ -318,6 +330,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             Rigidbody rb = missile.rb;
             Vector3 here = missile.transform.position;
+            if (target is Ship keel && !keel.disabled)
+            {
+                Vector3 off = target.GlobalPosition() - missile.GlobalPosition();
+                if (WaterRun.UnderKeel(new Vector2(off.x, off.z).magnitude, keel.maxRadius))
+                {
+                    VanguardStats.ShipHits++;
+                    missile.Detonate(Vector3.up, true, false);
+                    return true;
+                }
+            }
             if (Physics.Linecast(here, here + rb.velocity * Time.fixedDeltaTime * 1.1f, out RaycastHit hit,
                 (int)PhysicsLayers.ShipsMask | (int)PhysicsLayers.StaticsMask))
             {
@@ -327,7 +349,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 return true;
             }
             Vector3 v = swimHeading * WaterRun.Speed;
-            v.y = rb.velocity.y + WaterRun.VerticalAccel(y, rb.velocity.y) * Time.fixedDeltaTime;
+            // Gravity is cancelled underwater; otherwise the spring settles 2.45 m deep of the run depth.
+            v.y = rb.velocity.y + (WaterRun.VerticalAccel(y, rb.velocity.y) - Physics.gravity.y) * Time.fixedDeltaTime;
             rb.velocity = v;
             rb.angularVelocity = Vector3.zero;
             rb.MoveRotation(Quaternion.LookRotation(new Vector3(v.x, v.y * 0.2f, v.z)));
@@ -350,6 +373,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile.disabled) return;
             if (!(launcher is Aircraft host) || host.disabled || TowedTrail.Snaps(host.gForce, host.radarAlt))
             {
+                Plugin.Logger?.LogInfo("[Vanguard] ALE-X fiber cut: host=" + (launcher != null ? launcher.name : "none") +
+                    " g=" + ((launcher as Aircraft)?.gForce ?? -1f).ToString("F1") + " agl=" + (launcher?.radarAlt ?? -1f).ToString("F0"));
                 Detonate();
                 return;
             }
@@ -362,10 +387,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             rb.MoveRotation(Quaternion.LookRotation(h.forward, h.up));
         }
 
-        // Radar missiles tracking the host may jump to the decoy; rear-aspect shots far more often.
+        // Radar missiles tracking the host may jump to the decoy; rear-aspect shots far more often. A captured
+        // seeker stays on the decoy (it re-radiates the host's signature) until the decoy dies.
         private void SeduceTowed()
         {
             if (!(launcher is Aircraft host) || host.disabled) return;
+            for (int i = captured.Count - 1; i >= 0; i--)
+            {
+                Missile held = captured[i];
+                if (held == null || held.disabled) captured.RemoveAt(i);
+                else if (held.targetID.Id != missile.persistentID.Id) SeekerCapture.Retarget(held, missile);
+            }
             MissileWarning warning = host.GetMissileWarningSystem();
             if (warning == null) return;
             GlobalPosition hostPos = host.GlobalPosition();
@@ -379,7 +411,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 float range = toThreat.magnitude;
                 float aspect = Vector3.Dot(fwd, toThreat / Mathf.Max(range, 1f));
                 if (!SeductionRule.SeducesTowed(threat.GetSeekerType(), range, aspect, Random.value)) continue;
-                threat.SetTarget(missile);
+                SeekerCapture.Retarget(threat, missile);
+                captured.Add(threat);
                 VanguardStats.Seductions++;
             }
         }
@@ -398,7 +431,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (threat == null || threat.disabled) continue;
                 float range = FastMath.Distance(threat.GlobalPosition(), self);
                 if (SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
-                    threat.SetTarget(missile);
+                    SeekerCapture.Retarget(threat, missile);
             }
         }
 

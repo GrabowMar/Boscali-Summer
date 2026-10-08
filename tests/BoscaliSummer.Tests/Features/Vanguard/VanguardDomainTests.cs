@@ -55,10 +55,20 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 CarrierProfile.Height(1000f) == CarrierProfile.ReleaseHeight, "glide slope, then 40 m inside 1.5 km");
             TestAssert.That(CarrierProfile.ShouldRelease(250f, 60f) && !CarrierProfile.ShouldRelease(250f, 300f) &&
                 !CarrierProfile.ShouldRelease(900f, 40f), "release needs both close range and low height");
+            var spots = CarrierProfile.DropCandidates();
+            TestAssert.That(spots.Count > 20 && spots[0] == Vector2.zero, "drop search starts at the release point");
+            float far = 0f;
+            for (int i = 0; i < spots.Count; i++) far = Mathf.Max(far, spots[i].magnitude);
+            TestAssert.That(far <= CarrierProfile.DropSearchRadius + 0.01f && spots[spots.Count - 1].magnitude > 100f &&
+                spots[1].magnitude <= spots[spots.Count - 1].magnitude, "search spirals outward to 150 m");
+            TestAssert.That(CarrierProfile.Spaced(new Vector2(0f, 0f), new List<Vector2> { new Vector2(25f, 0f) }) &&
+                !CarrierProfile.Spaced(new Vector2(0f, 0f), new List<Vector2> { new Vector2(10f, 0f) }), "UGVs land 20 m apart");
 
             TestAssert.That(WaterRun.VerticalAccel(0f, 0f) < 0f && WaterRun.VerticalAccel(-12f, 0f) > 0f &&
                 Mathf.Abs(WaterRun.VerticalAccel(WaterRun.Depth, 0f)) < 1e-3f, "depth spring holds -6 m");
             TestAssert.That(WaterRun.Accepts(true) && !WaterRun.Accepts(false), "ORCA swims only at ships");
+            TestAssert.That(WaterRun.UnderKeel(8f, 10f) && WaterRun.UnderKeel(40f, 100f) && !WaterRun.UnderKeel(30f, 20f),
+                "under-keel fuze: within max(12 m, half the hull radius)");
             TestAssert.That(Mathf.Abs(WaterRun.SnakeYaw(1f)) <= 30f && Mathf.Abs(WaterRun.SnakeYaw(1f)) > 25f &&
                 Mathf.Abs(WaterRun.SnakeYaw(0f)) < 1e-3f, "snake search swings +/-30 deg");
 
