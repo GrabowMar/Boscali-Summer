@@ -66,7 +66,7 @@ namespace BoscaliSummer.Vanguard
                 case "strike":
                     Modules.Vanguard.Runtime.DroneOrders.Order(lead, bandit);
                     return Status(lead);
-                case "equip": return Equip();
+                case "equip": return Equip(Text(args, "tanker") ?? "Tarantula");
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
                 case "drain": return Drain(receiver, Number(args, "fuel", 0.3f));
                 case "status": return Status(lead);
@@ -152,27 +152,33 @@ namespace BoscaliSummer.Vanguard
         private static readonly System.Reflection.FieldInfo LeakRate =
             typeof(FuelTank).GetField("leakRate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
 
-        private static Dictionary<string, object> Equip()
+        private static Dictionary<string, object> Equip(string tankerType)
         {
             tanker = receiver = null;
             foreach (Aircraft a in UnityEngine.Object.FindObjectsOfType<Aircraft>())
             {
                 if (a.disabled || a.definition == null) continue;
-                if (a.definition.unitName.IndexOf("Tarantula", StringComparison.OrdinalIgnoreCase) >= 0) tanker = a;
+                if (a.definition.unitName.IndexOf(tankerType, StringComparison.OrdinalIgnoreCase) >= 0) tanker = a;
                 else if (a.definition.unitName.IndexOf("FS-20", StringComparison.OrdinalIgnoreCase) >= 0) receiver = a;
             }
             WeaponMount kit = null;
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.jsonKey == VanguardKeys.SkywellMount) kit = w;
-            if (tanker == null || receiver == null || kit == null) return Failure("VanguardAutomation", "equip", "need a Tarantula, an FS-20 and the kit");
+            if (tanker == null || receiver == null || kit == null) return Failure("VanguardAutomation", "equip", "need the tanker type, an FS-20 and the kit");
             var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
-            for (int i = 0; i < tanker.weaponManager.hardpointSets.Length; i++) loadout.weapons.Add(i == 0 ? kit : null);
+            // Rear cargo bay (nearest the ramp) if the airframe has one, else the first cargo / mission bay.
+            HardpointSet[] sets = tanker.weaponManager.hardpointSets;
+            int bay = Array.FindIndex(sets, h => h.name.IndexOf("Rear", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (bay < 0) bay = Array.FindIndex(sets, h => h.name.IndexOf("Cargo", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                         h.name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (bay < 0) bay = 0;
+            for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == bay ? kit : null);
             tanker.Networkloadout = loadout;
             NuclearOption.SavedMission.Loadout armed = null;
             foreach (StandardLoadout sl in receiver.definition.aircraftParameters.StandardLoadouts ?? Array.Empty<StandardLoadout>())
                 if (armed == null && sl?.loadout?.weapons != null && sl.loadout.weapons.Exists(w => w != null)) armed = sl.loadout;
             if (armed != null) receiver.Networkloadout = armed;
-            return new Dictionary<string, object> { ["ok"] = true,
+            return new Dictionary<string, object> { ["ok"] = true, ["tankerType"] = tanker.definition.unitName, ["bay"] = sets[bay].name,
                 ["kit"] = Modules.Vanguard.Runtime.SkywellBoard.KitStation(tanker) != null ? 1 : 0,
                 ["armed"] = armed != null ? 1 : 0 };
         }

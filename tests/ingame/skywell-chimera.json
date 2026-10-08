@@ -1,0 +1,617 @@
+{
+  "name": "skywell-chimera",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 6000,
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "tanker",
+      "type": "MC-260 Chimera",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "lead",
+          "offset": [
+            300,
+            80,
+            -1200
+          ]
+        }
+      },
+      "speed": 130
+    },
+    {
+      "op": "fly",
+      "id": "tanker",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "equip",
+        "tanker": "Chimera"
+      },
+      "store": "equip"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "drain",
+        "fuel": 0.3
+      },
+      "store": "drain"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "deployed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      },
+      "store": "view"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t0"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t1"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-kite-t1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t2"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t3"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-kite-t3",
+      "hide_ui": true
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t4"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t5"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t6"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t7"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t8"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-close-t8",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t9"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-close-t9",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t10"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-below-t10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t11"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-below-t11",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t12"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-12",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t13"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t14"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t15"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-15",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t16"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t17"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t18"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-18",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t19"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t20"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t21"
+    },
+    {
+      "op": "capture",
+      "name": "skywell-side-21",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t22"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "t23"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "capture",
+      "name": "skywell-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "capture",
+      "name": "skywell-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "off"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "contact"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "served"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "equip.kit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "drain.missing",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "contact.receiverFuel",
+      "min": 0.45
+    },
+    {
+      "check": "result_above",
+      "path": "served.receiverAlive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "deployed.skywellActive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "served.refuels",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "served.rearms",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "served.skywellStockKg",
+      "max": 1499
+    },
+    {
+      "check": "result_below",
+      "path": "served.skywellFuelKg",
+      "max": 7999
+    },
+    {
+      "check": "result_below",
+      "path": "contact.receiverMissing",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "served.receiverLeaks",
+      "max": 0.5
+    }
+  ]
+}
