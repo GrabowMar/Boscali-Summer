@@ -250,7 +250,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     AegisEnvelope.ContactRadius(threat.definition.width,threat.definition.height)))
             {
                 float speed=(threat.rb.velocity-missile.rb.velocity).magnitude;
-                float damage=missile.pierceDamage*Mathf.Clamp(speed/300f,1f,4f);
+                float damage=missile.info.pierceDamage*Mathf.Clamp(speed/300f,1f,4f);
                 threat.TakeDamage(damage,0f,1f,0f,0f,launcher != null ? launcher.persistentID : missile.persistentID);
                 Detonate();
                 return;
