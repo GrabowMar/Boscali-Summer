@@ -1,5 +1,6 @@
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
@@ -19,6 +20,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float DropSlewDegPerSec = 1000f;
         private const float JamRange = 25000f;
         private const float JamConeCos = 0.5f; // 60 deg half-angle
+
+        // Missile.pierceDamage is private; the interceptor scales its own warhead's pierce by closure speed.
+        private static readonly AccessTools.FieldRef<Missile, float> PierceDamage = AccessTools.FieldRefAccess<Missile, float>("pierceDamage");
 
         private readonly Missile missile;
         private readonly VanguardRole role;
@@ -250,7 +254,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     AegisEnvelope.ContactRadius(threat.definition.width,threat.definition.height)))
             {
                 float speed=(threat.rb.velocity-missile.rb.velocity).magnitude;
-                float damage=missile.info.pierceDamage*Mathf.Clamp(speed/300f,1f,4f);
+                float damage=PierceDamage(missile)*Mathf.Clamp(speed/300f,1f,4f);
                 threat.TakeDamage(damage,0f,1f,0f,0f,launcher != null ? launcher.persistentID : missile.persistentID);
                 Detonate();
                 return;
