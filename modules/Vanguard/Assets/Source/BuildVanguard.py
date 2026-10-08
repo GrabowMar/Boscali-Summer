@@ -1246,6 +1246,17 @@ def skywell(m):
     def ycyl(name, rings, mat, n=16):
         return tube(name, rings, mat, n=n)
 
+    def missile(name, y0, y1, x, z, r, mat, strakes=False, n=8):
+        """AAM along +Y: body, ogive nose, cruciform tail fins and mid strakes."""
+        tube(name, [(y0, r * 0.8, x, z), (y0 + 0.05, r, x, z), (y1 - 0.28, r, x, z)], mat, n=n)
+        loft(name + "Nose", [(y1 - 0.28, r, r, r, z, 2, 2, 2), (y1 - 0.1, r * 0.55, r * 0.55, r * 0.55, z, 2, 2, 2),
+                             (y1, 0.004, 0.004, 0.004, z, 2, 2, 2)], mat, rings=4, n=n, tip=True).location.x = x
+        for f in range(4):
+            a_ = math.pi / 4 + math.pi / 2 * f
+            for fy, fl, fh in ((y0 + 0.14, 0.2, 0.09),) + (((y0 + (y1 - y0) * 0.55, 0.3, 0.035),) if strakes else ()):
+                crisp(f"{name}Fin{f}{fy:.2f}", (0.01, fl, fh), (x + (r + fh / 2) * math.cos(a_), fy, z + (r + fh / 2) * math.sin(a_)),
+                      mat, rot=(0, -a_ + math.pi / 2, 0), ch=0.003)
+
     for k, cy in enumerate((1.4, -1.4)):
         crisp(f"Pallet{k}", (2.24, 2.74, 0.05), (0.0, cy, 0.025), m[SKIN], ch=0.008)
         for side in (1, -1):
@@ -1264,6 +1275,15 @@ def skywell(m):
         cylinder(f"ManBolt{i}", 0.014, 0.03, (0.13 * math.cos(a_), 1.4 + 0.13 * math.sin(a_), 1.14), m[DARK], verts=6)
     cylinder("Vent", 0.03, 0.28, (0.25, 1.9, 1.17), m[SKIN], verts=8)
     cylinder("VentCap", 0.05, 0.04, (0.25, 1.9, 1.32), m[DARK], verts=8)
+    for side in (1, -1):
+        for y in (0.85, 2.25):
+            for px in (0.62, 1.08):
+                crisp(f"RackPost{side}{y}{px}", (0.04, 0.05, 0.62), (side * px, y, 0.41), m[DARK], ch=0.005)
+            for z in (0.3, 0.58):
+                crisp(f"RackBar{side}{y}{z}", (0.5, 0.05, 0.035), (side * 0.85, y, z - 0.09), m[DARK], ch=0.004)
+        for mx in (0.73, 0.97):
+            for z in (0.3, 0.58):
+                missile(f"Stock{side}{mx}{z}", 0.72, 2.35, side * mx, z, 0.062, m[SKIN])
     crisp("Skid", (0.7, 0.55, 0.08), (-0.55, 0.0, 0.09), m[SKIN])
     ycyl("PumpMotor", [(-0.22, 0.13, -0.55, 0.3), (0.12, 0.13, -0.55, 0.3)], m[SKIN], n=14)
     for r_ in range(3):
@@ -1353,10 +1373,13 @@ def skywell(m):
             with seg("Cassette2", "Wrist2", (x, -2.3, 1.2)):
                 ycyl("ToolFlange", [(-2.3, 0.1, x, 1.2), (-2.34, 0.1, x, 1.2)], m[DARK], n=16)
                 ycyl("ForceDisc", [(-2.34, 0.085, x, 1.2), (-2.38, 0.085, x, 1.2)], m[SKIN], n=16)
-                crisp("JawRail", (0.32, 0.06, 0.06), (x, -2.42, 1.2), m[SKIN], ch=0.006)
-                for side in (1, -1):
-                    crisp(f"Jaw{side}", (0.04, 0.32, 0.12), (x + side * 0.13, -2.6, 1.2), m[DARK], ch=0.006)
-                crisp("Payload", (0.2, 0.42, 0.14), (x, -2.62, 1.2), m[SKIN], ch=0.01)
+                px = x - sx * 0.25
+                crisp("JawRail", (0.3, 0.06, 0.06), (x - sx * 0.12, -2.42, 1.2), m[SKIN], ch=0.006)
+                for jy in (-2.42, -1.75):
+                    crisp(f"Jaw{jy}", (0.05, 0.05, 0.2), (px + sx * 0.08, jy, 1.2), m[DARK], ch=0.004)
+                    crisp(f"JawTop{jy}", (0.12, 0.05, 0.03), (px, jy, 1.29), m[DARK], ch=0.004)
+                crisp("JawSpine", (0.04, 0.72, 0.04), (px + sx * 0.1, -2.08, 1.2), m[SKIN], ch=0.004)
+                missile("Payload", -2.75, -1.2, px, 1.2, 0.062, m[SKIN], strakes=True, n=12)
 
     def pose(stow=False):
         objs = bpy.data.objects
@@ -1368,11 +1391,17 @@ def skywell(m):
         bpy.context.view_layer.update()
 
     return {
-        "color": (0.39, 0.41, 0.38), "metal": 0.15, "smooth": 0.32, "grime": 0.14, "wear": (0.6, 0.6, 0.57),
-        "patches": [((-1.2, -3.0, -0.1), (1.2, 3.0, 0.11), (0.6, 0.62, 0.62)),
-                    ((-0.5, 0.4, 0.15), (0.5, 2.4, 1.1), (0.32, 0.35, 0.29)),
-                    ((0.54, -0.8, 0.15), (0.66, 0.65, 0.25), (0.85, 0.66, 0.08)),
-                    ((-2, -3.2, 1.05), (2, -2.45, 1.4), (0.85, 0.66, 0.08))],
+        "color": (0.42, 0.44, 0.46), "metal": 0.22, "smooth": 0.38, "grime": 0.1, "wear": (0.6, 0.62, 0.63),
+        "patches": [((-1.2, -3.0, -0.1), (1.2, 3.0, 0.11), (0.56, 0.58, 0.6)),             # pallets
+                    ((-0.5, 0.4, 0.15), (0.5, 2.4, 1.1), (0.27, 0.29, 0.31)),             # gunmetal tank
+                    ((0.54, -0.8, 0.15), (0.66, 0.65, 0.25), (0.85, 0.66, 0.08)),          # fuel line
+                    ((0.7, -3.2, 1.05), (1.3, -2.45, 1.4), (0.85, 0.66, 0.08)),            # nozzle tip
+                    ((0.62, 0.68, 0.2), (1.1, 2.4, 0.7), (0.8, 0.81, 0.79)),               # stock rounds
+                    ((-1.1, 0.68, 0.2), (-0.62, 2.4, 0.7), (0.8, 0.81, 0.79)),
+                    ((0.62, 1.95, 0.2), (1.1, 2.03, 0.7), (0.85, 0.66, 0.08)),             # warhead bands
+                    ((-1.1, 1.95, 0.2), (-0.62, 2.03, 0.7), (0.85, 0.66, 0.08)),
+                    ((-0.8, -2.8, 1.08), (-0.6, -1.15, 1.32), (0.8, 0.81, 0.79)),          # payload round
+                    ((-0.8, -1.6, 1.08), (-0.6, -1.52, 1.32), (0.85, 0.66, 0.08))],
         "bands": [(1.25, 1.33, 0.5, (0.85, 0.66, 0.08))],
         "lines": [plane_y(y) for y in (-1.6, 0.6, 2.1)],
         "stencils": [("JP-8 / F-34", 0.9, 1.95, 0.5, 0.75, 0.3, (0.12, 0.13, 0.12)),
