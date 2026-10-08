@@ -15,6 +15,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string Orca = "VG_Orca";
         public const string AleX = "VG_AleX";
         public const string AegisInfo = "WI_VG_Aegis"; // WeaponInfo asset name of the AEGIS pod
+        public const string SkywellInfo = "WI_VG_Skywell";   // SKYWELL kit WeaponInfo (cargo MountedMissile)
+        public const string SkywellMount = "VG_Skywell_Kit";
 
         public static VanguardRole RoleOf(string jsonKey)
         {

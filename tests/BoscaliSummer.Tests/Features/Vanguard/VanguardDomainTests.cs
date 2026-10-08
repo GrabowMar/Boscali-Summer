@@ -84,6 +84,35 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 !SeductionRule.SeducesTowed("ARH", 2000f, 0.8f, 0.3f) &&
                 !SeductionRule.SeducesTowed("IR", 2000f, -0.8f, 0.01f) &&
                 !SeductionRule.SeducesTowed("ARH", 4000f, -0.8f, 0.01f), "towed decoy: radar, close, rear-biased");
+
+            TestAssert.That(SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, true) &&
+                !SkywellContact.Captures(new Vector3(0f, 0f, -120f), 10f, true) &&
+                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 40f, true) &&
+                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, false), "SKYWELL capture zone");
+            TestAssert.That(SkywellContact.TransferSeconds(8000f, 0) == 20f && SkywellContact.TransferSeconds(0f, 0) == 3f,
+                "transfer time clamps to 3..20 s");
+            TestAssert.That(SkywellContact.Aborts(30f, false) && SkywellContact.Aborts(0f, true) && !SkywellContact.Aborts(1f, false),
+                "contact aborts on distance or stick");
+
+            float stock = 100f, funds = 0f;
+            int[] rounds = RearmAllocation.Allocate(new List<RearmAllocation.StationNeed>
+            {
+                new RearmAllocation.StationNeed { Missing = 5, MassPerRound = 30f, CostPerRound = 1f },
+                new RearmAllocation.StationNeed { Missing = 4, MassPerRound = 5f, CostPerRound = 1f, Skip = true },
+            }, ref stock, ref funds, true);
+            TestAssert.That(rounds[0] == 3 && rounds[1] == 0 && Mathf.Abs(stock - 10f) < 1e-3f, "rearm is mass-limited; skipped stations get nothing");
+            float stock2 = 1000f, funds2 = 2.5f;
+            int[] paid = RearmAllocation.Allocate(new List<RearmAllocation.StationNeed>
+            {
+                new RearmAllocation.StationNeed { Missing = 5, MassPerRound = 10f, CostPerRound = 1f },
+            }, ref stock2, ref funds2, false);
+            TestAssert.That(paid[0] == 2 && Mathf.Abs(funds2 - 0.5f) < 1e-3f, "players are limited by funds");
+
+            TestAssert.That(ArmIK.Solve(10f, 10f, new Vector3(0f, 0f, 20f), out _, out float straight) && Mathf.Abs(straight) < 1f,
+                "fully extended arm is straight");
+            TestAssert.That(!ArmIK.Solve(10f, 10f, new Vector3(0f, 0f, 25f), out _, out _), "target beyond reach");
+            TestAssert.That(ArmIK.Solve(10f, 10f, new Vector3(0f, 0f, 10f), out _, out float bent) && Mathf.Abs(bent - 120f) < 1f,
+                "half reach bends the elbow 120 deg");
         }
     }
 }
