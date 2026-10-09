@@ -116,8 +116,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
 
         /// <summary>Vapour trails off the winglet fins once the glider is flying.</summary>
-        private void PoseTrails(Rig rig, bool on, Vector3 left, Vector3 right)
+        private void PoseTrails(Rig rig, bool on, Vector3 left, Vector3 right, float dt)
         {
+            // A floating-origin shift (>= 1 km) moves the whole world but strands the trails' world-space points at the old
+            // coordinates, which would smear a streak across the screen for their 0.6 s life: wipe them on a jump no speed explains.
+            Vector3 anchor = rig.Tanker.transform.position;
+            float reach = Mathf.Max(rig.Tanker.rb != null ? rig.Tanker.rb.velocity.magnitude : 0f, 300f) * dt + 200f;
+            if ((anchor - rig.TrailAnchor).sqrMagnitude > reach * reach)
+            {
+                if (rig.TrailL != null) rig.TrailL.Clear();
+                if (rig.TrailR != null) rig.TrailR.Clear();
+            }
+            rig.TrailAnchor = anchor;
             if (rig.TrailL == null)
             {
                 if (!on) return;

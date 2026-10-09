@@ -17,8 +17,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private struct Slot
         {
-            public int Index, Ammo, Full;
-            public string Label;
+            public int Index;
+            public string Label, Status, StatusFirst; // strings are built when the servable set changes, never per read
         }
 
         private IHudLine pitLine;
@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private byte order;                  // local standing order mirror (0 BOTH, 1 FUEL, 2 MUNITIONS)
         private int priority = -1;           // local station served first, -1 auto (one-shot)
         private readonly List<Slot> slots = new List<Slot>(MaxSlots);
+        private int slotSignature;           // aircraft + servable stations + their ammo: the cache below is rebuilt only when it changes
+        private Aircraft orderOwner;         // the aircraft the order / priority mirror belongs to
         private readonly Dictionary<uint, byte> lastFlags = new Dictionary<uint, byte>();
         private readonly Dictionary<int, int> runMissing = new Dictionary<int, int>(); // rounds missing when a station's run began
 
@@ -105,6 +107,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if ((rose & PitFlags.Nothing) != 0) Notice("SKYWELL  NOTHING TO SERVE", HudTone.Caution);
             if ((rose & PitFlags.FuelStockOut) != 0) Notice("SKYWELL  FUEL STOCK EMPTY", HudTone.Caution);
             if ((rose & PitFlags.MunitionStockOut) != 0) Notice("SKYWELL  MUNITIONS STOCK EMPTY", HudTone.Caution);
+            if ((rose & PitFlags.Capped) != 0) Notice("SKYWELL  PIT STOP CAPPED  DOCK AGAIN", HudTone.Caution);
         }
 
         private static float TankerJobProgress(SkywellView v) =>
@@ -117,17 +120,58 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static string StationName(Aircraft a, int station) =>
             a.weaponStations != null && station >= 0 && station < a.weaponStations.Count ? SkywellStations.Describe(a.weaponStations[station]) : "STATION";
 
-        /// <summary>5 Hz cache of the stations a handoff can still serve (missing rounds, passes the kit's skip rules).</summary>
+        /// <summary>A different aircraft (respawn): the server's order for it starts at BOTH / auto, so the mirror must too.</summary>
+        private void NewAircraft(Aircraft me)
+        {
+            orderOwner = me;
+            order = 0;
+            priority = -1;
+            docking = 0;
+            lastPhase.Clear();
+            lastFlags.Clear();
+            ResetStop();
+            pitLine?.Release();
+            pitLine = null;
+            slots.Clear();
+            slotSignature = 0;
+        }
+
+        /// <summary>
+        /// 5 Hz look at the stations a handoff can still serve (missing rounds, passes the kit's skip rules). The signature pass
+        /// allocates nothing; the list and its strings are rebuilt only when a station fills, fires or the aircraft changes.
+        /// </summary>
         private void RefreshSlots(Aircraft me)
         {
+            if (!pitAvailable || me.weaponStations == null)
+            {
+                slots.Clear();
+                slotSignature = 0;
+                return;
+            }
+            int signature = me.GetInstanceID();
+            for (int i = 0; i < me.weaponStations.Count; i++)
+            {
+                WeaponStation s = me.weaponStations[i];
+                if (SkywellStations.Skip(s) || MissingAt(me, i) <= 0) continue;
+                signature = signature * 31 + i * 1009 + s.GetAmmoTotal() * 17 + s.FullAmmo;
+            }
+            if (signature == slotSignature) return;
+            slotSignature = signature;
             slots.Clear();
-            if (!pitAvailable || me.weaponStations == null) return;
             for (int i = 0; i < me.weaponStations.Count && slots.Count < MaxSlots; i++)
             {
                 WeaponStation s = me.weaponStations[i];
                 if (SkywellStations.Skip(s) || MissingAt(me, i) <= 0) continue;
-                slots.Add(new Slot { Index = i, Ammo = s.GetAmmoTotal(), Full = s.FullAmmo, Label = SkywellStations.Describe(s) });
+                string status = "x" + s.GetAmmoTotal() + "/" + s.FullAmmo;
+                slots.Add(new Slot { Index = i, Label = SkywellStations.Describe(s), Status = status, StatusFirst = status + " FIRST" });
             }
+        }
+
+        private int SlotOf(int station)
+        {
+            for (int i = 0; i < slots.Count; i++)
+                if (slots[i].Index == station) return i;
+            return -1;
         }
 
         // ---- ISkywellControl: the radial PIT STOP branch
@@ -146,14 +190,26 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         public int PitStationCount => slots.Count;
 
-        public string PitStationLabel(int slot) => slot >= 0 && slot < slots.Count ? slots[slot].Label : "";
+        public int PitStationAt(int slot) => slot >= 0 && slot < slots.Count ? slots[slot].Index : -1;
 
-        public string PitStationStatus(int slot) =>
-            slot >= 0 && slot < slots.Count ? $"x{slots[slot].Ammo}/{slots[slot].Full}" + (slots[slot].Index == priority ? " FIRST" : "") : "";
-
-        public void PrioritiseStation(int slot)
+        public string PitStationLabel(int station)
         {
-            priority = slot >= 0 && slot < slots.Count ? slots[slot].Index : -1;
+            int at = SlotOf(station);
+            if (at >= 0) return slots[at].Label;
+            // Already full (or not cached yet): the name still belongs to the weapon station.
+            return Local(out Aircraft a) && a.weaponStations != null && station >= 0 && station < a.weaponStations.Count
+                ? SkywellStations.Describe(a.weaponStations[station]) : "";
+        }
+
+        public string PitStationStatus(int station)
+        {
+            int at = SlotOf(station);
+            return at < 0 ? "" : station == priority ? slots[at].StatusFirst : slots[at].Status;
+        }
+
+        public void PrioritiseStation(int station)
+        {
+            priority = station >= 0 ? station : -1;
             Notice(priority >= 0 ? $"SKYWELL  HANDOFF FIRST  STN {priority + 1}" : "SKYWELL  ORDER  AUTO", HudTone.Info);
             Push();
         }

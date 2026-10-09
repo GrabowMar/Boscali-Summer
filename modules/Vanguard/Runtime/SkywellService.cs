@@ -34,6 +34,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static readonly Dictionary<uint, SkywellView> Views = new Dictionary<uint, SkywellView>();
         public static System.Action<SkywellView> Changed; // host -> SkywellNet broadcast
 
+        /// <summary>Local aircraft: Time.timeSinceLevelLoad until which the server refuses a re-dock after a hot break (HUD sets, dock script reads).</summary>
+        public static float HotLockUntil;
+
         public static void Set(SkywellView view)
         {
             Views[view.Tanker] = view;
@@ -133,7 +136,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float AiStowAltitude = 150f;   // hysteresis: a landing never starts with the ramp held open
         private const float ReceiverCooldown = 30f;
         private const float AbortCooldown = 5f;
-        private const float HotBreakCooldown = 8f;
+        internal const float HotBreakCooldown = 8f; // also the local re-dock lockout the HUD shows
         private const float DockedTolerance = 3f;
         private const float EngageTimeout = 75f;
 
@@ -172,6 +175,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             lockout.Clear();
             prefs.Clear();
             SkywellBoard.Views.Clear();
+            SkywellBoard.HotLockUntil = 0f;
         }
 
         /// <summary>Server: flip the kit on the sender's own aircraft (ignored without a kit station).</summary>
@@ -197,6 +201,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float range = receiver.Player == null ? AiEngageRange : EngageRadius + 20f;
             if (Vector3.Distance(SkywellBoard.ProbePoint(receiver), SkywellBoard.ContactPoint(tanker)) > range) return false;
             kit.Receiver = receiver;
+            kit.HotUntil = 0f; // the red break flag belongs to the receiver the break hit, not to whoever docks next
             Enter(kit, SkywellPhase.Engage, Time.timeSinceLevelLoad + EngageTimeout);
             return true;
         }
@@ -230,7 +235,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (scan)
             {
                 nextScan = now + ScanInterval;
-                PrunePrefs();
+                PruneState();
                 DeployAiTankers();
             }
 

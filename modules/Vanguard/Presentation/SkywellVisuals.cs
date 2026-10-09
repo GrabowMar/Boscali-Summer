@@ -72,6 +72,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             public Vector3 ReachTarget;      // tanker space: the rail the loader last served
             public SkywellGlow GlowDeck, GlowKite, GlowCradle, GlowNozzle, GlowTipL, GlowTipR;
             public TrailRenderer TrailL, TrailR;
+            public Vector3 TrailAnchor;      // tanker world position last frame: a jump no flight speed explains is a floating-origin shift
 
             public void Dispose()
             {
@@ -131,9 +132,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             // A player engages by holding the brake near an idle, deployed kit; the script flies the rest. After any release
             // the brake did not cause (hot break, abort), the pilot lets go first, or the script would grab the jet again.
             bool haveMe = GameManager.GetLocalAircraft(out Aircraft me) && me != null && !me.disabled && me.LocalSim;
-            if (haveMe && me.GetInputs().brake < ResetBrake) needsBrakeReset = false;
-            if (haveMe && !needsBrakeReset && !holds.ContainsKey(me) && me.GetInputs().brake >= RequiredBrake &&
-                NearestKit(me, out Aircraft kitTanker))
+            if (haveMe && Brake(me) < ResetBrake) needsBrakeReset = false;
+            // Inside the hot-break lockout the server would refuse the dock: do not fly the jet in first (the HUD says CLEARING).
+            if (haveMe && !needsBrakeReset && !holds.ContainsKey(me) && Brake(me) >= RequiredBrake &&
+                now >= SkywellBoard.HotLockUntil && NearestKit(me, out Aircraft kitTanker))
             {
                 Engage(me, kitTanker, now);
                 SkywellNet.RequestDock(me, kitTanker);
@@ -164,7 +166,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                                view.Receiver == r.persistentID.Id;
                 if (r.Player != null && GameManager.IsLocalAircraft(r))
                 {
-                    if (r.GetInputs().brake < RequiredBrake)
+                    if (Brake(r) < RequiredBrake)
                     {
                         SkywellNet.RequestUndock(r);
                         released.Add(r);
@@ -232,7 +234,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return best != null;
         }
 
-        private void Engage(Aircraft r, Aircraft tanker, float now)
+        private void Engage(Aircraft r, Aircraft tanker, float now) => holds[r] = MakeHold(r, tanker, now);
+
+        private static Hold MakeHold(Aircraft r, Aircraft tanker, float now)
         {
             Transform t = tanker.transform;
             Vector3 pivot = r.rb.position;
@@ -253,7 +257,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     hold.Bodies.Add(new Body { Rb = part.rb, Pos = inv * (part.rb.position - pivot), Rot = inv * part.rb.rotation });
             if (r.rb != null && seen.Add(r.rb))
                 hold.Bodies.Add(new Body { Rb = r.rb, Pos = Vector3.zero, Rot = Quaternion.identity });
-            holds[r] = hold;
+            return hold;
         }
 
         /// <summary>Receiver pivot (rigidbody origin) that puts its probe on the contact point, tanker space.</summary>
@@ -511,7 +515,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 rig.Winch.T.localRotation = rig.Winch.Rot * Quaternion.AngleAxis(tether / 0.2f * Mathf.Rad2Deg, Vector3.right); // drum pays the line out
             PoseGlow(rig, v, hot, connected);
             PoseTrails(rig, rig.Launch > 0.85f, rig.TipL.T != null ? rig.TipL.T.position + kUp * 0.45f : pos,
-                rig.TipR.T != null ? rig.TipR.T.position + kUp * 0.45f : pos);
+                rig.TipR.T != null ? rig.TipR.T.position + kUp * 0.45f : pos, dt);
             ProbeReach = rig.Reach;
             ProbeNozzle = rig.NozzleRun;
             ProbeReachMax = Mathf.Max(ProbeReachMax, rig.Reach);

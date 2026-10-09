@@ -40,13 +40,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             int count = System.Math.Min(kit.PitStationCount, MaxPitStations);
             for (int i = 0; i < count; i++)
             {
-                int slot = i;
-                string label = kit.PitStationLabel(slot);
-                if (string.IsNullOrEmpty(label)) continue;
-                yield return Leaf("pit-s" + slot, label, AceIcon.Station, () => kit.PrioritiseStation(slot),
+                // The servable list shrinks as stations fill: a leaf keeps the station it was built for, never its list position.
+                int station = kit.PitStationAt(i);
+                string label = kit.PitStationLabel(station);
+                if (station < 0 || string.IsNullOrEmpty(label)) continue;
+                yield return Leaf("pit-s" + station, label, AceIcon.Station, () => kit.PrioritiseStation(station),
                     status: () =>
                     {
-                        string text = kit.PitStationStatus(slot);
+                        string text = kit.PitStationStatus(station);
                         return new AceRadialStatus(text, text.EndsWith("FIRST") ? AceTone.Active : AceTone.Normal);
                     });
             }

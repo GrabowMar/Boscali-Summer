@@ -1942,22 +1942,22 @@
     },
     {
       "check": "result_above",
-      "path": "d.rxStops",
+      "path": "final.pitBreaks",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "d.rxHandoffs",
+      "path": "final.pitBreakHandoffs",
       "min": 1
     },
     {
       "check": "result_below",
-      "path": "d.rxFuelJobs",
+      "path": "final.pitBreakFuelJobs",
       "max": 0.5
     },
     {
       "check": "result_above",
-      "path": "final.pitBreaks",
+      "path": "final.pitBreakJobIndex",
       "min": 1
     },
     {

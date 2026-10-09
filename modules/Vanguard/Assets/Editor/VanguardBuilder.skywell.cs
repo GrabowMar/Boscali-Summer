@@ -14,8 +14,13 @@ namespace Vanguard
             "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle",
         };
 
-        // Pit-stop additions: the runtime is null-safe without them, so an older model only warns.
+        // Pit-stop additions: the runtime is null-safe without them, so a v4 model (none of them) only warns.
         static readonly string[] SkywellPitJoints = { "LatchL", "LatchR", "Round" };
+
+        // FLIP TO true IN THE COMMIT THAT SHIPS THE v5 MODEL. From then on a model missing any pit joint or lamp child is rejected,
+        // so a stale FBX cannot pass the batch silently (the runtime is a null-safe no-op for all of them). A model carrying SOME
+        // of the new joints but not all is rejected regardless: that is a half-updated FBX, never a v4 one.
+        const bool SkywellRequirePitJoints = false;
 
         // Joints whose lamps SkywellGlow tints: each needs a DIRECT child named Glow* (the LOD meshes hang under it).
         static readonly string[] SkywellGlowJoints = { "Deck", "Kite", "Cradle", "Nozzle", "WingletL", "WingletR" };
@@ -33,10 +38,18 @@ namespace Vanguard
 
             string[] noPitJoints = SkywellPitJoints.Where(n => !joints.ContainsKey(n)).ToArray();
             if (noPitJoints.Length > 0)
-                Debug.LogWarning("[Vanguard] SKYWELL_PIT_JOINTS_MISSING " + string.Join(",", noPitJoints) + ": the cradle round and hold-down latches will not animate");
+            {
+                string message = "SKYWELL_PIT_JOINTS_MISSING " + string.Join(",", noPitJoints) + ": the cradle round and hold-down latches will not animate";
+                if (SkywellRequirePitJoints || noPitJoints.Length < SkywellPitJoints.Length) throw new Exception(message);
+                Debug.LogWarning("[Vanguard] " + message);
+            }
             string[] noLamps = SkywellGlowJoints.Where(n => !joints[n].Cast<Transform>().Any(c => c.name.StartsWith("Glow", StringComparison.Ordinal))).ToArray();
             if (noLamps.Length > 0)
-                Debug.LogWarning("[Vanguard] SKYWELL_GLOW_MISSING " + string.Join(",", noLamps) + ": those lamps will not change colour");
+            {
+                string message = "SKYWELL_GLOW_MISSING " + string.Join(",", noLamps) + ": those lamps will not change colour";
+                if (SkywellRequirePitJoints || noLamps.Length < SkywellGlowJoints.Length) throw new Exception(message);
+                Debug.LogWarning("[Vanguard] " + message);
+            }
 
             Vector3 size = VisualBounds(visual).size;
             float[] sorted = { size.x, size.y, size.z };

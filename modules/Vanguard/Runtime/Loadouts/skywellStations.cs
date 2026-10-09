@@ -1,6 +1,7 @@
+using System;
 using System.Collections.Generic;
-using System.Reflection;
 using BoscaliSummer.Modules.Vanguard.Domain;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
@@ -8,8 +9,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// <summary>SKYWELL view of a receiver's weapon stations: what a handoff can serve, which rail is next, where it is.</summary>
     internal static class SkywellStations
     {
-        private static readonly FieldInfo MountedPosition =
-            typeof(MountedMissile).GetField("mountedPosition", BindingFlags.NonPublic | BindingFlags.Instance);
+        // Unboxed accessor (StationPoint runs twice a frame during a handoff): null if a game update renames the field.
+        private static readonly AccessTools.FieldRef<MountedMissile, Vector3> MountedPosition = FindMountedPosition();
+
+        // Upper-case HUD names, built once per weapon (the HUD asks every 0.2 s and the radial every frame).
+        private static readonly Dictionary<WeaponInfo, string> Names = new Dictionary<WeaponInfo, string>();
+
+        private static AccessTools.FieldRef<MountedMissile, Vector3> FindMountedPosition()
+        {
+            try { return AccessTools.FieldRefAccess<MountedMissile, Vector3>("mountedPosition"); }
+            catch (Exception) { return null; }
+        }
 
         /// <summary>Stations the kit never serves: cargo, nuclear, massless, or not rearmable.</summary>
         public static bool Skip(WeaponStation s)
@@ -61,8 +71,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Weapon w = r.weaponStations != null && index >= 0 && index < r.weaponStations.Count ? NextEmpty(r.weaponStations[index]) : null;
             if (w == null) return SkywellBoard.PylonPoint(r);
             Transform t = w.transform;
-            Vector3 p = w is MountedMissile && t.parent != null && MountedPosition?.GetValue(w) is Vector3 mounted
-                ? t.parent.TransformPoint(mounted)
+            Vector3 p = w is MountedMissile mounted && t.parent != null && MountedPosition != null
+                ? t.parent.TransformPoint(MountedPosition(mounted))
                 : t.position;
             // A weapon parked at the airframe origin means the anchor is not a real rail: fall back to the bounds heuristic.
             return (p - r.transform.position).sqrMagnitude < 0.25f ? SkywellBoard.PylonPoint(r) : p;
@@ -73,8 +83,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             WeaponInfo info = s?.WeaponInfo;
             if (info == null) return "STATION";
+            if (Names.TryGetValue(info, out string cached)) return cached;
             string name = (!string.IsNullOrEmpty(info.shortName) ? info.shortName : info.weaponName ?? "STATION").ToUpperInvariant();
-            return name.Length <= 14 ? name : name.Substring(0, 14);
+            return Names[info] = name.Length <= 14 ? name : name.Substring(0, 14);
         }
     }
 }

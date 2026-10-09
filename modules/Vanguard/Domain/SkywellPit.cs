@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const byte Nothing = 2;
         public const byte FuelStockOut = 4;
         public const byte MunitionStockOut = 8;
+        public const byte Capped = 16;     // the plan hit the 30 s / 14 job cap and dropped jobs: dock again for the rest
     }
 
     /// <summary>One weapon station of the receiver as the planner sees it (live ammo, no game types).</summary>
@@ -77,7 +78,12 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         /// <summary>Fills <paramref name="into"/> with the job list for this order and returns its length.</summary>
         public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
-            int priority, float munitionStockKg, float funds, bool free, List<PitJob> into)
+            int priority, float munitionStockKg, float funds, bool free, List<PitJob> into) =>
+            Plan(order, fuelNeedKg, fuelFraction, fuelStockKg, stations, priority, munitionStockKg, funds, free, into, out _);
+
+        /// <param name="capped">True when the 30 s / 14 job cap dropped jobs (the pilot has to dock again for them).</param>
+        public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
+            int priority, float munitionStockKg, float funds, bool free, List<PitJob> into, out bool capped)
         {
             into.Clear();
             bool wantFuel = order != PitOrder.Munitions && fuelStockKg >= 1f && fuelNeedKg >= FuelNeedFloorKg;
@@ -115,6 +121,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             float total = 0f;
             int keep = 0;
             while (keep < into.Count && keep < MaxJobs && total + into[keep].Seconds <= MaxSeconds) total += into[keep++].Seconds;
+            capped = keep < into.Count;
             into.RemoveRange(keep, into.Count - keep);
             return into.Count;
         }

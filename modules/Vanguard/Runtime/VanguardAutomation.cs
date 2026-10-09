@@ -67,6 +67,8 @@ namespace BoscaliSummer.Vanguard
                 case "pitarm": return SkywellArm(args);
                 case "pit": return SkywellPit(args);
                 case "threatwhen": return SkywellThreatWhen(bandit, args);
+                case "brake": return SkywellBrake(args);
+                case "seatplace": return SkywellPlace(args);
                 case "rxstatus": return SkywellRxStatus(args);
                 case "status": return Status(lead);
                 case "showcase": return Showcase(lead);
@@ -163,7 +165,7 @@ namespace BoscaliSummer.Vanguard
             WeaponMount kit = null;
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.jsonKey == VanguardKeys.SkywellMount) kit = w;
-            if (tanker == null || receiver == null || kit == null) return Failure("VanguardAutomation", "equip", "need the tanker type, an FS-20 and the kit");
+            if (tanker == null || kit == null) return Failure("VanguardAutomation", "equip", "need the tanker type and the kit"); // an FS-20 is optional: a seated player is armed with pitarm
             var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
             // Rear cargo bay (nearest the ramp) if the airframe has one, else the first cargo / mission bay.
             HardpointSet[] sets = tanker.weaponManager.hardpointSets;
@@ -173,7 +175,7 @@ namespace BoscaliSummer.Vanguard
             if (bay < 0) bay = 0;
             for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == bay ? kit : null);
             tanker.Networkloadout = loadout;
-            NuclearOption.SavedMission.Loadout armed = ArmedLoadout(receiver);
+            NuclearOption.SavedMission.Loadout armed = receiver != null ? ArmedLoadout(receiver) : null;
             if (armed != null) receiver.Networkloadout = armed;
             return new Dictionary<string, object> { ["ok"] = true, ["tankerType"] = tanker.definition.unitName, ["bay"] = sets[bay].name,
                 ["kit"] = Modules.Vanguard.Runtime.SkywellBoard.KitStation(tanker) != null ? 1 : 0,

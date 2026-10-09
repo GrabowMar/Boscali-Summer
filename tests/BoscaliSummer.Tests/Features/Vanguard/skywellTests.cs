@@ -89,6 +89,15 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             List<PitJob> timed = Plan(PitOrder.Both, 8000f, 0.10f, -1, 8000f, 1500f, 0f, true, heavy, B);
             TestAssert.That(PitPlan.Total(timed) <= PitPlan.MaxSeconds + 1e-3f, "total pit time stays within 30 s");
 
+            // 11b: a truncated plan says so (the HUD tells the pilot to dock again), a plan that fits does not
+            var cappedJobs = new List<PitJob>();
+            PitPlan.Plan(PitOrder.Munitions, 0f, 1f, 8000f, new[] { many }, -1, 1500f, 0f, true, cappedJobs, out bool wasCapped);
+            TestAssert.That(wasCapped && cappedJobs.Count == 14, "40 missing rounds: 14 jobs kept and the plan reports it was capped");
+            PitPlan.Plan(PitOrder.Both, 2400f, 0.55f, 8000f, new[] { A, B }, -1, 1500f, 0f, true, cappedJobs, out bool smallCapped);
+            TestAssert.That(!smallCapped && cappedJobs.Count == 4, "a 12 s stop is not capped");
+            const byte others = PitFlags.HotBreak | PitFlags.Nothing | PitFlags.FuelStockOut | PitFlags.MunitionStockOut;
+            TestAssert.That((PitFlags.Capped & others) == 0 && PitFlags.Capped != 0, "the capped flag is its own bit");
+
             // 12: live-state clamp at commit
             float stock = 130f, funds = 0f;
             TestAssert.That(PitPlan.Take(A, 2, ref stock, ref funds, true) == 1 && Near(stock, 10f), "Take(2) with 130 kg returns 1 and leaves 10 kg");

@@ -39,7 +39,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             docking = 0;
             pitAvailable = false;
             slots.Clear();
+            slotSignature = 0;
             priority = -1;
+            order = 0;
+            orderOwner = null;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -80,10 +83,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             pitAvailable = false;
             if (Local(out Aircraft me))
             {
+                if (me != orderOwner) NewAircraft(me);
                 if (SkywellBoard.KitStation(me) != null) shown = Tanker(me);
                 else
                 {
-                    shown = pitAvailable = Receiver(me);
+                    shown = Receiver(me); // sets pitAvailable: docked, or any deployed friendly kit within cue range
                     RefreshSlots(me);
                 }
             }
@@ -124,11 +128,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             uint id = me.persistentID.Id;
             foreach (SkywellView v in SkywellBoard.Views.Values)
-                if (v.Receiver == id) return Docked(me, v);
+                if (v.Receiver == id) return pitAvailable = Docked(me, v);
             if (docking != 0)
             {
                 bool hot = SkywellBoard.Views.TryGetValue(docking, out SkywellView gone) && (gone.Flags & PitFlags.HotBreak) != 0;
-                if (hot) Notice("SKYWELL  HOT BREAK  MISSILE INBOUND", HudTone.Warning);
+                if (hot)
+                {
+                    Notice("SKYWELL  HOT BREAK  MISSILE INBOUND", HudTone.Warning);
+                    // The server refuses this jet for a while: show it, and keep the dock script from pulling the jet in meanwhile.
+                    SkywellBoard.HotLockUntil = Time.timeSinceLevelLoad + SkywellService.HotBreakCooldown;
+                }
                 else Notice(lastPhase.TryGetValue(docking, out SkywellPhase p) && p == SkywellPhase.Served
                     ? "SKYWELL  DISCONNECTED" : "SKYWELL  CONTACT LOST", HudTone.Info);
                 lastFlags.Remove(docking);
@@ -180,22 +189,27 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return true;
         }
 
-        /// <summary>Nearest deployed friendly kit: director-light cues into the hook-up window.</summary>
+        /// <summary>
+        /// Nearest free deployed friendly kit: director-light cues into the hook-up window. PIT STOP is available from any
+        /// deployed friendly kit in cue range, busy or not, so a pilot queued behind another jet can already choose an order.
+        /// </summary>
         private bool Approach(Aircraft me)
         {
             Aircraft best = null;
             float bestDist = CueRange;
+            byte bestFlags = 0;
             foreach (SkywellView v in SkywellBoard.Views.Values)
             {
-                if (!v.Active || v.Receiver != 0) continue;
+                if (!v.Active) continue;
                 Aircraft tanker = Resolve(v.Tanker);
                 if (tanker == null || tanker.disabled || tanker == me || tanker.NetworkHQ != me.NetworkHQ) continue;
                 float d = Vector3.Distance(SkywellBoard.ProbePoint(me), SkywellBoard.ContactPoint(tanker));
-                if (d < bestDist)
-                {
-                    bestDist = d;
-                    best = tanker;
-                }
+                if (d >= CueRange) continue;
+                pitAvailable = true;
+                if (v.Receiver != 0 || d >= bestDist) continue;
+                bestDist = d;
+                best = tanker;
+                bestFlags = v.Flags;
             }
             if (best == null) return false;
             // Receiver probe relative to the contact point, tanker axes (+y up, +z forward).
@@ -203,7 +217,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                           best.transform.InverseTransformPoint(SkywellBoard.ContactPoint(best));
             if (bestDist <= SkywellService.EngageRadius && rel.z < 5f)
             {
-                Line()?.Set(HudTone.Warning, "SKYWELL  READY", "HOLD BRAKE TO DOCK  ·  ORDER " + OrderWord(), 1f);
+                float lockLeft = SkywellBoard.HotLockUntil - Time.timeSinceLevelLoad;
+                if ((bestFlags & PitFlags.HotBreak) != 0 || lockLeft > 0f)
+                    Line()?.Set(HudTone.Warning, "SKYWELL  HOT BREAK  CLEARING", lockLeft > 0f ? "RE-DOCK IN " + Mathf.CeilToInt(lockLeft) + " s" : "STAND BY", 0f);
+                else
+                    Line()?.Set(HudTone.Warning, "SKYWELL  READY", "HOLD BRAKE TO DOCK  ·  ORDER " + OrderWord(), 1f);
                 return true;
             }
             Line()?.Set(HudTone.Info, "SKYWELL  TANKER  " + Mathf.RoundToInt(bestDist) + " m", Director(rel),

@@ -34,6 +34,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static readonly List<PitStation> stationScratch = new List<PitStation>(16);
         private static readonly List<PitJob> planScratch = new List<PitJob>(16);
         private static readonly List<Missile> inbound = new List<Missile>(8);
+        private static readonly List<Aircraft> pruneScratch = new List<Aircraft>(8);
 
         /// <summary>Sim hook: a stop just entered Transfer (tanker, receiver).</summary>
         internal static event Action<Aircraft, Aircraft> TransferStarted;
@@ -47,14 +48,29 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Read-only: scanning for receivers must not create an entry per aircraft.</summary>
         private PitOrder OrderFor(Aircraft receiver) => prefs.TryGetValue(receiver, out PitPrefs p) ? p.Order : PitOrder.Both;
 
-        /// <summary>Forget orders of aircraft that are gone (called from the periodic scan).</summary>
-        private void PrunePrefs()
+        /// <summary>
+        /// Forget aircraft that are gone and re-dock timers that ran out (called from the periodic scan). Orders (and their tallies,
+        /// which the sim reads after a victim dies) are only swept once there are 32 of them.
+        /// </summary>
+        private void PruneState()
         {
+            float now = Time.timeSinceLevelLoad;
+            PruneTimers(cooldown, now);
+            PruneTimers(lockout, now);
             if (prefs.Count < 32) return;
-            var gone = new List<Aircraft>();
+            pruneScratch.Clear();
             foreach (Aircraft a in prefs.Keys)
-                if (a == null || a.disabled) gone.Add(a);
-            foreach (Aircraft a in gone) prefs.Remove(a);
+                if (a == null || a.disabled) pruneScratch.Add(a);
+            foreach (Aircraft a in pruneScratch) prefs.Remove(a);
+        }
+
+        private static void PruneTimers(Dictionary<Aircraft, float> timers, float now)
+        {
+            if (timers.Count == 0) return;
+            pruneScratch.Clear();
+            foreach (KeyValuePair<Aircraft, float> pair in timers)
+                if (pair.Key == null || pair.Key.disabled || now >= pair.Value) pruneScratch.Add(pair.Key);
+            foreach (Aircraft a in pruneScratch) timers.Remove(a);
         }
 
         /// <summary>Server: set the receiver's order and (optionally) the station served first. False when the priority is refused.</summary>
@@ -79,8 +95,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static int PriorityOf(Aircraft receiver) =>
             instance != null && receiver != null && instance.prefs.TryGetValue(receiver, out PitPrefs p) ? p.Priority : -1;
 
+        /// <summary>A destroyed aircraft still keys its tally (Unity compares destroyed objects by instance id), so a dead victim stays readable.</summary>
         public static PitTally TallyOf(Aircraft receiver) =>
-            instance != null && receiver != null && instance.prefs.TryGetValue(receiver, out PitPrefs p) ? p.Tally : default;
+            instance != null && !ReferenceEquals(receiver, null) && instance.prefs.TryGetValue(receiver, out PitPrefs p) ? p.Tally : default;
 
         // ---- the stop
 
@@ -117,8 +134,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (need < Mathf.Max(PitPlan.FuelNeedFloorKg, 0.08f * capacity)) need = 0f;
             Player player = r.Player;
             PitPlan.Plan(p.Order, need, r.GetFuelLevel(), kit.FuelKg, stationScratch, p.Priority,
-                kit.StockKg, player != null ? player.Allocation : 0f, player == null, planScratch);
+                kit.StockKg, player != null ? player.Allocation : 0f, player == null, planScratch, out bool capped);
             kit.Jobs.AddRange(planScratch);
+            if (capped) kit.Flags |= PitFlags.Capped; // the HUD tells the pilot to dock again for the dropped jobs
 
             if (p.Order != PitOrder.Munitions && need >= PitPlan.FuelNeedFloorKg && kit.FuelKg < 1f) kit.Flags |= PitFlags.FuelStockOut;
             if (p.Order != PitOrder.Fuel)
@@ -232,6 +250,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!HostileInbound(kit.Receiver, kit.Tanker) && !HostileInbound(kit.Tanker, kit.Tanker)) return false;
             kit.HotUntil = now + HotFlagSeconds;
             VanguardStats.Bump("skywell.hotBreak");
+            // What the victim held at the break, as numbers: the missile may destroy it before any status read (the sim reads these).
+            PitTally tally = TallyOf(kit.Receiver);
+            VanguardStats.Counters["skywell.breakHandoffs"] = tally.Handoffs;
+            VanguardStats.Counters["skywell.breakFuelJobs"] = tally.FuelJobs;
+            VanguardStats.Counters["skywell.breakJobIndex"] = kit.JobIndex;
             Drop(kit, false, true);
             return true;
         }

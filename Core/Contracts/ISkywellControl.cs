@@ -25,16 +25,20 @@ namespace BoscaliSummer.Core.Contracts
 
         void SetPitMode(byte mode);
 
-        /// <summary>Stations a handoff can serve right now (missing rounds), at most 8.</summary>
+        /// <summary>Stations a handoff can serve right now (missing rounds), at most 8. The list shrinks as stations fill, so
+        /// callers identify a station by <see cref="PitStationAt"/> once, then keep using that index.</summary>
         int PitStationCount { get; }
 
-        /// <summary>Upper-case short name of the station in this slot, at most 14 characters.</summary>
-        string PitStationLabel(int slot);
+        /// <summary>Weapon-station index of the n-th servable station; -1 when n is out of range.</summary>
+        int PitStationAt(int slot);
 
-        /// <summary>"x1/2", plus " FIRST" when that station is the priority.</summary>
-        string PitStationStatus(int slot);
+        /// <summary>Upper-case short name of this weapon station, at most 14 characters.</summary>
+        string PitStationLabel(int station);
 
-        /// <summary>Serve this slot's station first; -1 returns to automatic order.</summary>
-        void PrioritiseStation(int slot);
+        /// <summary>"x1/2", plus " FIRST" when that station is the priority; empty once it needs nothing.</summary>
+        string PitStationStatus(int station);
+
+        /// <summary>Serve this weapon station first; -1 returns to automatic order.</summary>
+        void PrioritiseStation(int station);
     }
 }
