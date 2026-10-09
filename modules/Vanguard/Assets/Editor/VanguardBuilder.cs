@@ -60,7 +60,7 @@ namespace Vanguard
                 Mass = 80, Yield = 0, Cost = 1.6f, Value = 28, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Orca", Name = "AGT-80 ORCA Glide Torpedo", Short = "ORCA", Model = "Orca",
-                Description = "Long-glide torpedo. Glides ~25 km toward a ship, enters the water 5 km out and runs at 90 m/s, 6 m deep, into the hull. Ships only; a hard turn in the last 300 m can beat it.",
+                Description = "Glide torpedo with a clip-on wing kit. Locked on a ship: glides in, sheds the kit at the splash 5 km out and runs at 90 m/s, 6 m deep, into the hull; a hard turn in the last 300 m can beat it. No ship locked: lays a SLEEPER 3-12 km ahead (farther from higher up) that sinks to 35 m and waits up to 10 minutes; the first hostile hull inside 1.2 km wakes it for a rising run. Friendly ships never wake it.",
                 Mass = 600, Yield = 450, Pierce = 600, Cost = 1.5f, Value = 30, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple" } },
             new Spec { Key = "VG_AleX", Name = "ALE-X Towed Decoy", Short = "ALE-X", Model = "AleX",
@@ -84,6 +84,7 @@ namespace Vanguard
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
+            ValidateOrca();
             OpReferenceIndex.Refresh();
             Build();
             ValidateAndPreview(materials);

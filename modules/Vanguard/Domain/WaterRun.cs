@@ -6,16 +6,21 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     internal static class WaterRun
     {
         public const float Speed = 90f;
+        public const float Accel = 30f;          // m/s^2 from a standstill (a woken sleeper) up to Speed
         public const float Depth = -6f;
         public const float EntryRange = 5000f;   // glide to the water this far out, clear of the ship's point defence
         public const float StopLeadRange = 300f; // the last stretch runs straight at the hull: hard turns can beat it
         public const float LostLimit = 3f;       // seconds without a track before the snake starts
-        public const float SearchTime = 10f;     // snake duration before the torpedo scuttles
+        public const float SearchTime = 10f;     // snake duration before the torpedo gives up (re-sleeps or scuttles)
         public const float SnakeAmplitude = 30f;
         public const float SnakePeriod = 4f;
 
-        public static float VerticalAccel(float globalY, float vy) => (Depth - globalY) * 4f - vy * 3f;
+        public static float VerticalAccel(float globalY, float vy, float depth = Depth) => (depth - globalY) * 4f - vy * 3f;
 
+        /// <summary>Run speed this tick: entries faster than Speed clamp at once, a standing start ramps up.</summary>
+        public static float RunSpeed(float flatSpeed, float dt) => Mathf.Min(Speed, flatSpeed + Accel * dt);
+
+        /// <summary>Only a live ship gets an attack run; anything else becomes a sleeper.</summary>
         public static bool Accepts(bool isShip) => isShip;
 
         /// <summary>Under-keel fuze: the run depth passes beneath shallow hulls, so fire when under the ship.</summary>
