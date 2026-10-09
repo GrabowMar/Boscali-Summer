@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private float captureWaitSince = -1f;
         private bool captureWaitLogged;
         private WeatherSyncMessage? pendingSync;
+        private float lastTapeTime = -1f;
         internal bool IsCaptured => baselineCaptured && fieldKey != null;
 
         // Baseline captured from the mission at scene start, restored at teardown
@@ -250,6 +251,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             captureWaitSince = -1f;
             captureWaitLogged = false;
             pendingSync = null;
+            lastTapeTime = -1f;
             warned.Clear();
             // Capture happens in Update, after the mission environment is applied.
         }
@@ -481,7 +483,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             // Never build the field on a local clock while the mission clock is still loading:
             // the whole sky would jump when the real clock appears a moment later.
             if (!TryMissionTime(out float missionTime)) return;
+            RekeyAfterClockReset(missionTime);
             UpdateField(missionTime);
+            lastTapeTime = missionTime;
 
             if (settings != null && !InputFieldChecker.InsideInputField && ConsoleKeyPressed())
                 ToggleConsole();
@@ -491,7 +495,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 if (GameAccess.IsServer())
                 {
-                    UpdateHostProgression(missionTime);
+                    UpdateHostProgression();
                 }
 
                 // Preload: the first known targets apply at once, so a mission (or a late
@@ -507,6 +511,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 currentTurbulence = level.windTurbulence;
             }
 
+            // The key goes out on a fixed beat, held or moving, so a late joiner never waits for a change.
+            if (WeatherHeartbeat.Due(GameAccess.IsServer(), fieldReady, fieldKey != null, Time.unscaledTime, lastBroadcastTime))
+                BroadcastSync(missionTime);
         }
 
         private void LateUpdate()
@@ -1050,32 +1057,38 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             fieldUpdated = true;
         }
 
-        private void UpdateHostProgression(float missionTime)
+        // Spec 9.4: a mission clock that steps backwards (restart, replay) must not drag the tape with it. The host
+        // re-keys so the tape position is where it was and the epoch is the new time, and tells everyone.
+        private void RekeyAfterClockReset(float missionTime)
         {
-            if (explicitTargets || !field.IsBuilt)
-            {
-                if (Time.unscaledTime - lastBroadcastTime > 8f) BroadcastSync(missionTime);
-                return;
-            }
+            if (!GameAccess.IsServer() || fieldKey == null || lastTapeTime < 0f || missionTime >= lastTapeTime) return;
+            // INTERIM(slice 4): like every other re-key, keep the sky on screen. AfterClockReset restarts the legacy
+            // step counter at the new time, so its opener must be the state being shown, not the mission class.
+            fieldKey = fieldKey.AfterClockReset(lastTapeTime, missionTime).WithMissionClass(ShownClass());
+            nextFieldUpdate = 0f;
+            lastForecastSampleTime = -999f;
+            logger?.LogInfo("[Weather] mission clock stepped back " + lastTapeTime.ToString("0") + " -> " +
+                missionTime.ToString("0") + " s; tape re-keyed.");
+            BroadcastSync(missionTime);
+        }
 
-            if (fieldUpdated)
-            {
-                transitionDuration = WeatherTimeline.FadeSeconds;
-                transitionProgress = field.Timeline.Blend;
-                targetConditions = Mathf.Clamp(field.MeanCover(3),
-                    settings.MinConditions.Value, settings.MaxConditions.Value);
-                targetCloudHeight = field.Regional().CloudBase;
-                // Each state freshens or calms the mission wind (never reverses it) and adds
-                // its own turbulence on top of the authored loads.
-                StateParams sky = field.Params;
-                targetTurbulence = Mathf.Max(baselineWindTurbulence, sky.Turbulence) * settings.TurbulenceMultiplier.Value;
-                float windFactor = Mathf.Lerp(1f, sky.WindFactor, settings.WindVariability.Value);
-                targetWind = new Vector3(baselineWindVelocity.x * windFactor, baselineWindVelocity.y,
-                    baselineWindVelocity.z * windFactor);
-                targetsReady = true;
-            }
+        private void UpdateHostProgression()
+        {
+            if (explicitTargets || !field.IsBuilt || !fieldUpdated) return;
 
-            if (Time.unscaledTime - lastBroadcastTime > 8f) BroadcastSync(missionTime);
+            transitionDuration = WeatherTimeline.FadeSeconds;
+            transitionProgress = field.Timeline.Blend;
+            targetConditions = Mathf.Clamp(field.MeanCover(3),
+                settings.MinConditions.Value, settings.MaxConditions.Value);
+            targetCloudHeight = field.Regional().CloudBase;
+            // Each state freshens or calms the mission wind (never reverses it) and adds
+            // its own turbulence on top of the authored loads.
+            StateParams sky = field.Params;
+            targetTurbulence = Mathf.Max(baselineWindTurbulence, sky.Turbulence) * settings.TurbulenceMultiplier.Value;
+            float windFactor = Mathf.Lerp(1f, sky.WindFactor, settings.WindVariability.Value);
+            targetWind = new Vector3(baselineWindVelocity.x * windFactor, baselineWindVelocity.y,
+                baselineWindVelocity.z * windFactor);
+            targetsReady = true;
         }
 
         private void BroadcastSync(float missionTime)
