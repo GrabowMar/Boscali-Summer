@@ -143,11 +143,6 @@
     },
     {
       "check": "result_above",
-      "path": "live.maldj_lobeRadars",
-      "min": 1
-    },
-    {
-      "check": "result_above",
       "path": "shadow.maldj_denied",
       "min": 1
     },

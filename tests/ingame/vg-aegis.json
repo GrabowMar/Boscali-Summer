@@ -66,6 +66,18 @@
       "seconds": 3
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "aegisfit"
+      },
+      "store": "fit"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
       "op": "mark",
       "text": "dry trigger: pod fitted, no lock -> SNAP NO SOLUTION, no dart"
     },

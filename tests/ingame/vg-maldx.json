@@ -74,21 +74,7 @@
     },
     {
       "op": "wait",
-      "seconds": 6
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "threat",
-        "range": 5000,
-        "seeker": "ARH"
-      },
-      "store": "threat"
-    },
-    {
-      "op": "wait",
-      "seconds": 6
+      "seconds": 12
     },
     {
       "op": "call",
@@ -96,7 +82,7 @@
       "args": {
         "action": "status"
       },
-      "store": "lured"
+      "store": "cruise"
     },
     {
       "op": "wait",
@@ -117,7 +103,7 @@
     },
     {
       "op": "wait",
-      "seconds": 75
+      "seconds": 40
     },
     {
       "op": "call",
@@ -126,6 +112,42 @@
         "action": "status"
       },
       "store": "orbit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_MaldX",
+        "at": "ground"
+      },
+      "store": "launch2"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "threat",
+        "range": 5000,
+        "seeker": "ARH"
+      },
+      "store": "threat"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "lured"
     },
     {
       "op": "end"
@@ -142,37 +164,22 @@
     },
     {
       "check": "result_above",
-      "path": "lured.VG_MaldX_guided",
+      "path": "cruise.VG_MaldX_guided",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "lured.maldx_launched",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "lured.maldx_lured",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "lured.maldx_drawn",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "lured.VG_MaldX_altitude",
+      "path": "cruise.VG_MaldX_altitude",
       "min": 5500
     },
     {
       "check": "result_above",
-      "path": "lured.VG_MaldX_speed",
+      "path": "cruise.VG_MaldX_speed",
       "min": 170
     },
     {
       "check": "result_below",
-      "path": "lured.VG_MaldX_speed",
+      "path": "cruise.VG_MaldX_speed",
       "max": 290
     },
     {
@@ -199,6 +206,21 @@
       "check": "result_below",
       "path": "orbit.maldx_lureMin",
       "max": 4500
+    },
+    {
+      "check": "result_above",
+      "path": "lured.maldx_launched",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "lured.maldx_lured",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "lured.maldx_drawn",
+      "min": 1
     }
   ]
 }

@@ -38,6 +38,15 @@ namespace BoscaliSummer.Vanguard
             return state;
         }
 
+        // `aegisfit`: put the pod on the lead before the first snap; weapon stations rebuild a frame later, so wait ~2 s.
+        private static Dictionary<string, object> AegisFit(Aircraft lead)
+        {
+            if (lead == null || lead.weaponManager == null) return Failure("VanguardAutomation", "aegisfit", "no friendly aircraft");
+            if (AegisStation(lead) == null && FitAegis(lead) == null && lead.Networkloadout?.weapons?.Exists(w => w != null && w.jsonKey == AegisMount) != true)
+                return Failure("VanguardAutomation", "aegisfit", "no hardpoint set offers " + AegisMount);
+            return Status(lead);
+        }
+
         private static WeaponStation AegisStation(Aircraft aircraft)
         {
             foreach (WeaponStation s in aircraft.weaponStations)

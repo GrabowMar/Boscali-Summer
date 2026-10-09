@@ -44,6 +44,7 @@ namespace BoscaliSummer.Vanguard
             switch (Text(args, "action"))
             {
                 case "catalog": return Catalog();
+                case "aegisfit": return AegisFit(lead);
                 case "snap": return Snap(lead, Text(args, "target") == "none" ? null : (Unit)bandit, Number(args, "press", 1f) > 0f);
                 case "launch":
                     string at = Text(args, "at");

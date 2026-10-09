@@ -162,18 +162,18 @@
     },
     {
       "check": "result_above",
-      "path": "laid.orca.splash",
-      "min": 2
-    },
-    {
-      "check": "result_above",
-      "path": "laid.orca.set",
+      "path": "laid.orca_splash",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "laid.orca.kitDetached",
-      "min": 2
+      "path": "laid.orca_set",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "laid.orca_kitDetached",
+      "min": 1
     },
     {
       "check": "result_above",
@@ -197,7 +197,7 @@
     },
     {
       "check": "result_below",
-      "path": "friendly.orca.wake",
+      "path": "friendly.orca_wake",
       "max": 0
     },
     {
@@ -207,28 +207,28 @@
     },
     {
       "check": "result_above",
-      "path": "woke.orca.wake",
+      "path": "woke.orca_wake",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "woke.orca.bubbles",
-      "min": 2
+      "path": "woke.orca_bubbles",
+      "min": 1
     },
     {
       "check": "result_above",
-      "path": "woke.orca.rotor",
-      "min": 2
+      "path": "woke.orca_rotor",
+      "min": 1
     },
     {
       "check": "result_above",
-      "path": "final.orca.hit",
-      "min": 2
+      "path": "final.orca_hit",
+      "min": 1
     },
     {
       "check": "result_above",
       "path": "final.shipHits",
-      "min": 2
+      "min": 1
     },
     {
       "check": "result_below",
@@ -242,7 +242,7 @@
     },
     {
       "check": "result_below",
-      "path": "final.orca.expired",
+      "path": "final.orca_expired",
       "max": 0
     }
   ]

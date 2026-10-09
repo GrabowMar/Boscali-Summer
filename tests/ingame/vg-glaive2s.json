@@ -53,7 +53,8 @@
       "time_of_day": 11,
       "conditions": 0.05,
       "cloud_height": 6000,
-      "wind_speed": 0
+      "wind_speed": 0,
+      "wind_turbulence": 0
     },
     {
       "op": "wait",

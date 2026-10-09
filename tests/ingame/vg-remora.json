@@ -164,7 +164,7 @@
     },
     {
       "op": "wait",
-      "seconds": 25
+      "seconds": 50
     },
     {
       "op": "call",

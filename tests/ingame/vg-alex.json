@@ -36,6 +36,15 @@
       "heading": 180
     },
     {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
       "op": "observe",
       "follow": "lead"
     },
