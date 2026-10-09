@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             WeaponArticulation.Attach(__instance);
             OrcaVisuals.Attach(__instance);
             RemoraVisuals.Attach(__instance);
+            MaldjEmitter.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }

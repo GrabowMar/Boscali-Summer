@@ -19,8 +19,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public static void Attach(Missile missile)
         {
             VanguardRole role = VanguardKeys.RoleOf(missile.definition.jsonKey);
-            if (role != VanguardRole.Decoy && role != VanguardRole.Jammer &&
-                role != VanguardRole.Torpedo && role != VanguardRole.Drone) return;
+            // MALD-J (Jammer) is animated by MaldjEmitter; REMORA (Drone) folds its wings here.
+            if (role != VanguardRole.Decoy && role != VanguardRole.Torpedo && role != VanguardRole.Drone) return;
             if (missile.GetComponent<WeaponArticulation>() != null) return;
             Transform visual = missile.transform.Find("VanguardVisual");
             if (visual == null) return;

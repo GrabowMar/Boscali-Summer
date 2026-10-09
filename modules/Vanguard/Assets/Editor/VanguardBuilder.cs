@@ -36,8 +36,8 @@ namespace Vanguard
                 Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 3.0f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
-                Description = "Jammer decoy. As MALD-X, and jams every enemy radar inside a 60 degree cone ahead of it out to 25 km.",
-                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 600, GLimit = 6, TurnRate = 12,
+                Description = "SHADOW stand-in jammer. Raises its emitter mast and flies straight at 200 m/s toward the locked target (else ahead) for four minutes, projecting a 55 degree jam lobe out to 35 km. Enemy radars in the lobe cannot see friendly aircraft hiding within 12 degrees of the jammer's line, until they close inside 9 km burn-through.",
+                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 240, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
                 Description = "ARCHER loyal-wingman drone with two mini radar missiles on underwing rails. Holds a wing slot and draws radar-guided missiles. VANGUARD: DESIGNATE your target and it turns in and fires both rounds inside 12 km, then rejoins; designate again when empty and it rams with its 60 kg warhead. Six-minute endurance.",
@@ -87,6 +87,7 @@ namespace Vanguard
             ValidateOperationalPrefabs();
             ValidateOrca();
             ValidateRemoraRig();
+            ValidateMaldJ();
             OpReferenceIndex.Refresh();
             Build();
             ValidateAndPreview(materials);
@@ -497,7 +498,7 @@ namespace Vanguard
                     foreach (string name in new[] { "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle" })
                         if (!names.Contains(name)) throw new Exception("Skywell lost joint " + name);
                 }
-                if (model == "MaldX" || model == "MaldJ" || IsGlaive(model) || model == "Orca")
+                if (model == "MaldX" || IsGlaive(model) || model == "Orca") // MaldJ ships stowed: ValidateMaldJ checks its wings
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
                     Transform right = renderers.Single(r => r.name == "WingR").transform;
@@ -712,7 +713,8 @@ namespace Vanguard
                 if (!r.GetComponentInParent<MountedMissile>(true)) r.enabled = true;
             foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
             {
-                StowWings(Visual(station.transform, spec.Model, materials), station.transform);
+                GameObject rackVisual = Visual(station.transform, spec.Model, materials);
+                if (spec.Model != "MaldJ") StowWings(rackVisual, station.transform); // the MaldJ FBX already holds the stowed pose
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);

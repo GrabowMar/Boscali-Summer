@@ -90,8 +90,7 @@ namespace BoscaliSummer.Vanguard
             showcase.transform.position = showcaseAnchor.ToLocalPosition();
             var prefabs = new List<GameObject>();
             foreach (MissileDefinition m in Encyclopedia.i.missiles)
-                if (m != null && m.unitPrefab != null && VanguardKeys.RoleOf(m.jsonKey) != VanguardRole.None &&
-                    m.jsonKey != VanguardKeys.MaldJ) prefabs.Add(m.unitPrefab);
+                if (m != null && m.unitPrefab != null && VanguardKeys.RoleOf(m.jsonKey) != VanguardRole.None) prefabs.Add(m.unitPrefab);
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.prefab != null && Array.IndexOf(ShowcaseMounts, w.jsonKey) >= 0) prefabs.Add(w.prefab);
             for (int i = 0; i < prefabs.Count; i++)
