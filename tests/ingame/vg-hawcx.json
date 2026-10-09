@@ -1,0 +1,118 @@
+{
+  "name": "vg-hawcx",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          -30000
+        ]
+      },
+      "altitude": 6000,
+      "speed": 240,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          80000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "ground",
+        "range": 100000
+      },
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_HawcX",
+        "at": "ground"
+      },
+      "store": "launch"
+    },
+    {
+      "op": "wait",
+      "seconds": 31
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "glide"
+    },
+    {
+      "op": "wait",
+      "seconds": 70
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "late"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "ground.range",
+      "min": 100000
+    },
+    {
+      "check": "result_above",
+      "path": "glide.hawcx_separations",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "glide.hawcx_glowPhases",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "late.hawcx_finals",
+      "min": 1
+    }
+  ]
+}

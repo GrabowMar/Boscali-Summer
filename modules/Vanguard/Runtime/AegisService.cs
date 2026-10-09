@@ -32,6 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             VanguardRegistry.Clear();
             DroneOrders.Clear();
             VanguardStats.Clear();
+            HawcxState.Clear();
         }
 
         public static void Watch(Aircraft aircraft)

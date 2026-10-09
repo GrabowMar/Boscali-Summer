@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Vanguard
         public Type[] PatchTypes => new[]
         {
             typeof(Patches.VanguardArticulationPatch),
+            typeof(Patches.HawcxGlowPatch),
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),

@@ -44,8 +44,8 @@ namespace Vanguard
                 Mass = 450, Yield = 60, Pierce = 300, Cost = 0.8f, Value = 40, RadarSize = 0.15f, Thrust = 4200, BurnTime = 360, GLimit = 9, TurnRate = 25,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_HawcX", Name = "HAWC-X Hypersonic Glide Vehicle", Short = "HAWC-X", Model = "HawcX",
-                Description = "Boost-glide strike weapon. Climbs to 25 km at Mach 8, skips and weaves along the edge of space, then dives near-vertically onto the target.",
-                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 30, GLimit = 25, TurnRate = 18,
+                Description = "Boost-glide strike weapon. A 22 s booster lifts it to 24 km and drops away; it skips twice along the edge of space, unseen by enemy sensors while its sheath glows, then dives onto the target. In the final, DRONES: STRIKE shifts it onto a target within 20 km.",
+                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 22, GLimit = 25, TurnRate = 18,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
                 Description = "Low-profile three-dart self-defense rail. Darts are carried horizontally, drop clear and pitch nose-up, then snap onto a visible inbound threat and ignite. All-direction protection inside 1.1 km; physical contact, limited reaction time and three shots.",
@@ -614,6 +614,7 @@ namespace Vanguard
             g.name = spec.Key;
             HideRenderers(g);
             var visual = Visual(g.transform, spec.Model, materials);
+            if (spec.Key == "VG_HawcX") HawcxRig(visual, materials);
             if (IsGlaive(spec.Model))
             {
                 AddGlaiveCannon(g, spec, visual);
