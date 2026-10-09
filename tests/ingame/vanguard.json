@@ -361,8 +361,8 @@
     },
     {
       "check": "result_above",
-      "path": "escort.VG_MaldX_fromLead",
-      "min": 2000
+      "path": "escort.VG_MaldX_guided",
+      "min": 1
     },
     {
       "check": "result_above",

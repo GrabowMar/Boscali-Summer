@@ -31,9 +31,9 @@ namespace Vanguard
 
         static readonly Spec[] Missiles =
         {
-            new Spec { Key = "VG_MaldX", Name = "ADM-160X MALD-X", Short = "MALD-X", Model = "MaldX",
-                Description = "Miniature air-launched decoy. Flies a weaving 80 km route with a fighter-sized radar signature, then orbits. Radar-guided missiles chasing the launcher may switch to it.",
-                Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 0.6f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
+            new Spec { Key = "VG_MaldX", Name = "MALD-X BAIT", Short = "BAIT", Model = "MaldX",
+                Description = "Loud fighter-signature decoy. Weaves toward your designated or locked target at 230 m/s and loiters over it for five minutes. Enemy radar sites that hold it for 3 s are EXPOSED to your side for 60 s; radar missiles chasing friendly aircraft within 4 km may switch to it.",
+                Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 3.0f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
                 Description = "Jammer decoy. As MALD-X, and jams every enemy radar inside a 60 degree cone ahead of it out to 25 km.",
@@ -75,6 +75,7 @@ namespace Vanguard
             var materials = Materials();
             var infos = new Dictionary<string, WeaponInfo>();
             foreach (Spec spec in Missiles) infos[spec.Key] = Missile(spec, materials);
+            MaldxIdentity(infos["VG_MaldX"]);
             foreach (Spec spec in Missiles)
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
             AegisPod(infos["VG_AegisDart"], materials);

@@ -50,12 +50,13 @@ namespace BoscaliSummer.Vanguard
                 case "lure":
                     Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
                     Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
+                    Modules.Vanguard.Domain.SeductionRule.LureChance = Number(args, "bait", 0.25f);
                     return Status(lead);
                 case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
                 case "snapg":
                     Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
                     return Status(lead);
-                case "ground": return Ground(lead, Number(args, "range", 12000f));
+                case "ground": return Ground(lead, Number(args, "range", 12000f), Text(args, "type") ?? "UGV1_grenade");
                 case "ship": return SpawnTestShip(lead, Number(args, "range", 14000f), Text(args, "type") ?? "Frigate1", (int)Number(args, "from", 0f));
                 case "threat": return Threat(bandit, lead, Number(args, "range", 5000f), Text(args, "seeker") ?? "ARH", Number(args, "climb", 200f));
                 case "strike":
@@ -281,12 +282,12 @@ namespace BoscaliSummer.Vanguard
             return Status(lead);
         }
 
-        // An enemy Hexhound on dry, flat ground `range` ahead of the lead (sweeps +/-60 deg and +6 km until one fits).
-        private static Dictionary<string, object> Ground(Aircraft lead, float range)
+        // An enemy Hexhound (or `type`, e.g. RadarSAM1) on dry, flat ground `range` ahead of the lead (sweeps +/-60 deg and +6 km until one fits).
+        private static Dictionary<string, object> Ground(Aircraft lead, float range, string type)
         {
             if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "ground", "need lead and an enemy HQ");
-            if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
-                return Failure("VanguardAutomation", "ground", "UGV1_grenade not in Encyclopedia.Lookup");
+            if (!Encyclopedia.Lookup.TryGetValue(type, out UnitDefinition def))
+                return Failure("VanguardAutomation", "ground", type + " not in Encyclopedia.Lookup");
             Vector3 fwd = lead.transform.forward;
             fwd.y = 0f;
             fwd.Normalize();
@@ -364,6 +365,8 @@ namespace BoscaliSummer.Vanguard
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
+            // Sim check paths split on '.', so each counter is mirrored as <key>_<event> as well.
+            foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key.Replace('.', '_')] = counter.Value;
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

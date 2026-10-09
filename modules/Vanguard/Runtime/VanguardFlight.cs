@@ -133,6 +133,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             switch (role)
             {
+                case VanguardRole.Decoy: return MaldxRules.Lifetime;
                 case VanguardRole.Drone: return 360f;
                 case VanguardRole.Interceptor: return 6f;
                 case VanguardRole.Torpedo: return 400f;
@@ -148,6 +149,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Plan(float age)
         {
             GlobalPosition pos = missile.GlobalPosition();
+            if (role == VanguardRole.Decoy) { PlanBait(pos); return; }
             switch (role)
             {
                 case VanguardRole.Glider: PlanGlide(pos, age); break;
@@ -385,6 +387,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Effects()
         {
+            if (role == VanguardRole.Decoy) { LureThreats(); return; }
             if (role == VanguardRole.Decoy || role == VanguardRole.Jammer || role == VanguardRole.Drone)
                 SeduceThreats();
             if (role == VanguardRole.Jammer) JamRadars();

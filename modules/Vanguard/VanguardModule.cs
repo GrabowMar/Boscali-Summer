@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<AegisService>(60);
             context.AddSceneService<Networking.GlaiveNet>(60);
             context.AddSceneService<LanceService>(60);
+            context.AddSceneService<MaldxService>(60);
+            context.AddSceneService<Networking.MaldxNet>(60);
             context.AddSceneService<Presentation.TowCable>(60);
             context.AddSceneService<SkywellService>(60);
             context.AddSceneService<Networking.SkywellNet>(60);
