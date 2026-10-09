@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool archerPublished;
         private Unit volleyTarget;
         private int volleyCue = -1;
+        private Unit ramWatched;
 
         public int Slot => slot;
 
@@ -90,6 +91,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (phase == RemoraPhase.Ram)
             {
                 VanguardStats.Bump("remora.rams");
+                if (cued != null && cued != ramWatched)
+                {
+                    ramWatched = cued;
+                    // A kill only counts when this drone was already gone: its blast (or hull) is what ended the target.
+                    cued.onDisableUnit += _ =>
+                    {
+                        if (missile == null || missile.disabled) VanguardStats.Bump("remora.ramKills");
+                    };
+                }
                 missile.Arm(); // the replaced cruise seeker never arms it; unarmed it would only fizzle
                 Plugin.Logger?.LogInfo("[Vanguard] REMORA ram on " + (cued != null ? cued.unitName : "?"));
             }
@@ -102,8 +112,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             int left = RemoraArcher.Left(archerFired);
             bool tracked = missile.NetworkHQ != null && missile.NetworkHQ.TryGetKnownPosition(target, out _);
             float now = Time.timeSinceLevelLoad;
-            if (!RemoraArcher.CanFire(toTarget.magnitude, Vector3.Angle(missile.transform.forward, toTarget),
-                    now - archerLastShot, left, tracked) || launcher == null || launcher.disabled) return;
+            float range = toTarget.magnitude, offNose = Vector3.Angle(missile.transform.forward, toTarget);
+            // Sim diagnostic: the drone is in range and cone but the faction has no track on the target yet.
+            if (RemoraArcher.HoldsForTrack(range, offNose, left, tracked)) VanguardStats.Bump("remora.holdNoTrack");
+            if (!RemoraArcher.CanFire(range, offNose, now - archerLastShot, left, tracked) || launcher == null || launcher.disabled) return;
             int pylon = RemoraArcher.NextPylon(archerFired);
             MissileDefinition round = ArcherRound();
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -112,7 +124,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Transform rail = RemoraVisuals.Pylon(missile, pylon);
             // Drop the round half a metre clear of its rail (no rail child: under the wing, 1.2 m out).
             Vector3 from = (rail != null ? rail.position : t.position + t.right * (pylon == 0 ? -1.2f : 1.2f)) - t.up * 0.5f;
-            Missile aam = spawner.SpawnMissile(round, from, t.rotation, missile.rb.velocity, target, launcher);
+            // Turn the round part-way onto the target so it does not leave a 60 deg off-nose shot pointing away.
+            Quaternion launchRot = toTarget.sqrMagnitude > 1f
+                ? Quaternion.RotateTowards(t.rotation, Quaternion.LookRotation(toTarget, t.up), RemoraArcher.LaunchTurn)
+                : t.rotation;
+            // owner = the drone: every peer places the round at drone + offset (exact). Vanilla StartMissile hands
+            // ownerID on to the drone's owner (the launcher) after one physics tick, which keeps the kill credit.
+            Missile aam = spawner.SpawnMissile(round, from, launchRot, missile.rb.velocity, target, missile);
             archerFired |= 1 << pylon;
             archerLastShot = now;
             volleyTarget = target;
@@ -136,7 +154,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void RamFuse()
         {
             if (archerPhase != RemoraPhase.Ram || target == null || target.disabled) return;
-            if (!FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), RemoraArcher.RamFuse)) return;
+            Vector3 to = target.GlobalPosition() - missile.GlobalPosition();
+            float dist = to.magnitude;
+            Vector3 rel = missile.rb.velocity - (target.rb != null ? target.rb.velocity : Vector3.zero);
+            float closing = dist > 0.01f ? Vector3.Dot(rel, to / dist) : 0f;
+            if (dist > RemoraArcher.FuseRadius(closing, Time.fixedDeltaTime)) return;
             VanguardStats.Bump("remora.ramHits");
             Detonate();
         }

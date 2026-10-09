@@ -183,9 +183,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     visible: When(a => a.radar != null),
                     status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))))
                 .Add(Leaf("drone-strike", "VANGUARD: DESIGNATE", AceIcon.Strike, () => Service<IDroneCommand>()?.Strike(),
-                    visible: () => Service<IDroneCommand>() is IDroneCommand d && !d.Striking,
+                    visible: () => Service<IDroneCommand>() != null, // stays up while Striking: a fresh cue re-aims the drones
                     enabled: () => Service<IDroneCommand>()?.CanStrike == true,
-                    status: () => Service<IDroneCommand>()?.CanStrike == true ? new AceRadialStatus("ON TARGET", AceTone.Active)
+                    status: () => Service<IDroneCommand>() is IDroneCommand d && d.CanStrike
+                        ? new AceRadialStatus(d.Striking ? "RE-DESIGNATE" : "ON TARGET", AceTone.Active)
                         : new AceRadialStatus("NO TARGET", AceTone.Caution)))
                 .Add(Leaf("drone-screen", "VANGUARD: RELEASE", AceIcon.Defence, () => Service<IDroneCommand>()?.Screen(),
                     visible: () => Service<IDroneCommand>()?.Striking == true,

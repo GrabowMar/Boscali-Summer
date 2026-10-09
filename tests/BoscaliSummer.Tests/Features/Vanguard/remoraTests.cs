@@ -26,6 +26,15 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 1.4f, 1, true), "1.5 s between rounds");
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 9f, 0, true), "empty rails hold fire");
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 9f, 2, false), "no faction track holds fire");
+            TestAssert.That(RemoraArcher.HoldsForTrack(5000f, 10f, 2, false), "in range and cone, rounds left, no track = waiting on a sensor");
+            TestAssert.That(!RemoraArcher.HoldsForTrack(5000f, 10f, 2, true) && !RemoraArcher.HoldsForTrack(13000f, 10f, 2, false) &&
+                !RemoraArcher.HoldsForTrack(5000f, 70f, 2, false) && !RemoraArcher.HoldsForTrack(5000f, 10f, 0, false),
+                "tracked, out of range, out of cone or empty is not a track hold");
+
+            TestAssert.That(Near(RemoraArcher.FuseRadius(0f, 0.02f), RemoraArcher.RamFuseMin) &&
+                Near(RemoraArcher.FuseRadius(-300f, 0.02f), RemoraArcher.RamFuseMin), "slow or opening ram keeps the tight 6 m fuse");
+            TestAssert.That(Near(RemoraArcher.FuseRadius(700f, 0.02f), 8.4f), "700 m/s closing: window 1.2 steps wide");
+            TestAssert.That(Near(RemoraArcher.FuseRadius(5000f, 0.02f), RemoraArcher.RamFuseMax), "fuse never opens past 12 m");
 
             TestAssert.That(RemoraArcher.Status(2, 2, RemoraPhase.Escort) == "ARCHER 2/2 READY", "ready line");
             TestAssert.That(RemoraArcher.Status(3, 4, RemoraPhase.Engage) == "ARCHER ENGAGING 3/4", "engaging line sums drones");

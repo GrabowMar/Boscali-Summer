@@ -106,7 +106,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (missile.timeSinceSpawn >= AegisEnvelope.DropClearSeconds && missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
                 CheckIntercept();
             }
-            if (role == VanguardRole.Drone) RamFuse();
+            if (role == VanguardRole.Drone)
+            {
+                RamFuse();
+                if (missile.disabled) return;
+            }
             float now = Time.timeSinceLevelLoad;
             if (now >= nextPlan)
             {

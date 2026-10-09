@@ -7,7 +7,7 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IDroneCommand
     {
-        /// <summary>True after DESIGNATE until RELEASE or the designated target dies (local view).</summary>
+        /// <summary>True after DESIGNATE until RELEASE, the designated target dies or the local aircraft changes (local view). DESIGNATE stays valid while it is true: a fresh cue re-aims the drones.</summary>
         bool Striking { get; }
 
         /// <summary>The local aircraft has a target selected to designate.</summary>

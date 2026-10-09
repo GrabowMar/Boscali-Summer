@@ -16,9 +16,11 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float FireCone = 60f;      // deg off the drone's nose
         public const float FireInterval = 1.5f;
         public const float AiLeash = 20000f;    // AI launchers: engage only targets this close to the launcher
-        public const float RamFuse = 15f;       // m to the rammed target
+        public const float RamFuseMin = 6f;     // m to the rammed target centre (blast frags fall off with the cube of range)
+        public const float RamFuseMax = 12f;
         public const float HitRadius = 40f;     // an AAM that dies this close to its target scored
         public const float ElevonLimit = 25f;   // deg
+        public const float LaunchTurn = 30f;    // deg a fired round is turned from the drone's nose toward its target
 
         public static int Left(int firedMask) => Rounds - ((firedMask & 1) + ((firedMask >> 1) & 1));
 
@@ -31,6 +33,17 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             if (air && left > 0) return RemoraPhase.Engage;
             return cueSpent ? RemoraPhase.Escort : RemoraPhase.Ram;
         }
+
+        /// <summary>
+        /// Ram fuse radius: tight so the blast lands on the hull, wide enough that a fast pass always has a physics tick
+        /// inside it (the 2 x radius window is 1.2 steps of closing speed).
+        /// </summary>
+        public static float FuseRadius(float closingSpeed, float step) =>
+            Mathf.Clamp(Mathf.Max(closingSpeed, 0f) * step * 0.6f, RamFuseMin, RamFuseMax);
+
+        /// <summary>In range and cone with rounds left but no faction track: the volley is waiting on a sensor.</summary>
+        public static bool HoldsForTrack(float range, float offNoseDeg, int left, bool tracked) =>
+            !tracked && left > 0 && range <= FireRange && offNoseDeg <= FireCone;
 
         public static bool CanFire(float range, float offNoseDeg, float sinceShot, int left, bool tracked) =>
             tracked && left > 0 && range <= FireRange && offNoseDeg <= FireCone && sinceShot >= FireInterval;

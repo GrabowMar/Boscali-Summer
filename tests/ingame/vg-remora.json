@@ -231,6 +231,11 @@
       "check": "result_above",
       "path": "ram.remora_ramHits",
       "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ram.remora_ramKills",
+      "min": 1
     }
   ]
 }

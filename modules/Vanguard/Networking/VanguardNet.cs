@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     internal sealed class VanguardNet : MonoBehaviour, ISceneService, IDroneCommand
     {
         internal const byte ProtocolVersion = 1;
-        private const float OrderInterval = 0.5f;
+        private const float OrderInterval = 0.2f; // per aircraft; a re-designate right after DESIGNATE must not be eaten
 
         private readonly SenderThrottle throttle = new SenderThrottle();
         private HandlerSlot serverSlot;
@@ -35,8 +35,10 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         private float nextRegistration;
 
         private Unit designated; // local view of the last order; lapses when that target dies
+        private Aircraft designatedFrom; // the local aircraft that sent it: a respawn starts clean
 
-        public bool Striking => designated != null && !designated.disabled;
+        public bool Striking => designated != null && !designated.disabled && designatedFrom != null && !designatedFrom.disabled &&
+            GameManager.GetLocalAircraft(out Aircraft me) && me == designatedFrom;
 
         public bool CanStrike => LocalTarget(out _, out _);
 
@@ -65,6 +67,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         public void ResetForScene()
         {
             designated = null;
+            designatedFrom = null;
             throttle.Clear();
         }
 
@@ -72,6 +75,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (!LocalTarget(out Aircraft aircraft, out Unit target)) return;
             designated = target;
+            designatedFrom = aircraft;
             Send(aircraft, true, target);
         }
 
@@ -79,6 +83,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
             designated = null;
+            designatedFrom = null;
             Send(aircraft, false, null);
         }
 
@@ -125,6 +130,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             Unit target = null;
             if (message.Strike && !UnitRegistry.TryGetUnit(new PersistentID { Id = message.TargetId }, out target)) return;
             if (target != null && (target.disabled || target.NetworkHQ == aircraft.NetworkHQ)) return;
+            // Only a unit the pilot's faction already tracks: the drones fly to the target's true position.
+            if (target != null && (aircraft.NetworkHQ == null || !aircraft.NetworkHQ.TryGetKnownPosition(target, out _))) return;
             DroneOrders.Order(aircraft, target);
         }
 
