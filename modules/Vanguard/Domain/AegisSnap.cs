@@ -31,6 +31,14 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float FinStart = .05f;
         public const float FinEnd = .2f;
 
+        // Server re-check of a client-named snap: the owner's envelope plus allowance for latency and the rail delay.
+        public const float RangeSlack = 1.2f;
+        public const float AngleSlack = 10f;
+
+        /// <summary>False for a snap launched outside the envelope (+ slack): that dart then flies with the defence-dart rules.</summary>
+        public static bool ServerAccepts(float range, float offNoseDeg) =>
+            range <= MaxRange * RangeSlack && offNoseDeg <= MaxOffNose + AngleSlack;
+
         public static SnapVerdict Judge(bool hasTarget, bool air, float range, float offNoseDeg, int ammo, bool threatInbound)
         {
             if (ammo <= 0) return SnapVerdict.Empty;

@@ -15,21 +15,49 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal static class AegisTrigger
     {
         private static readonly Dictionary<WeaponStation, float> LastPress = new Dictionary<WeaponStation, float>();
+        private static readonly List<WeaponStation> Dead = new List<WeaponStation>();
+        private static readonly Dictionary<WeaponInfo, bool> Known = new Dictionary<WeaponInfo, bool>();
         private static readonly List<Missile> Inbound = new List<Missile>();
 
-        public static bool IsAegis(WeaponStation station) =>
-            station?.WeaponInfo != null && station.WeaponInfo.name.Contains(VanguardKeys.AegisInfo);
+        // Per-frame callers (HUD, the WeaponManager.Fire patch): WeaponInfo.name allocates a string, so cache it per info asset.
+        public static bool IsAegis(WeaponStation station)
+        {
+            WeaponInfo info = station?.WeaponInfo;
+            if (info == null) return false;
+            if (!Known.TryGetValue(info, out bool aegis)) Known[info] = aegis = info.name.Contains(VanguardKeys.AegisInfo);
+            return aegis;
+        }
 
-        public static void Clear() => LastPress.Clear();
+        public static void Clear()
+        {
+            LastPress.Clear();
+            Known.Clear();
+        }
+
+        // Stations are rebuilt on every loadout change or respawn; their old WeaponStation objects hold dead cells.
+        private static void PruneDead()
+        {
+            foreach (WeaponStation s in LastPress.Keys)
+                if (s.Weapons.Count == 0 || s.Weapons[0] == null) Dead.Add(s);
+            for (int i = 0; i < Dead.Count; i++) LastPress.Remove(Dead[i]);
+            Dead.Clear();
+        }
 
         public static SnapVerdict Press(Aircraft aircraft, WeaponStation station, Unit target)
         {
             float now = Time.timeSinceLevelLoad;
-            bool held = LastPress.TryGetValue(station, out float last) && now - last < AegisSnap.HeldGap;
+            bool known = LastPress.TryGetValue(station, out float last);
+            if (!known) PruneDead();
+            bool held = known && now - last < AegisSnap.HeldGap;
             LastPress[station] = now;
             // Tap to fire: holding the trigger must not dump the darts the automatic defence relies on.
-            if (held || aircraft.remoteSim || station.SafetyIsOn(aircraft) || station.SalvoInProgress ||
-                station.Ammo > 0 && !station.Ready()) return SnapVerdict.Busy;
+            if (held || aircraft.remoteSim || station.SafetyIsOn(aircraft) || station.SalvoInProgress) return SnapVerdict.Busy;
+            if (station.Ammo > 0 && !station.Ready())
+            {
+                // Also covers the pod's own automatic defence launches, which the pilot did not trigger.
+                AegisHud.Notify(aircraft, HudTone.Caution, "SNAP — NO SOLUTION", "POD CYCLING");
+                return SnapVerdict.Busy;
+            }
 
             bool has = target != null && !target.disabled;
             Vector3 to = has ? target.GlobalPosition() - aircraft.GlobalPosition() : Vector3.zero;
@@ -67,6 +95,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             snap = target is Aircraft;
             if (!missile.IsServer) return;
+            if (snap && !SnapInEnvelope())
+            {
+                // The press was judged on the owner's peer; the server does not take its word for the envelope.
+                snap = false;
+                VanguardStats.Bump("aegis.snapRejected");
+            }
             if (snap)
             {
                 VanguardStats.Bump("aegis.snapAway"); // carried nose-forward and the target is ahead: no pitch-up
@@ -79,6 +113,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         private float AegisLifetime() => snap ? AegisSnap.Lifetime : AegisSnap.DefenceLifetime;
+
+        private bool SnapInEnvelope()
+        {
+            if (launcher == null || target == null) return false;
+            Vector3 to = target.GlobalPosition() - launcher.GlobalPosition();
+            return AegisSnap.ServerAccepts(to.magnitude, Vector3.Angle(launcher.transform.forward, to));
+        }
 
         private void PlanIntercept(GlobalPosition pos)
         {

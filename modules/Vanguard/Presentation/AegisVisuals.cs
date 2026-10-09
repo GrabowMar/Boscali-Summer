@@ -55,19 +55,27 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private AegisHinge[] doors;
         private float[] firedAt;
 
+        /// <summary>Rigs every pod the station holds: a two-station hardpoint set merges both pods into one 6-dart station.</summary>
         public static void Attach(WeaponStation station)
         {
-            if (station.Weapons.Count == 0 || !(station.Weapons[0] is MountedMissile first) || first.transform.parent == null) return;
-            Transform pod = first.transform.parent;
-            if (pod.GetComponent<AegisDoors>() != null) return;
+            foreach (Weapon weapon in station.Weapons)
+            {
+                Transform pod = weapon != null && weapon is MountedMissile ? weapon.transform.parent : null;
+                if (pod != null && pod.GetComponent<AegisDoors>() == null) Rig(pod);
+            }
+        }
+
+        private static void Rig(Transform pod)
+        {
             MountedMissile[] cells = pod.GetComponentsInChildren<MountedMissile>(true);
+            Transform first = cells[0].transform;
             var doors = new AegisHinge[cells.Length];
             for (int i = 0; i < cells.Length; i++)
             {
                 Transform door = AegisHinge.Find(pod, "Door" + CellIndex(cells[i], i));
                 if (door == null) continue;
-                float lateral = Vector3.Dot(AegisHinge.Centre(door) - door.position, first.transform.right);
-                doors[i] = AegisHinge.Of(door, first.transform.forward, AegisSnap.DoorSwing(lateral));
+                float lateral = Vector3.Dot(AegisHinge.Centre(door) - door.position, first.right);
+                doors[i] = AegisHinge.Of(door, first.forward, AegisSnap.DoorSwing(lateral));
             }
             var c = pod.gameObject.AddComponent<AegisDoors>();
             c.cells = cells;

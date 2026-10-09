@@ -19,7 +19,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>AEGIS fire control: nearest closing threat in range, one interceptor per threat, global cooldown.</summary>
     internal sealed class InterceptPicker
     {
-        public const float MaxRange = 1100f;
+        // 1100 m + ~150 m: the pod cover's 0.15 s rail delay (AegisSnap.DoorLead) costs a fast closer that much approach.
+        public const float MaxRange = 1250f;
         public const float MinRange = 120f; // Very close arrivals can beat the drop-and-turn delay.
         public const float Cooldown = 2.2f;
         public const float EngagementMemory = 8f;

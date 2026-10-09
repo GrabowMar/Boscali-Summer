@@ -1,5 +1,6 @@
 {
   "name": "vg-aegis",
+  "_note": "Lead is a CI-22 Cricket: its Outer Left Wing Pylon is a ONE-station set that offers the pod's ECMPod1 donor, so the station holds exactly 3 darts (FS-20 has no legal set; FS-12 / T/A-30 / SFB-81 sets merge two pods into one 6-dart station and break the ammo checks). hit.aegis.doorOpen and hit.aegis.finsOpen need the Door0..2 / FinA..FinD joints of the remade AegisPod / AegisInterceptor models: they stay red on branches without those models and are not a code fault.",
   "mods": [
     "boscalisummer"
   ],
@@ -8,7 +9,7 @@
     {
       "op": "spawn",
       "id": "lead",
-      "type": "FS-20 Vortex",
+      "type": "CI-22 Cricket",
       "faction": "Boscali",
       "at": {
         "map": [
@@ -16,15 +17,15 @@
           0
         ]
       },
-      "altitude": 6000,
+      "altitude": 3000,
       "msl": true,
-      "speed": 220,
+      "speed": 140,
       "heading": 0
     },
     {
       "op": "spawn",
       "id": "bandit",
-      "type": "FS-20 Vortex",
+      "type": "CI-22 Cricket",
       "faction": "Primeva",
       "at": {
         "near": {
@@ -36,7 +37,7 @@
           ]
         }
       },
-      "speed": 200
+      "speed": 120
     },
     {
       "op": "fly",
@@ -156,6 +157,10 @@
     {
       "op": "wait",
       "seconds": 7
+    },
+    {
+      "op": "mark",
+      "text": "snap result: snapHit needs server contact; doorOpen/finsOpen need the Door0..2 + FinA..FinD joints of the remade pod/dart models (red before those models merge = model dependency, not a code fault)"
     },
     {
       "op": "call",

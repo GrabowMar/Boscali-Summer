@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
 
@@ -26,6 +27,17 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 AegisSnap.Judge(true, true, 900f, 0f, 1, false) == SnapVerdict.Fire, "only the last dart is reserved, only under threat");
             TestAssert.That(AegisSnap.Reason(SnapVerdict.OutOfRange, 3240f) == "RANGE 3.2 km > 2.5" &&
                 AegisSnap.Reason(SnapVerdict.Fire, 0f) == null, "range reason uses invariant km");
+
+            TestAssert.That(AegisSnap.ServerAccepts(2500f, 70f) && AegisSnap.ServerAccepts(2900f, 79f),
+                "server takes a snap at the envelope edge plus latency slack");
+            TestAssert.That(!AegisSnap.ServerAccepts(3100f, 20f) && !AegisSnap.ServerAccepts(1800f, 85f),
+                "server refuses a snap far outside the range or the off-nose cone (flies as a plain defence dart)");
+
+            var picker = new InterceptPicker();
+            var fast = new List<ThreatView> { new ThreatView(7, 1200f, 600f) };
+            TestAssert.That(InterceptPicker.MaxRange >= 1100f + 100f && picker.Pick(0f, fast) == 7 &&
+                new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(8, InterceptPicker.MaxRange + 50f, 600f) }) == -1,
+                "defence window carries the cover's 0.15 s rail delay and still ends at MaxRange");
 
             TestAssert.That(AegisSnap.Damage(50f, 600f, AegisSnap.DamageScale) == 200f && AegisSnap.Damage(50f, 100f, 2f) == 100f &&
                 AegisSnap.Damage(50f, 3000f, 2f) == 400f && AegisSnap.Damage(50f, 600f, 1f) == 100f, "snap damage = defence dart x2, closure 1..4x");

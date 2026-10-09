@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = 0; i < stations.Count; i++)
             {
                 WeaponStation s = stations[i];
-                if (s?.WeaponInfo != null && s.Ammo > 0 && s.WeaponInfo.name.Contains(VanguardKeys.AegisInfo)) return s;
+                if (s != null && s.Ammo > 0 && AegisTrigger.IsAegis(s)) return s;
             }
             return null;
         }
@@ -103,7 +103,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (station.Ammo >= ammo) return true;
             picker.Fired(now, pick);
             VanguardStats.Bump("aegis.defenceLaunch");
-            Networking.AegisNet.Raise(aircraft, Networking.AegisCue.Intercept);
+            Networking.AegisNet.Raise(aircraft, Networking.AegisCue.Intercept, station); // owner client mirrors the launch
             return true;
         }
     }

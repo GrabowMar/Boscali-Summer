@@ -16,8 +16,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     {
         private const string Owner = "vanguard.aegis";
         private const string Channel = "vg.aegis";
+        private static readonly string ReadyDetail = "SNAP " + AegisSnap.Km(AegisSnap.MaxRange) + " km · AUTO DEFENCE";
         private static IHudBoard board;
         private IHudLine line;
+        private int readyAmmo = -1; // ammo the cached ready text was built for
+        private string readyText;
 
         public void ResetForScene()
         {
@@ -60,7 +63,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             line ??= board.Acquire(Owner, Channel, "ready");
             float full = Mathf.Max(station.FullAmmo, 1);
             if (station.Ammo > 0)
-                line?.Set(HudTone.Info, "AEGIS " + station.Ammo + " READY", "SNAP " + AegisSnap.Km(AegisSnap.MaxRange) + " km · AUTO DEFENCE", station.Ammo / full);
+            {
+                if (readyAmmo != station.Ammo)
+                {
+                    readyAmmo = station.Ammo;
+                    readyText = "AEGIS " + readyAmmo + " READY";
+                }
+                line?.Set(HudTone.Info, readyText, ReadyDetail, station.Ammo / full);
+            }
             else line?.Set(HudTone.Caution, "AEGIS EMPTY", "NO DEFENCE DARTS", 0f);
         }
     }
