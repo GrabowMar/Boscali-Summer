@@ -48,8 +48,8 @@ namespace Vanguard
                 Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 30, GLimit = 25, TurnRate = 18,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
-                Description = "Low-profile three-dart self-defense rail. Darts are carried horizontally, drop clear and pitch nose-up, then snap onto a visible inbound threat and ignite. All-direction protection inside 1.1 km; physical contact, limited reaction time and three shots.",
-                Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 45, TurnRate = 55,
+                Description = "Low-profile three-dart hit-to-kill pod. Automatic: darts drop clear, pitch onto a missile locked on you and ignite; all-direction protection inside 1.1 km. SNAP: tap the station with a locked aircraft, helicopter or drone inside 2.5 km and 70 deg of the nose for a double-damage dart. The last dart stays with the defence while a missile is inbound.",
+                Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 55,
                 Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
             new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A Orbiting Gun Drone", Short = "GLAIVE-A", Model = "Glaive2A",
                 Description = "Air-launched folding-wing gun drone. Three-second launch boost, powered ingress toward the enemy, then a 300 m suppression orbit with a stabilized 7.62 mm gun. 180 rounds, short bursts, tracked hostile targets only; departs when dry or out of endurance.",
@@ -78,6 +78,7 @@ namespace Vanguard
             foreach (Spec spec in Missiles)
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
             AegisPod(infos["VG_AegisDart"], materials);
+            AegisSnapSetup(infos["VG_AegisDart"]);
             AleXPod(infos["VG_AleX"], materials);
             SkywellKit(materials);
             Lance(materials);

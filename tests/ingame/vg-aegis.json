@@ -1,0 +1,281 @@
+{
+  "name": "vg-aegis",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 6000,
+      "msl": true,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "lead",
+          "offset": [
+            0,
+            0,
+            -1800
+          ]
+        }
+      },
+      "speed": 200
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 200
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 200
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "mark",
+      "text": "dry trigger: pod fitted, no lock -> SNAP NO SOLUTION, no dart"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap",
+        "target": "none"
+      },
+      "store": "dry"
+    },
+    {
+      "op": "mark",
+      "text": "auto defence: IR missile locks the lead -> AegisService launches a dart"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "threat",
+        "range": 3000,
+        "seeker": "IR",
+        "climb": 100
+      },
+      "store": "threat1"
+    },
+    {
+      "op": "wait",
+      "seconds": 7
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap",
+        "press": 0
+      },
+      "store": "defence"
+    },
+    {
+      "op": "mark",
+      "text": "second threat 6 km out, then SNAP at the bandit ~1.6 km ahead (2 darts left -> allowed)"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "threat",
+        "range": 6000,
+        "seeker": "IR",
+        "climb": 100
+      },
+      "store": "threat2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap"
+      },
+      "store": "snap"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.3
+    },
+    {
+      "op": "capture",
+      "name": "aegis-snap-release"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "mark",
+      "text": "last dart + threat inbound -> reserved for the defence, no launch"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap",
+        "target": "none"
+      },
+      "store": "reserve"
+    },
+    {
+      "op": "wait",
+      "seconds": 7
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap",
+        "press": 0
+      },
+      "store": "hit"
+    },
+    {
+      "op": "wait",
+      "seconds": 16
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snap",
+        "press": 0
+      },
+      "store": "last"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "dry.aegis.ammoBefore",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "dry.aegis.ammo",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "dry.aegis.noSolution",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "defence.aegis.defenceLaunch",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "defence.threatsGone",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "snap.aegis.range",
+      "max": 2500
+    },
+    {
+      "check": "result_above",
+      "path": "snap.aegis.ammoBefore",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "snap.aegis.ammo",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "snap.aegis.snapPress",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "reserve.aegis.reserved",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "reserve.aegis.ammo",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "hit.aegis.snapAway",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "hit.aegis.snapHit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "hit.aegis.doorOpen",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "hit.aegis.finsOpen",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "last.aegis.defenceLaunch",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "last.aegis.ammo",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "last.threatsGone",
+      "min": 2
+    }
+  ]
+}

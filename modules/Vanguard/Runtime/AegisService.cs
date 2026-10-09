@@ -32,6 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             VanguardRegistry.Clear();
             DroneOrders.Clear();
             VanguardStats.Clear();
+            AegisTrigger.Clear();
         }
 
         public static void Watch(Aircraft aircraft)
@@ -99,7 +100,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (threat == null) return true;
             int ammo = station.Ammo;
             station.LaunchMount(aircraft, threat, threat.GlobalPosition());
-            if (station.Ammo < ammo) picker.Fired(now, pick);
+            if (station.Ammo >= ammo) return true;
+            picker.Fired(now, pick);
+            VanguardStats.Bump("aegis.defenceLaunch");
+            Networking.AegisNet.Raise(aircraft, Networking.AegisCue.Intercept);
             return true;
         }
     }

@@ -62,13 +62,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             this.slot = slot;
             seed = unchecked((uint)missile.GetInstanceID()) % 997 / 997f;
             launcher = missile.owner;
-            if (role == VanguardRole.Interceptor && missile.IsServer)
-            {
-                Vector3 up=launcher != null ? launcher.transform.up : Vector3.up;
-                Vector3 reference=launcher != null ? launcher.transform.forward : Vector3.forward;
-                missile.rb.rotation=Quaternion.LookRotation(up,reference); // Native rail has already dropped it .55 m clear.
-                missile.rb.angularVelocity=Vector3.zero;
-            }
+            if (role == VanguardRole.Interceptor) InitAegis();
             fallbackAim = aimpoint;
             launchPos = missile.GlobalPosition();
             cruiseAltitude = Mathf.Max(launchPos.y, 300f);
@@ -134,7 +128,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (role)
             {
                 case VanguardRole.Drone: return 360f;
-                case VanguardRole.Interceptor: return 6f;
+                case VanguardRole.Interceptor: return AegisLifetime();
                 case VanguardRole.Torpedo: return 400f;
                 case VanguardRole.Carrier:
                 case VanguardRole.Sentinel:
@@ -236,50 +230,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.SetAimpoint(slotPos + leadVel * 1.5f, leadVel);
         }
 
-        private void PlanIntercept(GlobalPosition pos)
-        {
-            if (target == null || target.disabled)
-            {
-                Detonate();
-                return;
-            }
-            GlobalPosition tPos = target.GlobalPosition();
-            Vector3 tVel = target.rb != null ? target.rb.velocity : Vector3.zero;
-            Vector3 rel = tPos - pos;
-            float closing = Mathf.Max(100f, -Vector3.Dot(tVel - missile.rb.velocity, rel.normalized));
-            float tgo = Mathf.Clamp(rel.magnitude / closing, 0f, 4f);
-            missile.SetAimpoint(tPos + tVel * tgo, tVel);
-        }
-
-        private void SlewDuringDrop()
-        {
-            if (target == null || target.disabled) return;
-            Rigidbody rb = missile.rb;
-            Vector3 tVel = target.rb != null ? target.rb.velocity : Vector3.zero;
-            Vector3 to = target.GlobalPosition() + tVel * 0.5f - missile.GlobalPosition();
-            if (to.sqrMagnitude < 1f) return;
-            Quaternion want = Quaternion.LookRotation(to.normalized, Vector3.up);
-            rb.angularVelocity = Vector3.zero;
-            rb.MoveRotation(Quaternion.RotateTowards(rb.rotation, want, DropSlewDegPerSec * Time.fixedDeltaTime));
-        }
-
-        private void CheckIntercept()
-        {
-            if (target == null || target.disabled) return;
-            Vector3 relative = target.GlobalPosition()-missile.GlobalPosition();
-            if (target is Missile threat && missile.IsServer && missile.timeSinceSpawn >= AegisEnvelope.ArmSeconds &&
-                hasInterceptSample && AegisEnvelope.Contact(previousInterceptRelative,relative,
-                    AegisEnvelope.ContactRadius(threat.definition.width,threat.definition.height)))
-            {
-                float speed=(threat.rb.velocity-missile.rb.velocity).magnitude;
-                float damage=PierceDamage(missile)*Mathf.Clamp(speed/300f,1f,4f);
-                threat.TakeDamage(damage,0f,1f,0f,0f,launcher != null ? launcher.persistentID : missile.persistentID);
-                Detonate();
-                return;
-            }
-            previousInterceptRelative=relative;
-            hasInterceptSample=true;
-        }
 
         // Air phase: glide along the ship's predicted track and reach the water EntryRange short of it.
         private void PlanTorpedo(GlobalPosition pos)
