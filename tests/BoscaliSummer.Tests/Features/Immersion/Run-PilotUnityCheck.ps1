@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
     [string]$EvidenceDir = '',
     [string]$ModDll = '',
@@ -18,7 +18,7 @@ foreach ($source in @('modules/Immersion/Visuals/CockpitPilotRig.cs', 'modules/I
     'modules/Immersion/Visuals/PilotReflection.cs', 'modules/Immersion/Visuals/PilotShaderBundle.cs',
     'modules/Weather/Visuals/CanopyGlassResolver.cs', 'modules/Weather/Domain/CanopyScoring.cs',
     'modules/Weather/Visuals/CanopyGlassView.cs', 'Core/Contracts/ICanopyGlassView.cs',
-    'Core/Contracts/FxBudget.cs', 'Core/Contracts/IClientEffect.cs')) {
+    'Core/Contracts/FxBudget.cs', 'Core/Contracts/IClientEffect.cs', 'Core/Util/EmbeddedResources.cs')) {
     $path = Join-Path $repo $source
     if ($SourceSnapshot) {
         $snapshotPath = Join-Path $SourceSnapshot ([IO.Path]::GetFileName($source))

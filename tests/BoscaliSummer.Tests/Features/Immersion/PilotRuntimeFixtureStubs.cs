@@ -80,11 +80,9 @@ namespace BepInEx.Logging
         public void LogError(object message) => Messages.Add(message?.ToString());
     }
 }
-namespace BoscaliSummer.Core.Game
-{
-    public static class SceneSingleton<T> where T : class { public static T i; }
-    public static class NetworkSceneSingleton<T> where T : class { public static T i; }
-}
+// Global like the game's own singletons (production code no longer imports a Core.Game alias for them).
+public static class SceneSingleton<T> where T : class { public static T i; }
+public static class NetworkSceneSingleton<T> where T : class { public static T i; }
 namespace BoscaliSummer.Core.Services
 {
     internal static class ModuleServices
