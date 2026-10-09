@@ -336,7 +336,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (GameAccess.IsServer())
             {
                 // The mission's authored weather is the opening state.
-                fieldKey = NewFieldKey(0f, settings != null && settings.DynamicWeatherEnabled.Value,
+                fieldKey = NewFieldKey(0f, settings != null && settings.TapeMoves.Value,
                     StateTable.FromConditions(baselineConditions));
                 fieldReady = true;
             }
@@ -895,7 +895,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private WeatherKey NewFieldKey(float epoch, bool dynamic, WeatherRegimeType start)
         {
             return new WeatherKey(unchecked((uint)missionSeed), epoch, dynamic, (byte)start,
-                settings.StateIntervalMinutes.Value, settings.StateFadeSeconds.Value,
+                5f, 60f, // INTERIM(slice 4): the timeline's own constants; the key no longer carries them
                 fieldKey?.Sets ?? 0, fieldKey?.LayoutSalt ?? 0, fieldKey != null && fieldKey.HasAnchor,
                 fieldKey?.AnchorX ?? 0f, fieldKey?.AnchorZ ?? 0f, fieldKey?.FrontTurn ?? 0);
         }
@@ -909,12 +909,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             nextFieldUpdate = Time.unscaledTime + 1f;
 
             if (GameAccess.IsServer() && !isManualOverride &&
-                (fieldKey.Dynamic != (consoleAuto || settings.DynamicWeatherEnabled.Value) ||
-                 !Mathf.Approximately(fieldKey.IntervalMinutes, settings.StateIntervalMinutes.Value) ||
-                 !Mathf.Approximately(fieldKey.FadeSeconds, settings.StateFadeSeconds.Value)))
+                fieldKey.Dynamic != (consoleAuto || settings.TapeMoves.Value))
             {
                 // Continue from the state on screen; the renderer crossfades the new layout.
-                fieldKey = NewFieldKey(missionTime, consoleAuto || settings.DynamicWeatherEnabled.Value,
+                fieldKey = NewFieldKey(missionTime, consoleAuto || settings.TapeMoves.Value,
                     field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
                 lastForecastSampleTime = -999f;
                 BroadcastSync(missionTime);
@@ -991,8 +989,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     FieldAnchorX = fieldKey != null ? fieldKey.AnchorX : 0f,
                     FieldAnchorZ = fieldKey != null ? fieldKey.AnchorZ : 0f,
                     FieldFrontTurn = fieldKey != null ? fieldKey.FrontTurn : (byte)0,
-                    HoldMinutes = fieldKey != null ? fieldKey.IntervalMinutes : settings.StateIntervalMinutes.Value,
-                    BlendMinutes = (fieldKey != null ? fieldKey.FadeSeconds : settings.StateFadeSeconds.Value) / 60f
+                    HoldMinutes = fieldKey != null ? fieldKey.IntervalMinutes : 5f, // INTERIM(slice 4): the timeline's constants
+                    BlendMinutes = (fieldKey != null ? fieldKey.FadeSeconds : 60f) / 60f
                 });
             }
         }
@@ -1280,7 +1278,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             forcedRainIntensity = null;
             transitionProgress = 0f;
 
-            fieldKey = NewFieldKey(missionTime, consoleAuto || settings.DynamicWeatherEnabled.Value,
+            fieldKey = NewFieldKey(missionTime, consoleAuto || settings.TapeMoves.Value,
                 field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;

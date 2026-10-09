@@ -996,6 +996,7 @@ ProbeEventsSerialization(pluginAssembly, mirageAssembly);
 ProbeFactionMoraleSerialization(pluginAssembly, mirageAssembly);
 ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
+ProbeWeatherConfig(pluginAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 // Wing integration is optional and the supported contract is compiled in-tree. A hard
 // external dependency prevents BepInEx from loading the entire plugin when Wing is absent.
@@ -1719,6 +1720,35 @@ static void ProbeSessionSerialization(Assembly plugin, Assembly mirage)
     if ((byte)message.GetField("Protocol")!.GetValue(foreign)! != 9 || message.GetField("Keys")!.GetValue(foreign) != null)
         throw new InvalidOperationException("Host settings reader must stop at a foreign protocol header");
     Console.WriteLine("  Session protocol-1 host settings roundtrip");
+}
+
+static void ProbeWeatherConfig(Assembly plugin)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Assembly bepInEx = Assembly.Load("BepInEx");
+    Type configFile = bepInEx.GetType("BepInEx.Configuration.ConfigFile", true)!;
+    string path = Path.Combine(Path.GetTempPath(), "boscali-weather-config-probe-" + Environment.ProcessId + ".cfg");
+    try
+    {
+        // A player's file from before the tape: the old switch is off and the old step timing is customised.
+        File.WriteAllText(path, "[Weather]\n\nDynamicWeatherEnabled = false\nStateIntervalMinutes = 9\nStateFadeSeconds = 120\n");
+        object config = Activator.CreateInstance(configFile, path, true)!;
+        Type settingsType = plugin.GetType("BoscaliSummer.Modules.Weather.Configuration.WeatherSettings", true)!;
+        object settings = Activator.CreateInstance(settingsType, config)!;
+        plugin.GetType("BoscaliSummer.Core.Config.LegacyConfigMigration", true)!
+            .GetMethod("RemoveEntries", flags)!.Invoke(null, new[] { config });
+        configFile.GetMethod("Save")!.Invoke(config, null);
+        string text = File.ReadAllText(path);
+        foreach (string gone in new[] { "DynamicWeatherEnabled", "StateIntervalMinutes", "StateFadeSeconds" })
+            if (text.Contains(gone + " ="))
+                throw new InvalidOperationException("Weather config key " + gone + " survived the migration:\n" + text);
+        // The stored false is deliberately not carried over: TapeMoves starts at its default.
+        foreach (string kept in new[] { "TapeMoves = true", "Pace = 3", "SeedMode = Random", "FixedSeed = 0" })
+            if (!text.Contains(kept))
+                throw new InvalidOperationException("Weather config is missing '" + kept + "':\n" + text);
+        Console.WriteLine("  Weather config: old keys purged, TapeMoves on, Pace 3, SeedMode Random, FixedSeed 0");
+    }
+    finally { File.Delete(path); }
 }
 
 static void ProbeFactionMoraleSerialization(Assembly plugin, Assembly mirage)
