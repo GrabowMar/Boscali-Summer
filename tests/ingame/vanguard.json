@@ -99,14 +99,6 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "pk",
-        "chance": 1
-      }
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
         "action": "threat",
         "range": 4000,
         "seeker": "IR"

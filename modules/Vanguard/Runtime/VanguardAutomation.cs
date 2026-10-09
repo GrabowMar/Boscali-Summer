@@ -424,6 +424,8 @@ namespace BoscaliSummer.Vanguard
                 state[k + "_topSpeed"] = TopSpeed[k];
                 state[k + "_altitude"] = m.GlobalPosition().y;
                 state[k + "_guided"] = Modules.Vanguard.Runtime.VanguardRegistry.TryGet(m, out _) ? 1 : 0;
+                var gunDrone=m.GetComponent<Modules.Vanguard.Runtime.GlaiveDrone>();
+                if (gunDrone != null) state[k + "_phase"]=gunDrone.Phase.ToString();
                 if (lead != null) state[k + "_fromLead"] = FastMath.Distance(m.GlobalPosition(), lead.GlobalPosition());
             }
             return state;

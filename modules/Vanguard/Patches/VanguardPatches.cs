@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         private static void Postfix(Missile __instance)
         {
             if (__instance == null || __instance.definition == null) return;
-            GlaiveTurret.Attach(__instance); // Cache deployed wing bases before launch presentation folds them.
+            GlaiveDrone.Attach(__instance);
             WeaponArticulation.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
@@ -51,17 +51,6 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         {
             if (___missile == null || !VanguardRegistry.TryGet(___missile, out VanguardFlight flight)) return true;
             flight.SlowCheck();
-            return false;
-        }
-    }
-
-    [HarmonyPatch(typeof(Missile), "ServerFixedUpdate")]
-    internal static class GlaiveSuspendedPhysicsPatch
-    {
-        private static bool Prefix(Missile __instance)
-        {
-            if (!VanguardRegistry.TryGet(__instance,out VanguardFlight flight) || !flight.GunDeployed) return true;
-            flight.TickGun();
             return false;
         }
     }

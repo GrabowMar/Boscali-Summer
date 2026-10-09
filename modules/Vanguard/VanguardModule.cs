@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.GlaiveSuspendedPhysicsPatch),
             typeof(Patches.AegisLockPatch),
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),

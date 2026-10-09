@@ -54,18 +54,28 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 VanguardKeys.RoleOf(VanguardKeys.Orca) == VanguardRole.Torpedo &&
                 VanguardKeys.RoleOf(VanguardKeys.AleX) == VanguardRole.Towed, "batch-2 keys get their roles");
             TestAssert.That(GlaiveProfile.Height(20000f) > GlaiveProfile.Height(5000f) &&
-                GlaiveProfile.Height(1000f) == 650f, "gun pod approaches high enough for a useful canopy descent");
-            TestAssert.That(GlaiveProfile.ShouldDeploy(250f,650f,4f) &&
-                !GlaiveProfile.ShouldDeploy(250f,100f,4f) && !GlaiveProfile.ShouldDeploy(900f,650f,4f) &&
-                !GlaiveProfile.ShouldDeploy(250f,650f,1f), "deployment needs range, altitude and launch clearance");
-            TestAssert.That(GlaiveProfile.Inflation(0f) == 0f && GlaiveProfile.Inflation(1.8f) == 1f &&
-                !GlaiveProfile.Burst(1f) && GlaiveProfile.Burst(2.4f), "canopy inflates before the firing cycle");
-            TestAssert.That(GlaiveProfile.CanFire(700f,500f,true,true) &&
-                !GlaiveProfile.CanFire(700f,500f,false,true) && !GlaiveProfile.CanFire(700f,500f,true,false) &&
-                !GlaiveProfile.CanFire(1300f,500f,true,true) && !GlaiveProfile.CanFire(100f,-20f,true,true),
-                "gun pod rejects friendlies, occlusion, excess range and targets above it");
-            TestAssert.That(GlaiveProfile.Retire(20f,240,5f) && GlaiveProfile.Retire(400f,0,20f) &&
-                !GlaiveProfile.Retire(400f,200,20f), "turret retires at low height or when dry");
+                GlaiveProfile.Height(1000f) == 160f, "drone ingress converges on its orbit altitude");
+            TestAssert.That(GlaiveProfile.Capture(500f,160f,6f,70f) &&
+                !GlaiveProfile.Capture(500f,160f,2f,70f) && !GlaiveProfile.Capture(900f,160f,6f,70f) &&
+                !GlaiveProfile.Capture(500f,20f,6f,70f) && !GlaiveProfile.Capture(500f,160f,6f,200f),
+                "orbit capture requires launch clearance, approach range, altitude and safe speed");
+            Vector3 outside=GlaiveProfile.OrbitOffset(Vector3.right*600f,Vector3.forward);
+            Vector3 inside=GlaiveProfile.OrbitOffset(Vector3.right*100f,Vector3.forward);
+            Vector3 centre=GlaiveProfile.OrbitOffset(Vector3.zero,Vector3.zero);
+            TestAssert.That(outside.x < 0f && inside.x > 0f && outside.z > 0f && inside.z > 0f &&
+                Mathf.Abs(centre.magnitude-220f)<.01f, "orbit guidance recovers radius and stays finite at its centre");
+            TestAssert.That(GlaiveProfile.Throttle(40f)>GlaiveProfile.Throttle(70f) && GlaiveProfile.Throttle(100f)==0f,
+                "propeller throttle corrects cruise speed rather than imposing velocity");
+            TestAssert.That(!GlaiveProfile.Burst(.5f) && GlaiveProfile.Burst(2.5f) && !GlaiveProfile.Burst(3.5f),
+                "gun fires bounded bursts after orbit capture");
+            TestAssert.That(GlaiveProfile.CanFire(350f,160f,70f,1f,true,true) &&
+                !GlaiveProfile.CanFire(350f,160f,70f,1f,false,true) && !GlaiveProfile.CanFire(350f,160f,70f,1f,true,false) &&
+                !GlaiveProfile.CanFire(600f,160f,70f,1f,true,true) && !GlaiveProfile.CanFire(100f,-20f,70f,1f,true,true) &&
+                !GlaiveProfile.CanFire(350f,160f,200f,1f,true,true) && !GlaiveProfile.CanFire(350f,160f,70f,.9f,true,true),
+                "gun rejects friendlies, occlusion, excess range, overhead targets, overspeed and unslewed aim");
+            TestAssert.That(GlaiveProfile.Retire(20f,180,6f) && GlaiveProfile.Retire(400f,0,20f) &&
+                GlaiveProfile.Retire(400f,180,181f) && !GlaiveProfile.Retire(20f,180,2f) &&
+                !GlaiveProfile.Retire(400f,180,20f), "drone retires when low, dry or expired after launch clearance");
             TestAssert.That(LanceCapacitor.Tracer(0f) >= .5f && LanceCapacitor.Tracer(1f) <= 1.2f,
                 "railgun uses a thin slug streak instead of an oversized beam");
 

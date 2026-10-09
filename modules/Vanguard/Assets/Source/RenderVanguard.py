@@ -13,11 +13,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import BuildVanguard as generator
 
 
-def main(models, review):
+def main(models, review, only=None):
     os.makedirs(review, exist_ok=True)
     with open(os.path.join(models, "AssetReport.json"), encoding="utf-8") as file:
         report = json.load(file)
     for name, build in generator.MODELS.items():
+        if only and name not in only: continue
         # Reuse the build's preview directions/poses; no duplicate model specification.
         generator.clear_scene()
         spec = build(generator.mats(name))
@@ -64,9 +65,9 @@ def main(models, review):
     with open(os.path.join(models, "AssetReport.json"), "w", encoding="utf-8") as file:
         json.dump(report, file, indent=2)
     generator.contact_sheet(models, list(generator.MODELS))
-    generator.contact_sheet(review, list(generator.MODELS))
+    generator.contact_sheet(review, [n for n in generator.MODELS if os.path.isfile(os.path.join(review,n+".png"))])
 
 
 if __name__ == "__main__":
     args = sys.argv[sys.argv.index("--") + 1:]
-    main(os.path.abspath(args[0]), os.path.abspath(args[1]))
+    main(os.path.abspath(args[0]), os.path.abspath(args[1]), args[2].split(",") if len(args)>2 else None)

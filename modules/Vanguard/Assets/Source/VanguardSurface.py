@@ -16,7 +16,6 @@ def service_stencils(model):
         "HawcX": [("SEPARATION PLANE", -2.88, -2.45, -0.09, -0.06, 0.20, dark)],
         "AegisPod": [("SAFE / SERVICE", -.40, .40, -.079, -.053, .29, dark)],
         "Lance": [("COOLANT / CLOSED", -0.83, -0.35, -0.245, -0.208, 0.072, pale)],
-        "Glaive": [("ACCESS / 02", 0.25, 0.80, -0.065, -0.030, 0.28, dark)],
         "Orca": [("SERVICE / 03", -1.14, -0.76, 0.03, 0.065, 0.12, pale)],
         "AleXPod": [("FIBER / KEEP CLEAR", 0.13, 0.46, -0.068, -0.045, 0.105, dark)],
     }.get(model, [])
@@ -82,18 +81,42 @@ def surface_layers(model, spec, pos, nrm, base, noise):
         soot = np.exp(-((x / 0.077) ** 2 + (z / 0.062) ** 2)) * (y > 2.58) * 0.15
         base *= (1.0 - soot)[..., None]
         smoothness -= soot * 0.20
-    elif model == "GlaiveCanopy":
-        fabric = z > 5.65
-        gore = np.floor((np.arctan2(y,x)+np.pi) / (np.pi/6)).astype(int)
-        stripe = fabric & ((gore % 6) == 0)
-        base[stripe] = (.52,.57,.49)
-        weave = np.sin(x*900)*np.sin(y*900)
-        height[fabric] += weave[fabric]*.000065
-        seam = np.abs(np.sin(np.arctan2(y,x)*6)) < .007
-        height[fabric & seam] -= .00025
-        base[fabric & seam] *= .87
-        smoothness[fabric] = .16 + fine[fabric]*.035
-        smoothness[~fabric] = .20
+    elif model == "Glaive" and spec.get("glaive_polish"):
+        # Composite airframe, rubber seals and coated steel hardware have separate responses.
+        wing=(np.abs(x)>.23)&(z>.095)&(z<.255)&(y>-.4)&(y<.5)
+        smoothness[wing]=.27+fine[wing]*.025
+        prop=(y<-1.105)&(y>-1.195)&(np.abs(x)<.35)&(z>-.035)&(z<.15)
+        base[prop]=(.09,.11,.115); smoothness[prop]=.34
+        tips=prop&(np.abs(x)>.30)
+        base[tips]=(.64,.62,.47)
+        gun=(z<-.173)&(np.abs(x)<.14)&(y>.02)&(y<.72)
+        metal_region(gun,(.22,.245,.25),.43)
+        barrel=gun&(y>.28)&(np.abs(x)<.02)
+        metal_region(barrel,(.13,.155,.17),.49)
+        seal=(z>-.144)&(z<-.133)&((x*x+(y-.13)**2)<.083**2)
+        base[seal]=(.055,.07,.075); metallic[seal]=0; smoothness[seal]=.23
+        pin=((np.abs(x)-.255)**2+(y+.16)**2<.0125**2)&(z>.18)
+        metal_region(pin,(.13,.155,.17),.40)
+        jacket=barrel&(y>.28)&(y<.415)&(np.abs(z+.26)<.008)&(np.abs(nrm[...,0])>.6)&(((y-.28)%.045)<.027)
+        base[jacket]=(.025,.035,.040); height[jacket]-=.0007
+        cooling=(np.abs(x)>.12)&(np.abs(x)<.18)&(y>-.67)&(y<-.43)&(z>.035)&(z<.075)&(np.abs(nrm[...,0])>.7)&(((y+.67)%.052)<.032)
+        base[cooling]=(.035,.045,.05); height[cooling]-=.0006
+        # Short top-only control-surface seams; avoid arbitrary rings across the wings.
+        span=np.abs(x)
+        edge=np.where(span<.97,.34-(span-.255)*(.16/.715),.18-(span-.97)*(.24/.75))
+        chord=np.where(span<.97,.50-(span-.255)*(.16/.715),.34-(span-.97)*(.14/.75))
+        hinge=edge-chord*.74
+        seam=wing&(np.abs(x)>.82)&(np.abs(x)<1.59)&(nrm[...,2]>.6)&(np.abs(y-hinge)<.0013)
+        height[seam]-=.0003; base[seam]*=.65
+        fin=(np.abs(x)>.36)&(np.abs(x)<.55)&(y<-1.71)&(z>.10)&(np.abs(nrm[...,0])>.6)
+        fin_le=-1.75-(z-.07)*(.19/.31)
+        fin_chord=.31-(z-.07)*(.14/.31)
+        rudder=fin&(np.abs(y-(fin_le-fin_chord*.75))<.0013)
+        elevator=(np.abs(x)<.57)&(y<-1.71)&(z>.072)&(z<.088)&(nrm[...,2]>.7)&(np.abs(y+1.86)<.0013)
+        tail_seam=rudder|elevator
+        height[tail_seam]-=.00025; base[tail_seam]*=.65
+        cover=(y>.35)&(y<.73)&(np.abs(x)<.066)&(z>.161)
+        base[cover]*=.92; smoothness[cover]=.31
     elif model == "AegisInterceptor":
         # The gunmetal vehicle is a conductive housing; white motor paint is not.
         vehicle = (y >= 0.081) & (y < 0.389)

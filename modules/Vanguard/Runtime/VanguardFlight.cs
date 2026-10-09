@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly float cruiseAltitude;
         private Unit target;
         private bool fins;
-        private GlaiveTurret gunPod;
+        private GlaiveDrone gunDrone;
         private Vector3 previousInterceptRelative;
         private bool hasInterceptSample;
         private float nextPlan;
@@ -62,19 +62,29 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             this.slot = slot;
             seed = unchecked((uint)missile.GetInstanceID()) % 997 / 997f;
             launcher = missile.owner;
+            if (role == VanguardRole.Interceptor && missile.IsServer)
+            {
+                Vector3 up=launcher != null ? launcher.transform.up : Vector3.up;
+                Vector3 reference=launcher != null ? launcher.transform.forward : Vector3.forward;
+                missile.rb.rotation=Quaternion.LookRotation(up,reference); // Native rail has already dropped it .55 m clear.
+                missile.rb.angularVelocity=Vector3.zero;
+            }
             fallbackAim = aimpoint;
             launchPos = missile.GlobalPosition();
             cruiseAltitude = Mathf.Max(launchPos.y, 300f);
             Vector3 forward = missile.transform.forward;
             forward.y = 0f;
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
+            if (role == VanguardRole.Carrier)
+            {
+                gunDrone=GlaiveDrone.Attach(missile);
+                gunDrone?.Configure(target,aimpoint);
+            }
         }
 
         public VanguardRole Role => role;
         public Unit Launcher => launcher;
         public Missile Missile => missile;
-        public bool GunDeployed => gunPod != null && gunPod.Deployed;
-        public void TickGun() => gunPod?.TickHost();
 
         public void Tick()
         {
@@ -83,6 +93,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 missile.DeployFins();
                 fins = true;
+            }
+            if (role == VanguardRole.Carrier)
+            {
+                if (gunDrone == null) Detonate();
+                else gunDrone.TickHost();
+                return; // Native Steering/ApplyAero still run after this seeker hook.
             }
             if (role == VanguardRole.Towed) HoldTow();
             if (role == VanguardRole.Interceptor)
@@ -109,7 +125,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
             if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            if (age > Lifetime() || (age > 10f && missile.speed < 60f && role != VanguardRole.Towed && !underwater && !GunDeployed)) Detonate();
+            float minimumSpeed = role == VanguardRole.Carrier ? 25f : 60f;
+            if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
         private float Lifetime()
@@ -137,7 +154,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Drone: PlanDrone(pos); break;
                 case VanguardRole.Interceptor: PlanIntercept(pos); break;
                 case VanguardRole.Torpedo: PlanTorpedo(pos); break;
-                case VanguardRole.Carrier: PlanCarrier(pos); break;
             }
         }
 
@@ -261,24 +277,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             previousInterceptRelative=relative;
             hasInterceptSample=true;
-        }
-
-        // Ingress overhead, then brake under a canopy and become a suspended gun turret.
-        private void PlanCarrier(GlobalPosition pos)
-        {
-            GlobalPosition aim = TargetPosition(out _);
-            Vector3 to = aim - pos;
-            float flat = new Vector2(to.x, to.z).magnitude;
-            if (GlaiveProfile.ShouldDeploy(flat, missile.radarAlt, missile.timeSinceSpawn))
-            {
-                gunPod = GlaiveTurret.Attach(missile);
-                if (gunPod == null) Detonate(); // Old/incomplete bundle fails closed, never restores UGV delivery.
-                else gunPod.Deploy(target);
-                return;
-            }
-            GlobalPosition point = aim;
-            point.y = aim.y + GlaiveProfile.Height(flat);
-            missile.SetAimpoint(point, Vector3.zero);
         }
 
         // Air phase: glide along the ship's predicted track and reach the water EntryRange short of it.

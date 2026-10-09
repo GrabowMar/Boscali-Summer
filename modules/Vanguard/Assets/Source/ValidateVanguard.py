@@ -13,14 +13,15 @@ import numpy as np
 
 
 MODELS = ("Remora", "MaldX", "HawcX", "AegisInterceptor", "AegisPod", "Lance",
-          "Glaive", "GlaiveCanopy", "Orca", "AleX", "AleXPod", "SkywellKit")
-HIGH_RES = {"Remora", "HawcX", "Lance", "Glaive", "SkywellKit"}
+          "Glaive", "Orca", "AleX", "AleXPod", "SkywellKit")
+HIGH_RES = {"Remora", "Glaive", "SkywellKit"}
+LOW_RES = {"AleX"}
 REQUIRED = {
     "Remora": {"ElevonL": (None, (-1.2, -1.17, -0.01)), "ElevonR": (None, (1.2, -1.17, -0.01))},
     "MaldX": {"WingL": (None, (-0.08, 0.17, 0.17)), "WingR": (None, (0.08, 0.17, 0.17))},
     "HawcX": {"BodyFlapL": (None, (-0.22, -2.04, -0.08)), "BodyFlapR": (None, (0.22, -2.04, -0.08))},
-    "Glaive": {"WingL": (None, (-0.25, -0.18, 0.16)), "WingR": (None, (0.25, -0.18, 0.16)),
-               "GunYaw": (None, (0, -0.2, -0.22)), "GunPitch": ("GunYaw", (0, -0.12, -0.33))},
+    "Glaive": {"WingL": (None, (-0.255, -0.16, 0.175)), "WingR": (None, (0.255, -0.16, 0.175)),
+               "GunYaw": (None, (0, 0.13, -0.102)), "GunPitch": ("GunYaw", (0, 0.13, -0.26)), "Propeller": (None, (0, -1.152, 0.055))},
     "Orca": {"WingL": (None, (-0.06, 0.39, 0.24)), "WingR": (None, (0.06, 0.39, 0.24)),
              "Rotor": (None, (0, -1.54, 0))},
     "SkywellKit": {
@@ -118,7 +119,7 @@ def atlas_mask(parts, size=256):
 
 
 def texture_check(model, directory, skin_parts, errors):
-    expected = 2048 if model in HIGH_RES else 1024
+    expected = 2048 if model in HIGH_RES else (512 if model in LOW_RES else 1024)
     images = {}
     for part in skin_parts:
         mat = part.data.materials[0]
