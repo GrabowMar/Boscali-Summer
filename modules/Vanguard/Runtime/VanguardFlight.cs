@@ -18,8 +18,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // onto the intercept point so it lights already pointed at threats from any direction.
         private const float DropPhase = AegisEnvelope.SlewEnd;
         private const float DropSlewDegPerSec = 1000f;
-        private const float JamRange = 25000f;
-        private const float JamConeCos = 0.5f; // 60 deg half-angle
 
         // Missile.pierceDamage is private; the interceptor scales its own warhead's pierce by closure speed.
         private static readonly AccessTools.FieldRef<Missile, float> PierceDamage = AccessTools.FieldRefAccess<Missile, float>("pierceDamage");
@@ -141,6 +139,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Gunship: return 300f;
                 case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
+                case VanguardRole.Jammer: return MaldjShadow.Lifetime;
                 default: return 600f;
             }
         }
@@ -151,8 +150,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (role)
             {
                 case VanguardRole.Glider: PlanGlide(pos, age); break;
-                case VanguardRole.Decoy:
-                case VanguardRole.Jammer: PlanDecoy(pos); break;
+                case VanguardRole.Decoy: PlanDecoy(pos); break;
+                case VanguardRole.Jammer: PlanJammer(pos); break;
                 case VanguardRole.Drone: PlanDrone(pos); break;
                 case VanguardRole.Interceptor: PlanIntercept(pos); break;
                 case VanguardRole.Torpedo: PlanTorpedo(pos); break;
@@ -385,9 +384,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Effects()
         {
-            if (role == VanguardRole.Decoy || role == VanguardRole.Jammer || role == VanguardRole.Drone)
+            if (role == VanguardRole.Decoy || role == VanguardRole.Drone)
                 SeduceThreats();
-            if (role == VanguardRole.Jammer) JamRadars();
+            if (role == VanguardRole.Jammer) JamNoise();
             if (role == VanguardRole.Towed) SeduceTowed();
         }
 
@@ -474,30 +473,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 float range = FastMath.Distance(threat.GlobalPosition(), self);
                 if (SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
                     SeekerCapture.Retarget(threat, missile);
-            }
-        }
-
-        private void JamRadars()
-        {
-            FactionHQ own = missile.NetworkHQ;
-            GlobalPosition self = missile.GlobalPosition();
-            // The jam cone sweeps +/-10 deg so coverage breathes instead of sitting on fixed radars.
-            Vector3 fwd = Quaternion.AngleAxis(Mathf.Sin(missile.timeSinceSpawn * 1.1f) * 10f, missile.transform.up) *
-                missile.transform.forward;
-            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
-            {
-                if (hq == null || hq == own) continue;
-                var radars = GameAccess.GetHqRadars(hq);
-                if (radars == null) continue;
-                for (int i = 0; i < radars.Count; i++)
-                {
-                    Unit unit = radars[i] != null ? radars[i].GetAttachedUnit() : null;
-                    if (unit == null || unit.disabled) continue;
-                    Vector3 to = unit.GlobalPosition() - self;
-                    float d = to.magnitude;
-                    if (d > JamRange || Vector3.Dot(to / Mathf.Max(d, 1f), fwd) < JamConeCos) continue;
-                    unit.Jam(new Unit.JamEventArgs { jammingUnit = missile, jamAmount = 1.5f });
-                }
             }
         }
 

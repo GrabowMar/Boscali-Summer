@@ -36,8 +36,8 @@ namespace Vanguard
                 Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 0.6f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
-                Description = "Jammer decoy. As MALD-X, and jams every enemy radar inside a 60 degree cone ahead of it out to 25 km.",
-                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 600, GLimit = 6, TurnRate = 12,
+                Description = "SHADOW stand-in jammer. Raises its emitter mast and flies straight at 200 m/s toward the locked target (else ahead) for four minutes, projecting a 55 degree jam lobe out to 35 km. Enemy radars in the lobe cannot see friendly aircraft hiding within 12 degrees of the jammer's line, until they close inside 9 km burn-through.",
+                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 240, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
                 Description = "Attritable escort drone. Holds a wing slot on the launcher and draws radar-guided missiles. On STRIKE it dives into the launcher's target with a 60 kg warhead. Six-minute endurance.",
@@ -83,6 +83,7 @@ namespace Vanguard
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
+            ValidateMaldJ();
             OpReferenceIndex.Refresh();
             Build();
             ValidateAndPreview(materials);

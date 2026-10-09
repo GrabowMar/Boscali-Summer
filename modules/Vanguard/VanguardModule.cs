@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Vanguard
         public Type[] PatchTypes => new[]
         {
             typeof(Patches.VanguardArticulationPatch),
+            typeof(Patches.MaldjShadowPatch),
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Networking.GlaiveNet>(60);
             context.AddSceneService<LanceService>(60);
             context.AddSceneService<Presentation.TowCable>(60);
+            context.AddSceneService<Presentation.MaldjHud>(60);
             context.AddSceneService<SkywellService>(60);
             context.AddSceneService<Networking.SkywellNet>(60);
             context.AddSceneService<Presentation.SkywellVisuals>(60);

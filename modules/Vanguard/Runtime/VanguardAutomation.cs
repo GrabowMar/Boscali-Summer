@@ -87,8 +87,7 @@ namespace BoscaliSummer.Vanguard
             showcase.transform.position = showcaseAnchor.ToLocalPosition();
             var prefabs = new List<GameObject>();
             foreach (MissileDefinition m in Encyclopedia.i.missiles)
-                if (m != null && m.unitPrefab != null && VanguardKeys.RoleOf(m.jsonKey) != VanguardRole.None &&
-                    m.jsonKey != VanguardKeys.MaldJ) prefabs.Add(m.unitPrefab);
+                if (m != null && m.unitPrefab != null && VanguardKeys.RoleOf(m.jsonKey) != VanguardRole.None) prefabs.Add(m.unitPrefab);
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.prefab != null && Array.IndexOf(ShowcaseMounts, w.jsonKey) >= 0) prefabs.Add(w.prefab);
             for (int i = 0; i < prefabs.Count; i++)
@@ -364,6 +363,7 @@ namespace BoscaliSummer.Vanguard
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
+            foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key.Replace('.', '_')] = counter.Value; // sim check paths split on '.'
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);
