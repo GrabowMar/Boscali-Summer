@@ -553,7 +553,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     source=parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--source-json',type=Path);source.add_argument('--source-assets',type=Path)
-    parser.add_argument('--out',type=Path,default=Path(__file__).resolve().parents[1]/'modules/Immersion/Assets/Source/pilot-first-person.json')
+    parser.add_argument('--out',type=Path,default=Path(__file__).resolve().parents[1]/'modules/Immersion/Assets/Source/pilot-first-person-base.json')  # Build-PilotBody.py authors the shipped mesh from this
     parser.add_argument('--export-native',action='store_true',help=argparse.SUPPRESS)
     args=parser.parse_args()
     path=args.source_json or args.source_assets
