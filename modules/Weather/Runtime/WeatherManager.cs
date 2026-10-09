@@ -200,6 +200,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             environmentGeneration = environmentGeneration == int.MaxValue ? 1 : environmentGeneration + 1;
             CloseConsole();
             network?.ResetScene();
+            MissionTimeSource.Reset(); // a new mission restarts at zero; only Support reset the shared clock before, and it can be disabled
             RestoreNativeWeather();
             TeardownRainSystems();
             terrainRain.Reset();
@@ -470,7 +471,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 if (settings.TerrainRainEnabled.Value)
                 {
                     terrainRain.SetLighting(sunDirection, terrainSunColor, RenderSettings.fogColor * lightLevel,
-                        RenderSettings.fogDensity, Time.time);
+                        RenderSettings.fogDensity, Time.time); // render-only: the ripple phase follows the game's time scale, not the weather field
                     terrainRain.Update(LevelInfo.i.LoadedMapSettings != null ? LevelInfo.i.LoadedMapSettings.transform : null,
                         SceneSingleton<CameraStateManager>.i?.mainCamera,
                         EffectiveRainIntensity(), Time.deltaTime, Field, weatherTime, forcedRainIntensity);
@@ -826,16 +827,17 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "seatAltitudeAGL", Mathf.Max(0f, point.y - ground) }, { "rainRate", weather.RainRate } };
         }
 
-        internal void SetFixtureField(uint seed, float modelAge, WeatherRegimeType? fixtureState = null)
+        internal bool SetFixtureField(uint seed, float modelAge, WeatherRegimeType? fixtureState = null)
         {
-            if (!GameAccess.IsServer() || !isManualOverride) return;
-            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
+            if (!GameAccess.IsServer() || !isManualOverride ||
+                !RequireClock("fixture field", out float missionTime)) return false;
             missionSeed = unchecked((int)seed);
             fieldKey = NewFieldKey(missionTime - modelAge, false,
                 fixtureState ?? StateTable.FromConditions(targetConditions));
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
+            return true;
         }
 
         private void UpdateLighting(Camera camera)
@@ -1132,11 +1134,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 " route " + (rainSound.IsRouted ? 1 : 0) + " clips " + (rainSound.ClipsReady ? 1 : 0)));
         }
 
-        private static bool TryMissionTime(out float time)
+        // The gated mission clock (spec 9.5): false until a manager exists and, in multiplayer, the shared start
+        // is set. The only time input of the weather field.
+        private static bool TryMissionTime(out float time) => MissionTimeSource.TryNow(out time);
+
+        private bool RequireClock(string what, out float time)
         {
-            MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-            time = mission != null ? mission.MissionTime : 0f;
-            return mission != null;
+            if (TryMissionTime(out time)) return true;
+            logger?.LogWarning("[Weather] " + what + " refused: no valid mission clock yet.");
+            return false;
         }
 
         /// <summary>Host: resend the key now, for a peer that just joined.</summary>
@@ -1158,8 +1164,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 return cachedForecast;
             }
 
+            if (!TryMissionTime(out float missionTime)) return cachedForecast ?? Array.Empty<ForecastStep>();
             lastForecastSampleTime = now;
-            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0f;
             int[] offsets = WeatherForecast.DefaultOffsetsMinutes;
             cachedForecast = new ForecastStep[offsets.Length];
 
@@ -1214,8 +1220,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return WeatherForecast.ComputeLunarData(phase);
         }
 
-        public void SetManualOverride(float conditions, float cloudHeight, Vector3? wind = null, float? forcedRain = null, bool snapImmediate = true)
+        public bool SetManualOverride(float conditions, float cloudHeight, Vector3? wind = null, float? forcedRain = null, bool snapImmediate = true)
         {
+            if (!RequireClock("manual override", out float missionTime)) return false;
             isManualOverride = true;
             explicitTargets = true;
             targetConditions = Mathf.Clamp01(conditions);
@@ -1240,7 +1247,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 settled = true;
             }
 
-            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             fieldKey = NewFieldKey(missionTime, false, StateTable.FromConditions(targetConditions));
             fieldReady = true;
             nextFieldUpdate = 0f;
@@ -1249,14 +1255,14 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             RegimeSnapshot reg = RegimeSnapshot.FromConditions(currentConditions);
             NotifyPlayer(reg.Name, forcedRain);
+            return true;
         }
 
         public void SetForcedRain(float? rainIntensity)
         {
-            if (!CanCommand) return;
+            if (!CanCommand || !RequireClock("forced rain", out float missionTime)) return;
             forcedRainIntensity = rainIntensity.HasValue ? Mathf.Clamp01(rainIntensity.Value) : (float?)null;
             lastForecastSampleTime = -999f;
-            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             BroadcastSync(missionTime);
 
             string rainDesc = !rainIntensity.HasValue ? "AUTO" :
@@ -1268,12 +1274,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
         public void ClearManualOverride()
         {
+            if (fieldKey == null || !RequireClock("resume", out float missionTime)) return;
             isManualOverride = false;
             explicitTargets = false;
             forcedRainIntensity = null;
             transitionProgress = 0f;
 
-            float missionTime = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? Time.time;
             fieldKey = NewFieldKey(missionTime, consoleAuto || settings.DynamicWeatherEnabled.Value,
                 field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
             nextFieldUpdate = 0f;
