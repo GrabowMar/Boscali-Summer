@@ -950,8 +950,9 @@ Type highCommandNet = pluginAssembly.GetType("BoscaliSummer.Modules.HighCommand.
     if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
     throw new InvalidOperationException("High command protocol changed without updating its probe");
 Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherNet", true)!;
-// Version 7 retains the wire layout and pins the front-aligned generator/independent cloud ceilings.
-if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 7)
+// Version 8 carries the whole weather-tape key (seed, story, pin, salt, class, opening base, heading, epoch,
+// offset, speed, dynamic, sets, anchor, set origins) and drops the stepping timeline's fields.
+if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 8)
     throw new InvalidOperationException("Weather protocol changed without updating its probe");
 foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
@@ -981,7 +982,7 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "HasSnapshot:System.Boolean", "Session:System.Int32", "HostEpoch:System.Int32", "Faction:System.String", "Fronts:BoscaliSummer.Core.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Core.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Core.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
-    ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single", "FieldSets:System.Byte", "FieldSalt:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldFrontTurn:System.Byte" }),
+    ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldStory:System.Byte", "FieldSkyPin:System.Byte", "FieldSalt:System.Byte", "FieldMissionClass:System.Byte", "FieldOpeningBase:System.Single", "FieldHeading:System.Single", "FieldEpoch:System.Single", "FieldOffset:System.Single", "FieldSystemSpeed:System.Single", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "FieldSets:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldSetOriginSquall:System.Single", "FieldSetOriginSupercell:System.Single", "FieldSetOriginCell:System.Single" }),
     ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }) })
 {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;
@@ -996,6 +997,7 @@ ProbeEventsSerialization(pluginAssembly, mirageAssembly);
 ProbeFactionMoraleSerialization(pluginAssembly, mirageAssembly);
 ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
+ProbeWeatherSerialization(pluginAssembly, mirageAssembly);
 ProbeWeatherConfig(pluginAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 // Wing integration is optional and the supported contract is compiled in-tree. A hard
@@ -1720,6 +1722,60 @@ static void ProbeSessionSerialization(Assembly plugin, Assembly mirage)
     if ((byte)message.GetField("Protocol")!.GetValue(foreign)! != 9 || message.GetField("Keys")!.GetValue(foreign) != null)
         throw new InvalidOperationException("Host settings reader must stop at a foreign protocol header");
     Console.WriteLine("  Session protocol-1 host settings roundtrip");
+}
+
+static void ProbeWeatherSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Type net = plugin.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherNet", true)!;
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 8)
+        throw new InvalidOperationException("Weather protocol changed without updating its probe");
+    net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type message = plugin.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", true)!;
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+    var write = (Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(message)
+        .GetProperty("Write", flags)!.GetValue(null)!;
+    var read = (Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(message)
+        .GetProperty("Read", flags)!.GetValue(null)!;
+
+    object Roundtrip(byte[] bytes)
+    {
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            return read.DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+
+    // One distinct value per field, so a swapped or dropped field cannot pass.
+    var expected = new (string Name, object Value)[]
+    {
+        ("Protocol", (byte)8), ("TargetConditions", 0.31f), ("TargetCloudHeight", 1850f), ("TargetWindX", -7.5f),
+        ("TargetWindZ", 12.25f), ("TargetTurbulence", 0.4f), ("MissionTimeSeconds", 4321u), ("ForcedRain", 0.65f),
+        ("FieldSeed", 4000000007u), ("FieldStory", (byte)3), ("FieldSkyPin", (byte)46), ("FieldSalt", (byte)201),
+        ("FieldMissionClass", (byte)5), ("FieldOpeningBase", 2410f), ("FieldHeading", 271.5f), ("FieldEpoch", 123.5f),
+        ("FieldOffset", -45000.25f), ("FieldSystemSpeed", 31.5f), ("FieldDynamic", true), ("FieldManual", true),
+        ("FieldSets", (byte)37), ("FieldHasAnchor", true), ("FieldAnchorX", 1111f), ("FieldAnchorZ", -2222f),
+        ("FieldSetOriginSquall", 3333f), ("FieldSetOriginSupercell", 4444f), ("FieldSetOriginCell", 5555f),
+    };
+    if (message.GetFields(BindingFlags.Public | BindingFlags.Instance).Length != expected.Length)
+        throw new InvalidOperationException("Weather sync probe sample does not cover every message field");
+    object sample = Activator.CreateInstance(message)!;
+    foreach (var (name, value) in expected) message.GetField(name)!.SetValue(sample, value);
+    object writer = Activator.CreateInstance(writerType, 256)!;
+    write.DynamicInvoke(writer, sample);
+    object copy = Roundtrip((byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!);
+    foreach (var (name, value) in expected)
+        if (!Equals(message.GetField(name)!.GetValue(copy), value))
+            throw new InvalidOperationException("Weather sync field " + name + " changed in the roundtrip: " +
+                message.GetField(name)!.GetValue(copy) + " != " + value);
+    object foreign = Roundtrip(new byte[] { 7 });
+    if ((byte)message.GetField("Protocol")!.GetValue(foreign)! != 7 || (uint)message.GetField("FieldSeed")!.GetValue(foreign)! != 0u)
+        throw new InvalidOperationException("Weather sync reader must stop at a foreign protocol header");
+    Console.WriteLine("  Weather protocol-8 sync roundtrip: every field, foreign-protocol rejection");
 }
 
 static void ProbeWeatherConfig(Assembly plugin)

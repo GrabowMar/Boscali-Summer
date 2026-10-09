@@ -977,66 +977,57 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void BroadcastSync(float missionTime)
         {
             lastBroadcastTime = Time.unscaledTime;
-            if (network != null)
+            if (network == null || fieldKey == null) return;
+            var message = new WeatherSyncMessage
             {
-                network.Broadcast(new WeatherSyncMessage
-                {
-                    Protocol = WeatherNet.ProtocolVersion,
-                    TargetConditions = targetConditions,
-                    TargetCloudHeight = targetCloudHeight,
-                    TargetWindX = targetWind.x,
-                    TargetWindZ = targetWind.z,
-                    TargetTurbulence = targetTurbulence,
-                    TransitionProgress = transitionProgress,
-                    MissionTimeSeconds = (uint)Mathf.Max(0f, missionTime),
-                    ForcedRain = forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1.0f,
-                    FieldSeed = fieldKey != null ? fieldKey.Seed : unchecked((uint)missionSeed),
-                    FieldEpoch = fieldKey != null ? fieldKey.Epoch : 0f,
-                    FieldStartRegime = fieldKey != null ? fieldKey.MissionClass : (byte)0, // INTERIM: wire v7 until Task 7
-                    FieldDynamic = fieldKey != null && fieldKey.Dynamic,
-                    FieldManual = isManualOverride,
-                    FieldSets = fieldKey != null ? fieldKey.Sets : (byte)0,
-                    FieldSalt = fieldKey != null ? fieldKey.LayoutSalt : (byte)0,
-                    FieldHasAnchor = fieldKey != null && fieldKey.HasAnchor,
-                    FieldAnchorX = fieldKey != null ? fieldKey.AnchorX : 0f,
-                    FieldAnchorZ = fieldKey != null ? fieldKey.AnchorZ : 0f,
-                    FieldFrontTurn = 0,
-                    HoldMinutes = WeatherTimeline.IntervalMinutes,
-                    BlendMinutes = WeatherTimeline.FadeSeconds / 60f
-                });
-            }
+                Protocol = WeatherNet.ProtocolVersion,
+                TargetConditions = targetConditions,
+                TargetCloudHeight = targetCloudHeight,
+                TargetWindX = targetWind.x,
+                TargetWindZ = targetWind.z,
+                TargetTurbulence = targetTurbulence,
+                MissionTimeSeconds = (uint)Mathf.Max(0f, missionTime),
+                ForcedRain = forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1.0f,
+                FieldManual = isManualOverride,
+            };
+            WeatherSyncKey.Write(ref message, WeatherKeyWire.FromKey(fieldKey));
+            network.Broadcast(message);
         }
 
         public void ApplyNetworkSync(WeatherSyncMessage message)
         {
             if (GameAccess.IsServer()) return;
 
+            WeatherKey key = WeatherKeyWire.ToKey(WeatherSyncKey.Read(message), WarnOnce);
+            bool haveClock = TryMissionTime(out float localTime);
+            if (!WeatherKeyWire.CanAdopt(key.Dynamic, haveClock, localTime, message.MissionTimeSeconds))
+            {
+                WarnOnce("a moving weather key from a host whose mission clock is more than 10 s away was ignored");
+                return;
+            }
+
             targetConditions = message.TargetConditions;
             targetCloudHeight = message.TargetCloudHeight;
             targetWind = new Vector3(message.TargetWindX, baselineWindVelocity.y, message.TargetWindZ);
             targetTurbulence = message.TargetTurbulence;
-            transitionProgress = message.TransitionProgress;
-            float fadeSeconds = Mathf.Clamp(message.BlendMinutes * 60f, 10f, 300f);
-            transitionDuration = fadeSeconds;
+            transitionDuration = WeatherTimeline.FadeSeconds;
             missionSeed = unchecked((int)message.FieldSeed);
-            var key = new WeatherKey(message.FieldSeed, message.FieldEpoch, message.FieldDynamic,
-                (byte)Mathf.Clamp(message.FieldStartRegime, 0, StateTable.Count - 1), message.FieldSets,
-                message.FieldSalt, message.FieldHasAnchor, message.FieldAnchorX, message.FieldAnchorZ); // INTERIM: wire v7 until Task 7
-            // Keep the same instance while nothing changed, so consumers see one stable key.
-            if (!key.Equals(fieldKey)) fieldKey = key;
+            // Keep the same instance while nothing changed, so consumers see one stable key (spec 10.1).
+            fieldKey = WeatherKeyWire.Reuse(fieldKey, key);
             fieldReady = true;
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             isManualOverride = message.FieldManual;
             targetsReady = true;
-            if (message.ForcedRain >= 0f)
-            {
-                forcedRainIntensity = message.ForcedRain;
-            }
-            else
-            {
-                forcedRainIntensity = null;
-            }
+            forcedRainIntensity = message.ForcedRain >= 0f ? message.ForcedRain : (float?)null;
+        }
+
+        private readonly HashSet<string> warned = new HashSet<string>();
+
+        /// <summary>Logs a wire or clock problem once per scene; passed to <see cref="WeatherKeyWire.ToKey"/> as its warn callback.</summary>
+        private void WarnOnce(string text)
+        {
+            if (warned.Add(text)) logger?.LogWarning("[Weather] " + text);
         }
 
         private float NativeSkyConditions(float conditions)
