@@ -494,7 +494,7 @@ namespace Vanguard
                     foreach (string name in new[] { "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle" })
                         if (!names.Contains(name)) throw new Exception("Skywell lost joint " + name);
                 }
-                if (model == "MaldX" || model == "MaldJ" || IsGlaive(model) || model == "Orca")
+                if (model == "MaldX" || IsGlaive(model) || model == "Orca") // MaldJ ships stowed: ValidateMaldJ checks its wings
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
                     Transform right = renderers.Single(r => r.name == "WingR").transform;
@@ -709,7 +709,8 @@ namespace Vanguard
                 if (!r.GetComponentInParent<MountedMissile>(true)) r.enabled = true;
             foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
             {
-                StowWings(Visual(station.transform, spec.Model, materials), station.transform);
+                GameObject rackVisual = Visual(station.transform, spec.Model, materials);
+                if (spec.Model != "MaldJ") StowWings(rackVisual, station.transform); // the MaldJ FBX already holds the stowed pose
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);

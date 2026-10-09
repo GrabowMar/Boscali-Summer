@@ -16,6 +16,13 @@
       "view": "cockpit"
     },
     {
+      "op": "record",
+      "ids": [
+        "player"
+      ],
+      "hz": 2
+    },
+    {
       "op": "spawn",
       "id": "bandit",
       "type": "FS-20 Vortex",
@@ -39,7 +46,7 @@
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
         "action": "ship",
-        "range": 28000,
+        "range": 32000,
         "type": "Frigate1",
         "from": 0
       },
@@ -69,7 +76,23 @@
     },
     {
       "op": "wait",
-      "seconds": 20
+      "seconds": 1.6
+    },
+    {
+      "op": "mark",
+      "text": "maldj lobe live"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "live"
+    },
+    {
+      "op": "wait",
+      "seconds": 18
     },
     {
       "op": "call",
@@ -104,6 +127,11 @@
       "check": "status_ok"
     },
     {
+      "check": "result_below",
+      "path": "ship.range",
+      "max": 34500
+    },
+    {
       "check": "result_above",
       "path": "cold.maldj_launched",
       "min": 1
@@ -112,6 +140,11 @@
       "check": "result_below",
       "path": "cold.maldj_denied",
       "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "live.maldj_lobeRadars",
+      "min": 1
     },
     {
       "check": "result_above",
@@ -152,6 +185,12 @@
       "check": "result_below",
       "path": "shadow.VG_MaldJ_altitude",
       "max": 3600
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "player"
+      ]
     }
   ]
 }

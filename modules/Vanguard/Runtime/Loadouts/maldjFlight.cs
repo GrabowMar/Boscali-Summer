@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     Unit unit = radars[i] != null ? radars[i].GetAttachedUnit() : null;
                     if (unit == null || unit.disabled) continue;
                     Vector3 to = unit.GlobalPosition() - self;
-                    if (to.sqrMagnitude > MaldjShadow.NoiseRange * MaldjShadow.NoiseRange || !MaldjShadow.InLobe(forward, to)) continue;
+                    if (!MaldjShadow.Noises(forward, to)) continue;
                     unit.Jam(new Unit.JamEventArgs { jammingUnit = missile, jamAmount = MaldjShadow.NoiseAmount });
                     VanguardStats.Bump("maldj.noise");
                 }
@@ -88,12 +88,19 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return best;
         }
 
-        /// <summary>Radar filter: true when this radar must not see this aircraft. Counts denials and burn-throughs.</summary>
-        public static bool Hides(Radar radar, Aircraft aircraft)
+        /// <summary>
+        /// Radar filter: true when this radar must not see this aircraft. Counts denials and burn-throughs only for
+        /// requests inside the radar's own range (it queues checks out to 2x range), and a burn-through only while the
+        /// radar is not blinded by close-in noise (CanSeeRadarReturn returns !IsJammed, so a jammed radar sees nothing).
+        /// </summary>
+        public static bool Hides(Radar radar, Aircraft aircraft, float dist)
         {
             ShadowState state = Check(ScanPosition(radar), aircraft, out _);
-            if (state == ShadowState.Shadowed) VanguardStats.Bump("maldj.denied");
-            else if (state == ShadowState.BurnThrough) VanguardStats.Bump("maldj.burnThrough");
+            if (state != ShadowState.None && dist <= radar.GetRadarRange())
+            {
+                if (state == ShadowState.Shadowed) VanguardStats.Bump("maldj.denied");
+                else if (!radar.IsJammed()) VanguardStats.Bump("maldj.burnThrough");
+            }
             return state == ShadowState.Shadowed;
         }
 

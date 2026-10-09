@@ -9,9 +9,10 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     [HarmonyPatch(typeof(Radar), nameof(Radar.CanSeeRadarReturn))]
     internal static class MaldjShadowPatch
     {
-        private static bool Prefix(Radar __instance, IRadarReturn radarReturn, ref bool __result)
+        // dist is the original's own parameter name (Radar.CanSeeRadarReturn(IRadarReturn, float dist, float clutterFactor)).
+        private static bool Prefix(Radar __instance, IRadarReturn radarReturn, float dist, ref bool __result)
         {
-            if (MaldjField.Jammers.Count == 0 || !(radarReturn is Aircraft aircraft) || !MaldjField.Hides(__instance, aircraft)) return true;
+            if (MaldjField.Jammers.Count == 0 || !(radarReturn is Aircraft aircraft) || !MaldjField.Hides(__instance, aircraft, dist)) return true;
             __result = false;
             return false;
         }

@@ -5,9 +5,12 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// MALD-J on every peer: tracks the jammer in <see cref="MaldjField"/>, raises the dorsal "Mast" 60 deg over
-    /// 1.0-1.6 s and pulses every "Glow*" renderer while jamming (MaterialPropertyBlock, shared material untouched).
-    /// Driven only by the synced transform and timeSinceSpawn. Missing parts fail soft: the jammer still jams.
+    /// MALD-J on every peer: tracks the jammer in <see cref="MaldjField"/>, unfolds "WingL"/"WingR" over 0.3-0.8 s,
+    /// raises the dorsal "Mast" 60 deg over 1.0-1.6 s and pulses every "Glow*" renderer while jamming
+    /// (MaterialPropertyBlock, shared material untouched). The FBX holds the STOWED pose of every articulated part
+    /// (MECHANICS.md part contract), so the wings are owned here, not by WeaponArticulation (which treats the FBX
+    /// pose as deployed). Driven only by the synced transform and timeSinceSpawn. Missing parts fail soft: the jammer
+    /// still jams.
     /// </summary>
     internal sealed class MaldjEmitter : MonoBehaviour
     {
@@ -19,6 +22,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private Quaternion mastStowed; // relative to the missile
         private float mastSign = -1f;
         private bool mastDone;
+        private Transform wingL, wingR;
+        private Quaternion wingLStowed, wingRStowed; // local rotations from the FBX
+        private Vector3 wingLAxis, wingRAxis;        // the missile's up, in each wing's parent frame
+        private bool wingsDone;
         private Renderer[] glows;
         private Color glowBase = new Color(0.08f, 0.4f, 0.46f) * 0.8f; // Vanguard_Glow default
 
@@ -43,7 +50,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (glows.Length > 0 && glows[0].sharedMaterial != null && glows[0].sharedMaterial.HasProperty(EmissionColor))
                 glowBase = glows[0].sharedMaterial.GetColor(EmissionColor);
             foreach (Transform t in visual.GetComponentsInChildren<Transform>(true))
+            {
                 if (t.name == "Mast") mast = t;
+                else if (t.name == "WingL") wingL = t;
+                else if (t.name == "WingR") wingR = t;
+            }
+            if (wingL != null && wingR != null)
+            {
+                wingLStowed = wingL.localRotation;
+                wingRStowed = wingR.localRotation;
+                wingLAxis = wingL.parent.InverseTransformDirection(missile.transform.up);
+                wingRAxis = wingR.parent.InverseTransformDirection(missile.transform.up);
+            }
+            else wingL = wingR = null;
             if (mast == null) return;
             Transform body = missile.transform;
             mastStowed = Quaternion.Inverse(body.rotation) * mast.rotation;
@@ -65,6 +84,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 return;
             }
             float age = missile.timeSinceSpawn;
+            if (wingL != null && !wingsDone)
+            {
+                // Port sweeps out about the missile's up and starboard the other way: the reverse of the fold
+                // WeaponArticulation and the builder's StowWings apply to a deployed-pose model.
+                float sweep = MaldjShadow.WingSweepDegrees * MaldjShadow.WingDeploy(age);
+                wingL.localRotation = Quaternion.AngleAxis(sweep, wingLAxis) * wingLStowed;
+                wingR.localRotation = Quaternion.AngleAxis(-sweep, wingRAxis) * wingRStowed;
+                wingsDone = age >= MaldjShadow.WingEnd;
+            }
             if (mast != null && !mastDone)
             {
                 mast.rotation = missile.transform.rotation *

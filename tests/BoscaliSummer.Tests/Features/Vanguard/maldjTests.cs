@@ -18,6 +18,10 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Near(MaldjShadow.Throttle(260f), 0f, "very fast idles");
             TestAssert.Near(MaldjShadow.Lifetime, 240f, "four-minute endurance");
 
+            TestAssert.Near(MaldjShadow.WingDeploy(0.2f), 0f, "wings stowed before 0.3 s");
+            TestAssert.Near(MaldjShadow.WingDeploy(0.55f), 0.5f, "wings half out at 0.55 s");
+            TestAssert.Near(MaldjShadow.WingDeploy(1f), 1f, "wings fully out after 0.8 s");
+            TestAssert.That(MaldjShadow.WingEnd <= MaldjShadow.MastStart, "wings are out before the mast starts to rise");
             TestAssert.Near(MaldjShadow.MastAngle(0.5f), 0f, "mast stowed before 1.0 s");
             TestAssert.Near(MaldjShadow.MastAngle(1.3f), 30f, "mast half up at 1.3 s");
             TestAssert.Near(MaldjShadow.MastAngle(2f), 60f, "mast fully raised");
@@ -42,6 +46,16 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Eq(Shadow(radar, new Vector3(0f, 0f, 10500f)), ShadowState.Shadowed, "9.5 km from the radar is still hidden");
             TestAssert.Eq(Shadow(new Vector3(0f, 0f, -20000f), new Vector3(0f, 0f, -40000f)), ShadowState.None, "a radar behind the jammer is not jammed");
             TestAssert.That(ShadowState.Shadowed > ShadowState.BurnThrough && ShadowState.BurnThrough > ShadowState.None, "best state wins by order");
+
+            // Noise blinds a radar outright, so it must leave a burn-through window: the jammer 6 km from the radar is
+            // quiet while an aircraft 8 km from it (2 km behind the jammer on the same line) already burns through.
+            TestAssert.That(MaldjShadow.NoiseRange < MaldjShadow.BurnThroughRange, "noise range is well inside burn-through range");
+            TestAssert.That(!MaldjShadow.Noises(north, new Vector3(0f, 0f, 6000f)), "jammer 6 km from the radar makes no noise");
+            TestAssert.That(MaldjShadow.Noises(north, new Vector3(0f, 0f, 2500f)), "jammer overflying the radar (2.5 km) jams it");
+            TestAssert.That(!MaldjShadow.Noises(north, new Vector3(0f, 0f, -2500f)), "a radar behind the jammer is not jammed");
+            // Radar at z=20000, jammer at z=14000 (6 km short of it), aircraft at z=12000 (8 km short of it).
+            TestAssert.Eq(MaldjShadow.Classify(north, new Vector3(0f, 0f, 6000f), new Vector3(0f, 0f, -8000f)),
+                ShadowState.BurnThrough, "burn-through window exists while the jammer is still outside noise range");
         }
 
         private static ShadowState Shadow(Vector3 radar, Vector3 aircraft) =>

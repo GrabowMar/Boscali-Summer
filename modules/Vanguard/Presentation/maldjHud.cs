@@ -29,7 +29,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private ShadowState state;
         private float burnRange;
         private bool launcher;
-        private int lobeRadars;
+        // Draw() runs every frame; these are rebuilt in Evaluate() only when the number they show changes.
+        private string burnDetail = "";
+        private string blindDetail = "";
+        private int burnTenths = -1;
+        private int blindShown = -1;
 
         public void ResetForScene()
         {
@@ -37,6 +41,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             radars.Clear();
             state = ShadowState.None;
             launcher = false;
+            burnTenths = blindShown = -1;
             pilotLine?.Release();
             launcherLine?.Release();
             pilotLine = launcherLine = null;
@@ -76,13 +81,26 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (radar == null || !radar.IsOperational()) continue;
                 GlobalPosition at = MaldjField.ScanPosition(radar);
                 ShadowState s = MaldjField.Check(at, me, out float range);
+                // Close-in noise blinds a radar outright (RpcJam runs Radar_OnJam on every peer), so a jammed radar
+                // cannot burn through however close the aircraft is.
+                if (s == ShadowState.BurnThrough && radar.IsJammed()) s = ShadowState.Shadowed;
                 if (s == ShadowState.Shadowed) shadowed++;
                 else if (s == ShadowState.BurnThrough) nearest = Mathf.Min(nearest, range);
                 if (launcher && MaldjField.InLobeOf(me, at)) lobe++;
             }
             burnRange = nearest;
-            lobeRadars = lobe;
-            if (launcher) VanguardStats.Counters["maldj.lobeRadars"] = lobe; // gauge for the sim
+            int tenths = nearest < float.MaxValue ? Mathf.RoundToInt(nearest / 100f) : -1;
+            if (tenths >= 0 && tenths != burnTenths)
+            {
+                burnTenths = tenths;
+                burnDetail = (tenths / 10f).ToString("F1") + " km";
+            }
+            if (lobe != blindShown)
+            {
+                blindShown = lobe;
+                blindDetail = lobe + (lobe == 1 ? " RADAR BLIND" : " RADARS BLIND");
+            }
+            if (launcher) VanguardStats.Set("maldj.lobeRadars", lobe); // gauge for the sim
             // Any radar burning through outranks the radars still blinded: that one can see you.
             Enter(nearest < float.MaxValue ? ShadowState.BurnThrough : shadowed > 0 ? ShadowState.Shadowed : ShadowState.None);
         }
@@ -121,15 +139,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 (pilotLine ??= board.Acquire(Owner, Channel, "pilot"))?.Set(HudTone.Info, "IN SHADOW", null, 0f);
             else if (state == ShadowState.BurnThrough)
                 (pilotLine ??= board.Acquire(Owner, Channel, "pilot"))?.Set(HudTone.Warning, "BURN-THROUGH",
-                    (burnRange / 1000f).ToString("F1") + " km", Mathf.Clamp01(burnRange / MaldjShadow.BurnThroughRange));
+                    burnDetail, Mathf.Clamp01(burnRange / MaldjShadow.BurnThroughRange));
             else
             {
                 pilotLine?.Release();
                 pilotLine = null;
             }
             if (launcher)
-                (launcherLine ??= board.Acquire(Owner, Channel, "launcher"))?.Set(HudTone.Info, "SHADOW ACTIVE",
-                    lobeRadars + (lobeRadars == 1 ? " RADAR BLIND" : " RADARS BLIND"), 0f);
+                (launcherLine ??= board.Acquire(Owner, Channel, "launcher"))?.Set(HudTone.Info, "SHADOW ACTIVE", blindDetail, 0f);
             else
             {
                 launcherLine?.Release();
