@@ -60,6 +60,7 @@ namespace BoscaliSummer.Vanguard
                 case "ship": return SpawnTestShip(lead, Number(args, "range", 14000f), Text(args, "type") ?? "Frigate1", (int)Number(args, "from", 0f));
                 case "threat": return Threat(bandit, lead, Number(args, "range", 5000f), Text(args, "seeker") ?? "ARH", Number(args, "climb", 200f));
                 case "strike":
+                    if (lead != null && lead.radar != null) lead.radar.activated = true; // ARCHER fires only on a faction track
                     Modules.Vanguard.Runtime.DroneOrders.Order(lead, bandit);
                     return Status(lead);
                 case "equip": return Equip(Text(args, "tanker") ?? "Tarantula");

@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             VanguardRole role = VanguardKeys.RoleOf(missile.definition.jsonKey);
             if (role != VanguardRole.Decoy && role != VanguardRole.Jammer &&
-                role != VanguardRole.Torpedo) return;
+                role != VanguardRole.Torpedo && role != VanguardRole.Drone) return;
             if (missile.GetComponent<WeaponArticulation>() != null) return;
             Transform visual = missile.transform.Find("VanguardVisual");
             if (visual == null) return;

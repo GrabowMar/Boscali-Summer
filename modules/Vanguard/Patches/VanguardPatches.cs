@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             GlaiveDrone.Attach(__instance);
             WeaponArticulation.Attach(__instance);
             OrcaVisuals.Attach(__instance);
+            RemoraVisuals.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }

@@ -1,0 +1,241 @@
+{
+  "name": "vg-remora",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 6000,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Remora"
+      },
+      "store": "launch"
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "capture",
+      "name": "remora-escort-wings-out",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "escort"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "lead",
+          "offset": [
+            300,
+            0,
+            -22000
+          ]
+        }
+      },
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "strike"
+      },
+      "store": "designate"
+    },
+    {
+      "op": "wait",
+      "seconds": 24
+    },
+    {
+      "op": "capture",
+      "name": "remora-archer-away",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 21
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "volley"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit2",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "lead",
+          "offset": [
+            -300,
+            0,
+            -9000
+          ]
+        }
+      },
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "fly",
+      "id": "bandit2",
+      "program": [
+        {
+          "level": 200
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "strike"
+      },
+      "store": "redesignate"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "ram"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "escort.VG_Remora_guided",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "escort.remora_launched",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "escort.VG_Remora_fromLead",
+      "min": 40
+    },
+    {
+      "check": "result_below",
+      "path": "escort.VG_Remora_fromLead",
+      "max": 300
+    },
+    {
+      "check": "result_above",
+      "path": "volley.remora_engaged",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "volley.remora_fired",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "volley.remora_fired",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "volley.remora_aamHits",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ram.remora_rams",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ram.remora_ramHits",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ram.remora_ramKills",
+      "min": 1
+    }
+  ]
+}

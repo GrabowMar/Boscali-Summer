@@ -100,6 +100,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (missile.timeSinceSpawn >= AegisEnvelope.DropClearSeconds && missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
                 CheckIntercept();
             }
+            if (role == VanguardRole.Drone)
+            {
+                RamFuse();
+                if (missile.disabled) return;
+            }
             float now = Time.timeSinceLevelLoad;
             if (now >= nextPlan)
             {
@@ -203,33 +208,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             point.y = cruiseAltitude;
             missile.SetAimpoint(point, Vector3.zero);
-        }
-
-        private void PlanDrone(GlobalPosition pos)
-        {
-            Unit strike = DroneOrders.StrikeTarget(launcher);
-            if (strike != null && !strike.disabled)
-            {
-                target = strike;
-                GlobalPosition aim = TargetPosition(out Vector3 vel);
-                missile.SetThrottle(1f);
-                missile.SetAimpoint(aim, vel);
-                return;
-            }
-            if (launcher == null || launcher.disabled)
-            {
-                PlanDecoy(pos); // orphaned drones fly on as decoys until they burn out
-                return;
-            }
-            Transform lt = launcher.transform;
-            Vector3 leadVel = launcher.rb != null ? launcher.rb.velocity : lt.forward * 200f;
-            GlobalPosition slotPos = launcher.GlobalPosition() +
-                FormationSlot.World(Vector3.zero, lt.forward, lt.right, lt.up, slot);
-            // Throttle on along-track error: ahead of the slot -> ease off, behind -> push.
-            float along = Vector3.Dot(slotPos - pos, lt.forward);
-            missile.SetThrottle(Mathf.Clamp01(0.55f + along / 300f));
-            // Chase a point 1.5 s ahead of the slot so the drone flies alongside, not into it.
-            missile.SetAimpoint(slotPos + leadVel * 1.5f, leadVel);
         }
 
         private void PlanIntercept(GlobalPosition pos)
