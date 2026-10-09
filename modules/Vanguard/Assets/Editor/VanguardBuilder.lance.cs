@@ -109,14 +109,17 @@ namespace Vanguard
         static bool IsChargeJoint(Transform t) =>
             t.name.Length == 7 && t.name.StartsWith("Charge", StringComparison.Ordinal) && t.name[6] >= '0' && t.name[6] <= '6';
 
-        // Charge0..Charge6 are Glow strips. If the model names the joint mesh itself (so Visual() mapped it to the skin atlas) give
-        // the joint's meshes the shared Glow material; a joint that already has Glow-named children is left alone.
+        // Charge0..Charge6 are Glow strips. The model contract is Glow.xxx children under each joint (the can's skin stays on the
+        // atlas). If a joint carries none, the build still converts every mesh under it to the shared Glow material so the strip
+        // lights, but it says so loudly: the skin can under that joint is now glowing too, and the model should be fixed.
         static void EnsureGlowStrips(GameObject visual, Dictionary<string, Material> materials)
         {
             foreach (var joint in visual.GetComponentsInChildren<Transform>(true).Where(IsChargeJoint))
             {
                 var meshes = joint.GetComponentsInChildren<MeshRenderer>(true);
                 if (meshes.Any(r => r.sharedMaterial == materials["Glow"])) continue;
+                Debug.LogWarning("[Vanguard] LANCE " + joint.name + " has no Glow.xxx child: converting its " + meshes.Length + " mesh(es) ("
+                    + string.Join(", ", meshes.Select(r => r.name).Distinct()) + ") to the Glow material. Fix models/Lance.py to emit Glow.xxx strips.");
                 foreach (var r in meshes) r.sharedMaterials = new[] { materials["Glow"] };
             }
         }
@@ -186,7 +189,9 @@ namespace Vanguard
             var gs = new SerializedObject(gun);
             if (P(gs, "proximityTimer").boolValue || P(gs, "recoilImpulse").floatValue != 0f || P(gs, "ForceServerAuthority").boolValue)
                 throw new Exception("LANCE Gun must have proximityTimer, recoilImpulse and ForceServerAuthority off");
-            var nodes = pod.GetComponentsInChildren<Transform>(true);
+            // Only the model's own subtree, like LancePodView.Find: a donor child that happens to share a name must not satisfy the contract.
+            Transform visualRoot = pod.transform.Find("VanguardVisual") ?? throw new Exception("LANCE prefab has no VanguardVisual child");
+            var nodes = visualRoot.GetComponentsInChildren<Transform>(true);
             Transform Node(string name) => nodes.FirstOrDefault(t => t.name == name) ?? throw new Exception("LANCE model missing joint " + name);
             Transform barrel = Node("Barrel"), muzzle = Node("Muzzle");
             for (int i = 0; i < 7; i++)

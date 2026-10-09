@@ -60,6 +60,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (shader == null) shader = Shader.Find("Sprites/Default");
                 if (shader == null) return;
                 material = new Material(shader);
+                MakeAdditive(material);
                 block = new MaterialPropertyBlock();
             }
             BeamLine beam;
@@ -82,6 +83,21 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             beam.Line.enabled = true;
         }
 
+        // "Universal Render Pipeline/Unlit" made with new Material() is opaque: switch it to additive transparent so the
+        // beam blends over the scene and fades to nothing instead of staying full brightness and popping off.
+        private static void MakeAdditive(Material m)
+        {
+            if (!m.shader.name.StartsWith("Universal Render Pipeline", System.StringComparison.Ordinal)) return;
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 2f);
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.One);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+        }
+
         private void LateUpdate()
         {
             float now = Time.time;
@@ -99,7 +115,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 beam.Line.SetPosition(1, beam.B.ToLocalPosition());
                 beam.Line.startWidth = 0.35f * (1f - 0.5f * t);
                 beam.Line.endWidth = 0.05f;
-                var color = new Color(0.9f * 2.5f, 1.1f * 2.5f, 1.3f * 2.5f, alpha); // HDR white-cyan
+                // Additive, so the fade is the RGB scaled down (an opaque or additive shader ignores alpha); alpha follows for
+                // the alpha-blended Sprites/Default fallback.
+                var color = new Color(0.9f * 2.5f * alpha, 1.1f * 2.5f * alpha, 1.3f * 2.5f * alpha, alpha); // HDR white-cyan
                 block.SetColor(BaseColor, color);
                 block.SetColor(Color0, color);
                 beam.Line.SetPropertyBlock(block);

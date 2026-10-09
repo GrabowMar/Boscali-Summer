@@ -11,7 +11,7 @@ namespace BoscaliSummer.Vanguard
 {
     /// <summary>
     /// LANCE sim hook (tests/ingame/vg-lance.json): BoscaliSummer.Vanguard.VanguardAutomation.LanceStep with
-    /// action = equip | select | hold | heat | chain | reset | status. Inert outside a hosted single-player nomodkit run.
+    /// action = equip | select | hold | heat | chain | twin | reset | status. Inert outside a hosted single-player nomodkit run.
     /// The sim cannot press a key, so hold calls WeaponStation.Fire every frame exactly as the pilot state does.
     /// </summary>
     public static partial class VanguardAutomation
@@ -35,17 +35,25 @@ namespace BoscaliSummer.Vanguard
                 case "heat": return LanceSetHeat(lead, Number(args, "set", 0f));
                 case "chain":
                     return LanceChain(lead, (int)Number(args, "count", 4f), Number(args, "spacing", 45f), Number(args, "power", 1f), (int)Number(args, "friend", -1f));
+                case "twin": return LanceTwin(lead, (int)Number(args, "count", 2f));
                 case "reset": return LanceReset(lead);
                 case "status": return LanceStatus(lead);
                 default: return Failure("VanguardAutomation", "LanceStep", "unknown action");
             }
         }
 
+        // The station lead when the aircraft has one (the pod that runs the charge cycle), else any pod of the aircraft.
         private static LancePod LanceOf(Aircraft lead)
         {
+            LancePod any = null;
             foreach (LancePod pod in LanceService.Pods.Values)
-                if (pod.Gun != null && pod.Aircraft == lead) return pod;
-            return null;
+            {
+                if (pod.Gun == null || pod.Aircraft != lead) continue;
+                any ??= pod;
+                WeaponStation station = pod.ResolveStation();
+                if (station != null && LanceService.LeadOf(station) == pod) return pod;
+            }
+            return any;
         }
 
         // Gives the lead the pod alone on the first matching set; the station list rebuilds over the next seconds.
@@ -125,23 +133,10 @@ namespace BoscaliSummer.Vanguard
             if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "lance_chain", "need lead and an enemy HQ");
             if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
                 return Failure("VanguardAutomation", "lance_chain", "UGV1_grenade not in Encyclopedia.Lookup");
-            Vector3 forward = lead.transform.forward;
-            forward.y = 0f;
-            forward.Normalize();
             foreach (float range in new[] { 1200f, 1700f })
                 for (int b = -60; b <= 60; b += 15)
                 {
-                    Vector3 dir = Quaternion.Euler(0f, b, 0f) * forward;
-                    var points = new Vector3[count];
-                    bool fits = true;
-                    for (int k = 0; k < count && fits; k++)
-                    {
-                        Vector3 desired = lead.transform.position + dir * (range + spacing * k);
-                        desired.y = Datum.LocalSeaY + 1400f;
-                        fits = GroundPlacement.TryPlace(def, desired, Quaternion.LookRotation(dir), out points[k]) &&
-                               (k == 0 || Mathf.Abs(points[k].y - points[0].y) <= 0.4f);
-                    }
-                    if (!fits) continue;
+                    if (!PlaceLine(lead, def, b, range, count, spacing, out Vector3[] points, out Vector3 dir)) continue;
                     float top = points[0].y;
                     for (int k = 0; k < count; k++)
                     {
@@ -164,24 +159,69 @@ namespace BoscaliSummer.Vanguard
             return new Dictionary<string, object> { ["ok"] = true, ["placed"] = 0 };
         }
 
-        private static readonly AccessTools.FieldRef<Turbofan, float> FanLoss = Lossref<Turbofan>();
-        private static readonly AccessTools.FieldRef<Turbojet, float> JetLoss = Lossref<Turbojet>();
-
-        private static AccessTools.FieldRef<T, float> Lossref<T>()
+        // `count` targets on one level line `spacing` apart, `range` out along `bearing` degrees off the lead's heading.
+        private static bool PlaceLine(Aircraft lead, UnitDefinition def, float bearing, float range, int count, float spacing, out Vector3[] points, out Vector3 dir)
         {
-            try { return AccessTools.FieldRefAccess<T, float>("parasiticThrustLoss"); }
-            catch (Exception) { return null; }
+            Vector3 forward = lead.transform.forward;
+            forward.y = 0f;
+            forward.Normalize();
+            dir = Quaternion.Euler(0f, bearing, 0f) * forward;
+            points = new Vector3[count];
+            for (int k = 0; k < count; k++)
+            {
+                Vector3 desired = lead.transform.position + dir * (range + spacing * k);
+                desired.y = Datum.LocalSeaY + 1400f;
+                if (!GroundPlacement.TryPlace(def, desired, Quaternion.LookRotation(dir), out points[k]) ||
+                    (k > 0 && Mathf.Abs(points[k].y - points[0].y) > 0.4f)) return false;
+            }
+            return true;
         }
 
-        private static float EngineLossNow(Aircraft aircraft)
+        // The twin-pod volley of a CLIENT-owned aircraft, minus the net: ONE server release for `count` slugs
+        // (LanceServer.Release, exactly what LanceNet.ReceiveIntent calls), then one hit claim at each of two separated
+        // targets (LanceServer.Resolve, what the ArmorPenetrate patch calls), then a third claim that must read as a ricochet.
+        private static Dictionary<string, object> LanceTwin(Aircraft lead, int count)
         {
-            float total = 0f;
-            foreach (IEngine engine in aircraft.engineStates)
+            if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "lance_twin", "need lead and an enemy HQ");
+            if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
+                return Failure("VanguardAutomation", "lance_twin", "UGV1_grenade not in Encyclopedia.Lookup");
+            WeaponStation station = LanceOf(lead)?.ResolveStation();
+            if (station == null) return new Dictionary<string, object> { ["ok"] = true, ["placed"] = 0, ["found"] = 0 };
+            var lines = new List<Vector3[]>();
+            var dirs = new List<Vector3>();
+            var bearings = new List<float>();
+            for (int b = -60; b <= 60 && lines.Count < 2; b += 15)
             {
-                if (engine is Turbofan fan && FanLoss != null) total += FanLoss(fan);
-                else if (engine is Turbojet jet && JetLoss != null) total += JetLoss(jet);
+                if (bearings.Count > 0 && b - bearings[0] < 30f) continue; // two lines at least 30 degrees apart: ~470 m between the targets
+                if (!PlaceLine(lead, def, b, 900f, 1, 0f, out Vector3[] points, out Vector3 dir)) continue;
+                lines.Add(points);
+                dirs.Add(dir);
+                bearings.Add(b);
             }
-            return total;
+            if (lines.Count < 2) return new Dictionary<string, object> { ["ok"] = true, ["placed"] = 0, ["found"] = 1 };
+            for (int i = 0; i < 2; i++)
+                NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, lines[i][0].ToGlobalPosition(), Quaternion.LookRotation(dirs[i]), Vector3.zero,
+                    enemyHq, "VG_TwinTarget", 1f, true, null);
+            Physics.SyncTransforms();
+            int unmatched0 = VanguardStats.Get("lance.unmatched"), duplicates0 = VanguardStats.Get("lance.duplicates"),
+                chains0 = VanguardStats.Get("lance.chains"), pending0 = VanguardStats.Get("lance.pending");
+            bool released = LanceServer.Release(lead, station.Number, station.Ammo, 1f, count, Time.time, out float power, out float _);
+            int pending = VanguardStats.Get("lance.pending") - pending0;
+            var result = new Dictionary<string, object> { ["ok"] = true, ["placed"] = 1, ["found"] = 1, ["released"] = released ? 1 : 0, ["power"] = power, ["pending"] = pending };
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 start = lines[i][0] - dirs[i] * 5f;
+                start.y = lines[i][0].y + 1.1f;
+                LanceServer.Resolve(start, dirs[i] * 2900f, lead.persistentID);
+                result["line" + i + "Units"] = LanceServer.LastUnits;
+                result["line" + i + "First"] = LanceServer.LastFirstUnit; // damage the first part of that line's target took
+            }
+            result["unmatched"] = VanguardStats.Get("lance.unmatched") - unmatched0;
+            result["duplicates"] = VanguardStats.Get("lance.duplicates") - duplicates0;
+            result["chains"] = VanguardStats.Get("lance.chains") - chains0;
+            LanceServer.Resolve(lines[0][0] - dirs[0] * 5f + Vector3.up * 1.1f, dirs[0] * 2900f, lead.persistentID); // nothing left: a ricochet
+            result["duplicatesAfterExtra"] = VanguardStats.Get("lance.duplicates") - duplicates0;
+            return result;
         }
 
         private static Dictionary<string, object> LanceStatus(Aircraft lead)
@@ -189,10 +229,12 @@ namespace BoscaliSummer.Vanguard
             var state = new Dictionary<string, object> { ["ok"] = true, ["time"] = Time.timeSinceLevelLoad };
             // Every counter is always present (0 until bumped): the sim treats a missing key as a failed check.
             foreach (string name in new[] { "charges", "cancels", "shots", "faults", "pending", "releases", "rejected", "claims", "duplicates", "unmatched",
-                                            "chains", "chainUnits", "chainParts", "friendlySkips", "clientDamage", "drawTicks" })
+                                            "chains", "chainUnits", "chainParts", "friendlySkips", "clientDamage", "drawTicks", "volleys", "errors", "castOverflow" })
                 state["lance_" + name] = VanguardStats.Get("lance." + name);
             state["lanceChainUnits"] = LanceServer.LastUnits;
             state["lanceChainReach"] = LanceServer.LastReach;
+            state["lanceHudLines"] = LanceService.HudLines;
+            state["lanceJam"] = SceneSingleton<CombatHUD>.i != null ? SceneSingleton<CombatHUD>.i.jamAccumulation : -1f;
             LancePod pod = LanceOf(lead);
             state["lanceFound"] = pod != null ? 1 : 0;
             if (pod == null) return state;
@@ -208,8 +250,9 @@ namespace BoscaliSummer.Vanguard
             state["lanceDraw"] = pod.Draw(now);
             state["lanceSag"] = LanceEngineDraw.SagOf(lead);
             state["lanceEngineLossN"] = LanceEngineDraw.TotalLoss(lead);
-            state["lanceJetLossN"] = EngineLossNow(lead);
-            state["lanceAbCut"] = EngineLossNow(lead) > 0f ? 1 : 0;
+            float fieldLoss = LanceEngineDraw.FieldLoss(lead);
+            state["lanceJetLossN"] = fieldLoss; // read back from the engines' own field, not from the Lance's tables
+            state["lanceAbCut"] = fieldLoss > 0f ? 1 : 0;
             state["lanceFlicker"] = look.Charging ? LanceDraw.FlickerLevel(look.Charge) : 0f;
             state["lanceReadyIn"] = pod.Phase == LancePhase.Idle ? 0f : Mathf.Max(0f, pod.ReadyAt - now);
             state["lanceBarrelM"] = LancePose.BarrelOffset(look.SinceShot, look.LastPower);
@@ -218,6 +261,18 @@ namespace BoscaliSummer.Vanguard
             state["lanceNoseUpPeakDegS"] = LanceProbe.NoseUpPeak;
             state["lanceNoseDownPeakDegS"] = LanceProbe.NoseDownPeak;
             state["lanceView"] = pod.View != null ? 1 : 0;
+            // Per pod of the station, in station order: both pods of a twin station must load, fire and flash together.
+            int pods = 0;
+            if (pod.Station != null && LanceAccess.Ensure())
+                foreach (Weapon weapon in pod.Station.Weapons)
+                    if (weapon is Gun gun && LanceService.Pods.TryGetValue(gun, out LancePod member))
+                    {
+                        state["lancePod" + pods + "Ammo"] = gun.ammo;
+                        state["lancePod" + pods + "Loaded"] = LanceAccess.BulletsLoaded(gun);
+                        state["lancePod" + pods + "Fired"] = member.ShotAt > 0f ? 1 : 0;
+                        pods++;
+                    }
+            state["lancePods"] = pods;
             return state;
         }
 

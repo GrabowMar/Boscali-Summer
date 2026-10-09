@@ -9,40 +9,71 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// <summary>
     /// LANCE power draw on the engines of aircraft this peer simulates (owner peer; AI pods on the server). While the bank
     /// charges and primes, jets lose a share of their DRY thrust (any loss also cuts the afterburner) and turboprops lose
-    /// throttle. The three engine patches read the tables below; swivel-duct airframes keep their own SetParasiticLoss
-    /// writes, the patch just adds ours to them.
+    /// throttle. The jets' loss is written straight into the private parasiticThrustLoss field every physics step: the
+    /// SetParasiticLoss setters are one-line methods the JIT inlines into their callers, so a Harmony prefix on them would
+    /// silently never run. This component runs after every other FixedUpdate (order 1000), so on swivel-duct airframes,
+    /// which rewrite their own loss each step, the Lance share lands on top of the swivel's. The turboprop throttle patch
+    /// stays a Harmony patch (Transmission calls Throttle through an interface, which is not inlined).
     /// </summary>
+    [DefaultExecutionOrder(1000)]
     internal sealed class LanceEngineDraw : MonoBehaviour, ISceneService
     {
-        private static readonly Dictionary<object, float> Loss = new Dictionary<object, float>();
+        private struct Mark
+        {
+            public float Written, Base;
+        }
+
+        private static readonly Dictionary<object, Mark> Marks = new Dictionary<object, Mark>();
         private static readonly Dictionary<TurbineEngine, float> Throttle = new Dictionary<TurbineEngine, float>();
         private static readonly Dictionary<Aircraft, float> Sags = new Dictionary<Aircraft, float>();
-        private static readonly Dictionary<Aircraft, bool> Swivel = new Dictionary<Aircraft, bool>();
-        private static readonly AccessTools.FieldRef<Turbofan, float> Smoothed = SmoothedRef();
+        private static readonly AccessTools.FieldRef<Turbofan, float> Smoothed = Ref<Turbofan>("dynamicThrustFactorSmoothed");
+        private static readonly AccessTools.FieldRef<Turbofan, float> FanLoss = Ref<Turbofan>("parasiticThrustLoss");
+        private static readonly AccessTools.FieldRef<Turbojet, float> JetLoss = Ref<Turbojet>("parasiticThrustLoss");
 
         private readonly Dictionary<Aircraft, float> draw = new Dictionary<Aircraft, float>();
         private readonly List<Aircraft> ended = new List<Aircraft>();
 
-        private static AccessTools.FieldRef<Turbofan, float> SmoothedRef()
+        private static AccessTools.FieldRef<T, float> Ref<T>(string field)
         {
-            try { return AccessTools.FieldRefAccess<Turbofan, float>("dynamicThrustFactorSmoothed"); }
-            catch (System.Exception) { return null; }
+            try { return AccessTools.FieldRefAccess<T, float>(field); }
+            catch (System.Exception)
+            {
+                Plugin.Logger?.LogWarning("LANCE engine draw: " + typeof(T).Name + "." + field + " not found; that part of the draw is off.");
+                return null;
+            }
         }
-
-        /// <summary>Extra thrust loss (N) the Lance adds to this jet; 0 when it draws nothing.</summary>
-        public static float ExtraLoss(object engine) => Loss.TryGetValue(engine, out float newtons) ? newtons : 0f;
 
         public static float ThrottleFactor(TurbineEngine engine) => Throttle.TryGetValue(engine, out float factor) ? factor : 1f;
 
         /// <summary>Fraction of dry thrust the Lance is removing from this aircraft right now.</summary>
         public static float SagOf(Aircraft aircraft) => aircraft != null && Sags.TryGetValue(aircraft, out float sag) ? sag : 0f;
 
+        /// <summary>The loss (N) the engines of this aircraft really carry in their parasiticThrustLoss field (sim status).</summary>
+        public static float FieldLoss(Aircraft aircraft)
+        {
+            float total = 0f;
+            foreach (IEngine engine in aircraft.engineStates)
+            {
+                if (engine is Turbofan fan && FanLoss != null) total += FanLoss(fan);
+                else if (engine is Turbojet jet && JetLoss != null) total += JetLoss(jet);
+            }
+            return total;
+        }
+
+        /// <summary>The part of that loss the Lance added (sim status: proves the field write took).</summary>
+        public static float TotalLoss(Aircraft aircraft)
+        {
+            float total = 0f;
+            foreach (IEngine engine in aircraft.engineStates)
+                if (Marks.TryGetValue(engine, out Mark mark)) total += mark.Written - mark.Base;
+            return total;
+        }
+
         public void ResetForScene()
         {
-            Loss.Clear();
+            Marks.Clear();
             Throttle.Clear();
             Sags.Clear();
-            Swivel.Clear();
             draw.Clear();
         }
 
@@ -79,20 +110,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (sag > 0f) Sags[aircraft] = sag;
             else Sags.Remove(aircraft);
-            if (!Swivel.TryGetValue(aircraft, out bool swivel))
-                Swivel[aircraft] = swivel = aircraft.GetComponentInChildren<SwivelDuctSystem>(true) != null;
             foreach (IEngine engine in aircraft.engineStates)
             {
                 if (engine is Turbofan fan)
                 {
+                    if (FanLoss == null) continue;
                     float dry = fan.staticThrust * (Smoothed != null ? Smoothed(fan) : 0.6f);
-                    Set(fan, LanceDraw.JetLossNewtons(dry, sag));
-                    if (!swivel) fan.SetParasiticLoss(0f); // the patch adds our loss to the 0
+                    Overlay(fan, ref FanLoss(fan), LanceDraw.JetLossNewtons(dry, sag));
                 }
                 else if (engine is Turbojet jet)
                 {
-                    Set(jet, LanceDraw.JetLossNewtons(jet.maxThrust, sag));
-                    if (!swivel) jet.SetParasiticLoss(0f);
+                    if (JetLoss == null) continue;
+                    Overlay(jet, ref JetLoss(jet), LanceDraw.JetLossNewtons(jet.maxThrust, sag));
                 }
                 else if (engine is TurbineEngine prop)
                 {
@@ -103,18 +132,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             VanguardStats.Bump("lance.drawTicks");
         }
 
-        private static void Set(object engine, float newtons)
+        // Puts `extra` newtons of Lance loss on top of whatever else sets this engine's loss. If the field still holds what
+        // this method wrote last step nobody else touched it, so the other share is the remembered base; otherwise the
+        // swivel-duct system rewrote it this step and the field IS the base.
+        private static void Overlay(object engine, ref float loss, float extra)
         {
-            if (newtons > 0f) Loss[engine] = newtons;
-            else Loss.Remove(engine);
-        }
-
-        /// <summary>Sum of the extra jet loss on an aircraft (sim status).</summary>
-        public static float TotalLoss(Aircraft aircraft)
-        {
-            float total = 0f;
-            foreach (IEngine engine in aircraft.engineStates) total += ExtraLoss(engine);
-            return total;
+            float baseLoss = Marks.TryGetValue(engine, out Mark mark) && loss == mark.Written ? mark.Base : loss;
+            loss = baseLoss + extra;
+            if (extra > 0f) Marks[engine] = new Mark { Written = loss, Base = baseLoss };
+            else Marks.Remove(engine);
         }
     }
 }

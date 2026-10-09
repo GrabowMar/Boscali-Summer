@@ -28,8 +28,6 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.LanceAttachPatch),
             typeof(Patches.LanceRemoteShotPatch),
             typeof(Patches.LanceArmorPenetratePatch),
-            typeof(Patches.LanceTurbofanLossPatch),
-            typeof(Patches.LanceTurbojetLossPatch),
             typeof(Patches.LanceTurbineThrottlePatch),
             typeof(Patches.SkywellLaunchPatch),
             typeof(Patches.SkywellFirePatch)

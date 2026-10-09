@@ -135,6 +135,51 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             }
             TestAssert.That(last / first > 0.30f && last / first < 0.45f && LanceSlug.Continues(speed), "four-unit chain keeps ~40 % damage on the last unit");
 
+            // ---- server pairing: a twin-pod volley is ONE release that queues one entry per slug
+            var twin = new LancePending();
+            twin.Add(0.9f, 10f);
+            twin.Add(0.9f, 10f);
+            TestAssert.That(twin.Count == 2 && twin.Unused == 2, "a twin volley queues two pending slugs");
+            LanceClaim claimA = twin.Claim(10.4f, out float firstPower);
+            LanceClaim claimB = twin.Claim(10.4f, out float secondPower); // same instant, other target: NOT a ricochet
+            TestAssert.That(claimA == LanceClaim.Matched && claimB == LanceClaim.Matched && twin.Unused == 0, "both claims of a twin volley match");
+            Near(firstPower, 0.9f, 1e-6f, "first claim carries the released power");
+            Near(secondPower, 0.9f, 1e-6f, "second claim carries the released power");
+            LanceClaim ricochet = twin.Claim(10.45f, out float ricochetPower);
+            TestAssert.That(ricochet == LanceClaim.Duplicate, "a third claim right behind a twin volley is a ricochet duplicate");
+            Near(ricochetPower, LanceCapacitor.UnmatchedPower, 1e-6f, "a dropped duplicate carries no power");
+            var single = new LancePending();
+            single.Add(1f, 5f);
+            TestAssert.That(single.Claim(5.3f, out _) == LanceClaim.Matched && single.Claim(5.31f, out _) == LanceClaim.Duplicate,
+                "a single-pod release answers its ricochet claim as a duplicate");
+            TestAssert.That(new LancePending().Claim(1f, out float strayPower) == LanceClaim.Unmatched && strayPower == LanceCapacitor.UnmatchedPower,
+                "a claim with no release is an unmatched weak snap");
+            var late = new LancePending();
+            late.Add(1f, 0f);
+            TestAssert.That(late.Claim(LanceCapacitor.PendingTtl + 0.5f, out _) == LanceClaim.Unmatched, "a claim past the pending lifetime is unmatched");
+            var missed = new LancePending();
+            missed.Add(0.9f, 0f);    // a shot that never hit anything
+            missed.Add(0.5f, 1.5f);  // the shot that did
+            TestAssert.That(missed.Claim(1.9f, out float hitPower) == LanceClaim.Matched, "the fresh shot takes the claim");
+            Near(hitPower, 0.5f, 1e-6f, "the claim takes the newest unused shot");
+            TestAssert.That(missed.Claim(2.0f, out _) == LanceClaim.Duplicate, "a ricochet of that hit does not consume the stale missed shot");
+            var overflow = new LancePending();
+            for (int i = 0; i < LancePending.Capacity + 3; i++) overflow.Add(1f, i * 0.01f);
+            TestAssert.That(overflow.Count == LancePending.Capacity, "the pending queue is capped");
+
+            // ---- server rail: one bank clock and one heat per station, whatever the pod count
+            var rail = new LanceRail();
+            TestAssert.That(rail.TryRelease(1f, 100f, 250f, 24, out float railPower) && Mathf.Abs(railPower - 1f) < 1e-6f, "a fresh bank releases full power");
+            Near(rail.Heat, LanceHeat.ShotHeat(1f), 1e-5f, "a twin volley books ONE shot of heat");
+            Near(rail.ReadyAt, 100f + LanceCapacitor.RechargeSeconds(1f), 1e-4f, "and one recharge");
+            TestAssert.That(!rail.TryRelease(1f, 101f, 250f, 22, out float earlyPower) && earlyPower == 0f, "a second release before the bank is ready is rejected");
+            TestAssert.That(rail.TryRelease(1f, rail.ReadyAt, 250f, 22, out float boundPower) && Mathf.Abs(boundPower - LanceCapacitor.Power01(LanceCapacitor.ServerChargeBound(0f))) < 1e-5f,
+                "a release the instant the bank is ready is bounded to what the bank can hold");
+            TestAssert.That(rail.TryRelease(1f, 200f, 250f, 24, out float rearmPower) && rail.Heat < 0.6f && rearmPower > 0.99f, "a rearm (more ammo than last release) clears rails and bank");
+            var hot = new LanceRail { Heat = 1.2f, HeatAt = 300f };
+            TestAssert.That(hot.TryRelease(1f, 300f, 250f, 12, out float faultPower) && Mathf.Abs(faultPower - LanceHeat.FaultPower) < 1e-5f, "an overheated rail fires a dud");
+            TestAssert.That(hot.ReadyAt >= 300f + LanceHeat.FaultLockout - 1e-4f, "and locks out");
+
             // ---- pose
             Near(LancePose.BarrelTravel(0f), 0.10f, 1e-6f, "snap recoil travel");
             Near(LancePose.BarrelTravel(1f), 0.25f, 1e-6f, "full recoil travel");

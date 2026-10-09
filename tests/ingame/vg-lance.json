@@ -274,6 +274,15 @@
       "store": "safe"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "twin",
+        "count": 2
+      },
+      "store": "twin"
+    },
+    {
       "op": "wait",
       "seconds": 1.0
     },
@@ -329,16 +338,6 @@
       "min": 1
     },
     {
-      "check": "result_above",
-      "path": "sel.ammo",
-      "min": 12
-    },
-    {
-      "check": "result_below",
-      "path": "sel.ammo",
-      "max": 12
-    },
-    {
       "check": "result_below",
       "path": "idle.lanceState",
       "max": 0
@@ -352,11 +351,6 @@
       "check": "result_below",
       "path": "idle.lanceAbCut",
       "max": 0
-    },
-    {
-      "check": "result_above",
-      "path": "tap.lance_shots",
-      "min": 1
     },
     {
       "check": "result_above",
@@ -377,16 +371,6 @@
       "check": "result_below",
       "path": "tap.lanceHeat",
       "max": 0.2
-    },
-    {
-      "check": "result_above",
-      "path": "tap.lanceAmmo",
-      "min": 11
-    },
-    {
-      "check": "result_below",
-      "path": "tap.lanceAmmo",
-      "max": 11
     },
     {
       "check": "result_above",
@@ -432,11 +416,6 @@
       "check": "result_above",
       "path": "full.lancePowerLast",
       "min": 0.99
-    },
-    {
-      "check": "result_above",
-      "path": "full.lance_shots",
-      "min": 2
     },
     {
       "check": "result_below",
@@ -502,16 +481,6 @@
       "check": "result_below",
       "path": "ai.lancePowerLast",
       "max": 0.96
-    },
-    {
-      "check": "result_above",
-      "path": "ai.lance_shots",
-      "min": 1
-    },
-    {
-      "check": "result_below",
-      "path": "ai.lance_shots",
-      "max": 1
     },
     {
       "check": "result_above",
@@ -583,6 +552,226 @@
       "ids": [
         "lead"
       ]
+    },
+    {
+      "check": "result_above",
+      "path": "sel.ammo",
+      "min": 24
+    },
+    {
+      "check": "result_below",
+      "path": "sel.ammo",
+      "max": 24
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lance_shots",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lance_shots",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lance_volleys",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lance_volleys",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lanceAmmo",
+      "min": 22
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lanceAmmo",
+      "max": 22
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePods",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePods",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod0Loaded",
+      "min": 11
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePod0Loaded",
+      "max": 11
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod1Loaded",
+      "min": 11
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePod1Loaded",
+      "max": 11
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod0Fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod1Fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "full.lance_shots",
+      "min": 4
+    },
+    {
+      "check": "result_below",
+      "path": "full.lance_shots",
+      "max": 4
+    },
+    {
+      "check": "result_above",
+      "path": "full.lance_volleys",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "full.lance_volleys",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ai.lance_shots",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "ai.lance_shots",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ai.lance_volleys",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "ai.lance_volleys",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.placed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.released",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.pending",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "twin.pending",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line0Units",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line1Units",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line0First",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line1First",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "twin.chains",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "twin.chains",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "twin.unmatched",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "twin.unmatched",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "twin.duplicates",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "twin.duplicates",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "twin.duplicatesAfterExtra",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "twin.duplicatesAfterExtra",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "end.lance_unmatched",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "end.lance_unmatched",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "end.lance_errors",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "end.lance_errors",
+      "max": 0
     }
   ]
 }

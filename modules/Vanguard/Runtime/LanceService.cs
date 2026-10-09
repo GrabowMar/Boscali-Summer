@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public WeaponStation Station;
         public LancePodView View;
         public LancePhase Phase;
-        public float HoldStart, LastHold, Heat, CycleEnd, ReadyAt, RechargeTotal, LastPower, NextSend;
+        public float HoldStart, LastHold, Heat, CycleEnd, ReadyAt, RechargeTotal, LastPower, NextSend, NextEmpty;
         public float ShotAt = -99f;
         public int LastAmmo = -1;
         // Observer mirror (LanceFx): last charge level and the power of the last server-confirmed shot.
@@ -91,6 +91,21 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             LanceLook look = Look(now);
             return look.Charging ? LanceDraw.ChargeDraw(look.Charge)
                 : look.Recharge01 >= 0f ? LanceDraw.RechargeDraw(LastPower, look.Recharge01) : 0f;
+        }
+
+        /// <summary>A wingman pod of a twin station shows the lead's cycle (the lead alone runs the state machine).</summary>
+        public void Mirror(LancePod lead)
+        {
+            Phase = lead.Phase;
+            HoldStart = lead.HoldStart;
+            LastHold = lead.LastHold;
+            Heat = lead.Heat;
+            CycleEnd = lead.CycleEnd;
+            ReadyAt = lead.ReadyAt;
+            RechargeTotal = lead.RechargeTotal;
+            LastPower = lead.LastPower;
+            ShotAt = lead.ShotAt;
+            LastAmmo = lead.LastAmmo;
         }
 
         public WeaponStation ResolveStation()
@@ -135,6 +150,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// trigger-held, and when the calls stop the service releases one slug scaled by hold time. The bank drains the
     /// engines while it charges (LanceEngineDraw), the rails heat with every shot, a full charge punches through
     /// everything on the line (LanceServer). The server decides every damage number; clients send the held charge.
+    /// The pods of one station (the default wing sets carry two) act as ONE bank: the first attached pod runs the cycle
+    /// and a release fires one slug from every pod, for one shot's heat, recharge, kick and shake.
     /// </summary>
     internal sealed class LanceService : MonoBehaviour, ISceneService
     {
@@ -142,6 +159,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const string Channel = "lance";
 
         public static readonly Dictionary<Gun, LancePod> Pods = new Dictionary<Gun, LancePod>();
+        private static readonly List<LancePod> Scratch = new List<LancePod>(4), Volley = new List<LancePod>(4);
+        private static readonly string[] DeratedWords = new string[102], SagWords = new string[102], CoolWords = new string[400];
         /// <summary>AI pods release at 85 % charge; the sim switches this off to hold full charges.</summary>
         public static bool AutoRelease = true;
         private static LanceService instance;
@@ -149,6 +168,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly List<Gun> gone = new List<Gun>();
         private IHudBoard board;
         private IHudLine chargeLine, heatLine, busLine;
+
+        /// <summary>Held HUD lines right now (sim status: proves the player-owned board path ran).</summary>
+        public static int HudLines => instance == null ? 0 : (instance.chargeLine != null ? 1 : 0) + (instance.heatLine != null ? 1 : 0) + (instance.busLine != null ? 1 : 0);
 
         private void Awake() => instance = this;
 
@@ -178,10 +200,40 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return pod;
         }
 
-        public static LancePod PodFor(Aircraft aircraft, byte stationNumber)
+        /// <summary>Every pod of the station in station order. A reused list: consume it before the next call.</summary>
+        public static List<LancePod> PodsIn(Aircraft aircraft, byte stationNumber)
         {
-            if (aircraft == null || stationNumber >= aircraft.weaponStations.Count) return null;
-            foreach (Weapon weapon in aircraft.weaponStations[stationNumber].Weapons)
+            Scratch.Clear();
+            if (aircraft != null && stationNumber < aircraft.weaponStations.Count)
+                foreach (Weapon weapon in aircraft.weaponStations[stationNumber].Weapons)
+                    if (weapon is Gun gun && Pods.TryGetValue(gun, out LancePod pod)) Scratch.Add(pod);
+            return Scratch;
+        }
+
+        /// <summary>Pods of the station still on their pylons: the most slugs one release can fire.</summary>
+        public static int AttachedIn(WeaponStation station)
+        {
+            int attached = 0;
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun gun && gun.IsAttached() && Pods.ContainsKey(gun)) attached++;
+            return attached;
+        }
+
+        /// <summary>The first pod of the station that can still fire (attached, off safety, a round loaded); null = none can.</summary>
+        internal static LancePod LeadOf(WeaponStation station)
+        {
+            if (station == null || !LanceAccess.Available) return null;
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun gun && gun.IsAttached() && !gun.Safety && LanceAccess.BulletsLoaded(gun) > 0 && Pods.TryGetValue(gun, out LancePod pod)) return pod;
+            return null;
+        }
+
+        // The pod that owns the station's cycle: the lead, or (every round spent) the first pod, so the others keep mirroring one cycle.
+        private static LancePod CycleOwner(WeaponStation station)
+        {
+            LancePod lead = LeadOf(station);
+            if (lead != null || station == null) return lead;
+            foreach (Weapon weapon in station.Weapons)
                 if (weapon is Gun gun && Pods.TryGetValue(gun, out LancePod pod)) return pod;
             return null;
         }
@@ -203,12 +255,23 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // Linked-guns fire reaches every gun station; only the selected Lance station may charge.
             if (aircraft.weaponManager.currentWeaponStation != station) return;
             float now = Time.time;
+            LancePod lead = LeadOf(station);
+            if (lead != null && lead != pod) return; // a wingman: the lead's cycle covers the whole station
             if (pod.Phase == LancePhase.Charging)
             {
                 pod.LastHold = now;
                 return;
             }
-            if (pod.Phase != LancePhase.Idle || LanceAccess.BulletsLoaded(gun) <= 0 || station.Ammo <= 0) return;
+            if (pod.Phase != LancePhase.Idle) return;
+            if (LanceAccess.BulletsLoaded(gun) <= 0 || station.Ammo <= 0)
+            {
+                if (aircraft.Player != null && now >= pod.NextEmpty)
+                {
+                    pod.NextEmpty = now + 2f;
+                    Notice(HudTone.Warning, "LANCE EMPTY");
+                }
+                return;
+            }
             pod.Phase = LancePhase.Charging;
             pod.HoldStart = pod.LastHold = pod.NextSend = now;
             VanguardStats.Bump("lance.charges");
@@ -230,10 +293,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 }
                 if (pod.Aircraft.disabled) continue;
                 pod.Heat = LanceHeat.Step(pod.Heat, pod.Aircraft.speed, dt);
-                if (pod.Owner) Tick(pod, now);
+                if (pod.Owner)
+                {
+                    LancePod owner = CycleOwner(pod.ResolveStation());
+                    if (owner == null || owner == pod) Tick(pod, now);
+                    else pod.Mirror(owner);
+                }
                 if (pod.Aircraft == me && (mine == null || pod.Rank > mine.Rank)) mine = pod;
             }
             for (int i = 0; i < gone.Count; i++) Pods.Remove(gone[i]);
+            LanceServer.Prune(now);
             Hud(mine, now);
         }
 
@@ -288,24 +357,40 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private static void Release(LancePod pod, float now)
         {
-            Gun gun = pod.Gun;
             WeaponStation station = pod.Station;
             Aircraft aircraft = pod.Aircraft;
+            Volley.Clear();
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun g && g.IsAttached() && !g.Safety && LanceAccess.BulletsLoaded(g) > 0 && Pods.TryGetValue(g, out LancePod member)) Volley.Add(member);
+            int count = Volley.Count;
+            if (count == 0)
+            {
+                pod.Phase = LancePhase.Idle; // every round is gone: nothing to fire
+                return;
+            }
             float requested = LanceCapacitor.Power01(LanceCapacitor.Charge(pod.LastHold - pod.HoldStart));
             bool fault = LanceHeat.IsFault(pod.Heat);
             float power = requested * (fault ? LanceHeat.FaultPower : LanceHeat.Derate(pod.Heat));
             // The server learns the shot BEFORE the vanilla bullet exists, so its hit claim always finds this release.
+            // One entry per slug: the server pairs each of the volley's hit claims with its own.
             if (GameAccess.IsServer())
             {
-                LanceServer.Enqueue(aircraft, power, now);
+                LanceServer.Enqueue(aircraft, power, now, count);
                 LanceNet.ServerShot(pod, power);
             }
-            else LanceNet.SendRelease(pod, requested);
-            LanceAccess.SetTracerSize(gun, LanceCapacitor.Tracer(power));
-            LanceAccess.Fire(gun);
-            LanceAccess.SetBulletsLoaded(gun, LanceAccess.BulletsLoaded(gun) - 1);
-            gun.ammo--;
-            station.UpdateLastFired(1);
+            else LanceNet.SendRelease(pod, requested, count);
+            int ammoBefore = station.Ammo;
+            for (int i = 0; i < count; i++)
+            {
+                Gun gun = Volley[i].Gun;
+                station.Ammo = ammoBefore - i; // each SpawnBullet reports Ammo - 1 to the peers: count the volley down so the last report is true
+                LanceAccess.SetTracerSize(gun, LanceCapacitor.Tracer(power));
+                LanceAccess.Fire(gun);
+                LanceAccess.SetBulletsLoaded(gun, LanceAccess.BulletsLoaded(gun) - 1);
+                gun.ammo--;
+            }
+            station.Ammo = ammoBefore;
+            station.UpdateLastFired(count);
             station.Updated();
 
             pod.Heat += LanceHeat.ShotHeat(power);
@@ -318,11 +403,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             pod.RechargeTotal = recharge;
             pod.LastPower = power;
             pod.ShotAt = now;
-            VanguardStats.Bump("lance.shots");
+            VanguardStats.Bump("lance.shots", count);
+            VanguardStats.Bump("lance.volleys");
             if (fault) VanguardStats.Bump("lance.faults");
 
-            Kick(aircraft, gun, power);
-            if (pod.View != null) pod.View.PlayShot(power); // Unity null check: the view may have been destroyed
+            Kick(aircraft, pod.Gun, power); // once per volley, not per pod
+            foreach (LancePod member in Volley)
+                if (member.View != null) member.View.PlayShot(power); // Unity null check: the view may have been destroyed
             if (aircraft.Player != null)
             {
                 if (fault) Notice(HudTone.Warning, "RAIL FAULT - COOLING");
@@ -366,7 +453,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             else if (pod.Phase == LancePhase.Fault)
             {
                 chargeLine ??= board.Acquire(Owner, Channel, "charge");
-                chargeLine?.Set(HudTone.Warning, "RAIL FAULT", "COOLING  " + Mathf.Max(0f, pod.ReadyAt - now).ToString("0.0"), Mathf.Max(0f, look.Recharge01));
+                chargeLine?.Set(HudTone.Warning, "RAIL FAULT", CoolingWord(pod.ReadyAt - now), Mathf.Max(0f, look.Recharge01));
             }
             else if (pod.Phase != LancePhase.Idle)
             {
@@ -396,7 +483,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (draw >= 0.05f)
             {
                 busLine ??= board.Acquire(Owner, Channel, "bus");
-                busLine?.Set(HudTone.Caution, "BUS DRAW", sag > 0f ? "AB OFFLINE  -" + Mathf.RoundToInt(sag * 100f) + "% THRUST" : "AB OFFLINE", draw);
+                int sagPct = Mathf.RoundToInt(sag * 100f); // the afterburner only drops out once the engines actually lose thrust
+                busLine?.Set(HudTone.Caution, "BUS DRAW", sagPct > 0 ? Cached(SagWords, sagPct, "AB OFFLINE  -", "% THRUST") : "BUS STANDBY", draw);
             }
             else
             {
@@ -423,9 +511,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case HeatBand.Cool: return "NOMINAL";
                 case HeatBand.Warm: return "WARM";
                 case HeatBand.Hot: return "HOT";
-                case HeatBand.Derated: return "DERATED -" + Mathf.RoundToInt((1f - LanceHeat.Derate(heat)) * 100f) + "% POWER";
+                case HeatBand.Derated: return Cached(DeratedWords, Mathf.RoundToInt((1f - LanceHeat.Derate(heat)) * 100f), "DERATED -", "% POWER");
                 default: return "OVERHEAT  NEXT SHOT FAULTS";
             }
+        }
+
+        // The HUD sets these strings every frame: build each distinct one once.
+        private static string Cached(string[] cache, int index, string prefix, string suffix)
+        {
+            index = Mathf.Clamp(index, 0, cache.Length - 1);
+            return cache[index] ??= prefix + index + suffix;
+        }
+
+        private static string CoolingWord(float seconds)
+        {
+            int tenths = Mathf.Clamp(Mathf.CeilToInt(seconds * 10f), 0, CoolWords.Length - 1);
+            return CoolWords[tenths] ??= "COOLING  " + tenths / 10 + "." + tenths % 10;
         }
 
         private void ReleaseLines()

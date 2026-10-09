@@ -12,28 +12,28 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// claim bounded by the server's bank clock and rail heat), the through-chain reach, which units it crosses and what
     /// each takes. The only client-supplied geometry is the vanilla hit claim (Unit.CmdClaimHit, plausibility-checked by
     /// the game), which keeps what-you-see-is-what-you-hit. LanceArmorPenetratePatch routes every Lance impact here.
+    /// A station volley (one slug per pod) is ONE release that queues one pending entry per slug.
     /// </summary>
     internal static class LanceServer
     {
-        private sealed class Pending
-        {
-            public float Power, At, UsedAt;
-            public bool Used;
-        }
-
         private sealed class Shooter
         {
-            public float Heat, HeatAt, ReadyAt;
-            public readonly List<Pending> Queue = new List<Pending>(4);
-        }
+            public readonly LancePending Queue = new LancePending();
+            public readonly Dictionary<byte, LanceRail> Rails = new Dictionary<byte, LanceRail>(2);
 
-        private const int MaxPending = 4;
-        private const float DuplicateWindow = 0.5f; // a ricochet of the same slug claims again within ~0.1 s
+            public LanceRail Rail(byte station)
+            {
+                if (!Rails.TryGetValue(station, out LanceRail rail)) Rails[station] = rail = new LanceRail();
+                return rail;
+            }
+        }
 
         private static readonly Dictionary<uint, Shooter> Shooters = new Dictionary<uint, Shooter>();
         private static readonly Dictionary<Unit, int> Crossed = new Dictionary<Unit, int>();
-        private static readonly RaycastHit[] Buffer = new RaycastHit[64];
+        private static readonly List<uint> Dead = new List<uint>();
+        private static readonly RaycastHit[] Buffer = new RaycastHit[128];
         private static readonly IComparer<RaycastHit> ByDistance = Comparer<RaycastHit>.Create((a, b) => a.distance.CompareTo(b.distance));
+        private static float nextPrune;
 
         // Last chain, read by the sim.
         public static int LastUnits, LastParts, LastFriendly;
@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             Shooters.Clear();
             Crossed.Clear();
+            nextPrune = 0f;
             LastUnits = LastParts = LastFriendly = 0;
             LastReach = LastSpan = LastFirstUnit = LastLastUnit = 0f;
         }
@@ -54,84 +55,88 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return shooter;
         }
 
-        public static float HeatOf(Aircraft aircraft) => Shooters.TryGetValue(aircraft.persistentID.Id, out Shooter s) ? s.Heat : 0f;
+        public static float HeatOf(Aircraft aircraft, byte station) =>
+            Shooters.TryGetValue(aircraft.persistentID.Id, out Shooter s) && s.Rails.TryGetValue(station, out LanceRail rail) ? rail.Heat : 0f;
 
+        /// <summary>Sim hook: pin the heat of every rail the server already tracks for this aircraft.</summary>
         public static void SetHeat(Aircraft aircraft, float heat)
         {
-            Shooter s = Of(aircraft);
-            s.Heat = heat;
-            s.HeatAt = Time.time;
+            if (!Shooters.TryGetValue(aircraft.persistentID.Id, out Shooter s)) return;
+            foreach (LanceRail rail in s.Rails.Values)
+            {
+                rail.Heat = heat;
+                rail.HeatAt = Time.time;
+            }
         }
 
-        public static void Clear(Aircraft aircraft) => Shooters.Remove(aircraft.persistentID.Id);
-
-        /// <summary>A shot the server already trusts (host or AI pod): remember its power for the coming hit claim.</summary>
-        public static void Enqueue(Aircraft aircraft, float power, float now)
+        /// <summary>Drops shooters whose aircraft is gone or dead (called a few times a second from LanceService).</summary>
+        public static void Prune(float now)
         {
-            List<Pending> queue = Of(aircraft).Queue;
-            queue.Add(new Pending { Power = power, At = now });
-            if (queue.Count > MaxPending) queue.RemoveAt(0);
-            VanguardStats.Bump("lance.pending");
+            if (now < nextPrune) return;
+            nextPrune = now + 2f;
+            Dead.Clear();
+            foreach (uint id in Shooters.Keys)
+                if (!UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit unit) || unit == null || unit.disabled) Dead.Add(id);
+            foreach (uint id in Dead) Shooters.Remove(id);
+        }
+
+        /// <summary>A shot the server already trusts (host or AI pod): remember its power for the coming hit claims, one per slug.</summary>
+        public static void Enqueue(Aircraft aircraft, float power, float now, int count = 1)
+        {
+            LancePending queue = Of(aircraft).Queue;
+            for (int i = 0; i < count; i++) queue.Add(power, now);
+            VanguardStats.Bump("lance.pending", count);
         }
 
         /// <summary>
-        /// A client's release. Rejects a bank that cannot be ready yet, bounds the claimed power by the time since the
-        /// bank was ready, derates it by the server's rail heat, then enqueues it. False = rejected.
+        /// A client's release of one station volley. Rejects a bank that cannot be ready yet, bounds the claimed power by
+        /// the time since the bank was ready, derates it by the station's rail heat, then queues <paramref name="count"/>
+        /// pending slugs at that power. False = rejected.
         /// </summary>
-        public static bool Release(Aircraft aircraft, float requested01, float now, out float power, out float heat)
+        public static bool Release(Aircraft aircraft, byte station, int ammo, float requested01, int count, float now, out float power, out float heat)
         {
             Shooter s = Of(aircraft);
-            power = 0f;
-            heat = s.Heat;
-            if (now < s.ReadyAt - LanceCapacitor.ServerSlack)
+            LanceRail rail = s.Rail(station);
+            bool accepted = rail.TryRelease(requested01, now, aircraft.speed, ammo, out power);
+            heat = rail.Heat;
+            if (!accepted)
             {
                 VanguardStats.Bump("lance.rejected");
                 return false;
             }
-            float bound = LanceCapacitor.Power01(LanceCapacitor.ServerChargeBound(now - s.ReadyAt));
-            s.Heat = LanceHeat.Step(s.Heat, aircraft.speed, now - s.HeatAt);
-            s.HeatAt = now;
-            bool fault = LanceHeat.IsFault(s.Heat);
-            power = Mathf.Min(requested01, bound) * (fault ? LanceHeat.FaultPower : LanceHeat.Derate(s.Heat));
-            s.Heat += LanceHeat.ShotHeat(power);
-            heat = s.Heat;
-            float recharge = LanceCapacitor.RechargeSeconds(power);
-            s.ReadyAt = now + (fault ? Mathf.Max(recharge, LanceHeat.FaultLockout) : recharge);
             VanguardStats.Bump("lance.releases");
-            Enqueue(aircraft, power, now);
+            Enqueue(aircraft, power, now, Math.Max(1, count));
             return true;
         }
 
         /// <summary>The ArmorPenetrate prefix body: pair the hit claim with the shooter's release, then run the chain.</summary>
         public static void Resolve(Vector3 position, Vector3 velocity, PersistentID dealer)
         {
-            float now = Time.time;
             VanguardStats.Bump("lance.claims");
             UnitRegistry.TryGetUnit(dealer, out Unit shooter);
             float power = LanceCapacitor.UnmatchedPower;
-            bool matched = false, duplicate = false;
-            if (shooter != null && Shooters.TryGetValue(shooter.persistentID.Id, out Shooter s))
-                for (int i = s.Queue.Count - 1; i >= 0 && !matched; i--)
-                {
-                    Pending p = s.Queue[i];
-                    if (now - p.At > LanceCapacitor.PendingTtl) break;
-                    if (!p.Used)
-                    {
-                        p.Used = true;
-                        p.UsedAt = now;
-                        power = p.Power;
-                        matched = true;
-                    }
-                    else if (now - p.UsedAt < DuplicateWindow) duplicate = true;
-                }
-            if (!matched && duplicate)
+            LanceClaim claim = LanceClaim.Unmatched;
+            if (shooter != null && Shooters.TryGetValue(shooter.persistentID.Id, out Shooter s)) claim = s.Queue.Claim(Time.time, out power);
+            if (claim == LanceClaim.Duplicate)
             {
                 VanguardStats.Bump("lance.duplicates");
                 return;
             }
-            if (!matched) VanguardStats.Bump("lance.unmatched");
-            Penetrate(position, velocity, power, shooter, dealer);
+            if (claim == LanceClaim.Unmatched) VanguardStats.Bump("lance.unmatched");
+            try
+            {
+                Penetrate(position, velocity, power, shooter, dealer);
+            }
+            catch (Exception e)
+            {
+                // The prefix still swallows the claim: a throw here must not fall through into the vanilla full-pierce hit.
+                VanguardStats.Bump("lance.errors");
+                Plugin.Logger?.LogError("LANCE through-shot failed: " + e);
+            }
         }
+
+        private static int Cast(Vector3 origin, Vector3 dir, float distance) =>
+            Physics.RaycastNonAlloc(origin, dir, Buffer, distance, ~(int)PhysicsLayers.ExclusionZonesMask, QueryTriggerInteraction.Ignore);
 
         /// <summary>
         /// One slug from <paramref name="position"/> along <paramref name="velocity"/>. Crosses up to 6 units / 20 parts
@@ -145,15 +150,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 VanguardStats.Bump("lance.clientDamage");
                 return;
             }
-            float speed = velocity.magnitude;
+            // A claim's velocity is client-supplied (vanilla only clamps it to 1.5 x muzzle): the slug never beats its muzzle speed.
+            float speed = Mathf.Min(velocity.magnitude, LanceCapacitor.MuzzleVelocity);
             if (speed < 1f) return;
-            Vector3 dir = velocity / speed;
+            Vector3 dir = velocity.normalized;
             float reach = LanceSlug.ThroughReach(power);
             DamageEffects.BlastFrag(LanceCapacitor.Blast(power), position, dealer, PersistentID.None);
 
             // Start a hair behind the reported impact so the first collider is always inside the ray.
             Vector3 origin = position - dir * 0.3f;
-            int count = Physics.RaycastNonAlloc(origin, dir, Buffer, reach + 0.4f, ~(int)PhysicsLayers.ExclusionZonesMask, QueryTriggerInteraction.Ignore);
+            float castDistance = reach + 0.4f;
+            int count = Cast(origin, dir, castDistance);
+            // A full buffer holds an arbitrary subset, which can drop the near target: shorten the line until it all fits.
+            for (int tries = 0; count >= Buffer.Length && tries < 4; tries++)
+            {
+                castDistance *= 0.5f;
+                count = Cast(origin, dir, castDistance);
+                VanguardStats.Bump("lance.castOverflow");
+            }
+            reach = Mathf.Min(reach, castDistance - 0.4f);
             Array.Sort(Buffer, 0, count, ByDistance);
             Crossed.Clear();
             int parts = 0, friendly = 0;

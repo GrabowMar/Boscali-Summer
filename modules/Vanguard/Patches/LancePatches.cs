@@ -22,14 +22,18 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     [HarmonyPatch(typeof(Gun), nameof(Gun.RemoteSingleFire))]
     internal static class LanceRemoteShotPatch
     {
-        private const float FreshSeconds = 1.5f, DefaultPower = 0.6f;
+        private const float FreshSeconds = 1.5f, DefaultPower = 0.6f, ReplayGuard = 0.15f;
 
-        private static void Prefix(Gun __instance, out LancePod __state)
+        private static bool Prefix(Gun __instance, out LancePod __state)
         {
             __state = null;
-            if (!LanceService.Pods.TryGetValue(__instance, out LancePod pod) || pod.Owner || !LanceAccess.Ensure()) return;
+            if (!LanceService.Pods.TryGetValue(__instance, out LancePod pod) || pod.Owner || !LanceAccess.Ensure()) return true;
+            // The owner's pods each report their slug with a RemoteFireSingle RPC, and each RPC replays EVERY gun of the
+            // station: a twin-pod volley would draw every slug twice. One replay per gun per volley.
+            if (Time.time - pod.ShotAt < ReplayGuard) return false;
             __state = pod;
             LanceAccess.SetTracerSize(__instance, LanceCapacitor.Tracer(PowerOf(pod)));
+            return true;
         }
 
         private static void Postfix(LancePod __state)
@@ -58,19 +62,8 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
-    // Engine draw: the jets' parasitic loss and the turboprops' throttle. Both read LanceEngineDraw tables (empty = no-op).
-    [HarmonyPatch(typeof(Turbofan), nameof(Turbofan.SetParasiticLoss))]
-    internal static class LanceTurbofanLossPatch
-    {
-        private static void Prefix(Turbofan __instance, ref float loss) => loss += LanceEngineDraw.ExtraLoss(__instance);
-    }
-
-    [HarmonyPatch(typeof(Turbojet), nameof(Turbojet.SetParasiticLoss))]
-    internal static class LanceTurbojetLossPatch
-    {
-        private static void Prefix(Turbojet __instance, ref float loss) => loss += LanceEngineDraw.ExtraLoss(__instance);
-    }
-
+    // Engine draw, turboprops: the throttle factor LanceEngineDraw tabulates (empty table = no-op). The jets' thrust loss is
+    // written straight into their private field by LanceEngineDraw itself: SetParasiticLoss is inlined and cannot be patched.
     [HarmonyPatch(typeof(TurbineEngine), nameof(TurbineEngine.Throttle))]
     internal static class LanceTurbineThrottlePatch
     {

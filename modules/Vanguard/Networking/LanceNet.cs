@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
@@ -13,11 +14,14 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Networking
 {
-    /// <summary>Owner client to server. Level is the held charge (Charge) or the requested raw power (Release), 0..255.</summary>
+    /// <summary>
+    /// Owner client to server. Level is the held charge (Charge) or the requested raw power (Release), 0..255. Count is the
+    /// number of slugs a Release volley fired (one per pod of the station; the server clamps it to the pods it knows).
+    /// </summary>
     [NetworkMessage]
     internal struct LanceIntent
     {
-        public byte Protocol, Station, Kind, Level;
+        public byte Protocol, Station, Kind, Level, Count;
     }
 
     /// <summary>Server to clients: another pod's charge / shot / cancel for visuals, and the through-shot beam.</summary>
@@ -37,7 +41,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     /// </summary>
     internal sealed class LanceNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 2;
         internal const byte IntentCharge = 0, IntentRelease = 1, IntentCancel = 2;
         internal const byte FxCharge = 0, FxShot = 1, FxBeam = 2, FxCancel = 3;
         private const float ReleaseInterval = 0.8f, ChargeInterval = 0.2f, CueInterval = 5f, MaxBeamRange = 6000f;
@@ -58,12 +62,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     w.WriteByte(v.Station);
                     w.WriteByte(v.Kind);
                     w.WriteByte(v.Level);
+                    w.WriteByte(v.Count);
                 }),
                 (Func<NetworkReader, LanceIntent>)(r =>
                 {
                     byte protocol = r.ReadByte();
                     return protocol != ProtocolVersion ? new LanceIntent { Protocol = protocol }
-                        : new LanceIntent { Protocol = protocol, Station = r.ReadByte(), Kind = r.ReadByte(), Level = r.ReadByte() };
+                        : new LanceIntent { Protocol = protocol, Station = r.ReadByte(), Kind = r.ReadByte(), Level = r.ReadByte(), Count = r.ReadByte() };
                 }));
             MirageSerializers.Strict.Install<LanceFx>(
                 (Action<NetworkWriter, LanceFx>)((w, v) =>
@@ -127,8 +132,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             else SendIntent(pod, IntentCharge, charge01);
         }
 
-        /// <summary>Client owner: the raw (pre-derate) power it held; the server applies its own bound and heat.</summary>
-        public static void SendRelease(LancePod pod, float requested01) => SendIntent(pod, IntentRelease, requested01);
+        /// <summary>Client owner: the raw (pre-derate) power it held and how many slugs the station fired; the server applies its own bound and heat.</summary>
+        public static void SendRelease(LancePod pod, float requested01, int count) => SendIntent(pod, IntentRelease, requested01, count);
 
         public static void SendCancel(LancePod pod)
         {
@@ -138,10 +143,10 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             else SendIntent(pod, IntentCancel, 0f);
         }
 
-        private static void SendIntent(LancePod pod, byte kind, float level01) =>
+        private static void SendIntent(LancePod pod, byte kind, float level01, int count = 1) =>
             NetworkManagerNuclearOption.i?.Client?.Send(new LanceIntent
             {
-                Protocol = ProtocolVersion, Station = pod.Station.Number, Kind = kind, Level = Level(level01),
+                Protocol = ProtocolVersion, Station = pod.Station.Number, Kind = kind, Level = Level(level01), Count = (byte)Mathf.Clamp(count, 1, 255),
             });
 
         // ---- server
@@ -174,19 +179,29 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             if (intent.Protocol != ProtocolVersion || !sender.IsAuthenticated ||
                 !sender.TryGetPlayer<Player>(out Player player) || player == null) return;
             Aircraft aircraft = player.Aircraft; // never taken from the message
-            if (aircraft == null || aircraft.disabled) return;
-            LancePod pod = LanceService.PodFor(aircraft, intent.Station);
-            if (pod == null) return;
+            if (aircraft == null || aircraft.disabled || intent.Station >= aircraft.weaponStations.Count) return;
+            WeaponStation station = aircraft.weaponStations[intent.Station];
+            int pods = LanceService.AttachedIn(station);
+            if (pods == 0) return;
             float interval = intent.Kind == IntentRelease ? ReleaseInterval : ChargeInterval;
             if (!throttle.Allow(((ulong)aircraft.persistentID.Id << 10) | ((ulong)intent.Station << 2) | intent.Kind, Time.unscaledTime, interval)) return;
             uint id = aircraft.persistentID.Id;
             if (intent.Kind == IntentRelease)
             {
-                if (LanceServer.Release(aircraft, FromLevel(intent.Level), Time.time, out float power, out float heat))
+                // Only a loaded station can fire. The selected station is NOT checked: a dedicated server never receives the
+                // owner's RpcSetActiveStation, so its weaponManager.currentWeaponStation would reject honest shots. The slugs
+                // per volley claimed are bounded by the pods the server sees.
+                if (station.Ammo <= 0)
+                {
+                    VanguardStats.Bump("lance.rejected");
+                    return;
+                }
+                int count = Mathf.Clamp(intent.Count, 1, pods);
+                if (LanceServer.Release(aircraft, intent.Station, station.Ammo, FromLevel(intent.Level), count, Time.time, out float power, out float heat))
                     Broadcast(new LanceFx { Kind = FxShot, ShooterId = id, Station = intent.Station, Level = Level(power), Heat = HeatByte(heat) });
             }
             else if (intent.Kind == IntentCharge)
-                Broadcast(new LanceFx { Kind = FxCharge, ShooterId = id, Station = intent.Station, Level = intent.Level, Heat = HeatByte(LanceServer.HeatOf(aircraft)) });
+                Broadcast(new LanceFx { Kind = FxCharge, ShooterId = id, Station = intent.Station, Level = intent.Level, Heat = HeatByte(LanceServer.HeatOf(aircraft, intent.Station)) });
             else if (intent.Kind == IntentCancel)
                 Broadcast(new LanceFx { Kind = FxCancel, ShooterId = id, Station = intent.Station });
         }
@@ -212,23 +227,26 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     LanceService.Notice(HudTone.Info, "THROUGH-SHOT  x" + fx.Hits);
                 return;
             }
-            LancePod pod = LanceService.PodFor(aircraft, fx.Station);
-            if (pod == null || aircraft.LocalSim) return; // the owner already drew its own pod
+            List<LancePod> pods = LanceService.PodsIn(aircraft, fx.Station); // every pod of the station shows the same charge and shot
+            if (pods.Count == 0 || aircraft.LocalSim) return; // the owner already drew its own pods
             float now = Time.time;
-            pod.Heat = FromHeat(fx.Heat);
-            if (fx.Kind == FxCharge)
+            foreach (LancePod pod in pods)
             {
-                pod.RemoteCharge = FromLevel(fx.Level);
-                pod.RemoteAt = now;
-                Cue(pod, aircraft, pod.RemoteCharge, now);
+                pod.Heat = FromHeat(fx.Heat);
+                if (fx.Kind == FxCharge)
+                {
+                    pod.RemoteCharge = FromLevel(fx.Level);
+                    pod.RemoteAt = now;
+                }
+                else if (fx.Kind == FxShot)
+                {
+                    pod.FxPower = FromLevel(fx.Level);
+                    pod.FxAt = now;
+                    pod.RemoteCharge = 0f;
+                }
+                else if (fx.Kind == FxCancel) pod.RemoteCharge = 0f;
             }
-            else if (fx.Kind == FxShot)
-            {
-                pod.FxPower = FromLevel(fx.Level);
-                pod.FxAt = now;
-                pod.RemoteCharge = 0f;
-            }
-            else if (fx.Kind == FxCancel) pod.RemoteCharge = 0f;
+            if (fx.Kind == FxCharge) Cue(pods[0], aircraft, FromLevel(fx.Level), now);
         }
 
         private static bool Finite(GlobalPosition p) =>

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using UnityEngine;
+using UnityEngine.Audio;
 
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
@@ -41,7 +42,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             view.pod = pod;
             view.mount = visual.parent;
             view.Find(visual);
+            view.BuildFlash(); // a disabled light now, so the first shot does not pay for URP light setup
             return view;
+        }
+
+        private void BuildFlash()
+        {
+            var go = new GameObject("LanceFlash");
+            go.transform.SetParent(transform, false);
+            flash = go.AddComponent<Light>();
+            flash.type = LightType.Point;
+            flash.color = new Color(0.7f, 0.85f, 1f);
+            flash.range = 30f;
+            flash.shadows = LightShadows.None;
+            flash.enabled = false;
         }
 
         private void Find(Transform visual)
@@ -78,16 +92,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             flashAt = Time.time;
             flashPower = power;
-            if (flash == null)
-            {
-                var go = new GameObject("LanceFlash");
-                go.transform.SetParent(transform, false);
-                flash = go.AddComponent<Light>();
-                flash.type = LightType.Point;
-                flash.color = new Color(0.7f, 0.85f, 1f);
-                flash.range = 30f;
-                flash.shadows = LightShadows.None;
-            }
+            if (flash == null) BuildFlash(); // the view was built without one (never expected)
             Vector3 forward = mount != null ? mount.forward : transform.forward;
             flash.transform.position = (muzzle != null ? muzzle.position : transform.position + forward * 3f) + forward;
         }
@@ -133,17 +138,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             block ??= new MaterialPropertyBlock();
             float blend = LancePose.HeatBlend(look.Heat);
+            // Compared with the blend LAST PUSHED (not last frame's): the rails cool a hair per frame, so a frame-to-frame test never trips.
+            bool blendMoved = Mathf.Abs(blend - pushedBlend) >= 0.02f;
             Color tint = Color.Lerp(Cyan, Orange, blend);
             for (int i = 0; i < strips.Length; i++)
             {
                 // A powered but unlit strip keeps a dim floor so the bank never reads as dead hardware.
                 float value = Mathf.Max(LancePose.StripIntensity(i, look.Charge, look.Charging, now, look.SinceShot, look.LastPower, look.Recharge01), 0.3f);
-                if (Mathf.Abs(value - pushed[i]) < 0.02f && Mathf.Abs(blend - pushedBlend) < 0.02f) continue;
+                if (Mathf.Abs(value - pushed[i]) < 0.02f && !blendMoved) continue;
                 pushed[i] = value;
                 block.SetColor(EmissionColor, tint * value);
                 foreach (Renderer r in strips[i]) r.SetPropertyBlock(block);
             }
-            pushedBlend = blend;
+            if (blendMoved) pushedBlend = blend;
         }
 
         private void PushFlash(float now)
@@ -179,6 +186,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 whine.minDistance = 20f;
                 whine.maxDistance = 800f;
                 whine.rolloffMode = AudioRolloffMode.Linear;
+                // The game's volume sliders live on its mixer groups: use the group of the gun's own sound source.
+                AudioSource vanilla = pod.Gun.GetComponent<AudioSource>();
+                AudioMixerGroup group = vanilla != null ? vanilla.outputAudioMixerGroup : null;
+                if (group == null && SoundManager.i != null) group = SoundManager.i.EffectsMixer;
+                if (group != null) whine.outputAudioMixerGroup = group;
             }
             bool mine = pod.Owner && pod.Aircraft.Player != null && GameManager.GetLocalAircraft(out Aircraft me) && me == pod.Aircraft;
             whine.spatialBlend = mine ? 0f : 1f;
