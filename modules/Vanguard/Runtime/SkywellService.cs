@@ -18,12 +18,24 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public SkywellPhase Phase;
         public float FuelKg;
         public float StockKg;
+        // Pit stop (protocol 3): what the docked receiver is being served right now.
+        public PitOrder Order;
+        public PitJobKind Job;       // job in flight (None outside Transfer)
+        public byte JobStation;      // index into the receiver's weaponStations, 255 = none (fuel)
+        public byte JobIndex;        // jobs committed so far
+        public byte JobCount;        // committed + remaining
+        public byte JobTenths;       // seconds of the job in flight x10
+        public byte Flags;           // PitFlags
+        public ushort PitTenths;     // pit time x10 once Served
     }
 
     internal static class SkywellBoard
     {
         public static readonly Dictionary<uint, SkywellView> Views = new Dictionary<uint, SkywellView>();
         public static System.Action<SkywellView> Changed; // host -> SkywellNet broadcast
+
+        /// <summary>Local aircraft: Time.timeSinceLevelLoad until which the server refuses a re-dock after a hot break (HUD sets, dock script reads).</summary>
+        public static float HotLockUntil;
 
         public static void Set(SkywellView view)
         {
@@ -58,6 +70,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static Vector3 ProbePoint(Aircraft receiver)
         {
             Bounds b = LocalBounds(receiver);
+            // Some airframes measure tiny bounds (mesh scale quirks): the cockpit is a safe stand-in for the nose.
+            if (b.size.magnitude < 8f && receiver.cockpitViewPoint != null)
+                return receiver.cockpitViewPoint.position + receiver.transform.forward * 1.2f + receiver.transform.up * 0.4f;
             return receiver.transform.TransformPoint(new Vector3(b.extents.x * 0.12f, b.center.y + b.extents.y * 0.25f, b.max.z - 2f));
         }
 
@@ -104,11 +119,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
     /// <summary>
     /// SKYWELL server (FS-41 CATOBAR style): a receiver's owner asks to dock while its pilot holds the brake near the
-    /// arms (SkywellDock drives the airframe); the server confirms, waits for the docked pose, transfers fuel and
-    /// munitions through vanilla Refuel/RpcRearm, then keeps it held until the brake is released.
+    /// arms (SkywellDock drives the airframe); the server confirms, waits for the docked pose, then runs the pit stop:
+    /// a job list (fuel, one hot-swap handoff per round) built from the receiver's live state and its standing order
+    /// (skywellPit.cs), through vanilla Refuel/RpcRearm, and keeps it held until the brake is released.
     /// AI tankers deploy on their own; AI receivers astern that need service are docked by the host.
     /// </summary>
-    internal sealed class SkywellService : MonoBehaviour, ISceneService
+    internal sealed partial class SkywellService : MonoBehaviour, ISceneService
     {
         public const float FuelStockKg = 8000f;
         public const float MunitionStockKg = 1500f;
@@ -117,7 +133,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float TickInterval = 0.1f;
         private const float ScanInterval = 2f;
         private const float AiDeployAltitude = 300f;
+        private const float AiStowAltitude = 150f;   // hysteresis: a landing never starts with the ramp held open
         private const float ReceiverCooldown = 30f;
+        private const float AbortCooldown = 5f;
+        internal const float HotBreakCooldown = 8f; // also the local re-dock lockout the HUD shows
         private const float DockedTolerance = 3f;
         private const float EngageTimeout = 75f;
 
@@ -131,13 +150,20 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             public float FuelKg = FuelStockKg;
             public float StockKg = MunitionStockKg;
             public float LastToggle = -10f;
+            // Pit stop
+            public readonly List<PitJob> Jobs = new List<PitJob>();
+            public int JobIndex;                   // jobs committed so far
+            public float JobStart, JobEnd, TransferStart, HotUntil, NextHotCheck;
+            public bool Replan, FuelCommitted;
+            public byte Flags;
+            public ushort PitTenths;
         }
 
         private static SkywellService instance;
         private readonly Dictionary<Aircraft, Kit> kits = new Dictionary<Aircraft, Kit>();
         private readonly Dictionary<Aircraft, float> cooldown = new Dictionary<Aircraft, float>();
+        private readonly Dictionary<Aircraft, float> lockout = new Dictionary<Aircraft, float>(); // hot-break: nobody re-docks at once
         private readonly List<Aircraft> drop = new List<Aircraft>();
-        private readonly List<RearmAllocation.StationNeed> needs = new List<RearmAllocation.StationNeed>();
         private float nextTick, nextScan;
 
         private void Awake() => instance = this;
@@ -146,7 +172,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             kits.Clear();
             cooldown.Clear();
+            lockout.Clear();
+            prefs.Clear();
             SkywellBoard.Views.Clear();
+            SkywellBoard.HotLockUntil = 0f;
         }
 
         /// <summary>Server: flip the kit on the sender's own aircraft (ignored without a kit station).</summary>
@@ -168,9 +197,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 !instance.kits.TryGetValue(tanker, out Kit kit) || !kit.Active || receiver.NetworkHQ != tanker.NetworkHQ) return false;
             if (kit.Receiver == receiver) return true;
             if (kit.Receiver != null || instance.Busy(receiver)) return false;
+            if (instance.lockout.TryGetValue(receiver, out float until) && Time.timeSinceLevelLoad < until) return false;
             float range = receiver.Player == null ? AiEngageRange : EngageRadius + 20f;
             if (Vector3.Distance(SkywellBoard.ProbePoint(receiver), SkywellBoard.ContactPoint(tanker)) > range) return false;
             kit.Receiver = receiver;
+            kit.HotUntil = 0f; // the red break flag belongs to the receiver the break hit, not to whoever docks next
             Enter(kit, SkywellPhase.Engage, Time.timeSinceLevelLoad + EngageTimeout);
             return true;
         }
@@ -204,6 +235,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (scan)
             {
                 nextScan = now + ScanInterval;
+                PruneState();
                 DeployAiTankers();
             }
 
@@ -215,12 +247,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     drop.Add(kit.Tanker);
                     continue;
                 }
+                if (kit.HotUntil > 0f && now >= kit.HotUntil)
+                {
+                    kit.HotUntil = 0f; // the hot-break flag lasts 3 s
+                    Publish(kit);
+                }
                 if (!kit.Active) continue;
                 if (kit.Receiver == null)
                 {
                     if (scan) CallInAi(kit, now);
                 }
-                else Advance(kit, now);
+                else if (!HotBreakCheck(kit, now)) Advance(kit, now);
             }
             for (int i = 0; i < drop.Count; i++)
             {
@@ -236,9 +273,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = 0; i < all.Count; i++)
             {
                 Aircraft a = all[i];
-                if (a == null || a.disabled || a.Player != null || kits.ContainsKey(a) || a.radarAlt < AiDeployAltitude ||
-                    SkywellBoard.KitStation(a) == null) continue;
-                Kit kit = KitOf(a);
+                if (a == null || a.disabled || a.Player != null || SkywellBoard.KitStation(a) == null) continue;
+                kits.TryGetValue(a, out Kit kit);
+                if (kit != null && kit.Active)
+                {
+                    if (a.radarAlt >= AiStowAltitude) continue;
+                    kit.Active = false; // low and slow: stow before the approach
+                    Drop(kit, false);
+                    continue;
+                }
+                if (a.radarAlt < AiDeployAltitude) continue;
+                kit = kit ?? KitOf(a);
                 kit.Active = true;
                 Publish(kit);
             }
@@ -269,8 +314,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (best != null) Dock(best, tanker);
         }
 
-        private static bool Needs(Kit kit, Aircraft r) =>
-            (FuelNeedKg(r) > Mathf.Max(50f, 0.15f * FuelCapacityKg(r)) && kit.FuelKg > 1f) || (MissingRounds(r) > 0 && kit.StockKg > 1f);
+        /// <summary>Worth a call-in: a real fuel need the stock can meet, or a servable station the stock can reload (as the receiver's order allows).</summary>
+        private bool Needs(Kit kit, Aircraft r)
+        {
+            PitOrder order = OrderFor(r);
+            if (order != PitOrder.Munitions && FuelNeedKg(r) > Mathf.Max(50f, 0.15f * FuelCapacityKg(r)) && kit.FuelKg > 1f) return true;
+            if (order == PitOrder.Fuel) return false;
+            SkywellStations.Collect(r, stationScratch);
+            float lightest = float.MaxValue;
+            foreach (PitStation s in stationScratch)
+                if (!s.Skip && s.Missing > 0 && s.MassPerRound > 0f) lightest = Mathf.Min(lightest, s.MassPerRound);
+            return lightest < float.MaxValue && kit.StockKg >= lightest;
+        }
 
         private bool Busy(Aircraft r)
         {
@@ -292,17 +347,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (kit.Phase)
             {
                 case SkywellPhase.Engage:
-                    if (dist <= DockedTolerance)
-                        Enter(kit, SkywellPhase.Transfer, now + SkywellContact.TransferSeconds(FuelNeedKg(r), MissingRounds(r)));
+                    if (dist <= DockedTolerance) BeginStop(kit, r, now);
                     else if (now >= kit.PhaseEnd) Drop(kit, false);
                     break;
                 case SkywellPhase.Transfer:
                     if (dist > SkywellContact.AbortDistance) Drop(kit, false);
-                    else if (now >= kit.PhaseEnd)
-                    {
-                        Transfer(kit, r);
-                        Enter(kit, SkywellPhase.Served, now + SkywellContact.ReleaseSeconds);
-                    }
+                    else RunJobs(kit, r, now);
                     break;
                 case SkywellPhase.Served:
                     // Players stay held until they release the brake; AI is let go after a beat.
@@ -318,47 +368,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Publish(kit);
         }
 
-        private void Drop(Kit kit, bool served)
+        /// <summary>Committed jobs stay committed: only the unfinished list, the order flags and the receiver are dropped.</summary>
+        private void Drop(Kit kit, bool served, bool hot = false)
         {
-            if (kit.Receiver != null) cooldown[kit.Receiver] = Time.timeSinceLevelLoad + (served ? ReceiverCooldown : 5f);
+            Aircraft r = kit.Receiver;
+            if (r != null)
+            {
+                float now = Time.timeSinceLevelLoad;
+                cooldown[r] = now + (hot ? HotBreakCooldown : served ? ReceiverCooldown : AbortCooldown);
+                if (hot) lockout[r] = now + HotBreakCooldown;
+                if (prefs.TryGetValue(r, out PitPrefs p)) p.Priority = -1; // one-shot
+            }
             kit.Receiver = null;
             kit.Phase = SkywellPhase.Idle;
+            kit.Jobs.Clear();
+            kit.JobIndex = 0;
+            kit.Replan = kit.FuelCommitted = false;
+            kit.Flags = 0;
+            kit.PitTenths = 0;
             Publish(kit);
-        }
-
-        private void Transfer(Kit kit, Aircraft r)
-        {
-            float fuel = FuelNeedKg(r);
-            if (fuel > 1f && kit.FuelKg > 1f)
-            {
-                r.Refuel(kit.Tanker); // ponytail: no partial-fill API, so a near-empty stock still tops off
-                kit.FuelKg = Mathf.Max(0f, kit.FuelKg - fuel);
-                VanguardStats.Refuels++;
-            }
-
-            needs.Clear();
-            for (int i = 0; i < r.weaponStations.Count; i++)
-            {
-                WeaponStation s = r.weaponStations[i];
-                WeaponInfo info = s?.WeaponInfo;
-                needs.Add(new RearmAllocation.StationNeed
-                {
-                    Missing = s == null ? 0 : s.FullAmmo - s.GetAmmoTotal(),
-                    MassPerRound = info != null ? info.massPerRound : 0f,
-                    CostPerRound = info != null ? info.costPerRound : 0f,
-                    Skip = info == null || info.cargo || info.nuclear,
-                });
-            }
-            Player player = r.Player;
-            float funds = player != null ? player.Allocation : 0f;
-            float before = funds;
-            int[] rounds = RearmAllocation.Allocate(needs, ref kit.StockKg, ref funds, player == null);
-            bool any = false;
-            for (int i = 0; i < rounds.Length; i++) any |= rounds[i] > 0;
-            if (!any) return;
-            r.RpcRearm(new RearmEventArgs { Rearmer = kit.Tanker, Stations = rounds });
-            if (player != null && before > funds) player.AddAllocation(funds - before);
-            VanguardStats.Rearms++;
         }
 
         internal static float FuelCapacityKg(Aircraft a)
@@ -385,15 +413,28 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return missing;
         }
 
-        private static void Publish(Kit kit) => SkywellBoard.Set(new SkywellView
+        private static void Publish(Kit kit)
         {
-            Tanker = kit.Tanker.persistentID.Id,
-            Active = kit.Active,
-            Receiver = kit.Receiver != null ? kit.Receiver.persistentID.Id : 0u,
-            Phase = kit.Phase,
-            FuelKg = kit.FuelKg,
-            StockKg = kit.StockKg,
-        });
+            bool serving = kit.Receiver != null && kit.Phase == SkywellPhase.Transfer && kit.JobIndex < kit.Jobs.Count;
+            PitJob job = serving ? kit.Jobs[kit.JobIndex] : default;
+            SkywellBoard.Set(new SkywellView
+            {
+                Tanker = kit.Tanker.persistentID.Id,
+                Active = kit.Active,
+                Receiver = kit.Receiver != null ? kit.Receiver.persistentID.Id : 0u,
+                Phase = kit.Phase,
+                FuelKg = kit.FuelKg,
+                StockKg = kit.StockKg,
+                Order = kit.Receiver != null && instance != null ? instance.OrderFor(kit.Receiver) : PitOrder.Both,
+                Job = job.Kind,
+                JobStation = job.Kind == PitJobKind.Handoff || job.Kind == PitJobKind.Cassette ? (byte)Mathf.Clamp(job.Station, 0, 254) : (byte)255,
+                JobIndex = (byte)Mathf.Clamp(kit.JobIndex, 0, 255),
+                JobCount = (byte)Mathf.Clamp(kit.Jobs.Count, 0, 255),
+                JobTenths = (byte)Mathf.Clamp(Mathf.RoundToInt(job.Seconds * 10f), 0, 255),
+                Flags = (byte)((kit.Flags & ~PitFlags.HotBreak) | (Time.timeSinceLevelLoad < kit.HotUntil ? PitFlags.HotBreak : 0)),
+                PitTenths = kit.Phase == SkywellPhase.Served ? kit.PitTenths : (ushort)0,
+            });
+        }
 
         private void OnDestroy()
         {
