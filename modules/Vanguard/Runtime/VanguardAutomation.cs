@@ -368,6 +368,7 @@ namespace BoscaliSummer.Vanguard
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
             // Sim check paths split on '.', so each counter is mirrored as <key>_<event> as well.
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key.Replace('.', '_')] = counter.Value;
+            Modules.Vanguard.Runtime.SentinelDrone.Report(state, Launched);
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

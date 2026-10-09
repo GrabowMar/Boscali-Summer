@@ -73,6 +73,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             forward.y = 0f;
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
             if (role == VanguardRole.Gunship) InitGunship(target, aimpoint);
+            if (role == VanguardRole.Sentinel) InitSentinel(target);
         }
 
         public VanguardRole Role => role;
@@ -86,6 +87,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 missile.DeployFins();
                 fins = true;
+            }
+            if (role == VanguardRole.Sentinel)
+            {
+                TickSentinel();
+                return;
             }
             if (role == VanguardRole.Gunship)
             {
@@ -122,7 +128,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
             if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            float minimumSpeed = VanguardKeys.IsGunDrone(role) ? 25f : 60f;
+            float minimumSpeed = role == VanguardRole.Sentinel ? 0f : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers
             if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 

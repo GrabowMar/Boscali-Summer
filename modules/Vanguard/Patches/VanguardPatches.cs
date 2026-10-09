@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         private static void Postfix(Missile __instance)
         {
             if (__instance == null || __instance.definition == null) return;
-            GlaiveDrone.Attach(__instance);
+            if (SentinelDrone.Attach(__instance) == null) GlaiveDrone.Attach(__instance); // GLAIVE-2A gets its own rig
             WeaponArticulation.Attach(__instance);
             OrcaVisuals.Attach(__instance);
             RemoraVisuals.Attach(__instance);
