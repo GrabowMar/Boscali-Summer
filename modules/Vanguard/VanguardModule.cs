@@ -27,8 +27,8 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.LanceFirePatch),
             typeof(Patches.SkywellLaunchPatch),
             typeof(Patches.SkywellFirePatch),
+            typeof(Patches.AlexPressPatch),
             typeof(Patches.AlexLaunchPatch),
-            typeof(Patches.AlexFirePatch),
             typeof(Patches.AlexDeflectArhPatch),
             typeof(Patches.AlexDeflectSarhPatch),
             typeof(Patches.AlexSuppressPatch)

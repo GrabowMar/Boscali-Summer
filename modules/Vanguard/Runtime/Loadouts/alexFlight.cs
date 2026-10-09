@@ -108,8 +108,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             kitePrevRel = kiteRel;
             kiteRel = TowedTrail.Follow(kiteRel, TowedTrail.Offset(h.forward, h.up, kiteLine), dt);
             Rigidbody rb = missile.rb;
-            rb.MovePosition(TowAnchor.RootFor(missile, host) + kiteRel);
-            rb.velocity = (host.rb != null ? host.rb.velocity : rb.velocity) + (kiteRel - kitePrevRel) / dt;
+            Vector3 hostVelocity = host.rb != null ? host.rb.velocity : rb.velocity;
+            // The anchor is read before this physics step moves the host; the target is where it will be after it.
+            rb.MovePosition(TowAnchor.RootFor(missile, host) + kiteRel + hostVelocity * dt);
+            rb.velocity = hostVelocity + (kiteRel - kitePrevRel) / dt;
             rb.angularVelocity = Vector3.zero;
             rb.MoveRotation(Quaternion.LookRotation(h.forward, h.up));
             if (now >= kiteNextPublish) PublishKite();

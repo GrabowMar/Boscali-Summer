@@ -18,13 +18,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float DeployCooldown = 15f;
         private const float MinAgl = 300f;
 
-        private readonly Dictionary<Unit, float> readyAt = new Dictionary<Unit, float>();
+        private readonly Dictionary<uint, float> readyAt = new Dictionary<uint, float>();
+        private readonly List<uint> expired = new List<uint>();
         private readonly List<Missile> inbound = new List<Missile>();
         private float next;
 
         public void ResetForScene()
         {
             readyAt.Clear();
+            AlexFire.Clear();
             AlexBoard.Clear();
             AlexDeflect.Clear();
             AlexSuppress.Clear();
@@ -46,7 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = 0; i < a.weaponStations.Count; i++)
             {
                 WeaponStation s = a.weaponStations[i];
-                if (s?.WeaponInfo != null && s.WeaponInfo.name.Contains(AlexKite.InfoName) && (!loaded || s.Ammo > 0)) return s;
+                if (AlexFire.IsPod(s) && (!loaded || s.Ammo > 0)) return s;
             }
             return null;
         }
@@ -56,16 +58,26 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float now = Time.timeSinceLevelLoad;
             if (now < next || !GameAccess.IsServer()) return;
             next = now + ScanInterval;
+            PruneCooldowns(now);
             List<Unit> units = UnitRegistry.allUnits;
             for (int i = 0; i < units.Count; i++)
                 if (units[i] is Aircraft a && !a.disabled && a.LocalSim && a.Player == null) TryDeploy(a, now);
+        }
+
+        // A cooldown that has run out says nothing, so dead aircraft never pile up in the table.
+        private void PruneCooldowns(float now)
+        {
+            expired.Clear();
+            foreach (KeyValuePair<uint, float> pair in readyAt)
+                if (now >= pair.Value) expired.Add(pair.Key);
+            for (int i = 0; i < expired.Count; i++) readyAt.Remove(expired[i]);
         }
 
         private void TryDeploy(Aircraft a, float now)
         {
             WeaponStation station = PodStation(a, true);
             if (station == null || AlexBoard.TowedBy(a.persistentID.Id, out _)) return;
-            if (readyAt.TryGetValue(a, out float at) && now < at) return;
+            if (readyAt.TryGetValue(a.persistentID.Id, out float at) && now < at) return;
             if (a.radarAlt < MinAgl || !station.Ready()) return;
             float nearest = TowedTrail.NoThreat;
             ThreatScan.Inbound(a, inbound);
@@ -73,25 +85,70 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (SeductionRule.IsRadarSeeker(inbound[i].GetSeekerType()))
                     nearest = Mathf.Min(nearest, FastMath.Distance(inbound[i].GlobalPosition(), a.GlobalPosition()));
             if (!AlexKite.AiDeploys(nearest)) return;
-            readyAt[a] = now + DeployCooldown;
+            readyAt[a.persistentID.Id] = now + DeployCooldown;
             station.LaunchMount(a, null, a.GlobalPosition() + a.transform.forward * 50000f);
             VanguardStats.Bump("alex.ai_deployed");
         }
     }
 
     /// <summary>
-    /// Fire press on an ALE-X station while a decoy is on the fiber cuts it instead of launching the next one
-    /// (WeaponStation.LaunchMount prefix, see AlexLaunchPatch). The owning peer asks; the host decides.
+    /// The ALE-X pod's fire button. The player's trigger is a held button: Pilot.Fire calls WeaponManager.Fire every
+    /// frame it is down, and the pod's last decoy leaves Ready() false (Ammo 0), so the press is taken in a
+    /// WeaponManager.Fire prefix (AlexPressPatch) before any of that. A press acts once, on its first call:
+    /// launch the next decoy, or CUT the one on the fiber. The rest of the hold is swallowed, so a held button
+    /// never cuts one decoy and launches the next. The owning peer asks, the host decides.
     /// </summary>
     internal static class AlexFire
     {
-        /// <summary>True when the press was swallowed as a cut.</summary>
-        public static bool Intercept(WeaponStation station, Unit owner)
+        private static readonly Dictionary<WeaponInfo, bool> PodInfos = new Dictionary<WeaponInfo, bool>();
+        private static readonly Dictionary<uint, float> LastCall = new Dictionary<uint, float>();
+
+        public static void Clear() => LastCall.Clear();
+
+        /// <summary>The station carries the ALE-X decoy. The name test runs once per WeaponInfo: Object.name allocates.</summary>
+        public static bool IsPod(WeaponStation station)
         {
-            if (station?.WeaponInfo == null || !station.WeaponInfo.name.Contains(AlexKite.InfoName) ||
-                !(owner is Aircraft aircraft) || !AlexBoard.TowedBy(aircraft.persistentID.Id, out _)) return false;
-            if (GameAccess.IsServer()) return AlexService.Cut(aircraft, aircraft.Player != null ? KiteCut.Pilot : KiteCut.Auto);
-            if (!aircraft.LocalSim) return false; // another pilot's press, replayed here for the visuals
+            WeaponInfo info = station?.WeaponInfo;
+            if (info == null) return false;
+            if (!PodInfos.TryGetValue(info, out bool pod)) PodInfos[info] = pod = info.name.Contains(AlexKite.InfoName);
+            return pod;
+        }
+
+        /// <summary>WeaponManager.Fire prefix, for the aircraft this peer simulates. True = the call is consumed.</summary>
+        public static bool Press(Aircraft aircraft, WeaponStation station)
+        {
+            if (aircraft == null || !aircraft.LocalSim || !IsPod(station)) return false;
+            uint id = aircraft.persistentID.Id;
+            float now = Time.unscaledTime;
+            bool fresh = !LastCall.TryGetValue(id, out float last) || AlexKite.FreshPress(now - last, Time.unscaledDeltaTime);
+            LastCall[id] = now;
+            switch (AlexKite.Press(fresh, AlexBoard.TowedBy(id, out _)))
+            {
+                case PodPress.Cut:
+                    Ask(aircraft, KiteCut.Pilot);
+                    break;
+                case PodPress.Launch:
+                    // Vanilla would salvo over a multi-target list; the pod is one press, one decoy.
+                    if (!station.SafetyIsOn(aircraft) && station.Ready() && !station.SalvoInProgress)
+                        station.LaunchMount(aircraft, null, aircraft.GlobalPosition() + aircraft.transform.forward * 50000f);
+                    break;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// WeaponStation.LaunchMount prefix: the AI and sim paths, which never come through WeaponManager.Fire
+        /// (a player's launch is handled by <see cref="Press"/>). True when the call was swallowed as a cut.
+        /// </summary>
+        public static bool Intercept(WeaponStation station, Unit owner) =>
+            owner is Aircraft aircraft && aircraft.Player == null && IsPod(station) &&
+            AlexBoard.TowedBy(aircraft.persistentID.Id, out _) && Ask(aircraft, KiteCut.Auto);
+
+        // The host cuts at once; another peer's owner sends the intent and lets the host decide.
+        private static bool Ask(Aircraft aircraft, KiteCut reason)
+        {
+            if (GameAccess.IsServer()) return AlexService.Cut(aircraft, reason);
+            if (!aircraft.LocalSim) return false;
             Networking.AlexNet.RequestCut();
             return true;
         }

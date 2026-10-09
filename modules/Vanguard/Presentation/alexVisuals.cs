@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float dt = Mathf.Max(Time.deltaTime, 1e-3f);
             if (previousLine >= 0f) lineRate = Mathf.Lerp(lineRate, (line - previousLine) / dt, 0.25f);
             previousLine = line;
-            pod.Drive(!free, AlexKite.ReelSpin(lineRate));
+            pod.Drive(!free, free ? 0f : AlexKite.ReelSpin(lineRate)); // a cut decoy has no fiber on the drum
         }
     }
 
@@ -134,7 +134,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             for (int i = 0; i < host.weaponStations.Count; i++)
             {
                 WeaponStation station = host.weaponStations[i];
-                if (station?.WeaponInfo == null || !station.WeaponInfo.name.Contains(AlexKite.InfoName)) continue;
+                if (!AlexFire.IsPod(station)) continue;
                 for (int w = 0; w < station.Weapons.Count; w++)
                 {
                     Transform cell = station.Weapons[w] != null ? station.Weapons[w].transform : null;

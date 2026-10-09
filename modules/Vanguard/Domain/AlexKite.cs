@@ -8,10 +8,14 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>Why the fiber parted (AlexState.Reason): do not renumber.</summary>
     internal enum KiteCut : byte { None = 0, Pilot = 1, Snap = 2, Low = 3, Replaced = 4, Auto = 5 }
 
+    /// <summary>What one WeaponManager.Fire call does while the ALE-X station is selected.</summary>
+    internal enum PodPress { Launch, Cut, Swallow }
+
     /// <summary>ALE-X KITE rules that are not tow geometry (see TowedTrail): layers, the cut, HUD words, pod and fin animation.</summary>
     internal static class AlexKite
     {
         public const string InfoName = "WI_VG_AleX"; // WeaponInfo asset name of the ALE-X pod's decoy
+        public const string MountKey = "VG_AleX_Pod"; // WeaponMount jsonKey of the two-decoy pod
         public const float FreeSeconds = 20f;       // a cut decoy keeps radiating, then self-destructs
         public const float FreeFloor = 0.3f;        // it decelerates to this fraction of the host speed it was cut at
         public const float DeflectRange = 6000f;
@@ -42,6 +46,16 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static bool AiCuts(int captured, float sinceFirstCapture) => captured > 0 && sinceFirstCapture >= AiCutDelay;
 
         public static bool AiDeploys(float threatRange) => threatRange <= AiDeployRange;
+
+        // ---- the fire press
+
+        public const float PressGap = 0.25f; // a held trigger calls WeaponManager.Fire every frame; a new press follows this much silence
+
+        /// <summary>True when a Fire call starts a new press: the trigger was up for longer than <see cref="PressGap"/> (or one long frame).</summary>
+        public static bool FreshPress(float sinceLastCall, float frameSeconds) => sinceLastCall > Mathf.Max(PressGap, 2f * frameSeconds);
+
+        /// <summary>A held trigger acts once, on its first call; every later call of the hold is swallowed.</summary>
+        public static PodPress Press(bool fresh, bool towing) => !fresh ? PodPress.Swallow : towing ? PodPress.Cut : PodPress.Launch;
 
         // ---- HUD words (vg.alex)
 

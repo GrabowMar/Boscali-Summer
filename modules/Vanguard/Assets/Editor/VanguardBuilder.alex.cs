@@ -2,6 +2,8 @@
 // Runtime keys on these joint names (modules/Vanguard/Presentation/alexVisuals.cs, MECHANICS.md part contract):
 //   AleXPod: Reel (drum, spins about the pod's lateral axis), TailCone (aft door, hinge on top)
 //   AleX:    FinL, FinR, FinT (pop-out tail fins; the FBX holds the stowed pose), Strobe (small Glow lens)
+// The runtime skips a joint the model lacks, so a model without them still builds: AlexDress logs ALEX_RIG_MISSING.
+// The final merge pass sets VG_STRICT_RIG=1 to make a missing joint abort the build instead.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -53,14 +55,15 @@ namespace Vanguard
         // per renderer with a MaterialPropertyBlock and never touches the shared asset.
         static void AlexDress(Dictionary<string, Material> materials)
         {
+            bool rigged = true;
             AlexEditPrefab(R + "VG_AleX.prefab", root =>
             {
-                AlexRequireJoints(root, "ALE-X body", "FinL", "FinR", "FinT", "Strobe");
+                rigged &= AlexCheckJoints(root, "ALE-X body", "FinL", "FinR", "FinT", "Strobe");
                 foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
                     if (r.GetComponentsInParent<Transform>(true).Any(t => t.name == "Strobe")) r.sharedMaterials = new[] { materials["Glow"] };
             });
-            AlexEditPrefab(R + "VG_AleX_Pod.prefab", root => AlexRequireJoints(root, "ALE-X pod", "Reel", "TailCone"));
-            Debug.Log("[Vanguard] ALEX_RIG_OK pod=Reel,TailCone body=FinL,FinR,FinT,Strobe(Glow)");
+            AlexEditPrefab(R + "VG_AleX_Pod.prefab", root => rigged &= AlexCheckJoints(root, "ALE-X pod", "Reel", "TailCone"));
+            if (rigged) Debug.Log("[Vanguard] ALEX_RIG_OK pod=Reel,TailCone body=FinL,FinR,FinT,Strobe(Glow)");
         }
 
         static void AlexEditPrefab(string path, Action<GameObject> edit)
@@ -74,11 +77,17 @@ namespace Vanguard
             finally { PrefabUtility.UnloadPrefabContents(root); }
         }
 
-        static void AlexRequireJoints(GameObject root, string what, params string[] names)
+        // True when every contract joint is there. A missing one is a loud warning (the models come from another
+        // branch and this one may merge first); VG_STRICT_RIG=1 turns it into a build failure.
+        static bool AlexCheckJoints(GameObject root, string what, params string[] names)
         {
             var have = new HashSet<string>(root.GetComponentsInChildren<Transform>(true).Select(t => t.name));
             var missing = names.Where(n => !have.Contains(n)).ToArray();
-            if (missing.Length > 0) throw new Exception(what + " lost joint(s) " + string.Join(", ", missing) + " (MECHANICS.md part contract)");
+            if (missing.Length == 0) return true;
+            string message = what + " lost joint(s) " + string.Join(", ", missing) + " (MECHANICS.md part contract)";
+            if (Environment.GetEnvironmentVariable("VG_STRICT_RIG") == "1") throw new Exception(message);
+            Debug.LogWarning("[Vanguard] ALEX_RIG_MISSING " + message + "; the runtime skips them");
+            return false;
         }
     }
 }

@@ -5,16 +5,18 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Patches
 {
-    // ALE-X: a fire press on the pod while a decoy is on the fiber cuts it instead of launching the next one.
-    [HarmonyPatch(typeof(WeaponStation), nameof(WeaponStation.LaunchMount))]
-    internal static class AlexLaunchPatch
+    // ALE-X: the fire press. The trigger is a held button (WeaponManager.Fire runs every frame it is down) and the pod's
+    // last decoy has Ammo 0, so the press is taken here, before the Ready() gate: launch, cut, or swallow the rest of the hold.
+    [HarmonyPatch(typeof(WeaponManager), nameof(WeaponManager.Fire))]
+    internal static class AlexPressPatch
     {
-        private static bool Prefix(WeaponStation __instance, Unit owner) => !AlexFire.Intercept(__instance, owner);
+        private static bool Prefix(WeaponManager __instance, Aircraft ___aircraft) =>
+            !AlexFire.Press(___aircraft, __instance.currentWeaponStation);
     }
 
-    // Stations whose WeaponInfo.fireInterval is 0 fire through WeaponStation.Fire instead of LaunchMount.
-    [HarmonyPatch(typeof(WeaponStation), nameof(WeaponStation.Fire))]
-    internal static class AlexFirePatch
+    // The AI and sim launch the pod through LaunchMount directly; a launch while a decoy is out is a cut there too.
+    [HarmonyPatch(typeof(WeaponStation), nameof(WeaponStation.LaunchMount))]
+    internal static class AlexLaunchPatch
     {
         private static bool Prefix(WeaponStation __instance, Unit owner) => !AlexFire.Intercept(__instance, owner);
     }

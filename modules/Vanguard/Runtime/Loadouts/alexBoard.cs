@@ -54,19 +54,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return false;
         }
 
-        /// <summary>The host's decoy: on the fiber if there is one, else the latest cut one.</summary>
-        public static bool ForHost(uint host, out AlexView found)
+        /// <summary>The host's most recently cut decoy that is still adrift (the one with the most time left), or false.</summary>
+        public static bool FreeOf(uint host, out AlexView found)
         {
-            if (TowedBy(host, out found)) return true;
+            found = default;
+            bool any = false;
             foreach (AlexView view in Views.Values)
-                if (view.Host == host && view.State == KiteState.Free)
+                if (view.Host == host && view.State == KiteState.Free && (!any || view.FreeLeft > found.FreeLeft))
                 {
                     found = view;
-                    return true;
+                    any = true;
                 }
-            found = default;
-            return false;
+            return any;
         }
+
+        /// <summary>The host's decoy: on the fiber if there is one, else the latest cut one.</summary>
+        public static bool ForHost(uint host, out AlexView found) => TowedBy(host, out found) || FreeOf(host, out found);
 
         public static void Clear() => Views.Clear();
     }
@@ -125,7 +128,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static void Remove(Unit host)
         {
-            if (host == null || !Hosts.TryGetValue(host, out Hold hold)) return;
+            // ReferenceEquals: a launcher destroyed before the kite ended is "== null" to Unity but is still the key.
+            if (ReferenceEquals(host, null) || !Hosts.TryGetValue(host, out Hold hold)) return;
             if (--hold.Decoys <= 0) Hosts.Remove(host);
             else Hosts[host] = hold;
         }

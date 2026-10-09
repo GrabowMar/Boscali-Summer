@@ -12,6 +12,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             Deploy();
             Layers();
             Cut();
+            Press();
             Words();
             Animation();
         }
@@ -108,6 +109,40 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Eq((byte)KiteState.Gone, (byte)3, "KiteState wire value");
             TestAssert.Eq((byte)KiteCut.Pilot, (byte)1, "KiteCut wire value");
             TestAssert.Eq((byte)KiteCut.Auto, (byte)5, "KiteCut wire value");
+        }
+
+        // The review blocker: the trigger is a held button, so Fire is called every frame of the hold. Walk 60 fps
+        // frames of three taps (0.4 s down, 0.6 s up) through the same rules the WeaponManager.Fire prefix uses.
+        private static void Press()
+        {
+            TestAssert.That(AlexKite.FreshPress(99f, 0.016f), "the first call is a press");
+            TestAssert.That(!AlexKite.FreshPress(0.016f, 0.016f) && !AlexKite.FreshPress(0.25f, 0.016f), "the next frames of a hold are not");
+            TestAssert.That(AlexKite.FreshPress(0.26f, 0.016f), "0.25 s of silence ends a hold");
+            TestAssert.That(!AlexKite.FreshPress(0.4f, 0.25f) && AlexKite.FreshPress(0.6f, 0.25f), "a 250 ms hitch inside a hold is still the hold");
+            TestAssert.Eq((int)AlexKite.Press(false, false), (int)PodPress.Swallow, "a held call with nothing out is swallowed");
+            TestAssert.Eq((int)AlexKite.Press(false, true), (int)PodPress.Swallow, "a held call with a decoy out is swallowed, not a relaunch");
+            TestAssert.Eq((int)AlexKite.Press(true, false), (int)PodPress.Launch, "a new press launches the next decoy");
+            TestAssert.Eq((int)AlexKite.Press(true, true), (int)PodPress.Cut, "a new press with a decoy out cuts it");
+
+            const float dt = 1f / 60f;
+            bool had = false, towing = false;
+            float last = 0f;
+            int launches = 0, cuts = 0, frames = 0;
+            for (int frame = 0; frame < 240; frame++)
+            {
+                float t = frame * dt;
+                if (t % 1.0f >= 0.4f) continue; // taps at 0 s, 1 s, 2 s, 3 s, each held 0.4 s
+                bool fresh = !had || AlexKite.FreshPress(t - last, dt);
+                had = true;
+                last = t;
+                frames++;
+                PodPress act = AlexKite.Press(fresh, towing);
+                if (act == PodPress.Launch) { launches++; towing = true; }
+                else if (act == PodPress.Cut) { cuts++; towing = false; }
+            }
+            TestAssert.That(frames > 90, "the walk really held the trigger over many frames (" + frames + ")");
+            TestAssert.Eq(launches, 2, "four taps: launch, cut, launch, cut - two decoys leave the pod");
+            TestAssert.Eq(cuts, 2, "... and each is cut by the tap after its launch, never by the same hold");
         }
 
         private static void Words()

@@ -53,6 +53,8 @@ namespace BoscaliSummer.Vanguard
                     return Status(lead);
                 case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
                 case "cut": return AlexCut(lead);
+                case "alexfit": return AlexFit(lead);
+                case "alexpress": return AlexPress(lead, (int)Number(args, "calls", 1f));
                 case "snapg":
                     Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
                     return Status(lead);
