@@ -5,13 +5,12 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// SKYWELL PIT STOP on every peer: job-change bookkeeping, the hot-swap round, latches, lamps, wingtip trails and the
-    /// re-dock lockout. Everything is derived from the published <see cref="SkywellView"/>; no per-frame traffic.
+    /// SKYWELL PIT STOP on every peer: job-change bookkeeping, the hot-swap round, latches, lamps and wingtip trails.
+    /// Everything is derived from the published <see cref="SkywellView"/>; no per-frame traffic.
     /// </summary>
     internal sealed partial class SkywellVisuals
     {
-        private const float PitKiteSpeed = 22f;   // m/s while a job is in flight (tanker frame)
-        private const float HotKiteSpeed = 28f;   // m/s snapping back after a hot break
+        private const float HotKiteSpeed = 28f;   // m/s snapping back to the tow position after a hot break
 
         private static readonly Color Teal = new Color(0.10f, 0.85f, 0.80f);
         private static readonly Color Amber = new Color(1f, 0.55f, 0.05f);
@@ -21,7 +20,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static readonly Color NavRed = new Color(1f, 0.05f, 0.05f);
         private static readonly Color NavGreen = new Color(0.05f, 1f, 0.20f);
 
-        private static bool needsBrakeReset;      // local aircraft: the server let go, the pilot must release the brake before the next dock
         // Sim diagnostics (status: kiteReach / kiteNozzle / ...Max / kiteRoundMin): the joints really were driven.
         internal static float ProbeReach, ProbeNozzle, ProbeReachMax, ProbeNozzleMax, ProbeRoundMin = 1f;
 
@@ -41,7 +39,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 bool isStation = v.Job == PitJobKind.Handoff || v.Job == PitJobKind.Cassette;
                 bool committed = !receiverChanged && v.JobIndex > rig.LastIndex;
                 rig.JobStart = Time.time;
-                rig.From = wasStation && !receiverChanged ? (v.JobStation == rig.LastStation ? PitFrom.SameStation : PitFrom.OtherStation) : PitFrom.Home;
+                rig.From = wasStation && !receiverChanged ? PitFrom.Again : PitFrom.Home;
                 rig.RoundHidden = wasStation && committed;
                 if (committed)
                 {

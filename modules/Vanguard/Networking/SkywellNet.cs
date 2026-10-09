@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     internal struct SkywellIntent
     {
         public byte Protocol;
-        public byte Action; // SkywellNet.Toggle / Dock / Undock / OrderAction
-        public uint Tanker; // Dock only
+        public byte Action; // SkywellNet.Toggle / OrderAction (protocol 4: the dock / undock intents are gone)
+        public uint Tanker; // reserved (the host finds receivers by the service box itself)
         public byte Value;   // Order: PitOrder
         public byte Station; // Order: priority station + 1 (0 = none / auto)
     }
@@ -42,15 +42,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     }
 
     /// <summary>
-    /// SKYWELL wire: client intents (toggle own kit, abort own contact; the host resolves the aircraft from the
-    /// sender, never from the message) and the host's per-tanker state for every peer's visuals and assist.
+    /// SKYWELL wire: client intents (toggle own kit, set the pit-stop order; the host resolves the aircraft from the
+    /// sender, never from the message; a receiver asks for service by flying into the box, which the host sees itself) and the host's per-tanker state for every peer's visuals and assist.
     /// </summary>
     internal sealed class SkywellNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 3;
+        internal const byte ProtocolVersion = 4;
         internal const byte Toggle = 0;
-        internal const byte DockAction = 1;
-        internal const byte UndockAction = 2;
         internal const byte OrderAction = 3;
         private const float IntentInterval = 0.5f;
         private const float OrderInterval = 0.25f;
@@ -135,20 +133,6 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             else Send(Toggle);
         }
 
-        /// <summary>Owner peer: brake held near a kit; the dock driver already flies the receiver in.</summary>
-        public static void RequestDock(Aircraft receiver, Aircraft tanker)
-        {
-            if (GameAccess.IsServer()) SkywellService.Dock(receiver, tanker);
-            else Send(DockAction, tanker.persistentID.Id);
-        }
-
-        /// <summary>Owner peer: brake released.</summary>
-        public static void RequestUndock(Aircraft receiver)
-        {
-            if (GameAccess.IsServer()) SkywellService.Undock(receiver);
-            else Send(UndockAction);
-        }
-
         /// <summary>Owner peer: standing pit-stop order and the station served first (-1 = auto).</summary>
         public static void RequestOrder(Aircraft receiver, byte order, int station)
         {
@@ -217,9 +201,6 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     SkywellService.SetPrefs(aircraft, (PitOrder)message.Value, message.Station - 1);
             }
             else if (message.Action == Toggle) SkywellService.Toggle(aircraft);
-            else if (message.Action == UndockAction) SkywellService.Undock(aircraft);
-            else if (message.Action == DockAction && UnitRegistry.TryGetUnit(new PersistentID { Id = message.Tanker }, out Unit unit))
-                SkywellService.Dock(aircraft, unit as Aircraft);
         }
 
         private void ReceiveState(INetworkPlayer sender, SkywellState message)

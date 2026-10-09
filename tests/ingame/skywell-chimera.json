@@ -12,7 +12,7 @@
       "faction": "Boscali",
       "at": {
         "map": [
-          0,
+          25000,
           0
         ]
       },
@@ -31,7 +31,7 @@
           "offset": [
             300,
             80,
-            -1200
+            -1000
           ]
         }
       },
@@ -528,7 +528,7 @@
     },
     {
       "op": "wait",
-      "seconds": 30
+      "seconds": 40
     },
     {
       "op": "call",
@@ -549,6 +549,15 @@
         "action": "status"
       },
       "store": "served"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "rxstatus",
+        "rx": "lead"
+      },
+      "store": "lead"
     },
     {
       "op": "end"
@@ -612,6 +621,71 @@
       "check": "result_below",
       "path": "served.receiverLeaks",
       "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "served.pitStops",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "served.pitHandoffs",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "lead.rxHandoffs",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "lead.rxDrainedServed",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "lead.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "lead.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "served.tankerDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "served.tankerAlive",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "served.receiverDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "served.pitBoxLost",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "served.serveGapSamples",
+      "min": 20
+    },
+    {
+      "check": "result_below",
+      "path": "served.serveGapMax",
+      "max": 6.0
+    },
+    {
+      "check": "result_above",
+      "path": "served.serveGapMin",
+      "min": 0.5
     }
   ]
 }

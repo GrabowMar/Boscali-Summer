@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Domain
 {
-    /// <summary>SKYWELL probe contact: capture zone behind the ramp, phase timings and abort rule (tanker frame).</summary>
+    /// <summary>RETIRED probe-contact era (superseded by SkywellBox): capture zone behind the ramp, phase timings and abort rule, kept pinned by the domain tests.</summary>
     internal static class SkywellContact
     {
         public static readonly Vector3 ContactOffset = new Vector3(0f, -14f, -34f); // from the kit mount, tanker axes

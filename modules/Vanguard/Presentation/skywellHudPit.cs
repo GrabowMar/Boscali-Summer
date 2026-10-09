@@ -8,7 +8,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// SKYWELL pit-stop words: the job line and pips while a receiver is served, commit and edge notices, and the
+    /// SKYWELL pit-stop words (SERVICE: FUEL n%, HANDOFF STA n, SERVICE COMPLETE, BOX LOST): the job line and pips while a receiver is served, commit and edge notices, and the
     /// ISkywellControl order / station-priority members the radial PIT STOP branch calls.
     /// </summary>
     internal sealed partial class SkywellHud
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         // job in flight, as this HUD saw it begin
         private PitJobKind jobKind;
         private byte jobStation, jobIndex;
-        private float jobStart, jobKg;
+        private float jobStart, jobKg, fuelFrom, fuelTo;
 
         private string OrderWord() => order == 1 ? "FUEL" : order == 2 ? "MUNITIONS" : "BOTH";
 
@@ -56,7 +56,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 jobStation = v.JobStation;
                 jobIndex = v.JobIndex;
                 jobStart = Time.time;
-                if (v.Job == PitJobKind.Fuel) jobKg = SkywellService.FuelNeedKg(me);
+                if (v.Job == PitJobKind.Fuel)
+                {
+                    jobKg = SkywellService.FuelNeedKg(me);
+                    fuelFrom = me.GetFuelLevel();
+                    fuelTo = Mathf.Max(fuelFrom, me.fuelLevel);
+                }
                 else if (v.Job != PitJobKind.None)
                 {
                     int missing = MissingAt(me, v.JobStation);
@@ -66,17 +71,22 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float total = Mathf.Max(v.JobTenths / 10f, 0.1f), elapsed = Time.time - jobStart;
             float left = Mathf.Max(0f, total - elapsed), bar = Mathf.Clamp01(elapsed / total);
             if (v.Job == PitJobKind.Fuel)
-                Line()?.Set(HudTone.Caution, "PIT STOP  FUEL", $"FUEL +{PitCopy.Kg(jobKg)} KG  ·  {left:0.0} s", bar);
+            {
+                // The gauge climbs through the flow (plug, flow, unplug); the real level takes over once the tanks are topped off.
+                float flow = Mathf.Clamp01((elapsed - PitPlan.FuelPlug) / Mathf.Max(0.1f, total - PitPlan.FuelPlug - PitPlan.FuelUnplug));
+                int percent = Mathf.RoundToInt(Mathf.Max(me.GetFuelLevel(), Mathf.Lerp(fuelFrom, fuelTo, flow)) * 100f);
+                Line()?.Set(HudTone.Caution, $"SKYWELL  SERVICE: FUEL {percent}%", $"+{PitCopy.Kg(jobKg)} KG  ·  {left:0.0} s", bar);
+            }
             else
             {
                 int missing = MissingAt(me, v.JobStation);
-                string title = $"PIT STOP  STN {v.JobStation + 1} {StationName(me, v.JobStation)}";
-                if (v.Job == PitJobKind.Cassette) Line()?.Set(HudTone.Caution, title, $"CASSETTE SWAP  ·  {missing} RDS", bar);
+                string title = $"SKYWELL  HANDOFF STA {v.JobStation + 1}";
+                if (v.Job == PitJobKind.Cassette) Line()?.Set(HudTone.Caution, title, $"{StationName(me, v.JobStation)}  ·  CASSETTE SWAP  ·  {missing} RDS", bar);
                 else
                 {
                     runMissing.TryGetValue(v.JobStation, out int began);
                     int of = Mathf.Max(began, 1);
-                    Line()?.Set(HudTone.Caution, title, $"HANDOFF {Mathf.Clamp(of - missing + 1, 1, of)}/{of}  ·  {left:0.0} s", bar);
+                    Line()?.Set(HudTone.Caution, title, $"{StationName(me, v.JobStation)}  {Mathf.Clamp(of - missing + 1, 1, of)}/{of}  ·  {left:0.0} s", bar);
                 }
             }
             PitLine()?.Set(HudTone.Info, PitCopy.Pips(v.JobIndex, v.JobCount) + "  JOB " + Mathf.Min(v.JobIndex + 1, v.JobCount) + "/" + v.JobCount, null, 0f);
@@ -107,7 +117,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if ((rose & PitFlags.Nothing) != 0) Notice("SKYWELL  NOTHING TO SERVE", HudTone.Caution);
             if ((rose & PitFlags.FuelStockOut) != 0) Notice("SKYWELL  FUEL STOCK EMPTY", HudTone.Caution);
             if ((rose & PitFlags.MunitionStockOut) != 0) Notice("SKYWELL  MUNITIONS STOCK EMPTY", HudTone.Caution);
-            if ((rose & PitFlags.Capped) != 0) Notice("SKYWELL  PIT STOP CAPPED  DOCK AGAIN", HudTone.Caution);
+            if ((rose & PitFlags.Capped) != 0) Notice("SKYWELL  PIT STOP CAPPED  FLY THE BOX AGAIN", HudTone.Caution);
+            if ((rose & PitFlags.BoxLost) != 0 && tanker) Notice("SKYWELL  BOX LOST", HudTone.Warning);
         }
 
         private static float TankerJobProgress(SkywellView v) =>

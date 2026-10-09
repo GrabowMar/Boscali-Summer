@@ -7,9 +7,10 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
-    /// SKYWELL PIT STOP (server): the docked receiver is served one job at a time, in the order the pilot chose
+    /// SKYWELL PIT STOP (server): the receiver holding the box is served one job at a time, in the order the pilot chose
     /// (FUEL / MUNITIONS / BOTH, one station first). Every round is a visible hot-swap handoff; a hostile missile
-    /// closing on either aircraft is a HOT BREAK that releases the receiver but keeps what was already loaded.
+    /// closing on either aircraft is a HOT BREAK that releases the receiver but keeps what was already loaded; so is
+    /// the receiver leaving the box (BOX LOST).
     /// </summary>
     internal sealed partial class SkywellService
     {
@@ -28,6 +29,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal struct PitTally
         {
             public int Stops, Handoffs, FuelJobs, PriorityFirst, Tenths;
+            public int[] PerStation;   // hand-offs committed per receiver station index (null until the first)
         }
 
         private readonly Dictionary<Aircraft, PitPrefs> prefs = new Dictionary<Aircraft, PitPrefs>();
@@ -49,7 +51,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private PitOrder OrderFor(Aircraft receiver) => prefs.TryGetValue(receiver, out PitPrefs p) ? p.Order : PitOrder.Both;
 
         /// <summary>
-        /// Forget aircraft that are gone and re-dock timers that ran out (called from the periodic scan). Orders (and their tallies,
+        /// Forget aircraft that are gone and re-entry timers that ran out (called from the periodic scan). Orders (and their tallies,
         /// which the sim reads after a victim dies) are only swept once there are 32 of them.
         /// </summary>
         private void PruneState()
@@ -57,6 +59,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float now = Time.timeSinceLevelLoad;
             PruneTimers(cooldown, now);
             PruneTimers(lockout, now);
+            if (inBoxSince.Count > 0)
+            {
+                pruneScratch.Clear();
+                foreach (Aircraft a in inBoxSince.Keys)
+                    if (a == null || a.disabled) pruneScratch.Add(a);
+                foreach (Aircraft a in pruneScratch) inBoxSince.Remove(a);
+            }
             if (prefs.Count < 32) return;
             pruneScratch.Clear();
             foreach (Aircraft a in prefs.Keys)
@@ -101,7 +110,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         // ---- the stop
 
-        /// <summary>The probe is in: build the job list from the receiver's real state and start job 0 (or finish at once).</summary>
+        /// <summary>The glider is under the belly: build the job list from the receiver's real state and start job 0 (or finish at once).</summary>
         private void BeginStop(Kit kit, Aircraft r, float now)
         {
             kit.Jobs.Clear();
@@ -115,7 +124,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 kit.Flags |= PitFlags.Nothing;
                 kit.PitTenths = 0;
-                Enter(kit, SkywellPhase.Served, now + SkywellContact.ReleaseSeconds);
+                Enter(kit, SkywellPhase.Served, now + ServedSeconds);
                 return;
             }
             kit.TransferStart = kit.JobStart = now;
@@ -136,7 +145,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             PitPlan.Plan(p.Order, need, r.GetFuelLevel(), kit.FuelKg, stationScratch, p.Priority,
                 kit.StockKg, player != null ? player.Allocation : 0f, player == null, planScratch, out bool capped);
             kit.Jobs.AddRange(planScratch);
-            if (capped) kit.Flags |= PitFlags.Capped; // the HUD tells the pilot to dock again for the dropped jobs
+            if (capped) kit.Flags |= PitFlags.Capped; // the HUD tells the pilot to fly the box again for the dropped jobs
 
             if (p.Order != PitOrder.Munitions && need >= PitPlan.FuelNeedFloorKg && kit.FuelKg < 1f) kit.Flags |= PitFlags.FuelStockOut;
             if (p.Order != PitOrder.Fuel)
@@ -196,7 +205,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             PitPrefs p = PrefsOf(r);
             p.Tally.Tenths = kit.PitTenths;
             p.Priority = -1;
-            Enter(kit, SkywellPhase.Served, now + SkywellContact.ReleaseSeconds);
+            Enter(kit, SkywellPhase.Served, now + ServedSeconds);
         }
 
         /// <summary>Vanilla refuel is all-or-nothing; the stock is charged what the tanks actually needed.</summary>
@@ -236,13 +245,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             r.RpcRearm(new RearmEventArgs { Rearmer = kit.Tanker, Stations = rounds });
             if (player != null && before > funds) player.AddAllocation(funds - before);
             VanguardStats.Rearms++;
-            PrefsOf(r).Tally.Handoffs++;
+            PitPrefs prefsOf = PrefsOf(r);
+            prefsOf.Tally.Handoffs++;
+            (prefsOf.Tally.PerStation ??= new int[32])[Mathf.Clamp(job.Station, 0, 31)]++;
             VanguardStats.Bump("skywell.handoff");
         }
 
         // ---- hot break
 
-        /// <summary>Every 0.5 s while docking or serving: a hostile missile within 7 s of either aircraft kicks the receiver out.</summary>
+        /// <summary>Every 0.5 s while the glider comes or serves: a hostile missile within 7 s of either aircraft kicks the receiver out.</summary>
         private bool HotBreakCheck(Kit kit, float now)
         {
             if (kit.Receiver == null || (kit.Phase != SkywellPhase.Engage && kit.Phase != SkywellPhase.Transfer) || now < kit.NextHotCheck) return false;

@@ -15,7 +15,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const byte Nothing = 2;
         public const byte FuelStockOut = 4;
         public const byte MunitionStockOut = 8;
-        public const byte Capped = 16;     // the plan hit the 30 s / 14 job cap and dropped jobs: dock again for the rest
+        public const byte Capped = 16;     // the plan hit the 30 s / 14 job cap and dropped jobs: fly the box again for the rest
+        public const byte BoxLost = 32;    // the receiver left the service box (3 s after the glider let go)
     }
 
     /// <summary>One weapon station of the receiver as the planner sees it (live ammo, no game types).</summary>
@@ -34,13 +35,13 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     }
 
     /// <summary>
-    /// SKYWELL pit-stop planner: which jobs a docked receiver gets, in what order, and how long each takes.
+    /// SKYWELL pit-stop planner: which jobs a receiver in the box gets, in what order, and how long each takes.
     /// Pure and deterministic; the service re-plans from live state at every job boundary.
     /// </summary>
     internal static class PitPlan
     {
         public const float FuelFlowKgS = 400f, FuelPlug = 0.9f, FuelUnplug = 0.6f, FuelMinFlow = 1.2f, FuelMaxFlow = 12f;
-        public const float FirstHandoff = 1.7f, NextHandoff = 1.1f, CassetteSwap = 2.4f, FuelFirstBelow = 0.35f;
+        public const float FirstHandoff = 1.7f, NextHandoff = 1.5f, CassetteSwap = 2.4f, FuelFirstBelow = 0.35f;
         public const float MaxSeconds = 30f, HotBreakTti = 7f, HotBreakClosing = 20f, FuelNeedFloorKg = 50f;
         public const int MaxJobs = 14;
 
@@ -81,7 +82,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             int priority, float munitionStockKg, float funds, bool free, List<PitJob> into) =>
             Plan(order, fuelNeedKg, fuelFraction, fuelStockKg, stations, priority, munitionStockKg, funds, free, into, out _);
 
-        /// <param name="capped">True when the 30 s / 14 job cap dropped jobs (the pilot has to dock again for them).</param>
+        /// <param name="capped">True when the 30 s / 14 job cap dropped jobs (the pilot flies the box again for them).</param>
         public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
             int priority, float munitionStockKg, float funds, bool free, List<PitJob> into, out bool capped)
         {
@@ -144,25 +145,25 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         }
     }
 
-    internal enum PitFrom { Home, SameStation, OtherStation }
+    /// <summary>Where the loader starts a job: Home = arm already down (stop start, after fuel), Again = it just committed a round up at the rail.</summary>
+    internal enum PitFrom { Home, Again }
 
     /// <summary>Client staging timelines, seconds since a job's state change; the visuals drive joints straight from these.</summary>
     internal static class PitStaging
     {
+        public const float Slide = 0.7f, Up = 0.6f, Latch = 0.3f, Down = 0.5f;
+
         private static float S(float x) => Mathf.SmoothStep(0f, 1f, x);
 
-        /// <summary>Loader extension 0..1.</summary>
+        /// <summary>
+        /// Loader lift 0..1 along the straight line from the glider's carousel up to the pylon: a job from Home waits for the glider
+        /// to slide under the station (0.7 s), then rises 0.6 s and latches 0.3 s before the commit; a follow-on first lowers the arm
+        /// 0.5 s to take the next round, rises 0.6 s and latches 0.3 s.
+        /// </summary>
         public static float Reach(float t, PitFrom from)
         {
-            switch (from)
-            {
-                case PitFrom.OtherStation:
-                    return t < 0.40f ? Mathf.Lerp(1f, 0f, S(t / 0.40f)) : S(Mathf.Clamp01((t - 0.55f) / 0.60f));
-                case PitFrom.SameStation:
-                    return t < 0.35f ? Mathf.Lerp(1f, 0.2f, S(t / 0.35f)) : t < 0.55f ? 0.2f : Mathf.Lerp(0.2f, 1f, S(Mathf.Clamp01((t - 0.55f) / 0.40f)));
-                default:
-                    return S(Mathf.Clamp01((t - 0.15f) / 0.60f));
-            }
+            if (from == PitFrom.Home) return S(Mathf.Clamp01((t - Slide) / Up));
+            return t < Down ? Mathf.Lerp(1f, 0f, S(t / Down)) : S(Mathf.Clamp01((t - Down - 0.05f) / Up));
         }
 
         /// <summary>Cradle round visibility: a follow-on job regrows it from the belly magazine.</summary>

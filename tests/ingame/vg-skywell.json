@@ -12,7 +12,7 @@
       "faction": "Boscali",
       "at": {
         "map": [
-          0,
+          25000,
           0
         ]
       },
@@ -31,7 +31,7 @@
           "offset": [
             40,
             0,
-            700
+            400
           ]
         }
       },
@@ -49,7 +49,7 @@
           "offset": [
             -40,
             10,
-            900
+            520
           ]
         }
       },
@@ -67,7 +67,7 @@
           "offset": [
             60,
             -10,
-            1100
+            640
           ]
         }
       },
@@ -85,7 +85,7 @@
           "offset": [
             -60,
             20,
-            1300
+            760
           ]
         }
       },
@@ -99,13 +99,13 @@
       "faction": "Primeva",
       "at": {
         "map": [
-          0,
+          25000,
           80000
         ]
       },
       "altitude": 3000,
-      "speed": 200,
-      "heading": 180
+      "speed": 130,
+      "heading": 0
     },
     {
       "op": "fly",
@@ -2009,6 +2009,66 @@
       "check": "result_below",
       "path": "final.kiteRoundMin",
       "max": 0.3
+    },
+    {
+      "check": "result_below",
+      "path": "final.tankerDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "b.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "a.rxDrainedServed",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxDrainedServed",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "final.pitBoxLost",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.serveGapSamples",
+      "min": 20
+    },
+    {
+      "check": "result_below",
+      "path": "final.serveGapMax",
+      "max": 6.0
+    },
+    {
+      "check": "result_above",
+      "path": "final.serveGapMin",
+      "min": 0.5
     }
   ]
 }

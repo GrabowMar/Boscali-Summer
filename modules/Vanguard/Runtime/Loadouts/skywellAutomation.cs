@@ -87,23 +87,17 @@ namespace BoscaliSummer.Vanguard
             return new Dictionary<string, object> { ["ok"] = true, ["pitOrder"] = (int)order, ["pitPriority"] = station, ["pitAccepted"] = accepted ? 1 : 0 };
         }
 
-        /// <summary>Hold the SEATED aircraft's brake for the dock script (<c>value</c> 0..1; below 0 returns to the real input).</summary>
-        private static Dictionary<string, object> SkywellBrake(Dictionary<string, object> args)
+        /// <summary>
+        /// The SEATED jet flies itself to the box centre and holds it (<c>on</c> 1, default) through the same autopilot hold the AI receivers
+        /// use, or lets go (<c>on</c> 0). A scenario cannot press keys or fly the seated jet, so this is the sim's pilot; it writes controls
+        /// only, never the airframe's body.
+        /// </summary>
+        private static Dictionary<string, object> SkywellFly(Dictionary<string, object> args)
         {
-            if (SeatedRx(args) == null) return Failure("VanguardAutomation", "brake", "needs the seated local aircraft (seat op first)");
-            float value = Number(args, "value", 1f);
-            SkywellVisuals.SimBrake = value < 0f ? (float?)null : UnityEngine.Mathf.Clamp01(value);
-            return new Dictionary<string, object> { ["ok"] = true, ["brake"] = SkywellVisuals.SimBrake ?? -1f };
-        }
-
-        /// <summary>Put the seated, unflown jet in the hook-up window: <c>astern</c> metres behind the contact point, flying with the tanker.</summary>
-        private static Dictionary<string, object> SkywellPlace(Dictionary<string, object> args)
-        {
-            Aircraft me = SeatedRx(args);
-            if (me == null || tanker == null) return Failure("VanguardAutomation", "seatplace", "needs the seated local aircraft and equip first");
-            bool placed = SkywellVisuals.SimPlace(me, tanker, Number(args, "astern", 30f));
-            return placed ? new Dictionary<string, object> { ["ok"] = true, ["placed"] = 1 }
-                : Failure("VanguardAutomation", "seatplace", "the jet is not simulated here");
+            if (SeatedRx(args) == null || tanker == null) return Failure("VanguardAutomation", "seatfly", "needs the seated local aircraft and equip first");
+            bool on = Number(args, "on", 1f) > 0f;
+            SkywellVisuals.SimHoldTanker = on ? tanker : null;
+            return new Dictionary<string, object> { ["ok"] = true, ["flying"] = on ? 1 : 0 };
         }
 
         /// <summary>One-shot: when the named receiver next enters Transfer, spawn the usual threat on it (hot-break check).</summary>
@@ -139,7 +133,18 @@ namespace BoscaliSummer.Vanguard
                 foreach (FuelTank tank in rx.GetFuelTanks())
                     if (LeakRate?.GetValue(tank) is float rate && rate > 0f) leaks++;
             SkywellService.PitTally tally = SkywellService.TallyOf(rx);
-            return new Dictionary<string, object>
+            int detached = 0, drainedStations = 0, drainedServed = 0;
+            if (exists)
+                foreach (UnitPart part in rx.partLookup)
+                    if (part != null && part.IsDetached()) detached++;
+            if (!ReferenceEquals(rx, null) && Drained.TryGetValue(rx, out int mask))
+                for (int i = 0; i < 31; i++)
+                    if ((mask & (1 << i)) != 0)
+                    {
+                        drainedStations++;
+                        if (tally.PerStation != null && tally.PerStation[i] > 0) drainedServed++;
+                    }
+            var status = new Dictionary<string, object>
             {
                 ["ok"] = true,
                 ["rxAlive"] = exists && !rx.disabled ? 1 : 0,
@@ -152,7 +157,13 @@ namespace BoscaliSummer.Vanguard
                 ["rxPriorityFirst"] = tally.PriorityFirst,
                 ["rxPitSeconds"] = tally.Tenths / 10f,
                 ["rxOrder"] = (int)SkywellService.OrderOf(rx),
+                ["rxDetached"] = detached,
+                ["rxDrainedStations"] = drainedStations,
+                ["rxDrainedServed"] = drainedServed,
+                ["rxDrainedMissed"] = drainedStations - drainedServed,
             };
+            for (int i = 0; i < 8; i++) status["rxStn" + i] = tally.PerStation != null ? tally.PerStation[i] : 0;
+            return status;
         }
 
         /// <summary>Numeric mirrors of the pit-stop state (the sim checker has no string equality, and dotted counter keys do not resolve).</summary>
@@ -162,6 +173,7 @@ namespace BoscaliSummer.Vanguard
             state["pitHandoffs"] = VanguardStats.Get("skywell.handoff");
             state["pitFuelJobs"] = VanguardStats.Get("skywell.fuelJob");
             state["pitBreaks"] = VanguardStats.Get("skywell.hotBreak");
+            state["pitBoxLost"] = VanguardStats.Get("skywell.boxLost");
             state["pitPriorityFirst"] = VanguardStats.Get("skywell.priorityFirst");
             state["pitSeconds"] = VanguardStats.Get("skywell.pitTenths") / 10f;
             // What the last hot-break victim held when it was released (the victim itself may be dead by the time anyone asks).
@@ -173,6 +185,10 @@ namespace BoscaliSummer.Vanguard
             state["kiteReachMax"] = SkywellVisuals.ProbeReachMax;
             state["kiteNozzleMax"] = SkywellVisuals.ProbeNozzleMax;
             state["kiteRoundMin"] = SkywellVisuals.ProbeRoundMin;
+            // Glider-to-airframe clearance while a stop is in its job phase (box distance to the receiver's bounds): it must sit under the belly.
+            state["serveGapMax"] = SkywellVisuals.ServeGapMax;
+            state["serveGapMin"] = SkywellVisuals.ServeGapMin;
+            state["serveGapSamples"] = SkywellVisuals.ServeGapSamples;
             if (tanker != null && SkywellBoard.Views.TryGetValue(tanker.persistentID.Id, out SkywellView view))
             {
                 state["skywellPhaseN"] = (int)view.Phase;

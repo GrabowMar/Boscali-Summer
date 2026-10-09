@@ -6,56 +6,16 @@
   "timeout_s": 240,
   "ops": [
     {
-      "op": "spawn",
-      "id": "tanker",
-      "type": "VL-49 Tarantula",
-      "faction": "Boscali",
-      "at": {
-        "map": [
-          0,
-          0
-        ]
-      },
-      "altitude": 6000,
-      "speed": 110,
-      "heading": 0
-    },
-    {
-      "op": "fly",
-      "id": "tanker",
-      "program": [
-        {
-          "level": 240
-        }
-      ]
-    },
-    {
-      "op": "wait",
-      "seconds": 10
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "equip"
-      },
-      "store": "equip"
-    },
-    {
-      "op": "wait",
-      "seconds": 14
-    },
-    {
       "op": "seat",
       "id": "player",
       "faction": "Boscali",
       "aircraft": "FS-20 Vortex",
       "near": [
-        200,
-        2000
+        25000,
+        0
       ],
       "altitude": 6000,
-      "speed": 110,
+      "speed": 120,
       "heading": 0,
       "view": "cockpit"
     },
@@ -89,18 +49,49 @@
       "seconds": 1
     },
     {
+      "op": "spawn",
+      "id": "tanker",
+      "type": "VL-49 Tarantula",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            0,
+            14,
+            -90
+          ]
+        }
+      },
+      "speed": 110
+    },
+    {
+      "op": "fly",
+      "id": "tanker",
+      "program": [
+        {
+          "level": 240
+        }
+      ]
+    },
+    {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "seatplace",
-        "rx": "player",
-        "astern": 20
+        "action": "equip",
+        "norx": 1
       },
-      "store": "place"
+      "store": "equip"
     },
     {
-      "op": "wait",
-      "seconds": 1
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "seatfly",
+        "rx": "player",
+        "on": 1
+      },
+      "store": "fly"
     },
     {
       "op": "call",
@@ -115,7 +106,7 @@
     },
     {
       "op": "wait",
-      "seconds": 0.5
+      "seconds": 8
     },
     {
       "op": "call",
@@ -131,17 +122,17 @@
       "hide_ui": false
     },
     {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "brake",
-        "value": 1
-      },
-      "store": "hold"
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-engage",
+      "hide_ui": false
     },
     {
       "op": "wait",
-      "seconds": 3.5
+      "seconds": 4
     },
     {
       "op": "capture",
@@ -150,7 +141,7 @@
     },
     {
       "op": "wait",
-      "seconds": 8
+      "seconds": 5
     },
     {
       "op": "capture",
@@ -182,8 +173,9 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "brake",
-        "value": 0
+        "action": "seatfly",
+        "rx": "player",
+        "on": 0
       },
       "store": "release"
     },
@@ -214,14 +206,6 @@
       "hide_ui": false
     },
     {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "brake",
-        "value": -1
-      }
-    },
-    {
       "op": "end"
     }
   ],
@@ -243,6 +227,11 @@
       "check": "result_above",
       "path": "drain.shots",
       "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "fly.flying",
+      "min": 0.5
     },
     {
       "check": "result_above",
@@ -296,8 +285,18 @@
     },
     {
       "check": "result_above",
-      "path": "seatSt.skywellPhaseN",
-      "min": 2
+      "path": "seatA.rxDrainedServed",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "seatA.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "seatA.rxDetached",
+      "max": 0.5
     },
     {
       "check": "result_above",
@@ -308,6 +307,26 @@
       "check": "result_above",
       "path": "seatSt.pitHandoffs",
       "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "seatSt.pitBoxLost",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "seatSt.serveGapSamples",
+      "min": 10
+    },
+    {
+      "check": "result_below",
+      "path": "seatSt.serveGapMax",
+      "max": 6.0
+    },
+    {
+      "check": "result_above",
+      "path": "seatSt.serveGapMin",
+      "min": 0.5
     },
     {
       "check": "result_below",
@@ -327,6 +346,11 @@
     {
       "check": "result_below",
       "path": "seatStB.tankerLeaks",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "seatStB.tankerDetached",
       "max": 0.5
     }
   ]

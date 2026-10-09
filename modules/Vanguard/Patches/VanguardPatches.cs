@@ -95,6 +95,14 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
+    // SKYWELL: an AI receiver the kit is serving (or the sim's seated jet) holds the service box on its own autopilot target. Pilot states
+    // write their inputs from this call, so the hold goes in a postfix and is the last writer of the step.
+    [HarmonyPatch(typeof(Pilot), nameof(Pilot.Pilot_OnAeroInputsApplied))]
+    internal static class SkywellHoldPatch
+    {
+        private static void Postfix(Pilot __instance) => Presentation.SkywellVisuals.SteerAfterPilot(__instance);
+    }
+
     // LANCE: the trigger charges the capacitor instead of firing; LanceService fires on release.
     [HarmonyPatch(typeof(Gun), nameof(Gun.Fire))]
     internal static class LanceFirePatch
