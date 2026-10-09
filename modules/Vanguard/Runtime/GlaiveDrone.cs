@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static GlaiveDrone Attach(Missile missile)
         {
-            if (missile == null || missile.definition == null || VanguardKeys.RoleOf(missile.definition.jsonKey) != VanguardRole.Carrier) return null;
+            if (missile == null || missile.definition == null || !VanguardKeys.IsGunDrone(VanguardKeys.RoleOf(missile.definition.jsonKey))) return null;
             var old=missile.GetComponent<GlaiveDrone>();
             if (old != null) return old;
             Transform visual=missile.transform.Find("VanguardVisual");

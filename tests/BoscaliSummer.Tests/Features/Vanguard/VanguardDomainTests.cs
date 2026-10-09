@@ -49,8 +49,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(!SeductionRule.Seduces("ARH", 9000f, 0.1f) && !SeductionRule.Seduces("ARH", 3000f, 0.9f),
                 "range and the roll both gate seduction");
 
-            TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Glaive2A) == VanguardRole.Carrier &&
-                VanguardKeys.RoleOf(VanguardKeys.Glaive2S) == VanguardRole.Carrier &&
+            TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Glaive2A) == VanguardRole.Sentinel &&
+                VanguardKeys.RoleOf(VanguardKeys.Glaive2S) == VanguardRole.Gunship &&
                 VanguardKeys.RoleOf(VanguardKeys.Orca) == VanguardRole.Torpedo &&
                 VanguardKeys.RoleOf(VanguardKeys.AleX) == VanguardRole.Towed, "batch-2 keys get their roles");
             TestAssert.That(GlaiveProfile.Height(20000f) > GlaiveProfile.Height(5000f) &&

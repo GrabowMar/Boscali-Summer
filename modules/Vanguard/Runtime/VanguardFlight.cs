@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// (see VanguardPatches); vanilla Steering/ApplyAero still fly the airframe toward the aimpoint we set.
     /// Re-plans at 5 Hz; only the interceptor's proximity check runs every physics tick.
     /// </summary>
-    internal sealed class VanguardFlight
+    internal sealed partial class VanguardFlight
     {
         private const float PlanInterval = 0.2f;
         private const float EffectInterval = 0.5f;
@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 forward = missile.transform.forward;
             forward.y = 0f;
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
-            if (role == VanguardRole.Carrier)
+            if (VanguardKeys.IsGunDrone(role))
             {
                 gunDrone=GlaiveDrone.Attach(missile);
                 gunDrone?.Configure(target,aimpoint);
@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
-            if (role == VanguardRole.Carrier)
+            if (VanguardKeys.IsGunDrone(role))
             {
                 if (gunDrone == null) Detonate();
                 else gunDrone.TickHost();
@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
             if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            float minimumSpeed = role == VanguardRole.Carrier ? 25f : 60f;
+            float minimumSpeed = VanguardKeys.IsGunDrone(role) ? 25f : 60f;
             if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
@@ -136,7 +136,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Drone: return 360f;
                 case VanguardRole.Interceptor: return 6f;
                 case VanguardRole.Torpedo: return 400f;
-                case VanguardRole.Carrier: return 300f;
+                case VanguardRole.Carrier:
+                case VanguardRole.Sentinel:
+                case VanguardRole.Gunship: return 300f;
                 case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
                 default: return 600f;

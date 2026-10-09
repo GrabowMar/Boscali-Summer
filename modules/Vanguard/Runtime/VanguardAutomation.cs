@@ -11,7 +11,7 @@ namespace BoscaliSummer.Vanguard
     /// Explicit nomodkit single-player test hook (tests/ingame/vanguard.json); inert outside a sim run.
     /// Launches Vanguard missiles straight from the spawner so a scenario needs no loadout UI.
     /// </summary>
-    public static class VanguardAutomation
+    public static partial class VanguardAutomation
     {
         private static readonly Dictionary<string, Missile> Launched = new Dictionary<string, Missile>();
         private static readonly Dictionary<string, float> TopSpeed = new Dictionary<string, float>();
@@ -363,6 +363,7 @@ namespace BoscaliSummer.Vanguard
             state["ugvsAlive"] = 0; // Compatibility telemetry: ground-vehicle delivery is retired.
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
+            foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

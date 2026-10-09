@@ -15,7 +15,7 @@ using UnityEngine;
 
 namespace Vanguard
 {
-    public static class VanguardBuilder
+    public static partial class VanguardBuilder
     {
         const string R = "Assets/Blueprinter/Mods/Vanguard/";
         const string D = "Assets/Blueprinter/_donotship/";
