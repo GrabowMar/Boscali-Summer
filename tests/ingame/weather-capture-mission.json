@@ -1,0 +1,129 @@
+{
+  "name": "weather-capture-mission",
+  "mission": "13. Reprisal",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 450,
+      "speed": 110,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 60
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "capture"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "capture.captured",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "capture.keySeed",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "capture.keySeedIsLegacy",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "capture.baselineConditions",
+      "min": 0.5337
+    },
+    {
+      "check": "result_below",
+      "path": "capture.baselineConditions",
+      "max": 0.5377
+    },
+    {
+      "check": "result_above",
+      "path": "capture.baselineCloudHeight",
+      "min": 1445.875
+    },
+    {
+      "check": "result_below",
+      "path": "capture.baselineCloudHeight",
+      "max": 1447.875
+    },
+    {
+      "check": "result_above",
+      "path": "capture.baselineWindSpeed",
+      "min": 4.3293
+    },
+    {
+      "check": "result_below",
+      "path": "capture.baselineWindSpeed",
+      "max": 4.3493
+    },
+    {
+      "check": "result_above",
+      "path": "capture.keyClass",
+      "min": 2.5
+    },
+    {
+      "check": "result_below",
+      "path": "capture.keyClass",
+      "max": 3.5
+    },
+    {
+      "check": "result_above",
+      "path": "capture.keyOpeningBase",
+      "min": 1449.5
+    },
+    {
+      "check": "result_below",
+      "path": "capture.keyOpeningBase",
+      "max": 1450.5
+    },
+    {
+      "check": "result_above",
+      "path": "capture.keyHeading",
+      "min": 300.405
+    },
+    {
+      "check": "result_below",
+      "path": "capture.keyHeading",
+      "max": 302.405
+    }
+  ]
+}

@@ -34,6 +34,14 @@ namespace BoscaliSummer.Modules.Weather.Networking
             InstallSerializers();
         }
 
+        /// <summary>Two resends, one and four seconds out, cover a peer whose handler registers after the first one
+        /// lands. Called when a peer joins and when the host creates its key.</summary>
+        public void ArmResends()
+        {
+            resyncAt = Time.unscaledTime + 1f;
+            resyncsLeft = 2;
+        }
+
         public void ResetScene()
         {
             ClientHandlers.Release();
@@ -60,11 +68,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
         private void WatchPeers(NetworkServer server)
         {
             int peers = server?.AuthenticatedPlayers?.Count ?? 0;
-            if (peers > knownPeers)
-            {
-                resyncAt = Time.unscaledTime + 1f;
-                resyncsLeft = 2;
-            }
+            if (peers > knownPeers) ArmResends();
             knownPeers = peers;
             if (resyncsLeft > 0 && Time.unscaledTime >= resyncAt)
             {
