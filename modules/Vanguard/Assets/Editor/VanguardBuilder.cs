@@ -835,49 +835,6 @@ namespace Vanguard
             Debug.Log("[Vanguard] SKYWELL carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
         }
 
-        static void Lance(Dictionary<string, Material> materials)
-        {
-            const string donor = "gun_57mm_pod";
-            const string json = "VG_Lance_Pod";
-            var info = Copy<WeaponInfo>("Gun57mm_Pod", "WI_VG_Lance");
-            Edit(info, s =>
-            {
-                P(s, "weaponName").stringValue = "RG-12 LANCE Railgun";
-                P(s, "shortName").stringValue = "LANCE";
-                P(s, "description").stringValue = "Electromagnetic railgun pod. HOLD the trigger to charge the capacitor bank and release a 3.4 km/s full-power slug; taps fire weak snap shots. Twelve rounds; the bank recharges between shots.";
-                P(s, "muzzleVelocity").floatValue = 3000;
-                P(s, "pierceDamage").floatValue = 4000;
-                P(s, "blastDamage").floatValue = 25;
-                P(s, "dragCoef").floatValue = 0.05f;
-                P(s, "costPerRound").floatValue = 0.02f;
-                P(s, "weaponIcon").objectReferenceValue = Icon("Lance");
-            });
-            var mount = Copy<WeaponMount>(donor, "WM_" + json);
-            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
-            g.name = json;
-            HideRenderers(g);
-            Visual(g.transform, "Lance", materials);
-            foreach (var gun in g.GetComponentsInChildren<Gun>(true))
-                Edit(gun, s =>
-                {
-                    // Fire from the model's lit bore, not the donor 57 mm barrel. = the MachinedMuzzle frame in models/Lance.py.
-                    var muzzles = P(s, "muzzles");
-                    for (int i = 0; i < muzzles.arraySize; i++)
-                        if (muzzles.GetArrayElementAtIndex(i).objectReferenceValue is Transform t)
-                            t.position = g.transform.TransformPoint(new Vector3(0f, 0f, 2.62f));
-                    P(s, "info").objectReferenceValue = info;
-                    P(s, "fireRate").floatValue = 30;
-                    P(s, "magazineCapacity").intValue = 12;
-                    P(s, "tracerColor").colorValue = new Color(0.82f, 0.90f, 1f);
-                    P(s, "muzzleParticles").arraySize = 0; // Electromagnetic exit: no powder-gun flame plume.
-                    P(s, "tracerRatio").intValue = 1;
-                    P(s, "tracerSize").floatValue = 3f;
-                });
-            Edit(mount, s => P(s, "ammo").intValue = 12);
-            // Any station that takes a gun pod or a single heavy AGM can hang the pod.
-            SaveMount(g, mount, json, info, donor, "gun_30mm_rotary_pod", "AGM_heavy_single");
-        }
-
         static void SaveMount(GameObject g, WeaponMount mount, string json, WeaponInfo info, params string[] donors)
         {
             PrefabUtility.SaveAsPrefabAsset(g, R + json + ".prefab");

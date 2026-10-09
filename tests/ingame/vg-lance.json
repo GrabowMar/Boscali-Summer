@@ -1,0 +1,777 @@
+{
+  "name": "vg-lance",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-12 Revoker",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 230,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          80000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "equip",
+        "pylon": "wing"
+      },
+      "store": "fit"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "select"
+      },
+      "store": "sel"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "idle"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 1.0,
+        "full": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1.6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "tap"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 3.0,
+        "full": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "mid"
+    },
+    {
+      "op": "wait",
+      "seconds": 6.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "full"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "heat",
+        "set": 1.0
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 2.6,
+        "full": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "derate"
+    },
+    {
+      "op": "wait",
+      "seconds": 3.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "heat",
+        "set": 1.3
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 2.6,
+        "full": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "fault"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "reset"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 3.0,
+        "full": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "ai"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "reset"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "chain",
+        "count": 4,
+        "spacing": 45,
+        "power": 1.0
+      },
+      "store": "chain"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "chain",
+        "count": 4,
+        "spacing": 45,
+        "power": 0.1
+      },
+      "store": "snap"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "chain",
+        "count": 4,
+        "spacing": 45,
+        "power": 1.0,
+        "friend": 1
+      },
+      "store": "safe"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "twin",
+        "count": 2
+      },
+      "store": "twin"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "fit.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "fit.mountAmmo",
+      "min": 12
+    },
+    {
+      "check": "result_below",
+      "path": "fit.mountAmmo",
+      "max": 12
+    },
+    {
+      "check": "result_above",
+      "path": "fit.mountMassKg",
+      "min": 290
+    },
+    {
+      "check": "result_below",
+      "path": "fit.mountMassKg",
+      "max": 310
+    },
+    {
+      "check": "result_above",
+      "path": "sel.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sel.selected",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "idle.lanceState",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "idle.lanceHeat",
+      "max": 0.01
+    },
+    {
+      "check": "result_below",
+      "path": "idle.lanceAbCut",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePowerLast",
+      "min": 0.3
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePowerLast",
+      "max": 0.4
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lanceHeat",
+      "min": 0.07
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lanceHeat",
+      "max": 0.2
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceCharge",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceDraw",
+      "min": 0.4
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceAbCut",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceEngineLossN",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceFlicker",
+      "min": 0.3
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceStrip0",
+      "min": 2.0
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceSag",
+      "min": 0.02
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceState",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "full.lancePowerLast",
+      "min": 0.99
+    },
+    {
+      "check": "result_below",
+      "path": "full.lanceState",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "full.lanceEngineLossN",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "full.lanceAbCut",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "full.lanceNoseUpPeakDegS",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "derate.lancePowerLast",
+      "min": 0.67
+    },
+    {
+      "check": "result_below",
+      "path": "derate.lancePowerLast",
+      "max": 0.75
+    },
+    {
+      "check": "result_above",
+      "path": "fault.lancePowerLast",
+      "min": 0.14
+    },
+    {
+      "check": "result_below",
+      "path": "fault.lancePowerLast",
+      "max": 0.16
+    },
+    {
+      "check": "result_above",
+      "path": "fault.lanceState",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "fault.lanceReadyIn",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "fault.lance_faults",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ai.lancePowerLast",
+      "min": 0.9
+    },
+    {
+      "check": "result_below",
+      "path": "ai.lancePowerLast",
+      "max": 0.96
+    },
+    {
+      "check": "result_above",
+      "path": "chain.placed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "chain.units",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "chain.parts",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "chain.reach",
+      "min": 1400
+    },
+    {
+      "check": "result_above",
+      "path": "chain.ratio",
+      "min": 0.15
+    },
+    {
+      "check": "result_below",
+      "path": "chain.ratio",
+      "max": 0.6
+    },
+    {
+      "check": "result_below",
+      "path": "chain.friendlySkips",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "snap.placed",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "snap.units",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "safe.placed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "safe.units",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "safe.friendlySkips",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "end.lance_clientDamage",
+      "max": 0
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "result_above",
+      "path": "sel.ammo",
+      "min": 24
+    },
+    {
+      "check": "result_below",
+      "path": "sel.ammo",
+      "max": 24
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lance_shots",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lance_shots",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lance_volleys",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lance_volleys",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lanceAmmo",
+      "min": 22
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lanceAmmo",
+      "max": 22
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePods",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePods",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod0Loaded",
+      "min": 11
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePod0Loaded",
+      "max": 11
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod1Loaded",
+      "min": 11
+    },
+    {
+      "check": "result_below",
+      "path": "tap.lancePod1Loaded",
+      "max": 11
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod0Fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tap.lancePod1Fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "full.lance_shots",
+      "min": 4
+    },
+    {
+      "check": "result_below",
+      "path": "full.lance_shots",
+      "max": 4
+    },
+    {
+      "check": "result_above",
+      "path": "full.lance_volleys",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "full.lance_volleys",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ai.lance_shots",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "ai.lance_shots",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "ai.lance_volleys",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "ai.lance_volleys",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.placed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.released",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.pending",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "twin.pending",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line0Units",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line1Units",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line0First",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "twin.line1First",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "twin.chains",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "twin.chains",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "twin.unmatched",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "twin.unmatched",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "twin.duplicates",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "twin.duplicates",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "twin.duplicatesAfterExtra",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "twin.duplicatesAfterExtra",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "end.lance_unmatched",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "end.lance_unmatched",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "end.lance_errors",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "end.lance_errors",
+      "max": 0
+    }
+  ]
+}

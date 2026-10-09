@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Vanguard.Domain;
+using BoscaliSummer.Modules.Vanguard.Networking;
+using BoscaliSummer.Modules.Vanguard.Presentation;
 using HarmonyLib;
 using UnityEngine;
 
@@ -14,7 +17,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     {
         public static bool Available { get; private set; }
         private static bool tried;
-        private static AccessTools.FieldRef<Gun, float> muzzleVelocity;
         private static AccessTools.FieldRef<Gun, float> tracerSize;
         private static AccessTools.FieldRef<Gun, int> bulletsLoaded;
         private delegate void SpawnBulletFn(Gun gun, float timeOffset);
@@ -27,11 +29,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             tried = true;
             try
             {
-                muzzleVelocity = AccessTools.FieldRefAccess<Gun, float>("muzzleVelocity");
                 tracerSize = AccessTools.FieldRefAccess<Gun, float>("tracerSize");
                 bulletsLoaded = AccessTools.FieldRefAccess<Gun, int>("bulletsLoaded");
                 spawnBullet = AccessTools.MethodDelegate<SpawnBulletFn>(AccessTools.Method(typeof(Gun), "SpawnBullet"));
-                Available = muzzleVelocity != null && tracerSize != null && bulletsLoaded != null && spawnBullet != null;
+                Available = tracerSize != null && bulletsLoaded != null && spawnBullet != null;
             }
             catch (Exception e)
             {
@@ -44,159 +45,496 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static int BulletsLoaded(Gun gun) => bulletsLoaded(gun);
         public static void SetBulletsLoaded(Gun gun, int value) => bulletsLoaded(gun) = value;
-        public static void SetMuzzleVelocity(Gun gun, float value) => muzzleVelocity(gun) = value;
         public static void SetTracerSize(Gun gun, float value) => tracerSize(gun) = value;
         public static void Fire(Gun gun) => spawnBullet(gun, 0f);
     }
 
+    internal enum LancePhase : byte { Idle, Charging, Cycling, Recharging, Fault }
+
+    /// <summary>What a pod looks like right now; the same record drives HUD, strips, barrel and audio on every peer.</summary>
+    internal struct LanceLook
+    {
+        public float Charge, Heat, SinceShot, LastPower, Recharge01;
+        public bool Charging, Fault;
+    }
+
+    /// <summary>One LANCE gun. The owner peer runs the state machine; other peers mirror it from LanceFx messages.</summary>
+    internal sealed class LancePod
+    {
+        public readonly Gun Gun;
+        public readonly Aircraft Aircraft;
+        public WeaponStation Station;
+        public LancePodView View;
+        public LancePhase Phase;
+        public float HoldStart, LastHold, Heat, CycleEnd, ReadyAt, RechargeTotal, LastPower, NextSend, NextEmpty;
+        public float ShotAt = -99f;
+        public int LastAmmo = -1;
+        // Observer mirror (LanceFx): last charge level and the power of the last server-confirmed shot.
+        public float RemoteCharge, RemoteAt = -99f, FxPower, FxAt = -99f;
+
+        public LancePod(Gun gun, Aircraft aircraft)
+        {
+            Gun = gun;
+            Aircraft = aircraft;
+        }
+
+        public bool Owner => Aircraft != null && Aircraft.LocalSim;
+
+        /// <summary>0 idle, 1 charging, 2 recharging, 3 fault (sim status).</summary>
+        public int StateCode => Phase == LancePhase.Charging ? 1 : Phase == LancePhase.Fault ? 3 : Phase == LancePhase.Idle ? 0 : 2;
+
+        public int Rank => Phase == LancePhase.Charging ? 3 : Phase != LancePhase.Idle ? 2 : Heat > 0.12f ? 1 : 0;
+
+        /// <summary>0..1 engine draw: the bank while it charges, then a decaying tail while it primes.</summary>
+        public float Draw(float now)
+        {
+            LanceLook look = Look(now);
+            return look.Charging ? LanceDraw.ChargeDraw(look.Charge)
+                : look.Recharge01 >= 0f ? LanceDraw.RechargeDraw(LastPower, look.Recharge01) : 0f;
+        }
+
+        /// <summary>A wingman pod of a twin station shows the lead's cycle (the lead alone runs the state machine).</summary>
+        public void Mirror(LancePod lead)
+        {
+            Phase = lead.Phase;
+            HoldStart = lead.HoldStart;
+            LastHold = lead.LastHold;
+            Heat = lead.Heat;
+            CycleEnd = lead.CycleEnd;
+            ReadyAt = lead.ReadyAt;
+            RechargeTotal = lead.RechargeTotal;
+            LastPower = lead.LastPower;
+            ShotAt = lead.ShotAt;
+            LastAmmo = lead.LastAmmo;
+        }
+
+        public WeaponStation ResolveStation()
+        {
+            if (Station == null && Aircraft != null)
+                Station = Aircraft.weaponStations.Find(s => s.Weapons.Contains(Gun));
+            return Station;
+        }
+
+        public LanceLook Look(float now)
+        {
+            var look = new LanceLook { Heat = Heat, SinceShot = ShotAt > 0f ? now - ShotAt : -1f, LastPower = LastPower, Recharge01 = -1f };
+            if (Owner)
+            {
+                if (Phase == LancePhase.Charging)
+                {
+                    look.Charging = true;
+                    look.Charge = LanceCapacitor.Charge(now - HoldStart);
+                }
+                else if (Phase != LancePhase.Idle && RechargeTotal > 0f)
+                    look.Recharge01 = Mathf.Clamp01(1f - (ReadyAt - now) / RechargeTotal);
+                look.Fault = Phase == LancePhase.Fault;
+                return look;
+            }
+            float age = now - RemoteAt;
+            if (age < 0.6f && RemoteCharge > 0f)
+            {
+                look.Charging = true;
+                look.Charge = Mathf.Min(1f, RemoteCharge + 0.4f * Mathf.Min(age, 0.5f));
+            }
+            else if (look.SinceShot >= 0f)
+            {
+                float refill = look.SinceShot / (LanceCapacitor.CyclingSeconds + LanceCapacitor.RechargeSeconds(LastPower));
+                look.Recharge01 = refill < 1f ? refill : -1f;
+            }
+            return look;
+        }
+    }
+
     /// <summary>
-    /// RG-12 LANCE capacitor control. Gun.Fire is suppressed for the pod (LanceFirePatch); each call only
-    /// records trigger-held, and when the calls stop the service releases one slug scaled by hold time.
-    /// Single-mag pod: when the 12 rounds are gone the trigger goes dead, as vanilla.
+    /// RG-12 LANCE OVERCHARGE, owner peer. Gun.Fire is suppressed for the pod (LanceFirePatch); each call only records
+    /// trigger-held, and when the calls stop the service releases one slug scaled by hold time. The bank drains the
+    /// engines while it charges (LanceEngineDraw), the rails heat with every shot, a full charge punches through
+    /// everything on the line (LanceServer). The server decides every damage number; clients send the held charge.
+    /// The pods of one station (the default wing sets carry two) act as ONE bank: the first attached pod runs the cycle
+    /// and a release fires one slug from every pod, for one shot's heat, recharge, kick and shake.
     /// </summary>
     internal sealed class LanceService : MonoBehaviour, ISceneService
     {
         private const string Owner = "vanguard.lance";
         private const string Channel = "lance";
 
-        private sealed class Charge
-        {
-            public Gun Gun;
-            public WeaponStation Station;
-            public float Start = -99f;
-            public float LastHold = -99f;
-            public float ReadyAt;
-            public float RechargeTotal;
-            public WeaponInfo Clone;
-        }
-
-        private static readonly Dictionary<Gun, Charge> Charges = new Dictionary<Gun, Charge>();
+        public static readonly Dictionary<Gun, LancePod> Pods = new Dictionary<Gun, LancePod>();
+        private static readonly List<LancePod> Scratch = new List<LancePod>(4), Volley = new List<LancePod>(4);
+        private static readonly string[] DeratedWords = new string[102], SagWords = new string[102], CoolWords = new string[400];
+        /// <summary>AI pods release at 85 % charge; the sim switches this off to hold full charges.</summary>
+        public static bool AutoRelease = true;
+        private static LanceService instance;
 
         private readonly List<Gun> gone = new List<Gun>();
         private IHudBoard board;
-        private IHudLine line;
+        private IHudLine chargeLine, heatLine, busLine;
+
+        /// <summary>Held HUD lines right now (sim status: proves the player-owned board path ran).</summary>
+        public static int HudLines => instance == null ? 0 : (instance.chargeLine != null ? 1 : 0) + (instance.heatLine != null ? 1 : 0) + (instance.busLine != null ? 1 : 0);
+
+        private void Awake() => instance = this;
 
         public static bool IsLance(Gun gun) =>
-            gun != null && gun.info != null && gun.info.name.Contains(VanguardKeys.LanceInfo);
+            gun != null && (Pods.ContainsKey(gun) || (gun.info != null && gun.info.name.Contains(VanguardKeys.LanceInfo)));
 
         public void ResetForScene()
         {
-            Charges.Clear();
+            Pods.Clear();
             gone.Clear();
-            line?.Release();
-            line = null;
+            ReleaseLines();
+            LanceServer.Reset();
+        }
+
+        private void OnDestroy()
+        {
+            ResetForScene();
+            if (instance == this) instance = null;
+        }
+
+        public static LancePod Register(Gun gun, Aircraft aircraft)
+        {
+            if (Pods.TryGetValue(gun, out LancePod pod)) return pod;
+            pod = new LancePod(gun, aircraft);
+            Pods[gun] = pod;
+            if (!GameManager.IsHeadless) pod.View = LancePodView.Attach(pod);
+            return pod;
+        }
+
+        /// <summary>Every pod of the station in station order. A reused list: consume it before the next call.</summary>
+        public static List<LancePod> PodsIn(Aircraft aircraft, byte stationNumber)
+        {
+            Scratch.Clear();
+            if (aircraft != null && stationNumber < aircraft.weaponStations.Count)
+                foreach (Weapon weapon in aircraft.weaponStations[stationNumber].Weapons)
+                    if (weapon is Gun gun && Pods.TryGetValue(gun, out LancePod pod)) Scratch.Add(pod);
+            return Scratch;
+        }
+
+        /// <summary>Pods of the station still on their pylons: the most slugs one release can fire.</summary>
+        public static int AttachedIn(WeaponStation station)
+        {
+            int attached = 0;
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun gun && gun.IsAttached() && Pods.ContainsKey(gun)) attached++;
+            return attached;
+        }
+
+        /// <summary>The first pod of the station that can still fire (attached, off safety, a round loaded); null = none can.</summary>
+        internal static LancePod LeadOf(WeaponStation station)
+        {
+            if (station == null || !LanceAccess.Available) return null;
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun gun && gun.IsAttached() && !gun.Safety && LanceAccess.BulletsLoaded(gun) > 0 && Pods.TryGetValue(gun, out LancePod pod)) return pod;
+            return null;
+        }
+
+        // The pod that owns the station's cycle: the lead, or (every round spent) the first pod, so the others keep mirroring one cycle.
+        private static LancePod CycleOwner(WeaponStation station)
+        {
+            LancePod lead = LeadOf(station);
+            if (lead != null || station == null) return lead;
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun gun && Pods.TryGetValue(gun, out LancePod pod)) return pod;
+            return null;
+        }
+
+        public static void Notice(HudTone tone, string text, string detail = null)
+        {
+            if (instance != null && instance.board != null) instance.board.Notice(Channel, tone, text, detail);
         }
 
         /// <summary>One trigger-held tick from the Fire patch. Never fires; Update fires on release.</summary>
         public static void Hold(Gun gun, WeaponStation station)
         {
-            if (gun == null || station == null || gun.Safety || !LanceAccess.Ensure()) return;
-            if (!Charges.TryGetValue(gun, out Charge c))
-            {
-                c = new Charge { Gun = gun };
-                Charges[gun] = c;
-            }
-            if (gun.info != c.Clone) // first hold, or Rearm swapped the shared asset back in
-            {
-                c.Clone = UnityEngine.Object.Instantiate(gun.info);
-                gun.info = c.Clone;
-            }
-            c.Station = station;
+            if (gun == null || station == null || !LanceAccess.Ensure()) return;
+            if (!Pods.TryGetValue(gun, out LancePod pod)) pod = Register(gun, gun.attachedUnit as Aircraft);
+            Aircraft aircraft = pod.Aircraft;
+            if (aircraft == null || !aircraft.LocalSim || gun.Safety || !gun.IsAttached()) return;
+            pod.Station = station;
             gun.SetWeaponStation(station);
+            // Linked-guns fire reaches every gun station; only the selected Lance station may charge.
+            if (aircraft.weaponManager.currentWeaponStation != station) return;
             float now = Time.time;
-            if (LanceAccess.BulletsLoaded(gun) <= 0 || station.Ammo <= 0 || now < c.ReadyAt)
+            LancePod lead = LeadOf(station);
+            if (lead != null && lead != pod) return; // a wingman: the lead's cycle covers the whole station
+            if (pod.Phase == LancePhase.Charging)
             {
-                c.LastHold = -99f; // dry or recharging: drop any banked hold
+                pod.LastHold = now;
                 return;
             }
-            if (c.LastHold < 0f || now - c.LastHold > LanceCapacitor.ReleaseGap) c.Start = now;
-            c.LastHold = now;
+            if (pod.Phase != LancePhase.Idle) return;
+            if (LanceAccess.BulletsLoaded(gun) <= 0 || station.Ammo <= 0)
+            {
+                if (aircraft.Player != null && now >= pod.NextEmpty)
+                {
+                    pod.NextEmpty = now + 2f;
+                    Notice(HudTone.Warning, "LANCE EMPTY");
+                }
+                return;
+            }
+            pod.Phase = LancePhase.Charging;
+            pod.HoldStart = pod.LastHold = pod.NextSend = now;
+            VanguardStats.Bump("lance.charges");
         }
 
         private void Update()
         {
-            float now = Time.time;
+            float now = Time.time, dt = Time.deltaTime;
             gone.Clear();
-            foreach (KeyValuePair<Gun, Charge> pair in Charges)
+            GameManager.GetLocalAircraft(out Aircraft me);
+            LancePod mine = null;
+            foreach (KeyValuePair<Gun, LancePod> pair in Pods)
             {
-                Charge c = pair.Value;
-                if (c.Gun == null)
+                LancePod pod = pair.Value;
+                if (pod.Gun == null || pod.Aircraft == null)
                 {
                     gone.Add(pair.Key);
                     continue;
                 }
-                if (c.LastHold > 0f && now - c.LastHold > LanceCapacitor.ReleaseGap && now >= c.ReadyAt) Fire(c, now);
+                if (pod.Aircraft.disabled) continue;
+                pod.Heat = LanceHeat.Step(pod.Heat, pod.Aircraft.speed, dt);
+                if (pod.Owner)
+                {
+                    LancePod owner = CycleOwner(pod.ResolveStation());
+                    if (owner == null || owner == pod) Tick(pod, now);
+                    else pod.Mirror(owner);
+                }
+                if (pod.Aircraft == me && (mine == null || pod.Rank > mine.Rank)) mine = pod;
             }
-            for (int i = 0; i < gone.Count; i++) Charges.Remove(gone[i]);
-            Hud(now);
+            for (int i = 0; i < gone.Count; i++) Pods.Remove(gone[i]);
+            LanceServer.Prune(now);
+            Hud(mine, now);
         }
 
-        private static void Fire(Charge c, float now)
+        private static void Tick(LancePod pod, float now)
         {
-            c.LastHold = -99f;
-            Gun gun = c.Gun;
-            int loaded = LanceAccess.BulletsLoaded(gun);
-            if (c.Station == null || c.Station.Ammo <= 0 || loaded <= 0)
+            Aircraft aircraft = pod.Aircraft;
+            WeaponStation station = pod.ResolveStation();
+            if (station == null) return;
+            if (pod.LastAmmo >= 0 && station.Ammo > pod.LastAmmo) // rearmed: rails serviced, bank ready
             {
-                c.RechargeTotal = 0.3f; // dry click: brief lockout, no recharge
-                c.ReadyAt = now + c.RechargeTotal;
+                pod.Heat = 0f;
+                if (pod.Phase != LancePhase.Charging) pod.Phase = LancePhase.Idle;
+            }
+            pod.LastAmmo = station.Ammo;
+            switch (pod.Phase)
+            {
+                case LancePhase.Charging:
+                    if (!CanHold(pod))
+                    {
+                        pod.Phase = LancePhase.Idle; // switched station, gear down, pod gone, rounds gone: no shot, no ammo
+                        LanceNet.SendCancel(pod);
+                        VanguardStats.Bump("lance.cancels");
+                        break;
+                    }
+                    float charge = LanceCapacitor.Charge(now - pod.HoldStart);
+                    bool held = now - pod.LastHold <= LanceCapacitor.ReleaseGap;
+                    if (!held || (aircraft.Player == null && AutoRelease && charge >= LanceCapacitor.AiReleaseCharge)) Release(pod, now);
+                    else if (now >= pod.NextSend)
+                    {
+                        pod.NextSend = now + 0.25f;
+                        LanceNet.SendCharge(pod, charge);
+                    }
+                    break;
+                case LancePhase.Cycling:
+                    if (now >= pod.CycleEnd) pod.Phase = LancePhase.Recharging;
+                    break;
+                case LancePhase.Recharging:
+                case LancePhase.Fault:
+                    if (now >= pod.ReadyAt)
+                    {
+                        pod.Phase = LancePhase.Idle;
+                        if (aircraft.Player != null) Notice(HudTone.Info, "LANCE READY");
+                    }
+                    break;
+            }
+        }
+
+        private static bool CanHold(LancePod pod) =>
+            pod.Gun != null && pod.Station != null && pod.Aircraft.weaponManager.currentWeaponStation == pod.Station &&
+            !pod.Station.SafetyIsOn(pod.Aircraft) && pod.Gun.IsAttached() && !pod.Gun.Safety &&
+            pod.Station.Ammo > 0 && LanceAccess.BulletsLoaded(pod.Gun) > 0;
+
+        private static void Release(LancePod pod, float now)
+        {
+            WeaponStation station = pod.Station;
+            Aircraft aircraft = pod.Aircraft;
+            Volley.Clear();
+            foreach (Weapon weapon in station.Weapons)
+                if (weapon is Gun g && g.IsAttached() && !g.Safety && LanceAccess.BulletsLoaded(g) > 0 && Pods.TryGetValue(g, out LancePod member)) Volley.Add(member);
+            int count = Volley.Count;
+            if (count == 0)
+            {
+                pod.Phase = LancePhase.Idle; // every round is gone: nothing to fire
                 return;
             }
-            float power = LanceCapacitor.Power01(LanceCapacitor.Charge(now - c.Start));
-            c.Clone.blastDamage = LanceCapacitor.Blast(power);
-            c.Clone.pierceDamage = LanceCapacitor.Pierce(power);
-            c.Clone.muzzleVelocity = LanceCapacitor.Velocity(power);
-            LanceAccess.SetMuzzleVelocity(gun, LanceCapacitor.Velocity(power));
-            LanceAccess.SetTracerSize(gun, LanceCapacitor.Tracer(power));
-            LanceAccess.Fire(gun);
-            LanceAccess.SetBulletsLoaded(gun, loaded - 1);
-            gun.ammo--;
-            c.Station.UpdateLastFired(1);
-            c.Station.Updated();
-            c.RechargeTotal = LanceCapacitor.RechargeSeconds(power);
-            c.ReadyAt = now + c.RechargeTotal;
+            float requested = LanceCapacitor.Power01(LanceCapacitor.Charge(pod.LastHold - pod.HoldStart));
+            bool fault = LanceHeat.IsFault(pod.Heat);
+            float power = requested * (fault ? LanceHeat.FaultPower : LanceHeat.Derate(pod.Heat));
+            // The server learns the shot BEFORE the vanilla bullet exists, so its hit claim always finds this release.
+            // One entry per slug: the server pairs each of the volley's hit claims with its own.
+            if (GameAccess.IsServer())
+            {
+                LanceServer.Enqueue(aircraft, power, now, count);
+                LanceNet.ServerShot(pod, power);
+            }
+            else LanceNet.SendRelease(pod, requested, count);
+            int ammoBefore = station.Ammo;
+            for (int i = 0; i < count; i++)
+            {
+                Gun gun = Volley[i].Gun;
+                station.Ammo = ammoBefore - i; // each SpawnBullet reports Ammo - 1 to the peers: count the volley down so the last report is true
+                LanceAccess.SetTracerSize(gun, LanceCapacitor.Tracer(power));
+                LanceAccess.Fire(gun);
+                LanceAccess.SetBulletsLoaded(gun, LanceAccess.BulletsLoaded(gun) - 1);
+                gun.ammo--;
+            }
+            station.Ammo = ammoBefore;
+            station.UpdateLastFired(count);
+            station.Updated();
+
+            pod.Heat += LanceHeat.ShotHeat(power);
+            float recharge = LanceCapacitor.CyclingSeconds + (fault
+                ? Mathf.Max(LanceCapacitor.RechargeSeconds(power), LanceHeat.FaultLockout)
+                : LanceCapacitor.RechargeSeconds(power));
+            pod.Phase = fault ? LancePhase.Fault : LancePhase.Cycling;
+            pod.CycleEnd = now + LanceCapacitor.CyclingSeconds;
+            pod.ReadyAt = now + recharge;
+            pod.RechargeTotal = recharge;
+            pod.LastPower = power;
+            pod.ShotAt = now;
+            VanguardStats.Bump("lance.shots", count);
+            VanguardStats.Bump("lance.volleys");
+            if (fault) VanguardStats.Bump("lance.faults");
+
+            Kick(aircraft, pod.Gun, power); // once per volley, not per pod
+            foreach (LancePod member in Volley)
+                if (member.View != null) member.View.PlayShot(power); // Unity null check: the view may have been destroyed
+            if (aircraft.Player != null)
+            {
+                if (fault) Notice(HudTone.Warning, "RAIL FAULT - COOLING");
+                if (GameManager.GetLocalAircraft(out Aircraft me) && me == aircraft)
+                {
+                    LanceCapacitor.Shake(power, out float low, out float high);
+                    SceneSingleton<CameraStateManager>.i?.ShakeCamera(low, high);
+                }
+            }
         }
 
-        private void Hud(float now)
+        // VelocityChange keeps the kick mass-independent; positive spin about +right pitches the nose DOWN, so nose-up is -right.
+        private static void Kick(Aircraft aircraft, Gun gun, float power)
+        {
+            Rigidbody rb = aircraft.rb;
+            if (rb == null) return;
+            LanceCapacitor.Kick(power, out float back, out float noseUp);
+            rb.AddForce(-gun.transform.forward * back, ForceMode.VelocityChange);
+            rb.AddTorque(-aircraft.transform.right * noseUp, ForceMode.VelocityChange);
+        }
+
+        // ---- HUD (local player's aircraft only)
+
+        private void Hud(LancePod pod, float now)
         {
             if (board == null && !ModuleServices.TryGet(out board)) return;
             board.DeclareChannel(Channel, "LANCE");
-            if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled)
+            if (pod == null || !pod.Owner || pod.Aircraft.Player == null || pod.Aircraft.disabled)
             {
-                line?.Release();
-                line = null;
+                ReleaseLines();
                 return;
             }
-            Charge mine = null;
-            foreach (Charge c in Charges.Values)
-                if (c.Gun != null && c.Gun.attachedUnit == me)
-                {
-                    mine = c;
-                    break;
-                }
-            if (mine == null)
+            LanceLook look = pod.Look(now);
+            // charge / recharge / fault line
+            if (look.Charging)
             {
-                line?.Release();
-                line = null;
-                return;
+                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                if (look.Charge >= 0.995f) chargeLine?.Set(HudTone.Info, "LANCE READY", "RELEASE TO FIRE", 1f);
+                else chargeLine?.Set(HudTone.Caution, "LANCE CHARGE", TierWord(LanceCapacitor.TierOf(look.Charge)), look.Charge);
             }
-            if (mine.LastHold > 0f && now - mine.LastHold <= LanceCapacitor.ReleaseGap)
+            else if (pod.Phase == LancePhase.Fault)
             {
-                float charge = LanceCapacitor.Charge(now - mine.Start);
-                line ??= board.Acquire(Owner, Channel, "charge");
-                if (charge >= 1f) line?.Set(HudTone.Info, "LANCE READY", "RELEASE TO FIRE", 1f);
-                else line?.Set(HudTone.Caution, "LANCE CHARGE", "HOLD TO POWER UP", charge);
+                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                chargeLine?.Set(HudTone.Warning, "RAIL FAULT", CoolingWord(pod.ReadyAt - now), Mathf.Max(0f, look.Recharge01));
             }
-            else if (now < mine.ReadyAt && mine.RechargeTotal > 0f)
+            else if (pod.Phase != LancePhase.Idle)
             {
-                line ??= board.Acquire(Owner, Channel, "charge");
-                line?.Set(HudTone.Warning, "LANCE RECHARGE", "CAPACITOR BANK", 1f - (mine.ReadyAt - now) / mine.RechargeTotal);
+                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                chargeLine?.Set(HudTone.Warning, "LANCE RECHARGE", "BANK PRIMING", Mathf.Max(0f, look.Recharge01));
             }
             else
             {
-                line?.Release();
-                line = null;
+                chargeLine?.Release();
+                chargeLine = null;
             }
+            // rail heat line
+            if (pod.Heat >= 0.12f || look.Charging)
+            {
+                heatLine ??= board.Acquire(Owner, Channel, "heat");
+                HudTone tone = pod.Heat >= LanceHeat.DerateStart ? HudTone.Warning : pod.Heat >= LanceHeat.HotAt ? HudTone.Caution : HudTone.Info;
+                heatLine?.Set(tone, "RAIL HEAT", HeatWord(pod.Heat), Mathf.Min(pod.Heat, 1f));
+            }
+            else
+            {
+                heatLine?.Release();
+                heatLine = null;
+            }
+            // bus draw line
+            float sag = LanceEngineDraw.SagOf(pod.Aircraft);
+            float draw = pod.Draw(now);
+            if (draw >= 0.05f)
+            {
+                busLine ??= board.Acquire(Owner, Channel, "bus");
+                int sagPct = Mathf.RoundToInt(sag * 100f); // the afterburner only drops out once the engines actually lose thrust
+                busLine?.Set(HudTone.Caution, "BUS DRAW", sagPct > 0 ? Cached(SagWords, sagPct, "AB OFFLINE  -", "% THRUST") : "BUS STANDBY", draw);
+            }
+            else
+            {
+                busLine?.Release();
+                busLine = null;
+            }
+            // cockpit: the stutter is the vanilla jam effect on the HUD markers plus a low hum
+            if (look.Charging)
+            {
+                float level = LanceDraw.FlickerLevel(look.Charge);
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                if (hud != null && level > 0f) hud.jamAccumulation = Mathf.Max(hud.jamAccumulation, 0.35f * level);
+                if (level > 0.5f) SceneSingleton<CameraStateManager>.i?.ShakeCamera(0.03f * level, 0.06f * level);
+            }
+        }
+
+        private static string TierWord(LanceTier tier) =>
+            tier == LanceTier.Snap ? "SNAP" : tier == LanceTier.Punch ? "PUNCH" : "THROUGH-SHOT";
+
+        private static string HeatWord(float heat)
+        {
+            switch (LanceHeat.BandOf(heat))
+            {
+                case HeatBand.Cool: return "NOMINAL";
+                case HeatBand.Warm: return "WARM";
+                case HeatBand.Hot: return "HOT";
+                case HeatBand.Derated: return Cached(DeratedWords, Mathf.RoundToInt((1f - LanceHeat.Derate(heat)) * 100f), "DERATED -", "% POWER");
+                default: return "OVERHEAT  NEXT SHOT FAULTS";
+            }
+        }
+
+        // The HUD sets these strings every frame: build each distinct one once.
+        private static string Cached(string[] cache, int index, string prefix, string suffix)
+        {
+            index = Mathf.Clamp(index, 0, cache.Length - 1);
+            return cache[index] ??= prefix + index + suffix;
+        }
+
+        private static string CoolingWord(float seconds)
+        {
+            int tenths = Mathf.Clamp(Mathf.CeilToInt(seconds * 10f), 0, CoolWords.Length - 1);
+            return CoolWords[tenths] ??= "COOLING  " + tenths / 10 + "." + tenths % 10;
+        }
+
+        private void ReleaseLines()
+        {
+            chargeLine?.Release();
+            heatLine?.Release();
+            busLine?.Release();
+            chargeLine = heatLine = busLine = null;
         }
     }
 }
