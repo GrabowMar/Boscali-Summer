@@ -54,6 +54,9 @@ namespace BoscaliSummer.Vanguard
                     Modules.Vanguard.Domain.SeductionRule.LureChance = Number(args, "bait", 0.25f);
                     return Status(lead);
                 case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
+                case "cut": return AlexCut(lead);
+                case "alexfit": return AlexFit(lead);
+                case "alexpress": return AlexPress(lead, (int)Number(args, "calls", 1f));
                 case "snapg":
                     Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
                     return Status(lead);
@@ -370,6 +373,7 @@ namespace BoscaliSummer.Vanguard
             // Sim check paths split on '.', so each counter is mirrored as <key>_<event> as well.
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key.Replace('.', '_')] = counter.Value;
             Modules.Vanguard.Runtime.SentinelDrone.Report(state, Launched);
+            AlexStatus(state, lead);
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

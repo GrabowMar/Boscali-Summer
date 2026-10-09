@@ -25,14 +25,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return FormationSlot.FirstFree(used);
         }
 
-        // ALE-X: one decoy on the fiber per aircraft. A new deployment cuts the old one.
+        // ALE-X: one decoy on the fiber per aircraft. A new deployment cuts the old one loose (it flies on, see CutKite).
         public static void CutTowed(Unit launcher)
         {
             if (launcher == null) return;
             var cut = new List<VanguardFlight>();
             foreach (VanguardFlight flight in Flights.Values)
                 if (flight.Role == VanguardRole.Towed && flight.Launcher == launcher) cut.Add(flight);
-            foreach (VanguardFlight flight in cut) flight.Scuttle();
+            foreach (VanguardFlight flight in cut) flight.CutKite(KiteCut.Replaced);
         }
 
         public static void Clear() => Flights.Clear();

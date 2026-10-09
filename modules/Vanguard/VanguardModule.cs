@@ -34,7 +34,12 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.LanceArmorPenetratePatch),
             typeof(Patches.LanceTurbineThrottlePatch),
             typeof(Patches.SkywellLaunchPatch),
-            typeof(Patches.SkywellFirePatch)
+            typeof(Patches.SkywellFirePatch),
+            typeof(Patches.AlexPressPatch),
+            typeof(Patches.AlexLaunchPatch),
+            typeof(Patches.AlexDeflectArhPatch),
+            typeof(Patches.AlexDeflectSarhPatch),
+            typeof(Patches.AlexSuppressPatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);
@@ -62,6 +67,9 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
             context.AddSceneService<Networking.RemoraNet>(60);
             context.AddSceneService<Presentation.RemoraHud>(60);
+            context.AddSceneService<AlexService>(60);
+            context.AddSceneService<Networking.AlexNet>(60);
+            context.AddSceneService<Presentation.AlexHud>(60);
         }
     }
 }
