@@ -223,7 +223,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             head.Measure(boundAircraft, Time.fixedDeltaTime);
             if (head.Discontinuity)
             {
-                physiology.Reset();
                 shake.ResetMeasurements();
                 airframeAudio?.Silence();
             }

@@ -24,32 +24,45 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap"), LightId = Shader.PropertyToID("_LightLevel");
         private readonly List<KeyValuePair<string, int>> loadout = new List<KeyValuePair<string, int>>(12);
         private readonly Action markDirty;
+        private readonly KneeboardSchedule schedule = new KneeboardSchedule();
         private GameObject quad;
         private Mesh mesh;
         private Material material;
         private RenderTexture card;
         private Texture2D plain;
         private Aircraft aircraft;
-        private bool dirty, cameraOverBudget, warned;
+        private bool cardValid, warned;
 
-        internal Kneeboard() { markDirty = () => dirty = true; }
+        internal Kneeboard() { markDirty = () => schedule.MarkDirty(); }
 
         internal bool Bound => quad != null;
         internal Renderer Renderer { get; private set; }
         internal float LastRenderMs { get; private set; } = -1f;
         internal string Side { get; private set; } = "none";
 
-        /// <summary>Places the card on the thigh in its current (seated) pose; parenting keeps it there as the rig moves.</summary>
+        /// <summary>True once per cockpit entry: a failed bind is not retried every frame.</summary>
+        internal bool TryBeginBind() => schedule.BeginBind();
+
+        /// <summary>Places the card on the thigh in its current (seated) pose; parenting keeps it there as the rig moves.
+        /// The same aircraft keeps its rendered card across cockpit re-entries.</summary>
         internal void Bind(Transform thigh, Transform knee, Vector3 up, bool rightThigh, Aircraft owner, Shader shader)
         {
-            Release();
+            Detach();
             if (thigh == null || knee == null || owner == null || shader == null || !shader.isSupported) return;
             Vector3 along = knee.position - thigh.position;
             if (along.sqrMagnitude < .01f) return;
             Vector3 forward = along.normalized;
             Vector3 top = Vector3.ProjectOnPlane(up, forward).normalized;
             if (top.sqrMagnitude < .5f) return;
-            aircraft = owner;
+            if (!ReferenceEquals(owner, aircraft))
+            {
+                Unsubscribe();
+                aircraft = owner;
+                cardValid = false;
+                owner.OnRearmUnit += markDirty;
+                owner.onLoadoutChanged += markDirty;
+            }
+            schedule.Bound(owner.GetInstanceID());
             Side = rightThigh ? "right" : "left";
             quad = new GameObject("Boscali.Kneeboard") { layer = 3 }; // PhysicsLayers.Cockpit, like the body
             quad.transform.SetPositionAndRotation(thigh.position + along * .62f + top * .095f, Quaternion.LookRotation(-top, forward));
@@ -66,52 +79,74 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             renderer.receiveShadows = false;
             renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
             renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
-            material = new Material(shader) { name = "Boscali.Kneeboard", hideFlags = HideFlags.HideAndDontSave };
-            material.SetFloat("_BodyVisible", 1f);
-            material.SetFloat("_HeadMaskMode", 0f);
-            material.SetFloat("_Smoothness", .15f);
+            if (material == null)
+            {
+                material = new Material(shader) { name = "Boscali.Kneeboard", hideFlags = HideFlags.HideAndDontSave };
+                material.SetFloat("_BodyVisible", 1f);
+                material.SetFloat("_HeadMaskMode", 0f);
+                material.SetFloat("_Smoothness", .15f);
+            }
             renderer.sharedMaterial = material;
-            owner.OnRearmUnit += markDirty;
-            owner.onLoadoutChanged += markDirty;
-            dirty = true;
+            if (cardValid) material.SetTexture(BaseMapId, card);
         }
 
-        /// <summary>Cheap per-frame check; the card is re-rendered only after bind, rearm or loadout change.</summary>
+        /// <summary>Cheap per-frame check; the card is re-rendered only for a new aircraft, a rearm or a loadout change.</summary>
         internal void Tick()
         {
-            if (!dirty || quad == null) return;
-            dirty = false;
+            if (quad == null || !schedule.TakeRender()) return;
             Render();
         }
 
         internal void SetVisible(bool visible) { if (quad != null && quad.activeSelf != visible) quad.SetActive(visible); }
         internal void SetLight(float level) { if (material != null) material.SetFloat(LightId, level); }
 
-        internal void Release()
+        /// <summary>Leaving the cockpit view: drop the quad, keep the aircraft's rendered card and its rearm subscription.</summary>
+        internal void Detach()
         {
-            if (aircraft != null) { aircraft.OnRearmUnit -= markDirty; aircraft.onLoadoutChanged -= markDirty; }
             if (quad != null) Object.Destroy(quad);
             if (mesh != null) Object.Destroy(mesh);
+            quad = null; mesh = null; Renderer = null; Side = "none";
+            schedule.Detach();
+        }
+
+        internal void Release()
+        {
+            Detach();
+            Unsubscribe();
             if (material != null) Object.Destroy(material);
             if (card != null) { card.Release(); Object.Destroy(card); }
             if (plain != null) Object.Destroy(plain);
-            quad = null; mesh = null; material = null; card = null; plain = null; aircraft = null; Renderer = null;
-            dirty = false; Side = "none";
+            material = null; card = null; plain = null; aircraft = null; cardValid = false;
+            schedule.Reset();
+        }
+
+        private void Unsubscribe()
+        {
+            // A destroyed aircraft still holds the managed delegate list; detach regardless of Unity's null.
+            if ((object)aircraft == null) return;
+            aircraft.OnRearmUnit -= markDirty;
+            aircraft.onLoadoutChanged -= markDirty;
         }
 
         private void Render()
         {
-            var watch = Stopwatch.StartNew();
             string[] lines = KneeboardCard.Lines(aircraft.unitName, aircraft.definition != null ? aircraft.definition.unitName : null,
                 Loadout(), HomeBase(), MissionManager.CurrentMission != null ? MissionManager.CurrentMission.Name : "Free flight", TimeOfDay());
-            if (!cameraOverBudget && RenderCard(lines)) material.SetTexture(BaseMapId, card);
-            else material.SetTexture(BaseMapId, PlainCard());
-            LastRenderMs = (float)watch.Elapsed.TotalMilliseconds;
-            if (LastRenderMs > 2f && !cameraOverBudget)
+            if (schedule.UseCamera)
             {
-                cameraOverBudget = true;
-                if (!warned) { warned = true; Plugin.Logger?.LogWarning($"[Immersion] Kneeboard card took {LastRenderMs:0.0} ms; later cards use the plain texture."); }
+                var watch = Stopwatch.StartNew();
+                bool rendered = RenderCard(lines);
+                LastRenderMs = (float)watch.Elapsed.TotalMilliseconds;
+                schedule.Recorded(LastRenderMs);
+                if (rendered) cardValid = true;
+                if (!schedule.UseCamera && !warned)
+                {
+                    warned = true;
+                    Plugin.Logger?.LogWarning($"[Immersion] Kneeboard card took {LastRenderMs:0.0} ms; later cards keep the last one.");
+                }
             }
+            // Over budget: keep the last rendered card (stale after a rearm) rather than blanking it.
+            material.SetTexture(BaseMapId, cardValid ? (Texture)card : PlainCard());
         }
 
         private bool RenderCard(string[] lines)
@@ -124,40 +159,46 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     { name = "Boscali.KneeboardCard", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
                 card.Create();
             }
-            var root = new GameObject("Boscali.KneeboardCard") { layer = CardLayer };
-            root.transform.position = new Vector3(0f, -50000f, 0f);
-            var canvas = root.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.WorldSpace;
-            var rect = (RectTransform)root.transform;
-            rect.sizeDelta = new Vector2(Size, Size);
-            Image(root.transform, "Paper", Paper, Vector2.zero, Vector2.one);
-            Image(root.transform, "Clip", new Color(.22f, .23f, .22f), new Vector2(.3f, .94f), new Vector2(.7f, 1f));
-            Text(root.transform, "<mspace=0.58em>" + string.Join("\n", lines) + "</mspace>", font, 25f, Ink, new Vector2(.06f, .04f), new Vector2(.97f, .92f), 0f);
-            Text(root.transform, "TRAINING", font, 44f, Stamp, new Vector2(.45f, .04f), new Vector2(.98f, .2f), 12f);
-            var holder = new GameObject("Boscali.KneeboardCamera");
-            var camera = holder.AddComponent<Camera>();
-            camera.enabled = false;
-            camera.orthographic = true;
-            camera.orthographicSize = Size / 2f;
-            camera.transform.SetPositionAndRotation(root.transform.position - Vector3.forward * 10f, Quaternion.identity);
-            camera.nearClipPlane = .1f; camera.farClipPlane = 50f;
-            camera.cullingMask = 1 << CardLayer;
-            camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = Paper;
-            camera.allowHDR = false; camera.allowMSAA = false;
-            camera.targetTexture = card;
-            bool ok = true;
+            GameObject root = null, holder = null;
             try
             {
+                root = new GameObject("Boscali.KneeboardCard") { layer = CardLayer };
+                root.transform.position = new Vector3(0f, -50000f, 0f);
+                var canvas = root.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.WorldSpace;
+                ((RectTransform)root.transform).sizeDelta = new Vector2(Size, Size);
+                Image(root.transform, "Paper", Paper, Vector2.zero, Vector2.one);
+                Image(root.transform, "Clip", new Color(.22f, .23f, .22f), new Vector2(.3f, .94f), new Vector2(.7f, 1f));
+                Text(root.transform, "<mspace=0.58em>" + string.Join("\n", lines) + "</mspace>", font, 25f, Ink, new Vector2(.06f, .04f), new Vector2(.97f, .92f), 0f);
+                Text(root.transform, "TRAINING", font, 44f, Stamp, new Vector2(.45f, .04f), new Vector2(.98f, .2f), 12f);
+                holder = new GameObject("Boscali.KneeboardCamera");
+                var camera = holder.AddComponent<Camera>();
+                camera.enabled = false;
+                camera.orthographic = true;
+                camera.orthographicSize = Size / 2f;
+                camera.transform.SetPositionAndRotation(root.transform.position - Vector3.forward * 10f, Quaternion.identity);
+                camera.nearClipPlane = .1f; camera.farClipPlane = 50f;
+                camera.cullingMask = 1 << CardLayer;
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = Paper;
+                camera.allowHDR = false; camera.allowMSAA = false;
+                camera.targetTexture = card;
                 Canvas.ForceUpdateCanvases();
                 camera.Render();
+                camera.targetTexture = null;
+                return true;
             }
-            catch (Exception) { ok = false; }
-            camera.targetTexture = null;
-            // Immediate: nothing on the card layer may outlive this call into another camera's frame.
-            Object.DestroyImmediate(holder);
-            Object.DestroyImmediate(root);
-            return ok;
+            catch (Exception error)
+            {
+                if (!warned) { warned = true; Plugin.Logger?.LogWarning("[Immersion] Kneeboard card render failed: " + error.Message); }
+                return false;
+            }
+            finally
+            {
+                // Immediate: nothing on the card layer may outlive this call into another camera's frame.
+                if (holder != null) Object.DestroyImmediate(holder);
+                if (root != null) Object.DestroyImmediate(root);
+            }
         }
 
         private Texture2D PlainCard()

@@ -91,7 +91,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 rig.SetLight(light);
                 rig.SetBodyVisible(settings.PilotBodyEnabled.Value);
                 // Handedness is known once controls bind (or after a short grace for control-less layouts).
-                if (!kneeboard.Bound && (controlsBound || Time.frameCount > bindFrame + 30)) BindKneeboard();
+                if (!kneeboard.Bound && (controlsBound || Time.frameCount > bindFrame + 30) && kneeboard.TryBeginBind()) BindKneeboard();
                 kneeboard.SetVisible(settings.PilotBodyEnabled.Value);
                 kneeboard.SetLight(Mathf.Clamp(light, .06f, 1f));
                 kneeboard.Tick();
@@ -258,13 +258,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public void ResetForScene()
         {
-            kneeboard.Release(); reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
+            kneeboard.Detach(); reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
             controlsBound = stickExpected = throttleExpected = false;
             retryAt = controlsRetryAt = 0; warnedAircraft = 0; reportedControls = -1;
         }
-        public void ReleaseFx() { ResetForScene(); PilotShaderBundle.Release(); }
+        public void ReleaseFx() { ResetForScene(); kneeboard.Release(); PilotShaderBundle.Release(); }
         private void OnDisable() => ResetForScene();
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy() { ResetForScene(); kneeboard.Release(); }
         public void DescribeFx(IDictionary<string, object> state)
         {
             state["pilotBodyBound"] = rig.Valid;

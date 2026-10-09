@@ -64,4 +64,58 @@ namespace BoscaliSummer.Modules.Immersion.Domain
 
         private static string Fit(string line) => line.Length <= Width ? line : line.Substring(0, Width - 3) + "...";
     }
+
+    /// <summary>
+    /// When the kneeboard binds and renders. One bind attempt per cockpit entry. One render per aircraft, plus one
+    /// after a rearm or loadout change, never per cockpit re-entry. The camera path is dropped only when a warm render
+    /// exceeds 2 ms (the first, cold render, which builds the texture and the font atlas, may take 8 ms).
+    /// </summary>
+    internal sealed class KneeboardSchedule
+    {
+        public const float WarmBudgetMs = 2f, ColdBudgetMs = 8f;
+        private int aircraft, renders;
+        private bool attempted, dirty;
+
+        public bool UseCamera { get; private set; } = true;
+
+        public bool BeginBind()
+        {
+            if (attempted) return false;
+            attempted = true;
+            return true;
+        }
+
+        public void Bound(int aircraftId)
+        {
+            if (aircraftId == aircraft) return;
+            aircraft = aircraftId;
+            dirty = true;
+            renders = 0;
+            UseCamera = true;
+        }
+
+        public void MarkDirty() => dirty = true;
+
+        public bool TakeRender()
+        {
+            if (!dirty) return false;
+            dirty = false;
+            return true;
+        }
+
+        public void Recorded(float milliseconds)
+        {
+            renders++;
+            if (!(milliseconds <= (renders == 1 ? ColdBudgetMs : WarmBudgetMs))) UseCamera = false;
+        }
+
+        public void Detach() => attempted = false;
+
+        public void Reset()
+        {
+            aircraft = renders = 0;
+            attempted = dirty = false;
+            UseCamera = true;
+        }
+    }
 }

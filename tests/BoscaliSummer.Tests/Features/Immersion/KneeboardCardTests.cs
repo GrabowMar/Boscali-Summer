@@ -38,6 +38,27 @@ namespace BoscaliSummer.Tests.Features.Immersion
                     TestAssert.That(line.Length <= KneeboardCard.Width, "Every line fits the card: " + line);
             TestAssert.That(Array.Exists(wide, l => l.EndsWith("...", StringComparison.Ordinal)) && Array.Exists(wide, l => l.Contains("23:59 L")),
                 "Overlong text is cut with an ellipsis; the clock never rolls to 24:00.");
+
+            var schedule = new KneeboardSchedule();
+            TestAssert.That(schedule.BeginBind() && !schedule.BeginBind(), "A bind is attempted once per cockpit entry, never every frame.");
+            schedule.Bound(101);
+            TestAssert.That(schedule.TakeRender() && !schedule.TakeRender(), "A new aircraft's card renders once.");
+            schedule.Recorded(6f);
+            TestAssert.That(schedule.UseCamera, "A cold first render (RT, TMP atlas, URP warm-up) does not latch the plain fallback.");
+            schedule.Detach();
+            TestAssert.That(schedule.BeginBind(), "Re-entering the cockpit may bind again.");
+            schedule.Bound(101);
+            TestAssert.That(!schedule.TakeRender(), "Re-entering the same aircraft's cockpit keeps the card; no re-render.");
+            schedule.MarkDirty();
+            TestAssert.That(schedule.TakeRender(), "Rearm or loadout change re-renders the card.");
+            schedule.Recorded(1.2f);
+            TestAssert.That(schedule.UseCamera, "A warm render within 2 ms keeps the camera path.");
+            schedule.MarkDirty(); schedule.TakeRender(); schedule.Recorded(3f);
+            TestAssert.That(!schedule.UseCamera, "A warm render over 2 ms switches later cards off the camera.");
+            schedule.Detach(); schedule.BeginBind(); schedule.Bound(202);
+            TestAssert.That(schedule.TakeRender() && schedule.UseCamera, "A different aircraft gets a fresh card and a fresh budget.");
+            schedule.Reset();
+            TestAssert.That(schedule.BeginBind() && !schedule.TakeRender(), "Reset forgets the aircraft and pending renders.");
         }
     }
 }
