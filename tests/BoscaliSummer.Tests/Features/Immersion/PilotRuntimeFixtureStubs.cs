@@ -107,12 +107,29 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
 namespace BoscaliSummer.Modules.Immersion.Runtime
 {
     internal sealed class FixtureHead { internal Vector3 ForceG = Vector3.up; }
+    internal sealed class FixturePhysiology { internal float ChestLift01 = .5f; }
     internal sealed class ImmersionManager
     {
         internal static ImmersionManager Live;
         internal static bool IsCockpitActive;
         internal Quaternion HeadOffset = Quaternion.identity;
         internal readonly FixtureHead Head = new FixtureHead();
+        internal readonly FixturePhysiology Physiology = new FixturePhysiology();
+    }
+}
+namespace BoscaliSummer.Modules.Immersion.Visuals
+{
+    // The kneeboard's text rendering needs TMP and live game data; the pilot fixture only proves the body.
+    internal sealed class Kneeboard
+    {
+        internal bool Bound { get; private set; }
+        internal float LastRenderMs => -1f;
+        internal string Side => "none";
+        internal void Bind(Transform thigh, Transform knee, Vector3 up, bool rightThigh, Aircraft owner, Shader shader) => Bound = thigh != null;
+        internal void Tick() { }
+        internal void SetVisible(bool visible) { }
+        internal void SetLight(float level) { }
+        internal void Release() => Bound = false;
     }
 }
 #endif

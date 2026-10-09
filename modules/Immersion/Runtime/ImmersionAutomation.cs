@@ -29,6 +29,20 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Per-feature A/B switches (args: body, reflection, visor, breathing - each optional bool).</summary>
+        public static Dictionary<string, object> Configure(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            if (manager == null || manager.Settings == null) return Failure("ImmersionAutomation", "Configure", "no immersion manager in this scene");
+            if (Arg(args, "body") is bool body) manager.Settings.PilotBodyEnabled.Value = body;
+            if (Arg(args, "reflection") is bool reflection) manager.Settings.PilotReflectionEnabled.Value = reflection;
+            if (Arg(args, "visor") is bool visor) manager.Settings.HelmetVisorEnabled.Value = visor;
+            if (Arg(args, "breathing") is bool breathing) manager.Settings.PilotBreathingEnabled.Value = breathing;
+            manager.LogAutomation("Configure: body=" + manager.Settings.PilotBodyEnabled.Value + " reflection=" + manager.Settings.PilotReflectionEnabled.Value +
+                " visor=" + manager.Settings.HelmetVisorEnabled.Value + " breathing=" + manager.Settings.PilotBreathingEnabled.Value);
+            return Readout(manager);
+        }
+
         /// <summary>Drive pilot cues from a fixed G (args: g -5..12, seconds 0..30) through the vanilla-equation fallback.</summary>
         public static Dictionary<string, object> InjectG(Dictionary<string, object> args)
         {

@@ -87,6 +87,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public Quaternion HeadOffset => composedOffset;
         internal HeadMotion Head => head;
         internal PilotPhysiology Physiology => physiology;
+        internal ImmersionSettings Settings => settings;
         internal PilotCue Cues { get; private set; }
         internal void OnPlayerHit() => vitals.AddHit();
 
