@@ -1,0 +1,333 @@
+{
+  "name": "vg-glaive2s",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1200,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          90000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 11,
+      "conditions": 0.05,
+      "cloud_height": 6000,
+      "wind_speed": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "ground",
+        "range": 3500
+      },
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Glaive2S",
+        "at": "ground"
+      },
+      "store": "launch"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "boost"
+    },
+    {
+      "op": "wait",
+      "seconds": 55
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "station"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "view"
+      },
+      "store": "view"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "capture",
+      "name": "spectre-orbit",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "firing"
+    },
+    {
+      "op": "capture",
+      "name": "spectre-firing",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "handoff",
+        "offset": 900
+      },
+      "store": "handoff"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "sliding"
+    },
+    {
+      "op": "capture",
+      "name": "spectre-handoff",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "handed"
+    },
+    {
+      "op": "wait",
+      "seconds": 130
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "ground.range",
+      "min": 3500
+    },
+    {
+      "check": "result_below",
+      "path": "ground.range",
+      "max": 6000
+    },
+    {
+      "check": "result_above",
+      "path": "boost.glaive2s.launch",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "boost.glaive2s.alive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "boost.glaive2s.phase",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2s.orbit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2s.phase",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "station.glaive2s.phase",
+      "max": 2
+    },
+    {
+      "check": "result_below",
+      "path": "station.glaive2s.centreToFirst",
+      "max": 60
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2s.radius",
+      "min": 150
+    },
+    {
+      "check": "result_below",
+      "path": "station.glaive2s.radius",
+      "max": 900
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2s.agl",
+      "min": 120
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2s.bank",
+      "min": 20
+    },
+    {
+      "check": "result_above",
+      "path": "firing.glaive2s.shots",
+      "min": 5
+    },
+    {
+      "check": "result_above",
+      "path": "firing.glaive2s.radius",
+      "min": 250
+    },
+    {
+      "check": "result_below",
+      "path": "firing.glaive2s.radius",
+      "max": 700
+    },
+    {
+      "check": "result_above",
+      "path": "firing.glaive2s.speed",
+      "min": 45
+    },
+    {
+      "check": "result_below",
+      "path": "firing.glaive2s.speed",
+      "max": 150
+    },
+    {
+      "check": "result_above",
+      "path": "sliding.glaive2s.handoff",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sliding.glaive2s.slide",
+      "min": 300
+    },
+    {
+      "check": "result_below",
+      "path": "sliding.glaive2s.slide",
+      "max": 900
+    },
+    {
+      "check": "result_below",
+      "path": "handed.glaive2s.slide",
+      "max": 60
+    },
+    {
+      "check": "result_below",
+      "path": "handed.glaive2s.centreToSecond",
+      "max": 60
+    },
+    {
+      "check": "result_above",
+      "path": "handed.glaive2s.phase",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "handed.glaive2s.shots",
+      "min": 15
+    },
+    {
+      "check": "result_above",
+      "path": "end.glaive2s.depart",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "end.glaive2s.shots",
+      "min": 20
+    }
+  ]
+}

@@ -55,8 +55,8 @@ namespace Vanguard
                 Description = "Air-launched folding-wing gun drone. Three-second launch boost, powered ingress toward the enemy, then a 300 m suppression orbit with a stabilized 7.62 mm gun. 180 rounds, short bursts, tracked hostile targets only; departs when dry or out of endurance.",
                 Mass = 80, Yield = 0, Cost = 1.2f, Value = 25, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
-            new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S Suppression Drone", Short = "GLAIVE-S", Model = "Glaive2S",
-                Description = "Wingborne suppression drone with launch assist, pusher propulsion and a light belly gun. Maintains a moving orbit, fires short aimed bursts, and leaves on ammunition or energy exhaustion. No hovering or parachute.",
+            new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S SPECTRE Gunship Drone", Short = "SPECTRE", Model = "Glaive2S",
+                Description = "Folding-wing gunship drone. Launch boost, 90 m/s ingress, then a left-hand pylon turn 450 m around the target and 350 m above it while its port-side 30 mm HE cannon fires short bursts: 240 rounds, 150 s on station. Designate a new ground target to HAND-OFF: the orbit slides to it.",
                 Mass = 80, Yield = 0, Cost = 1.6f, Value = 28, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Orca", Name = "AGT-80 ORCA Glide Torpedo", Short = "ORCA", Model = "Orca",
@@ -78,6 +78,7 @@ namespace Vanguard
             MaldxIdentity(infos["VG_MaldX"]);
             foreach (Spec spec in Missiles)
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
+            Glaive2S(); // VanguardBuilder.glaive2s.cs
             AegisPod(infos["VG_AegisDart"], materials);
             AleXPod(infos["VG_AleX"], materials);
             SkywellKit(materials);
@@ -112,7 +113,7 @@ namespace Vanguard
             if (fitted.size.y > .4f || fitted.size.x > .5f)
                 throw new Exception("AEGIS carriage exceeds the low-profile pylon envelope: " + fitted.size);
             Debug.Log("[Vanguard] AEGIS_CARRIAGE_SIZE " + fitted.size);
-            foreach (string key in new[] { "VG_Glaive2A", "VG_Glaive2S" })
+            foreach (string key in new[] { "VG_Glaive2A" }) // VG_Glaive2S: rest-relative check in Glaive2S()
             {
                 var pod = Load<GameObject>(R + key + ".prefab");
                 var guns = pod.GetComponentsInChildren<Gun>(true);
