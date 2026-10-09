@@ -64,7 +64,7 @@ namespace Vanguard
                 Mass = 600, Yield = 450, Pierce = 600, Cost = 1.5f, Value = 30, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple" } },
             new Spec { Key = "VG_AleX", Name = "ALE-X Towed Decoy", Short = "ALE-X", Model = "AleX",
-                Description = "Fiber-towed decoy. Trails 100 m behind the aircraft; radar missiles tracking you may switch to it, mostly from the rear. Lost above 7 g, below 50 m or after five minutes.",
+                Description = "Fiber-towed decoy on an automatic reel: 60 m of line, 150 m or 250 m once a radar missile tracks you. SUPPRESS slows turret locks, DEFLECT bends missile aimpoints toward it, SEDUCE takes missiles over. Fire again to CUT it loose: it keeps them for 20 s. The fiber snaps above 7 g or below 50 m.",
                 Mass = 20, Yield = 2, Cost = 0.05f, Value = 3, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
                 Racks = new string[0] }, // ALE-X gets its own two-decoy pod, see AleXPod()
         };
@@ -79,6 +79,7 @@ namespace Vanguard
                 foreach (string rack in spec.Racks) Mount(spec, infos[spec.Key], rack, materials);
             AegisPod(infos["VG_AegisDart"], materials);
             AleXPod(infos["VG_AleX"], materials);
+            AlexDress(materials);
             SkywellKit(materials);
             Lance(materials);
             AssetDatabase.SaveAssets();
@@ -794,39 +795,6 @@ namespace Vanguard
             }
             Edit(mount, s => P(s, "ammo").intValue = AegisCells.Length);
             // Compact enough for the self-protection stations that carry flare and ECM pods.
-            SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
-        }
-
-        // ALE-X: two decoys in aft tubes, released backward onto the fiber. = models/AleXPod.py CELLS (Blender x, y, z -> Unity x, z, y).
-        static readonly Vector3[] AleXCells = { new Vector3(0.06f, 0f, -0.7f), new Vector3(-0.06f, 0f, -0.7f) };
-
-        static void AleXPod(WeaponInfo info, Dictionary<string, Material> materials)
-        {
-            const string donor = "AGM_heavy_single";
-            const string json = "VG_AleX_Pod";
-            var mount = Copy<WeaponMount>(donor, "WM_" + json);
-            var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
-            g.name = json;
-            HideRenderers(g);
-            var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
-            Vector3 home = first.transform.localPosition;
-            Visual(first.transform.parent, "AleXPod", materials).transform.localPosition = home;
-            for (int i = 0; i < AleXCells.Length; i++)
-            {
-                var cell = i == 0 ? first : UnityEngine.Object.Instantiate(first, first.transform.parent);
-                cell.name = "AleXCell" + i;
-                cell.transform.localPosition = home + AleXCells[i];
-                cell.transform.localRotation = Quaternion.identity;
-                Edit(cell, s =>
-                {
-                    P(s, "info").objectReferenceValue = info;
-                    P(s, "railDirection").enumValueIndex = 4; // Backward
-                    P(s, "railLength").floatValue = 0.8f;
-                    P(s, "railSpeed").floatValue = 6f;
-                    P(s, "railDelay").floatValue = 0f;
-                });
-            }
-            Edit(mount, s => P(s, "ammo").intValue = AleXCells.Length);
             SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
         }
 

@@ -52,6 +52,7 @@ namespace BoscaliSummer.Vanguard
                     Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
                     return Status(lead);
                 case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
+                case "cut": return AlexCut(lead);
                 case "snapg":
                     Modules.Vanguard.Domain.TowedTrail.SnapG = Number(args, "g", 7f);
                     return Status(lead);
@@ -364,6 +365,7 @@ namespace BoscaliSummer.Vanguard
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
+            AlexStatus(state, lead);
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

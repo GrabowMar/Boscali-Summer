@@ -1,0 +1,397 @@
+{
+  "name": "vg-alex",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          80000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "snapg",
+        "g": 12
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "lure",
+        "chance": 1
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_AleX"
+      },
+      "store": "deployed"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "pay"
+    },
+    {
+      "op": "capture",
+      "name": "alex-deploy",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 3.4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "idle"
+    },
+    {
+      "op": "capture",
+      "name": "alex-towed",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "threat",
+        "range": 7000,
+        "climb": 1500,
+        "seeker": "ARH"
+      },
+      "store": "threat1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "reel"
+    },
+    {
+      "op": "wait",
+      "seconds": 16
+    },
+    {
+      "op": "capture",
+      "name": "alex-dragged",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "dragged"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "settled"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_AleX"
+      },
+      "store": "second"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_AleX"
+      },
+      "store": "third"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "towing3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "cut"
+      },
+      "store": "pressed"
+    },
+    {
+      "op": "capture",
+      "name": "alex-cut",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "free"
+    },
+    {
+      "op": "wait",
+      "seconds": 22
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "ended"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "pay.alex_fromAnchor",
+      "min": 3
+    },
+    {
+      "check": "result_below",
+      "path": "pay.alex_fromAnchor",
+      "max": 45
+    },
+    {
+      "check": "result_above",
+      "path": "pay.alex_line",
+      "min": 3
+    },
+    {
+      "check": "result_below",
+      "path": "pay.alex_line",
+      "max": 45
+    },
+    {
+      "check": "result_below",
+      "path": "pay.alex_state",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "pay.alex_deployed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "idle.alex_line",
+      "min": 59
+    },
+    {
+      "check": "result_below",
+      "path": "idle.alex_line",
+      "max": 61
+    },
+    {
+      "check": "result_above",
+      "path": "idle.alex_state",
+      "min": 0.9
+    },
+    {
+      "check": "result_below",
+      "path": "idle.alex_state",
+      "max": 1.1
+    },
+    {
+      "check": "result_above",
+      "path": "idle.alex_fromAnchor",
+      "min": 50
+    },
+    {
+      "check": "result_below",
+      "path": "idle.alex_fromAnchor",
+      "max": 75
+    },
+    {
+      "check": "result_above",
+      "path": "reel.alex_lineTarget",
+      "min": 149
+    },
+    {
+      "check": "result_above",
+      "path": "reel.alex_line",
+      "min": 90
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.alex_seduced",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.seductions",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.alex_cut_auto",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.alex_dragged",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.alex_line_peak",
+      "min": 149
+    },
+    {
+      "check": "result_above",
+      "path": "dragged.alex_pips_seen",
+      "min": 6
+    },
+    {
+      "check": "result_above",
+      "path": "settled.threatsGone",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "settled.threat_toLead",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "settled.alex_free_ended",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "towing3.alex_cut_replaced",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pressed.cutDone",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pressed.alex_cut_pilot",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "free.alex_state",
+      "min": 1.9
+    },
+    {
+      "check": "result_above",
+      "path": "free.alex_freeLeft",
+      "min": 15
+    },
+    {
+      "check": "result_below",
+      "path": "free.alex_freeLeft",
+      "max": 20.1
+    },
+    {
+      "check": "result_above",
+      "path": "ended.alex_expired",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "ended.VG_AleX_alive",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "ended.alex_deployed",
+      "min": 3
+    }
+  ]
+}

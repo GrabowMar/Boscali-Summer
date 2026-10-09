@@ -87,8 +87,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(Mathf.Abs(WaterRun.SnakeYaw(1f)) <= 30f && Mathf.Abs(WaterRun.SnakeYaw(1f)) > 25f &&
                 Mathf.Abs(WaterRun.SnakeYaw(0f)) < 1e-3f, "snake search swings +/-30 deg");
 
-            Vector3 trail = TowedTrail.Offset(Vector3.forward, Vector3.up);
-            TestAssert.That(trail == new Vector3(0f, -8f, -100f), "decoy trails 100 m behind, 8 m below");
+            Vector3 trail = TowedTrail.Offset(Vector3.forward, Vector3.up, 100f);
+            TestAssert.That((trail - new Vector3(0f, -8f, -100f)).magnitude < 1e-3f, "decoy trails 100 m of fiber behind, 8 m below");
             TestAssert.That(TowedTrail.Snaps(7.5f, 500f) && TowedTrail.Snaps(2f, 40f) && !TowedTrail.Snaps(4f, 500f),
                 "cable snaps above 7 g or below 50 m");
             TestAssert.That(Mathf.Abs(TowedTrail.GLoad(Vector3.zero, new Vector3(0f, 0f, 9.81f * 7f * 0.25f), 0.25f) - 7f) < 0.01f &&
@@ -151,7 +151,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(WaterRun.SnakeYaw(1f, 0f) == WaterRun.SnakeYaw(1f) &&
                 WaterRun.SnakeYaw(1f, 0.75f) != WaterRun.SnakeYaw(1f), "seeded snake searches vary");
 
-            TestAssert.That(TowedTrail.TrailPoint(new Vector3(5f, -1f, -6f), Vector3.forward, Vector3.up) == new Vector3(5f, -9f, -106f),
+            TestAssert.That((TowedTrail.TrailPoint(new Vector3(5f, -1f, -6f), Vector3.forward, Vector3.up, 100f) - new Vector3(5f, -9f, -106f)).magnitude < 1e-3f,
                 "towed decoy trails from its pylon anchor");
         }
     }

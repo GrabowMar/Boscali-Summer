@@ -26,7 +26,12 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),
             typeof(Patches.SkywellLaunchPatch),
-            typeof(Patches.SkywellFirePatch)
+            typeof(Patches.SkywellFirePatch),
+            typeof(Patches.AlexLaunchPatch),
+            typeof(Patches.AlexFirePatch),
+            typeof(Patches.AlexDeflectArhPatch),
+            typeof(Patches.AlexDeflectSarhPatch),
+            typeof(Patches.AlexSuppressPatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);
@@ -42,6 +47,9 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.SkywellVisuals>(60);
             context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));
             context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
+            context.AddSceneService<AlexService>(60);
+            context.AddSceneService<Networking.AlexNet>(60);
+            context.AddSceneService<Presentation.AlexHud>(60);
         }
     }
 }
