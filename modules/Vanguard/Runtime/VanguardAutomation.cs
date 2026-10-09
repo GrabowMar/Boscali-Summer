@@ -65,6 +65,7 @@ namespace BoscaliSummer.Vanguard
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
                 case "drain": return Drain(receiver, Number(args, "fuel", 0.3f));
                 case "status": return Status(lead);
+                case "orca": return Orca(args, lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
                 default: return Failure("VanguardAutomation", "Step", "unknown action");

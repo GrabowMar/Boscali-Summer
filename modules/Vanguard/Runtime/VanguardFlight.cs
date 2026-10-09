@@ -135,7 +135,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 case VanguardRole.Drone: return 360f;
                 case VanguardRole.Interceptor: return 6f;
-                case VanguardRole.Torpedo: return 400f;
+                case VanguardRole.Torpedo: return OrcaLifetime();
                 case VanguardRole.Carrier:
                 case VanguardRole.Sentinel:
                 case VanguardRole.Gunship: return 300f;
@@ -279,108 +279,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             previousInterceptRelative=relative;
             hasInterceptSample=true;
-        }
-
-        // Air phase: glide along the ship's predicted track and reach the water EntryRange short of it.
-        private void PlanTorpedo(GlobalPosition pos)
-        {
-            if (underwater)
-            {
-                PlanSwim(pos);
-                return;
-            }
-            GlobalPosition aim = TargetPosition(out Vector3 tVel);
-            Vector3 to = aim - pos;
-            float flat = new Vector2(to.x, to.z).magnitude;
-            GlobalPosition point;
-            if (flat > WaterRun.EntryRange)
-            {
-                point = aim + tVel * (flat / 250f);
-                point.y = Mathf.Clamp(flat * 0.05f, 30f, 2000f);
-            }
-            else
-            {
-                // Inside the entry range: dive into the sea just ahead, not at the ship (that line meets the water at the hull).
-                Vector3 dir = flat > 1f ? new Vector3(to.x, 0f, to.z) / flat : missile.transform.forward;
-                point = pos + dir * 300f;
-                point.y = -20f;
-            }
-            missile.SetAimpoint(point, tVel);
-        }
-
-        // Water phase (5 Hz): home on the ship; lead it until StopLeadRange; snake-search when the track is lost.
-        private void PlanSwim(GlobalPosition pos)
-        {
-            bool tracking = target is Ship ship && !ship.disabled;
-            Vector3 to = tracking ? target.GlobalPosition() - pos : Vector3.zero;
-            Vector3 flatTo = new Vector3(to.x, 0f, to.z);
-            if (tracking && Vector3.Angle(swimHeading, flatTo) > 75f && flatTo.magnitude < 600f) tracking = false; // overran it
-            if (tracking)
-            {
-                lostFor = 0f;
-                searchFor = -1f;
-                Vector3 lead = flatTo.magnitude > WaterRun.StopLeadRange && target.rb != null
-                    ? flatTo + new Vector3(target.rb.velocity.x, 0f, target.rb.velocity.z) * (flatTo.magnitude / WaterRun.Speed)
-                    : flatTo;
-                swimHeading = lead.normalized;
-                return;
-            }
-            lostFor += PlanInterval;
-            if (lostFor < WaterRun.LostLimit) return;
-            searchFor = searchFor < 0f ? 0f : searchFor + PlanInterval;
-            if (searchFor > WaterRun.SearchTime)
-            {
-                Detonate();
-                return;
-            }
-            swimHeading = Quaternion.Euler(0f, WaterRun.SnakeYaw(searchFor, seed) * PlanInterval, 0f) * swimHeading;
-        }
-
-        /// <summary>Called from Missile.DetectCollisions. True when the torpedo owns this physics tick (underwater).</summary>
-        public bool SwimTick()
-        {
-            if (missile.disabled) return false;
-            float y = (float)missile.GlobalPosition().y;
-            if (!underwater)
-            {
-                if (y > 0f) return false;
-                if (!WaterRun.Accepts(target is Ship ship && !ship.disabled))
-                {
-                    Detonate(); // never swim at a non-ship
-                    return true;
-                }
-                underwater = true;
-                VanguardStats.WaterEntries++;
-                Vector3 v0 = new Vector3(missile.rb.velocity.x, 0f, missile.rb.velocity.z);
-                swimHeading = v0.sqrMagnitude > 1f ? v0.normalized : missile.transform.forward;
-            }
-            Rigidbody rb = missile.rb;
-            Vector3 here = missile.transform.position;
-            if (target is Ship keel && !keel.disabled)
-            {
-                Vector3 off = target.GlobalPosition() - missile.GlobalPosition();
-                if (WaterRun.UnderKeel(new Vector2(off.x, off.z).magnitude, keel.maxRadius))
-                {
-                    VanguardStats.ShipHits++;
-                    missile.Detonate(Vector3.up, true, false);
-                    return true;
-                }
-            }
-            if (Physics.Linecast(here, here + rb.velocity * Time.fixedDeltaTime * 1.1f, out RaycastHit hit,
-                (int)PhysicsLayers.ShipsMask | (int)PhysicsLayers.StaticsMask))
-            {
-                bool hull = ((1 << hit.collider.gameObject.layer) & (int)PhysicsLayers.ShipsMask) != 0;
-                if (hull) VanguardStats.ShipHits++;
-                missile.Detonate(hit.normal, hull, !hull);
-                return true;
-            }
-            Vector3 v = swimHeading * WaterRun.Speed;
-            // Gravity is cancelled underwater; otherwise the spring settles 2.45 m deep of the run depth.
-            v.y = rb.velocity.y + (WaterRun.VerticalAccel(y, rb.velocity.y) - Physics.gravity.y) * Time.fixedDeltaTime;
-            rb.velocity = v;
-            rb.angularVelocity = Vector3.zero;
-            rb.MoveRotation(Quaternion.LookRotation(new Vector3(v.x, v.y * 0.2f, v.z)));
-            return true;
         }
 
         private void Effects()
