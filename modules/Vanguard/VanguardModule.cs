@@ -24,6 +24,9 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.VanguardSlowChecksPatch),
             typeof(Patches.AegisLockPatch),
+            typeof(Patches.AegisSnapPatch),
+            typeof(Patches.AegisDoorsPatch),
+            typeof(Patches.AegisFinsPatch),
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),
             typeof(Patches.SkywellLaunchPatch),
@@ -35,6 +38,8 @@ namespace BoscaliSummer.Modules.Vanguard
         public void Install(ModuleContext context)
         {
             context.AddSceneService<AegisService>(60);
+            context.AddSceneService<Networking.AegisNet>(60);
+            context.AddSceneService<Presentation.AegisHud>(60);
             context.AddSceneService<Networking.GlaiveNet>(60);
             context.AddSceneService<Networking.OrcaNet>(60);
             context.AddSceneService<Networking.SentinelNet>(60);
