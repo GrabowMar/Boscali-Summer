@@ -84,7 +84,7 @@ def surface_layers(spec, pos, nrm, base, noise):
             np.clip(smoothness, 0.12, 0.80), height.astype(np.float32))
 
 
-def detail_normal(pos, nrm, height, covered):
+def detail_normal(pos, nrm, height, covered, max_slope=0.65):
     """Encode OpenGL tangent normals from physical relief without UV seam spikes.
 
     Unlike a fixed texture-space multiplier, this divides relief gradients by
@@ -95,35 +95,47 @@ def detail_normal(pos, nrm, height, covered):
         flat = np.empty(pos.shape, np.float32)
         flat[...] = (0.5, 0.5, 1.0)
         return flat
-    dp_u = np.roll(pos, -1, 1) - np.roll(pos, 1, 1)
-    dp_v = np.roll(pos, -1, 0) - np.roll(pos, 1, 0)
-    len_u = np.linalg.norm(dp_u, axis=-1)
-    len_v = np.linalg.norm(dp_v, axis=-1)
-    nonzero = covered & (len_u > 1e-7) & (len_v > 1e-7)
-    step_u = float(np.median(len_u[nonzero])) if np.any(nonzero) else 1.0
-    step_v = float(np.median(len_v[nonzero])) if np.any(nonzero) else 1.0
-    valid = nonzero & (len_u < step_u * 5) & (len_v < step_v * 5)
-    for axis, step in ((0, step_v), (1, step_u)):
-        valid &= np.roll(covered, 1, axis) & np.roll(covered, -1, axis)
-        for direction in (-1, 1):
-            neighbor = np.roll(pos, direction, axis)
-            valid &= np.linalg.norm(neighbor - pos, axis=-1) < step * 3
-            valid &= np.sum(nrm * np.roll(nrm, direction, axis), axis=-1) > 0.65
-    valid[[0, -1], :] = False
-    valid[:, [0, -1]] = False
+    # Per-neighbour same-surface tests; texels on a UV island border fall back to one-sided differences, so relief
+    # stays continuous up to the seam instead of going flat (and never differentiates across the seam).
+    steps = []
+    for axis in (0, 1):
+        d = np.linalg.norm(np.roll(pos, -1, axis) - pos, axis=-1)
+        ok = covered & np.roll(covered, -1, axis) & (d > 1e-7)
+        steps.append(float(np.median(d[ok])) if np.any(ok) else 1.0)
+
+    def same_surface(axis, direction):
+        dist = np.linalg.norm(np.roll(pos, direction, axis) - pos, axis=-1)
+        ok = covered & np.roll(covered, direction, axis)
+        ok &= (dist < steps[axis] * 6) & (dist > 1e-7)  # 0 = bake-margin duplicate; thin islands stay valid
+        ok &= np.sum(nrm * np.roll(nrm, direction, axis), axis=-1) > 0.65
+        edge = 0 if direction == 1 else -1  # np.roll wraps around the image border
+        if axis == 0:
+            ok[edge, :] = False
+        else:
+            ok[:, edge] = False
+        return ok
+
+    def diff(a, axis, fwd_ok, bwd_ok):
+        fwd, bwd = np.roll(a, -1, axis) - a, a - np.roll(a, 1, axis)
+        both, f_only, b_only = fwd_ok & bwd_ok, fwd_ok & ~bwd_ok, bwd_ok & ~fwd_ok
+        if a.ndim == 3:
+            both, f_only, b_only = both[..., None], f_only[..., None], b_only[..., None]
+        return np.where(both, fwd + bwd, np.where(f_only, fwd, np.where(b_only, bwd, 0)))
+    fu, bu, fv, bv = same_surface(1, -1), same_surface(1, 1), same_surface(0, -1), same_surface(0, 1)
+    dp_u, dp_v = diff(pos, 1, fu, bu), diff(pos, 0, fv, bv)
+    valid = covered & (fu | bu) & (fv | bv)
     tangent = dp_u - nrm * np.sum(dp_u * nrm, axis=-1, keepdims=True)
     tangent /= np.maximum(np.linalg.norm(tangent, axis=-1, keepdims=True), 1e-7)
     bitangent = np.cross(nrm, tangent)
     handedness = np.where(np.sum(bitangent * dp_v, axis=-1) < 0, -1.0, 1.0).astype(np.float32)
     bitangent *= handedness[..., None]
-    dh_u = np.roll(height, -1, 1) - np.roll(height, 1, 1)
-    dh_v = np.roll(height, -1, 0) - np.roll(height, 1, 0)
+    dh_u, dh_v = diff(height, 1, fu, bu), diff(height, 0, fv, bv)
     slope_u = dh_u / np.maximum(np.abs(np.sum(dp_u * tangent, axis=-1)), 1e-7)
     slope_v = (dh_v - slope_u * np.sum(dp_v * tangent, axis=-1)) / np.maximum(np.abs(np.sum(dp_v * bitangent, axis=-1)), 1e-7)
     # Sub-millimetre relief should not become a nearly sideways normal at a tiny
     # footprint; bounded slopes also keep 8-bit normal compression predictable.
-    slope_u = np.where(valid, np.clip(slope_u, -0.65, 0.65), 0)
-    slope_v = np.where(valid, np.clip(slope_v, -0.65, 0.65), 0)
+    slope_u = np.where(valid, np.clip(slope_u, -max_slope, max_slope), 0)
+    slope_v = np.where(valid, np.clip(slope_v, -max_slope, max_slope), 0)
     normal = np.stack((-slope_u, -slope_v, np.ones_like(height)), -1)
     normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
     return (normal * 0.5 + 0.5).astype(np.float32)
@@ -171,8 +183,9 @@ def self_check():
     assert np.allclose(rotated_normal[3:-3, 3:-3, 0] / rotated_normal[3:-3, 3:-3, 2], 0.1, atol=1e-5)
     jumped = pos.copy()
     jumped[:, 48:, 0] += 3.0
-    seam_normal = detail_normal(jumped, nrm, uu * 0.1, covered)
-    assert np.allclose(seam_normal[4:-4, 47:49], (0.5, 0.5, 1.0))
+    seam_normal = detail_normal(jumped, nrm, uu * 0.1, covered) * 2 - 1
+    # Island border texels keep the true slope from their own side: no spike, no flat band.
+    assert np.allclose(seam_normal[4:-4, 46:50, 0] / seam_normal[4:-4, 46:50, 2], -0.1, atol=1e-5)
     assert np.allclose(np.linalg.norm(interior, axis=-1), 1, atol=1e-5)
     thermal_pos = pos.copy()
     thermal_pos[..., 1] = np.clip(vv, -2.0, 1.5)
