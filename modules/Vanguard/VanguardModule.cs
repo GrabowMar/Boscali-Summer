@@ -25,6 +25,12 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.AegisLockPatch),
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),
+            typeof(Patches.LanceAttachPatch),
+            typeof(Patches.LanceRemoteShotPatch),
+            typeof(Patches.LanceArmorPenetratePatch),
+            typeof(Patches.LanceTurbofanLossPatch),
+            typeof(Patches.LanceTurbojetLossPatch),
+            typeof(Patches.LanceTurbineThrottlePatch),
             typeof(Patches.SkywellLaunchPatch),
             typeof(Patches.SkywellFirePatch)
         };
@@ -36,6 +42,9 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<AegisService>(60);
             context.AddSceneService<Networking.GlaiveNet>(60);
             context.AddSceneService<LanceService>(60);
+            context.AddSceneService<Networking.LanceNet>(60);
+            context.AddSceneService<Presentation.LanceFxPlayer>(60);
+            context.AddSceneService<LanceEngineDraw>(60);
             context.AddSceneService<Presentation.TowCable>(60);
             context.AddSceneService<SkywellService>(60);
             context.AddSceneService<Networking.SkywellNet>(60);
