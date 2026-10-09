@@ -84,9 +84,17 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             switch (phase)
             {
                 case GlaivePhase.Depart: return roundsLeft <= 0 ? "SPECTRE WINCHESTER" : "SPECTRE OFF STATION";
-                case GlaivePhase.Orbit: return slide >= HandOffShown ? "HAND-OFF " + Km(slide) : "SPECTRE IN ORBIT";
+                case GlaivePhase.Orbit: return slide >= HandOffShown ? HandOffText(slide) : "SPECTRE IN ORBIT";
                 default: return "SPECTRE INBOUND";
             }
+        }
+
+        // One string per 0.1 km step (up to 99.9 km), built on first use: the launcher HUD asks for this at 5 Hz.
+        private static readonly string[] HandOff = new string[1000];
+        private static string HandOffText(float slide)
+        {
+            int tenths = Mathf.RoundToInt(slide / 100f);
+            return tenths >= 0 && tenths < HandOff.Length ? HandOff[tenths] ??= "HAND-OFF " + Km(tenths * 100f) : "HAND-OFF " + Km(slide);
         }
 
         public static string Km(float metres) => (metres/1000f).ToString("0.0",CultureInfo.InvariantCulture) + " km";

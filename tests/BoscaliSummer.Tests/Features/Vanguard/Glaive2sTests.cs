@@ -80,6 +80,9 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Ingress, 240, 0f), "SPECTRE INBOUND", "HUD inbound");
             TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Orbit, 200, 20f), "SPECTRE IN ORBIT", "HUD on station");
             TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Orbit, 200, 1400f), "HAND-OFF 1.4 km", "HUD hand-off distance");
+            TestAssert.That(ReferenceEquals(GlaiveProfile.HudText(GlaivePhase.Orbit, 200, 1400f), GlaiveProfile.HudText(GlaivePhase.Orbit, 90, 1430f)),
+                "HAND-OFF text is one cached string per 0.1 km (the HUD asks at 5 Hz)");
+            TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Orbit, 200, 250000f), "HAND-OFF 250.0 km", "HUD hand-off beyond the cache");
             TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Depart, 0, 0f), "SPECTRE WINCHESTER", "HUD dry");
             TestAssert.Eq(GlaiveProfile.HudText(GlaivePhase.Depart, 60, 0f), "SPECTRE OFF STATION", "HUD time out");
         }

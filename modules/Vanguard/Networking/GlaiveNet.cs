@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 }));
         }
 
-        public void ResetForScene() => GlaiveDrone.Active.Clear();
+        public void ResetForScene() => GlaiveDrone.ResetScene();
 
         private void Update()
         {

@@ -16,7 +16,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal sealed class GlaiveDrone : MonoBehaviour
     {
         private const float PlanSeconds = .2f;
+        private const float HudSeconds = .2f;
         internal static readonly HashSet<GlaiveDrone> Active=new HashSet<GlaiveDrone>();
+        private static readonly HashSet<int> RigRejected=new HashSet<int>(); // missiles already warned about (Attach runs per snapshot)
+        internal static void ResetScene() { Active.Clear(); RigRejected.Clear(); }
         private Missile missile;
         private Gun gun;
         private Transform visual,yaw,pitch,muzzle,propeller,wingL,wingR;
@@ -32,6 +35,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool hasSnapshot,configured;
         private ParticleSystem[] flashes;
         private string hudKey;
+        private float nextHud;
         public GlaivePhase Phase { get; private set; }
         /// <summary>Horizontal distance from the orbit centre to its objective (HAND-OFF still to run).</summary>
         public float Slide { get; private set; }
@@ -50,9 +54,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile == null || missile.definition == null || VanguardKeys.RoleOf(missile.definition.jsonKey) != VanguardRole.Gunship) return null;
             var old=missile.GetComponent<GlaiveDrone>();
             if (old != null) return old;
+            int id=missile.GetInstanceID();
+            if (RigRejected.Contains(id)) return null;
             Transform visual=missile.transform.Find("VanguardVisual");
             var gun=missile.GetComponentInChildren<Gun>(true);
-            if (visual == null || gun == null) { Plugin.Logger?.LogWarning("[Vanguard] GLAIVE-2S has no visual or gun"); return null; }
+            if (visual == null || gun == null)
+            {
+                RigRejected.Add(id);
+                Plugin.Logger?.LogWarning("[Vanguard] GLAIVE-2S has no visual or gun");
+                return null;
+            }
             var drone=missile.gameObject.AddComponent<GlaiveDrone>();
             drone.missile=missile; drone.gun=gun; drone.visual=visual; drone.visualRest=visual.localRotation;
             Transform breech=null;
@@ -72,7 +83,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 drone.muzzle=new GameObject("GlaiveMuzzle").transform;
                 drone.muzzle.SetParent(missile.transform,false);
                 drone.muzzle.localPosition=new Vector3(-.4f,-.15f,0f);
-                Plugin.Logger?.LogWarning("[Vanguard] GLAIVE-2S rig has no GlaiveMuzzle; firing from the hull");
+                Plugin.Logger?.LogWarning("[Vanguard] GLAIVE-2S rig has no GlaiveMuzzle; firing from the hull"); // once: the component now exists
             }
             Vector3 barrel=breech != null ? drone.muzzle.position-breech.position : missile.transform.forward;
             drone.rest=GlaiveProfile.GunAngles(missile.transform.InverseTransformDirection(barrel.normalized));
@@ -305,8 +316,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Vector3 axis=propeller.parent.InverseTransformDirection(missile.transform.forward);
                 propeller.localRotation=Quaternion.AngleAxis(Mathf.Max(0f,missile.timeSinceSpawn-GlaiveProfile.LaunchSeconds)*3600f,axis)*propellerRest;
             }
-            if (missile.persistentID.Id != 0 && GameManager.GetLocalAircraft(out Aircraft me) && me != null && missile.owner == me)
-                Glaive2sHud.Show(hudKey ??= missile.persistentID.Id.ToString(),Phase,RoundsLeft,Slide);
+            // The board keeps a line for 1.5 s after its last Set, so 5 Hz is plenty and keeps the per-frame cost at zero.
+            if (Time.unscaledTime >= nextHud)
+            {
+                nextHud=Time.unscaledTime+HudSeconds;
+                if (missile.persistentID.Id != 0 && GameManager.GetLocalAircraft(out Aircraft me) && me != null && missile.owner == me)
+                    Glaive2sHud.Show(hudKey ??= missile.persistentID.Id.ToString(),Phase,RoundsLeft,Slide);
+            }
         }
 
         private void Wings()

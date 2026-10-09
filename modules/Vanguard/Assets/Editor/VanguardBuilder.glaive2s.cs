@@ -41,18 +41,19 @@ namespace Vanguard
                     P(s, "fireRate").floatValue = 300f;
                     P(s, "ForceServerAuthority").boolValue = true;
                 });
-                // Cruise stage covers ingress plus 150 s on station.
+                // Cruise stage is powered for the whole VanguardFlight lifetime (300 s: 3 s launch assist + 295 s), so a long ingress
+                // never leaves the drone unpowered before its 150 s on station are used.
                 Edit(root.GetComponent<Missile>(), s =>
                 {
                     var motors = P(s, "motors");
                     if (motors.arraySize != 2) throw new Exception("VG_Glaive2S lost its launch-assist / cruise stages");
-                    motors.GetArrayElementAtIndex(1).FindPropertyRelative("burnTime").floatValue = 240f;
+                    motors.GetArrayElementAtIndex(1).FindPropertyRelative("burnTime").floatValue = 295f;
                 });
                 ValidateGlaive2SRig(root);
                 PrefabUtility.SaveAsPrefabAsset(root, path);
             }
             finally { PrefabUtility.UnloadPrefabContents(root); }
-            Debug.Log("[Vanguard] GLAIVE2S_SPECTRE_OK rounds=" + Glaive2SRounds + " gun=30mm_HE cruise=240s");
+            Debug.Log("[Vanguard] GLAIVE2S_SPECTRE_OK rounds=" + Glaive2SRounds + " gun=30mm_HE cruise=295s");
         }
 
         // Rest-relative: the barrel may rest forward (old belly gun) or on the port beam (side-firing remake).
