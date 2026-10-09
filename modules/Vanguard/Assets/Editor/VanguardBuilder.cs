@@ -43,9 +43,9 @@ namespace Vanguard
                 Description = "ARCHER loyal-wingman drone with two mini radar missiles on underwing rails. Holds a wing slot and draws radar-guided missiles. VANGUARD: DESIGNATE your target and it turns in and fires both rounds inside 12 km, then rejoins; designate again when empty and it rams with its 60 kg warhead. Six-minute endurance.",
                 Mass = 450, Yield = 60, Pierce = 300, Cost = 0.8f, Value = 40, RadarSize = 0.15f, Thrust = 4200, BurnTime = 360, GLimit = 9, TurnRate = 25,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
-            new Spec { Key = "VG_HawcX", Name = "HAWC-X Hypersonic Glide Vehicle", Short = "HAWC-X", Model = "HawcX",
-                Description = "Boost-glide strike weapon. Climbs to 25 km at Mach 8, skips and weaves along the edge of space, then dives near-vertically onto the target.",
-                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 30, GLimit = 25, TurnRate = 18,
+            new Spec { Key = "VG_HawcX", Name = "HAWC-X SKIP Glider", Short = "HAWC-X", Model = "HawcX",
+                Description = "SKIP glider. Boosts to 24 km and drops its booster, skips twice through glowing phases where nothing can track it (and it takes no updates), then dives. In the final dive, DESIGNATE a new target within 20 km to shift it.",
+                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 22, GLimit = 25, TurnRate = 18,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
                 Description = "Low-profile three-dart hit-to-kill pod. Automatic: darts drop clear, pitch onto a missile locked on you and ignite; all-direction protection inside 1.1 km. SNAP: tap the station with a locked aircraft, helicopter or drone inside 2.5 km and 70 deg of the nose for a double-damage dart. The last dart stays with the defence while a missile is inbound.",
@@ -90,6 +90,7 @@ namespace Vanguard
             ValidateOrca();
             ValidateRemoraRig();
             ValidateMaldJ();
+            ValidateHawcX();
             OpReferenceIndex.Refresh();
             Build();
             ValidateAndPreview(materials);
@@ -319,6 +320,7 @@ namespace Vanguard
                 r.enabled = true;
             }
             ConfigureLods(g, model);
+            if (model == "HawcX") HideSheath(g);
             return g;
         }
 

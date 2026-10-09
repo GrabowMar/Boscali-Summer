@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Decoy) { PlanBait(pos); return; }
             switch (role)
             {
-                case VanguardRole.Glider: PlanGlide(pos, age); break;
+                case VanguardRole.Glider: PlanHawcx(pos, age); break;
                 case VanguardRole.Decoy: PlanDecoy(pos); break;
                 case VanguardRole.Jammer: PlanJammer(pos); break;
                 case VanguardRole.Drone: PlanDrone(pos); break;
@@ -160,24 +160,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile.NetworkHQ != null && missile.NetworkHQ.TryGetKnownPosition(target, out GlobalPosition known))
                 return known;
             return target.GlobalPosition();
-        }
-
-        private void PlanGlide(GlobalPosition pos, float age)
-        {
-            GlobalPosition aim = TargetPosition(out Vector3 targetVel);
-            Vector3 to = aim - pos;
-            Vector3 flat = new Vector3(to.x, 0f, to.z);
-            GlidePlan plan = GlideProfile.Plan(age, flat.magnitude, pos.y, seed);
-            if (plan.Phase == GlidePhase.Terminal)
-            {
-                missile.SetAimpoint(aim, targetVel);
-                return;
-            }
-            Vector3 dir = flat.sqrMagnitude > 1f ? flat.normalized : bearing;
-            Vector3 right = new Vector3(dir.z, 0f, -dir.x);
-            GlobalPosition point = pos + dir * 8000f + right * plan.Lateral;
-            point.y = plan.Altitude;
-            missile.SetAimpoint(point, Vector3.zero);
         }
 
         private void PlanDecoy(GlobalPosition pos)

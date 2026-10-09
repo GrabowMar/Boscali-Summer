@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             watched.Clear();
             confirmed.Clear();
             VanguardRegistry.Clear();
+            VanguardFlight.HawcxGlowing.Clear();
             DroneOrders.Clear();
             VanguardStats.Clear();
             AegisTrigger.Clear();
