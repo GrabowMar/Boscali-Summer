@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Material material;
         private Material bodyMaterial;
         private SkinnedMeshRenderer firstPerson;
+        private Renderer companion;
         private Camera camera;
         private Transform frame, neck, headEnd, rightUpper, rightLower, rightHand, leftUpper, leftLower, leftHand;
         private Transform leftFoot, rightFoot, stick, throttle;
@@ -244,6 +245,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         }
 
         internal void SetFrame(Transform value) { if (value != null) frame = value; }
+
+        /// <summary>A body-attached renderer (the kneeboard) shown only to the bound cockpit camera, like the body.</summary>
+        internal void SetCompanion(Renderer renderer) { companion = renderer; }
 
         internal void SetControlHandedness(bool rightHandStick)
         {
@@ -519,6 +523,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             bool visible = bodyVisible && rendering == camera;
             if (firstPerson != null) firstPerson.enabled = visible;
+            if (companion != null) companion.enabled = visible;
             if (material != null) material.SetFloat(BodyVisibleId, visible && firstPerson == null ? 1f : 0f);
             if (bodyMaterial != null) bodyMaterial.SetFloat(BodyVisibleId, visible ? 1f : 0f);
         }
@@ -539,7 +544,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             for (int i = 0; i < count; i++) { sources[i] = null; copies[i] = null; }
             count = 0; root = null; material = null; camera = null; frame = null; nativeAnimator = null; nativeRenderer = null;
             Head = Chest = neck = headEnd = rightUpper = rightLower = rightHand = leftUpper = leftLower = leftHand = null;
-            bodyMaterial = null; firstPerson = null;
+            bodyMaterial = null; firstPerson = null; companion = null;
             leftFoot = rightFoot = stick = throttle = null; Renderer = null;
             lean = pitchLean = headPitch = headYaw = pedals = 0f;
             bodyVisible = false; stickOnRight = true; properties.Clear();

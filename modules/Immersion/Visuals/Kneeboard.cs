@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal Kneeboard() { markDirty = () => dirty = true; }
 
         internal bool Bound => quad != null;
+        internal Renderer Renderer { get; private set; }
         internal float LastRenderMs { get; private set; } = -1f;
         internal string Side { get; private set; } = "none";
 
@@ -60,6 +61,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
             quad.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = quad.AddComponent<MeshRenderer>();
+            Renderer = renderer;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
             renderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
@@ -93,7 +95,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (material != null) Object.Destroy(material);
             if (card != null) { card.Release(); Object.Destroy(card); }
             if (plain != null) Object.Destroy(plain);
-            quad = null; mesh = null; material = null; card = null; plain = null; aircraft = null;
+            quad = null; mesh = null; material = null; card = null; plain = null; aircraft = null; Renderer = null;
             dirty = false; Side = "none";
         }
 

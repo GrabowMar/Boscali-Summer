@@ -136,6 +136,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             bool rightThigh = !rig.StickOnRight; // the free hand's side, away from the stick
             kneeboard.Bind(rig.Bone(rightThigh ? "thigh_R" : "thigh_L"), rig.Bone(rightThigh ? "shin_R" : "shin_L"),
                 aircraft.cockpit.transform.up, rightThigh, aircraft, PilotShaderBundle.GetBody());
+            rig.SetCompanion(kneeboard.Renderer);
         }
 
         private void WarnUnavailable()

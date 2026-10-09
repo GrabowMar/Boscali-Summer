@@ -125,6 +125,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal bool Bound { get; private set; }
         internal float LastRenderMs => -1f;
         internal string Side => "none";
+        internal Renderer Renderer => null;
         internal void Bind(Transform thigh, Transform knee, Vector3 up, bool rightThigh, Aircraft owner, Shader shader) => Bound = thigh != null;
         internal void Tick() { }
         internal void SetVisible(bool visible) { }
