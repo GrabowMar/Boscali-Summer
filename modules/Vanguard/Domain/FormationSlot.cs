@@ -12,6 +12,14 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return new Vector3(side * (45f + 30f * rank), 5f * rank, -55f - 35f * rank);
         }
 
+        /// <summary>Lowest slot no live drone holds, so a lost wingman's slot is refilled first.</summary>
+        public static int FirstFree(System.Collections.Generic.ICollection<int> used)
+        {
+            int slot = 0;
+            while (used.Contains(slot)) slot++;
+            return slot;
+        }
+
         public static Vector3 World(Vector3 position, Vector3 forward, Vector3 right, Vector3 up, int slot)
         {
             Vector3 local = Local(slot);

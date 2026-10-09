@@ -21,8 +21,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     }
 
     /// <summary>
-    /// Client intent for REMORA orders. The host resolves the launcher from the sender's own
-    /// aircraft (never from the message) and the target from its persistent id.
+    /// Client intent for the Vanguard designation bus (DroneOrders). The host resolves the launcher from the
+    /// sender's own aircraft (never from the message) and the target from its persistent id.
     /// </summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService, IDroneCommand
     {
@@ -34,7 +34,9 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<VanguardDroneOrder>(Receive);
         private float nextRegistration;
 
-        public bool Striking { get; private set; }
+        private Unit designated; // local view of the last order; lapses when that target dies
+
+        public bool Striking => designated != null && !designated.disabled;
 
         public bool CanStrike => LocalTarget(out _, out _);
 
@@ -62,21 +64,21 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         public void ResetForScene()
         {
-            Striking = false;
+            designated = null;
             throttle.Clear();
         }
 
         public void Strike()
         {
             if (!LocalTarget(out Aircraft aircraft, out Unit target)) return;
-            Striking = true;
+            designated = target;
             Send(aircraft, true, target);
         }
 
         public void Screen()
         {
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
-            Striking = false;
+            designated = null;
             Send(aircraft, false, null);
         }
 

@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.SkywellVisuals>(60);
             context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));
             context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
+            context.AddSceneService<Networking.RemoraNet>(60);
+            context.AddSceneService<Presentation.RemoraHud>(60);
         }
     }
 }

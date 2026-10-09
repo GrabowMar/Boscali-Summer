@@ -364,6 +364,8 @@ namespace BoscaliSummer.Vanguard
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
+            // Sim check paths split on '.', so "remora.fired" is checked as <store>.remora_fired.
+            foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key.Replace('.', '_')] = counter.Value;
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

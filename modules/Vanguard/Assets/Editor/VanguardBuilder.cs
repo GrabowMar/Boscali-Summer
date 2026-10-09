@@ -40,7 +40,7 @@ namespace Vanguard
                 Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
-                Description = "Attritable escort drone. Holds a wing slot on the launcher and draws radar-guided missiles. On STRIKE it dives into the launcher's target with a 60 kg warhead. Six-minute endurance.",
+                Description = "ARCHER loyal-wingman drone with two mini radar missiles on underwing rails. Holds a wing slot and draws radar-guided missiles. VANGUARD: DESIGNATE your target and it turns in and fires both rounds inside 12 km, then rejoins; designate again when empty and it rams with its 60 kg warhead. Six-minute endurance.",
                 Mass = 450, Yield = 60, Pierce = 300, Cost = 0.8f, Value = 40, RadarSize = 0.15f, Thrust = 4200, BurnTime = 360, GLimit = 9, TurnRate = 25,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_HawcX", Name = "HAWC-X Hypersonic Glide Vehicle", Short = "HAWC-X", Model = "HawcX",
@@ -83,6 +83,7 @@ namespace Vanguard
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
+            ValidateRemoraRig();
             OpReferenceIndex.Refresh();
             Build();
             ValidateAndPreview(materials);
