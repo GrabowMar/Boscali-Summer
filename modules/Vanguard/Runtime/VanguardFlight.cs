@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly float cruiseAltitude;
         private Unit target;
         private bool fins;
-        private GlaiveDrone gunDrone;
         private Vector3 previousInterceptRelative;
         private bool hasInterceptSample;
         private float nextPlan;
@@ -75,11 +74,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 forward = missile.transform.forward;
             forward.y = 0f;
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
-            if (VanguardKeys.IsGunDrone(role))
-            {
-                gunDrone=GlaiveDrone.Attach(missile);
-                gunDrone?.Configure(target,aimpoint);
-            }
+            if (role == VanguardRole.Gunship) InitGunship(target, aimpoint);
         }
 
         public VanguardRole Role => role;
@@ -94,10 +89,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
-            if (VanguardKeys.IsGunDrone(role))
+            if (role == VanguardRole.Gunship)
             {
-                if (gunDrone == null) Detonate();
-                else gunDrone.TickHost();
+                TickGunship();
                 return; // Native Steering/ApplyAero still run after this seeker hook.
             }
             if (role == VanguardRole.Towed) HoldTow();

@@ -16,13 +16,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         public byte Protocol;
         public uint MissileId, Shots;
         public byte Phase;
-        public float Yaw,Pitch;
+        public float Yaw,Pitch,Slide;
     }
 
-    /// <summary>Server-to-client presentation only. No client can deploy, steer or fire a gun pod.</summary>
+    /// <summary>GLAIVE-2S server-to-client presentation only. No client can deploy, steer or fire the drone.</summary>
     internal sealed class GlaiveNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 2;
+        internal const byte ProtocolVersion = 3; // 3: GLAIVE-2S SPECTRE adds the HAND-OFF slide
         private HandlerSlot slot;
         private HandlerSlot ClientHandlers => slot ??= HandlerSlot.Of<GlaiveState>(Receive);
         private float nextRegistration;
@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     w.WriteByte(v.Phase);
                     w.WriteSingle(v.Yaw); w.WriteSingle(v.Pitch);
                     w.WritePackedUInt32(v.Shots);
+                    w.WriteSingle(v.Slide);
                 }),
                 (Func<NetworkReader,GlaiveState>)(r =>
                 {
@@ -45,7 +46,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     return new GlaiveState
                     {
                         Protocol=protocol, MissileId=r.ReadPackedUInt32(), Phase=r.ReadByte(),
-                        Yaw=r.ReadSingle(),Pitch=r.ReadSingle(),Shots=r.ReadPackedUInt32(),
+                        Yaw=r.ReadSingle(),Pitch=r.ReadSingle(),Shots=r.ReadPackedUInt32(),Slide=r.ReadSingle(),
                     };
                 }));
         }
