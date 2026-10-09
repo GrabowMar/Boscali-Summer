@@ -11,6 +11,7 @@ using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
 {
@@ -31,12 +32,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private static readonly FieldInfo ThrottleMotion = AccessTools.Field(ThrottleType, "motion");
         private readonly CockpitPilotRig rig = new CockpitPilotRig();
         private readonly PilotReflection reflection = new PilotReflection();
+        private readonly Kneeboard kneeboard = new Kneeboard();
         private ImmersionSettings settings;
         private ManualLogSource logger;
         private Aircraft aircraft;
         private Pilot pilot;
         private Camera camera;
         private Cockpit controls;
+        private UniversalAdditionalCameraData cameraData;
         private bool controlsBound, stickExpected, throttleExpected;
         private int bindFrame;
         private float retryAt, controlsRetryAt;
@@ -84,8 +87,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 }
                 LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
                 float ambient = level != null ? level.GetAmbientLight() : 1f;
-                rig.SetLight(Mathf.Clamp01(ambient * .8f + .18f));
+                float light = Mathf.Clamp01(ambient * .8f + .18f);
+                rig.SetLight(light);
                 rig.SetBodyVisible(settings.PilotBodyEnabled.Value);
+                // Handedness is known once controls bind (or after a short grace for control-less layouts).
+                if (!kneeboard.Bound && (controlsBound || Time.frameCount > bindFrame + 30) && kneeboard.TryBeginBind()) BindKneeboard();
+                kneeboard.SetVisible(settings.PilotBodyEnabled.Value);
+                kneeboard.SetLight(Mathf.Clamp(light, .06f, 1f));
+                kneeboard.Tick();
                 ImmersionManager immersion = ImmersionManager.Live;
                 Vector3 force = immersion != null ? immersion.Head.ForceG : Vector3.up;
                 Quaternion view = cameras.mainCamera.transform.rotation;
@@ -97,7 +106,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 Quaternion lookLocal = Quaternion.Inverse(aircraft.cockpit.transform.rotation) * view;
                 ControlInputs inputs = aircraft.GetInputs();
                 rig.Pose(inputs != null ? inputs.pitch : 0f, inputs != null ? inputs.roll : 0f,
-                    inputs != null ? inputs.yaw : 0f, inputs != null ? inputs.throttle : 0f, force, lookLocal, Time.deltaTime,
+                    inputs != null ? inputs.yaw : 0f, inputs != null ? inputs.throttle : 0f, force,
+                    immersion != null ? immersion.Physiology.ChestLift01 : .5f, lookLocal, Time.deltaTime,
                     settings.PilotControlMotionEnabled.Value, settings.ComfortMotionEnabled.Value);
                 reflection.Tick(rig, aircraft.cockpit.transform, cameras.mainCamera, camera, ambient, settings.PilotReflectionEnabled.Value);
             }
@@ -111,6 +121,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             var animator = PilotAnimator.GetValue(pilot) as Animator;
             if (!rig.Bind(source, animator, PilotShaderBundle.GetBody(), camera)) { WarnUnavailable(); return false; }
             rig.SetFrame(aircraft.cockpit.transform);
+            camera.TryGetComponent(out cameraData);
             ModuleServices.TryGet(out ICanopyGlassView canopy);
             reflection.SetGlassView(canopy);
             bindFrame = Time.frameCount;
@@ -118,6 +129,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             controlsRetryAt = 0f;
             reportedControls = -1;
             return true;
+        }
+
+        private void BindKneeboard()
+        {
+            bool rightThigh = !rig.StickOnRight; // the free hand's side, away from the stick
+            kneeboard.Bind(rig.Bone(rightThigh ? "thigh_R" : "thigh_L"), rig.Bone(rightThigh ? "shin_R" : "shin_L"),
+                aircraft.cockpit.transform.up, rightThigh, aircraft, PilotShaderBundle.GetBody());
+            rig.SetCompanion(kneeboard.Renderer);
         }
 
         private void WarnUnavailable()
@@ -239,13 +258,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public void ResetForScene()
         {
-            reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null;
+            kneeboard.Detach(); reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
             controlsBound = stickExpected = throttleExpected = false;
             retryAt = controlsRetryAt = 0; warnedAircraft = 0; reportedControls = -1;
         }
-        public void ReleaseFx() { ResetForScene(); PilotShaderBundle.Release(); }
+        public void ReleaseFx() { ResetForScene(); kneeboard.Release(); PilotShaderBundle.Release(); }
         private void OnDisable() => ResetForScene();
-        private void OnDestroy() => ResetForScene();
+        private void OnDestroy() { ResetForScene(); kneeboard.Release(); }
         public void DescribeFx(IDictionary<string, object> state)
         {
             state["pilotBodyBound"] = rig.Valid;
@@ -253,6 +272,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["pilotBodyVertices"] = rig.BodyRenderer != null && rig.BodyRenderer.sharedMesh != null
                 ? rig.BodyRenderer.sharedMesh.vertexCount : 0;
             state["pilotTransforms"] = rig.TransformCount;
+            state["pilotOwnedTextures"] = PilotShaderBundle.GetBodyTextures(out _, out _, out _);
+            state["pilotShadowsAvailable"] = cameraData != null && cameraData.renderShadows;
+            state["kneeboardBound"] = kneeboard.Bound;
+            state["kneeboardRenderMs"] = kneeboard.LastRenderMs;
+            state["kneeboardSide"] = kneeboard.Side;
             state["pilotControlComponentBound"] = controls != null;
             state["pilotControlsBound"] = controlsBound && (!stickExpected || rig.StickBound) && (!throttleExpected || rig.ThrottleBound);
             state["pilotStickBound"] = rig.StickBound;

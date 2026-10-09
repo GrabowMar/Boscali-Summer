@@ -7,28 +7,6 @@ namespace BoscaliSummer.Tests.Features.Immersion
     {
         public static void Run()
         {
-            TestAssert.That(ImmersionMath.ExposureAudioCutoff(0f, 0f) == 22000f &&
-                ImmersionMath.ExposureAudioCutoff(float.NaN, 0f) == 22000f,
-                "Neutral and invalid exposure bypass filtering.");
-            TestAssert.That(ImmersionMath.ExposureAudioCutoff(1f, 0f) >= 1200f &&
-                ImmersionMath.ExposureAudioCutoff(1f, 0f) < 1300f,
-                "Sustained exposure has a bounded low cutoff.");
-            var brief = new PilotExposure(); brief.Step(9f, .05f);
-            var sustained = new PilotExposure();
-            for (int i = 0; i < 120; i++) sustained.Step(9f, 1f / 60f);
-            TestAssert.That(sustained.Positive > brief.Positive * 5f,
-                "A sustained load causes more exposure than a brief spike.");
-            float exposure = sustained.Positive;
-            sustained.Step(9f, 0f); sustained.Step(9f, 5f); sustained.Step(float.NaN, .02f);
-            TestAssert.That(sustained.Positive == exposure, "Paused/stalled/invalid load cannot accumulate exposure.");
-            for (int i = 0; i < 600; i++) sustained.Step(1f, 1f / 60f);
-            TestAssert.That(sustained.Positive < .001f, "Normal flight recovers exposure.");
-            for (int i = 0; i < 120; i++) sustained.Step(-3f, 1f / 60f);
-            TestAssert.That(sustained.Negative > .9f && sustained.Positive < .001f,
-                "Negative load uses independent exposure.");
-            sustained.Reset();
-            TestAssert.That(sustained.Positive == 0 && sustained.Negative == 0, "Binding reset clears pilot exposure.");
-
             var motion = new MotionEnvelope();
             for (int i = 0; i < 1000; i++) motion.AddGun(10000f, 2f);
             TestAssert.That(motion.Recoil <= 1f, "A burst of gun impulses remains bounded.");

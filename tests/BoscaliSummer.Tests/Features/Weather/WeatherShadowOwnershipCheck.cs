@@ -61,7 +61,6 @@ public static class WeatherShadowOwnershipCheck
                 UnityEngine.Object.DestroyImmediate(baselineCookie); UnityEngine.Object.DestroyImmediate(ownedCookie); UnityEngine.Object.DestroyImmediate(foreignCookie);
             }
             CheckShelterOwnership();
-            CheckNativeFilterOwnership();
             File.WriteAllText("shadow-result.txt", "PASS: " + assertions + " current-DLL native LightState/filter/shelter assertions");
             UnityEditor.EditorApplication.Exit(0);
         }
@@ -73,34 +72,6 @@ public static class WeatherShadowOwnershipCheck
         assertions++; Debug.Log("PASS " + behavior);
     }
     private static bool Same(Quaternion a, Quaternion b) => Math.Abs(Quaternion.Dot(a, b)) > .99999f;
-
-    private static void CheckNativeFilterOwnership()
-    {
-        Type type = typeof(AvConsole).Assembly.GetType("BoscaliSummer.Modules.Immersion.Audio.CockpitAudioFilter", true);
-        MethodInfo tick = type.GetMethod("Tick", All), release = type.GetMethod("Release", All);
-        for (int scenario = 0; scenario < 3; scenario++)
-        {
-            var root = new GameObject("Native borrowed filter ownership " + scenario);
-            Camera camera = root.AddComponent<Camera>(); camera.enabled = false;
-            root.AddComponent<AudioListener>();
-            var native = root.AddComponent<AudioLowPassFilter>();
-            native.enabled = scenario == 2; native.cutoffFrequency = 7777f; native.lowpassResonanceQ = 1.5f;
-            object owner = Activator.CreateInstance(type, true);
-            object[] arguments = { camera, 1f, 0f, true, true, 1f };
-            tick.Invoke(owner, arguments); tick.Invoke(owner, arguments);
-            Check(native.enabled && native.cutoffFrequency < 7777f, "High exposure borrows native filter " + scenario);
-            native.lowpassResonanceQ = 2.5f;
-            if (scenario < 2) native.cutoffFrequency = 5555f;
-            else native.enabled = false;
-            if (scenario == 1) tick.Invoke(owner, arguments);
-            release.Invoke(owner, null); release.Invoke(owner, null);
-            Check(!native.enabled, "Native/foreign disabled state survives release " + scenario);
-            Check(native.cutoffFrequency == (scenario < 2 ? 5555f : 7777f),
-                "Foreign cutoff and independent original cutoff restore " + scenario);
-            Check(native.lowpassResonanceQ == 2.5f, "Foreign resonance remains unowned " + scenario);
-            UnityEngine.Object.DestroyImmediate(root);
-        }
-    }
 
     private static void CheckShelterOwnership()
     {

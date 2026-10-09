@@ -20,6 +20,8 @@ Shader "Boscali/PilotBody"
         _HeadCenter ("Head mask world center and radius", Vector) = (0,0,0,.22)
         _HeadMaskMode ("Head mask: none, fallback sphere, oriented box", Float) = 1
         _LightLevel ("Cockpit light", Range(0,1)) = 1
+        _MaskMap ("Owned AO (R), smoothness (G), metal (B)", 2D) = "white" {}
+        _OwnedMaps ("Owned body textures", Float) = 0
     }
     SubShader
     {
@@ -31,6 +33,7 @@ Shader "Boscali/PilotBody"
         TEXTURE2D(_BumpMap); SAMPLER(sampler_BumpMap);
         TEXTURE2D(_MetallicGlossMap); SAMPLER(sampler_MetallicGlossMap);
         TEXTURE2D(_OcclusionMap); SAMPLER(sampler_OcclusionMap);
+        TEXTURE2D(_MaskMap); SAMPLER(sampler_MaskMap);
         CBUFFER_START(UnityPerMaterial)
         float4 _BaseMap_ST, _BumpMap_ST, _MetallicGlossMap_ST, _OcclusionMap_ST;
         half4 _BaseColor;
@@ -39,7 +42,7 @@ Shader "Boscali/PilotBody"
         half _BumpScale, _Metallic, _Smoothness, _OcclusionStrength;
         half _SmoothnessTextureChannel, _SpecularHighlights;
         half _HasNormalMap, _HasMetallicMap, _HasOcclusionMap;
-        half _BodyVisible, _HeadMaskMode, _LightLevel;
+        half _BodyVisible, _HeadMaskMode, _LightLevel, _OwnedMaps;
         CBUFFER_END
         struct Input { float4 vertex : POSITION; float3 normal : NORMAL; float4 tangent : TANGENT; float2 uv : TEXCOORD0; };
         struct Output
@@ -89,8 +92,17 @@ Shader "Boscali/PilotBody"
         half4 PilotBodyColour(Output i)
         {
             half4 albedo = PilotAlbedo(i);
-            half metallic = _Metallic, smoothness = _Smoothness;
-            if (_HasMetallicMap > .5h)
+            half metallic = _Metallic, smoothness = _Smoothness, occlusion;
+            if (_OwnedMaps > .5h)
+            {
+                // Authored body: one packed mask, no borrowed native maps.
+                half3 packed = SAMPLE_TEXTURE2D(_MaskMap, sampler_MaskMap, i.uv).rgb;
+                occlusion = lerp(1, packed.r, saturate(_OcclusionStrength));
+                smoothness = packed.g;
+                metallic = packed.b;
+            }
+            else occlusion = PilotOcclusion(i);
+            if (_OwnedMaps < .5h && _HasMetallicMap > .5h)
             {
                 half4 surface = SAMPLE_TEXTURE2D(_MetallicGlossMap, sampler_MetallicGlossMap,
                     i.uv * _MetallicGlossMap_ST.xy + _MetallicGlossMap_ST.zw);
@@ -98,14 +110,16 @@ Shader "Boscali/PilotBody"
                 metallic = surface.r;
                 smoothness *= surface.a;
             }
-            if (_SmoothnessTextureChannel > .5h) smoothness = _Smoothness * albedo.a;
+            if (_OwnedMaps < .5h && _SmoothnessTextureChannel > .5h) smoothness = _Smoothness * albedo.a;
             half3 normal = PilotNormal(i);
             half alpha = 1;
             BRDFData brdf;
             InitializeBRDFData(albedo.rgb, saturate(metallic), half3(0,0,0), saturate(smoothness), alpha, brdf);
-            Light mainLight = GetMainLight();
-            half3 diffuseAmbient = SampleSH(normal) * brdf.diffuse * PilotOcclusion(i);
-            // ponytail: one native main light + ambient; no additional-light loops, shadows, or reflection probes.
+            // Receives the cockpit camera's existing main-light shadow map (canopy frames sweep across the body).
+            // No keyword without a shadow-rendering camera, so attenuation is 1 at no cost; the body casts nothing.
+            Light mainLight = GetMainLight(TransformWorldToShadowCoord(i.world));
+            half3 diffuseAmbient = SampleSH(normal) * brdf.diffuse * occlusion;
+            // ponytail: one native main light + ambient; no additional-light loops or reflection probes.
             half3 direct = LightingPhysicallyBased(brdf, mainLight, normal,
                 GetWorldSpaceNormalizeViewDir(i.world), _SpecularHighlights < .5h);
             return half4((diffuseAmbient + direct) * max(.06h, _LightLevel), 1);
@@ -125,6 +139,8 @@ Shader "Boscali/PilotBody"
             ZWrite On
             HLSLPROGRAM
             #pragma target 3.0
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma vertex vert
             #pragma fragment frag
             Output vert(Input v) { return PilotVertex(v, false); }

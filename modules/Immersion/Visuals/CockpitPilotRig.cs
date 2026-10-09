@@ -28,13 +28,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Material material;
         private Material bodyMaterial;
         private SkinnedMeshRenderer firstPerson;
+        private Renderer companion;
         private Camera camera;
         private Transform frame, neck, headEnd, rightUpper, rightLower, rightHand, leftUpper, leftLower, leftHand;
         private Transform leftFoot, rightFoot, stick, throttle;
         private Vector3 stickGrip, throttleGrip;
         private Quaternion stickRotation, throttleRotation;
         private int count;
-        private float phase, lean, pitchLean, headPitch, headYaw, pedals;
+        private float lean, pitchLean, headPitch, headYaw, pedals;
         private float rightArmLength, leftArmLength, stickRestFit, throttleRestFit;
         private bool bodyVisible, hooked, stickOnRight = true;
         internal SkinnedMeshRenderer Renderer { get; private set; }
@@ -124,6 +125,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 firstPerson.reflectionProbeUsage = ReflectionProbeUsage.Off;
                 bodyMaterial = new Material(shader) { name = "Boscali.FirstPersonBody", hideFlags = HideFlags.HideAndDontSave };
                 BorrowMaterial(native, bodyMaterial);
+                if (PilotShaderBundle.GetBodyTextures(out Texture2D albedo, out Texture2D normalMap, out Texture2D maskMap))
+                    OwnMaterial(bodyMaterial, albedo, normalMap, maskMap);
                 bodyMaterial.SetFloat(HeadModeId, 0);
                 firstPerson.sharedMaterial = bodyMaterial;
             }
@@ -186,6 +189,20 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             BorrowFloat(native, owned, "_SpecularHighlights");
         }
 
+        private static void OwnMaterial(Material owned, Texture2D albedo, Texture2D normalMap, Texture2D maskMap)
+        {
+            owned.SetTexture("_BaseMap", albedo);
+            owned.SetTextureScale("_BaseMap", Vector2.one); owned.SetTextureOffset("_BaseMap", Vector2.zero);
+            owned.SetColor("_BaseColor", Color.white);
+            owned.SetTexture("_BumpMap", normalMap);
+            owned.SetTextureScale("_BumpMap", Vector2.one); owned.SetTextureOffset("_BumpMap", Vector2.zero);
+            owned.SetFloat("_BumpScale", 1f);
+            owned.SetFloat("_HasNormalMap", 1f);
+            owned.SetTexture("_MaskMap", maskMap);
+            owned.SetFloat("_OcclusionStrength", 1f);
+            owned.SetFloat("_OwnedMaps", 1f);
+        }
+
         private static void BorrowMap(Material native, Material owned, string property, string keyword, string flag)
         {
             Texture texture = native.HasProperty(property) ? native.GetTexture(property) : null;
@@ -228,6 +245,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         }
 
         internal void SetFrame(Transform value) { if (value != null) frame = value; }
+
+        /// <summary>A body-attached renderer (the kneeboard) shown only to the bound cockpit camera, like the body.</summary>
+        internal void SetCompanion(Renderer renderer) { companion = renderer; }
 
         internal void SetControlHandedness(bool rightHandStick)
         {
@@ -381,13 +401,12 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
         }
 
-        internal void Pose(float pitch, float roll, float yaw, float throttleInput, Vector3 forceG,
+        internal void Pose(float pitch, float roll, float yaw, float throttleInput, Vector3 forceG, float chestLift01,
             Quaternion lookLocal, float dt, bool motion, bool comfort)
         {
             if (!Valid || frame == null) return;
             float blend = PilotPoseMath.Smoothing(dt, 10f);
             // CopySeatedPose ran first: reapply the last presentation state even when time is paused.
-            if (blend > 0f) phase = (phase + Mathf.Min(dt, .05f) * 1.55f) % (Mathf.PI * 2f);
             Vector3 look = lookLocal.eulerAngles;
             float wantedPitch = Mathf.Clamp(Mathf.DeltaAngle(0, look.x), -45f, 35f);
             float wantedYaw = Mathf.Clamp(Mathf.DeltaAngle(0, look.y), -75f, 75f);
@@ -403,7 +422,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     comfort ? -.5f : -2f, comfort ? .5f : 2f), blend);
                 Vector2 torso = Vector2.ClampMagnitude(new Vector2(pitchLean, lean), comfort ? .5f : 2f);
                 Chest.rotation = FrameRotation(Quaternion.Euler(torso.x, 0, torso.y)) * Chest.rotation;
-                float breath = PilotPoseMath.BreathMetres(phase, comfort);
+                float breath = PilotPoseMath.BreathMetres(chestLift01, comfort);
                 Chest.position += frame.up * breath;
                 pedals = Mathf.Lerp(pedals, PilotPoseMath.Input(yaw), blend);
                 if (leftFoot != null) leftFoot.rotation = FrameRotation(Quaternion.Euler(pedals * 8f, 0, 0)) * leftFoot.rotation;
@@ -504,6 +523,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             bool visible = bodyVisible && rendering == camera;
             if (firstPerson != null) firstPerson.enabled = visible;
+            if (companion != null) companion.enabled = visible;
             if (material != null) material.SetFloat(BodyVisibleId, visible && firstPerson == null ? 1f : 0f);
             if (bodyMaterial != null) bodyMaterial.SetFloat(BodyVisibleId, visible ? 1f : 0f);
         }
@@ -524,9 +544,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             for (int i = 0; i < count; i++) { sources[i] = null; copies[i] = null; }
             count = 0; root = null; material = null; camera = null; frame = null; nativeAnimator = null; nativeRenderer = null;
             Head = Chest = neck = headEnd = rightUpper = rightLower = rightHand = leftUpper = leftLower = leftHand = null;
-            bodyMaterial = null; firstPerson = null;
+            bodyMaterial = null; firstPerson = null; companion = null;
             leftFoot = rightFoot = stick = throttle = null; Renderer = null;
-            phase = lean = pitchLean = headPitch = headYaw = pedals = 0f;
+            lean = pitchLean = headPitch = headYaw = pedals = 0f;
             bodyVisible = false; stickOnRight = true; properties.Clear();
             rightArmLength = leftArmLength = stickRestFit = throttleRestFit = 0f;
         }

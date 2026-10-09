@@ -19,6 +19,9 @@ namespace BoscaliSummer.Tests.Features.Immersion
                     Math.Abs(PilotPoseMath.TorsoDegrees(i, true)) <= .5f,
                     "Body motion respects its full and comfort limits.");
             }
+            TestAssert.That(PilotPoseMath.BreathMetres(.5f, false) == 0 && PilotPoseMath.BreathMetres(1f, false) > .0029f &&
+                PilotPoseMath.BreathMetres(0f, false) < -.0029f && PilotPoseMath.BreathMetres(float.NaN, false) == 0,
+                "Chest breath follows the shared breath clock's lift: neutral at half, +/-3 mm at the extremes.");
             TestAssert.That(PilotPoseMath.Smoothing(0, 8) == 0 && PilotPoseMath.Smoothing(-1, 8) == 0 &&
                 PilotPoseMath.Smoothing(2, 8) == 0, "Pause, rewind and long frame gaps cannot advance pose.");
             float twice = 1 - (1 - PilotPoseMath.Smoothing(.01f, 8)) * (1 - PilotPoseMath.Smoothing(.01f, 8));

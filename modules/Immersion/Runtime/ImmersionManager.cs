@@ -38,12 +38,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly SunGlare glare = new SunGlare();
         private readonly MfdGlow mfdGlow = new MfdGlow();
         private readonly SurfaceImmersion surface = new SurfaceImmersion();
-        private readonly CockpitAudioFilter audioFilter = new CockpitAudioFilter();
-        private readonly GVignette gVignette = new GVignette();
+        private readonly VisorOverlay visor = new VisorOverlay();
         private AirframeAudio airframeAudio;
         private CanopyWindAudio windAudio;
-        private PilotStrainAudio pilotStrainAudio;
-        private readonly PilotExposure exposure = new PilotExposure();
+        private PilotBreathingAudio pilotBreathingAudio;
+        private readonly PilotPhysiology physiology = new PilotPhysiology();
+        private readonly PilotVitals vitals = new PilotVitals();
+        private float debugG, debugGUntil = -1f;
         private Aircraft boundAircraft;
         private Camera boundCamera;
         private readonly CockpitCameraOffset cameraOffset = new CockpitCameraOffset();
@@ -63,18 +64,19 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
 
         public string EffectId => "immersion";
-        public FxBudget Budget => new FxBudget(0, 1, 3, true);
+        public FxBudget Budget => new FxBudget(0, 1, 5, true);
 
         public void ReleaseFx()
         {
             ResetForScene();
+            visor.Release();
             SunGlare.ReleaseData();
             if (airframeAudio != null) { airframeAudio.Release(); Object.Destroy(airframeAudio); }
             if (windAudio != null) { windAudio.Release(); Object.Destroy(windAudio); }
-            if (pilotStrainAudio != null) { pilotStrainAudio.Release(); Object.Destroy(pilotStrainAudio); }
+            if (pilotBreathingAudio != null) { pilotBreathingAudio.Release(); Object.Destroy(pilotBreathingAudio); }
             airframeAudio = null;
             windAudio = null;
-            pilotStrainAudio = null;
+            pilotBreathingAudio = null;
         }
 
         public void DescribeFx(IDictionary<string, object> state)
@@ -84,6 +86,18 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public Quaternion HeadOffset => composedOffset;
         internal HeadMotion Head => head;
+        internal PilotPhysiology Physiology => physiology;
+        internal ImmersionSettings Settings => settings;
+        internal PilotCue Cues { get; private set; }
+        internal void OnPlayerHit() => vitals.AddHit();
+
+        /// <summary>Automation only: drive pilot cues from a fixed G through the vanilla-equation fallback.</summary>
+        internal void InjectG(float g, float seconds)
+        {
+            debugG = g;
+            debugGUntil = Time.unscaledTime + seconds;
+            physiology.Reset();
+        }
 
         public bool IsEnabled
         {
@@ -145,22 +159,16 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             set { if (settings != null) settings.SurfaceImmersionEnabled.Value = value; }
         }
 
-        public bool GForceAudioEnabled
-        {
-            get => settings != null && settings.GForceAudioEnabled.Value;
-            set { if (settings != null) settings.GForceAudioEnabled.Value = value; }
-        }
-
         public bool WindAudioEnabled
         {
             get => settings != null && settings.WindAudioEnabled.Value;
             set { if (settings != null) settings.WindAudioEnabled.Value = value; }
         }
 
-        public bool GVignetteEnabled
+        public bool HelmetVisorEnabled
         {
-            get => settings != null && settings.GVignetteEnabled.Value;
-            set { if (settings != null) settings.GVignetteEnabled.Value = value; }
+            get => settings != null && settings.HelmetVisorEnabled.Value;
+            set { if (settings != null) settings.HelmetVisorEnabled.Value = value; }
         }
 
         public bool MachBuffetEnabled
@@ -169,10 +177,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             set { if (settings != null) settings.MachBuffetEnabled.Value = value; }
         }
 
-        public bool PilotStrainAudioEnabled
+        public bool PilotBreathingEnabled
         {
-            get => settings != null && settings.PilotStrainAudioEnabled.Value;
-            set { if (settings != null) settings.PilotStrainAudioEnabled.Value = value; }
+            get => settings != null && settings.PilotBreathingEnabled.Value;
+            set { if (settings != null) settings.PilotBreathingEnabled.Value = value; }
         }
 
         public void ResetForScene()
@@ -182,15 +190,16 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             shake.Release();
             glare.Release();
             mfdGlow.Release();
+            visor.Hide();
             surface.Reset();
-            audioFilter.Release();
-            gVignette.Release();
             if (airframeAudio != null) airframeAudio.Silence();
             if (windAudio != null) windAudio.Silence();
-            if (pilotStrainAudio != null) pilotStrainAudio.Silence();
+            if (pilotBreathingAudio != null) pilotBreathingAudio.Silence();
             IsCockpitActive = false;
             FollowingUnit = null;
-            exposure.Reset();
+            physiology.Reset();
+            vitals.Reset();
+            Cues = PilotCue.None;
             composedOffset = Quaternion.identity;
             composedAngles = Vector3.zero;
             boundAircraft = null;
@@ -214,7 +223,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             head.Measure(boundAircraft, Time.fixedDeltaTime);
             if (head.Discontinuity)
             {
-                exposure.Reset();
                 shake.ResetMeasurements();
                 airframeAudio?.Silence();
             }
@@ -267,15 +275,17 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             float loadDt = double.IsNaN(lastMissionClock) ? 0f : (float)(missionClock - lastMissionClock);
             if (loadDt < 0f || loadDt > 0.25f)
             {
-                exposure.Reset();
                 shake.ResetMeasurements();
                 airframeAudio?.Silence();
                 loadDt = 0f;
             }
             lastMissionClock = missionClock;
-            exposure.Step(head.ForceG.y, loadDt);
+            PilotVitalsSample sample = vitals.Read(aircraft);
+            if (Time.unscaledTime < debugGUntil) { sample.G = debugG; sample.HasVanilla = false; }
+            Cues = physiology.Step(sample, loadDt);
             bool comfort = settings.ComfortMotionEnabled.Value;
-            head.Step(dt, settings.HeadMotionStrength.Value, settings.HeadMotionEnabled.Value, exposure.Strain, comfort);
+            head.Step(dt, settings.HeadMotionStrength.Value, settings.HeadMotionEnabled.Value,
+                physiology.Exertion01, physiology.ChestLift01, comfort);
             Vector3 relativeAir = aircraft.rb.velocity - (environmentValid ? environment.WindWorldMps : Vector3.zero);
             float airspeed = environmentValid ? relativeAir.magnitude : aircraft.speed;
             float altitude = aircraft.transform.GlobalPosition().y;
@@ -298,6 +308,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                     level != null ? 1f - Mathf.Clamp01(level.GetCloudOcclusion(camera.transform.position)) : 1f);
             float ambient = level != null ? level.GetAmbientLight() : 1f;
             if (environmentValid) ambient *= 1f - environment.CloudShade01 * 0.35f;
+            // Smudges catch light only when looking toward a visible sun (60 deg off-axis -> none, ~18 deg -> full).
+            Light sunLight = level != null ? level.sun : null;
+            float facing = sunLight != null ? Mathf.Clamp01((Vector3.Dot(camera.transform.forward, -sunLight.transform.forward) - .5f) / .45f) : 0f;
+            visor.Tick(Cues, physiology, glare.Visibility * facing * facing, ambient,
+                environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
             surface.Tick(aircraft, true, level, settings.SurfaceImmersionEnabled.Value, dt);
             EnsureAudioComponents();
@@ -316,13 +331,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                     true, settings.WindAudioEnabled.Value, dt, wetMask, altitude, slip,
                     environmentValid ? environment.Turbulence01 : 0f);
             }
-            if (pilotStrainAudio != null)
+            if (pilotBreathingAudio != null)
             {
-                pilotStrainAudio.TryRoute();
-                pilotStrainAudio.Tick(exposure.Positive, true, settings.PilotStrainAudioEnabled.Value, dt);
+                pilotBreathingAudio.TryRoute();
+                pilotBreathingAudio.Tick(Cues, physiology, settings.PilotBreathingEnabled.Value);
             }
-            audioFilter.Tick(camera, exposure.Positive, exposure.Negative, true, settings.GForceAudioEnabled.Value, dt);
-            gVignette.Tick(exposure.Positive, exposure.Negative, true, settings.GVignetteEnabled.Value, dt);
         }
 
         internal void ApplyCameraOffset(CameraStateManager cameras)
@@ -349,10 +362,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 windAudio = gameObject.AddComponent<CanopyWindAudio>();
                 windAudio.Initialize();
             }
-            if (pilotStrainAudio == null)
+            if (pilotBreathingAudio == null)
             {
-                pilotStrainAudio = gameObject.AddComponent<PilotStrainAudio>();
-                pilotStrainAudio.Initialize();
+                pilotBreathingAudio = gameObject.AddComponent<PilotBreathingAudio>();
+                pilotBreathingAudio.Initialize();
             }
         }
 
@@ -384,11 +397,17 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["damageCandidates"] = surface.CandidateCount;
             state["damageSurfaces"] = surface.SurfaceCount;
             state["creaks"] = airframeAudio != null ? airframeAudio.Creaks : 0;
-            state["audioCutoff"] = audioFilter.CutoffFrequency;
-            state["audioFilteringActive"] = audioFilter.IsFilteringActive;
-            state["gVignetteWeight"] = gVignette.Weight;
-            state["pilotPositiveExposure"] = exposure.Positive;
-            state["pilotNegativeExposure"] = exposure.Negative;
+            state["pilotBloodPressure"] = physiology.BloodPressure;
+            state["pilotStamina"] = physiology.Stamina;
+            state["pilotConscious"] = physiology.Conscious;
+            state["pilotLoadG"] = physiology.LoadG;
+            state["pilotExertion"] = physiology.Exertion01;
+            state["pilotStress"] = physiology.Stress01;
+            state["pilotStraining"] = physiology.Straining;
+            state["pilotBreathRate"] = physiology.BreathsPerMinute;
+            state["pilotHeartRate"] = physiology.HeartRate;
+            state["pilotGreyout"] = physiology.Greyout01;
+            state["pilotVanillaGloc"] = vitals.HasVanilla;
             state["immersionBindingValid"] = presenting;
             state["immersionWeatherValid"] = environmentValid;
             state["immersionWeatherAge"] = environmentValid ? Time.frameCount - environment.FrameIndex : -1;
@@ -401,12 +420,20 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionPivotApplied"] = cameraOffset.IsApplied;
             state["immersionAircraftId"] = boundAircraft != null ? boundAircraft.GetInstanceID() : 0;
             state["immersionCameraId"] = boundCamera != null ? boundCamera.GetInstanceID() : 0;
-            state["immersionSources"] = (airframeAudio != null ? 1 : 0) + (windAudio != null ? 1 : 0) + (pilotStrainAudio != null ? 1 : 0);
+            state["immersionSources"] = (airframeAudio != null ? 1 : 0) + (windAudio != null ? 1 : 0) + (pilotBreathingAudio != null ? 3 : 0);
             state["immersionWindPlaying"] = windAudio != null && windAudio.IsPlaying;
             state["immersionWindVolume"] = windAudio != null ? windAudio.Volume : 0f;
             state["immersionWindPan"] = windAudio != null ? windAudio.Pan : 0f;
             state["immersionCreakPlaying"] = airframeAudio != null && airframeAudio.IsPlaying;
-            state["immersionStrainPlaying"] = pilotStrainAudio != null && pilotStrainAudio.IsPlaying;
+            state["immersionBreathPlaying"] = pilotBreathingAudio != null && pilotBreathingAudio.IsPlaying;
+            state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
+            state["visorVisible"] = visor.Visible;
+            state["visorTint"] = visor.Tint;
+            state["visorSunLit"] = visor.SunLit;
+            state["visorFog"] = visor.Fog;
+            state["visorBrow"] = visor.Brow;
+            state["visorSortingOrder"] = visor.SortingOrder;
+            state["visorHudMode"] = visor.HudMode;
 
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             state["ambient"] = level != null ? level.GetAmbientLight() : -1f;

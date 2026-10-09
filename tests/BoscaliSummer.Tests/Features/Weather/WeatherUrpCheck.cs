@@ -130,8 +130,6 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         IEnumerator materialChecks = TestMaterialOwnership();
         while (materialChecks.MoveNext()) yield return materialChecks.Current;
         TestCameraOwnership();
-        IEnumerator filterChecks = TestFilterOwnership();
-        while (filterChecks.MoveNext()) yield return filterChecks.Current;
 
         var march = new Material(Resources.Load<Shader>("FlightCloud"));
         var composite = new Material(Resources.Load<Shader>("FlightCloudComposite"));
@@ -1130,36 +1128,6 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         for (int y = 16; y < a.height; y += 32)
             for (int x = 16; x < a.width; x += 32) { sum += Delta(a.GetPixel(x, y), b.GetPixel(x, y)); count++; }
         return sum / count;
-    }
-
-    private IEnumerator TestFilterOwnership()
-    {
-        var camera = new GameObject("Native filtered cockpit").AddComponent<Camera>(); camera.enabled = false;
-        camera.gameObject.AddComponent<AudioListener>();
-        var native = camera.gameObject.AddComponent<AudioLowPassFilter>();
-        native.enabled = true; native.cutoffFrequency = 7777f; native.lowpassResonanceQ = 1.5f;
-        var owner = new CockpitAudioFilter(); owner.Tick(camera, 1f, 0f, true, true, 1f);
-        owner.Tick(camera, 1f, 0f, true, true, 1f);
-        Check(native.cutoffFrequency < 7777f && owner.IsFilteringActive, "Pilot exposure owns a bounded native filter cutoff");
-        native.lowpassResonanceQ = 2.5f;
-        owner.Tick(camera, 0f, 0f, true, true, .02f);
-        Check(native.enabled && native.cutoffFrequency == 7777f && native.lowpassResonanceQ == 2.5f,
-            "Normal G restores cutoff and retains native resonance updates");
-        owner.Tick(camera, 1f, 0f, true, true, 1f); native.cutoffFrequency = 5555f;
-        owner.Release();
-        Check(native != null && native.enabled && native.cutoffFrequency == 5555f && native.lowpassResonanceQ == 2.5f,
-            "Foreign native filter replacement survives release");
-        var replacement = new GameObject("Replacement cockpit").AddComponent<Camera>(); replacement.enabled = false;
-        replacement.gameObject.AddComponent<AudioListener>();
-        owner.Tick(camera, 1f, 0f, true, true, 1f);
-        owner.Tick(replacement, 1f, 0f, true, true, 1f);
-        Check(native.cutoffFrequency == 5555f, "Camera replacement restores the previous camera filter");
-        var created = replacement.GetComponent<AudioLowPassFilter>();
-        Check(created != null, "Missing cockpit filter is created for exposure");
-        owner.Release(); owner.Release(); yield return null;
-        Check(created == null && replacement.GetComponent<AudioLowPassFilter>() == null,
-            "Created cockpit filter is destroyed after repeated release");
-        Destroy(camera.gameObject); Destroy(replacement.gameObject);
     }
 
     private static Camera CameraAt(string name, RenderTexture target, float depth)

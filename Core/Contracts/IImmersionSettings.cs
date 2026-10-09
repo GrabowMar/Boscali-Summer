@@ -16,10 +16,9 @@ namespace BoscaliSummer.Core.Contracts
         bool MfdGlowEnabled { get; set; }
         bool AirframeAudioEnabled { get; set; }
         bool SurfaceImmersionEnabled { get; set; }
-        bool GForceAudioEnabled { get; set; }
         bool WindAudioEnabled { get; set; }
-        bool GVignetteEnabled { get; set; }
+        bool HelmetVisorEnabled { get; set; }
         bool MachBuffetEnabled { get; set; }
-        bool PilotStrainAudioEnabled { get; set; }
+        bool PilotBreathingEnabled { get; set; }
     }
 }
