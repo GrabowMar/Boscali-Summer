@@ -33,6 +33,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         public float Gain { get; set; } = 1f;
 
         public float Intensity => flare != null ? flare.intensity : 0f;
+        /// <summary>0-1 sun visibility after elevation, terrain and cloud transmission (independent of view direction).</summary>
+        internal float Visibility => visibility;
 
         public void Tick(LevelInfo level, Camera camera, bool on, float dt, float transmission = 1f)
         {

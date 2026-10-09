@@ -11,6 +11,7 @@ using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Immersion.Runtime
 {
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private Pilot pilot;
         private Camera camera;
         private Cockpit controls;
+        private UniversalAdditionalCameraData cameraData;
         private bool controlsBound, stickExpected, throttleExpected;
         private int bindFrame;
         private float retryAt, controlsRetryAt;
@@ -112,6 +114,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             var animator = PilotAnimator.GetValue(pilot) as Animator;
             if (!rig.Bind(source, animator, PilotShaderBundle.GetBody(), camera)) { WarnUnavailable(); return false; }
             rig.SetFrame(aircraft.cockpit.transform);
+            camera.TryGetComponent(out cameraData);
             ModuleServices.TryGet(out ICanopyGlassView canopy);
             reflection.SetGlassView(canopy);
             bindFrame = Time.frameCount;
@@ -240,7 +243,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         public void ResetForScene()
         {
-            reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null;
+            reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
             controlsBound = stickExpected = throttleExpected = false;
             retryAt = controlsRetryAt = 0; warnedAircraft = 0; reportedControls = -1;
         }
@@ -254,6 +257,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["pilotBodyVertices"] = rig.BodyRenderer != null && rig.BodyRenderer.sharedMesh != null
                 ? rig.BodyRenderer.sharedMesh.vertexCount : 0;
             state["pilotTransforms"] = rig.TransformCount;
+            state["pilotOwnedTextures"] = PilotShaderBundle.GetBodyTextures(out _, out _, out _);
+            state["pilotShadowsAvailable"] = cameraData != null && cameraData.renderShadows;
             state["pilotControlComponentBound"] = controls != null;
             state["pilotControlsBound"] = controlsBound && (!stickExpected || rig.StickBound) && (!throttleExpected || rig.ThrottleBound);
             state["pilotStickBound"] = rig.StickBound;

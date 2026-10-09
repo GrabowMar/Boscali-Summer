@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly SunGlare glare = new SunGlare();
         private readonly MfdGlow mfdGlow = new MfdGlow();
         private readonly SurfaceImmersion surface = new SurfaceImmersion();
+        private readonly VisorOverlay visor = new VisorOverlay();
         private AirframeAudio airframeAudio;
         private CanopyWindAudio windAudio;
         private PilotBreathingAudio pilotBreathingAudio;
@@ -68,6 +69,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public void ReleaseFx()
         {
             ResetForScene();
+            visor.Release();
             SunGlare.ReleaseData();
             if (airframeAudio != null) { airframeAudio.Release(); Object.Destroy(airframeAudio); }
             if (windAudio != null) { windAudio.Release(); Object.Destroy(windAudio); }
@@ -187,6 +189,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             shake.Release();
             glare.Release();
             mfdGlow.Release();
+            visor.Hide();
             surface.Reset();
             if (airframeAudio != null) airframeAudio.Silence();
             if (windAudio != null) windAudio.Silence();
@@ -305,6 +308,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                     level != null ? 1f - Mathf.Clamp01(level.GetCloudOcclusion(camera.transform.position)) : 1f);
             float ambient = level != null ? level.GetAmbientLight() : 1f;
             if (environmentValid) ambient *= 1f - environment.CloudShade01 * 0.35f;
+            // Smudges catch light only when looking toward a visible sun (60 deg off-axis -> none, ~18 deg -> full).
+            Light sunLight = level != null ? level.sun : null;
+            float facing = sunLight != null ? Mathf.Clamp01((Vector3.Dot(camera.transform.forward, -sunLight.transform.forward) - .5f) / .45f) : 0f;
+            visor.Tick(Cues, physiology, glare.Visibility * facing * facing, ambient,
+                environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
             surface.Tick(aircraft, true, level, settings.SurfaceImmersionEnabled.Value, dt);
             EnsureAudioComponents();
@@ -419,6 +427,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionCreakPlaying"] = airframeAudio != null && airframeAudio.IsPlaying;
             state["immersionBreathPlaying"] = pilotBreathingAudio != null && pilotBreathingAudio.IsPlaying;
             state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
+            state["visorVisible"] = visor.Visible;
+            state["visorTint"] = visor.Tint;
+            state["visorSunLit"] = visor.SunLit;
+            state["visorFog"] = visor.Fog;
+            state["visorBrow"] = visor.Brow;
+            state["visorSortingOrder"] = visor.SortingOrder;
+            state["visorHudMode"] = visor.HudMode;
 
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             state["ambient"] = level != null ? level.GetAmbientLight() : -1f;

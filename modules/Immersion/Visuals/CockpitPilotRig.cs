@@ -124,6 +124,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 firstPerson.reflectionProbeUsage = ReflectionProbeUsage.Off;
                 bodyMaterial = new Material(shader) { name = "Boscali.FirstPersonBody", hideFlags = HideFlags.HideAndDontSave };
                 BorrowMaterial(native, bodyMaterial);
+                if (PilotShaderBundle.GetBodyTextures(out Texture2D albedo, out Texture2D normalMap, out Texture2D maskMap))
+                    OwnMaterial(bodyMaterial, albedo, normalMap, maskMap);
                 bodyMaterial.SetFloat(HeadModeId, 0);
                 firstPerson.sharedMaterial = bodyMaterial;
             }
@@ -184,6 +186,20 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             BorrowFloat(native, owned, "_OcclusionStrength");
             BorrowFloat(native, owned, "_SmoothnessTextureChannel");
             BorrowFloat(native, owned, "_SpecularHighlights");
+        }
+
+        private static void OwnMaterial(Material owned, Texture2D albedo, Texture2D normalMap, Texture2D maskMap)
+        {
+            owned.SetTexture("_BaseMap", albedo);
+            owned.SetTextureScale("_BaseMap", Vector2.one); owned.SetTextureOffset("_BaseMap", Vector2.zero);
+            owned.SetColor("_BaseColor", Color.white);
+            owned.SetTexture("_BumpMap", normalMap);
+            owned.SetTextureScale("_BumpMap", Vector2.one); owned.SetTextureOffset("_BumpMap", Vector2.zero);
+            owned.SetFloat("_BumpScale", 1f);
+            owned.SetFloat("_HasNormalMap", 1f);
+            owned.SetTexture("_MaskMap", maskMap);
+            owned.SetFloat("_OcclusionStrength", 1f);
+            owned.SetFloat("_OwnedMaps", 1f);
         }
 
         private static void BorrowMap(Material native, Material owned, string property, string keyword, string flag)

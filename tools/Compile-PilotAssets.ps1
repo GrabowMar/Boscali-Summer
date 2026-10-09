@@ -13,7 +13,7 @@ New-Item -ItemType Directory -Force -Path "$fixture/Assets/PilotShader", "$fixtu
 $editorVersion = if ($Unity -like '*62f3*') { '2022.3.62f3' } else { '2022.3.62f2' }
 Set-Content -LiteralPath "$fixture/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVersion"
 Set-Content -LiteralPath "$fixture/Packages/manifest.json" -Value '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.assetbundle":"1.0.0"}}'
-foreach ($name in 'PilotBody.shader', 'PilotCanopyReflection.shader', 'pilot-first-person.json') {
+foreach ($name in 'PilotBody.shader', 'PilotCanopyReflection.shader', 'VisorOverlay.shader', 'pilot-first-person.json') {
     $source = Join-Path $SourceDir $name
     if (-not (Test-Path -LiteralPath $source)) { throw "Required pilot asset source missing: $source" }
     Copy-Item -LiteralPath $source -Destination "$fixture/Assets/PilotShader/$name" -Force
@@ -112,7 +112,8 @@ public static class BuildPilotBundle
             GraphicsSettings.renderPipelineAsset = pipeline;
             QualitySettings.renderPipeline = pipeline;
             AssetDatabase.SaveAssets();
-            string[] shaderPaths = { "Assets/PilotShader/PilotBody.shader", "Assets/PilotShader/PilotCanopyReflection.shader" };
+            string[] shaderPaths = { "Assets/PilotShader/PilotBody.shader", "Assets/PilotShader/PilotCanopyReflection.shader",
+                "Assets/PilotShader/VisorOverlay.shader" };
             foreach (string path in shaderPaths)
             {
                 Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
@@ -130,14 +131,14 @@ public static class BuildPilotBundle
                 throw new Exception("Pilot shader does not preserve BODY0 / CAPTURE1");
             string[] materialProperties = { "_BumpMap", "_BumpScale", "_MetallicGlossMap", "_Metallic", "_Smoothness",
                 "_SmoothnessTextureChannel", "_SpecularHighlights", "_OcclusionMap", "_OcclusionStrength",
-                "_HasNormalMap", "_HasMetallicMap", "_HasOcclusionMap", "_HeadMaskMode" };
+                "_HasNormalMap", "_HasMetallicMap", "_HasOcclusionMap", "_HeadMaskMode", "_OwnedMaps", "_MaskMap" };
             foreach (string property in materialProperties)
                 if (!bodyMaterial.HasProperty(property)) throw new Exception("Pilot material property missing: " + property);
             File.WriteAllText("shader-result.txt", "PASS supported BODY0 / CAPTURE1; native material contract: " +
                 string.Join(", ", materialProperties));
             UnityEngine.Object.DestroyImmediate(bodyMaterial);
             BuildFirstPersonMesh();
-            string[] paths = { shaderPaths[0], shaderPaths[1], "Assets/PilotShader/pilot-first-person.asset" };
+            string[] paths = { shaderPaths[0], shaderPaths[1], shaderPaths[2], "Assets/PilotShader/pilot-first-person.asset" };
             var build = new AssetBundleBuild { assetBundleName = "pilot.bundle", assetNames = paths };
             var manifest = BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
                 BuildAssetBundleOptions.ChunkBasedCompression, BuildTarget.StandaloneWindows64);
