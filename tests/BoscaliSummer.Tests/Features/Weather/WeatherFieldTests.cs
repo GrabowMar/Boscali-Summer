@@ -38,9 +38,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             FlightLevelPrecipitation();
         }
 
-        private static WeatherKey Key(uint seed = 20260918u, bool dynamic = true,
-            WeatherRegimeType? start = null, float interval = 5f, float fade = 60f)
-            => new WeatherKey(seed, 0f, dynamic, start.HasValue ? (byte)start.Value : WeatherKey.AutoState, interval, fade);
+        private static WeatherKey Key(uint seed = 20260918u, bool dynamic = true, WeatherRegimeType? start = null)
+            => new WeatherKey(seed, 0f, dynamic, start.HasValue ? (byte)start.Value : WeatherKey.AutoState);
 
         private static WeatherKey Held(WeatherRegimeType state, uint seed = 24u) => Key(seed, false, state);
 
@@ -54,8 +53,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(WeatherTimeline.Evaluate(key, 361f).Blend == 1f, "the fade lasts sixty seconds");
             TestAssert.That(WeatherTimeline.Evaluate(key, 330f).Blend > 0f && WeatherTimeline.Evaluate(key, 330f).Blend < 1f,
                 "the change fades in");
-            WeatherKey slow = Key(7u, interval: 12f);
-            TestAssert.That(WeatherTimeline.Evaluate(slow, 700f).Step == 0, "the interval follows the host setting");
+            TestAssert.That(WeatherTimeline.Evaluate(key, 700f).Step == 2, "the interim step interval is five minutes");
         }
 
         private static void StatesMoveOnlyToNeighbours()
@@ -96,7 +94,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 WeatherKey key = Key(seed);
                 for (int step = 0; step < 24; step++)
                 {
-                    float settled = step * 300f + WeatherTimeline.SettleSeconds(key) + 1f, late = step * 300f + 299f;
+                    float settled = step * 300f + WeatherTimeline.SettleSeconds() + 1f, late = step * 300f + 299f;
                     field.Build(key, settled, HalfX, HalfZ);
                     WeatherPoint a = field.Sample(9000f, -14000f);
                     int cells = field.CellCount;
@@ -332,14 +330,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             field.Build(key.WithoutAnchor(), 600f, HalfX, HalfZ);
             TestAssert.That(field.SuperstructureAt(0).X != 12000f, "without an anchor set-pieces take their default spot");
 
-            field.Build(Held(WeatherRegimeType.Overcast, 11u), 600f, HalfX, HalfZ);
-            float heading = field.Split.Heading;
-            field.Build(Held(WeatherRegimeType.Overcast, 11u).WithFrontTurn(2), 600f, HalfX, HalfZ);
-            TestAssert.That(Math.Abs(field.Split.Heading - heading - 90f) < 0.01f, "the console turns the front by 45 degree steps");
-            TestAssert.That(Held(WeatherRegimeType.Clear).WithFrontTurn(9).FrontTurn == 1 &&
-                Held(WeatherRegimeType.Clear).WithFrontTurn(-1).FrontTurn == 7, "front turns wrap around");
-            TestAssert.That(!key.Equals(key.WithoutAnchor()) && !key.Equals(key.WithFrontTurn(1)),
-                "placement and front turn are part of the synced key");
+            TestAssert.That(!key.Equals(key.WithoutAnchor()) && !key.Equals(key.WithLayoutSalt(1)),
+                "placement and layout are part of the synced key");
         }
 
         private static void FieldIsDeterministic()

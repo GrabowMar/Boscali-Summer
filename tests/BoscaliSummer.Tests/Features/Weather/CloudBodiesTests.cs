@@ -37,8 +37,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             // Set-pieces are mirrored as smooth envelopes: each formation reads as cloud on
             // the CPU where the shader draws it, with no effect far away. An empty weather
             // point isolates the hero contribution (no low deck, below the middle layer).
-            var key = new WeatherKey(12345u, 0f, false, (byte)WeatherRegimeType.Storm, 5f, 60f,
-                (byte)(Superstructures.StormEyeSet | Superstructures.LenticularSet), 0, true, 0f, 25000f, 0);
+            var key = new WeatherKey(12345u, 0f, false, (byte)WeatherRegimeType.Storm,
+                (byte)(Superstructures.StormEyeSet | Superstructures.LenticularSet), 0, true, 0f, 25000f);
             var field = new WeatherField();
             field.Build(key, 900f, 60000f, 60000f, 13f);
             TestAssert.That(field.SuperstructureCount >= 2, "a storm holds set-pieces, got " + field.SuperstructureCount);

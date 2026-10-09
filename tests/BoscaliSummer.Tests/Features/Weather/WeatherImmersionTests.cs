@@ -57,7 +57,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(scud.Density(rainyColumn, 0f, 1700f, 0f, 1200f) > 0.2f,
                 "Cloud altitude shift moves scud and its occupation together");
 
-            field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear, 5f, 60f,
+            field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
                 Superstructures.SupercellSet), 60f, 40000f, 40000f);
             Superstructure hero = field.SuperstructureAt(0);
             var settledHero = new CloudBodies(noise, 2, field.Params, field: field);

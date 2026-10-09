@@ -129,10 +129,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Timeline = timeline;
             StateParams sky = StateTable.At(timeline.Level);
             Params = sky;
-            PrevailingHeading = WeatherMath.Hash01(key.Seed, 41) * 360f;
+            PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
             WeatherMath.HeadingToVector(PrevailingHeading, out float driftX, out float driftZ);
 
-            Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, key.FrontTurn);
+            Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, 0); // INTERIM(slice 4): no front turn
             FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
             StateParams convection = StateTable.At(timeline.GrowthLevel);
             CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ, Split);

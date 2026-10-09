@@ -225,7 +225,8 @@ public sealed class CloudBench : MonoBehaviour
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
-            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, 5f, 60f, s.Sets, s.Salt, s.Anchor, 0f, 25000f, s.Turn);
+            // INTERIM(slice 4): the key has no front turn; the three front-turn views render the unturned sky.
+            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();

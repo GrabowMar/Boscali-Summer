@@ -85,7 +85,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private AvControl[] setButtons;
         private AvControl[] scenarioButtons;
         private AvControl[] rainButtons;
-        private AvControl placeButton, hereButton, unplaceButton, turnButton, flipButton, changingButton, rerollButton;
+        private AvControl placeButton, hereButton, unplaceButton, changingButton, rerollButton;
         private readonly List<AvHit> hitList = new List<AvHit>(32);
         private readonly List<AvHelpTip> tipList = new List<AvHelpTip>(16);
         private AvHit hovered;
@@ -310,24 +310,19 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             }
             setButtons = body.Add(new AvButtons(body.Content, setSpecs)).Controls;
             for (int i = 0; i < setButtons.Length; i++) setButtons[i].Help = SetHelp[i];
-            // Placement (4) and front (2) share one line of six.
+            // Placement and layout share one line; ROTATE/FLIP are hidden until the tape replaces the front (INTERIM, slice 4).
             AvControl[] placement = body.Add(new AvButtons(body.Content, new[]
             {
                 new AvControl.Spec("PLACE 30 KM AHEAD", () => weather.PlaceAhead(30000f)),
                 new AvControl.Spec("PLACE HERE", () => weather.PlaceAhead(0f)),
                 new AvControl.Spec("DEFAULT PLACE", () => weather.ClearPlacement()),
                 new AvControl.Spec("RE-ROLL LAYOUT", () => weather.RerollLayout()),
-                new AvControl.Spec("ROTATE 45°", () => weather.TurnFront(1)),
-                new AvControl.Spec("FLIP", () => weather.TurnFront(4)),
             })).Controls;
             placeButton = placement[0]; hereButton = placement[1]; unplaceButton = placement[2]; rerollButton = placement[3];
-            turnButton = placement[4]; flipButton = placement[5];
             placement[0].Help = "PLACE 30 KM AHEAD: stand the storm eye and lenticulars 30 km ahead of you (lenticulars sit beside the eye).";
             placement[1].Help = "PLACE HERE: centre the storm eye on you, so you start inside the eye.";
             placement[2].Help = "DEFAULT PLACE: put console set-pieces back at their default spots.";
             placement[3].Help = "RE-ROLL LAYOUT: new cloud, cell and default set-piece sites. The state and explicit placement stay.";
-            turnButton.Help = "ROTATE 45: turn the front's line by 45 degrees, so the deck arrives from another side.";
-            flipButton.Help = "FLIP: swap which side of the map is under the deck and which is open sky.";
 
             body.Section(AvIcon.CloudRain, "RAIN", "FORCE");
             var rainSpecs = new AvControl.Spec[RainValues.Length];
@@ -399,13 +394,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             placeButton.Interactable = host;
             hereButton.Interactable = host;
             unplaceButton.Interactable = host && weather.HasAnchor;
-            turnButton.Interactable = host;
-            flipButton.Interactable = host;
-            int turn = weather.FrontTurn;
             bool splitSky = field != null && field.Split.Amount > 0f;
             int frontHeading = field != null ? ((Mathf.RoundToInt(field.Split.Heading) % 360) + 360) % 360 : 0;
             string frontStatus = (splitSky ? "FRONT · HDG " + frontHeading.ToString("000") + "°" : "NO FRONT") +
-                (turn != 0 ? "  ·  TURN " + AvNum.Fixed(turn * 45, 0) + "°" : "") +
                 ((weather.ForcedSets & Superstructures.FogBankSet) != 0 ? "  ·  FOG" : "");
             frontRow.Set(frontStatus, "", "", AvState.Info);
             float? rainNow = weather.ForcedRainIntensity;

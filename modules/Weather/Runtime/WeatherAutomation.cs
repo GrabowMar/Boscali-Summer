@@ -94,7 +94,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!Enum.TryParse(Text(args, "scenario"), true, out WeatherScenario scenario) ||
                 !Enum.IsDefined(typeof(WeatherScenario), scenario))
                 return Fail("ApplyScenario", "unknown console weather preset");
-            manager.ApplyScenario(scenario);
+            if (!manager.ApplyScenario(scenario))
+                return Fail("ApplyScenario", "the weather has not started or has no valid mission clock yet");
             manager.LogAutomation("ApplyScenario: " + scenario);
             return Readout(manager);
         }

@@ -469,7 +469,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             volumeTop = result.Top;
             fadeStart = missionTime;
             // Finish together with the weather: the map shows the settled state.
-            fadeLength = first ? 0f : Mathf.Max(mapKey != null ? mapKey.FadeSeconds * 0.5f : 5f,
+            fadeLength = first ? 0f : Mathf.Max(WeatherTimeline.FadeSeconds * 0.5f,
                 result.SettledAt - missionTime);
             nextBlend = 0f;
             blendedAt = -1f;

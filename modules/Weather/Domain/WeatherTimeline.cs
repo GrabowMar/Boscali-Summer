@@ -38,7 +38,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
     /// <summary>
     /// The weather timeline: one static state per interval (5 min by default), each step a hold
-    /// or a move to a neighbouring state, faded over <see cref="WeatherKey.FadeSeconds"/>.
+    /// or a move to a neighbouring state, faded over <see cref="FadeSeconds"/>. INTERIM(slice 4): the weather tape
+    /// replaces this timeline; until then the key carries no interval or fade, so they are constants here.
     ///
     /// <para>The cloud layout (front bands, cumulus groups, storm-cell sites) is fixed while the
     /// weather builds and decays through it, so states grow and shrink clouds in place. A new
@@ -51,6 +52,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         /// <summary>Walk limit: 4000 steps is over 300 hours at five minutes.</summary>
         public const int MaxSteps = 4000;
+
+        /// <summary>INTERIM(slice 4): were key fields; the key no longer carries them.</summary>
+        public const float IntervalMinutes = 5f, FadeSeconds = 60f;
 
         public static TimelineState Evaluate(WeatherKey key, float time)
         {
@@ -65,8 +69,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 };
             }
 
-            float interval = key.IntervalMinutes * 60f;
-            float fade = Math.Min(key.FadeSeconds, interval * 0.5f);
+            float interval = IntervalMinutes * 60f;
+            float fade = Math.Min(FadeSeconds, interval * 0.5f);
             int n = time <= key.Epoch ? 0 : (int)Math.Min(MaxSteps, Math.Floor((time - key.Epoch) / interval));
 
             WeatherRegimeType previous = start, current = start;
@@ -81,7 +85,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             float stepStart = key.Epoch + n * interval;
             float blend = n == 0 ? 1f : WeatherMath.Smoothstep(stepStart, stepStart + fade, time);
-            float growth = n == 0 ? 1f : WeatherMath.Smoothstep(stepStart, stepStart + SettleSeconds(key), time);
+            float growth = n == 0 ? 1f : WeatherMath.Smoothstep(stepStart, stepStart + SettleSeconds(), time);
             if (n == 0) previous = current;
             if (n > 0 && current == WeatherRegimeType.Clear && growth >= 1f) clears++;
 
@@ -104,16 +108,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// How long a step takes to settle completely: the fade, or the slower convective growth
         /// (up to five minutes, never more than 90 % of the interval).
         /// </summary>
-        public static float SettleSeconds(WeatherKey key)
+        public static float SettleSeconds()
         {
-            float interval = key.IntervalMinutes * 60f;
-            float fade = Math.Min(key.FadeSeconds, interval * 0.5f);
+            float interval = IntervalMinutes * 60f;
+            float fade = Math.Min(FadeSeconds, interval * 0.5f);
             return Math.Max(fade, Math.Min(300f, interval * 0.9f));
         }
 
         /// <summary>Mission time the step containing this state has fully settled.</summary>
         public static float SettledAt(WeatherKey key, TimelineState state)
-            => key.Dynamic ? state.StepStart + SettleSeconds(key) : key.Epoch;
+            => key.Dynamic ? state.StepStart + SettleSeconds() : key.Epoch;
 
         private static uint LayoutSeed(WeatherKey key, int generation)
             => unchecked(key.Seed * 2654435761u ^ (uint)(generation * 40503 + 17) ^ (uint)(key.LayoutSalt * 0x9E3779B1u));

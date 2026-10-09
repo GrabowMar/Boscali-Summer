@@ -156,7 +156,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         blocker.GetComponent<Renderer>().sharedMaterial = Resources.Load<Material>("Occluder");
 
         var field = new WeatherField();
-        var key = new WeatherKey(90210u, 0f, false, (byte)WeatherRegimeType.Broken, 5f, 60f);
+        var key = new WeatherKey(90210u, 0f, false, (byte)WeatherRegimeType.Broken);
         field.Build(key, 900f, 60000f, 60000f, 13f);
         CloudMaps maps = CloudMaps.Build(key, 900f, 60000f, 60000f, 13f, 105000f, 315000f);
         var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);
@@ -347,7 +347,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         // per-frame parallax that single-depth reprojection cannot capture; the resolve
         // must refresh toward the fresh march instead of trailing it.
         var field = new WeatherField();
-        var key = new WeatherKey(90210u, 0f, false, (byte)WeatherRegimeType.Broken, 5f, 60f);
+        var key = new WeatherKey(90210u, 0f, false, (byte)WeatherRegimeType.Broken);
         field.Build(key, 900f, 60000f, 60000f, 13f);
         CloudMaps maps = CloudMaps.Build(key, 900f, 60000f, 60000f, 13f, 105000f, 315000f);
         var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);

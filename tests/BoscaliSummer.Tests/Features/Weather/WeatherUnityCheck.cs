@@ -333,7 +333,7 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         typeof(TerrainRainDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
             .SetValue(terrain, new Material(Resources.Load<Shader>("TerrainRain")));
         var historyKey = new BoscaliSummer.Modules.Weather.Domain.WeatherKey(90210u, 0f, false,
-            (byte)BoscaliSummer.Modules.Weather.Domain.WeatherRegimeType.Clear, 5f, 60f);
+            (byte)BoscaliSummer.Modules.Weather.Domain.WeatherRegimeType.Clear);
         history.Build(historyKey, 60f, 60000f, 60000f, 13f);
         terrain.Update(terrainMap.transform, camera, 0f, 0f, history, 60f, 1f);
         Check(terrain.Wetness > .99f, "New ground surface replays recent mission precipitation");

@@ -110,7 +110,8 @@ public static class ComEnvOverlayUnityCheck
         byte shown = (byte)(state == "clear-auto" || state == "fog" ? 0 : 6);
         byte sets = (byte)(state == "storm-all" ? 63 : state == "eye" ? 8 : state == "fog" ? 32 : 0);
         object key = Activator.CreateInstance(T("Modules.Weather.Domain.WeatherKey"), All, null,
-            new object[] { 42u, 0f, state == "clear-auto", shown, 5f, 60f, sets, (byte)0, state == "eye", 0f, 0f, (byte)(state == "storm-all" ? 7 : 0) }, null);
+            // Reflection with the default binder ignores optional defaults, so all 18 constructor parameters are passed, in order.
+            new object[] { 42u, 0f, state == "clear-auto", shown, sets, (byte)0, state == "eye", 0f, 0f, (byte)255, (byte)255, 0f, float.NaN, 0f, 27f, 0f, 0f, 0f }, null);
         Set(manager, "fieldKey", key); Set(manager, "fieldReady", true); Set(manager, "fieldSpan", new Vector2(100000f, 100000f));
         Set(manager, "isManualOverride", state != "clear-auto");
         Set(manager, "forcedRainIntensity", state == "storm-all" ? (object)1f : state == "fog" ? (object)0f : null);

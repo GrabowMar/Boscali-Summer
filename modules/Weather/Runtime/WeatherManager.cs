@@ -337,7 +337,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 // The mission's authored weather is the opening state.
                 fieldKey = NewFieldKey(0f, settings != null && settings.TapeMoves.Value,
-                    StateTable.FromConditions(baselineConditions));
+                    (byte)StateTable.FromConditions(baselineConditions), unchecked((uint)missionSeed));
                 fieldReady = true;
             }
 
@@ -833,7 +833,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 !RequireClock("fixture field", out float missionTime)) return false;
             missionSeed = unchecked((int)seed);
             fieldKey = NewFieldKey(missionTime - modelAge, false,
-                fixtureState ?? StateTable.FromConditions(targetConditions));
+                (byte)(fixtureState ?? StateTable.FromConditions(targetConditions)), seed);
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
@@ -892,13 +892,22 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Field != null ? localRainIntensity : WeatherForecast.RainIntensityFromConditions(currentConditions);
         }
 
-        private WeatherKey NewFieldKey(float epoch, bool dynamic, WeatherRegimeType start)
+        // Capture and fixtures only (spec 9.4): it reads the frame heading and the system speed from the mission
+        // baseline. Every later change to a live key goes through WeatherKey.Rebased.
+        private WeatherKey NewFieldKey(float epoch, bool dynamic, byte missionClass, uint seed)
         {
-            return new WeatherKey(unchecked((uint)missionSeed), epoch, dynamic, (byte)start,
-                5f, 60f, // INTERIM(slice 4): the timeline's own constants; the key no longer carries them
-                fieldKey?.Sets ?? 0, fieldKey?.LayoutSalt ?? 0, fieldKey != null && fieldKey.HasAnchor,
-                fieldKey?.AnchorX ?? 0f, fieldKey?.AnchorZ ?? 0f, fieldKey?.FrontTurn ?? 0);
+            return new WeatherKey(seed, epoch, dynamic, missionClass,
+                sets: fieldKey?.Sets ?? 0, layoutSalt: fieldKey?.LayoutSalt ?? 0,
+                hasAnchor: fieldKey != null && fieldKey.HasAnchor,
+                anchorX: fieldKey?.AnchorX ?? 0f, anchorZ: fieldKey?.AnchorZ ?? 0f,
+                openingBase: WeatherKey.QuantiseOpeningBase(baselineCloudHeight),
+                headingDeg: WeatherKey.HeadingFromWind(baselineWindVelocity.x, baselineWindVelocity.z, baselineWindSpeed, seed),
+                systemSpeed: TapePace.Speed(settings.Pace.Value, baselineWindSpeed));
         }
+
+        // INTERIM(slice 4): the class the legacy timeline is showing, used to keep the sky on screen across a re-key.
+        private byte ShownClass() =>
+            field.IsBuilt ? (byte)field.Timeline.To : (byte)StateTable.FromConditions(currentConditions);
 
         // One cached field serves native weather targets, local rain, clouds and the ENV screen.
         private void UpdateField(float missionTime)
@@ -908,12 +917,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (GameplayUI.GameIsPaused && field.IsBuilt) return;
             nextFieldUpdate = Time.unscaledTime + 1f;
 
-            if (GameAccess.IsServer() && !isManualOverride &&
-                fieldKey.Dynamic != (consoleAuto || settings.TapeMoves.Value))
+            bool wantDynamic = consoleAuto || settings.TapeMoves.Value;
+            float wantSpeed = TapePace.Speed(settings.Pace.Value, baselineWindSpeed);
+            if (GameAccess.IsServer() && !isManualOverride && TapeReconcile.Needed(fieldKey, wantDynamic, wantSpeed))
             {
-                // Continue from the state on screen; the renderer crossfades the new layout.
-                fieldKey = NewFieldKey(missionTime, consoleAuto || settings.TapeMoves.Value,
-                    field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
+                // A rebase keeps the tape position continuous. INTERIM(slice 4): the legacy timeline continues from
+                // the state on screen, so its opener is re-keyed; the tape never re-keys its class. A Pace-only
+                // change takes this path too (the key must carry the new speed) and, because Rebased resets Epoch,
+                // also restarts the legacy 5-minute step counter and snaps a mid-fade sky to its destination.
+                fieldKey = fieldKey.Rebased(missionTime, wantDynamic, wantSpeed).WithMissionClass(ShownClass());
                 lastForecastSampleTime = -999f;
                 BroadcastSync(missionTime);
             }
@@ -944,7 +956,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             if (fieldUpdated)
             {
-                transitionDuration = Mathf.Max(10f, fieldKey.FadeSeconds);
+                transitionDuration = WeatherTimeline.FadeSeconds;
                 transitionProgress = field.Timeline.Blend;
                 targetConditions = Mathf.Clamp(field.MeanCover(3),
                     settings.MinConditions.Value, settings.MaxConditions.Value);
@@ -980,7 +992,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     ForcedRain = forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1.0f,
                     FieldSeed = fieldKey != null ? fieldKey.Seed : unchecked((uint)missionSeed),
                     FieldEpoch = fieldKey != null ? fieldKey.Epoch : 0f,
-                    FieldStartRegime = fieldKey != null ? fieldKey.StartState : (byte)0,
+                    FieldStartRegime = fieldKey != null ? fieldKey.MissionClass : (byte)0, // INTERIM: wire v7 until Task 7
                     FieldDynamic = fieldKey != null && fieldKey.Dynamic,
                     FieldManual = isManualOverride,
                     FieldSets = fieldKey != null ? fieldKey.Sets : (byte)0,
@@ -988,9 +1000,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     FieldHasAnchor = fieldKey != null && fieldKey.HasAnchor,
                     FieldAnchorX = fieldKey != null ? fieldKey.AnchorX : 0f,
                     FieldAnchorZ = fieldKey != null ? fieldKey.AnchorZ : 0f,
-                    FieldFrontTurn = fieldKey != null ? fieldKey.FrontTurn : (byte)0,
-                    HoldMinutes = fieldKey != null ? fieldKey.IntervalMinutes : 5f, // INTERIM(slice 4): the timeline's constants
-                    BlendMinutes = (fieldKey != null ? fieldKey.FadeSeconds : 60f) / 60f
+                    FieldFrontTurn = 0,
+                    HoldMinutes = WeatherTimeline.IntervalMinutes,
+                    BlendMinutes = WeatherTimeline.FadeSeconds / 60f
                 });
             }
         }
@@ -1008,9 +1020,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             transitionDuration = fadeSeconds;
             missionSeed = unchecked((int)message.FieldSeed);
             var key = new WeatherKey(message.FieldSeed, message.FieldEpoch, message.FieldDynamic,
-                (byte)Mathf.Clamp(message.FieldStartRegime, 0, StateTable.Count - 1),
-                Mathf.Clamp(message.HoldMinutes, 1f, 30f), fadeSeconds, message.FieldSets, message.FieldSalt,
-                message.FieldHasAnchor, message.FieldAnchorX, message.FieldAnchorZ, message.FieldFrontTurn);
+                (byte)Mathf.Clamp(message.FieldStartRegime, 0, StateTable.Count - 1), message.FieldSets,
+                message.FieldSalt, message.FieldHasAnchor, message.FieldAnchorX, message.FieldAnchorZ); // INTERIM: wire v7 until Task 7
             // Keep the same instance while nothing changed, so consumers see one stable key.
             if (!key.Equals(fieldKey)) fieldKey = key;
             fieldReady = true;
@@ -1245,7 +1256,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 settled = true;
             }
 
-            fieldKey = NewFieldKey(missionTime, false, StateTable.FromConditions(targetConditions));
+            fieldKey = NewFieldKey(missionTime, false, (byte)StateTable.FromConditions(targetConditions),
+                unchecked((uint)missionSeed));
             fieldReady = true;
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
@@ -1278,8 +1290,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             forcedRainIntensity = null;
             transitionProgress = 0f;
 
-            fieldKey = NewFieldKey(missionTime, consoleAuto || settings.TapeMoves.Value,
-                field.IsBuilt ? field.Timeline.To : StateTable.FromConditions(currentConditions));
+            fieldKey = fieldKey.Rebased(missionTime, consoleAuto || settings.TapeMoves.Value,
+                TapePace.Speed(settings.Pace.Value, baselineWindSpeed)).WithMissionClass(ShownClass());
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
@@ -1306,10 +1318,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// <summary>Holds a state. The sky fades into it; fog, light and wind follow the field.</summary>
         internal void HoldState(WeatherRegimeType state)
         {
-            if (!CanCommand || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
             isManualOverride = true;
             explicitTargets = false;
-            fieldKey = NewFieldKey(now, false, state);
+            fieldKey = fieldKey.Rebased(now, false).WithMissionClass((byte)state); // INTERIM(slice 4): the held state is the opener
             RekeyAndSync(now);
             NotifyPlayer("HOLD " + RegimeSnapshot.FromType(state).Name, forcedRainIntensity);
         }
@@ -1330,7 +1342,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         }
 
         internal bool HasAnchor => fieldKey != null && fieldKey.HasAnchor;
-        internal int FrontTurn => fieldKey?.FrontTurn ?? 0;
 
         /// <summary>Stands the storm eye and lenticulars <paramref name="ahead"/> metres in front of
         /// the camera, along its level heading (0 puts them right here).</summary>
@@ -1355,18 +1366,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             RekeyAndSync(now);
         }
 
-        /// <summary>Turns the frontal boundary by 45 degree steps.</summary>
-        internal void TurnFront(int steps)
-        {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
-            fieldKey = fieldKey.WithFrontTurn(fieldKey.FrontTurn + steps);
-            RekeyAndSync(now);
-        }
-
         /// <summary>One click: a held state with its set-pieces and placement, sent as one key.</summary>
-        internal void ApplyScenario(WeatherScenario scenario)
+        internal bool ApplyScenario(WeatherScenario scenario)
         {
-            if (!CanCommand || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
             consoleAuto = scenario == WeatherScenario.ResetAll;
             isManualOverride = !consoleAuto;
             explicitTargets = false;
@@ -1380,10 +1383,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 x = (float)here.x; z = (float)here.z;
                 forward = camera.transform.forward;
             }
-            fieldKey = WeatherScenarios.Apply(scenario, NewFieldKey(now, false, ShownState),
+            fieldKey = WeatherScenarios.Apply(scenario, fieldKey.Rebased(now, false).WithMissionClass((byte)ShownState),
                 camera != null, x, z, forward.x, forward.z);
             RekeyAndSync(now);
             NotifyPlayer("SCENARIO " + scenario.ToString().ToUpperInvariant(), forcedRainIntensity);
+            return true;
         }
 
         /// <summary>New sites for the clouds and set-piece storms, same weather.</summary>

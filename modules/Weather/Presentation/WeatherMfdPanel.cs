@@ -139,7 +139,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 TimelineState timeline = stateField.Timeline;
                 string now = RegimeSnapshot.FromType(timeline.To).Name;
                 string next = RegimeSnapshot.FromType(timeline.Next).Name;
-                float interval = Mathf.Max(1f, stateField.Key.IntervalMinutes * 60f);
+                float interval = WeatherTimeline.IntervalMinutes * 60f;
                 nextText = timeline.Blend < 1f ? AvNum.Percent(timeline.Blend) : countdown;
                 nextFrac = timeline.Blend < 1f ? timeline.Blend : Mathf.Clamp01(1f - nextIn / interval);
                 footer = timeline.Blend < 1f
