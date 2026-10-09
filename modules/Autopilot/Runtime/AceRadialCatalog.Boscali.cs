@@ -34,6 +34,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     status: () => Service<ISkywellControl>() is ISkywellControl k
                         ? new AceRadialStatus((k.Deployed ? "DEPLOYED  " : "STOWED  ") + k.Stock, k.Deployed ? AceTone.Active : AceTone.Normal)
                         : AceRadialStatus.None))
+                .Add(PitStop())
                 // The pilot's ready OPS perks (Support owns them): first press arms, the second fires at the aim.
                 .Add(Branch("ops", "OPS PERKS", AceIcon.Strike).WithChildren(OpsPerks))
                 .WithChildren(ContributedPage);

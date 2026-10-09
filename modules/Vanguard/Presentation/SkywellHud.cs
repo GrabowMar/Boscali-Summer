@@ -12,12 +12,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     /// <summary>
     /// SKYWELL on the common HUD element and the radial menu. A receiver pilot is walked through the CATOBAR-style
     /// hook-up with director-light cues (UP/DOWN, FWD/AFT, like a tanker's belly lights), then HOLD BRAKE, docking,
-    /// transfer and served; a tanker pilot sees deploy state, receiver state and stock.
+    /// the pit stop job by job (skywellHudPit.cs) and served; a tanker pilot sees deploy state, receiver state and stock.
     /// </summary>
-    internal sealed class SkywellHud : MonoBehaviour, ISceneService, ISkywellControl
+    internal sealed partial class SkywellHud : MonoBehaviour, ISceneService, ISkywellControl
     {
         private const string Owner = "vanguard.skywell";
-        private const string Channel = "skywell";
+        private const string Channel = "vg.skywell";
         private const float CueRange = 800f;
         private const float Refresh = 0.2f;
 
@@ -27,14 +27,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private readonly Dictionary<uint, SkywellPhase> lastPhase = new Dictionary<uint, SkywellPhase>();
         private uint docking;           // tanker the local aircraft is docked to
         private float engageFrom = 1f;  // probe distance when docking began (bar)
-        private float transferStart, transferSeconds;
 
         public void ResetForScene()
         {
             line?.Release();
             line = null;
+            pitLine?.Release();
+            pitLine = null;
             lastPhase.Clear();
+            lastFlags.Clear();
             docking = 0;
+            pitAvailable = false;
+            slots.Clear();
+            priority = -1;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -71,23 +76,47 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             next = Time.unscaledTime + Refresh;
             if (board == null && !ModuleServices.TryGet(out board)) return;
             board.DeclareChannel(Channel, "SKYWELL");
-            if (!Local(out Aircraft me) || !(SkywellBoard.KitStation(me) != null ? Tanker(me) : Receiver(me)))
+            bool shown = false;
+            pitAvailable = false;
+            if (Local(out Aircraft me))
+            {
+                if (SkywellBoard.KitStation(me) != null) shown = Tanker(me);
+                else
+                {
+                    shown = pitAvailable = Receiver(me);
+                    RefreshSlots(me);
+                }
+            }
+            if (!shown)
             {
                 line?.Release();
                 line = null;
+                pitLine?.Release();
+                pitLine = null;
             }
         }
 
         private IHudLine Line() => line ??= board.Acquire(Owner, Channel, "status");
 
+        private IHudLine PitLine() => pitLine ??= board.Acquire(Owner, Channel, "pit");
+
         private bool Tanker(Aircraft me)
         {
             if (!SkywellBoard.Views.TryGetValue(me.persistentID.Id, out SkywellView v) || !v.Active) return false;
+            Edges(v, true);
             string stock = $"FUEL {v.FuelKg / 1000f:0.0} t  ·  MUNITIONS {v.StockKg / 1000f:0.00} t";
-            string state = v.Receiver == 0 ? "DEPLOYED  ·  AWAITING RECEIVER"
-                : v.Phase == SkywellPhase.Engage ? "RECEIVER DOCKING"
-                : v.Phase == SkywellPhase.Transfer ? "TRANSFERRING" : "RECEIVER SERVED";
-            Line()?.Set(v.Receiver == 0 ? HudTone.Info : HudTone.Caution, "SKYWELL  " + state, stock, 0f);
+            if (v.Receiver == 0)
+                Line()?.Set(HudTone.Info, "SKYWELL  DEPLOYED  ·  AWAITING RECEIVER", stock, 0f);
+            else if (v.Phase == SkywellPhase.Transfer)
+            {
+                Aircraft receiver = Resolve(v.Receiver);
+                string who = receiver != null ? receiver.unitName : "RECEIVER";
+                Line()?.Set(HudTone.Caution, "SKYWELL  SERVING  " + who,
+                    $"JOB {v.JobIndex + 1}/{v.JobCount}  ·  {(v.Job == PitJobKind.Fuel ? "FUEL" : "STN " + (v.JobStation + 1))}  ·  FUEL {v.FuelKg / 1000f:0.0} t  ·  MUN {v.StockKg / 1000f:0.00} t",
+                    TankerJobProgress(v));
+            }
+            else
+                Line()?.Set(HudTone.Caution, v.Phase == SkywellPhase.Engage ? "SKYWELL  RECEIVER DOCKING" : "SKYWELL  RECEIVER SERVED", stock, 0f);
             return true;
         }
 
@@ -98,9 +127,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (v.Receiver == id) return Docked(me, v);
             if (docking != 0)
             {
-                Notice(lastPhase.TryGetValue(docking, out SkywellPhase p) && p == SkywellPhase.Served
+                bool hot = SkywellBoard.Views.TryGetValue(docking, out SkywellView gone) && (gone.Flags & PitFlags.HotBreak) != 0;
+                if (hot) Notice("SKYWELL  HOT BREAK  MISSILE INBOUND", HudTone.Warning);
+                else Notice(lastPhase.TryGetValue(docking, out SkywellPhase p) && p == SkywellPhase.Served
                     ? "SKYWELL  DISCONNECTED" : "SKYWELL  CONTACT LOST", HudTone.Info);
+                lastFlags.Remove(docking);
                 docking = 0;
+                priority = -1; // one-shot
+                pitLine?.Release();
+                pitLine = null;
             }
             return Approach(me);
         }
@@ -115,8 +150,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             {
                 docking = v.Tanker;
                 engageFrom = Mathf.Max(dist, 1f);
+                ResetStop();
+                order = (byte)v.Order; // the server's standing order wins when the stop begins
             }
             lastPhase[v.Tanker] = v.Phase;
+            Edges(v, false);
             switch (v.Phase)
             {
                 case SkywellPhase.Engage:
@@ -124,17 +162,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         Mathf.Clamp01(1f - dist / engageFrom));
                     break;
                 case SkywellPhase.Transfer:
-                    if (fresh)
-                    {
-                        transferStart = Time.time;
-                        transferSeconds = SkywellContact.TransferSeconds(SkywellService.FuelNeedKg(me), SkywellService.MissingRounds(me));
-                    }
-                    Line()?.Set(HudTone.Caution, "SKYWELL  TRANSFER", "FUEL + MUNITIONS  ·  HOLD BRAKE",
-                        Mathf.Clamp01((Time.time - transferStart) / Mathf.Max(transferSeconds, 0.1f)));
+                    PitJobLines(me, v);
                     break;
                 default:
-                    if (fresh) Notice("SKYWELL  SERVICE COMPLETE", HudTone.Info);
-                    Line()?.Set(HudTone.Info, "SKYWELL  SERVED", "RELEASE BRAKE TO DISCONNECT", 1f);
+                    if (fresh)
+                    {
+                        FinishJob(me);
+                        if ((v.Flags & PitFlags.Nothing) == 0) Notice($"SKYWELL  PIT STOP COMPLETE  {v.PitTenths / 10f:0.0} s", HudTone.Info);
+                        priority = -1;
+                    }
+                    pitLine?.Release();
+                    pitLine = null;
+                    Line()?.Set(HudTone.Info, v.PitTenths > 0 ? $"SKYWELL  SERVED  {v.PitTenths / 10f:0.0} s" : "SKYWELL  SERVED",
+                        "RELEASE BRAKE TO DISCONNECT", 1f);
                     break;
             }
             return true;
@@ -163,7 +203,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                           best.transform.InverseTransformPoint(SkywellBoard.ContactPoint(best));
             if (bestDist <= SkywellService.EngageRadius && rel.z < 5f)
             {
-                Line()?.Set(HudTone.Warning, "SKYWELL  READY", "HOLD BRAKE TO DOCK", 1f);
+                Line()?.Set(HudTone.Warning, "SKYWELL  READY", "HOLD BRAKE TO DOCK  ·  ORDER " + OrderWord(), 1f);
                 return true;
             }
             Line()?.Set(HudTone.Info, "SKYWELL  TANKER  " + Mathf.RoundToInt(bestDist) + " m", Director(rel),

@@ -63,7 +63,11 @@ namespace BoscaliSummer.Vanguard
                     return Status(lead);
                 case "equip": return Equip(Text(args, "tanker") ?? "Tarantula");
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
-                case "drain": return Drain(receiver, Number(args, "fuel", 0.3f));
+                case "drain": return Drain(Rx(args), Number(args, "fuel", 0.3f), (int)Number(args, "stations", 2f), (int)Number(args, "rounds", 1f));
+                case "pitarm": return SkywellArm(args);
+                case "pit": return SkywellPit(args);
+                case "threatwhen": return SkywellThreatWhen(bandit, args);
+                case "rxstatus": return SkywellRxStatus(args);
                 case "status": return Status(lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
@@ -169,9 +173,7 @@ namespace BoscaliSummer.Vanguard
             if (bay < 0) bay = 0;
             for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == bay ? kit : null);
             tanker.Networkloadout = loadout;
-            NuclearOption.SavedMission.Loadout armed = null;
-            foreach (StandardLoadout sl in receiver.definition.aircraftParameters.StandardLoadouts ?? Array.Empty<StandardLoadout>())
-                if (armed == null && sl?.loadout?.weapons != null && sl.loadout.weapons.Exists(w => w != null)) armed = sl.loadout;
+            NuclearOption.SavedMission.Loadout armed = ArmedLoadout(receiver);
             if (armed != null) receiver.Networkloadout = armed;
             return new Dictionary<string, object> { ["ok"] = true, ["tankerType"] = tanker.definition.unitName, ["bay"] = sets[bay].name,
                 ["kit"] = Modules.Vanguard.Runtime.SkywellBoard.KitStation(tanker) != null ? 1 : 0,
@@ -215,18 +217,20 @@ namespace BoscaliSummer.Vanguard
             }
         }
 
-        private static Dictionary<string, object> Drain(Aircraft lead, float fuel)
+        // Drains the fuel to `fuel`, then fires up to `rounds` rounds from each of the first `stations` armed stations.
+        private static Dictionary<string, object> Drain(Aircraft lead, float fuel, int stations, int rounds)
         {
             if (lead == null) return Failure("VanguardAutomation", "drain", "no friendly aircraft");
             foreach (FuelTank t in lead.GetFuelTanks()) t.Refuel(fuel);
-            int fired = 0;
+            int fired = 0, shots = 0;
             foreach (WeaponStation s in lead.weaponStations)
-                if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.gun && s.Ammo > 0 && fired < 2)
+                if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.gun && s.Ammo > 0 && fired < stations)
                 {
-                    s.LaunchMount(lead, null, lead.GlobalPosition() + lead.transform.forward * 3000f);
+                    for (int k = 0; k < rounds && s.Ammo > 0; k++, shots++)
+                        s.LaunchMount(lead, null, lead.GlobalPosition() + lead.transform.forward * 3000f);
                     fired++;
                 }
-            return new Dictionary<string, object> { ["ok"] = true, ["fired"] = fired, ["fuel"] = lead.GetFuelLevel(),
+            return new Dictionary<string, object> { ["ok"] = true, ["fired"] = fired, ["shots"] = shots, ["fuel"] = lead.GetFuelLevel(),
                 ["missing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(lead) };
         }
 
@@ -411,6 +415,7 @@ namespace BoscaliSummer.Vanguard
                 state["receiverMissing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(receiver);
             }
             foreach (KeyValuePair<string, float> death in Deaths) state[death.Key] = death.Value;
+            SkywellStatus(state);
             if (threat != null && !threat.disabled)
                 state["threatOnLead"] = lead != null && threat.targetID.Id == lead.persistentID.Id ? 1 : 0;
             foreach (KeyValuePair<string, Missile> pair in Launched)

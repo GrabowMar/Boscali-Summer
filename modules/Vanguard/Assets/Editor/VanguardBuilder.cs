@@ -487,12 +487,7 @@ namespace Vanguard
                     var texture = Load<Texture2D>(R + "Models/" + model + "_" + channel + ".png");
                     if (texture.width != atlas || texture.height != atlas) throw new Exception(model + " texture density: " + channel);
                 }
-                if (model == "SkywellKit")
-                {
-                    var names = new HashSet<string>(visual.GetComponentsInChildren<Transform>(true).Select(t => t.name));
-                    foreach (string name in new[] { "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle" })
-                        if (!names.Contains(name)) throw new Exception("Skywell lost joint " + name);
-                }
+                if (model == "SkywellKit") ValidateSkywellKit(visual); // VanguardBuilder.skywell.cs
                 if (model == "MaldX" || model == "MaldJ" || IsGlaive(model) || model == "Orca")
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
@@ -839,9 +834,9 @@ namespace Vanguard
             var info = Copy<WeaponInfo>("FuelContainer1_info", "WI_VG_Skywell");
             Edit(info, s =>
             {
-                P(s, "weaponName").stringValue = "SKYWELL Refuel/Rearm Kit";
+                P(s, "weaponName").stringValue = "SKYWELL Pit-Stop Kit";
                 P(s, "shortName").stringValue = "SKYWELL";
-                P(s, "description").stringValue = "Roll-on service-glider kit. Fire to open the ramp and launch a tethered, folding-wing service glider. Friendly pilots close astern and HOLD BRAKE: the glider refuels them through its tail boom and loads missiles onto empty pylons from an 8 t fuel / 1.5 t munitions stock. Fire again to recover and stow.";
+                P(s, "description").stringValue = "Roll-on service-glider kit. Fire to open the ramp and launch a tethered, folding-wing glider. Friendly pilots close astern and HOLD BRAKE; choose FUEL, MUNITIONS or BOTH (and which pylon goes first) under SUPPORT > PIT STOP. The glider plugs your probe and hot-swaps rounds station by station from an 8 t fuel / 1.5 t munitions stock. Fire again to recover.";
                 P(s, "weaponIcon").objectReferenceValue = Icon("SkywellKit");
             });
             var mount = Copy<WeaponMount>(donor, "WM_" + json);
