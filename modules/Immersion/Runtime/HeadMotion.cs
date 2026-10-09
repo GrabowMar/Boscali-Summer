@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             rateDeg = Vector3.Lerp(rateDeg, rates, k);
         }
 
-        public void Step(float dt, float strength, bool active, float pilotStrain = 0f, bool comfort = false)
+        public void Step(float dt, float strength, bool active, float exertion01 = 0f, float breathLift01 = .5f, bool comfort = false)
         {
             float tp = 0f, ty = 0f, tr = 0f;
             if (active)
@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 ty *= 0.28f;
                 tr *= 0.28f;
                 if (!comfort)
-                    tp += ImmersionMath.BreathingOffset(Time.time, 13f + pilotStrain * 9f, 0.06f) * strength;
+                    tp += (Mathf.Clamp01(breathLift01) - .5f) * (.12f + .1f * Mathf.Clamp01(exertion01)) * strength;
             }
             (pitch, pitchVel) = ImmersionMath.SpringStep(pitch, pitchVel, tp, dt);
             (yaw, yawVel) = ImmersionMath.SpringStep(yaw, yawVel, ty, dt);

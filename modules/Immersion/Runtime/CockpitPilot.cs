@@ -97,7 +97,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 Quaternion lookLocal = Quaternion.Inverse(aircraft.cockpit.transform.rotation) * view;
                 ControlInputs inputs = aircraft.GetInputs();
                 rig.Pose(inputs != null ? inputs.pitch : 0f, inputs != null ? inputs.roll : 0f,
-                    inputs != null ? inputs.yaw : 0f, inputs != null ? inputs.throttle : 0f, force, lookLocal, Time.deltaTime,
+                    inputs != null ? inputs.yaw : 0f, inputs != null ? inputs.throttle : 0f, force,
+                    immersion != null ? immersion.Physiology.ChestLift01 : .5f, lookLocal, Time.deltaTime,
                     settings.PilotControlMotionEnabled.Value, settings.ComfortMotionEnabled.Value);
                 reflection.Tick(rig, aircraft.cockpit.transform, cameras.mainCamera, camera, ambient, settings.PilotReflectionEnabled.Value);
             }

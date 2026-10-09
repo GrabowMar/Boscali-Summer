@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => immersion.IsEnabled && (immersion.ExtraShakeEnabled || immersion.MachBuffetEnabled),
                 () => !immersion.IsEnabled ? needMaster() : "Turn on EXTRA SHAKE or MACH BUFFET first.");
 
-            flow.Section(AvIcon.Eye, "COCKPIT VISUALS", "GLARE · MFD GLOW · G-VIGNETTE");
+            flow.Section(AvIcon.Eye, "COCKPIT VISUALS", "GLARE · MFD GLOW · VISOR");
             AvCellGrid visualGrid = flow.Grid(2);
             ToggleCell(flow, visualGrid, page, "SUN GLARE",
                 "Data-driven lens flare when looking towards the sun, occluded by terrain, buildings, and clouds.",
@@ -76,32 +76,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.",
                 () => immersion.MfdGlowEnabled, v => immersion.MfdGlowEnabled = v,
                 masterOn, needMaster);
-            ToggleCell(flow, visualGrid, page, "G-VIGNETTE",
-                "Physiological G-force visual effects: peripheral tunnel vision greyout under +G, redout under -G.",
-                () => immersion.GVignetteEnabled, v => immersion.GVignetteEnabled = v,
+            ToggleCell(flow, visualGrid, page, "HELMET VISOR",
+                "Glass-only helmet visor: daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G.",
+                () => immersion.HelmetVisorEnabled, v => immersion.HelmetVisorEnabled = v,
                 masterOn, needMaster);
             ToggleCell(flow, visualGrid, page, "DAMAGE SURFACES",
                 "Subtle damage shading on supported opaque cockpit material slots. Weather owns glass rain and cold moisture.",
                 () => immersion.SurfaceImmersionEnabled, v => immersion.SurfaceImmersionEnabled = v,
                 masterOn, needMaster);
 
-            flow.Section(AvIcon.Volume, "COCKPIT AUDIO", "AIRFRAME · WIND · G-FILTER · AGSM");
+            flow.Section(AvIcon.Volume, "COCKPIT AUDIO", "AIRFRAME · WIND · BREATHING");
             AvCellGrid audioGrid = flow.Grid(2);
             ToggleCell(flow, audioGrid, page, "AIRFRAME CREAKS",
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.",
                 () => immersion.AirframeAudioEnabled, v => immersion.AirframeAudioEnabled = v,
                 masterOn, needMaster);
-            ToggleCell(flow, audioGrid, page, "G-AUDIO FILTER",
-                "Cockpit view: dynamic auditory narrowing and helmet audio low-pass filtering under high G-forces.",
-                () => immersion.GForceAudioEnabled, v => immersion.GForceAudioEnabled = v,
-                masterOn, needMaster);
             ToggleCell(flow, audioGrid, page, "CANOPY WIND",
                 "Cockpit view: procedural canopy wind rush and aerodynamic slipstream audio loop.",
                 () => immersion.WindAudioEnabled, v => immersion.WindAudioEnabled = v,
                 masterOn, needMaster);
-            ToggleCell(flow, audioGrid, page, "PILOT STRAIN",
-                "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.",
-                () => immersion.PilotStrainAudioEnabled, v => immersion.PilotStrainAudioEnabled = v,
+            ToggleCell(flow, audioGrid, page, "PILOT BREATHING",
+                "Oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, paced by the game's own G-LOC model.",
+                () => immersion.PilotBreathingEnabled, v => immersion.PilotBreathingEnabled = v,
                 masterOn, needMaster);
 
             flow.Section(AvIcon.Refresh, "IMMERSION ACTIONS", "RESET TO DEFAULTS");
@@ -116,12 +112,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 immersion.MachBuffetEnabled = true;
                 immersion.SunGlareEnabled = true;
                 immersion.MfdGlowEnabled = true;
-                immersion.GVignetteEnabled = true;
+                immersion.HelmetVisorEnabled = true;
                 immersion.SurfaceImmersionEnabled = true;
                 immersion.AirframeAudioEnabled = true;
-                immersion.GForceAudioEnabled = true;
                 immersion.WindAudioEnabled = true;
-                immersion.PilotStrainAudioEnabled = true;
+                immersion.PilotBreathingEnabled = true;
                 Echo("Immersion settings reset to defaults.");
                 Changed();
             }, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];

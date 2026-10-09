@@ -1,3 +1,5 @@
+using System;
+using System.Reflection;
 using BoscaliSummer.Modules.Immersion.Runtime;
 using HarmonyLib;
 
@@ -40,6 +42,36 @@ namespace BoscaliSummer.Modules.Immersion.Patches
             {
                 ImmersionManager.OnGunShot(__instance);
             }
+        }
+    }
+
+    /// <summary>
+    /// Hits on the followed aircraft raise pilot stress (faster breathing). The client body of the
+    /// Mirage RPC is Aircraft.UserCode_RpcDamage_&lt;hash&gt;; the hash changes per game build, so it is
+    /// resolved by prefix. Missing target: Harmony skips the patch and hits are simply not counted.
+    /// </summary>
+    [HarmonyPatch]
+    internal static class PlayerHitPatch
+    {
+        private static MethodBase target;
+        private static bool resolved;
+
+        private static MethodBase TargetMethod()
+        {
+            if (resolved) return target;
+            resolved = true;
+            foreach (MethodInfo method in AccessTools.GetDeclaredMethods(typeof(Aircraft)))
+                if (method.Name.StartsWith("UserCode_RpcDamage_", StringComparison.Ordinal)) { target = method; break; }
+            if (target == null) Plugin.Logger?.LogWarning("[Immersion] Aircraft.UserCode_RpcDamage_* not found; pilot stress ignores hits.");
+            return target;
+        }
+
+        private static bool Prepare() => TargetMethod() != null;
+
+        private static void Postfix(Aircraft __instance)
+        {
+            if (ImmersionManager.IsCockpitActive && ReferenceEquals(__instance, ImmersionManager.FollowingUnit))
+                ImmersionManager.Live?.OnPlayerHit();
         }
     }
 }

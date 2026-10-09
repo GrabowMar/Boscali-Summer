@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Vector3 stickGrip, throttleGrip;
         private Quaternion stickRotation, throttleRotation;
         private int count;
-        private float phase, lean, pitchLean, headPitch, headYaw, pedals;
+        private float lean, pitchLean, headPitch, headYaw, pedals;
         private float rightArmLength, leftArmLength, stickRestFit, throttleRestFit;
         private bool bodyVisible, hooked, stickOnRight = true;
         internal SkinnedMeshRenderer Renderer { get; private set; }
@@ -381,13 +381,12 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
         }
 
-        internal void Pose(float pitch, float roll, float yaw, float throttleInput, Vector3 forceG,
+        internal void Pose(float pitch, float roll, float yaw, float throttleInput, Vector3 forceG, float chestLift01,
             Quaternion lookLocal, float dt, bool motion, bool comfort)
         {
             if (!Valid || frame == null) return;
             float blend = PilotPoseMath.Smoothing(dt, 10f);
             // CopySeatedPose ran first: reapply the last presentation state even when time is paused.
-            if (blend > 0f) phase = (phase + Mathf.Min(dt, .05f) * 1.55f) % (Mathf.PI * 2f);
             Vector3 look = lookLocal.eulerAngles;
             float wantedPitch = Mathf.Clamp(Mathf.DeltaAngle(0, look.x), -45f, 35f);
             float wantedYaw = Mathf.Clamp(Mathf.DeltaAngle(0, look.y), -75f, 75f);
@@ -403,7 +402,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     comfort ? -.5f : -2f, comfort ? .5f : 2f), blend);
                 Vector2 torso = Vector2.ClampMagnitude(new Vector2(pitchLean, lean), comfort ? .5f : 2f);
                 Chest.rotation = FrameRotation(Quaternion.Euler(torso.x, 0, torso.y)) * Chest.rotation;
-                float breath = PilotPoseMath.BreathMetres(phase, comfort);
+                float breath = PilotPoseMath.BreathMetres(chestLift01, comfort);
                 Chest.position += frame.up * breath;
                 pedals = Mathf.Lerp(pedals, PilotPoseMath.Input(yaw), blend);
                 if (leftFoot != null) leftFoot.rotation = FrameRotation(Quaternion.Euler(pedals * 8f, 0, 0)) * leftFoot.rotation;
@@ -526,7 +525,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Head = Chest = neck = headEnd = rightUpper = rightLower = rightHand = leftUpper = leftLower = leftHand = null;
             bodyMaterial = null; firstPerson = null;
             leftFoot = rightFoot = stick = throttle = null; Renderer = null;
-            phase = lean = pitchLean = headPitch = headYaw = pedals = 0f;
+            lean = pitchLean = headPitch = headYaw = pedals = 0f;
             bodyVisible = false; stickOnRight = true; properties.Clear();
             rightArmLength = leftArmLength = stickRestFit = throttleRestFit = 0f;
         }
