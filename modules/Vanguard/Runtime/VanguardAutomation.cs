@@ -364,6 +364,7 @@ namespace BoscaliSummer.Vanguard
             state["refuels"] = Modules.Vanguard.Runtime.VanguardStats.Refuels;
             state["rearms"] = Modules.Vanguard.Runtime.VanguardStats.Rearms;
             foreach (var counter in Modules.Vanguard.Runtime.VanguardStats.Counters) state[counter.Key] = counter.Value;
+            Modules.Vanguard.Runtime.SentinelDrone.Report(state, Launched);
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);

@@ -51,8 +51,8 @@ namespace Vanguard
                 Description = "Low-profile three-dart self-defense rail. Darts are carried horizontally, drop clear and pitch nose-up, then snap onto a visible inbound threat and ignite. All-direction protection inside 1.1 km; physical contact, limited reaction time and three shots.",
                 Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 45, TurnRate = 55,
                 Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
-            new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A Orbiting Gun Drone", Short = "GLAIVE-A", Model = "Glaive2A",
-                Description = "Air-launched folding-wing gun drone. Three-second launch boost, powered ingress toward the enemy, then a 300 m suppression orbit with a stabilized 7.62 mm gun. 180 rounds, short bursts, tracked hostile targets only; departs when dry or out of endurance.",
+            new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A SENTINEL", Short = "GLAIVE-A", Model = "Glaive2A",
+                Description = SentinelDescription,
                 Mass = 80, Yield = 0, Cost = 1.2f, Value = 25, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S Suppression Drone", Short = "GLAIVE-S", Model = "Glaive2S",
@@ -110,7 +110,8 @@ namespace Vanguard
             if (fitted.size.y > .4f || fitted.size.x > .5f)
                 throw new Exception("AEGIS carriage exceeds the low-profile pylon envelope: " + fitted.size);
             Debug.Log("[Vanguard] AEGIS_CARRIAGE_SIZE " + fitted.size);
-            foreach (string key in new[] { "VG_Glaive2A", "VG_Glaive2S" })
+            ValidateSentinel(); // GLAIVE-2A: VanguardBuilder.glaive2a.cs
+            foreach (string key in new[] { "VG_Glaive2S" })
             {
                 var pod = Load<GameObject>(R + key + ".prefab");
                 var guns = pod.GetComponentsInChildren<Gun>(true);
@@ -493,7 +494,7 @@ namespace Vanguard
                     foreach (string name in new[] { "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle" })
                         if (!names.Contains(name)) throw new Exception("Skywell lost joint " + name);
                 }
-                if (model == "MaldX" || model == "MaldJ" || IsGlaive(model) || model == "Orca")
+                if (model == "MaldX" || model == "MaldJ" || (IsGlaive(model) && model != "Glaive2A") || model == "Orca")
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
                     Transform right = renderers.Single(r => r.name == "WingR").transform;
@@ -614,7 +615,8 @@ namespace Vanguard
             g.name = spec.Key;
             HideRenderers(g);
             var visual = Visual(g.transform, spec.Model, materials);
-            if (IsGlaive(spec.Model))
+            if (spec.Key == "VG_Glaive2A") AddSentinelGun(visual);
+            else if (IsGlaive(spec.Model))
             {
                 AddGlaiveCannon(g, spec, visual);
             }
