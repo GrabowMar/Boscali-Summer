@@ -1,7 +1,10 @@
 # VANGUARD weapon models v4 (Boscali Summer). Headless build:
-#   blender -b --python BuildVanguard.py -- <outdir> [Model,Model...]
-# Per model writes <Name>.fbx/.blend, baked <Name>_Albedo/_Normal/_MetalGloss.png and an EEVEE
-# preview <Name>.png; Overview.png is a contact sheet of the previews.
+#   blender -b --factory-startup --python BuildVanguard.py -- <outdir> [Model,Model...]
+# Every model lives in its own module, models/<Name>.py (see models/__init__.py for the contract); this file holds
+# the shared geometry helpers, the texture bake and the export, and drives the models it discovers there.
+# Per model writes <Name>.fbx/.blend, baked <Name>_Albedo/_Normal/_MetalGloss.png, <Name>_Icon.png and an EEVEE
+# preview <Name>.png; Overview.png is a contact sheet of the previews. ALWAYS pass an <outdir>: the default is
+# the tracked Assets/Models folder.
 # Blender frame: nose +Y, up +Z, starboard +X, metres, transforms applied. Mirrored halves are
 # real geometry (no negative scale) per the asset-pipeline skill.
 #
@@ -9,11 +12,13 @@
 # model. Detail lives in the bake, as on vanilla weapons: ambient occlusion, panel lines and
 # control-surface gaps (also cut into the normal map), NATO munition bands (yellow = live warhead,
 # brown = rocket motor, blue = inert/decoy), streaky airflow grime and smoothness variation.
+import sys
+sys.dont_write_bytecode = True  # Blender ignores PYTHONDONTWRITEBYTECODE; keep __pycache__ out of Source/
 import bpy
 import bmesh
 import math
 import os
-import sys
+import shutil
 import numpy as np
 from mathutils import Vector
 import json
@@ -24,12 +29,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.environ.get("NOMOD_BLENDER_PYLIBS", os.path.join(
     os.environ.get("LOCALAPPDATA", ""), "nomodkit", "blender-pylibs")))
 from PIL import Image, ImageDraw, ImageFont
-from VanguardSurface import surface_layers, detail_normal, service_stencils
+from VanguardSurface import surface_layers, detail_normal
+import models
 
-TEX = 1024
-UV_SHAPE = "CONCAVE"
-MODEL_TEX = {"Remora": 2048, "Glaive": 2048, "SkywellKit": 2048, "AleX": 512}  # 4-7 m airframes get double density
-ICON_TMP = os.path.join(tempfile.gettempdir(), "vanguard_icon_lines")  # build scratch, never shipped
+MODELS = models.discover()  # {name: module}, dependencies first; per-model tables below derive from it
+MODEL_TEX = {name: mod.TEX for name, mod in MODELS.items()}
+TEX = 1024  # atlas side of the model being built (set per model in main)
+UV_SHAPE = "CONCAVE"  # UV island pack shape of the model being built (module attribute UV_SHAPE overrides)
+# Icon-line masks bake -> icon render hand-off. Per process, so concurrent builds of one model cannot collide.
+ICON_TMP = os.path.join(tempfile.gettempdir(), f"vanguard_icon_lines_{os.getpid()}")
 SKIN, GLOW, GLASS, DARK = "Skin", "Vanguard_Glow", "Vanguard_Glass", "Vanguard_Dark"
 
 
@@ -509,17 +517,10 @@ def compose(model, spec, pos, nrm, ao, outdir):
     for lo, hi, col in spec.get("patches", []):
         mask = np.all((pos >= np.array(lo)) & (pos <= np.array(hi)), axis=-1)
         base[mask] = col
-    if model == "HawcX":
-        thermal = (y > -2.1) & (nrm[..., 2] < -0.35)
-        tile = ((np.floor(x * 20) + np.floor(y * 14)) % 2) * 0.016
-        base[thermal] = np.stack([0.055 + tile, 0.062 + tile, 0.07 + tile], -1)[thermal]
-        # Carbon ceramic tip and leading edges; no painted white on hot surfaces.
-        hot = (y > 1.65) | ((y > -2.1) & (np.abs(nrm[..., 0]) > 0.82))
-        base[hot] = (0.055, 0.065, 0.075)
 
-    base, metal, surface_smooth, surface_height = surface_layers(model, spec, pos, nrm, base, value_noise)
+    base, metal, surface_smooth, surface_height = surface_layers(spec, pos, nrm, base, value_noise)
     # Stencils projected in metres onto both flanks, not floating mesh lettering.
-    for text, y0, y1, z0, z1, xmin, col in list(spec.get("stencils", [])) + service_stencils(model):
+    for text, y0, y1, z0, z1, xmin, col in list(spec.get("stencils", [])) + list(spec.get("service_stencils", [])):
         canvas = Image.new("L", (768, 128))
         draw = ImageDraw.Draw(canvas)
         font_path = os.path.join(os.environ.get("WINDIR", "C:/Windows"), "Fonts", "bahnschrift.ttf")
@@ -647,7 +648,7 @@ def distance_meshes(parts):
     return counts
 
 
-def finish(model, spec, outdir):
+def finish(model, spec, outdir, budget=16000):
     segmented = {id(o) for sg in SEGMENTS for o in sg["objs"]}
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH" and id(o) not in segmented]
     groups = {}
@@ -703,7 +704,7 @@ def finish(model, spec, outdir):
             unwrap(p)
     skin = skins[0]
     tris = sum(sum(len(f.vertices) - 2 for f in p.data.polygons) for p in parts)
-    assert tris <= 16000, f"{model}: {tris} triangles exceeds the weapon budget"
+    assert tris <= budget, f"{model}: {tris} triangles exceeds the {budget} budget of its CLASS"
     for p in parts:
         assert min(p.scale) > 0, f"{model}: negative scale"
         assert p.data.uv_layers, f"{model}: missing UVs"
@@ -922,7 +923,7 @@ def contact_sheet(outdir, names, cols=3):
     sheet.save(os.path.join(outdir, "Overview.png"))
 
 
-# ================================================================ models
+# ================================================================ shared model helpers (models/*.py call g.<name>)
 
 def plane_y(y, xr=(-9, 9), zr=(-9, 9), yr=None):
     return ((0, 1, 0), y, (xr[0], y - 0.05, zr[0]), (xr[1], y + 0.05, zr[1]))
@@ -932,209 +933,22 @@ def plane_x(x, y0, y1, zr=(-9, 9)):
     return ((1, 0, 0), x, (x - 0.05, y0, zr[0]), (x + 0.05, y1, zr[1]))
 
 
-def remora(m):
-    """XQ-58V REMORA: 5.3 m stealth escort drone. Chined lifting body, dorsal S-duct intake,
-    cranked delta with elevons, canted V-tail, flattened 2D exhaust, chin EO/IR turret."""
-    loft("Fuselage", [
-        (-2.55, 0.26, 0.10, 0.08, 0.02, 2.2, 2.0, 0.85),
-        (-2.1, 0.40, 0.20, 0.12, 0.03, 2.4, 2.2, 0.8),
-        (-1.0, 0.52, 0.30, 0.16, 0.02, 2.5, 2.4, 0.75),
-        (0.2, 0.50, 0.32, 0.18, 0.0, 2.4, 2.4, 0.75),
-        (1.2, 0.40, 0.25, 0.16, -0.01, 2.2, 2.3, 0.8),
-        (2.0, 0.24, 0.15, 0.11, -0.02, 2.0, 2.2, 0.9),
-        (2.5, 0.10, 0.07, 0.06, -0.03, 2.0, 2.0, 1.1),
-        (2.72, 0.015, 0.012, 0.012, -0.035, 2.0, 2.0, 1.4),
-    ], m[SKIN], rings=34, n=28, tip=True, cap_tail=False)
-    # Dorsal intake hump with lip, and a dark duct behind the lip.
-    loft("IntakeHump", [
-        (-1.3, 0.05, 0.02, 0.02, 0.30, 2.5, 2, 1.2),
-        (-0.6, 0.20, 0.10, 0.02, 0.30, 2.6, 2, 1.0),
-        (0.2, 0.24, 0.12, 0.02, 0.31, 2.6, 2, 0.9),
-        (0.62, 0.22, 0.11, 0.02, 0.31, 2.6, 2, 0.9),
-    ], m[SKIN], rings=14, n=20, tip=False, cap_tail=True)
-    loft("IntakeDuct", [
-        (0.0, 0.17, 0.07, 0.01, 0.335, 2.4, 2, 1.0),
-        (0.64, 0.19, 0.085, 0.01, 0.335, 2.4, 2, 1.0),
-    ], m[DARK], rings=4, n=20, tip=False, cap_tail=True, cap_nose=False)
-    # Exhaust: flattened slot with a dark cavity.
-    loft("Exhaust", [
-        (-2.75, 0.22, 0.05, 0.05, 0.02, 4.0, 4.0, 2.0),
-        (-2.5, 0.25, 0.07, 0.06, 0.02, 4.0, 4.0, 2.0),
-    ], m[DARK], rings=4, n=20, tip=False, cap_tail=True)
-    # Cranked delta: root at the body chine, LE crank at 60% span.
-    wing_rows = [(0.42, 0.75, 0.0, 2.55, 0.07), (1.20, -0.02, -0.01, 1.55, 0.055),
-                 (2.25, -0.90, 0.025, 0.52, 0.045), (2.34, -1.10, 0.06, 0.26, 0.045)]
-    surface("Wing", [(x, y, z, c * 0.74, tr) for x, y, z, c, tr in wing_rows], m[SKIN], mirror="x")
-    for suffix, side in (("R", 1), ("L", -1)):
-        with seg("Elevon" + suffix, pivot=(side * 1.2, -1.17, -0.01)):
-            surface("ElevonPanel" + suffix,
-                    [(side * x, y - c * 0.74 - 0.008, z, c * 0.26 - 0.008, tr)
-                     for x, y, z, c, tr in wing_rows], m[SKIN])
-    fin("VTail", (-1.45, 0, 1.1, 0.07), (-2.25, 0.85, 0.42, 0.05), m[SKIN], cant=38, x=0.32, z=0.18, mirror=True)
-    # Faceted flush EOTS replaces the fragile spherical chin turret.
-    box("EotsFairing", (0.19, 0.32, 0.06), (0, 1.40, -0.178), m[DARK])
-    box("EotsWindow", (0.12, 0.15, 0.009), (0, 1.45, -0.211), m[GLASS])
-    for side in (1, -1):
-        box(f"FormationLight{side}", (0.008, 0.14, 0.006), (side * 0.49, -0.6, 0.13), m[GLOW])
-        box(f"CheekArray{side}", (0.012, 0.32, 0.095), (side * 0.36, 1.25, 0.012), m[DARK], rot=(0, 0, side * -0.19))
-        surface(f"ChineExtension{side}", [(side * 0.38, 1.5, -0.045, 1.25, 0.04),
-                (side * 0.79, 0.40, -0.045, 0.42, 0.04)], m[SKIN])
-    box("DorsalSatcom", (0.22, 0.48, 0.025), (0, -0.95, 0.32), m[DARK])
-    blade("SatcomBlade", -0.7, 0.3, 0.12, 0.18, m[SKIN])
-    blade("DatalinkBlade", 0.6, -0.17, 0.09, 0.14, m[SKIN], down=True)
-    lugs(-0.38, 0.38, 0.30, m[DARK])
-    return {
-        "color": (0.22, 0.275, 0.30), "metal": 0.12, "smooth": 0.36, "grime": 0.07,
-        "patches": [((-3, -3, -1), (3, 3, -0.06), (0.13, 0.16, 0.19)),
-                    ((-0.45, -2.8, -0.1), (0.45, -2.3, 0.12), (0.105, 0.13, 0.15))],
-        "stencils": [("XQ-58V", -2.1, -1.62, 0.3, 0.4, 0.38, (0.64, 0.71, 0.72)),
-                     ("REMORA 07", -0.75, 0.2, -0.045, 0.0, 0.42, (0.64, 0.71, 0.72))],
-        "bands": [(1.2, 1.32, 0.45, (0.85, 0.66, 0.08))],  # yellow: live warhead section
-        "lines": [plane_y(y) for y in (-2.2, -1.4, -0.45, 0.65, 1.55, 2.25)] + [
-            plane_x(0.0, -2.6, 2.7, (0.15, 9)),               # dorsal spine panel joint
-            ((0.6, 0.8, 0), 1.0, (0.9, -1.4, -0.2), (2.2, 0.0, 0.2)),   # elevon hinge line (stbd)
-            ((-0.6, 0.8, 0), 1.0, (-2.2, -1.4, -0.2), (-0.9, 0.0, 0.2)),  # elevon hinge line (port)
-            ((1, 0, 0), 1.25, (1.2, -1.2, -0.2), (1.3, 0.2, 0.2)),
-            ((1, 0, 0), -1.25, (-1.3, -1.2, -0.2), (-1.2, 0.2, 0.2)),
-        ],
-        "hatches": [(-1.9, -1.45, -0.2, 0.2, True), (0.9, 1.35, -0.16, 0.16, True),
-                    (-1.6, -0.9, -0.25, 0.25, False), (0.3, 0.9, -0.18, 0.18, False)],
-    }
+def cylinder(name, r, depth, loc, mat, verts=20):
+    """Upright (Z-axis) cylinder."""
+    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth, location=loc)
+    o = bpy.context.active_object
+    o.name = name
+    o.data.materials.append(mat)
+    return defix_caps(o)
 
 
-def mald(m):
-    """ADM-160X MALD: 2.85 m decoy. Flat-bottomed body, ogive nose, pop-out wing, tri-tail, ventral scoop."""
-    loft("Body", [
-        (-1.42, 0.12, 0.12, 0.10, 0.0, 2.2, 3.0, 1.3),
-        (-1.15, 0.17, 0.165, 0.15, 0.0, 2.6, 4.0, 0.85),
-        (0.8, 0.175, 0.17, 0.155, 0.0, 2.6, 4.0, 0.85),
-        (1.15, 0.14, 0.13, 0.12, 0.0, 2.4, 3.4, 0.95),
-        (1.34, 0.07, 0.065, 0.06, 0.0, 2.0, 2.4, 1.3),
-        (1.44, 0.01, 0.01, 0.01, 0.0, 2.0, 2.0, 2.0),
-    ], m[SKIN], rings=26, n=20, tip=True, cap_tail=True)
-    tube("Nozzle", [(-1.5, 0.085, 0, 0), (-1.42, 0.1, 0, 0)], m[DARK], n=20, cap0=True, cap1=True)
-    loft("Scoop", [
-        (-0.5, 0.07, 0.02, 0.06, -0.16, 2, 3, 1.5),
-        (0.15, 0.08, 0.02, 0.07, -0.165, 2, 3, 1.5),
-        (0.3, 0.07, 0.02, 0.06, -0.165, 2, 3, 1.5),
-    ], m[SKIN], rings=8, n=16, tip=False, cap_tail=True, cap_nose=False)
-    loft("ScoopDuct", [(0.2, 0.055, 0.01, 0.045, -0.175, 2, 3, 1.5), (0.31, 0.06, 0.01, 0.05, -0.175, 2, 3, 1.5)],
-         m[DARK], rings=3, n=16, tip=False, cap_tail=True, cap_nose=False)
-    for suffix, side in (("R", 1), ("L", -1)):
-        with seg("Wing" + suffix, pivot=(side * 0.08, 0.17, 0.17)):
-            surface("WingPanel" + suffix, [(side * 0.08, 0.38, 0.17, 0.42, 0.06),
-                    (side * 0.86, -0.05, 0.19, 0.18, 0.05)], m[SKIN])
-            cylinder("HingePin" + suffix, 0.022, 0.025, (side * 0.09, 0.17, 0.19), m[SKIN], verts=12)
-    for i, ang in enumerate((90, 215, 325)):
-        o = fin(f"Tail{i}", (-0.95, 0, 0.36, 0.06), (-1.28, 0.26, 0.14, 0.05), m[SKIN], z=0.16)[0]
-        o.location = (0, 0, 0)
-        o.rotation_euler = (0, -math.radians(ang - 90), 0)
-        o.location = (0.16 * math.cos(math.radians(ang)), 0, 0.16 * math.sin(math.radians(ang)) - 0.16 + 0.16)
-    lugs(-0.18, 0.18, 0.165, m[DARK])
-    loft("WingPivot", [(-0.12, 0.01, 0.005, 0.004, 0.165, 2, 2, 2), (-0.04, 0.07, 0.032, 0.01, 0.165, 2.4, 2, 1.4),
-                       (0.3, 0.07, 0.032, 0.01, 0.165, 2.4, 2, 1.4), (0.42, 0.01, 0.005, 0.004, 0.165, 2, 2, 2)],
-         m[SKIN], rings=12, n=16, tip=True, cap_tail=True)
-    blade("DecoyLink", -0.66, 0.166, 0.075, 0.12, m[DARK])
-    raceway("Raceway", -1.1, 0.85, 0.15, m[SKIN], ang=math.radians(122))
-    return {
-        "color": (0.64, 0.67, 0.62), "metal": 0.12, "smooth": 0.4, "grime": 0.08,
-        "zones": [(0.98, 1.5, (0.22, 0.28, 0.30))],
-        "patches": [((0.11, -0.25, 0.005), (0.3, 0.5, 0.1), (0.2, 0.22, 0.23)),       # RF emitter panels
-                    ((-0.3, -0.25, 0.005), (-0.11, 0.5, 0.1), (0.2, 0.22, 0.23))],
-        "stencils": [("ADM-160X", -0.93, -0.46, -0.06, -0.01, 0.10, (0.12, 0.17, 0.18))],
-        "bands": [(0.58, 0.66, 0.2, (0.12, 0.3, 0.75))],  # blue: inert / decoy
-        "lines": [plane_y(y) for y in (-1.1, -0.55, 0.0, 0.55, 0.95)] + [plane_x(0.0, -1.2, 0.9, (-9, -0.1))],
-        "hatches": [(-0.9, -0.6, -0.06, 0.06, True), (0.5, 0.8, -0.07, 0.07, True)],
-    }
-
-
-def hawc(m):
-    """HAWC-X: waverider glide body on a white solid booster with grid-free cruciform fins."""
-    loft("Glider", [
-        (-2.05, 0.56, 0.30, 0.10, 0.0, 1.3, 6.0, 0.55),
-        (-1.0, 0.48, 0.26, 0.09, 0.0, 1.3, 6.0, 0.55),
-        (0.3, 0.34, 0.19, 0.07, 0.0, 1.3, 6.0, 0.6),
-        (1.4, 0.18, 0.11, 0.045, 0.0, 1.4, 6.0, 0.7),
-        (2.1, 0.04, 0.03, 0.015, 0.0, 1.6, 6.0, 0.9),
-        (2.25, 0.004, 0.004, 0.003, 0.0, 2, 6, 1.0),
-    ], m[SKIN], rings=28, n=24, tip=True, cap_tail=True)
-    fin("Fin", (-1.35, 0, 0.75, 0.05), (-1.95, 0.42, 0.3, 0.04), m[SKIN], cant=22, x=0.42, z=-0.02, mirror=True)
-    for side in (1, -1):
-        with seg("BodyFlapR" if side > 0 else "BodyFlapL", pivot=(side * 0.22, -2.04, -0.08)):
-            box(f"BodyFlap{side}", (0.3, 0.16, 0.025), (side * 0.22, -2.12, -0.08), m[SKIN], chamfer=0.004)
-    loft("Interstage", [(-2.4, 0.26, 0.26, 0.26, 0.04, 2, 2, 2), (-2.05, 0.27, 0.22, 0.12, 0.04, 2, 2, 2)],
-         m[DARK], rings=4, n=24, tip=False, cap_tail=True)
-    tube("Booster", [(-4.4, 0.27, 0, 0.04), (-2.4, 0.27, 0, 0.04)], m[SKIN], n=20)
-    tube("NozzleBell", [(-4.72, 0.22, 0, 0.04), (-4.4, 0.15, 0, 0.04)], m[DARK], n=16, cap0=False, cap1=True)
-    tube("NozzleThroat", [(-4.7, 0.19, 0, 0.04), (-4.5, 0.1, 0, 0.04)], m[DARK], n=16, cap0=True, cap1=True)
-    for i, ang in enumerate((45, 135, 225, 315)):
-        a = math.radians(ang)
-        o = fin(f"BoosterFin{i}", (-3.85, 0, 0.55, 0.05), (-4.25, 0.36, 0.25, 0.04), m[SKIN])[0]
-        o.rotation_euler = (0, -(a - math.pi / 2), 0)
-        o.location = (0.27 * math.cos(a), 0, 0.04 + 0.27 * math.sin(a))
-    lugs(-3.6, -3.0, 0.31, m[DARK])
-    raceway("BoosterRaceway", -4.3, -2.45, 0.265, m[SKIN], ang=math.radians(70), zc=0.04, w=0.03, h=0.02)
-    surface("Chine", [(0.18, 1.3, -0.045, 1.4, 0.035),
-            (0.66, -1.0, -0.045, 1.0, 0.035)], m[SKIN], mirror="x")
-    for k, y in enumerate((-3.95, -2.55)):
-        tube(f"BoosterCollar{k}", [(y, 0.279, 0, 0.04), (y + 0.07, 0.279, 0, 0.04)], m[SKIN], n=20)
-    sleeve("NozzleLip", -4.73, -4.68, 0.225, 0.19, m[SKIN], z=0.04, n=24)
-    return {
-        "color": (0.16, 0.165, 0.17), "metal": 0.35, "smooth": 0.55, "grime": 0.08,
-        "zones": [(-4.75, -2.39, (0.82, 0.82, 0.8))],                  # white booster
-        "underside": [(-0.55, (0.07, 0.07, 0.075))],                    # thermal tile underside
-        "bands": [(-3.0, -2.85, 0.3, (0.45, 0.28, 0.14)),             # brown: rocket motor
-                  (0.4, 0.5, 0.4, (0.85, 0.66, 0.08))],               # yellow: warhead
-        "lines": [plane_y(y) for y in (-1.6, -0.6, 0.6, 1.5, -3.4, -4.0)] + [
-            ((0, 0, 1), 0.0, (-9, -2.1, -0.02), (9, 2.3, 0.02))],    # leading-edge seam
-        "hatches": [(-1.3, -0.8, -0.12, 0.12, True)],
-        "view": (1.0, 0.55, 0.45),
-        "stencils": [("HAWC-X", -1.25, -0.6, 0.045, 0.11, 0.21, (0.65, 0.69, 0.70)),
-                     ("BOOST / 02", -3.8, -3.15, 0.03, 0.09, 0.20, (0.16, 0.18, 0.20))],
-    }
-
-
-AEGIS_CELLS = [(-0.13, 0.15, -0.095), (0.0, 0.15, -0.095), (0.13, 0.15, -0.095)]  # = VanguardBuilder.AegisCells
-
-
-def aegis_pod(m):
-    """AEGIS-3: compact 2 m hard-kill pod. Flat-bottomed strongback that carries three AIM-X darts
-    visibly in ventral ejector cradles (they drop straight down), a faceted sensor head with a glow
-    ring, and missile-approach-warning windows on all four corners for 360 degree coverage."""
-    loft("Strongback", [
-        (-0.95, 0.07, 0.035, 0.02, 0.0, 2.2, 3.0, 1.2),
-        (-0.78, 0.165, 0.08, 0.034, 0.0, 2.6, 5.0, 0.8),
-        (-0.45, 0.19, 0.098, 0.038, 0.0, 2.7, 5.0, 0.75),
-        (0.72, 0.19, 0.098, 0.038, 0.0, 2.7, 5.0, 0.75),
-        (0.95, 0.15, 0.075, 0.03, 0.0, 2.5, 4.0, 0.8),
-        (1.07, 0.085, 0.042, 0.02, 0.0, 2.2, 3.0, 1.0),
-    ], m[SKIN], rings=30, n=28, tip=False, cap_tail=True)
-    loft("GlowRing", [(1.064, 0.088, 0.044, 0.022, 0.0, 2.2, 3, 1.0), (1.076, 0.088, 0.044, 0.022, 0.0, 2.2, 3, 1.0)],
-         m[GLOW], rings=3, n=28, tip=False, cap_tail=False, cap_nose=False)
-    loft("SensorHead", [(1.07, 0.083, 0.041, 0.019, 0.0, 2.2, 3, 1.0), (1.12, 0.06, 0.032, 0.015, 0.0, 2.2, 3, 1.0),
-                        (1.155, 0.025, 0.016, 0.008, 0.0, 2, 2, 1.2)], m[GLASS], rings=6, n=12, tip=True)
-    loft("Hardback", [(-0.55, 0.05, 0.03, 0.01, 0.092, 2.6, 2, 1.2), (0.62, 0.05, 0.03, 0.01, 0.092, 2.6, 2, 1.2)],
-         m[SKIN], rings=4, n=12, tip=False, cap_tail=True)
-    lugs(-0.25, 0.25, 0.112, m[DARK])
-    for side in (1, -1):
-        for y in (0.82, -0.62):  # MAWS windows, fore and aft on both chines
-            box(f"Maws{side}_{y}", (0.012, 0.07, 0.03), (side * 0.178, y, 0.006), m[GLASS], rot=(0, 0, side * -0.25))
-        box(f"StatusStrip{side}", (0.005, 0.46, 0.008), (side * 0.188, 0.2, 0.016), m[GLOW])
-    box("MawsVentral", (0.06, 0.07, 0.008), (0.0, -0.6, -0.037), m[GLASS])
-    for i, (x, y, z) in enumerate(AEGIS_CELLS):
-        for k, dy in enumerate((-0.27, 0.27)):  # ejector feet seat on the dart's top hex face
-            box(f"Ejector{i}_{k}", (0.03, 0.05, 0.028), (x, y + dy, -0.05), m[DARK])
-            box(f"EjectorShoe{i}_{k}", (0.055, 0.075, 0.012), (x, y + dy, -0.059), m[SKIN], chamfer=0.002)
-        box(f"CellBus{i}", (0.019, 0.40, 0.018), (x, y, -0.041), m[SKIN], chamfer=0.002)
-    return {
-        "color": (0.47, 0.49, 0.51), "metal": 0.3, "smooth": 0.45, "grime": 0.08,
-        "underside": [(-0.6, (0.24, 0.25, 0.27))],
-        "stencils": [("AEGIS-3  HTK", -0.5, 0.12, -0.004, 0.034, 0.14, (0.14, 0.16, 0.18))],
-        "lines": [plane_y(y) for y in (-0.72, -0.2, 0.5, 0.92)] + [plane_x(0.0, -0.8, 0.95, (0.07, 9))],
-        "hatches": [(-0.7, -0.35, -0.12, 0.12, True), (0.55, 0.85, -0.1, 0.1, True)],
-        "preview_with": [("AegisInterceptor", c) for c in AEGIS_CELLS],
-        "view": (1.0, 0.6, -0.28),
-    }
+def xcyl(name, r, length, loc, mat, verts=20):
+    """Cylinder along X."""
+    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=length, location=loc, rotation=(0.0, math.pi / 2, 0.0))
+    o = bpy.context.active_object
+    o.name = name
+    o.data.materials.append(mat)
+    return defix_caps(o)
 
 
 def radial_cone(name, ang, y, r0, length, r_in, r_out, mat, verts=10):
@@ -1167,477 +981,27 @@ def grid_fin(name, ang, y, mat, r0=0.028, span=0.042, half=0.024, chord=0.01, ce
         bar(f"R{k}", r0 + span / 2, -half + 2 * half * k / nt, (span, chord, frame if k in (0, nt) else web))
 
 
-def interceptor(m):
-    """AIM-X AEGIS dart: 0.9 m two-stage hit-to-kill round. Slim white booster on four folding grid
-    fins; tapered gunmetal hexagonal kill vehicle with an X of semi-recessed divert thrusters (glowing
-    throats), a ring of attitude jets and a glowing separation seam; hex ogive nose with a sapphire
-    seeker window. No warhead, so no yellow band."""
-    tube("Booster", [(-0.44, 0.025, 0, 0), (-0.42, 0.028, 0, 0), (0.05, 0.028, 0, 0)], m[SKIN], n=14)
-    tube("Nozzle", [(-0.465, 0.021, 0, 0), (-0.445, 0.016, 0, 0), (-0.435, 0.019, 0, 0)],
-         m[DARK], n=12, cap0=True, cap1=True)
-    tube("Interstage", [(0.05, 0.028, 0, 0), (0.08, 0.031, 0, 0)], m[DARK], n=12, cap0=True, cap1=True)
-    tube("SeparationSeam", [(0.078, 0.0318, 0, 0), (0.083, 0.0318, 0, 0)], m[SKIN], n=12)
-    # Hexagonal kill vehicle (faces at 30 + k*60 deg, top flat), tapering into a hex ogive nose.
-    loft("KillVehicle", [(y, r, r, r, 0, 2, 2, 2) for y, r in
-                         ((0.081, 0.031), (0.10, 0.037), (0.25, 0.037), (0.31, 0.031),
-                          (0.36, 0.021), (0.39, 0.013))],
-         m[SKIN], rings=12, n=6, tip=False)
-    loft("Seeker", [(y, r, r, r, 0, 2, 2, 2) for y, r in
-                    ((0.389, 0.0132), (0.405, 0.0095), (0.418, 0.004), (0.423, 0.0005))],
-         m[GLASS], rings=6, n=6, tip=True)
-    apothem = 0.037 * math.cos(math.pi / 6)
-    for i, deg in enumerate((30, 150, 210, 330)):  # divert X, half sunk into the faces
-        a = math.radians(deg)
-        radial_cone(f"Divert{i}", a, 0.185, apothem - 0.006, 0.016, 0.008, 0.0105, m[DARK], verts=10)
-        radial_cone(f"DivertThroat{i}", a, 0.185, apothem + 0.0102, 0.001, 0.0068, 0.0068, m[DARK], verts=10)
-    for i in range(6):  # attitude-control jets, one per face
-        radial_cone(f"Acs{i}", math.radians(30 + 60 * i), 0.112, apothem - 0.002, 0.006, 0.0028, 0.0038,
-                    m[DARK], verts=6)
-    for i in range(4):
-        grid_fin(f"GridFin{i}", math.radians(45 + 90 * i), -0.405, m[SKIN])
-    raceway("Raceway", -0.36, 0.03, 0.026, m[SKIN], ang=0.0, w=0.005, h=0.004, rings=8, n=8)
-    return {
-        "color": (0.82, 0.82, 0.8), "metal": 0.2, "smooth": 0.5, "grime": 0.06,
-        "zones": [(0.081, 0.4, (0.33, 0.35, 0.38))],                       # gunmetal kill vehicle
-        "bands": [(-0.07, -0.055, 0.035, (0.45, 0.28, 0.14))],            # brown: rocket motor
-        "lines": [plane_y(y) for y in (-0.33, -0.16, 0.0, 0.14, 0.24)], "line_width": 0.002,
-        "stencils": [("AIM-X  KV-2", -0.3, -0.19, -0.008, 0.008, 0.02, (0.16, 0.18, 0.2))],
-        "smooth_angle": 35, "view": (1.0, 0.6, 0.45),
-    }
+# ================================================================ driver
 
-
-def cylinder(name, r, depth, loc, mat, verts=20):
-    """Upright (Z-axis) cylinder."""
-    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth, location=loc)
-    o = bpy.context.active_object
-    o.name = name
-    o.data.materials.append(mat)
-    return defix_caps(o)
-
-
-LANCE_CAPS = [0.27 + k * 0.33 for k in range(7)]
-
-
-def lance(m):
-    """RG-12 LANCE: 4.7 m railgun pod in the exposed lab-hardware style, finished like vanilla kit:
-    crisp machined chamfers, matte military paint, bolted plates. One straight rectangular barrel
-    beam with segmented cover plates; seven ringed capacitor cans slung underneath; copper bus bars;
-    faceted power block and battery box at the rear with a cable loop; coolant bottle; muzzle block."""
-    def crisp(name, size, loc, mat, rot=(0, 0, 0)):
-        return box(name, size, loc, mat, rot, chamfer=0.006)
-
-    crisp("Beam", (0.2, 3.5, 0.2), (0.0, 0.72, 0.0), m[SKIN])
-    for k in range(8):  # segmented top cover plates
-        crisp(f"CoverPlate{k}", (0.23, 0.39, 0.028), (0.0, -0.82 + k * 0.42, 0.112), m[SKIN])
-    for i, y in enumerate(LANCE_CAPS):
-        cylinder(f"Capacitor{i}", 0.15, 0.42, (0.0, y, -0.3), m[SKIN], verts=16)
-        for k, z in enumerate((-0.135, -0.465)):  # clamp rings
-            cylinder(f"CapRing{i}_{k}", 0.158, 0.035, (0.0, y, z), m[SKIN], verts=16)
-        crisp(f"CapStrap{i}", (0.22, 0.05, 0.05), (0.0, y, -0.095), m[SKIN])
-    for side in (1, -1):
-        crisp(f"BusBar{side}", (0.012, 3.15, 0.034), (side * 0.104, 0.85, 0.04), m[SKIN])
-        crisp(f"BlockRib{side}", (0.02, 0.8, 0.05), (side * 0.175, -1.45, 0.06), m[SKIN])
-    crisp("PowerBlock", (0.34, 0.9, 0.46), (0.0, -1.45, -0.1), m[SKIN])
-    crisp("BatteryBox", (0.3, 0.55, 0.16), (0.0, -1.55, -0.41), m[SKIN])
-    loft("TailCone", [(-2.2, 0.06, 0.06, 0.06, -0.08, 2, 2, 2), (-1.88, 0.165, 0.21, 0.21, -0.08, 2, 2, 2)],
-         m[SKIN], rings=3, n=6, tip=False, cap_tail=True)
-    tube("PowerCable", [(-1.0, 0.016, 0.13, -0.12), (-0.75, 0.016, 0.15, -0.2),
-                        (-0.4, 0.016, 0.14, -0.16), (-0.12, 0.016, 0.11, -0.06)], m[DARK], n=6)
-    tube("CoolantTank", [(-0.98, 0.07, 0, -0.2), (-0.92, 0.1, 0, -0.2), (-0.2, 0.1, 0, -0.2), (-0.14, 0.07, 0, -0.2)],
-         m[SKIN], n=12)
-    crisp("TankSaddle", (0.12, 0.5, 0.06), (0.0, -0.56, -0.11), m[SKIN])
-    crisp("Muzzle", (0.26, 0.16, 0.26), (0.0, 2.52, 0.0), m[SKIN])
-    crisp("Bore", (0.08, 0.02, 0.06), (0.0, 2.6, 0.0), m[DARK])
-    crisp("BoreThroat", (0.05, 0.01, 0.034), (0.0, 2.588, 0.0), m[DARK])
-    # Aircraft hardware: protected capacitor bank, real coolant runs and shock mounts.
-    for side in (1, -1):
-        crisp(f"CapGuard{side}", (0.016, 2.55, 0.038), (side * 0.164, 1.23, -0.36), m[SKIN])
-        tube(f"CoolantRun{side}", [(-1.2, 0.014, side * 0.14, -0.19), (-0.8, 0.014, side * 0.16, -0.24),
-             (2.2, 0.014, side * 0.16, -0.24), (2.43, 0.014, side * 0.12, -0.12)], m[DARK], n=6)
-        for i, y in enumerate((0.15, 1.25, 2.35)):
-            crisp(f"BankBrace{side}_{i}", (0.026, 0.055, 0.3), (side * 0.16, y, -0.29), m[SKIN])
-        for i in range(5):
-            crisp(f"HeatSink{side}_{i}", (0.025, 0.46, 0.012),
-                  (side * (0.06 + 0.025 * i), -1.48, 0.145 + i * 0.003), m[SKIN])
-    lugs(-0.4, 0.6, 0.128, m[DARK])
-    louvres = [((0, 1, 0), y, (0.16, y - 0.05, -0.3), (0.2, y + 0.05, 0.0)) for y in np.arange(-1.8, -1.1, 0.05)]
-    louvres += [((0, 1, 0), y, (-0.2, y - 0.05, -0.3), (-0.16, y + 0.05, 0.0)) for y in np.arange(-1.8, -1.1, 0.05)]
-    return {
-        "color": (0.44, 0.46, 0.47), "metal": 0.12, "smooth": 0.3, "grime": 0.14, "wear": (0.6, 0.6, 0.58),
-        "patches": [((-0.2, 0.0, -0.6), (0.2, 2.5, -0.1), (0.36, 0.375, 0.38)),      # capacitor cans
-                    ((-0.12, -0.2, -0.13), (0.12, 2.5, -0.07), (0.44, 0.46, 0.47)),     # straps keep hull grey
-                    ((0.098, -0.8, 0.02), (0.12, 2.45, 0.06), (0.62, 0.43, 0.24)),      # copper bus bars
-                    ((-0.12, -0.8, 0.02), (-0.098, 2.45, 0.06), (0.62, 0.43, 0.24)),
-                    ((-0.12, -1.0, -0.32), (0.12, -0.12, -0.12), (0.33, 0.36, 0.3))],   # coolant bottle, olive
-        "bands": [(-0.75, -0.7, 0.11, (0.85, 0.66, 0.08))],                            # yellow: pressurised
-        "lines": [((0, 0, 1), -0.2, (-0.2, -0.2, -0.3), (0.2, 2.5, -0.1)),             # can sleeve seams
-                  plane_y(-1.7), plane_y(-1.2), plane_x(0.0, -1.85, -1.05, (-0.4, -0.3))] + louvres,
-        "hatches": [(-1.75, -1.2, -0.12, 0.12, True), (-1.8, -1.3, -0.1, 0.1, False)],
-        "rivets": [(-1.0, 2.4, 0.06, 0.09, 0.11)], "line_width": 0.006, "smooth_angle": 30,
-        "stencils": [("RG-12 LANCE", -1.85, -1.5, 0.12, 0.17, 0.16, (0.12, 0.13, 0.14)),
-                     ("DANGER HV", 0.45, 0.85, -0.07, -0.03, 0.098, (0.75, 0.2, 0.12))],
-        "view": (1.0, 0.75, 0.3),
-    }
-
-
-def glaive(m):
-    """GLAIVE-2: 4.5 m UGV glide carrier. Flat-bottomed chined lifting body, pop-out wing, canted twin tails,
-    clamshell split along the spine, ventral payload doors, chin EO window. No warhead: no yellow band."""
-    def crisp(name, size, loc, mat, rot=(0, 0, 0)):
-        return box(name, size, loc, mat, rot, chamfer=0.008)
-
-    hull = loft("Hull", [
-        (-2.25, 0.18, 0.12, 0.10, 0.0, 2.6, 4.0, 0.8),
-        (-1.9, 0.34, 0.22, 0.20, 0.0, 3.0, 5.0, 0.7),
-        (1.2, 0.34, 0.22, 0.20, 0.0, 3.0, 5.0, 0.7),
-        (1.9, 0.20, 0.15, 0.13, -0.01, 2.6, 4.0, 0.8),
-        (2.25, 0.03, 0.03, 0.03, -0.02, 2.0, 2.0, 1.2),
-    ], m[SKIN], rings=26, n=24, tip=True, cap_tail=True)
-    bm = bmesh.new()
-    bm.from_mesh(hull.data)
-    bay_faces = [f for f in bm.faces if abs(f.calc_center_median().x) < 0.23
-                 and -1.33 < f.calc_center_median().y < 0.96 and f.calc_center_median().z < -0.155]
-    bmesh.ops.delete(bm, geom=bay_faces, context="FACES")
-    bm.to_mesh(hull.data)
-    bm.free()
-    crisp("BayInnerRoof", (0.43, 2.3, 0.025), (0, -0.2, -0.07), m[DARK])
-    for side in (1, -1):
-        crisp(f"BayInnerWall{side}", (0.015, 2.3, 0.12), (side * 0.22, -0.2, -0.13), m[DARK])
-    for suffix, side in (("R", 1), ("L", -1)):
-        with seg("Wing" + suffix, pivot=(side * 0.3, -0.2, 0.2)):
-            surface("WingPanel" + suffix, [(side * 0.3, 0.35, 0.2, 1.1, 0.06),
-                    (side * 2.1, -0.35, 0.22, 0.45, 0.05)], m[SKIN])
-            cylinder("HingePin" + suffix, 0.045, 0.03, (side * 0.31, -0.2, 0.23), m[SKIN], verts=12)
-    fin("Tail", (-1.5, 0, 0.6, 0.06), (-2.0, 0.42, 0.28, 0.05), m[SKIN], cant=30, x=0.24, z=0.16, mirror=True)
-    crisp("EoWindow", (0.12, 0.2, 0.012), (0.0, 1.7, -0.148), m[GLASS])
-    crisp("WingPivot", (0.2, 0.3, 0.04), (0.0, 0.25, 0.225), m[SKIN])
-    tube("Exhaust", [(-2.33, 0.075, 0, 0), (-2.2, 0.09, 0, 0)], m[DARK], n=16)  # sustainer nozzle
-    for suffix, side in (("R", 1), ("L", -1)):
-        with seg("PayloadDoor" + suffix, pivot=(side * 0.22, -0.2, -0.195)):
-            crisp("PayloadDoorPanel" + suffix, (0.2, 2.35, 0.022), (side * 0.115, -0.2, -0.204), m[SKIN])
-        for i, y in enumerate((-1.3, -0.2, 0.8)):
-            crisp(f"DoorHinge{side}_{i}", (0.045, 0.095, 0.035), (side * 0.23, y, -0.20), m[DARK])
-    lugs(-0.35, 0.35, 0.24, m[DARK])
-    return {
-        "color": (0.43, 0.45, 0.44), "metal": 0.12, "smooth": 0.3, "grime": 0.12, "wear": (0.6, 0.6, 0.58),
-        "underside": [(-0.6, (0.3, 0.31, 0.32))],
-        "lines": [plane_y(y) for y in (-1.6, -0.6, 0.6, 1.5)] + [plane_x(0.0, -1.9, 1.3, (0.15, 9))],
-        "hatches": [(-1.4, 1.0, -0.2, 0.2, False), (-1.7, -1.2, -0.12, 0.12, True)],
-        "stencils": [("GLAIVE-2", -1.25, -0.35, 0.02, 0.1, 0.25, (0.14, 0.15, 0.16))],
-        "smooth_angle": 30, "view": (1.0, 0.75, 0.35),
-    }
-
-
-def orca(m):
-    """ORCA AGT-80: 3.1 m HAAWC-style long-glide torpedo. Dark olive torpedo with blunt sonar nose, X tail fins
-    and pump-jet shroud, strapped under a grey glide kit (spine, pop-out wing)."""
-    tube("Torpedo", [(-1.45, 0.11, 0, 0), (-1.3, 0.16, 0, 0), (1.15, 0.165, 0, 0), (1.3, 0.15, 0, 0)],
-         m[SKIN], n=24, cap0=True, cap1=True)
-    loft("SonarNose", [(y, r, r, r, 0, 2, 2, 2) for y, r in ((1.29, 0.152), (1.42, 0.12), (1.48, 0.06), (1.5, 0.01))],
-         m[DARK], rings=8, n=24, tip=True, cap_tail=True)
-    sleeve("PumpJetShroud", -1.62, -1.42, 0.17, 0.135, m[SKIN], n=24)
-    with seg("Rotor", pivot=(0, -1.54, 0)):
-        tube("RotorHub", [(-1.65, 0.022, 0, 0), (-1.54, 0.04, 0, 0), (-1.44, 0.03, 0, 0)], m[SKIN], n=12)
-        for i in range(5):
-            a = i * 2 * math.pi / 5
-            box(f"Impeller{i}", (0.092, 0.023, 0.015),
-                (0.082 * math.cos(a), -1.54, 0.082 * math.sin(a)), m[SKIN], rot=(0, -a, 0.2), chamfer=0.003)
-    for i in range(4):
-        a = math.pi / 4 + math.pi / 2 * i
-        o = fin(f"TailFin{i}", (-1.28, 0, 0.18, 0.08), (-1.34, 0.07, 0.12, 0.06), m[SKIN])[0]
-        o.rotation_euler = (0, -a, 0)
-        o.location = (0.15 * math.sin(a), 0, 0.15 * math.cos(a))
-    box("KitSpine", (0.12, 2.0, 0.07), (0.0, 0.1, 0.19), m[SKIN], chamfer=0.006)
-    for suffix, side in (("R", 1), ("L", -1)):
-        with seg("Wing" + suffix, pivot=(side * 0.06, 0.39, 0.24)):
-            surface("KitWing" + suffix, [(side * 0.06, 0.55, 0.24, 0.32, 0.06),
-                    (side * 1.35, 0.35, 0.25, 0.18, 0.05)], m[SKIN])
-            cylinder("WingPivot" + suffix, 0.024, 0.03, (side * 0.07, 0.39, 0.26), m[SKIN], verts=12)
-    for i, y in enumerate((-0.65, 0.8)):
-        sleeve("KitClamp" + str(i), y - 0.022, y + 0.022, 0.172, 0.16, m[SKIN], n=24)
-    lugs(-0.35, 0.35, 0.225, m[DARK])
-    return {
-        "color": (0.26, 0.29, 0.25), "metal": 0.15, "smooth": 0.35, "grime": 0.1, "wear": (0.5, 0.52, 0.48),
-        "patches": [((-3, -3, 0.15), (3, 3, 1), (0.46, 0.48, 0.48))],              # glide kit grey
-        "bands": [(0.3, 0.38, 0.2, (0.85, 0.66, 0.08)),                           # yellow: live warhead
-                  (-0.95, -0.88, 0.2, (0.45, 0.28, 0.14))],                       # brown: propulsion
-        "lines": [plane_y(y) for y in (-1.2, -0.5, 0.25, 0.85)],
-        "stencils": [("AGT-80 ORCA", -0.8, 0.15, -0.05, 0.05, 0.15, (0.85, 0.82, 0.6))],
-        "smooth_angle": 30, "view": (1.0, 0.7, 0.35),
-    }
-
-
-def alex(m):
-    """ALE-X: 0.95 m towed fiber decoy. Slim body, dark radome, X tail fins, aft fiber port. Blue: inert/decoy."""
-    tube("Body", [(-0.42, 0.045, 0, 0), (0.3, 0.05, 0, 0)], m[SKIN], n=16)
-    loft("Radome", [(y, r, r, r, 0, 2, 2, 2) for y, r in ((0.3, 0.05), (0.42, 0.035), (0.48, 0.004))],
-         m[SKIN], rings=6, n=16, tip=True, cap_tail=True)
-    for i in range(4):
-        a = math.pi / 4 + math.pi / 2 * i
-        o = fin(f"TailFin{i}", (-0.28, 0, 0.12, 0.06), (-0.36, 0.05, 0.06, 0.05), m[SKIN])[0]
-        o.rotation_euler = (0, -a, 0)
-        o.location = (0.045 * math.sin(a), 0, 0.045 * math.cos(a))
-    tube("FiberPort", [(-0.47, 0.012, 0, 0), (-0.42, 0.012, 0, 0)], m[SKIN], n=8)
-    sleeve("TowEye", -0.46, -0.425, 0.023, 0.013, m[SKIN], n=12)
-    raceway("FeedFairing", -0.34, 0.26, 0.048, m[SKIN], ang=math.radians(45), w=0.006, h=0.004)
-    return {
-        "color": (0.5, 0.52, 0.5), "metal": 0.15, "smooth": 0.35, "grime": 0.08,
-        "zones": [(0.3, 0.5, (0.10, 0.10, 0.105))],                       # ex-Dark radome
-        "patches": [((-0.012, -0.47, -0.012), (0.012, -0.42, 0.012), (0.10, 0.10, 0.105))],
-        "bands": [(-0.05, 0.0, 0.06, (0.12, 0.3, 0.75))],                         # blue: inert / decoy
-        "lines": [plane_y(y) for y in (-0.2, 0.1)], "line_width": 0.003,
-        "view": (1.0, 0.6, 0.45),
-    }
-
-
-ALEX_CELLS = [(0.06, -0.7, 0.0), (-0.06, -0.7, 0.0)]  # = VanguardBuilder.AleXCells (Unity x, z, y)
-
-
-def alex_pod(m):
-    """ALE-X pod: 1.7 m self-protection pod, two aft launch tubes, ventral fiber-reel housing."""
-    loft("Pod", [(-0.82, 0.12, 0.1, 0.1, 0, 2.4, 2.4, 1.6), (-0.6, 0.13, 0.13, 0.13, 0, 2.2, 2.2, 1.8),
-                 (0.55, 0.13, 0.13, 0.13, 0, 2.2, 2.2, 1.8), (0.85, 0.02, 0.02, 0.02, 0, 2, 2, 2)],
-         m[SKIN], rings=16, n=20, tip=True, cap_tail=True)
-    for side in (1, -1):
-        sleeve(f"TubeLip{side}", -0.847, -0.805, 0.038, 0.027, m[SKIN], x=side * 0.06, n=16)
-        tube(f"Tube{side}", [(-0.827, 0.027, side * 0.06, 0.0), (-0.65, 0.027, side * 0.06, 0.0)],
-             m[DARK], n=16, cap0=False)
-        box(f"ReelAccess{side}", (0.015, 0.34, 0.09), (side * 0.128, -0.14, -0.015), m[SKIN], chamfer=0.004)
-    loft("ReelHousing", [(-0.45, 0.06, 0.01, 0.05, -0.12, 2, 3, 1.4), (0.2, 0.06, 0.01, 0.05, -0.12, 2, 3, 1.4)],
-         m[SKIN], rings=4, n=12, tip=False, cap_tail=True)
-    lugs(-0.25, 0.25, 0.13, m[DARK])
-    return {
-        "color": (0.44, 0.46, 0.47), "metal": 0.12, "smooth": 0.3, "grime": 0.1,
-        "lines": [plane_y(y) for y in (-0.55, 0.0, 0.5)] + [plane_x(0.0, -0.6, 0.6, (0.05, 9))],
-        "hatches": [(-0.3, 0.1, -0.06, 0.06, True)],
-        "stencils": [("ALE-X", -0.45, 0.05, -0.02, 0.04, 0.12, (0.14, 0.15, 0.16))],
-        "view": (1.0, -0.6, 0.35),
-    }
-
-
-def xcyl(name, r, length, loc, mat, verts=20):
-    """Cylinder along X."""
-    bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=length, location=loc, rotation=(0.0, math.pi / 2, 0.0))
-    o = bpy.context.active_object
-    o.name = name
-    o.data.materials.append(mat)
-    return defix_caps(o)
-
-
-DECK_SLIDE = 3.2  # the rear pallet (kite cradle + winch) rides out over the ramp
-KY, KZ = -1.25, 0.85  # kite pivot (centre of the swivel wing) when cradled
-
-
-def skywell(m):
-    """SKYWELL service-kite kit (user-picked 2026-10-08): fuel + munitions stock on the forward pallet; on the sliding
-    rear deck a launch cradle holds a tethered service kite - a Gremlins-style swivel-wing drone with wingtip electric
-    rotors, V-tail, telescoping refuel nozzle in the tail cone, belly cartridge carousel and a folding two-link loader.
-    The kite flies on a fuel+power tether from the deck winch. Nose +Y, ramp -Y. Joint names are runtime API:
-    Deck, Winch, Kite, Tail, Wing, WingOuterL, WingOuterR, WingletL, WingletR, Nozzle, Loader, LoaderFore, Cradle."""
-    def crisp(name, size, loc, mat, rot=(0, 0, 0), ch=0.01):
-        return box(name, size, loc, mat, rot, chamfer=ch)
-
-    def ycyl(name, rings, mat, n=16):
-        return tube(name, rings, mat, n=n)
-
-    def missile(name, y0, y1, x, z, r, mat, n=8):
-        tube(name, [(y0, r * 0.8, x, z), (y0 + 0.05, r, x, z), (y1 - 0.28, r, x, z)], mat, n=n)
-        loft(name + "Nose", [(y1 - 0.28, r, r, r, z, 2, 2, 2), (y1 - 0.1, r * 0.55, r * 0.55, r * 0.55, z, 2, 2, 2),
-                             (y1, 0.004, 0.004, 0.004, z, 2, 2, 2)], mat, rings=4, n=n, tip=True).location.x = x
-        for f in range(4):
-            a_ = math.pi / 4 + math.pi / 2 * f
-            crisp(f"{name}Fin{f}", (0.01, 0.2, 0.09), (x + (r + 0.045) * math.cos(a_), y0 + 0.14, z + (r + 0.045) * math.sin(a_)),
-                  mat, rot=(0, -a_ + math.pi / 2, 0), ch=0.003)
-
-    def pallet(k, cy):
-        crisp(f"Pallet{k}", (2.24, 2.74, 0.05), (0.0, cy, 0.025), m[SKIN], ch=0.008)
-        for side in (1, -1):
-            crisp(f"RailX{k}{side}", (0.05, 2.74, 0.05), (side * 1.095, cy, 0.075), m[SKIN], ch=0.006)
-            crisp(f"RailY{k}{side}", (2.24, 0.05, 0.05), (0.0, cy + side * 1.345, 0.075), m[SKIN], ch=0.006)
-            for t in range(5):
-                crisp(f"Ring{k}{side}{t}", (0.07, 0.04, 0.03), (side * 1.06, cy - 1.1 + t * 0.55, 0.11), m[DARK], ch=0.004)
-
-    def cartridge(name, x, y, z, rot=(0, 0, 0)):
-        """Two-round rail cartridge: launch-rail spine + two compact AAMs."""
-        crisp(name, (0.16, 1.05, 0.05), (x, y, z), m[SKIN], rot=rot, ch=0.006)
-        for dx in (-0.05, 0.05):
-            ycyl(name + f"Rd{dx}", [(y - 0.5, 0.035, x + dx, z - 0.05), (y + 0.42, 0.035, x + dx, z - 0.05),
-                                    (y + 0.52, 0.01, x + dx, z - 0.05)], m[SKIN], n=8)
-
-    # ---- forward pallet: fuel tank, munitions stock, pump skid (unchanged layout, v4 look)
-    pallet(0, 1.4)
-    tank = [(1.25, 0.12), (1.3, 0.3), (1.42, 0.42), (1.6, 0.46), (2.45, 0.46), (2.6, 0.42), (2.7, 0.3), (2.74, 0.12)]
-    ycyl("Tank", [(y, r, 0.0, 0.62) for y, r in tank], m[SKIN], n=16)
-    for y in (1.6, 2.4):
-        crisp(f"Saddle{y}", (0.86, 0.14, 0.2), (0.0, y, 0.15), m[SKIN], ch=0.008)
-        ycyl(f"Strap{y}", [(y - 0.03, 0.475, 0.0, 0.62), (y + 0.03, 0.475, 0.0, 0.62)], m[DARK], n=16)
-    cylinder("Manway", 0.16, 0.06, (0.0, 2.0, 1.1), m[SKIN], verts=12)
-    for i in range(8):
-        a_ = 2 * math.pi * i / 8
-        cylinder(f"ManBolt{i}", 0.014, 0.03, (0.13 * math.cos(a_), 2.0 + 0.13 * math.sin(a_), 1.14), m[DARK], verts=6)
-    for side in (1, -1):
-        for y in (0.85, 2.25):
-            for px in (0.62, 1.08):
-                crisp(f"RackPost{side}{y}{px}", (0.04, 0.05, 0.62), (side * px, y, 0.41), m[DARK], ch=0.005)
-            for z in (0.3, 0.58):
-                crisp(f"RackBar{side}{y}{z}", (0.5, 0.05, 0.035), (side * 0.85, y, z - 0.09), m[DARK], ch=0.004)
-        for mx in (0.73, 0.97):
-            for z in (0.3, 0.58):
-                missile(f"Stock{side}{mx}{z}", 0.72, 2.35, side * mx, z, 0.062, m[SKIN])
-    crisp("Skid", (0.6, 0.5, 0.08), (-0.75, 0.05, 0.09), m[SKIN])
-    ycyl("PumpMotor", [(-0.17, 0.12, -0.75, 0.28), (0.15, 0.12, -0.75, 0.28)], m[SKIN], n=10)
-    for r_ in range(3):
-        ycyl(f"MotorRib{r_}", [(-0.1 + r_ * 0.09, 0.132, -0.75, 0.28), (-0.08 + r_ * 0.09, 0.132, -0.75, 0.28)], m[DARK], n=10)
-    cylinder("Filter", 0.15, 0.6, (0.88, 0.1, 0.4), m[SKIN], verts=12)
-    sphere("FilterHead", 0.15, (0.88, 0.1, 0.7), m[SKIN], seg=8)
-    ycyl("FuelLine", [(0.3, 0.04, 0.88, 0.15), (-0.2, 0.04, 0.88, 0.15)], m[SKIN], n=8)
-
-    # ---- sliding rear deck: launch cradle + tether winch
-    with seg("Deck", None, (0.0, -1.4, 0.0)):
-        pallet(1, -1.4)
-        for side in (1, -1):
-            crisp(f"Sled{side}", (0.12, 2.9, 0.06), (side * 0.7, -1.4, 0.0), m[DARK], ch=0.006)
-            crisp(f"LaunchRail{side}", (0.06, 2.6, 0.06), (side * 0.32, -1.35, 0.1), m[SKIN], ch=0.006)
-            crisp(f"DeckLight{side}", (0.03, 0.4, 0.02), (side * 1.12, -2.7, 0.09), m[GLOW], ch=0.003)
-        for y in (KY - 1.1, KY + 0.95):                          # V-block saddles under the kite body
-            for side in (1, -1):
-                crisp(f"VBlock{y}{side}", (0.12, 0.16, 0.42), (side * 0.2, y, 0.32), m[SKIN], rot=(0, side * 0.45, 0), ch=0.01)
-            crisp(f"SaddleBase{y}", (0.6, 0.18, 0.1), (0.0, y, 0.13), m[DARK], ch=0.008)
-        for side in (1, -1):                                     # hold-down latch arms
-            crisp(f"Latch{side}", (0.05, 0.12, 0.5), (side * 0.42, KY - 0.75, 0.4), m[DARK], rot=(0, -side * 0.35, 0), ch=0.006)
-        for side in (1, -1):
-            crisp(f"WinchFrame{side}", (0.06, 0.34, 0.42), (side * 0.62, -0.4, 0.22), m[SKIN], ch=0.008)
-    with seg("Winch", "Deck", (0.0, -0.4, 0.26)):
-        xcyl("WinchDrum", 0.17, 1.1, (0.0, -0.4, 0.26), m[SKIN], verts=14)
-        xcyl("TetherWrap", 0.2, 0.9, (0.0, -0.4, 0.26), m[DARK], verts=14)
-        xcyl("WinchMotor", 0.12, 0.2, (0.75, -0.4, 0.26), m[SKIN], verts=10)
-    ycyl("FeedHose", [(-0.2, 0.04, 0.88, 0.15), (-0.4, 0.04, 0.88, 0.2)], m[DARK], n=8)
-
-    # ---- the service glider: plane-sized (~13 m span) towed glider folded into a 4.8 m core pod (cradled pose; the
-    # runtime flies it). Stowed: centre wing swivelled along the pod, both outer panels folded back on top of it,
-    # tail boom telescoped inside the pod. Towed on the fuel+power tether and steered by its surfaces.
-    with seg("Kite", "Deck", (0.0, KY, KZ)):
-        loft("KiteBody", [(KY - 2.35, 0.2, 0.22, 0.2, KZ + 0.1, 2.3, 2.3, 2.3), (KY - 1.6, 0.33, 0.35, 0.3, KZ + 0.03, 2.5, 2.3, 2.4),
-                          (KY + 0.2, 0.42, 0.42, 0.34, KZ, 2.6, 2.3, 2.4), (KY + 1.3, 0.4, 0.4, 0.32, KZ, 2.6, 2.3, 2.4),
-                          (KY + 1.95, 0.3, 0.3, 0.25, KZ - 0.03, 2.4, 2.2, 2.2), (KY + 2.3, 0.15, 0.15, 0.13, KZ - 0.06, 2.2, 2.0, 2.0),
-                          (KY + 2.45, 0.03, 0.03, 0.03, KZ - 0.07, 2, 2, 2)], m[SKIN], rings=16, n=16, tip=True)
-        ycyl("BoomCollar", [(KY - 2.42, 0.17, 0.0, KZ + 0.1), (KY - 2.3, 0.17, 0.0, KZ + 0.1)], m[DARK], n=12)
-        sphere("KiteEye", 0.11, (0.0, KY + 2.1, KZ - 0.22), m[GLASS], seg=8)                 # EO/IR docking sensor
-        loft("SensorHood", [(KY + 1.2, 0.16, 0.14, 0.02, KZ + 0.38, 2.2, 2, 2), (KY + 1.85, 0.13, 0.11, 0.02, KZ + 0.33, 2.2, 2, 2),
-                            (KY + 2.05, 0.02, 0.02, 0.02, KZ + 0.29, 2, 2, 2)], m[GLASS], rings=4, n=12, tip=True)
-        crisp("Bridle", (0.16, 0.4, 0.12), (0.0, KY + 1.3, KZ + 0.42), m[DARK], ch=0.01)      # tether bridle fairing
-        crisp("Pivot", (0.36, 0.7, 0.12), (0.0, KY + 0.3, KZ + 0.42), m[SKIN], ch=0.012)
-        for side in (1, -1):                                       # belly magazine: trough rails + two spare rounds
-            crisp(f"Trough{side}", (0.05, 2.6, 0.1), (side * 0.38, KY + 0.6, KZ - 0.32), m[DARK], ch=0.006)
-        missile("SpareA", KY - 0.75, KY + 1.95, -0.2, KZ - 0.42, 0.085, m[SKIN])
-        missile("SpareB", KY - 0.75, KY + 1.95, 0.0, KZ - 0.47, 0.085, m[SKIN])
-    with seg("Tail", "Kite", (0.0, KY - 2.35, KZ + 0.1)):
-        # telescoping tail boom (2.6 m run): nested in the pod when stowed, T-tail at its end
-        ycyl("TailBoom", [(KY + 0.3, 0.12, 0.0, KZ + 0.1), (KY - 2.45, 0.12, 0.0, KZ + 0.1), (KY - 2.8, 0.07, 0.0, KZ + 0.12)], m[SKIN], n=12)
-        crisp("Fin", (0.05, 0.7, 1.05), (0.0, KY - 2.6, KZ + 0.65), m[SKIN], rot=(-0.3, 0, 0), ch=0.01)
-        crisp("Stab", (2.1, 0.45, 0.045), (0.0, KY - 2.82, KZ + 1.16), m[SKIN], ch=0.01)
-        crisp("BoomHinge", (0.18, 0.22, 0.13), (0.0, KY - 2.55, KZ - 0.02), m[DARK], ch=0.01)
-    with seg("Wing", "Kite", (0.0, KY + 0.3, KZ + 0.47)):
-        # centre section, stowed swivelled along the pod (span along Y): 4.4 m, 0.8 m chord
-        loft("WingCentre", [(KY + 0.3 - 2.2, 0.36, 0.06, 0.035, KZ + 0.5, 2.5, 2.5, 3.5), (KY + 0.3, 0.4, 0.07, 0.04, KZ + 0.5, 2.5, 2.5, 3.5),
-                            (KY + 0.3 + 2.2, 0.36, 0.06, 0.035, KZ + 0.5, 2.5, 2.5, 3.5)], m[SKIN], rings=6, n=12, tip=False)
-        for side in (1, -1):
-            crisp(f"Flaperon{side}", (0.09, 1.9, 0.03), (-0.38, KY + 0.3 + side * 1.15, KZ + 0.5), m[DARK], ch=0.004)
-            crisp(f"HingeBlock{side}", (0.5, 0.12, 0.1), (0.0, KY + 0.3 + side * 2.18, KZ + 0.53), m[DARK], ch=0.008)
-    for tip, side, lift in (("R", 1, 0.07), ("L", -1, 0.13)):
-        # outer panel on a vertical hinge pin at the centre-section tip, folded back inboard on top of it (stacked);
-        # swings 180 deg outboard like a carrier wing fold, winglets staying up
-        hinge = KY + 0.3 + side * 2.2
-        far = hinge - side * 4.1
-        rows = [(hinge, 0.32, 0.05, 0.03, KZ + 0.5 + lift, 2.5, 2.5, 3.5), (far, 0.2, 0.035, 0.02, KZ + 0.5 + lift, 2.5, 2.5, 3.5)]
-        with seg("WingOuter" + tip, "Wing", (0.0, hinge, KZ + 0.5 + lift)):
-            loft(f"Outer{tip}", rows if rows[0][0] < rows[1][0] else rows[::-1], m[SKIN], rings=6, n=10, tip=False)
-            crisp(f"OuterAileron{tip}", (0.08, 1.8, 0.025), (-0.26, hinge - side * 2.6, KZ + 0.5 + lift), m[DARK], ch=0.004)
-        with seg("Winglet" + tip, "WingOuter" + tip, (0.0, far, KZ + 0.5 + lift)):
-            crisp(f"WingletFin{tip}", (0.3, 0.05, 0.45), (0.05, far, KZ + 0.5 + lift + 0.22), m[SKIN], ch=0.006)
-            sphere(f"NavLight{tip}", 0.035, (-0.14, far, KZ + 0.5 + lift), m[GLOW], seg=6)
-    # mini flying boom: hinged under the tail, stowed folded forward under the boom; swings down onto the probe
-    with seg("Nozzle", "Tail", (0.0, KY - 2.55, KZ - 0.06)):
-        ycyl("BoomOuter", [(KY - 2.55, 0.06, 0.0, KZ - 0.1), (KY - 1.5, 0.06, 0.0, KZ - 0.1)], m[SKIN], n=10)
-        ycyl("BoomInner", [(KY - 1.5, 0.045, 0.0, KZ - 0.1), (KY - 0.62, 0.045, 0.0, KZ - 0.1)], m[SKIN], n=8)
-        for side in (1, -1):
-            crisp(f"BoomVane{side}", (0.24, 0.14, 0.02), (side * 0.14, KY - 1.7, KZ - 0.1), m[SKIN], rot=(0, side * 0.3, 0), ch=0.004)
-        ycyl("NozzleCollar", [(KY - 0.62, 0.06, 0.0, KZ - 0.1), (KY - 0.55, 0.06, 0.0, KZ - 0.1)], m[DARK], n=10)
-        ycyl("NozzleTip", [(KY - 0.55, 0.05, 0.0, KZ - 0.1), (KY - 0.45, 0.028, 0.0, KZ - 0.1)], m[SKIN], n=10)
-        ycyl("NozzleRing", [(KY - 0.6, 0.068, 0.0, KZ - 0.1), (KY - 0.58, 0.068, 0.0, KZ - 0.1)], m[GLOW], n=10)
-    LX = 0.24
-    with seg("Loader", "Kite", (LX, KY + 1.9, KZ - 0.28)):
-        xcyl("LoaderHub", 0.09, 0.18, (LX, KY + 1.9, KZ - 0.28), m[SKIN], verts=10)
-        crisp("LoaderUpper", (0.08, 2.0, 0.1), (LX + 0.09, KY + 0.95, KZ - 0.28), m[SKIN], ch=0.008)
-    with seg("LoaderFore", "Loader", (LX + 0.09, KY - 0.05, KZ - 0.3)):
-        xcyl("LoaderElbow", 0.08, 0.16, (LX + 0.09, KY - 0.05, KZ - 0.3), m[SKIN], verts=10)
-        crisp("LoaderLower", (0.07, 1.75, 0.09), (LX + 0.15, KY + 0.8, KZ - 0.33), m[SKIN], ch=0.008)
-    with seg("Cradle", "LoaderFore", (LX + 0.15, KY + 1.65, KZ - 0.36)):
-        crisp("CradleRail", (0.09, 1.9, 0.05), (LX + 0.02, KY + 0.6, KZ - 0.35), m[SKIN], ch=0.006)
-        for y in (KY - 0.2, KY + 1.4):
-            crisp(f"CradleClamp{y:.2f}", (0.24, 0.09, 0.15), (LX + 0.02, y, KZ - 0.42), m[DARK], ch=0.006)
-        missile("Round", KY - 0.75, KY + 1.95, LX + 0.02, KZ - 0.47, 0.085, m[SKIN])           # the round being delivered
-
-    def pose(stow=False):
-        objs = bpy.data.objects
-        if not hasattr(pose, "rest"):
-            pose.rest = {n: (objs[n].location.copy(), objs[n].rotation_euler.copy()) for n in
-                         ("Deck", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "Nozzle", "Loader", "LoaderFore")}
-        for n, (loc, rot) in pose.rest.items():
-            objs[n].location = loc.copy()
-            objs[n].rotation_euler = rot.copy()
-        if not stow:
-            objs["Deck"].location.y -= DECK_SLIDE
-            objs["Kite"].location.y -= 6.5
-            objs["Kite"].location.z -= 1.6
-            objs["Wing"].rotation_euler.z = -math.pi / 2
-            objs["Tail"].location.y -= 2.6
-            objs["WingOuterR"].rotation_euler.z = math.pi   # swings 180 deg about a vertical hinge pin
-            objs["WingOuterL"].rotation_euler.z = math.pi
-            objs["Nozzle"].rotation_euler.x = math.radians(150)
-            objs["Loader"].rotation_euler.x = math.radians(35)
-            objs["LoaderFore"].rotation_euler.x = math.radians(-50)
-        bpy.context.view_layer.update()
-
-    return {
-        "color": (0.42, 0.44, 0.46), "metal": 0.22, "smooth": 0.4, "grime": 0.1, "wear": (0.6, 0.62, 0.63),
-        "patches": [((-1.2, -3.0, -0.1), (1.2, 3.0, 0.11), (0.56, 0.58, 0.6)),             # pallets
-                    ((-0.5, 0.4, 0.15), (0.5, 2.4, 1.1), (0.27, 0.29, 0.31)),             # gunmetal tank
-                    ((0.62, 0.68, 0.2), (1.1, 2.4, 0.7), (0.8, 0.81, 0.79)),               # stock rounds
-                    ((-1.1, 0.68, 0.2), (-0.62, 2.4, 0.7), (0.8, 0.81, 0.79)),
-                    ((-0.4, KY + 0.3 - 2.0, KZ + 0.55), (0.4, KY + 0.3 - 1.4, KZ + 1.2), (0.85, 0.66, 0.08)),   # folded outer tips + winglets
-                    ((-0.4, KY + 0.3 + 1.4, KZ + 0.55), (0.4, KY + 0.3 + 2.0, KZ + 1.2), (0.85, 0.66, 0.08)),
-                    ((0.75, KY - 3.1, KZ + 1.05), (1.1, KY - 2.55, KZ + 1.25), (0.85, 0.66, 0.08)),          # stab tips
-                    ((-1.1, KY - 3.1, KZ + 1.05), (-0.75, KY - 2.55, KZ + 1.25), (0.85, 0.66, 0.08)),
-                    ((-0.45, KY - 0.8, KZ - 0.6), (0.45, KY + 2.0, KZ - 0.36), (0.8, 0.81, 0.79))],         # belly rounds
-        "lines": [plane_y(y) for y in (-1.6, 0.6, 2.1)],
-        "stencils": [("SKYWELL", 1.55, 2.6, 0.78, 0.98, 0.3, (0.85, 0.66, 0.08))],
-        "smooth_angle": 32, "view": (1.0, -1.1, 0.75), "pose": pose, "pose_view": (1.25, -0.6, 0.45),
-    }
-
-
-MODELS = {
-    "Remora": remora,
-    "MaldX": mald,
-    "HawcX": hawc,
-    "AegisInterceptor": interceptor,  # before the pod: its preview loads the dart .blend
-    "AegisPod": aegis_pod,
-    "Lance": lance,
-    "Glaive": glaive,
-    "Orca": orca,
-    "AleX": alex,
-    "AleXPod": alex_pod,
-    "SkywellKit": skywell,
-}
-
-# Complete replacement designs; existing primitives, atlas and export pipeline stay shared.
-from types import SimpleNamespace
-from VanguardRemake import replacements
-_remakes = replacements(SimpleNamespace(**globals()))
-MODELS = {**{k: v for k, v in MODELS.items() if k != "Glaive"}, **_remakes}
+def with_dependencies(names, outdir):
+    """The selected models plus any DEPENDS whose .blend is not already in outdir (e.g. AegisPod needs the dart)."""
+    wanted, todo = set(names), list(names)
+    while todo:
+        for dep in MODELS[todo.pop()].DEPENDS:
+            if dep not in wanted and not os.path.isfile(os.path.join(outdir, dep + ".blend")):
+                print(f"[vanguard] {dep}.blend not found in {outdir}: building it first", flush=True)
+                wanted.add(dep)
+                todo.append(dep)
+    return wanted
 
 
 def main(outdir, only=None):
+    global TEX, UV_SHAPE
+    models.require(only)  # None = every model; a broken model nobody asked for is only a warning
+    for name, why in models.BROKEN.items():
+        print(f"[vanguard] WARNING models/{name}.py skipped: {why}", flush=True)
+    unknown = [n for n in only or () if n not in MODELS]
+    assert not unknown, f"unknown model(s) {unknown}; available: {', '.join(MODELS)}"
     os.makedirs(outdir, exist_ok=True)
     os.makedirs(ICON_TMP, exist_ok=True)
     report_path = os.path.join(outdir, "AssetReport.json")
@@ -1645,19 +1009,23 @@ def main(outdir, only=None):
     if only and os.path.isfile(report_path):
         with open(report_path, encoding="utf-8") as f:
             report = {k: v for k, v in json.load(f).items() if k in MODELS}
-    for name, build in MODELS.items():
-        if only and name not in only:
-            continue
-        global TEX, UV_SHAPE
-        TEX = MODEL_TEX.get(name, 1024)
-        # Convex bounds pack small mechanism islands reliably without costly concave searches.
-        UV_SHAPE = "AABB" if name in ("SkywellKit", "Glaive") else "CONCAVE"
-        clear_scene()
-        spec = build(mats(name))
-        report[name] = finish(name, spec, outdir)
-        with open(os.path.join(outdir, "AssetReport.json"), "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
-    contact_sheet(outdir, [n for n in MODELS if os.path.isfile(os.path.join(outdir, n + ".png"))])
+    selected = with_dependencies(only, outdir) if only else set(MODELS)
+    this = sys.modules[__name__]
+    try:
+        for name, mod in MODELS.items():
+            if name not in selected:
+                continue
+            TEX = mod.TEX
+            # Convex bounds pack small mechanism islands reliably without costly concave searches.
+            UV_SHAPE = getattr(mod, "UV_SHAPE", "CONCAVE")
+            clear_scene()
+            spec = mod.build(this)
+            report[name] = finish(name, spec, outdir, models.CLASS_TRIS[mod.CLASS])
+            with open(report_path, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2)
+        contact_sheet(outdir, [n for n in MODELS if os.path.isfile(os.path.join(outdir, n + ".png"))])
+    finally:
+        shutil.rmtree(ICON_TMP, ignore_errors=True)
     print("VANGUARD_ASSETS_OK " + json.dumps(report))
 
 

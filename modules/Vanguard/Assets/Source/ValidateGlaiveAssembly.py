@@ -1,4 +1,5 @@
-"""Assembly contact and moving-envelope review of the generator, before expensive baking.
+"""Assembly contact and moving-envelope review of the GLAIVE-2A generator (models/Glaive2A.py),
+before expensive baking.
 
 blender -b --factory-startup --python-exit-code 1 -P ValidateGlaiveAssembly.py -- <evidence>
 Contact probes must lie inside both named solids. BVH overlap candidates are conservatively
@@ -14,6 +15,7 @@ import bpy
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import BuildVanguard as g
 
@@ -33,7 +35,8 @@ def inside(obj, point, tolerance=0.0002):
 def main(directory):
     os.makedirs(directory, exist_ok=True)
     g.clear_scene()
-    spec = g.MODELS['Glaive'](g.mats('Glaive'))
+    g.models.require(['Glaive2A'])
+    spec = g.MODELS['Glaive2A'].build(g)
     joints = {}
     for segment in g.SEGMENTS:
         joint = bpy.data.objects.new(segment['name'], None)
@@ -138,14 +141,14 @@ def main(directory):
         json.dump(result,file,indent=2)
     # Orthographic review includes transport and maximum depression, not just a flattering hero angle.
     spec['pose'](stow=True)
-    g.preview(os.path.join(directory,'Glaive_Transport.png'),(1,.8,.4),res=(1400,900))
+    g.preview(os.path.join(directory,'Glaive2A_Transport.png'),(1,.8,.4),res=(1400,900))
     spec['pose'](stow=False)
-    g.preview(os.path.join(directory,'Glaive_Assembly.png'),(1,.8,.35),res=(1400,900))
-    g.preview(os.path.join(directory,'Glaive_Underside.png'),(1,.65,-.7),res=(1400,900))
+    g.preview(os.path.join(directory,'Glaive2A_Assembly.png'),(1,.8,.35),res=(1400,900))
+    g.preview(os.path.join(directory,'Glaive2A_Underside.png'),(1,.65,-.7),res=(1400,900))
     joints['GunYaw'].rotation_euler.z=math.radians(110)
     joints['GunPitch'].rotation_euler.x=-math.radians(80)
     bpy.context.view_layer.update()
-    g.preview(os.path.join(directory,'Glaive_GunLimit.png'),(1,.5,-.4),res=(1400,900))
+    g.preview(os.path.join(directory,'Glaive2A_GunLimit.png'),(1,.5,-.4),res=(1400,900))
     print('GLAIVE_ASSEMBLY '+json.dumps({'result':result['result'],'contacts':len(rows),'poses':len(poses),'errors':errors}),flush=True)
     if errors: raise RuntimeError('GLAIVE assembly failed; see assembly-validation.json')
 

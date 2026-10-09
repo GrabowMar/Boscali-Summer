@@ -35,7 +35,7 @@ namespace Vanguard
                 Description = "Miniature air-launched decoy. Flies a weaving 80 km route with a fighter-sized radar signature, then orbits. Radar-guided missiles chasing the launcher may switch to it.",
                 Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 0.6f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
-            new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldX",
+            new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
                 Description = "Jammer decoy. As MALD-X, and jams every enemy radar inside a 60 degree cone ahead of it out to 25 km.",
                 Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
@@ -51,11 +51,11 @@ namespace Vanguard
                 Description = "Low-profile three-dart self-defense rail. Darts are carried horizontally, drop clear and pitch nose-up, then snap onto a visible inbound threat and ignite. All-direction protection inside 1.1 km; physical contact, limited reaction time and three shots.",
                 Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 45, TurnRate = 55,
                 Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
-            new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A Orbiting Gun Drone", Short = "GLAIVE-A", Model = "Glaive",
+            new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A Orbiting Gun Drone", Short = "GLAIVE-A", Model = "Glaive2A",
                 Description = "Air-launched folding-wing gun drone. Three-second launch boost, powered ingress toward the enemy, then a 300 m suppression orbit with a stabilized 7.62 mm gun. 180 rounds, short bursts, tracked hostile targets only; departs when dry or out of endurance.",
                 Mass = 80, Yield = 0, Cost = 1.2f, Value = 25, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
-            new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S Suppression Drone", Short = "GLAIVE-S", Model = "Glaive",
+            new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S Suppression Drone", Short = "GLAIVE-S", Model = "Glaive2S",
                 Description = "Wingborne suppression drone with launch assist, pusher propulsion and a light belly gun. Maintains a moving orbit, fires short aimed bursts, and leaves on ammunition or energy exhaustion. No hovering or parachute.",
                 Mass = 80, Yield = 0, Cost = 1.6f, Value = 28, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
@@ -193,18 +193,26 @@ namespace Vanguard
             foreach (var l in g.GetComponentsInChildren<LODGroup>(true)) UnityEngine.Object.DestroyImmediate(l);
         }
 
+        // Files of the retired model 'Glaive' (stem before the first '.' or '_'); Glaive2A / Glaive2S are different stems.
+        static bool Retired(string fileName) => fileName.Split('.', '_')[0] == "Glaive";
+
         static void ImportModels()
         {
             // These exact assets belong to the retired GLAIVE parachute implementation.
             foreach (string name in new[] { "GlaiveCanopy.fbx", "GlaiveCanopy_Albedo.png", "GlaiveCanopy_Normal.png", "GlaiveCanopy_MetalGloss.png", "GlaiveCanopy_Icon.png" })
                 AssetDatabase.DeleteAsset(R + "Models/" + name);
             AssetDatabase.DeleteAsset(R + "Materials/Skin_GlaiveCanopy.mat");
+            // 'Glaive' was split into Glaive2A / Glaive2S: drop the old files and material left in the project.
+            foreach (string file in Directory.Exists(R + "Models") ? Directory.GetFiles(R + "Models") : new string[0])
+                if (!file.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) && Retired(Path.GetFileName(file)))
+                    AssetDatabase.DeleteAsset(file.Replace('\\', '/'));
+            AssetDatabase.DeleteAsset(R + "Materials/Skin_Glaive.mat");
             string src = Environment.GetEnvironmentVariable("VG_MODELS") ?? throw new Exception("VG_MODELS not set");
             Directory.CreateDirectory(R + "Models");
             foreach (string file in Directory.GetFiles(src))
             {
                 string name = Path.GetFileName(file);
-                if (name.StartsWith("GlaiveCanopy", StringComparison.OrdinalIgnoreCase)) continue;
+                if (name.StartsWith("GlaiveCanopy", StringComparison.OrdinalIgnoreCase) || Retired(name)) continue;
                 if (name.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) || name.EndsWith("_Albedo.png", StringComparison.OrdinalIgnoreCase) || name.EndsWith("_Normal.png", StringComparison.OrdinalIgnoreCase) || name.EndsWith("_MetalGloss.png", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith("_Icon.png", StringComparison.OrdinalIgnoreCase))
                     File.Copy(file, R + "Models/" + name, true);
@@ -250,7 +258,7 @@ namespace Vanguard
                     var tex = (TextureImporter)AssetImporter.GetAtPath(path);
                     tex.textureType = path.EndsWith("_Normal.png", StringComparison.OrdinalIgnoreCase) ? TextureImporterType.NormalMap : TextureImporterType.Default;
                     tex.sRGBTexture = path.EndsWith("_Albedo.png", StringComparison.OrdinalIgnoreCase);
-                    tex.maxTextureSize = 2048; // BuildVanguard.py bakes 2048 for the 4-7 m airframes, 1024 otherwise
+                    tex.maxTextureSize = 2048; // each models/<Name>.py picks its atlas (512 / 1024 / 2048); ValidateAndPreview checks the import kept it
                     tex.textureCompression = TextureImporterCompression.CompressedHQ;
                     tex.mipmapEnabled = true;
                     tex.anisoLevel = 4;
@@ -349,6 +357,9 @@ namespace Vanguard
             return g;
         }
 
+        // GLAIVE-2A and GLAIVE-2S each own an airframe (models Glaive2A / Glaive2S) but share the gun rig and flight setup.
+        static bool IsGlaive(string model) => model.StartsWith("Glaive", StringComparison.Ordinal);
+
         static int LodLevel(string name) => name.EndsWith("_LOD1") ? 1 : name.EndsWith("_LOD2") ? 2 : 0;
         static string DetailName(string name) => LodLevel(name) == 0 ? name : name.Substring(0, name.Length - 5);
 
@@ -387,8 +398,8 @@ namespace Vanguard
             group.fadeMode = LODFadeMode.None; // Avoid rendering two levels together on small, numerous weapons.
             group.SetLODs(new[]
             {
-                new LOD(0.25f, renderers.Where(r => LodLevel(r.name) == 0).Cast<Renderer>().ToArray()),
-                new LOD(0.08f, renderers.Where(r => LodLevel(r.name) == 1).Cast<Renderer>().ToArray()),
+                new LOD(0.06f, renderers.Where(r => LodLevel(r.name) == 0).Cast<Renderer>().ToArray()),
+                new LOD(0.015f, renderers.Where(r => LodLevel(r.name) == 1).Cast<Renderer>().ToArray()),
                 new LOD(0.002f, renderers.Where(r => LodLevel(r.name) == 2).Cast<Renderer>().ToArray()),
             });
             group.RecalculateBounds();
@@ -429,6 +440,20 @@ namespace Vanguard
         [Serializable]
         sealed class ImportReport { public ModelCheck[] models; }
 
+        // Atlas side in px of the baked Albedo in VG_MODELS: PNG IHDR width/height are big-endian ints at bytes 16 and 20.
+        static int SourceAtlasSize(string model)
+        {
+            string path = Path.Combine(Environment.GetEnvironmentVariable("VG_MODELS") ?? throw new Exception("VG_MODELS not set"), model + "_Albedo.png");
+            var header = new byte[24];
+            using (var stream = File.OpenRead(path))
+                if (stream.Read(header, 0, 24) != 24) throw new Exception(path + " is not a PNG");
+            int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
+            int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+            if (header[1] != 'P' || width != height || width < 256 || width > 2048) // 2048 = ImportModels maxTextureSize
+                throw new Exception(model + " Albedo must be a square PNG of 256..2048 px, got " + width + "x" + height);
+            return width;
+        }
+
         static void ValidateAndPreview(Dictionary<string, Material> materials)
         {
             string directory = Environment.GetEnvironmentVariable("VG_PREVIEWS");
@@ -439,6 +464,7 @@ namespace Vanguard
                 RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
                 RenderSettings.ambientLight = new Color(0.40f, 0.44f, 0.50f);
             }
+            // Every Spec model (MaldX, MaldJ, Remora, HawcX, AegisInterceptor, Glaive2A, Glaive2S, Orca, AleX) plus the bespoke pods.
             var models = Missiles.Select(s => s.Model).Concat(new[] { "AegisPod", "AleXPod", "SkywellKit", "Lance" }).Distinct().ToArray();
             var reports = new List<ModelCheck>();
             foreach (string model in models)
@@ -455,11 +481,11 @@ namespace Vanguard
                 var importer = (ModelImporter)AssetImporter.GetAtPath(R + "Models/" + model + ".fbx");
                 if (importer.isReadable || importer.importAnimation || importer.importCameras || importer.importLights)
                     throw new Exception(model + " import retained unused data");
+                int atlas = SourceAtlasSize(model); // the side BuildVanguard.py baked (models/<Name>.py TEX), not a copy of it
                 foreach (string channel in new[] { "Albedo", "Normal", "MetalGloss" })
                 {
                     var texture = Load<Texture2D>(R + "Models/" + model + "_" + channel + ".png");
-                    int expected = new[] { "Remora", "HawcX", "Lance", "Glaive", "SkywellKit" }.Contains(model) ? 2048 : 1024;
-                    if (texture.width != expected || texture.height != expected) throw new Exception(model + " texture density: " + channel);
+                    if (texture.width != atlas || texture.height != atlas) throw new Exception(model + " texture density: " + channel);
                 }
                 if (model == "SkywellKit")
                 {
@@ -467,7 +493,7 @@ namespace Vanguard
                     foreach (string name in new[] { "Deck", "Winch", "Kite", "Tail", "Wing", "WingOuterL", "WingOuterR", "WingletL", "WingletR", "Nozzle", "Loader", "LoaderFore", "Cradle" })
                         if (!names.Contains(name)) throw new Exception("Skywell lost joint " + name);
                 }
-                if (model == "MaldX" || model == "Glaive" || model == "Orca")
+                if (model == "MaldX" || model == "MaldJ" || IsGlaive(model) || model == "Orca")
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
                     Transform right = renderers.Single(r => r.name == "WingR").transform;
@@ -588,12 +614,12 @@ namespace Vanguard
             g.name = spec.Key;
             HideRenderers(g);
             var visual = Visual(g.transform, spec.Model, materials);
-            if (spec.Model == "Glaive")
+            if (IsGlaive(spec.Model))
             {
                 AddGlaiveCannon(g, spec, visual);
             }
             var missile = g.GetComponent<Missile>();
-            if (spec.Key == "VG_AegisDart" || spec.Model == "Glaive")
+            if (spec.Key == "VG_AegisDart" || IsGlaive(spec.Model))
             {
                 // The 900 kg donor collider must not make a 90 cm dart hit like a cruise missile.
                 foreach (var collider in g.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
@@ -614,7 +640,7 @@ namespace Vanguard
                 // Donor aero is a 900 kg cruise missile's (finArea 3). finArea is lift as well as drag, so winged bodies
                 // keep it; only the AEGIS dart (a rocket that turns on thrust and torque) gets area ~ mass^(2/3).
                 if (spec.Key == "VG_AegisDart") P(s, "finArea").floatValue *= Mathf.Pow(spec.Mass / 900f, 2f / 3f);
-                if (spec.Model == "Glaive") P(s, "finArea").floatValue = 1.2f;
+                if (IsGlaive(spec.Model)) P(s, "finArea").floatValue = 1.2f;
                 if (spec.Key == "VG_HawcX") P(s, "supersonicDrag").floatValue = 0.35f; // waverider: holds Mach 8 in the glide
                 P(s, "foldingFins").arraySize = 0;
                 var motor = P(s, "motors").GetArrayElementAtIndex(0);
@@ -627,7 +653,7 @@ namespace Vanguard
                 // of the airframe, none for unpowered bodies (ALE-X).
                 var fuel = motor.FindPropertyRelative("fuelMass");
                 fuel.floatValue = spec.Thrust <= 0f ? 0f : Mathf.Min(fuel.floatValue, spec.Mass * 0.4f);
-                if (spec.Model == "Glaive")
+                if (IsGlaive(spec.Model))
                 {
                     var stages=P(s,"motors");
                     stages.arraySize=2;
@@ -689,7 +715,7 @@ namespace Vanguard
         }
 
         // AEGIS-3: three darts ride visibly under the pod and eject straight down (MountedMissile rail
-        // Down), so remaining ammo reads at a glance. Offsets mirror the cradles in BuildVanguard.py.
+        // Down), so remaining ammo reads at a glance. Offsets mirror CELLS in models/AegisPod.py.
         static void AddGlaiveCannon(GameObject missile, Spec spec, GameObject visual)
         {
             bool suppression = spec.Key == "VG_Glaive2S";
@@ -706,7 +732,7 @@ namespace Vanguard
                 P(s, "massPerRound").floatValue = .024f;
                 P(s, "costPerRound").floatValue = .001f;
                 P(s, "fireInterval").floatValue = .15f;
-                P(s, "weaponIcon").objectReferenceValue = Icon("Glaive");
+                P(s, "weaponIcon").objectReferenceValue = Icon(spec.Model);
             });
             var donor = Clone(D + "GameObject/gun_30mm_rotary_pod_PLACEHOLDER.prefab");
             var gun = donor.GetComponentsInChildren<Gun>(true).Single();
@@ -771,7 +797,7 @@ namespace Vanguard
             SaveMount(g, mount, json, info, donor, "SpecialFlarePod", "ECMPod1");
         }
 
-        // ALE-X: two decoys in aft tubes, released backward onto the fiber. = BuildVanguard.py ALEX_CELLS.
+        // ALE-X: two decoys in aft tubes, released backward onto the fiber. = models/AleXPod.py CELLS (Blender x, y, z -> Unity x, z, y).
         static readonly Vector3[] AleXCells = { new Vector3(0.06f, 0f, -0.7f), new Vector3(-0.06f, 0f, -0.7f) };
 
         static void AleXPod(WeaponInfo info, Dictionary<string, Material> materials)
@@ -868,7 +894,7 @@ namespace Vanguard
             foreach (var gun in g.GetComponentsInChildren<Gun>(true))
                 Edit(gun, s =>
                 {
-                    // Fire from the model's lit bore, not the donor 57 mm barrel. = BuildVanguard.py lance() muzzle.
+                    // Fire from the model's lit bore, not the donor 57 mm barrel. = the MachinedMuzzle frame in models/Lance.py.
                     var muzzles = P(s, "muzzles");
                     for (int i = 0; i < muzzles.arraySize; i++)
                         if (muzzles.GetArrayElementAtIndex(i).objectReferenceValue is Transform t)

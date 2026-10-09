@@ -9,6 +9,7 @@ import sys
 
 import bpy
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import BuildVanguard as generator
 
@@ -17,11 +18,11 @@ def main(models, review, only=None):
     os.makedirs(review, exist_ok=True)
     with open(os.path.join(models, "AssetReport.json"), encoding="utf-8") as file:
         report = json.load(file)
-    for name, build in generator.MODELS.items():
+    for name, model in generator.MODELS.items():
         if only and name not in only: continue
         # Reuse the build's preview directions/poses; no duplicate model specification.
         generator.clear_scene()
-        spec = build(generator.mats(name))
+        spec = model.build(generator)
         bpy.ops.wm.open_mainfile(filepath=os.path.join(models, name + ".blend"))
         report[name]["materials"] = sorted({mat.name for obj in bpy.context.scene.objects
                                              if obj.type == "MESH" for mat in obj.data.materials})

@@ -4,29 +4,23 @@ The bake supplies model-space position and unit normals. Only numpy is required;
 the caller supplies its existing deterministic value-noise function. Heights are
 in metres and are converted to a tangent normal once, after panel grooves.
 """
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 
 
-def service_stencils(model):
-    """Secondary maintenance copy in BuildVanguard's existing flank projection."""
-    dark, pale = (0.095, 0.115, 0.125), (0.56, 0.61, 0.62)
-    return {
-        "Remora": [("ACCESS / 04", -0.40, 0.10, 0.10, 0.137, 0.43, pale)],
-        "MaldX": [("RF / DO NOT PAINT", -0.16, 0.35, -0.108, -0.082, 0.115, dark)],
-        "HawcX": [("SEPARATION PLANE", -2.88, -2.45, -0.09, -0.06, 0.20, dark)],
-        "AegisPod": [("SAFE / SERVICE", -.40, .40, -.079, -.053, .29, dark)],
-        "Lance": [("COOLANT / CLOSED", -0.83, -0.35, -0.245, -0.208, 0.072, pale)],
-        "Orca": [("SERVICE / 03", -1.14, -0.76, 0.03, 0.065, 0.12, pale)],
-        "AleXPod": [("FIBER / KEEP CLEAR", 0.13, 0.46, -0.068, -0.045, 0.105, dark)],
-    }.get(model, [])
-
-
-def surface_layers(model, spec, pos, nrm, base, noise):
+def surface_layers(spec, pos, nrm, base, noise):
     """Return (base_color, metallic, smoothness, height_metres).
 
     Call after livery bands/zones/patches, before stencils and final AO/grime.
     Paint is dielectric. Conductive hardware is selected spatially, so a
     mirrored or articulated mesh uses the same coating after baking.
+
+    A model with its own coatings (bare metal, ceramic, rubber seals, local stains) supplies
+    spec["surface"] = function(S) in models/<Name>.py. S carries the writable per-texel arrays
+    base (N,N,3), metallic, smoothness, height (N,N; metres) plus read-only x, y, z, pos, nrm, fine/broad
+    noise, np, spec and metal_region(mask, colour, smoothness) for an unpainted conductive surface.
     """
     base = np.array(base, dtype=np.float32, copy=True)
     x, y, z = pos[..., 0], pos[..., 1], pos[..., 2]
@@ -55,88 +49,11 @@ def surface_layers(model, spec, pos, nrm, base, noise):
         smoothness[mask] = gloss + brush[mask] + fine[mask] * 0.025
         height[mask] = fine[mask] * 0.000008
 
-    if model == "Remora":
-        # Aft heat-resistant coating is low gloss, with local flow streaks.
-        aft = (y < -2.30) & (np.abs(x) < 0.44) & (z > -0.11) & (z < 0.13)
-        flow = (0.5 + 0.5 * np.sin(x * 190.0 + broad * 1.7)) * 0.04
-        base[aft] *= (1.0 - flow[aft, None])
-        smoothness[aft] = 0.23 + fine[aft] * 0.05
-    elif model == "Lance":
-        # Copper bus bars have an unpainted conductive surface, not grey paint.
-        bus = ((np.abs(x) >= 0.219) & (np.abs(x) <= 0.230) &
-               (y >= 0.68) & (y <= 0.98) & (np.abs(z) <= 0.023))
-        metal_region(bus, (0.66, 0.39, 0.19), 0.58)
-        if spec.get("exposed_bank"):
-            bus=(np.abs(x) >= .098)&(np.abs(x) <= .12)&(y >= -.8)&(y <= 2.45)&(z >= .019)&(z <= .061)
-            metal_region(bus,(.66,.39,.19),.58)
-            cans=(np.abs(x)<.164)&(y>.1)&(y<2.43)&(z<-.12)&(z>-.515)
-            metal_region(cans,(.42,.45,.48),.32)
-            clamps=cans&((np.abs(z+.135)<.026)|(np.abs(z+.465)<.026))
-            metal_region(clamps,(.54,.56,.59),.49)
-        muzzle = (y > 2.43) & (np.abs(x) < 0.145) & (np.abs(z) < 0.145)
-        metal_region(muzzle, (0.50, 0.52, 0.55), 0.43)
-        rails = (np.abs(x) > 0.043) & (np.abs(x) < 0.063) & (y > 2.35) & (np.abs(z) < 0.031)
-        metal_region(rails, (0.57,0.60,0.62), .52)
-        # Local operational stain around the bore; the housing stays clean.
-        soot = np.exp(-((x / 0.077) ** 2 + (z / 0.062) ** 2)) * (y > 2.58) * 0.15
-        base *= (1.0 - soot)[..., None]
-        smoothness -= soot * 0.20
-    elif model == "Glaive" and spec.get("glaive_polish"):
-        # Composite airframe, rubber seals and coated steel hardware have separate responses.
-        wing=(np.abs(x)>.23)&(z>.095)&(z<.255)&(y>-.4)&(y<.5)
-        smoothness[wing]=.27+fine[wing]*.025
-        prop=(y<-1.105)&(y>-1.195)&(np.abs(x)<.35)&(z>-.035)&(z<.15)
-        base[prop]=(.09,.11,.115); smoothness[prop]=.34
-        tips=prop&(np.abs(x)>.30)
-        base[tips]=(.64,.62,.47)
-        gun=(z<-.173)&(np.abs(x)<.14)&(y>.02)&(y<.72)
-        metal_region(gun,(.22,.245,.25),.43)
-        barrel=gun&(y>.28)&(np.abs(x)<.02)
-        metal_region(barrel,(.13,.155,.17),.49)
-        seal=(z>-.144)&(z<-.133)&((x*x+(y-.13)**2)<.083**2)
-        base[seal]=(.055,.07,.075); metallic[seal]=0; smoothness[seal]=.23
-        pin=((np.abs(x)-.255)**2+(y+.16)**2<.0125**2)&(z>.18)
-        metal_region(pin,(.13,.155,.17),.40)
-        jacket=barrel&(y>.28)&(y<.415)&(np.abs(z+.26)<.008)&(np.abs(nrm[...,0])>.6)&(((y-.28)%.045)<.027)
-        base[jacket]=(.025,.035,.040); height[jacket]-=.0007
-        cooling=(np.abs(x)>.12)&(np.abs(x)<.18)&(y>-.67)&(y<-.43)&(z>.035)&(z<.075)&(np.abs(nrm[...,0])>.7)&(((y+.67)%.052)<.032)
-        base[cooling]=(.035,.045,.05); height[cooling]-=.0006
-        # Short top-only control-surface seams; avoid arbitrary rings across the wings.
-        span=np.abs(x)
-        edge=np.where(span<.97,.34-(span-.255)*(.16/.715),.18-(span-.97)*(.24/.75))
-        chord=np.where(span<.97,.50-(span-.255)*(.16/.715),.34-(span-.97)*(.14/.75))
-        hinge=edge-chord*.74
-        seam=wing&(np.abs(x)>.82)&(np.abs(x)<1.59)&(nrm[...,2]>.6)&(np.abs(y-hinge)<.0013)
-        height[seam]-=.0003; base[seam]*=.65
-        fin=(np.abs(x)>.36)&(np.abs(x)<.55)&(y<-1.71)&(z>.10)&(np.abs(nrm[...,0])>.6)
-        fin_le=-1.75-(z-.07)*(.19/.31)
-        fin_chord=.31-(z-.07)*(.14/.31)
-        rudder=fin&(np.abs(y-(fin_le-fin_chord*.75))<.0013)
-        elevator=(np.abs(x)<.57)&(y<-1.71)&(z>.072)&(z<.088)&(nrm[...,2]>.7)&(np.abs(y+1.86)<.0013)
-        tail_seam=rudder|elevator
-        height[tail_seam]-=.00025; base[tail_seam]*=.65
-        cover=(y>.35)&(y<.73)&(np.abs(x)<.066)&(z>.161)
-        base[cover]*=.92; smoothness[cover]=.31
-    elif model == "AegisInterceptor":
-        # The gunmetal vehicle is a conductive housing; white motor paint is not.
-        vehicle = (y >= 0.081) & (y < 0.389)
-        metal_region(vehicle, (0.46, 0.49, 0.54), 0.57)
-    elif model == "HawcX":
-        # Ceramic belly / carbon leading edge, rather than metal-painted tiles.
-        thermal = (y > -2.10) & (nrm[..., 2] < -0.35)
-        hot = (y > 1.65) | ((y > -2.10) & (np.abs(nrm[..., 0]) > 0.82))
-        tx, ty = np.mod(x + 0.025, 0.075), np.mod(y + 0.035, 0.11)
-        gap = ((np.minimum(tx, 0.075 - tx) < 0.0013) |
-               (np.minimum(ty, 0.11 - ty) < 0.0013)) & thermal & ~hot
-        tile_id = np.floor((x + 0.025) / 0.075) * 19 + np.floor((y + 0.035) / 0.11) * 7
-        tile = ((tile_id % 13) / 12.0 - 0.5).astype(np.float32)
-        base[thermal] = np.array((0.064, 0.072, 0.080), np.float32) * (1.0 + tile[thermal, None] * 0.10)
-        base[gap] *= 0.73
-        base[hot] = (0.050, 0.059, 0.068)
-        metallic[thermal | hot] = 0.0
-        smoothness[thermal | hot] = 0.23 + fine[thermal | hot] * 0.055
-        height[gap] -= 0.00020
-        height[hot] *= 0.5
+    hook = spec.get("surface")
+    if hook is not None:
+        hook(SimpleNamespace(np=np, spec=spec, pos=pos, nrm=nrm, x=x, y=y, z=z, base=base, metallic=metallic,
+                             smoothness=smoothness, height=height, fine=fine, broad=broad,
+                             metal_region=metal_region))
 
     # Flush captive screws: four per service hatch, with a recessed slot.
     # No repeating lines of big rivets on stealth skins or smooth missile bodies.
@@ -215,6 +132,9 @@ def detail_normal(pos, nrm, height, covered):
 def self_check():
     """One numerical check for coating masks, physical normals and UV seams."""
     import json
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from models import HawcX, Lance  # the coating hooks live with their models (no bpy needed)
     # Noise is injected; this check does not import bpy or start a bake.
     def noise(p, scale, seed):
         return (np.sin((p * np.array((1.7, 0.9, 1.3), np.float32)).sum(-1) * scale + seed) + 1) * 0.5
@@ -224,8 +144,8 @@ def self_check():
     pos = np.stack((uu, vv, np.full_like(uu, 0.015)), -1)
     nrm = np.zeros_like(pos)
     nrm[..., 2] = 1
-    spec = {"smooth": 0.34, "hatches": [(-0.7, -0.4, -0.1, 0.1, True)]}
-    args = ("Lance", spec, pos, nrm, np.full_like(pos, 0.44), noise)
+    spec = {"smooth": 0.34, "hatches": [(-0.7, -0.4, -0.1, 0.1, True)], "surface": Lance.surface}
+    args = (spec, pos, nrm, np.full_like(pos, 0.44), noise)
     color, metal, gloss, height = surface_layers(*args)
     repeat = surface_layers(*args)
     assert all(np.array_equal(a, b) for a, b in zip((color, metal, gloss, height), repeat))
@@ -256,7 +176,7 @@ def self_check():
     assert np.allclose(np.linalg.norm(interior, axis=-1), 1, atol=1e-5)
     thermal_pos = pos.copy()
     thermal_pos[..., 1] = np.clip(vv, -2.0, 1.5)
-    ceramic = surface_layers("HawcX", {}, thermal_pos, -nrm, np.full_like(pos, 0.4), noise)
+    ceramic = surface_layers({"surface": HawcX.surface}, thermal_pos, -nrm, np.full_like(pos, 0.4), noise)
     assert np.all(ceramic[1] == 0) and ceramic[2].mean() < 0.25
     print(json.dumps({"surface_check": "PASS", "deterministic": True,
                       "paint_metallic": 0, "bus_metallic": 1,
