@@ -10,10 +10,18 @@ namespace NuclearOption.UIStyleSystem
 {
     using System;
     using System.Collections.Generic;
-    /// <summary>Active throws, exactly like the game's theme before a scene exists: MenuPalette falls back to the base game's green, amber and red.</summary>
+    /// <summary>
+    /// The live game's HUD theme as the cockpit shows it: near-pure green ink (the native HUD text samples about 0, 216, 16), amber and red. The editor's
+    /// own ThemeManager throws before a scene exists, which would send <c>AvTheme</c> to its minty fallbacks and make the renders judge a ring the player never sees.
+    /// </summary>
     public static class ThemeManager
     {
-        public static Theme Active => throw new InvalidOperationException();
+        private static readonly Theme Theme = new Theme
+        {
+            ColorTheme = new Palette { AllClear = new Color(0f, 0.9f, 0.08f), Warning = new Color(1f, 0.85f, 0f), Alert = new Color(1f, 0.2f, 0.15f) },
+        };
+
+        public static Theme Active => Theme;
         public static event Action ThemeGroupChanged;
     }
     public class Theme { public Palette ColorTheme; public TacticalScreenTheme TacScreenTheme; public TacticalScreenTheme HudTheme; }
