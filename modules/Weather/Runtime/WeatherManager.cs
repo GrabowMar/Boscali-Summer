@@ -886,6 +886,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "fieldCover", localWeather.Cover },
                 { "skyPin", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? fieldKey.SkyPin + 1 : 0 },
                 { "skyName", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? SkyLibrary.Get(fieldKey.SkyPin).Name : "-" },
+                { "metar", Field != null ? WeatherMetar.Line(localWeather) : "-" },
                 { "frontCount", Field?.FrontCount ?? 0 },
                 { "frontKind", Field != null && Field.FrontCount > 0 ? (int)Field.Front(0).Kind : -1 },
                 { "cellCount", Field?.CellCount ?? 0 },

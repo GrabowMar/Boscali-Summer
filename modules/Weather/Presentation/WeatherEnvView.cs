@@ -33,6 +33,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public WeatherRegimeType Regime;
         public string Code = "", Name = "", Briefing = "";
+        /// <summary>The METAR-style line derived from the layers at the camera (WeatherMetar); empty when unknown.</summary>
+        public string Metar = "";
         public float Cover, Deck, Top, VisibilityKm = -1f, Rain, Turbulence;
         public float WindKts;
         public int WindFrom, WindTo;
@@ -251,6 +253,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             {
                 Code = d.Code,
                 Word = d.Name,
+                Metar = d.Metar,
                 Regime = d.Regime,
                 Cover = d.Cover,
                 State = RegimeState(d.Regime),
