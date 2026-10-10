@@ -16,6 +16,36 @@ namespace BoscaliSummer.Tests.Features.Weather
             SlabFieldMorphologies();
             SlabFieldRungBlendIsContinuous();
             BodiesLadderBlend();
+            ThinLayerAreaFollowsCover();
+        }
+
+        /// <summary>The share of 6000 scattered points (a 54 km square, deterministic) where the thin layer's field exceeds 0.1: the area it visibly covers.</summary>
+        internal static float AreaShare(CloudBodies bodies, in SkyLayer layer)
+        {
+            var rng = new Random(5);
+            int covered = 0;
+            const int n = 6000;
+            for (int i = 0; i < n; i++)
+                if (bodies.Slab2D(layer, (float)(rng.NextDouble() * 54000.0), 4400f, (float)(rng.NextDouble() * 54000.0)) > 0.1f) covered++;
+            return (float)covered / n;
+        }
+
+        private static void ThinLayerAreaFollowsCover()
+        {
+            var bodies = MakeBodies(BoscaliSummer.Modules.Weather.Visuals.CloudNoise3D.Generate(64, 47), 64);
+            foreach (LayerKind kind in (LayerKind[])Enum.GetValues(typeof(LayerKind)))
+                foreach (float cover in new[] { 0.1f, 0.3f, 0.6f })
+                {
+                    LayerArchetype a = SkyArchetypes.Layer(kind);
+                    bool veil = a.Veil >= 0.79f * (a.Cells + a.Ripples + a.Streaks + a.Veil);
+                    if (veil && cover < 0.3f) continue;
+                    float share = AreaShare(bodies, a.ToLayer(cover));
+                    TestAssert.That(share >= 0.5f * cover && share <= 4f * cover, kind + " at cover " + cover + " covers " + share.ToString("0.000") + " of the sky");
+                }
+            // Detail never decides the area: the same archetype at Detail 0.05 and 1 covers within 0.08 of each other.
+            SkyLayer flat = SkyArchetypes.Layer(LayerKind.CirrusFibratus).ToLayer(0.3f), crisp = flat;
+            flat.Detail = 0.05f; crisp.Detail = 1f;
+            TestAssert.That(Math.Abs(AreaShare(bodies, flat) - AreaShare(bodies, crisp)) < 0.08f, "Detail does not change the covered area");
         }
 
         private static void SlabCoverMaskValues()
