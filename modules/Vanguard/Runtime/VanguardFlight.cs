@@ -61,6 +61,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
             if (role == VanguardRole.Gunship) InitGunship(target, aimpoint);
             if (role == VanguardRole.Sentinel) InitSentinel(target);
+            if (role == VanguardRole.Lander) InitHamilcar();
         }
 
         public VanguardRole Role => role;
@@ -84,6 +85,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 TickGunship();
                 return; // Native Steering/ApplyAero still run after this seeker hook.
+            }
+            if (role == VanguardRole.Lander)
+            {
+                TickHamilcar();
+                return;
             }
             if (role == VanguardRole.Towed) HoldTow();
             if (role == VanguardRole.Interceptor)
@@ -114,8 +120,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile.disabled) return;
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
-            if (!missile.IsTangible() && age > 1.5f) missile.SetTangible(true);
-            float minimumSpeed = role == VanguardRole.Sentinel ? 0f : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers
+            if (!missile.IsTangible() && age > (role == VanguardRole.Lander ? 2.5f : 1.5f)) missile.SetTangible(true); // the glider leaves through the hold
+            float minimumSpeed = role == VanguardRole.Sentinel ? 0f : role == VanguardRole.Lander ? HamilcarMinSpeed()
+                : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers, the glider lands
             if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
@@ -132,6 +139,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Gunship: return 300f;
                 case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
+                case VanguardRole.Lander: return HamilcarLifetime();
                 case VanguardRole.Jammer: return MaldjShadow.Lifetime;
                 default: return 600f;
             }

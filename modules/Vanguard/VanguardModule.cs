@@ -72,6 +72,7 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<AlexService>(60);
             context.AddSceneService<Networking.AlexNet>(60);
             context.AddSceneService<Presentation.AlexHud>(60);
+            context.AddSceneService<HamilcarService>(60);
         }
     }
 }

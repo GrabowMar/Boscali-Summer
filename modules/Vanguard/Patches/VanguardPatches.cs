@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             RemoraVisuals.Attach(__instance);
             MaldjEmitter.Attach(__instance);
             HawcxVisuals.Attach(__instance);
+            HamilcarVisuals.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }
@@ -117,14 +118,14 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     }
 
     // ORCA underwater: skip vanilla water drag/detonation and run the torpedo instead (server-side flights only).
+    // HAMILCAR from the final approach on: the flight lands it itself, so the vanilla ground hit is skipped.
     [HarmonyPatch(typeof(Missile), "DetectCollisions")]
     internal static class TorpedoCollisionsPatch
     {
         private static bool Prefix(Missile __instance)
         {
-            if (__instance == null || !VanguardRegistry.TryGet(__instance, out VanguardFlight flight) ||
-                flight.Role != VanguardRole.Torpedo) return true;
-            return !flight.SwimTick();
+            if (__instance == null || !VanguardRegistry.TryGet(__instance, out VanguardFlight flight)) return true;
+            return flight.Role == VanguardRole.Torpedo ? !flight.SwimTick() : !flight.OwnsGroundContact;
         }
     }
 }

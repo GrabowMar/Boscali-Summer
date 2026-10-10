@@ -67,6 +67,10 @@ namespace Vanguard
                 Description = "Fiber-towed decoy on an automatic reel: 60 m of line, 150 m or 250 m once a radar missile tracks you. SUPPRESS slows turret locks, DEFLECT bends missile aimpoints toward it, SEDUCE takes missiles over. Fire again to CUT it loose: it keeps them for 20 s. The fiber snaps above 7 g or below 50 m.",
                 Mass = 20, Yield = 2, Cost = 0.05f, Value = 3, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
                 Racks = new string[0] }, // ALE-X gets its own two-decoy pod, see AleXPod()
+            new Spec { Key = "VG_Hamilcar", Name = "CG-9 HAMILCAR Cargo Glider", Short = "HAMILCAR", Model = "Hamilcar",
+                Description = "Cargo glider with a small pusher propeller, carrying one Hexhound GMG robot. DESIGNATE a ground target and release from a hold: it flies fifteen metres for every metre of height, up to 45 km, lands on its belly about 250 m short of the target and the Hexhound rolls off. Straight-in at 120 m/s, it needs flat dry ground and anything that hits it on the way in loses both.",
+                Mass = 3650, Yield = 1, Pierce = 0, Cost = 1.6f, Value = 25, RadarSize = 0.5f, Thrust = 0, BurnTime = 1, GLimit = 4, TurnRate = 12,
+                Racks = new[] { "AGM_heavy_single" } }, // hold-floor station, see Hamilcar() in VanguardBuilder.hamilcar.cs
         };
 
         public static void Run()
@@ -84,6 +88,7 @@ namespace Vanguard
             AleXPod(infos["VG_AleX"], materials);
             AlexDress(materials);
             SkywellKit(materials);
+            Hamilcar(infos[HamilcarKey]); // VanguardBuilder.hamilcar.cs: retunes both prefabs, seats the Hexhound, hold carriers, model gate
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
@@ -435,7 +440,7 @@ namespace Vanguard
                 RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
                 RenderSettings.ambientLight = new Color(0.40f, 0.44f, 0.50f);
             }
-            // Every Spec model (MaldX, MaldJ, Remora, HawcX, AegisInterceptor, Glaive2A, Glaive2S, Orca, AleX) plus the bespoke pods.
+            // Every Spec model (MaldX, MaldJ, Remora, HawcX, AegisInterceptor, Glaive2A, Glaive2S, Orca, AleX, Hamilcar) plus the bespoke pods.
             var models = Missiles.Select(s => s.Model).Concat(new[] { "AegisPod", "AleXPod", "SkywellKit", "Lance" }).Distinct().ToArray();
             var reports = new List<ModelCheck>();
             foreach (string model in models)
@@ -689,7 +694,9 @@ namespace Vanguard
             foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
             {
                 GameObject rackVisual = Visual(station.transform, spec.Model, materials);
-                if (!StowedInFbx(spec.Model)) StowWings(rackVisual, station.transform); // those FBX files already hold the stowed pose
+                // Those FBX files already hold the stowed pose; HAMILCAR holds the flight pose but its joints are not WingL/WingR:
+                // Hamilcar() stows the mount visual itself.
+                if (!StowedInFbx(spec.Model) && spec.Model != "Hamilcar") StowWings(rackVisual, station.transform);
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);
@@ -801,8 +808,14 @@ namespace Vanguard
             Edit(station, s => P(s, "info").objectReferenceValue = info);
             Edit(mount, s => P(s, "ammo").intValue = 1);
             SaveMount(g, mount, json, info, donor);
-            // Third-party Aryx MC-260 Chimera cargo bays (as AirborneBuilder); Blueprinter only warns if it is absent.
-            // Carriers are exactly the VL-49 Tarantula's cargo / mission bays and the Aryx Chimera (not the donor's Ibis).
+            CargoHoldCarriers(json, "SKYWELL");
+        }
+
+        // Third-party Aryx MC-260 Chimera cargo bays (as AirborneBuilder); Blueprinter only warns if it is absent.
+        // Carriers are exactly the VL-49 Tarantula's cargo / mission bays and the Aryx Chimera (not the donor's Ibis).
+        // Replaces the Op SaveMount() generated for the donor rack; shared by SKYWELL and HAMILCAR (hold-only stores).
+        static void CargoHoldCarriers(string json, string label)
+        {
             var op = Load<OpAddWeaponToHardpoint>(R + "Op_" + json + ".asset");
             op.aircraft.Clear();
             var tarantula = Load<AircraftDefinition>(D + "MonoBehaviour/QuadVTOL1_PLACEHOLDER.asset");
@@ -814,7 +827,7 @@ namespace Vanguard
             if (!op.aircraft.Any(a => a.aircraftJsonKey == "Aryx_CargoPlane1"))
                 op.aircraft.Add(new OpAddWeaponToHardpoint.AircraftTarget { aircraftJsonKey = "Aryx_CargoPlane1", hardpointIndices = new List<int> { 1, 2, 3 } });
             EditorUtility.SetDirty(op);
-            Debug.Log("[Vanguard] SKYWELL carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
+            Debug.Log("[Vanguard] " + label + " carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
         }
 
         static void SaveMount(GameObject g, WeaponMount mount, string json, WeaponInfo info, params string[] donors)

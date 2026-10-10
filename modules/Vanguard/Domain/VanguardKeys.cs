@@ -1,6 +1,6 @@
 namespace BoscaliSummer.Modules.Vanguard.Domain
 {
-    internal enum VanguardRole { None, Decoy, Jammer, Drone, Glider, Interceptor, Carrier, Torpedo, Towed, Sentinel, Gunship }
+    internal enum VanguardRole { None, Decoy, Jammer, Drone, Glider, Interceptor, Carrier, Torpedo, Towed, Sentinel, Gunship, Lander }
 
     /// <summary>Unit jsonKeys baked into Vanguard.nobp by VanguardBuilder. Renaming one is a save/MP break.</summary>
     internal static class VanguardKeys
@@ -14,6 +14,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string Glaive2S = "VG_Glaive2S";
         public const string Orca = "VG_Orca";
         public const string AleX = "VG_AleX";
+        public const string Hamilcar = "VG_Hamilcar";
         public const string AegisInfo = "WI_VG_Aegis"; // WeaponInfo asset name of the AEGIS pod
         public const string LanceInfo = "WI_VG_Lance";   // RG-12 LANCE railgun pod WeaponInfo
         public const string SkywellInfo = "WI_VG_Skywell";   // SKYWELL kit WeaponInfo (cargo MountedMissile)
@@ -35,6 +36,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
                 case Glaive2S: return VanguardRole.Gunship;
                 case Orca: return VanguardRole.Torpedo;
                 case AleX: return VanguardRole.Towed;
+                case Hamilcar: return VanguardRole.Lander;
                 default: return VanguardRole.None;
             }
         }
