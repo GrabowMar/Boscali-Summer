@@ -11,8 +11,11 @@ namespace BoscaliSummer.Core.Game
     /// </summary>
     internal static class CockpitOverlayGate
     {
-        public static bool Open() =>
-            !Application.isBatchMode && !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode && HudUp();
+        public static bool Open() => NotSuppressed() && HudUp();
+
+        /// <summary>Not a batch run, the maximized map, a pause or cinematic mode: the one list every HUD-space overlay (and the Hud module's forced external view) respects.</summary>
+        public static bool NotSuppressed() =>
+            !Application.isBatchMode && !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode;
 
         /// <summary>The native HUD's icon layer is live: the same test the board uses to find its dock.</summary>
         private static bool HudUp()

@@ -48,8 +48,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         public static bool CanShowExternalHud(bool viewingOwnExternally) =>
-            viewingOwnExternally && !Application.isBatchMode &&
-            !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode;
+            viewingOwnExternally && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
 
         /// <summary>
         /// Re-evaluate this tick. <paramref name="viewingOwnExternally"/> is <see cref="IsOwnAircraftExternalView"/>,

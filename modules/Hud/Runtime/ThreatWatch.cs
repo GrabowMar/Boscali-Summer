@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private readonly List<Missile> known = new List<Missile>(8);
         private readonly List<float> knownSince = new List<float>(8);
         private Unit lockEmitter, spikeEmitter;
-        private float lastLock = float.NegativeInfinity, lastSpike = float.NegativeInfinity, lastNewMissile = float.NegativeInfinity;
+        private float lastLock = float.NegativeInfinity, lastSpike = float.NegativeInfinity;
         private float lockSince, spikeSince;
 
         public ThreatPicture Read(Aircraft aircraft, BoardFrame frame)
@@ -57,7 +57,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             t.Missiles = count;
             t.SinceLock = now - lastLock;
             t.SinceSpike = now - lastSpike;
-            t.SinceNewMissile = now - lastNewMissile;
             if (frame.ContactCount > 0)
             {
                 ThreatContact top = frame.Contacts[0];
@@ -126,7 +125,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             subscribed = aircraft;
             warning = aircraft != null ? aircraft.GetComponent<MissileWarning>() : null;
             lockEmitter = spikeEmitter = null;
-            lastLock = lastSpike = lastNewMissile = float.NegativeInfinity;
+            lastLock = lastSpike = float.NegativeInfinity;
             known.Clear();
             knownSince.Clear();
             if (aircraft != null) aircraft.onRadarWarning += OnRadarWarning;
@@ -147,9 +146,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private void OnMissileKnown(MissileWarning.OnMissileWarning e)
         {
-            float now = Time.unscaledTime;
-            AddKnown(e.missile, now);
-            lastNewMissile = now;
+            AddKnown(e.missile, Time.unscaledTime);
         }
 
         private void OnMissileGone(MissileWarning.OffMissileWarning e)

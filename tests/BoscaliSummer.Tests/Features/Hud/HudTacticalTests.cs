@@ -75,11 +75,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             legend.Expire(10f, null);
             TestAssert.That(legend.Legend == "", "Resolved pips clear and take the legend with them");
 
-            TestAssert.That(ShotRules.Hit(true, false, false), "A dumb bomb that struck armour is a hit even with no target");
-            TestAssert.That(ShotRules.Hit(false, true, false), "A proximity burst within 200 m of its target is a hit");
-            TestAssert.That(!ShotRules.Hit(false, false, true), "A terrain-only impact is a miss");
-            TestAssert.That(!ShotRules.Hit(false, true, true), "A terrain impact near a target is still a miss");
-            TestAssert.That(!ShotRules.Hit(false, false, false), "A self-destruct with no target in reach is a miss");
+            TestAssert.That(ShotRules.Hit(true, false), "A dumb bomb that struck armour is a hit even with no target");
+            TestAssert.That(ShotRules.Hit(false, true), "A burst within 200 m of its target is a hit (even when it also flags the ground, as a ground target's impact does)");
+            TestAssert.That(!ShotRules.Hit(false, false), "A terrain-only impact or a self-destruct with no target in reach is a miss");
 
             TestAssert.That(!ShotRules.IsDelivery(1f, false) && !ShotRules.IsDelivery(2f, false), "MALD-X/J and ALE-X decoys earn no pip");
             TestAssert.That(!ShotRules.IsDelivery(0.2f, false) && !ShotRules.IsDelivery(0f, false), "AEGIS darts and GLAIVE pods earn no pip");

@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct ThreatPicture
     {
         public int Missiles;
-        public float SinceLock, SinceSpike, SinceNewMissile;
+        public float SinceLock, SinceSpike;
         /// <summary>Nearest inbound missile (else the last locking emitter): bearing off the nose, degrees, + = right.</summary>
         public bool HasBearing;
         public float BearingDeg, ElevationDeg;
@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static ThreatPicture Clear => new ThreatPicture
         {
-            SinceLock = float.PositiveInfinity, SinceSpike = float.PositiveInfinity, SinceNewMissile = float.PositiveInfinity,
+            SinceLock = float.PositiveInfinity, SinceSpike = float.PositiveInfinity,
         };
     }
 
@@ -67,10 +67,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool IsDelivery(float blastDamage, bool jammer) => !jammer && blastDamage >= MinDeliveryBlast;
 
         /// <summary>
-        /// The detonation RPC's three flags: it struck armour (a vehicle, building or ship), or it went off within 200 m of
-        /// its target (<c>useUnit</c>) without being a terrain impact. A terrain-only impact is a miss.
+        /// The detonation RPC's flags: it struck armour (a vehicle, building or ship), or it went off within 200 m of its
+        /// target (<c>useUnit</c>). A terrain-only impact has neither and is a miss; a ground target's own impact also flags
+        /// the terrain, so <c>hitTerrain</c> must not veto a hit (the spec's rule: <c>hitArmor || useUnit</c>).
         /// </summary>
-        public static bool Hit(bool hitArmor, bool useUnit, bool hitTerrain) => hitArmor || (useUnit && !hitTerrain);
+        public static bool Hit(bool hitArmor, bool useUnit) => hitArmor || useUnit;
     }
 
     /// <summary>

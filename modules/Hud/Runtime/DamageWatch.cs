@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private readonly List<IEngine> engines = new List<IEngine>(4);
         private Aircraft watched;
         private bool engineDamaged;
-        private int enginesOut;
+        private int enginesOut, engineCount;
 
         public void Read(Aircraft aircraft, BoardFrame frame)
         {
@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 Swap(null);
                 return;
             }
-            if (aircraft != watched || engines.Count != aircraft.engineStates.Count) Swap(aircraft);
+            if (aircraft != watched || engineCount != aircraft.engineStates.Count) Swap(aircraft);   // the raw count: a null entry is not in `engines`
 
             var state = new DamageState
             {
@@ -63,6 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             engines.Clear();
             if (aircraft != watched) { engineDamaged = false; enginesOut = 0; }
             watched = aircraft;
+            engineCount = aircraft != null ? aircraft.engineStates.Count : 0;
             if (aircraft == null) return;
             foreach (IEngine engine in aircraft.engineStates)
             {

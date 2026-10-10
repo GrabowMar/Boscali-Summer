@@ -6,7 +6,7 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal static class HudLayout
     {
-        /// <summary>Lines shown at once. Notices and held lines share them, most severe first.</summary>
+        /// <summary>Feed cells shown at once, most severe first.</summary>
         public const int MaxRows = 4;
     }
 }

@@ -36,12 +36,12 @@ namespace BoscaliSummer.Modules.Hud.Patches
             return null;
         }
 
-        private static void Postfix(Missile __instance, bool hitArmor, bool useUnit, bool hitTerrain)
+        private static void Postfix(Missile __instance, bool hitArmor, bool useUnit)
         {
             try
             {
                 if (ShotFeed.IsOwn(__instance))
-                    ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), ShotRules.Hit(hitArmor, useUnit, hitTerrain), Time.unscaledTime);
+                    ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), ShotRules.Hit(hitArmor, useUnit), Time.unscaledTime);
             }
             catch (Exception e)
             {
