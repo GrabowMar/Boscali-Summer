@@ -17,10 +17,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-SPEC_DEFAULT = Path("C:/Users/marci/dev/cmenu-hud/docs/superpowers/specs/2026-10-10-hud-v8-tac-board/shots")
+# The takeover shots: the board flush in the top-right corner, the native panel painted out of the backdrop.
+SPEC_DEFAULT = Path("C:/Users/marci/dev/cmenu-hud/docs/superpowers/specs/2026-10-10-hud-v8-tac-board/takeover/shots")
 NAME = re.compile(r"^(?P<page>[a-z]+)-t(?P<t>[0-9.]+)-(?P<w>\d+)x(?P<h>\d+)\.png$")
-# The board's region of a 1080p screen: its right edge is x = 1904 and it hangs from y = 152; the tallest board is 434 units.
-REGION_1080 = (1440, 140, 1920, 600)
+# The board's region of a 1080p screen: its right edge is x = 1912 and it starts at y = 8; the tallest board is 577 units.
+REGION_1080 = (1440, 0, 1920, 600)
 
 
 def region(size):

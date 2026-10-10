@@ -275,10 +275,16 @@ foreach ((string typeName, string fieldName) in fields)
     ("UnitPart", "hitPoints", "System.Single"),
     ("Unit", "disabled", "System.Boolean"),
     ("WeaponStatus", "nameText", "TMPro.TextMeshProUGUI"),
-    // Tactical HUD (2026-10-07): StatusPanel reads the native cell and safety lamp, ThreatWatch and MissileTracker the warning systems.
+    // Tactical HUD (2026-10-07): StatusPanel reads the native label font and safety lamp, ThreatWatch and MissileTracker the warning systems.
     ("WeaponStatus", "safetyImage", "UnityEngine.UI.Image"),
-    ("WeaponStatus", "ammoText", "TMPro.TextMeshProUGUI"),
-    ("WeaponStatus", "panel", "UnityEngine.RectTransform"),
+    // Corner takeover (2026-10-10): NativeCorner hides the three boxes of the native TopRightPanel (weaponPanel, countermeasuresBackground, PowerPanel) behind owned CanvasGroups; the stores
+    // feed reads the guns' LINK (WeaponManager.gunsLinked, pinned below), the reload times of guns and missile launchers and the capacitor's full charge.
+    ("WeaponStatus", "weaponPanel", "UnityEngine.GameObject"),
+    ("CombatHUD", "weaponStatus", "WeaponStatus"),
+    ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
+    ("Gun", "reloadTime", "System.Single"),
+    ("MissileLauncher", "reloadTime", "System.Single"),
+    ("PowerSupply", "maxCharge", "System.Single"),
     ("Missile", "target", "Unit"),
     ("Unit", "onRegisterMissile", "System.Action`1<Missile>"),
     ("MissileWarning", "onMissileWarning", "System.Action`1<MissileWarning+OnMissileWarning>"),
@@ -961,6 +967,18 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.ScopeGauges",
     "BoscaliSummer.Core.Contracts.GaugeSpec",
     "BoscaliSummer.Modules.Hud.Domain.SystemsScope",
+    // Corner takeover: the stores header's feed structs are filled by name in the offline fixtures; NativeCorner is the one class that hides native objects.
+    "BoscaliSummer.Modules.Hud.Domain.StoresScope",
+    "BoscaliSummer.Modules.Hud.Domain.StoreStation",
+    "BoscaliSummer.Modules.Hud.Domain.StoreClass",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatScope",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatMissile",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatEmitter",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatSeeker",
+    "BoscaliSummer.Modules.Hud.Presentation.StoresHeader",
+    "BoscaliSummer.Modules.Hud.Presentation.ThreatPage",
+    "BoscaliSummer.Modules.Hud.Runtime.StoresFeed",
+    "BoscaliSummer.Modules.Hud.Runtime.NativeCorner",
     "BoscaliSummer.Modules.Hud.Presentation.ScopePages",
     "BoscaliSummer.Modules.Hud.Presentation.SystemsPage",
     // APPROACH, WING and DOCK (tb-flight): their feed structs and enums are filled by name in the offline fixtures.

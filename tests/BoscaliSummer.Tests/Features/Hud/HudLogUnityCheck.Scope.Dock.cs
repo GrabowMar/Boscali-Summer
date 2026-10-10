@@ -67,10 +67,10 @@ public static partial class HudLogUnityCheck
         s.SetFrame("Ticker", s.Fill(s.Domain("TickerLine"), "Tone", s.ContractEnum("HudTone", tone), "Channel", "skywell", "Text", text, "Count", 1, "Age", 2f));
         s.SetFrame("HasTicker", true);
 
-        float lv = (float)(0.6 + 0.4 * ((t * 0.075) % 1.0)), cdLeft = (float)(45.0 - ((t * 3.1) % 45.0));
+        float cdLeft = (float)(45.0 - ((t * 3.1) % 45.0));
         s.Gauge("radio", s.Fill(s.Contract("GaugeSpec"), "Id", "radio", "Label", "RADIO", "Kind", s.ContractEnum("GaugeKind", "Bars"), "Value", 1f, "Text", "SKYWELL", "Sub", "SIG 4/4", "Tone", s.ContractEnum("ScopeTone", "Ink")));
-        s.Gauge("lance", s.Fill(s.Contract("GaugeSpec"), "Id", "lance", "Label", "LANCE", "Kind", s.ContractEnum("GaugeKind", "Arc"), "Value", lv, "Text", Mathf.RoundToInt(lv * 100f) + "%", "Sub", "RG-12",
-            "Tone", s.ContractEnum("ScopeTone", "Ink"), "Ready", lv > 0.98f));
+        s.Gauge("ace", s.Fill(s.Contract("GaugeSpec"), "Id", "ace", "Label", "ACE HUNT", "Kind", s.ContractEnum("GaugeKind", "Needle"), "Angle", (140f + 5f * t) % 360f, "Text", "VOSS",
+            "Sub", Mathf.RoundToInt(38f - 0.4f * t) + "KM", "Tone", s.ContractEnum("ScopeTone", "Ink")));
         s.Gauge("perk", s.Fill(s.Contract("GaugeSpec"), "Id", "perk", "Label", "PERK", "Kind", s.ContractEnum("GaugeKind", "Ring"), "Value", 1f - cdLeft / 45f, "Inner", Mathf.CeilToInt(cdLeft).ToString(),
             "Text", "KINETIC", "Sub", "SPACE", "Tone", s.ContractEnum("ScopeTone", "Dim")));
     }

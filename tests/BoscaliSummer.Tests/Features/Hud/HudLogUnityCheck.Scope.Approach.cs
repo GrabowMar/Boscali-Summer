@@ -42,7 +42,7 @@ public static partial class HudLogUnityCheck
         s.Publish(a);
 
         s.SetFrame("Systems", s.Fill(s.Domain("SystemStates"), "Gear", s.DomainEnum("GearLamp", t < tGear ? "Moving" : "Down"), "FlightAssist", true, "AutoHover", false,
-            "RadarEmitting", true, "NightVision", false, "WeaponSafe", false, "EngineRunning", true));
+            "RadarEmitting", true, "NightVision", false, "WeaponSafe", true, "EngineRunning", true));
 
         // The ticker the page's notices would put there at this moment.
         string tone = "Info", chip = "ils", text; int count = 1;
@@ -59,10 +59,9 @@ public static partial class HudLogUnityCheck
         s.SetFrame("HasTicker", true);
 
         // The registered gauges the prototype's row ends with (the page brings AUTOPILOT and SINK RATE).
-        float lv = (float)(0.6 + 0.4 * ((t * 0.075) % 1.0));
         s.Gauge("radio", s.Fill(s.Contract("GaugeSpec"), "Id", "radio", "Label", "RADIO", "Kind", s.ContractEnum("GaugeKind", "Bars"), "Value", 0.75f, "Text", "K92 TWR", "Sub", "SIG 3/4", "Tone", s.ContractEnum("ScopeTone", "Ink")));
-        s.Gauge("lance", s.Fill(s.Contract("GaugeSpec"), "Id", "lance", "Label", "LANCE", "Kind", s.ContractEnum("GaugeKind", "Arc"), "Value", lv, "Text", Mathf.RoundToInt(lv * 100f) + "%", "Sub", "RG-12",
-            "Tone", s.ContractEnum("ScopeTone", "Ink"), "Ready", lv > 0.98f));
+        s.Gauge("ace", s.Fill(s.Contract("GaugeSpec"), "Id", "ace", "Label", "ACE HUNT", "Kind", s.ContractEnum("GaugeKind", "Needle"), "Angle", (140f + 5f * t) % 360f, "Text", "VOSS",
+            "Sub", Mathf.RoundToInt(38f - 0.4f * t) + "KM", "Tone", s.ContractEnum("ScopeTone", "Ink")));
     }
 }
 #endif

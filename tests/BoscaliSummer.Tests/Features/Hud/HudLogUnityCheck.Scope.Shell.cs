@@ -14,7 +14,7 @@ public static partial class HudLogUnityCheck
     {
         object selector = Field(status, "selector");
         ushort mask = (ushort)(1 << Convert.ToInt32(Enum.Parse(Type(HudDomain + "ScopePage"), page)));
-        Call(selector, "Update", mask, t);
+        Call(selector, "Update", mask, t, false);
     }
 
     private static object ShellLamps(bool lock_, int missiles)
@@ -57,7 +57,7 @@ public static partial class HudLogUnityCheck
         foreach (Vector2 size in new[] { new Vector2(1920, 1080), new Vector2(1280, 720) })
         {
             string res = "-" + (int)size.x + "x" + (int)size.y;
-            float u = size.y / 1080f;
+            float u = Mathf.Max(size.y / 1080f, 0.85f);      // the board's scale never goes under 0.85 (a 12 unit word is 10 px at 720p)
 
             // Full page: the stub THREAT page snapped in (the first page of the board never wipes), every row present.
             MakeBoard(size, 5f, out Canvas canvas, out object status, out object frame);
