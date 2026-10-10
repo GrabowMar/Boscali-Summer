@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             RemoraVisuals.Attach(__instance);
             MaldjEmitter.Attach(__instance);
             HawcxVisuals.Attach(__instance);
+            KestrelDrone.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }
