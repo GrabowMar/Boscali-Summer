@@ -52,9 +52,10 @@ public static class HudLogUnityCheck
             Set(colors, "alert", new Color(1f, .3f, .25f));
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
-            foreach (float width in new[] { 320f, 440f }) Status(width);
-            foreach (float width in new[] { 320f, 440f }) StatusRich(width);
-            foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) }) MissileCam(size);
+            foreach (Vector2 size in BoardSizes) {
+                foreach (string state in new[] { "calm", "hot", "notice", "bingo" }) Board(size, state);
+                MissileCam(size);
+            }
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
             Contracts();
             foreach (float height in new[] { 160f, 420f, 596f })
@@ -85,126 +86,213 @@ public static class HudLogUnityCheck
             label.font = font; label.fontSharedMaterial = font.material;
         }
     }
-    private static void Status(float width)
-    {
-        Canvas canvas = MakeCanvas("Status", new Vector2(640, 600)); CombatHUD hud = NativeDock(canvas);
-        var dock = new GameObject("WeaponsDock", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-        dock.SetParent(canvas.transform, false); dock.sizeDelta = new Vector2(width, 40); dock.anchoredPosition = new Vector2(0, 230);
-        dock.GetComponent<Image>().color = Color.black; dock.GetComponent<Image>().raycastTarget = false;
-        object status = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.StatusPanel"), true);
-        Call(status, "Build", hud, dock);
-        SyntheticFont((RectTransform)Field(status, "root"));
-        Type message = Type("BoscaliSummer.Modules.Hud.Domain.HudMessage"), tone = Type("BoscaliSummer.Core.Contracts.HudTone");
-        Array rows = Array.CreateInstance(message, 4);
-        string[] text = { "MISSILE WARNING / RIGHT QUARTER", "LANDING / FINAL APPROACH", "WEATHER / ICING CONDITIONS", "ACE HUNT / CONTACT REPORTED" };
-        string[] detail = { "SA-19 RADAR LOCK / 9.4 KM / BREAK RIGHT", "NORTHERN AIRBASE / GEAR DOWN / 140 KT", "FREEZING LEVEL 1,500 M / CLIMB OUT OF CLOUD", "NIGHTFALL 2 / LAST OBSERVED 18 SECONDS AGO" };
-        for (int i = 0; i < rows.Length; i++) {
-            object row = Activator.CreateInstance(message); Set(row, "Text", text[i]); Set(row, "Detail", detail[i]);
-            Set(row, "Tone", Enum.Parse(tone, i == 0 ? "Warning" : i == 2 ? "Caution" : "Info"));
-            Set(row, "Bar", .3f + i * .15f); rows.SetValue(row, i);
-        }
-        object frame = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.BoardFrame"));
-        object ledger = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger"));
-        Call(status, "Present", rows, rows.Length, frame, ledger);
-        Canvas.ForceUpdateCanvases();
-        Check(((TMP_Text)Field(status, "stripLabel")).text == detail[0].ToUpperInvariant(), "Capacitor bar carries the most severe line's detail.");
-        Check(((RectTransform)Field(status, "root")).Find("Label0").GetComponent<TMP_Text>().text == "MISSILE WARNING", "Cell label is the line head.");
-        foreach (Graphic g in ((RectTransform)Field(status, "root")).GetComponentsInChildren<Graphic>())
-            Check(!g.raycastTarget, "HUD must not intercept pointer input.");
-        Capture(canvas, "HUD-status-" + width + ".png");
-        foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
-            Check(!label.isTextOverflowing, "Status text remains readable: " + label.text);
-        int detailCount = 0;
-        foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
-            if (label.name == "Detail") detailCount++;
-        Check(detailCount == 1, "One detail line, under the cells.");
-        Call(status, "Present", rows, 0, frame, ledger);
-        Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "Empty status hides owned tree.");
-        Call(status, "Destroy"); Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-    }
     private const string HudDomain = "BoscaliSummer.Modules.Hud.Domain.";
+    private static readonly Vector2[] BoardSizes = { new Vector2(1280, 720), new Vector2(1920, 1080) };
     private static object Boxed(string name) => Activator.CreateInstance(Type(HudDomain + name));
     private static object EnumOf(string name, string value) => Enum.Parse(Type(HudDomain + name), value);
+    private static object Tone(string tone) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), tone);
     private static object Msg(string channel, string text, string detail, string tone, float bar)
     {
         object m = Boxed("HudMessage");
-        Set(m, "Channel", channel); Set(m, "Text", text); Set(m, "Detail", detail); Set(m, "Bar", bar);
-        Set(m, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), tone));
+        Set(m, "Channel", channel); Set(m, "Text", text); Set(m, "Detail", detail); Set(m, "Bar", bar); Set(m, "Tone", Tone(tone));
         return m;
     }
-    /// <summary>The board with every system lamp, a hot threat row (inbound missile, lock, spike) and the shot pips.</summary>
-    private static void StatusRich(float width)
+    private static Array Rows(params object[] messages)
     {
-        Canvas canvas = MakeCanvas("StatusRich", new Vector2(640, 600)); CombatHUD hud = NativeDock(canvas);
+        Array rows = Array.CreateInstance(Type(HudDomain + "HudMessage"), messages.Length);
+        for (int i = 0; i < messages.Length; i++) rows.SetValue(messages[i], i);
+        return rows;
+    }
+    /// <summary>A hazy sky behind the HUD: thin ink on a bright backdrop is the case the scrims and tones are for.</summary>
+    private static void Sky(Canvas canvas)
+    {
+        var texture = new Texture2D(1, 64, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < 64; y++) texture.SetPixel(0, y, Color.Lerp(new Color(.82f, .89f, .95f), new Color(.40f, .58f, .82f), y / 63f));
+        texture.Apply();
+        var sky = new GameObject("Sky", typeof(RectTransform), typeof(Image));
+        sky.transform.SetParent(canvas.transform, false); sky.transform.SetAsFirstSibling();
+        var rect = (RectTransform)sky.transform; rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+        var image = sky.GetComponent<Image>(); image.raycastTarget = false; image.sprite = Sprite.Create(texture, new Rect(0, 0, 1, 64), new Vector2(.5f, .5f));
+    }
+    /// <summary>
+    /// The board at the native size for this resolution. The offline dock has no native weapon cell to measure, so the unit and the
+    /// text sizes are set the way the build would from the real one at 1080p (cell about 71 px tall; figures about 1.7x and words
+    /// about 1.3x the fallback sizes, read off the in-game crop) and scale with the screen height.
+    /// </summary>
+    private static void NativeScale(object status, float height)
+    {
+        float k = height / 1080f;
+        Set(status, "unit", 1.04f * k);
+        foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>(true)) {
+            float m = (label.name.StartsWith("Value") ? 1.7f : 1.3f) * k;
+            label.fontSize *= m;
+            if (label.enableAutoSizing) { label.fontSizeMax *= m; label.fontSizeMin *= m; }
+        }
+    }
+    private static Transform Child(object status, string name) => ((RectTransform)Field(status, "root")).Find(name);
+    private static string TextOf(object status, string name) => Child(status, name).GetComponent<TMP_Text>().text;
+    private static object ThreatOf(int missiles, float sinceLock, float sinceSpike, bool bearing, float bearingDeg, float elevation, bool bearingIsMissile)
+    {
+        object threat = Type(HudDomain + "ThreatPicture").GetProperty("Clear").GetValue(null);
+        Set(threat, "Missiles", missiles); Set(threat, "SinceLock", sinceLock); Set(threat, "SinceSpike", sinceSpike); Set(threat, "SinceNewMissile", missiles > 0 ? 0.5f : 99f);
+        Set(threat, "HasBearing", bearing); Set(threat, "BearingDeg", bearingDeg); Set(threat, "ElevationDeg", elevation); Set(threat, "BearingIsMissile", bearingIsMissile);
+        return threat;
+    }
+    private static void Contact(object frame, int slot, string kind, string name, string seeker, bool locked, float range, float closure, float tti, float age)
+    {
+        object c = Boxed("ThreatContact");
+        Set(c, "Kind", EnumOf("ThreatKind", kind)); Set(c, "Name", name); Set(c, "Seeker", seeker); Set(c, "Locked", locked);
+        Set(c, "RangeM", range); Set(c, "ClosureMps", closure); Set(c, "TtiS", tti); Set(c, "AgeS", age);
+        ((Array)Field(frame, "Contacts")).SetValue(c, slot);
+    }
+    private static void CmStation(object frame, int slot, string tag, int ammo, int max, bool chargeable, int mask)
+    {
+        object s = Boxed("CmStation");
+        Set(s, "Tag", tag); Set(s, "Ammo", ammo); Set(s, "Max", max); Set(s, "Chargeable", chargeable); Set(s, "Mask", (byte)mask);
+        ((Array)Field(frame, "Cm")).SetValue(s, slot);
+    }
+    private static void FuelOf(object frame, float level, float enduranceS, bool bingo, bool joker, string tone)
+    {
+        object fuel = Boxed("FuelState");
+        Set(fuel, "Valid", true); Set(fuel, "Level", level); Set(fuel, "EnduranceS", enduranceS); Set(fuel, "Bingo", bingo); Set(fuel, "Joker", joker);
+        Set(fuel, "Field", "HighwayStrip2"); Set(fuel, "FieldM", 23000f); Set(fuel, "Tone", Tone(tone));
+        Set(frame, "Fuel", fuel);
+    }
+    private static void TickerOf(object frame, string tone, string channel, string text, string detail, int count, float age)
+    {
+        object tick = Boxed("TickerLine");
+        Set(tick, "Tone", Tone(tone)); Set(tick, "Channel", channel); Set(tick, "Text", text); Set(tick, "Detail", detail); Set(tick, "Count", count); Set(tick, "Age", age);
+        Set(frame, "Ticker", tick); Set(frame, "HasTicker", true);
+    }
+    private static void DamageOf(object frame, string flags, int engines, int out_, float detached)
+    {
+        object damage = Boxed("DamageState");
+        Set(damage, "Flags", Enum.Parse(Type(HudDomain + "DamageFlags"), flags)); Set(damage, "Engines", engines); Set(damage, "EnginesOut", out_); Set(damage, "DetachedRatio", detached);
+        Set(frame, "Damage", damage);
+    }
+    private static object SystemsOf(bool radar, bool safe)
+    {
+        object systems = Boxed("SystemStates");
+        Set(systems, "Gear", EnumOf("GearLamp", "Down")); Set(systems, "FlightAssist", true); Set(systems, "AutoHover", false);
+        Set(systems, "RadarEmitting", radar); Set(systems, "NightVision", false); Set(systems, "WeaponSafe", safe); Set(systems, "EngineRunning", true);
+        return systems;
+    }
+    /// <summary>
+    /// The status board in one named state, at one resolution, on a hazy sky with a stand-in for the native weapons block above it.
+    /// calm: idle dial, CM tiles at full load, fuel with endurance, cells with a cue strip. hot: an inbound radar missile with time to
+    /// impact, a lock, shot pips, a LOW flare station and the chaff highlighted. notice: a x3 warning on the ticker, JOKER, a search
+    /// spike, damage cautions. bingo: BINGO, FIRE and a dead engine, empty flares, a caution notice.
+    /// </summary>
+    private static void Board(Vector2 size, string state)
+    {
+        Canvas canvas = MakeCanvas("Board-" + state, size); CombatHUD hud = NativeDock(canvas);
+        Sky(canvas);
+        float k = size.y / 1080f;
         var dock = new GameObject("WeaponsDock", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-        dock.SetParent(canvas.transform, false); dock.sizeDelta = new Vector2(width, 40); dock.anchoredPosition = new Vector2(0, 230);
-        dock.GetComponent<Image>().color = Color.black; dock.GetComponent<Image>().raycastTarget = false;
+        dock.SetParent(canvas.transform, false); dock.sizeDelta = new Vector2(452f * k, 190f * k);
+        dock.anchoredPosition = new Vector2(size.x / 2f - 30f * k - dock.sizeDelta.x / 2f, size.y / 2f - 20f * k - dock.sizeDelta.y / 2f);
+        dock.GetComponent<Image>().color = new Color(.02f, .04f, .06f, .9f); dock.GetComponent<Image>().raycastTarget = false;
         object status = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.StatusPanel"), true);
         Call(status, "Build", hud, dock);
         SyntheticFont((RectTransform)Field(status, "root"));
+        NativeScale(status, size.y);
 
-        object systems = Boxed("SystemStates");
-        Set(systems, "Gear", EnumOf("GearLamp", "Down")); Set(systems, "FlightAssist", true); Set(systems, "AutoHover", false);
-        Set(systems, "RadarEmitting", true); Set(systems, "NightVision", false); Set(systems, "WeaponSafe", true); Set(systems, "EngineRunning", true);
-        object threat = Type(HudDomain + "ThreatPicture").GetProperty("Clear").GetValue(null);
-        Set(threat, "Missiles", 2); Set(threat, "SinceLock", 0.4f); Set(threat, "SinceSpike", 0.2f); Set(threat, "SinceNewMissile", 0.5f);
-        Set(threat, "HasBearing", true); Set(threat, "BearingDeg", 65f); Set(threat, "ElevationDeg", 20f); Set(threat, "BearingIsMissile", true);
         object frame = Boxed("BoardFrame");
-        Set(frame, "Systems", systems); Set(frame, "Threat", threat); Set(frame, "BootAge", -1f);
-
-        // Threat detail: an inbound radar missile (new, 7 s out) and a radar lock. Countermeasures: flares low, chaff matching, a jammer.
-        Array contacts = (Array)Field(frame, "Contacts");
-        object missileContact = Boxed("ThreatContact");
-        Set(missileContact, "Kind", EnumOf("ThreatKind", "Missile")); Set(missileContact, "Seeker", "SARH"); Set(missileContact, "Locked", true);
-        Set(missileContact, "RangeM", 2400f); Set(missileContact, "ClosureMps", 340f); Set(missileContact, "TtiS", 7.1f); Set(missileContact, "AgeS", 1.5f);
-        object lockContact = Boxed("ThreatContact");
-        Set(lockContact, "Kind", EnumOf("ThreatKind", "Lock")); Set(lockContact, "Name", "SA-19"); Set(lockContact, "RangeM", 9400f);
-        Set(lockContact, "TtiS", float.NaN); Set(lockContact, "AgeS", 10f);
-        contacts.SetValue(missileContact, 0); contacts.SetValue(lockContact, 1);
-        Set(frame, "ContactCount", 2); Set(frame, "InboundMask", (byte)2);
-        Array cm = (Array)Field(frame, "Cm");
-        object flares = Boxed("CmStation"); Set(flares, "Tag", "IR"); Set(flares, "Ammo", 6); Set(flares, "Max", 72); Set(flares, "Mask", (byte)1);
-        object chaff = Boxed("CmStation"); Set(chaff, "Tag", "RDR"); Set(chaff, "Ammo", 30); Set(chaff, "Max", 30); Set(chaff, "Mask", (byte)2);
-        object jammer = Boxed("CmStation"); Set(jammer, "Tag", "JAM"); Set(jammer, "Ammo", 1); Set(jammer, "Max", 1); Set(jammer, "Chargeable", true); Set(jammer, "Mask", (byte)2);
-        cm.SetValue(flares, 0); cm.SetValue(chaff, 1); cm.SetValue(jammer, 2);
-        Set(frame, "CmCount", 3);
-        object tick = Boxed("TickerLine");
-        Set(tick, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), "Warning")); Set(tick, "Channel", "events");
-        Set(tick, "Text", "SUPEREVENT · NIGHTFALL 2 INBOUND"); Set(tick, "Detail", "ALL THEATER · SEEK COVER"); Set(tick, "Count", 3); Set(tick, "Age", 0.5f);
-        Set(frame, "Ticker", tick); Set(frame, "HasTicker", true);
-        object fuel = Boxed("FuelState");
-        Set(fuel, "Valid", true); Set(fuel, "Level", .38f); Set(fuel, "EnduranceS", 2520f); Set(fuel, "Joker", true);
-        Set(fuel, "Field", "HighwayStrip2"); Set(fuel, "FieldM", 23000f); Set(fuel, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), "Caution"));
-        Set(frame, "Fuel", fuel);
-        object damage = Boxed("DamageState");
-        Set(damage, "Flags", Enum.Parse(Type(HudDomain + "DamageFlags"), "EngineDamaged, FuelLeak, Fire")); Set(damage, "Engines", 2); Set(damage, "EnginesOut", 1); Set(damage, "DetachedRatio", .14f);
-        Set(frame, "Damage", damage);
-
+        Set(frame, "BootAge", -1f);
+        Set(frame, "Now", 0f);   // the lit half of the flash beat, so every flashing lamp is drawn lit
         object ledger = Boxed("ShotLedger");
-        Call(ledger, "Launch", 1, false, 0f); Call(ledger, "Launch", 2, true, 0f); Call(ledger, "Launch", 3, false, 0f);
-        Call(ledger, "Detonate", 1, true, 1f); Call(ledger, "Launch", 4, true, 1f); Call(ledger, "Detonate", 3, false, 1.2f);
-
-        Type message = Type(HudDomain + "HudMessage");
-        Array rows = Array.CreateInstance(message, 4);
-        rows.SetValue(Msg("missile", "MSL 800m · TGT 2.1km", "AIM-120 → MIG-29", "Info", .28f), 0);
-        rows.SetValue(Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .45f), 1);
-        rows.SetValue(Msg("skywell", "SKYWELL", "DOWN 12 · LEFT 14 · FWD 40 m", "Info", .6f), 2);
-        rows.SetValue(Msg("lance", "LANCE", "RG-12 CHARGE", "Warning", .8f), 3);
-        Call(status, "Present", rows, rows.Length, frame, ledger);
+        Array rows;
+        switch (state) {
+        case "calm":
+            Set(frame, "Systems", SystemsOf(true, false)); Set(frame, "Threat", ThreatOf(0, 99f, 99f, false, 0f, 0f, false));
+            CmStation(frame, 0, "IR", 72, 72, false, 1); CmStation(frame, 1, "RDR", 30, 30, false, 2); CmStation(frame, 2, "JAM", 1, 1, true, 2); Set(frame, "CmCount", 3);
+            FuelOf(frame, .72f, 5400f, false, false, "Info");
+            rows = Rows(Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .45f), Msg("radio", "RADIO · AGRAPOL FM", "", "Info", 0f),
+                Msg("autopilot", "AUTOPILOT", "NAV 3/5 · ALT HOLD 6,000 FT", "Info", .6f));
+            break;
+        case "hot":
+            Set(frame, "Systems", SystemsOf(true, true)); Set(frame, "Threat", ThreatOf(2, 0.4f, 0.2f, true, 65f, 20f, true));
+            Contact(frame, 0, "Missile", null, "SARH", true, 2400f, 340f, 7.1f, 1.5f); Contact(frame, 1, "Lock", "SA-19", null, false, 9400f, float.NaN, float.NaN, 10f);
+            Set(frame, "ContactCount", 2); Set(frame, "InboundMask", (byte)2);
+            CmStation(frame, 0, "IR", 6, 72, false, 1); CmStation(frame, 1, "RDR", 30, 30, false, 2); CmStation(frame, 2, "JAM", 1, 1, true, 2); Set(frame, "CmCount", 3);
+            FuelOf(frame, .55f, 3300f, false, false, "Info");
+            Call(ledger, "Launch", 1, false, 0f); Call(ledger, "Launch", 2, true, 0f); Call(ledger, "Launch", 3, false, 0f);
+            Call(ledger, "Detonate", 1, true, 1f); Call(ledger, "Launch", 4, true, 1f); Call(ledger, "Detonate", 3, false, 1.2f);
+            rows = Rows(Msg("missile", "MSL 800m · TGT 2.1km", "AIM-120 → MIG-29", "Info", .28f), Msg("support", "SUPPORT · STRIKE", "ARTILLERY · 6 ROUNDS · TOT 00:40", "Caution", .5f),
+                Msg("contracts", "OPS · DEPOT", "DESTROY THE DEPOT · 4.2KM", "Info", .3f));
+            break;
+        case "notice":
+            Set(frame, "Systems", SystemsOf(false, false)); Set(frame, "Threat", ThreatOf(0, 99f, 0.3f, true, 200f, -5f, false));
+            Contact(frame, 0, "Spike", "SA-19", null, false, 22000f, float.NaN, float.NaN, 20f); Set(frame, "ContactCount", 1);
+            CmStation(frame, 0, "IR", 30, 72, false, 1); CmStation(frame, 1, "RDR", 30, 30, false, 2); Set(frame, "CmCount", 2);
+            DamageOf(frame, "EngineDamaged, FuelLeak", 2, 0, .14f);
+            FuelOf(frame, .38f, 2520f, false, true, "Caution");
+            TickerOf(frame, "Warning", "events", "SUPEREVENT · NIGHTFALL 2 INBOUND", "ALL THEATER · SEEK COVER", 3, 0.5f);
+            rows = Rows(Msg("skywell", "SKYWELL  TANKER  780m", "DOWN 12m  ·  LEFT 14m  ·  FWD 40m", "Info", .6f), Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .7f),
+                Msg("lance", "LANCE", "RG-12 CHARGE", "Info", .8f));
+            break;
+        default:
+            Set(frame, "Systems", SystemsOf(true, false)); Set(frame, "Threat", ThreatOf(1, 99f, 99f, true, 300f, -20f, true));
+            Contact(frame, 0, "Missile", null, "IR", false, 900f, 310f, 2.9f, 0.8f); Set(frame, "ContactCount", 1); Set(frame, "InboundMask", (byte)1);
+            CmStation(frame, 0, "IR", 0, 72, false, 1); CmStation(frame, 1, "RDR", 4, 30, false, 2); CmStation(frame, 2, "JAM", 1, 1, true, 2); Set(frame, "CmCount", 3);
+            DamageOf(frame, "FuelLeak, Fire", 2, 1, .30f);
+            FuelOf(frame, .09f, 240f, true, true, "Warning");
+            TickerOf(frame, "Caution", "weather", "ENV: ICING CONDITIONS", "FREEZING LEVEL 1,500 M · CLIMB OUT OF CLOUD", 1, 1.5f);
+            rows = Rows(Msg("lance", "LANCE", "RG-12 CHARGE", "Warning", .9f), Msg("missile", "MSL 400m · NO TGT", "AIM-9 → NO TARGET", "Caution", 0f));
+            break;
+        }
+        int count = rows.Length;
+        Call(status, "Present", rows, count, frame, ledger);
         Canvas.ForceUpdateCanvases();
-        Check(((RectTransform)Field(status, "root")).Find("ShotLegend").GetComponent<TMP_Text>().text == "SHOT", "Pips in flight carry the SHOT legend.");
-        Check(((RectTransform)Field(status, "root")).Find("HiLo").GetComponent<TMP_Text>().text == "HI", "A threat 20 degrees up reads HI.");
-        Check(((RectTransform)Field(status, "root")).Find("Value1").GetComponent<TMP_Text>().text == "45%", "A constant-text cell shows its bar as the figure.");
-        rows.SetValue(Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .7f), 1);
-        Call(status, "Present", rows, rows.Length, frame, ledger);
-        Check(((RectTransform)Field(status, "root")).Find("Value1").GetComponent<TMP_Text>().text == "70%", "The figure follows the bar when the text is constant.");
-        Capture(canvas, "HUD-status-rich-" + width + ".png");
-        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        string tag = state + "-" + size.x + "x" + size.y;
+        RectTransform root = (RectTransform)Field(status, "root");
+        Check(root.gameObject.activeSelf, "The board shows: " + tag);
+        foreach (Graphic g in root.GetComponentsInChildren<Graphic>()) Check(!g.raycastTarget, "HUD must not intercept pointer input: " + tag);
+        switch (state) {
+        case "calm":
+            Check(((TMP_Text)Field(status, "stripLabel")).text == "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "The cue strip carries the top line's detail: " + ((TMP_Text)Field(status, "stripLabel")).text);
+            Check(TextOf(status, "Label0") == "ILS" && TextOf(status, "Value0") == "45%", "A constant-text cell shows its bar as the figure: " + TextOf(status, "Value0"));
+            Check(TextOf(status, "Cm0") == "IR 72" && TextOf(status, "Cm2") == "JAM", "Every station shows: " + TextOf(status, "Cm0"));
+            Check(TextOf(status, "FuelLevel") == "72%  END 90MIN", "Fuel reads its endurance: " + TextOf(status, "FuelLevel"));
+            Check(!Child(status, "HiLo").gameObject.activeSelf && !Child(status, "ShotLegend").gameObject.activeSelf, "An idle threat row has no HI/LO and no shot legend");
+            Call(status, "Present", Rows(), 0, Boxed("BoardFrame"), ledger);
+            Check(!root.gameObject.activeSelf, "Empty status hides owned tree.");
+            Call(status, "Present", rows, count, frame, ledger);
+            break;
+        case "hot":
+            Check(TextOf(status, "ShotLegend") == "SHOT", "Pips in flight carry the SHOT legend.");
+            Check(TextOf(status, "HiLo") == "HI", "A threat 20 degrees up reads HI.");
+            Check(TextOf(status, "DetailRow0") == "SARH 2.4KM TTI 7S" && TextOf(status, "DetailChip0") == "MSL", "The inbound missile reads seeker, range and time to impact: " + TextOf(status, "DetailRow0"));
+            Check(TextOf(status, "DetailRow1") == "SA-19 9.4KM" && TextOf(status, "DetailChip1") == "LOCK", "A lock reads the emitter and range: " + TextOf(status, "DetailRow1"));
+            Check(TextOf(status, "Cm0") == "IR 6 LOW" && TextOf(status, "Cm1") == "RDR 30", "A low station says LOW in words: " + TextOf(status, "Cm0"));
+            Check(TextOf(status, "Threat2") == "MSL 2", "The missile lamp counts inbound missiles: " + TextOf(status, "Threat2"));
+            break;
+        case "notice":
+            Check(TextOf(status, "Ticker") == "WARNING · SUPEREVENT · NIGHTFALL 2 INBOUND X3" && TextOf(status, "TickerTag") == "EVENTS", "A repeated warning coalesces to x3 and stays a WARNING: " + TextOf(status, "Ticker"));
+            Check(TextOf(status, "FuelState") == "JOKER", "JOKER says so in words.");
+            Check(TextOf(status, "Damage0") == "FUEL LEAK" && TextOf(status, "Damage1") == "STR 86%" && TextOf(status, "Damage2") == "ENG DMG", "Damage cautions persist, worst first: " + TextOf(status, "Damage0") + "/" + TextOf(status, "Damage1"));
+            Check(TextOf(status, "DetailRow0") == "SA-19 22KM" && TextOf(status, "DetailChip0") == "SPKE", "A search-radar spike reads its emitter: " + TextOf(status, "DetailRow0"));
+            break;
+        default:
+            Check(TextOf(status, "FuelState") == "BINGO", "BINGO outranks JOKER in words.");
+            Check(TextOf(status, "Damage0") == "FIRE" && TextOf(status, "Damage1") == "ENG 1 OUT", "FIRE and a dead engine head the damage row: " + TextOf(status, "Damage0") + "/" + TextOf(status, "Damage1"));
+            Check(TextOf(status, "Cm0") == "IR 0 EMPTY" && TextOf(status, "Cm1") == "RDR 4 LOW", "An empty station says EMPTY in words: " + TextOf(status, "Cm0"));
+            Check(TextOf(status, "TickerTag") == "WEATHER" && TextOf(status, "Ticker") == "ENV: ICING CONDITIONS", "A caution notice reads in full on the ticker: " + TextOf(status, "Ticker"));
+            break;
+        }
+        foreach (var label in root.GetComponentsInChildren<TextMeshProUGUI>()) {
+            Check(!label.isTextOverflowing, "Board text is not cut off: " + label.text + " (" + tag + ")");
+            if (label.name.StartsWith("Lamp") || label.name.StartsWith("Threat") || label.name.StartsWith("Cm") || label.name.StartsWith("Damage") || label.name == "FuelState")
+                Check(label.preferredWidth <= label.rectTransform.rect.width * 1.02f, "A tile's words fit the tile: " + label.text + " " + label.preferredWidth + " > " + label.rectTransform.rect.width + " (" + tag + ")");
+        }
+        Capture(canvas, "HUD-board-" + tag + ".png");
+        Call(status, "Destroy"); Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
     }
     /// <summary>The readout while the orbit camera rides one of our missiles: locked on a target, then searching blind.</summary>
     private static void MissileCam(Vector2 size)
     {
         Canvas canvas = MakeCanvas("MissileCam", size); CombatHUD hud = NativeDock(canvas);
+        Sky(canvas);
         object panel = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.MissileCamPanel"), true);
         Call(panel, "Build", hud, canvas);
         SyntheticFont((RectTransform)Field(panel, "root"));
@@ -229,29 +317,42 @@ public static class HudLogUnityCheck
         Check(!root.gameObject.activeSelf, "The readout hides when the camera leaves the missile.");
         Call(panel, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
     }
+    /// <summary>The third-person cluster on a hazy sky: cruising with AoA and a real G, then every caution lit (over-G, low ground, BINGO fuel); once at the player's larger text setting.</summary>
     private static void Cluster(Vector2 size)
     {
-        Canvas canvas = MakeCanvas("Cluster", size); CombatHUD hud = NativeDock(canvas);
-        object cluster = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster"), true);
-        Call(cluster, "Build", hud, canvas);
-        SyntheticFont((RectTransform)Field(cluster, "root"));
-        Type flightType = Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster+Flight");
-        object flight = Activator.CreateInstance(flightType);
-        foreach (var kv in new[] { ("SpeedMps", 240f), ("AltitudeM", 1800f), ("RadarAltM", 120f), ("ClimbMps", -12f),
-            ("HeadingDeg", 359.6f), ("Mach", .72f), ("G", 5.1f), ("Fuel", .15f), ("Throttle", .8f) })
-            Set(flight, kv.Item1, kv.Item2);
-        Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f);
-        Capture(canvas, "HUD-cluster-" + size.x + "x" + size.y + ".png");
-        object heading = Field(cluster, "hdg");
-        Check(((TMP_Text)Field(heading, "Value")).text.StartsWith("000°"), "Rounded north wraps to 000 degrees.");
-        Call(cluster, "WriteHeading", -1f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("359°"), "Negative heading normalizes.");
-        Call(cluster, "WriteHeading", 5f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("005°"), "Heading retains three digits.");
-        Check(((TMP_Text)Field(Field(cluster, "alt"), "Caption")).text.StartsWith("R "), "Low radar altitude replaces the ALT caption.");
-        foreach (Graphic g in ((RectTransform)Field(cluster, "root")).GetComponentsInChildren<Graphic>())
-            Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
-        Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        foreach (string state in new[] { "cruise", "cautions", "large-text" }) {
+            if (state == "large-text" && size.x != 1920f) continue;
+            Canvas canvas = MakeCanvas("Cluster", size); CombatHUD hud = NativeDock(canvas);
+            Sky(canvas);
+            object cluster = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster"), true);
+            Call(cluster, "Build", hud, canvas);
+            SyntheticFont((RectTransform)Field(cluster, "root"));
+            Type flightType = Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster+Flight");
+            object flight = Activator.CreateInstance(flightType);
+            bool bad = state == "cautions";
+            foreach (var kv in new[] { ("SpeedMps", bad ? 130f : 240f), ("AltitudeM", bad ? 420f : 1800f), ("RadarAltM", bad ? 120f : 900f), ("ClimbMps", bad ? -32f : 3f),
+                ("HeadingDeg", 359.6f), ("Mach", bad ? .35f : .72f), ("G", bad ? 7.6f : 1.1f), ("GLimit", 9f), ("Fuel", bad ? .09f : .62f), ("Throttle", .8f),
+                ("BankDeg", bad ? 38f : 6f), ("SlipDeg", bad ? 4f : -1f), ("AoaDeg", bad ? 14.2f : 3.4f) })
+                Set(flight, kv.Item1, kv.Item2);
+            if (bad) { Set(flight, "FuelBingo", true); Set(flight, "FuelJoker", true); }
+            float scale = state == "large-text" ? 1.5f : 1f;
+            Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f, scale);
+            Canvas.ForceUpdateCanvases();
+            Capture(canvas, "HUD-cluster-" + state + "-" + size.x + "x" + size.y + ".png");
+            object heading = Field(cluster, "hdg");
+            Check(((TMP_Text)Field(heading, "Value")).text.StartsWith("000°"), "Rounded north wraps to 000 degrees.");
+            Call(cluster, "WriteHeading", -1f);
+            Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("359°"), "Negative heading normalizes.");
+            Call(cluster, "WriteHeading", 5f);
+            Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("005°"), "Heading retains three digits.");
+            Check(((TMP_Text)Field(Field(cluster, "alt"), "Caption")).text == (bad ? "PULL UP" : "ALT"), "The ALT caption names the ground cue: " + ((TMP_Text)Field(Field(cluster, "alt"), "Caption")).text);
+            Check(((TMP_Text)Field(Field(cluster, "spd"), "CaptionRight")).text == (bad ? "AOA 14.2°" : "AOA 3.4°"), "AoA reads in the SPD caption row: " + ((TMP_Text)Field(Field(cluster, "spd"), "CaptionRight")).text);
+            Check(((TMP_Text)Field(Field(cluster, "spd"), "SubLine")).text == (bad ? "M 0.35  G 7.6" : "M 0.72  G 1.1"), "G is the load factor: " + ((TMP_Text)Field(Field(cluster, "spd"), "SubLine")).text);
+            Check(((TMP_Text)Field(Field(cluster, "alt"), "BarLabel")).text == (bad ? "BINGO 9" : "FUEL 62"), "The fuel scale says BINGO as the board does: " + ((TMP_Text)Field(Field(cluster, "alt"), "BarLabel")).text);
+            foreach (Graphic g in ((RectTransform)Field(cluster, "root")).GetComponentsInChildren<Graphic>())
+                Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
+            Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
     }
     private static void Log(float height, bool merged)
     {
