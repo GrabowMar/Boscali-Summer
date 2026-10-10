@@ -59,6 +59,27 @@ namespace BoscaliSummer.Tests.Features.Immersion
             hit.Step(Vanilla(1f, hits: 2), Dt);
             TestAssert.That(hit.Stress01 >= .69f && hit.Stress01 <= 1f, "Hits add bounded stress.");
 
+            var struck = new PilotPhysiology();
+            PilotVitalsSample warhead = Vanilla(1f, hits: 1);
+            warhead.Blast = true;
+            struck.Step(warhead, Dt);
+            TestAssert.That(struck.Stress01 == 1f && struck.Pulse01 == 1f, "A warhead hit makes stress critical at once and the heart audible.");
+            int pounding = Count(struck, Vanilla(1f), 5f, PilotCue.Heartbeat);
+            TestAssert.That(struck.Stress01 == 1f && pounding >= 12 && pounding <= 14,
+                "Stress is held critical for seconds and the heart pounds at 160 bpm, got " + pounding);
+            Count(struck, Vanilla(1f), 12f, PilotCue.None);
+            TestAssert.That(struck.Pulse01 == 0f && Count(struck, Vanilla(1f), 5f, PilotCue.Heartbeat) == 0,
+                "The heartbeat fades once the stress eases.");
+
+            var crippled = new PilotPhysiology();
+            PilotVitalsSample wrecked = Vanilla(1f);
+            wrecked.Critical = true;
+            int limping = Count(crippled, wrecked, 10f, PilotCue.Heartbeat);
+            TestAssert.That(crippled.Pulse01 >= .7f && crippled.Stress01 >= .8f && limping >= 20,
+                "A critically damaged aircraft keeps the heartbeat going, got " + limping);
+            Count(crippled, Vanilla(1f), 15f, PilotCue.None);
+            TestAssert.That(crippled.Pulse01 == 0f, "Once repaired, the heart settles.");
+
             var loc = new PilotPhysiology();
             Count(loc, Vanilla(8f, bp: .3f, stamina: 0f), 1f, PilotCue.None);
             TestAssert.That((loc.Step(Vanilla(8f, bp: .15f, stamina: 0f, conscious: false), Dt) & PilotCue.LostConsciousness) != 0,

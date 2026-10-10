@@ -25,6 +25,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Texture2D texture;
         private volatile byte[] mask;
         private int baking;
+        private bool shaderWarned;
+        /// <summary>Automation only: scripted sim flight hides the vanilla HUD the visor normally follows.</summary>
+        internal bool IgnoreHud;
         private FogPulse fog;
         private float tint, brow, sunLit, wTint = -1f, wSun = -1f, wFog = -1f, wBrow = -1f, wLight = -1f;
 
@@ -51,7 +54,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             brow = VisorMath.Ease(brow, VisorMath.Brow(p.LoadG), dt, .4f);
             bool active = Mathf.Max(Mathf.Max(tint, sunLit), Mathf.Max(fog.Value, brow)) > VisorMath.Idle;
             if (!active || !Ensure()) { if (image != null && image.enabled) image.enabled = false; return; }
-            bool hudVisible = hud == null || hud.gameObject.activeInHierarchy;
+            bool hudVisible = IgnoreHud || hud == null || hud.gameObject.activeInHierarchy;
             if (image.enabled != hudVisible) image.enabled = hudVisible;
             if (!hudVisible) return;
             Write(TintId, tint, ref wTint);
@@ -65,7 +68,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             if (image != null && image.enabled) image.enabled = false;
             fog = default;
-            tint = brow = sunLit = 0f;
+            brow = sunLit = 0f; // the sun visor stays where it was; it eases with the sun, not with view changes
         }
 
         internal void Release()
@@ -87,7 +90,11 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 if (data == null)
                 {
                     if (Interlocked.Exchange(ref baking, 1) == 0)
-                        ThreadPool.QueueUserWorkItem(_ => mask = VisorMask.Build(Width, Height));
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            try { mask = VisorMask.Build(Width, Height); }
+                            catch (System.Exception) { mask = null; }
+                        });
                     return false;
                 }
                 texture = new Texture2D(Width, Height, TextureFormat.RGBA32, false, true)
@@ -99,7 +106,11 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (material == null)
             {
                 Shader shader = PilotShaderBundle.GetVisor();
-                if (shader == null) return false;
+                if (shader == null)
+                {
+                    if (!shaderWarned) { shaderWarned = true; Plugin.Logger?.LogWarning("[Immersion] Helmet visor shader missing from pilot.bundle; visor disabled."); }
+                    return false;
+                }
                 material = new Material(shader) { name = "Boscali.Visor", hideFlags = HideFlags.HideAndDontSave };
             }
             root = new GameObject("Boscali.VisorOverlay");
@@ -115,6 +126,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             image.material = material;
             image.enabled = false;
             canvas.sortingOrder = UnderHud();
+            if (hud != null) canvas.sortingLayerID = hud.rootCanvas.sortingLayerID;
             wTint = wSun = wFog = wBrow = wLight = -1f;
             return true;
         }

@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly Color colour;
 
         private string titleCache = string.Empty;
+        private float labelWidth = LabelWidth;
         private string detailCache;
         private int detailCard = -1;
         private int detailMetres = int.MinValue;
@@ -159,12 +160,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         internal void SetLabel(ContractCard card, float distance, bool metric, float x, float halfWidth,
             bool clamped, Color tone)
         {
+            bool changed = false;
             string titleText = card.TitleLine;
             if (titleCache != titleText)
             {
                 titleCache = titleText;
                 title.text = titleText;
                 title.ForceMeshUpdate();
+                changed = true;
             }
 
             // The detail line carries a live distance and clock, so it is rebuilt only when one
@@ -183,12 +186,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 detailCache = card.Detail(distance, metric);
                 detail.text = detailCache;
                 detail.ForceMeshUpdate();
+                changed = true;
             }
 
             title.color = colour;
             detail.color = tone;
 
-            float width = Mathf.Max(title.preferredWidth, detail.preferredWidth);
+            if (changed) labelWidth = Mathf.Max(title.preferredWidth, detail.preferredWidth);
+            float width = labelWidth;
             float visual = width * labelScale;
             if (!Mathf.Approximately(width, label.sizeDelta.x))
                 label.sizeDelta = new Vector2(width, label.sizeDelta.y);

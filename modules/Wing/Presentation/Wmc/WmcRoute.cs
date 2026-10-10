@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private RectTransform pageContent;
         private AvPopup popup;
         private WmcContext last;
-        private AvSection legsSection, apSection;
+        private AvSection legsSection;
         private WmcRouteMap map;
         private WmcLegTable legs;
         private AvStepper altStepper, spdStepper;
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly List<AvPopupEntry> routeEntries = new List<AvPopupEntry>(RouteStore.Max);
         private AvControl draw, action, del, skip, send, undo, clear, save, savedPicker, savedDelete;
         private string altText = "", spdText = "", legsShown, apNoteShown;
-        private int savedSelected = -1, legsKey = int.MinValue, apKey = int.MinValue, listKey = int.MinValue, loopValue = -1;
+        private int savedSelected = -1, apKey = int.MinValue, listKey = int.MinValue, loopValue = -1;
         private bool apOpen;
 
         public WmcRoute(WmcControls controls)
@@ -129,7 +129,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids.Add("plan.route.loop", () => EditDraft(d => d.CycleLoop()));
             ids.Add("plan.route.send", send);
 
-            apSection = flow.Section(AvIcon.Plane, "MY AUTOPILOT", "NAV · COUPLED TO ROUTE");
+            flow.Section(AvIcon.Plane, "MY AUTOPILOT", "NAV · COUPLED TO ROUTE");
             apRow = flow.Add(new AvRow(flow.Content));
             apNav = apRow.AddTrailing(new AvControl.Spec("NAV", () => PressAp(5)));
             apOff = apRow.AddTrailing(new AvControl.Spec("AP OFF", () => PressAp(6), AvButtonStyle.Quiet));

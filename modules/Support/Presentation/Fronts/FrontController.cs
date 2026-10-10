@@ -241,7 +241,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 {
                     if (a == null || a.AttachedAirbase || a.UnitDestroyed()) continue;
                     int id = a.GetInstanceID();
-                    if (!airbaseNames.TryGetValue(id, out string name)) airbaseNames[id] = name = BoscaliSummer.Modules.Command.Presentation.MapUi.MfdAirbaseFormatter.Format(a);
+                    if (!airbaseNames.TryGetValue(id, out string name)) airbaseNames[id] = name = MfdAirbaseFormatter.Format(a);
                     GlobalPosition p = (a.center != null ? a.center : a.transform).GlobalPosition();
                     FactionHQ hq = a.CurrentHQ;
                     airbaseFixes.Add(new AirbaseFix { X = p.x, Z = p.z, Name = name, Side = hq == null ? AirbaseSide.Neutral : hq == mine ? AirbaseSide.Own : AirbaseSide.Enemy });

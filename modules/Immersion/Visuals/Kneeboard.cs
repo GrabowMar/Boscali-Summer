@@ -1,26 +1,27 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Immersion.Domain;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
     /// <summary>
-    /// Thigh kneeboard: one quad on the thigh away from the stick. Its mission card is rendered once per sortie
-    /// (and again on rearm / loadout change) into a 512 px texture by a temporary camera that is destroyed at once.
-    /// Steady state is one draw call and a bool check. If that one-off render ever exceeds 2 ms, later cards
-    /// fall back to a plain paper texture with no camera.
+    /// Thigh kneeboard: one quad on the thigh away from the stick. Its mission card is drawn once per aircraft
+    /// (and again on rearm / loadout change) straight into a 512 px texture: one text mesh, one immediate draw,
+    /// no camera and no canvas (a temporary URP camera cost 23 ms in game). Steady state is one draw call and a
+    /// bool check. If a warm redraw ever exceeds 2 ms, later cards keep the last one.
     /// </summary>
     internal sealed class Kneeboard
     {
-        private const int Size = 512, CardLayer = 31;
-        private const float Width = .16f, Height = .22f;
-        private static readonly Color Paper = new Color(.86f, .84f, .76f), Ink = new Color(.1f, .11f, .1f), Stamp = new Color(.62f, .1f, .08f, .55f);
+        private const int Size = 512;
+        private const float Width = .14f, Height = .18f;
+        // Lit by the cockpit sun: mid-grey paper and near-black bold ink keep contrast without blowing out.
+        private static readonly Color Paper = new Color(.4f, .39f, .34f), Ink = new Color(.02f, .022f, .02f);
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap"), LightId = Shader.PropertyToID("_LightLevel");
         private readonly List<KeyValuePair<string, int>> loadout = new List<KeyValuePair<string, int>>(12);
         private readonly Action markDirty;
@@ -32,13 +33,20 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Texture2D plain;
         private Aircraft aircraft;
         private bool cardValid, warned;
+        /// <summary>Picked in SQD STUDIO: picture cards replace the written mission card (and need no text render).</summary>
+        internal IKneeboardGallery Gallery;
 
         internal Kneeboard() { markDirty = () => schedule.MarkDirty(); }
 
         internal bool Bound => quad != null;
         internal Renderer Renderer { get; private set; }
         internal float LastRenderMs { get; private set; } = -1f;
+        internal float LastLayoutMs { get; private set; } = -1f;
+        internal float LastDrawMs { get; private set; } = -1f;
+        internal int Renders { get; private set; }
+        internal void MarkDirty() => schedule.MarkDirty();
         internal string Side { get; private set; } = "none";
+        internal bool RightThigh { get; private set; }
 
         /// <summary>True once per cockpit entry: a failed bind is not retried every frame.</summary>
         internal bool TryBeginBind() => schedule.BeginBind();
@@ -64,8 +72,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             schedule.Bound(owner.GetInstanceID());
             Side = rightThigh ? "right" : "left";
+            RightThigh = rightThigh;
             quad = new GameObject("Boscali.Kneeboard") { layer = 3 }; // PhysicsLayers.Cockpit, like the body
-            quad.transform.SetPositionAndRotation(thigh.position + along * .62f + top * .095f, Quaternion.LookRotation(-top, forward));
+            quad.transform.SetPositionAndRotation(thigh.position + along * .68f + top * .112f, Quaternion.LookRotation(-top, forward));
             quad.transform.SetParent(thigh, true);
             mesh = new Mesh { name = "Boscali.Kneeboard" };
             mesh.vertices = new[] { new Vector3(-Width / 2, -Height / 2), new Vector3(Width / 2, -Height / 2), new Vector3(-Width / 2, Height / 2), new Vector3(Width / 2, Height / 2) };
@@ -84,10 +93,18 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 material = new Material(shader) { name = "Boscali.Kneeboard", hideFlags = HideFlags.HideAndDontSave };
                 material.SetFloat("_BodyVisible", 1f);
                 material.SetFloat("_HeadMaskMode", 0f);
-                material.SetFloat("_Smoothness", .15f);
+                material.SetFloat("_Smoothness", .05f);
             }
             renderer.sharedMaterial = material;
-            if (cardValid) material.SetTexture(BaseMapId, card);
+            if (!ApplyPicture() && cardValid) material.SetTexture(BaseMapId, card);
+        }
+
+        private bool ApplyPicture()
+        {
+            Texture2D picture = Gallery != null ? Gallery.Card(Gallery.Selected) : null;
+            if (picture == null) return false;
+            material.SetTexture(BaseMapId, picture);
+            return true;
         }
 
         /// <summary>Cheap per-frame check; the card is re-rendered only for a new aircraft, a rearm or a loadout change.</summary>
@@ -130,6 +147,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private void Render()
         {
+            if (ApplyPicture()) return;
             string[] lines = KneeboardCard.Lines(aircraft.unitName, aircraft.definition != null ? aircraft.definition.unitName : null,
                 Loadout(), HomeBase(), MissionManager.CurrentMission != null ? MissionManager.CurrentMission.Name : "Free flight", TimeOfDay());
             if (schedule.UseCamera)
@@ -138,6 +156,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 bool rendered = RenderCard(lines);
                 LastRenderMs = (float)watch.Elapsed.TotalMilliseconds;
                 schedule.Recorded(LastRenderMs);
+                Renders++;
                 if (rendered) cardValid = true;
                 if (!schedule.UseCamera && !warned)
                 {
@@ -159,34 +178,42 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     { name = "Boscali.KneeboardCard", useMipMap = true, autoGenerateMips = true, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
                 card.Create();
             }
-            GameObject root = null, holder = null;
+            GameObject holder = null;
+            RenderTexture previous = RenderTexture.active;
+            bool pushed = false;
             try
             {
-                root = new GameObject("Boscali.KneeboardCard") { layer = CardLayer };
-                root.transform.position = new Vector3(0f, -50000f, 0f);
-                var canvas = root.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.WorldSpace;
-                ((RectTransform)root.transform).sizeDelta = new Vector2(Size, Size);
-                Image(root.transform, "Paper", Paper, Vector2.zero, Vector2.one);
-                Image(root.transform, "Clip", new Color(.22f, .23f, .22f), new Vector2(.3f, .94f), new Vector2(.7f, 1f));
-                Text(root.transform, "<mspace=0.58em>" + string.Join("\n", lines) + "</mspace>", font, 25f, Ink, new Vector2(.06f, .04f), new Vector2(.97f, .92f), 0f);
-                Text(root.transform, "TRAINING", font, 44f, Stamp, new Vector2(.45f, .04f), new Vector2(.98f, .2f), 12f);
-                holder = new GameObject("Boscali.KneeboardCamera");
-                var camera = holder.AddComponent<Camera>();
-                camera.enabled = false;
-                camera.orthographic = true;
-                camera.orthographicSize = Size / 2f;
-                camera.transform.SetPositionAndRotation(root.transform.position - Vector3.forward * 10f, Quaternion.identity);
-                camera.nearClipPlane = .1f; camera.farClipPlane = 50f;
-                camera.cullingMask = 1 << CardLayer;
-                camera.clearFlags = CameraClearFlags.SolidColor;
-                camera.backgroundColor = Paper;
-                camera.allowHDR = false; camera.allowMSAA = false;
-                camera.targetTexture = card;
-                Canvas.ForceUpdateCanvases();
-                camera.Render();
-                camera.targetTexture = null;
-                return true;
+                // A 3D text object only to lay the mesh out; it is destroyed before any camera can see it.
+                holder = new GameObject("Boscali.KneeboardText");
+                holder.transform.position = new Vector3(0f, -50000f, 0f);
+                var text = holder.AddComponent<TextMeshPro>();
+                text.font = font;
+                text.isOrthographic = true; // one font point = one pixel of the card
+                text.fontSize = 28f;
+                text.fontStyle = FontStyles.Bold;
+                text.color = Ink;
+                text.enableWordWrapping = false;
+                text.richText = true;
+                text.alignment = TextAlignmentOptions.TopLeft;
+                const float left = Size * .06f, right = Size * .97f, bottom = Size * .04f, top = Size * .92f;
+                text.rectTransform.sizeDelta = new Vector2(right - left, top - bottom);
+                text.text = "<mspace=0.54em>" + string.Join("\n", lines) + "</mspace>";
+                var phase = Stopwatch.StartNew();
+                text.ForceMeshUpdate(true, true);
+                Material ink = text.fontSharedMaterial;
+                LastLayoutMs = (float)phase.Elapsed.TotalMilliseconds;
+                phase.Restart();
+                RenderTexture.active = card;
+                GL.PushMatrix();
+                pushed = true;
+                GL.LoadPixelMatrix(0f, Size, 0f, Size);
+                GL.Clear(true, true, Paper);
+                bool drawn = ink != null && text.mesh != null && ink.SetPass(0);
+                // Signed-distance glyphs come out soft in an immediate draw; four passes build solid ink (0.03 ms each).
+                Matrix4x4 place = Matrix4x4.Translate(new Vector3((left + right) * .5f, (bottom + top) * .5f, 0f));
+                for (int pass = 0; drawn && pass < 4; pass++) Graphics.DrawMeshNow(text.mesh, place);
+                LastDrawMs = (float)phase.Elapsed.TotalMilliseconds;
+                return drawn;
             }
             catch (Exception error)
             {
@@ -195,9 +222,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             finally
             {
-                // Immediate: nothing on the card layer may outlive this call into another camera's frame.
+                if (pushed) GL.PopMatrix();
+                RenderTexture.active = previous;
                 if (holder != null) Object.DestroyImmediate(holder);
-                if (root != null) Object.DestroyImmediate(root);
             }
         }
 
@@ -245,32 +272,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             return level != null ? level.timeOfDay : float.NaN;
-        }
-
-        private static void Image(Transform parent, string name, Color colour, Vector2 min, Vector2 max)
-        {
-            var node = new GameObject(name, typeof(RectTransform)) { layer = CardLayer };
-            node.transform.SetParent(parent, false);
-            var rect = (RectTransform)node.transform;
-            rect.anchorMin = min; rect.anchorMax = max; rect.offsetMin = rect.offsetMax = Vector2.zero;
-            node.AddComponent<UnityEngine.UI.Image>().color = colour;
-        }
-
-        private static void Text(Transform parent, string text, TMP_FontAsset font, float size, Color colour, Vector2 min, Vector2 max, float angle)
-        {
-            var node = new GameObject("Text", typeof(RectTransform)) { layer = CardLayer };
-            node.transform.SetParent(parent, false);
-            var rect = (RectTransform)node.transform;
-            rect.anchorMin = min; rect.anchorMax = max; rect.offsetMin = rect.offsetMax = Vector2.zero;
-            rect.localRotation = Quaternion.Euler(0f, 0f, angle);
-            var label = node.AddComponent<TextMeshProUGUI>();
-            label.font = font;
-            label.fontSize = size;
-            label.color = colour;
-            label.enableWordWrapping = false;
-            label.richText = true;
-            label.alignment = angle != 0f ? TextAlignmentOptions.Center : TextAlignmentOptions.TopLeft;
-            label.text = text;
         }
     }
 }

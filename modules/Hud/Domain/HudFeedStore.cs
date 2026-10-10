@@ -11,17 +11,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public string Channel;
         public string Text, Detail;
         public float Bar;
-        public bool Notice;
     }
 
-    /// <summary>Bounded data handles. Acquiring or updating a feed never creates Unity objects.</summary>
+    /// <summary>
+    /// Bounded data handles. Acquiring or updating a feed never creates Unity objects. Since the TAC BOARD (HUD v8) nothing draws
+    /// held lines: they are signals that a feed is live (<see cref="HasLive"/>) until each owner publishes a typed scope feed
+    /// instead; transient notices go to the <see cref="NoticeTicker"/>.
+    /// </summary>
     internal sealed class HudFeedStore
     {
         public const int Capacity = 16;
-        private const float StaleSeconds = 1.5f;
+        private const float StaleSeconds = 2.5f;
         private readonly Func<float> clock;
         private readonly List<Line> lines = new List<Line>(Capacity);
-        private readonly HudNoticeQueue notices = new HudNoticeQueue();
+        private readonly NoticeTicker ticker = new NoticeTicker();
         public HudFeedStore(Func<float> clock) { this.clock = clock; }
         public IHudLine Acquire(string owner, string channel, string key)
         {
@@ -29,49 +32,31 @@ namespace BoscaliSummer.Modules.Hud.Domain
             foreach (Line line in lines) if (line.Owner == owner && line.Key == key) return line;
             if (lines.Count == Capacity)
             {
-                int stale = lines.FindIndex(l => !l.Live(clock()));
+                int stale = -1;
+                float now = clock();
+                for (int i = 0; i < lines.Count && stale < 0; i++) if (!lines[i].Live(now)) stale = i;
                 if (stale < 0) return null;
                 lines[stale].Valid = false; lines.RemoveAt(stale);
             }
             var added = new Line(owner, channel, key, clock); lines.Add(added); return added;
         }
-        public void Notice(string channel, HudTone tone, string text, string detail, float seconds) =>
-            notices.Push(channel, tone, Clip(text, 160), Clip(detail, 240), clock(), seconds);
-        public void Mute(string channel) => notices.RemoveChannel(channel);
-        public void ClearNotices() => notices.Clear();
+        public void Notice(string channel, HudTone tone, string text, string detail) =>
+            ticker.Push(channel, tone, Clip(text, 160), Clip(detail, 240), clock());
         public void Reset()
-        { foreach (Line line in lines) line.Valid = false; lines.Clear(); notices.Clear(); }
+        { foreach (Line line in lines) line.Valid = false; lines.Clear(); ticker.Clear(); }
 
-        // Severity wins across held lines AND notices. Stable insertion order breaks ties.
-        public int Snapshot(HudMessage[] output, int limit, Func<string, bool> enabled, bool showNotices)
+        /// <summary>True while a held line of this channel is live: the board reads the pilot's situation from which feeds are up.</summary>
+        public bool HasLive(string channel)
         {
-            int count = 0;
-            limit = Math.Min(output.Length, Math.Max(0, limit));
-            float now = clock(); notices.Expire(now);
-            foreach (Line line in lines)
-                if (line.Live(now) && enabled(line.Channel))
-                {
-                    HudMessage message = line.Message;
-                    message.Channel = line.Channel;
-                    Insert(output, ref count, limit, message);
-                }
-            if (showNotices)
-                for (int i = 0; i < notices.Count; i++)
-                    if (notices.TryGet(i, out HudTone tone, out string text, out string detail))
-                        Insert(output, ref count, limit, new HudMessage
-                        { Tone = tone, Channel = notices.ChannelAt(i), Text = text, Detail = detail, Notice = true });
-            return count;
+            float now = clock();
+            foreach (Line line in lines) if (line.Channel == channel && line.Live(now)) return true;
+            return false;
         }
-        private static void Insert(HudMessage[] output, ref int count, int limit, HudMessage message)
-        {
-            int index = 0;
-            while (index < count && output[index].Tone >= message.Tone) index++;
-            if (index >= limit) return;
-            count = Math.Min(limit, count + 1);
-            for (int i = count - 1; i > index; i--) output[i] = output[i - 1];
-            output[index] = message;
-        }
-        private static string Clip(string value, int max) => string.IsNullOrEmpty(value) ? "" : value.Length <= max ? value : value.Substring(0, max - 1) + "\u2026";
+
+        /// <summary>The notice the ticker shows now, if any.</summary>
+        public bool Ticker(out TickerLine line) => ticker.Peek(clock(), out line);
+
+        private static string Clip(string value, int max) => string.IsNullOrEmpty(value) ? "" : value.Length <= max ? value : value.Substring(0, max - 1) + "…";
         private sealed class Line : IHudLine
         {
             public readonly string Owner, Channel, Key;

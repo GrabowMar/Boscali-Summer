@@ -14,6 +14,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             FrameRateIndependence();
             LookAheadClamp();
             LevelHorizon();
+            VerticalDive();
             NaNSafety();
             Pose();
         }
@@ -78,6 +79,17 @@ namespace BoscaliSummer.Tests.Features.Hud
             float climbPitch = (float)System.Math.Asin(System.Math.Min(1f, System.Math.Max(-1f, climbDir.Y))) * 57.2958f;
             TestAssert.That(climbPitch > 0f && climbPitch < 75f,
                 "A steep climb is dampened toward level, never amplified or flipped: " + climbPitch);
+        }
+
+        /// <summary>A vertical dive or climb has no heading: the blended direction must
+        /// snap to azimuth zero instead of following float residuals in X/Z.</summary>
+        private static void VerticalDive()
+        {
+            WVVec3 straight = WingviewMath.BlendDirection(new WVVec3(0f, 1f, 0f), new WVVec3(0f, 50f, 0f), true);
+            TestAssert.That(straight.X == 0f && straight.IsFinite, "A straight climb has no sideways component");
+            WVVec3 near = WingviewMath.BlendDirection(new WVVec3(1e-9f, 1f, 1e-9f), WVVec3.Zero, false);
+            TestAssert.That(near.X == 0f && near.IsFinite,
+                "A near-vertical blend snaps to azimuth zero, not Atan2 of residuals: " + near.X);
         }
 
         private static void NaNSafety()

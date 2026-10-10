@@ -84,6 +84,7 @@ namespace BoscaliSummer.Tests.Architecture
             "modules/Command/Presentation/MapUi/MfdRailPatch.cs",       // map-ground tint
             "modules/Command/Presentation/MapUi/MfdChromeLay.cs",       // restores a captured vanilla TMP size
             "modules/Comms/Presentation/CommsCockpitMarkers.cs",      // projected native HUD markers counter-scale text to a physical pixel floor
+            "modules/Support/Presentation/Fronts/FrontMap.cs",           // terrain image tint (data)
             "modules/Events/Presentation/EventAircraftPreview.cs",      // 3D preview camera background + light
             "modules/Progression/Presentation/PlaneNativeDamageView.cs", // native damage-state tint (data)
         };

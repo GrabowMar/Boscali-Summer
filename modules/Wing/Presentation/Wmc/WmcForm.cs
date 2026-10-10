@@ -44,8 +44,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly float[] presets = { FormationCatalog.Close, FormationCatalog.Standard, FormationCatalog.Open, FormationCatalog.Spread };
         private readonly string[] shapeIds = new string[MaxShapes];
         private FormationDefinition shownShape;
-        private string captionShown, memberCaptionShown, spacingCaptionShown, shapeCaptionShown;
-        private int formKey = int.MinValue, shapesKey = int.MinValue, stackShown = -1;
+        private string captionShown, memberCaptionShown, spacingCaptionShown;
+        private int shapesKey = int.MinValue, stackShown = -1;
         private ShapeWindow window;
 
         public WmcForm(WmcControls controls)
@@ -458,7 +458,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             private readonly WmcShapeCells cards;
             private readonly AvSection title;
             private readonly AvControl applyButton;
-            private readonly List<FormationDefinition> listed = new List<FormationDefinition>();
             private readonly List<FormationDefinition> all = new List<FormationDefinition>();
             private readonly List<string> familyNames = new List<string>();
             private readonly List<FormationDefinition> inFamily = new List<FormationDefinition>(MaxShapes);

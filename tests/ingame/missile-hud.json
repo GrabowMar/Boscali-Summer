@@ -72,8 +72,8 @@
     },
     {
       "op": "call",
-      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Menu",
-      "args": {},
+      "method": "BoscaliSummer.Modules.Autopilot.Runtime.AceRadialAutomation.Menu",
+      "args": { "category": "view" },
       "store": "menu"
     },
     {

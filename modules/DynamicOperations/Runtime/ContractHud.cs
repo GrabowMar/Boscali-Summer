@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private void Update()
         {
             if (manager == null) { Hide(); return; }
-            if (DynamicMap.mapMaximized || !GameManager.GetLocalAircraft(out Aircraft aircraft) ||
+            if (!CockpitOverlayGate.Open() || !GameManager.GetLocalAircraft(out Aircraft aircraft) ||
                 aircraft == null || aircraft.disabled || aircraft.HasEjected())
             { Hide(); return; }
 

@@ -232,14 +232,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         /// <summary>" · FUEL 82%": the fuel figure rides the sub line; the hull is the bar under the row.</summary>
         private static string FuelWord(Aircraft aircraft) =>
-            aircraft == null ? "" : " · FUEL " + AvNum.Percent(Mathf.Clamp01(aircraft.fuelLevel));
+            aircraft == null ? "" : " · FUEL " + AvNum.Percent(AircraftReadout.Fuel(aircraft));
 
         /// <summary>The mean part condition of one aircraft as the row's thin meter, with fuel and hull in its tip.</summary>
         private static void PaintWingMeter(SqdRosterRow row, Aircraft aircraft, string who)
         {
             if (row == null) return;
             if (aircraft == null) { row.SetMeter(null, AvTheme.RailInert); row.Help = who + ": no aircraft."; return; }
-            float fuel = Mathf.Clamp01(aircraft.fuelLevel);
+            float fuel = AircraftReadout.Fuel(aircraft);
             float sum = 0f;
             int n = 0;
             System.Collections.Generic.List<UnitPart> parts = aircraft.partLookup;

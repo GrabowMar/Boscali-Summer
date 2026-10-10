@@ -73,6 +73,7 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());
             runtime.Register(new WingHudPanel());
+            runtime.Register(new WingScopeFeed());
             runtime.Register(new WmcPanel());
             runtime.Register(new DevService());
             context.AddComponent<BridgeState>();

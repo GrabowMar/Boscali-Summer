@@ -99,14 +99,6 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "pk",
-        "chance": 1
-      }
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
         "action": "threat",
         "range": 4000,
         "seeker": "IR"
@@ -224,7 +216,7 @@
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
         "action": "ground",
-        "range": 6000
+        "range": 3500
       },
       "store": "ground"
     },
@@ -233,7 +225,7 @@
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
         "action": "launch",
-        "key": "VG_Glaive2A",
+        "key": "VG_Glaive2S",
         "at": "ground"
       },
       "store": "glaive_launch"
@@ -323,6 +315,14 @@
       "store": "deployed"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "g2s_deployed"
+    },
+    {
       "op": "wait",
       "seconds": 30
     },
@@ -333,6 +333,14 @@
         "action": "status"
       },
       "store": "batch2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Glaive2s",
+      "args": {
+        "action": "status"
+      },
+      "store": "g2s_batch2"
     },
     {
       "op": "end"
@@ -369,8 +377,8 @@
     },
     {
       "check": "result_above",
-      "path": "escort.VG_MaldX_fromLead",
-      "min": 2000
+      "path": "escort.VG_MaldX_guided",
+      "min": 1
     },
     {
       "check": "result_above",
@@ -404,12 +412,12 @@
     },
     {
       "check": "result_above",
-      "path": "deployed.turretsDeployed",
+      "path": "g2s_deployed.glaive2s.orbit",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "deployed.turretShots",
+      "path": "g2s_batch2.glaive2s.shots",
       "min": 1
     },
     {

@@ -59,19 +59,18 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
         private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
         private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
-        private static readonly int LayerDepthId = Shader.PropertyToID("_LayerDepth");
-        private static readonly int LayerSmoothId = Shader.PropertyToID("_LayerSmooth");
-        private static readonly int MidCoverId = Shader.PropertyToID("_MidCover");
-        private static readonly int MidSheetId = Shader.PropertyToID("_MidSheet");
-        private static readonly int HighCoverId = Shader.PropertyToID("_HighCover");
-        private static readonly int HighVeilId = Shader.PropertyToID("_HighVeil");
-        private static readonly int PuffScaleId = Shader.PropertyToID("_PuffScale");
-        private static readonly int PuffDepthId = Shader.PropertyToID("_PuffDepth");
-        private static readonly int BaseSharpId = Shader.PropertyToID("_BaseSharp");
-        private static readonly int BaseWobbleId = Shader.PropertyToID("_BaseWobble");
-        private static readonly int DomeId = Shader.PropertyToID("_Dome");
-        private static readonly int BillowId = Shader.PropertyToID("_Billow");
-        private static readonly int AnvilId = Shader.PropertyToID("_Anvil");
+        // The weather tape (TapeTexture, BakedTape): the shader reads every per-sample genus and thin-layer column from it.
+        private static readonly int TapeTexId = Shader.PropertyToID("_TapeTex");
+        private static readonly int TapeInfoId = Shader.PropertyToID("_TapeInfo");
+        private static readonly int TapeFrameId = Shader.PropertyToID("_TapeFrame");
+        private static readonly int TapeFrame2Id = Shader.PropertyToID("_TapeFrame2");
+        private static readonly int TapeChordId = Shader.PropertyToID("_TapeChord");
+        private static readonly int TapeFlagsId = Shader.PropertyToID("_TapeFlags");
+        // The low genus of a one-texel tape rides in uniforms (live play in slices 2-3), so a sample costs no texture fetch for it.
+        private static readonly int[] TapeConstLowIds =
+        {
+            Shader.PropertyToID("_TapeConstLow0"), Shader.PropertyToID("_TapeConstLow1"), Shader.PropertyToID("_TapeConstLow2"),
+        };
         private static readonly int WindDirId = Shader.PropertyToID("_CloudWindDir");
         private static readonly int HorizonCoverId = Shader.PropertyToID("_HorizonCover");
         private static readonly int HorizonDeckId = Shader.PropertyToID("_HorizonDeck");
@@ -87,6 +86,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int CheckerId = Shader.PropertyToID("_CloudChecker");
         private static readonly Vector2[] CheckerOrder = { new Vector2(0, 0), new Vector2(1, 1), new Vector2(1, 0), new Vector2(0, 1) };
 
+        private readonly TapeTexture tapeTexture = new TapeTexture();
+        private readonly Vector4[] tapeConstLow = new Vector4[3];
         private readonly Vector4[] heroA = new Vector4[Superstructures.MaxCount];
         private readonly Vector4[] heroB = new Vector4[Superstructures.MaxCount];
         private readonly float[] heroShown = new float[Superstructures.MaxCount];
@@ -111,6 +112,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal void Reset()
         {
+            tapeTexture.Dispose();
             for (int i = 0; i < heroShown.Length; i++) { heroShown[i] = 0f; heroSite[i] = Vector2.zero; }
             fogShown = 0f;
             previousFlash = 0f;
@@ -134,9 +136,48 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             fogShown = (field.Key.Sets & Superstructures.FogBankSet) != 0 ? 1f : 0f;
         }
 
+        /// <summary>
+        /// Binds the field's tape: the texture, its frame, the slab chords and which thin layers exist (spec 7.1: bound with the
+        /// other per-frame uniforms, never from a pass Execute). Returns false when the float texture cannot be made.
+        /// </summary>
+        internal bool BindTape(Material material, WeatherField field)
+        {
+            BakedTape tape = field.Tape.Tape;
+            if (tape == null || !tapeTexture.Update(tape)) return false;
+            TapeFrame f = field.Frame;
+            material.SetTexture(TapeTexId, tapeTexture.Texture);
+            material.SetVector(TapeInfoId, new Vector4(tape.Texels, 1f / tape.Texels, 1f / tape.TexelMetres, 0f));
+            material.SetVector(TapeFrameId, new Vector4(f.UX, f.UZ, f.Amplitude, Mathf.Max(1f, f.Wavelength)));
+            material.SetVector(TapeFrame2Id, new Vector4(f.Phase, f.Offset, 0f, 0f));
+            material.SetVector(TapeChordId, new Vector4(tape.MidChord0, tape.MidChord1, tape.HighChord0, tape.HighChord1));
+            bool constant = tape.IsConstant;
+            if (constant)
+            {
+                for (int i = 0; i < 3; i++) tapeConstLow[i] = Vector4.zero;
+                for (int c = 0; c < SkyColumns.Count; c++)
+                {
+                    int row = SkyColumns.GpuRow[c];
+                    if (row < 0 || row > 2) continue;
+                    Vector4 v = tapeConstLow[row];
+                    float value = tape.Data[c];
+                    switch (SkyColumns.GpuChannel[c])
+                    {
+                        case 0: v.x = value; break;
+                        case 1: v.y = value; break;
+                        case 2: v.z = value; break;
+                        default: v.w = value; break;
+                    }
+                    tapeConstLow[row] = v;
+                }
+                for (int i = 0; i < 3; i++) material.SetVector(TapeConstLowIds[i], tapeConstLow[i]);
+            }
+            material.SetVector(TapeFlagsId, new Vector4(tape.MidPresent ? 1f : 0f, tape.HighPresent ? 1f : 0f, constant ? 1f : 0f, 0f));
+            return true;
+        }
+
         internal void Apply(Material material, WeatherField field, in CloudFrame frame, Texture noise)
         {
-            StateParams sky = field.Params;
+            SkyParams sky = field.Params;
             material.SetTexture(NoiseId, noise);
             material.SetFloat(BaseId, sky.CloudBase + frame.CloudShift);
             material.SetFloat(ShiftId, frame.CloudShift);
@@ -189,31 +230,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             previousFlash = frame.Flash;
             material.SetFloat(StormId, sky.Severity);
             material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
-            // Cloud genera for the current state (they fade with it).
-            material.SetFloat(LayerDepthId, sky.LayerDepth);
-            material.SetFloat(LayerSmoothId, sky.LayerSmooth);
-            material.SetFloat(MidCoverId, sky.MidCover);
-            material.SetFloat(MidSheetId, sky.MidSheet);
-            material.SetFloat(HighCoverId, sky.HighCover);
-            material.SetFloat(HighVeilId, sky.HighVeil);
-            CloudGenus genus = CloudShape.Resolve(sky);
-            material.SetFloat(PuffScaleId, genus.PuffScale);
-            material.SetFloat(PuffDepthId, genus.PuffDepth);
-            material.SetFloat(BaseSharpId, genus.BaseSharp);
-            material.SetFloat(BaseWobbleId, genus.BaseWobble);
-            material.SetFloat(DomeId, genus.Dome);
-            material.SetFloat(BillowId, genus.Billow);
-            material.SetFloat(AnvilId, genus.Anvil);
+            // The low genus of every sample is a row of the field's tape (it fades with the state).
+            BindTape(material, field);
+            // The thin layers are rows of the same tape (BindTape above).
+
             WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
             material.SetVector(WindDirId, new Vector2(windX, windZ));
             // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
             // An overcast deck continues past the march: rays that reach its base beyond 220 km
             // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
             // The shader still opens it ahead of a frontal boundary (SplitShare).
-            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover,
-                Mathf.Max(sky.Cumulus * 0.3f + sky.Convective * 0.2f, sky.Overcast * 0.9f))));
-            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + Mathf.Max(300f, sky.LayerDepth) * 0.4f);
-            material.SetFloat(HorizonDepthId, Mathf.Max(300f, sky.LayerDepth));
+            // INTERIM(slice 4): the deck continues the far ring's cover with the sky's baked HorizonCover and HorizonDepth columns;
+            // reading the tape alone, with the march hand-off, comes with the horizon-deck work of slice 4.
+            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.HorizonCover)));
+            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + sky.HorizonDepth * 0.4f);
+            material.SetFloat(HorizonDepthId, sky.HorizonDepth);
             // The frontal boundary: one side of the map under the deck, the other opening up.
             SkySplit split = field.Split;
             material.SetVector(SplitAId, new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));

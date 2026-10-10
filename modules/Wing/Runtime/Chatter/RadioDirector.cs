@@ -286,6 +286,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 return;
             }
             VoicePacks.Stop();
+            WingRadioAudio.Tail(WingRadioAudio.SpokenSeconds(line.Text));
             if (!VoiceOn()) return;
             try
             {

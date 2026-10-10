@@ -59,6 +59,8 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             TestAssert.That(card.Family == "RECON", "the family comes from the wire title: " + card.Family);
             TestAssert.That(card.HasMarker, "a marked contract keeps its position");
             TestAssert.That(card.TitleLine == "#7 RECONNAISSANCE PASS", "the title line carries the board number");
+            TestAssert.That(object.ReferenceEquals(card.TitleLine, card.TitleLine),
+                "the title line is built once per card, not once per marker per frame");
             TestAssert.That(card.Inside(900f) && !card.Inside(1600f), "inside is the published radius, not a guess");
             TestAssert.That(card.Detail(900f, true).StartsWith("RECON · HOLD "), "inside reads as a hold: " + card.Detail(900f, true));
             TestAssert.That(card.Detail(5000f, true).Contains("TO AREA"), "outside reads as a distance");

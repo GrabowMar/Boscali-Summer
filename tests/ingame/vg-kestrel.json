@@ -1,0 +1,576 @@
+{
+  "name": "vg-kestrel",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 900,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "VL-49 Tarantula",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          27700,
+          49200
+        ]
+      },
+      "altitude": 6000,
+      "speed": 130,
+      "heading": 180
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          150000,
+          150000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 45
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead",
+        "kestrel"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 11,
+      "conditions": 0.05,
+      "cloud_height": 6000,
+      "wind_speed": 0,
+      "wind_turbulence": 0,
+      "wind_heading": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "mark",
+      "text": "carrier settling after the 130 m/s spawn"
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "targets",
+        "x": 27700,
+        "z": 36000,
+        "offset": 600
+      },
+      "store": "targets"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "fit"
+      },
+      "store": "fit"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "ready"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "view",
+        "angle": "close"
+      },
+      "store": "view"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "mark",
+      "text": "release: bay doors, rail, sled"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "fire"
+      },
+      "store": "fire"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "kestrel-1-sled",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.9
+    },
+    {
+      "op": "capture",
+      "name": "kestrel-2-unfold",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "unfold"
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "turn": {
+            "heading": 0,
+            "bank": 30
+          }
+        },
+        {
+          "climb": {
+            "gamma": 0,
+            "to": 20000
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "unfolded"
+    },
+    {
+      "op": "wait",
+      "seconds": 55
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "t60"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "view",
+        "angle": "glider"
+      },
+      "store": "viewGlider"
+    },
+    {
+      "op": "wait",
+      "seconds": 70
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "station"
+    },
+    {
+      "op": "capture",
+      "name": "kestrel-3-station",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "view",
+        "angle": "beam"
+      },
+      "store": "viewBeam"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "laser"
+    },
+    {
+      "op": "capture",
+      "name": "kestrel-4-laser",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "lasetest",
+        "standoff": 4000
+      },
+      "store": "lasetest"
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "final"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "kestrel",
+        "do": "status"
+      },
+      "store": "settled"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "targets.rangeFirst",
+      "min": 6000
+    },
+    {
+      "check": "result_below",
+      "path": "targets.rangeFirst",
+      "max": 10500
+    },
+    {
+      "check": "result_above",
+      "path": "targets.apart",
+      "min": 550
+    },
+    {
+      "check": "result_below",
+      "path": "targets.apart",
+      "max": 700
+    },
+    {
+      "check": "result_above",
+      "path": "fit.set",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "ready.kestrel.stationAmmo",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "ready.kestrel.knownFirst",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ready.kestrel.knownSecond",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ready.kestrel.trackedFirst",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "ready.kestrel.trackedSecond",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "fire.fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "unfold.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "unfold.kestrel.deployErr",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "unfolded.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "unfolded.kestrel.stationAmmo",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "unfolded.kestrel.carrierAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "unfolded.kestrel.carrierDetached",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "unfolded.kestrel.joints",
+      "min": 7
+    },
+    {
+      "check": "result_above",
+      "path": "unfolded.kestrel.deployed",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "unfolded.kestrel.deployErr",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "t60.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "t60.kestrel.age",
+      "min": 55
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.phase",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "station.kestrel.phase",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.orbit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.radius",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "station.kestrel.radius",
+      "max": 1100
+    },
+    {
+      "check": "result_above",
+      "path": "settled.kestrel.radius",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "settled.kestrel.radius",
+      "max": 1100
+    },
+    {
+      "check": "result_above",
+      "path": "settled.kestrel.height",
+      "min": 700
+    },
+    {
+      "check": "result_below",
+      "path": "settled.kestrel.height",
+      "max": 1300
+    },
+    {
+      "check": "result_above",
+      "path": "settled.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "settled.kestrel.carrierDetached",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.agl",
+      "min": 250
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.speed",
+      "min": 40
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.spot",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.spotted",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.knownFirst",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.knownSecond",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.trackedFirst",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.trackedSecond",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.lase",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.lased",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.lasedIsDesignated",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.kestrel.firstLased",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "laser.kestrel.lased",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "lasetest.fired",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "final.kestrel.lasetestDone",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "final.kestrel.lasetestMiss",
+      "max": 30
+    },
+    {
+      "check": "result_above",
+      "path": "final.kestrel.alive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "final.kestrel.lost",
+      "max": 0
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    }
+  ]
+}

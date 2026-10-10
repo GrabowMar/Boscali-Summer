@@ -33,6 +33,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly CockpitPilotRig rig = new CockpitPilotRig();
         private readonly PilotReflection reflection = new PilotReflection();
         private readonly Kneeboard kneeboard = new Kneeboard();
+        internal static CockpitPilot Live { get; private set; }
+        /// <summary>Automation only: redraw the kneeboard card to measure a warm render.</summary>
+        internal void DebugRefreshKneeboard() => kneeboard.MarkDirty();
+        internal void SetKneeboardGallery(IKneeboardGallery gallery) => kneeboard.Gallery = gallery;
         private ImmersionSettings settings;
         private ManualLogSource logger;
         private Aircraft aircraft;
@@ -49,7 +53,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public string EffectId => "cockpit-pilot";
         public FxBudget Budget => new FxBudget(393216, 10, 0, true);
 
-        internal void Configure(ImmersionSettings value, ManualLogSource log) { settings = value; logger = log; }
+        internal void Configure(ImmersionSettings value, ManualLogSource log) { settings = value; logger = log; Live = this; }
 
         private void LateUpdate()
         {
@@ -91,7 +95,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 rig.SetLight(light);
                 rig.SetBodyVisible(settings.PilotBodyEnabled.Value);
                 // Handedness is known once controls bind (or after a short grace for control-less layouts).
-                if (!kneeboard.Bound && (controlsBound || Time.frameCount > bindFrame + 30) && kneeboard.TryBeginBind()) BindKneeboard();
+                // Re-seat the card if control handedness resolved after it was placed; no card while the body is hidden.
+                if (kneeboard.Bound && kneeboard.RightThigh == rig.StickOnRight) kneeboard.Detach();
+                if (!kneeboard.Bound && settings.PilotBodyEnabled.Value && (controlsBound || Time.frameCount > bindFrame + 30) &&
+                    kneeboard.TryBeginBind()) BindKneeboard();
                 kneeboard.SetVisible(settings.PilotBodyEnabled.Value);
                 kneeboard.SetLight(Mathf.Clamp(light, .06f, 1f));
                 kneeboard.Tick();
@@ -264,7 +271,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
         public void ReleaseFx() { ResetForScene(); kneeboard.Release(); PilotShaderBundle.Release(); }
         private void OnDisable() => ResetForScene();
-        private void OnDestroy() { ResetForScene(); kneeboard.Release(); }
+        private void OnDestroy() { ResetForScene(); kneeboard.Release(); if (Live == this) Live = null; }
         public void DescribeFx(IDictionary<string, object> state)
         {
             state["pilotBodyBound"] = rig.Valid;
@@ -276,6 +283,9 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["pilotShadowsAvailable"] = cameraData != null && cameraData.renderShadows;
             state["kneeboardBound"] = kneeboard.Bound;
             state["kneeboardRenderMs"] = kneeboard.LastRenderMs;
+            state["kneeboardLayoutMs"] = kneeboard.LastLayoutMs;
+            state["kneeboardDrawMs"] = kneeboard.LastDrawMs;
+            state["kneeboardRenders"] = kneeboard.Renders;
             state["kneeboardSide"] = kneeboard.Side;
             state["pilotControlComponentBound"] = controls != null;
             state["pilotControlsBound"] = controlsBound && (!stickExpected || rig.StickBound) && (!throttleExpected || rig.ThrottleBound);

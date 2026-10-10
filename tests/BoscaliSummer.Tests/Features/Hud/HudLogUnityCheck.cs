@@ -16,7 +16,9 @@ using static UnityCheckHarness;
 
 // Production presenters, synthetic native dock/font, telemetry and message traffic.
 // No native asset, live input or game-state adapter claim.
-public static class HudLogUnityCheck
+// The TAC BOARD scope pages render from fixtures, one partial file per page: HudLogUnityCheck.Scope.cs holds the shared harness and the
+// -pages filter, HudLogUnityCheck.Scope.<Name>.cs the fixture of each page (see Run-HudLogUnityCheck.ps1 -Pages).
+public static partial class HudLogUnityCheck
 {
     private const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
     private static Assembly Mod => typeof(AvConsole).Assembly;
@@ -48,17 +50,22 @@ public static class HudLogUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
             var colors = ScriptableObject.CreateInstance<ColorTheme>();
-            Set(colors, "allClear", new Color(.65f, 1f, .87f)); Set(colors, "warning", new Color(1f, .75f, .3f));
-            Set(colors, "alert", new Color(1f, .3f, .25f));
+            // The prototype's ink, amber and red (spec style.css), so a render lines up with shots/ colour for colour.
+            Set(colors, "allClear", (Color)new Color32(56, 222, 82, 255)); Set(colors, "warning", (Color)new Color32(243, 217, 74, 255));
+            Set(colors, "alert", (Color)new Color32(255, 80, 70, 255));
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
-            foreach (float width in new[] { 320f, 440f }) Status(width);
-            foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
-            Contracts();
-            foreach (float height in new[] { 160f, 420f, 596f })
-                foreach (bool merged in new[] { false, true }) Log(height, merged);
-            Wire();
-            File.WriteAllText("result.txt", "PASS: " + captures + " production HUD/status/log/wire renders, " + assertions +
+            string[] pages = ScopePagesArg();
+            if (pages.Length == 0) {   // the whole check; with -pages only the scope fixtures of those pages run
+                foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
+                Contracts();
+                foreach (float height in new[] { 160f, 420f, 596f })
+                    foreach (bool merged in new[] { false, true }) Log(height, merged);
+                Wire();
+            }
+            VanguardGauges();
+            ScopeShots(pages);
+            File.WriteAllText("result.txt", "PASS: " + captures + " production HUD/scope/log/wire renders, " + assertions +
                 " input-transparency/layout/lifecycle assertions. Synthetic native dock/font and telemetry; no native asset, live input or game adapter acceptance.");
             EditorApplication.Exit(0);
         } catch (Exception e) { File.WriteAllText("result.txt", "FAIL: " + e); Debug.LogException(e); EditorApplication.Exit(1); }
@@ -78,69 +85,107 @@ public static class HudLogUnityCheck
     }
     private static void SyntheticFont(RectTransform root)
     {
-        var font = AvBundle.Font("NOA Rajdhani Medium SDF");
+        var font = HudFont();   // the HUD's face is mono: proportional type hides collisions
         foreach (var label in root.GetComponentsInChildren<TextMeshProUGUI>(true)) {
             label.font = font; label.fontSharedMaterial = font.material;
         }
     }
-    private static void Status(float width)
+    private const string HudDomain = "BoscaliSummer.Modules.Hud.Domain.";
+    private static object Boxed(string name) => Activator.CreateInstance(Type(HudDomain + name));
+    private static object EnumOf(string name, string value) => Enum.Parse(Type(HudDomain + name), value);
+    private static object Tone(string tone) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), tone);
+    /// <summary>A hazy sky behind the HUD (near white when asked): thin ink on a bright backdrop is the case the scrims and tones are for.</summary>
+    private static void Sky(Canvas canvas, bool white = false)
     {
-        Canvas canvas = MakeCanvas("Status", new Vector2(640, 600)); CombatHUD hud = NativeDock(canvas);
-        var dock = new GameObject("WeaponsDock", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
-        dock.SetParent(canvas.transform, false); dock.sizeDelta = new Vector2(width, 40); dock.anchoredPosition = new Vector2(0, 230);
-        dock.GetComponent<Image>().color = Color.black; dock.GetComponent<Image>().raycastTarget = false;
-        object status = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.StatusPanel"), true);
-        Call(status, "Build", hud, dock);
-        SyntheticFont((RectTransform)Field(status, "root"));
-        Type message = Type("BoscaliSummer.Modules.Hud.Domain.HudMessage"), tone = Type("BoscaliSummer.Core.Contracts.HudTone");
-        Array rows = Array.CreateInstance(message, 4);
-        string[] text = { "MISSILE WARNING / RIGHT QUARTER", "LANDING / FINAL APPROACH", "WEATHER / ICING CONDITIONS", "ACE HUNT / CONTACT REPORTED" };
-        string[] detail = { "SA-19 RADAR LOCK / 9.4 KM / BREAK RIGHT", "NORTHERN AIRBASE / GEAR DOWN / 140 KT", "FREEZING LEVEL 1,500 M / CLIMB OUT OF CLOUD", "NIGHTFALL 2 / LAST OBSERVED 18 SECONDS AGO" };
-        for (int i = 0; i < rows.Length; i++) {
-            object row = Activator.CreateInstance(message); Set(row, "Text", text[i]); Set(row, "Detail", detail[i]);
-            Set(row, "Tone", Enum.Parse(tone, i == 0 ? "Warning" : i == 2 ? "Caution" : "Info"));
-            Set(row, "Bar", .3f + i * .15f); rows.SetValue(row, i);
-        }
-        Call(status, "Present", rows, rows.Length, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
-        Canvas.ForceUpdateCanvases();
-        Check(((TMP_Text)Field(status, "stripLabel")).text == detail[0].ToUpperInvariant(), "Capacitor bar carries the most severe line's detail.");
-        Check(((RectTransform)Field(status, "root")).Find("Label0").GetComponent<TMP_Text>().text == "MISSILE WARNING", "Cell label is the line head.");
-        foreach (Graphic g in ((RectTransform)Field(status, "root")).GetComponentsInChildren<Graphic>())
-            Check(!g.raycastTarget, "HUD must not intercept pointer input.");
-        Capture(canvas, "HUD-status-" + width + ".png");
-        foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
-            Check(!label.isTextOverflowing, "Status text remains readable: " + label.text);
-        int detailCount = 0;
-        foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
-            if (label.name == "Detail") detailCount++;
-        Check(detailCount == 1, "One detail line, under the cells.");
-        Call(status, "Present", rows, 0, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
-        Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "Empty status hides owned tree.");
-        Call(status, "Destroy"); Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        var texture = new Texture2D(1, 64, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < 64; y++) texture.SetPixel(0, y, white ? Color.Lerp(new Color(.94f, .95f, .96f), new Color(.86f, .88f, .91f), y / 63f)
+            : Color.Lerp(new Color(.82f, .89f, .95f), new Color(.40f, .58f, .82f), y / 63f));
+        texture.Apply();
+        var sky = new GameObject("Sky", typeof(RectTransform), typeof(Image));
+        sky.transform.SetParent(canvas.transform, false); sky.transform.SetAsFirstSibling();
+        var rect = (RectTransform)sky.transform; rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+        var image = sky.GetComponent<Image>(); image.raycastTarget = false; image.sprite = Sprite.Create(texture, new Rect(0, 0, 1, 64), new Vector2(.5f, .5f));
     }
+    private static TMP_FontAsset HudFont() => AvBundle.Font("NOA JetBrains Mono Regular SDF");
+    /// <summary>A stand-in for one of the native weapon labels: Build reads only its font and its size.</summary>
+    private static TextMeshProUGUI NativeLabel(Transform parent, string name, TMP_FontAsset font, float size)
+    {
+        var label = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        label.transform.SetParent(parent, false); label.font = font; label.fontSharedMaterial = font.material; label.fontSize = size; label.text = "X";
+        return label;
+    }
+    /// <summary>
+    /// Whether a word fits its box once its allowed shrink is used. TMP reports an autosized label's preferred width at its largest size,
+    /// and <c>isTextOverflowing</c> is false for Overflow-mode and autosized text, so neither says whether a word would be cut.
+    /// </summary>
+    private static bool Fits(TMP_Text t, float tolerance)
+    {
+        float width = t.preferredWidth, smallest = t.enableAutoSizing && t.fontSizeMax > 0f ? width * t.fontSizeMin / t.fontSizeMax : width;
+        return smallest <= t.rectTransform.rect.width * tolerance;
+    }
+    private sealed class ClusterCase
+    {
+        public string Name, SpdCaption, AltCaption, FuelScale;
+        public float Speed, Alt, Radar, Climb, Mach, G, Fuel, Bank, Slip, Aoa, Scale = 1f;
+        public bool Bingo, Joker, White;
+    }
+    /// <summary>
+    /// The third-person cluster on a hazy sky (blue, or near-white where thin ink is hardest to read): cruising with AoA and a real G;
+    /// every caution lit (over-G, PULL UP, BINGO fuel); low ground alone; over-G with JOKER at once; and once at the player's larger text setting.
+    /// </summary>
     private static void Cluster(Vector2 size)
     {
-        Canvas canvas = MakeCanvas("Cluster", size); CombatHUD hud = NativeDock(canvas);
-        object cluster = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster"), true);
-        Call(cluster, "Build", hud, canvas);
-        SyntheticFont((RectTransform)Field(cluster, "root"));
-        Type flightType = Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster+Flight");
-        object flight = Activator.CreateInstance(flightType);
-        foreach (var kv in new[] { ("SpeedMps", 240f), ("AltitudeM", 1800f), ("RadarAltM", 120f), ("ClimbMps", -12f),
-            ("HeadingDeg", 359.6f), ("Mach", .72f), ("G", 5.1f), ("Fuel", .15f), ("Throttle", .8f) })
-            Set(flight, kv.Item1, kv.Item2);
-        Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f);
-        Capture(canvas, "HUD-cluster-" + size.x + "x" + size.y + ".png");
-        object heading = Field(cluster, "hdg");
-        Check(((TMP_Text)Field(heading, "Value")).text.StartsWith("000°"), "Rounded north wraps to 000 degrees.");
-        Call(cluster, "WriteHeading", -1f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("359°"), "Negative heading normalizes.");
-        Call(cluster, "WriteHeading", 5f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("005°"), "Heading retains three digits.");
-        Check(((TMP_Text)Field(Field(cluster, "alt"), "Caption")).text.StartsWith("R "), "Low radar altitude replaces the ALT caption.");
-        foreach (Graphic g in ((RectTransform)Field(cluster, "root")).GetComponentsInChildren<Graphic>())
-            Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
-        Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        var cases = new[] {
+            new ClusterCase { Name = "cruise", Speed = 240f, Alt = 1800f, Radar = 900f, Climb = 3f, Mach = .72f, G = 1.1f, Fuel = .62f, Bank = 6f, Slip = -1f, Aoa = 3.4f, SpdCaption = "SPD", AltCaption = "ALT", FuelScale = "FUEL 62" },
+            new ClusterCase { Name = "cautions", Speed = 130f, Alt = 420f, Radar = 120f, Climb = -32f, Mach = .35f, G = 7.6f, Fuel = .09f, Bank = 38f, Slip = 4f, Aoa = 14.2f, Bingo = true, Joker = true, SpdCaption = "OVER-G", AltCaption = "PULL UP", FuelScale = "BINGO 9" },
+            new ClusterCase { Name = "low", Speed = 130f, Alt = 420f, Radar = 120f, Climb = -8f, Mach = .35f, G = 1.4f, Fuel = .62f, Bank = 12f, Slip = 2f, Aoa = 9f, SpdCaption = "SPD", AltCaption = "LOW R ", FuelScale = "FUEL 62" },
+            new ClusterCase { Name = "joker", Speed = 240f, Alt = 1800f, Radar = 900f, Climb = 3f, Mach = .72f, G = 7.6f, Fuel = .20f, Bank = 50f, Slip = 0f, Aoa = 6f, Joker = true, SpdCaption = "OVER-G", AltCaption = "ALT", FuelScale = "JOKER 20" },
+            new ClusterCase { Name = "haze", Speed = 130f, Alt = 420f, Radar = 120f, Climb = -32f, Mach = .35f, G = 7.6f, Fuel = .09f, Bank = 38f, Slip = 4f, Aoa = 14.2f, Bingo = true, Joker = true, White = true, SpdCaption = "OVER-G", AltCaption = "PULL UP", FuelScale = "BINGO 9" },
+            new ClusterCase { Name = "large-text", Speed = 240f, Alt = 1800f, Radar = 900f, Climb = 3f, Mach = .72f, G = 1.1f, Fuel = .62f, Bank = 6f, Slip = -1f, Aoa = 3.4f, Scale = 1.5f, SpdCaption = "SPD", AltCaption = "ALT", FuelScale = "FUEL 62" },
+        };
+        System.Globalization.CultureInfo inv = System.Globalization.CultureInfo.InvariantCulture;
+        foreach (ClusterCase c in cases) {
+            if (c.Name == "large-text" && size.x != 1920f) continue;
+            Canvas canvas = MakeCanvas("Cluster", size); CombatHUD hud = NativeDock(canvas);
+            Sky(canvas, c.White);
+            object cluster = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster"), true);
+            Call(cluster, "Build", hud, canvas);
+            SyntheticFont((RectTransform)Field(cluster, "root"));
+            object flight = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster+Flight"));
+            foreach (var kv in new[] { ("SpeedMps", c.Speed), ("AltitudeM", c.Alt), ("RadarAltM", c.Radar), ("ClimbMps", c.Climb), ("HeadingDeg", 359.6f), ("Mach", c.Mach),
+                ("G", c.G), ("GLimit", 9f), ("Fuel", c.Fuel), ("Throttle", .8f), ("BankDeg", c.Bank), ("SlipDeg", c.Slip), ("AoaDeg", c.Aoa) })
+                Set(flight, kv.Item1, kv.Item2);
+            Set(flight, "FuelBingo", c.Bingo); Set(flight, "FuelJoker", c.Joker);
+            Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f, c.Scale);
+            Canvas.ForceUpdateCanvases();
+            string tag = c.Name + "-" + size.x + "x" + size.y;
+            Capture(canvas, "HUD-cluster-" + tag + ".png");
+            object spd = Field(cluster, "spd"), alt = Field(cluster, "alt");
+            Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("000°"), "Rounded north wraps to 000 degrees.");
+            Call(cluster, "WriteHeading", -1f);
+            Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("359°"), "Negative heading normalizes.");
+            Call(cluster, "WriteHeading", 5f);
+            Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("005°"), "Heading retains three digits.");
+            string altCaption = ((TMP_Text)Field(alt, "Caption")).text, spdCaption = ((TMP_Text)Field(spd, "Caption")).text;
+            Check(c.AltCaption == "LOW R " ? altCaption.StartsWith("LOW R ") : altCaption == c.AltCaption, "The ALT caption names the ground cue in words: " + altCaption + " (" + tag + ")");
+            Check(spdCaption == c.SpdCaption, "The SPD caption says OVER-G in words when the box is amber: " + spdCaption + " (" + tag + ")");
+            Check((((TMP_Text)Field(spd, "CaptionRight")).text ?? "") == (c.SpdCaption == "OVER-G" ? "" : "AOA " + c.Aoa.ToString("0.0", inv) + "°"), "AoA reads in the SPD caption row (OVER-G takes the row): " + ((TMP_Text)Field(spd, "CaptionRight")).text);
+            Check(((TMP_Text)Field(spd, "SubLine")).text == "M " + c.Mach.ToString("0.00", inv) + "  G " + c.G.ToString("0.0", inv), "G is the load factor: " + ((TMP_Text)Field(spd, "SubLine")).text);
+            Check(((TMP_Text)Field(alt, "BarLabel")).text == c.FuelScale, "The fuel scale says BINGO / JOKER as the board does: " + ((TMP_Text)Field(alt, "BarLabel")).text);
+            foreach (object box in new[] { spd, alt })
+                foreach (string name in new[] { "Caption", "CaptionRight", "Value", "SubLine", "BarLabel" }) {
+                    var label = (TMP_Text)Field(box, name);
+                    if (label != null && !string.IsNullOrEmpty(label.text))
+                        Check(Fits(label, 1f), "A cluster word fits its box: " + name + " [" + label.text + "] " + label.preferredWidth + " > " + label.rectTransform.rect.width + " (" + tag + ")");
+                }
+            // The SPD caption row holds the caption and the AoA: they must not run into each other.
+            TMP_Text left = (TMP_Text)Field(spd, "Caption"), right = (TMP_Text)Field(spd, "CaptionRight");
+            left.ForceMeshUpdate(); right.ForceMeshUpdate();
+            Check(left.renderedWidth + right.renderedWidth + 6f <= ((RectTransform)Field(spd, "Root")).rect.width - 14f, "The SPD caption and the AoA do not collide: " + left.renderedWidth + " + " + right.renderedWidth + " (" + tag + ")");
+            foreach (Graphic g in ((RectTransform)Field(cluster, "root")).GetComponentsInChildren<Graphic>())
+                Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
+            Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
     }
     private static void Log(float height, bool merged)
     {

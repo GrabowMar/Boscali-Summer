@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             string model = aircraft.definition != null ? aircraft.definition.unitName : aircraft.unitName;
             bool disabled = aircraft.disabled;
-            float fuel = Mathf.Clamp01(aircraft.fuelLevel);
+            float fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(aircraft);
             ControlInputs inputs = aircraft.GetInputs();
             planeIdentity.Set(string.IsNullOrEmpty(model) ? "AIRCRAFT" : model.ToUpperInvariant(),
                 disabled ? "DISABLED" : aircraft.HasEjected() ? "PILOT EJECTED"
@@ -191,11 +191,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             planeFlight[2].Set(UnitConverter.AltitudeReading((float)aircraft.transform.GlobalPosition().y));
             planeFlight[3].Set(aircraft.rb != null ? UnitConverter.ClimbRateReading(velocity.y) : null);
             planeFlight[4].Set(AvNum.Thousands(Mathf.RoundToInt(Mathf.Repeat(aircraft.transform.eulerAngles.y, 360f))) + "°");
-            planeFlight[5].Set(AvNum.Fixed(aircraft.gForce, 1) + " G");
+            planeFlight[5].Set(AvNum.Fixed(BoscaliSummer.Core.Game.AircraftReadout.LoadFactor(aircraft), 1) + " G");
 
             planeSystems.Set(SystemGear, aircraft.gearDeployed ? "DOWN" : "UP");
             planeSystems.Set(SystemAssist, aircraft.flightAssist ? "ON" : "OFF");
-            Countermeasure countermeasure = aircraft.countermeasureManager?.GetActiveCountermeasure();
+            Countermeasure countermeasure = BoscaliSummer.Core.Game.AircraftReadout.ActiveCountermeasure(aircraft);
             planeSystems.Set(SystemCountermeasure, countermeasure != null ? AvNum.Thousands(countermeasure.ammo) + " READY" : "NONE");
             MissileWarning warning = aircraft.GetMissileWarningSystem();
             int inbound = warning?.knownMissiles != null ? warning.knownMissiles.Count : 0;
@@ -344,7 +344,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             private readonly SqdBar fuelBar, throttleBar;
             private readonly AvChip stateChip;
             private float fuel, throttle;
-            private AvState state = AvState.Ready;
 
             public PlaneHero(RectTransform parent)
             {
@@ -370,7 +369,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 name.text = airframe ?? "";
                 stateChip.Set(stateWord, st);
-                state = st;
                 fuel = fuelFraction;
                 throttle = throttleFraction ?? 0f;
                 fuelValue.text = AvNum.Percent(fuelFraction);

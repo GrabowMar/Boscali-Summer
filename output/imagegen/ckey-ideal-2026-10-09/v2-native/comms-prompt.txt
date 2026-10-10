@@ -1,0 +1,13 @@
+Use case: ui-mockup. Create the COMMS state of an ideal game-native Nuclear Option / Boscali Summer C-key self-interaction menu.
+Image 1 is the edit target: external aircraft flight screenshot. Preserve aircraft, scenery, native HUD, minimap and camera. Completely REMOVE its old interaction menu and all giant concentric tinted backdrop circles, old category tokens, old branch fans and status labels. Image 2 is the STYLE AND LAYOUT REFERENCE: the new compact green category ring plus single square action pane. Match that design closely while replacing its flight actions with COMMS. Do not insert the cockpit from image 2.
+Landscape 16:9. Exact game's art direction: thin crisp green technical line icons, narrow uppercase aviation/monospaced text, square black-green scrims, 1px green borders, simple flat highlight. No white icons or text, no solid pie wedges, no glow, no broad background shading, no rounded corners. Keep native game green hue.
+Compact ten-category icon-and-tag ring centered near screen center, radius about 180px in 1920x1080 reference units. Clockwise from right: FLIGHT, WING, COMMS, RADIO, SUPPORT, VIEW, DEFENCE, TARGETS, WEAPONS, LIGHTS. All labels upright, around 19px on small dark plates. Center 56px aircraft glyph, 'CI-22 CRICKET', small compact detail 'ENGAGING' / 'SEND TEAM CALL'. Root labels readable but secondary, COMMS at lower right outlined clearly. No root spokes, no concentric guide circles, no ghost fan. Small header 'SELF INTERACTION' above ring.
+Exactly ONE rectangular action panel to right of ring, below existing top-right native HUD, on open water/sky, not covering aircraft silhouette. Match image 2 pane's size and flat green style. Bounds roughly x1240..1550 y365..795 reference units. Single orthogonal thin connector from COMMS token to panel. Panel header 'COMMS' and '01 / 02', second line 'TEAM CALLS'. Six aligned generously spaced rows with thin 18px native line icon and 20px uppercase label:
+ON MY WAY
+NEED SUPPORT
+ENGAGING
+SPIKE
+WINCHESTER
+BINGO FUEL
+Only ENGAGING is selected: flat bright green rectangular row with DARK text/glyph and squared inner focus brackets. Remaining rows green text on near-black. Use generic aircraft/radio technical line icons, no gear-cog stock software icons. Panel footer compact square controls '< PREV' '01 / 02' 'NEXT >'. All actions fully on screen.
+A single green-on-black compact rectangular mode hint below ring: 'CLICK MODE | LMB: SEND ENGAGING | WHEEL: PAGE | RMB: BACK | ESC: CLOSE'. Do not show release-C instruction in click mode. Preserve native corner panels and aircraft as closely as possible. Tiny 'CONCEPT' watermark bottom-left. Clean readable alignment, same game HUD rather than a generic settings screen.

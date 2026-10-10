@@ -27,6 +27,7 @@ namespace BoscaliSummer.Modules.Radio
             context.AddClientEffect(radio.ClientFx);
             context.AddService<IRadioRemote>(radio);
             context.AddSceneService<Presentation.RadioHudLine>(41).Configure(radio);
+            new RadioScopeGauge(radio).Register();      // the TAC BOARD's RADIO gauge
         }
     }
 }

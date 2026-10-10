@@ -435,7 +435,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Count => cells.Length;
 
-        public int Shown => shown;
+        public new int Shown => shown;
 
         public bool Set(int i, FormationDefinition shape, string name, bool latched)
         {

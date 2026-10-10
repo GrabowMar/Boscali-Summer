@@ -1,0 +1,23 @@
+PASS: Blueprinter 0.1.0 bundle reopened and rendered; 16 main prefabs; verified metre scale and anchors; 3 LODs each; static colliders; URP materials; no missing scripts or magenta pixels. Articulated rigs checked when present.
+Asset library only: no BuildingDefinition, ship simulation, damage logic, network identity or registration operations.
+Offline evidence only; game loading and placement remain unverified.
+BS_Mission_RadioRelay | LOD tris 3664/1450/428 | static collider tris 36
+BS_Mission_MobileJammer | LOD tris 10648/4258/1268 | static collider tris 36
+BS_Mission_AmmunitionDepot | LOD tris 7340/2872/880 | static collider tris 132
+BS_Mission_RepairStation | LOD tris 3044/1120/458 | static collider tris 120
+BS_Mission_ForwardAidStation | LOD tris 2296/896/274 | static collider tris 48
+BS_Mission_RescueCrashSite | LOD tris 1572/626/182 | static collider tris 24
+BS_Mission_SmugglerCache | LOD tris 2742/1076/300 | static collider tris 96
+BS_Mission_CoastalSensorPost | LOD tris 2472/966/294 | static collider tris 72
+BS_Mission_DroneGroundStation | LOD tris 2276/910/272 | static collider tris 48
+BS_Mission_PowerSubstation | LOD tris 4756/1878/519 | static collider tris 60
+BS_Mission_BridgeDemolitionKit | LOD tris 2396/958/286 | static collider tris 84
+BS_Mission_EvacuationLandingZone | LOD tris 3044/1216/364 | static collider tris 48
+BS_Mission_OpticalSatellite_Rig | moving mesh renderers 3 | material passes 11
+BS_Mission_OpticalSatellite | LOD tris 2512/1004/280 | static collider tris 12
+BS_Mission_SarSatellite_Rig | moving mesh renderers 4 | material passes 13
+BS_Mission_SarSatellite | LOD tris 2188/874/258 | static collider tris 12
+BS_Mission_RelaySatellite_Rig | moving mesh renderers 5 | material passes 17
+BS_Mission_RelaySatellite | LOD tris 3032/1210/362 | static collider tris 12
+BS_Mission_OrbitalServiceTug_Rig | moving mesh renderers 3 | material passes 11
+BS_Mission_OrbitalServiceTug | LOD tris 3220/1288/374 | static collider tris 12

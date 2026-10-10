@@ -1,0 +1,1582 @@
+{
+  "name": "vg-skywell",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 780,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "tanker",
+      "type": "VL-49 Tarantula",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          25000,
+          0
+        ]
+      },
+      "altitude": 6000,
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          25000,
+          80000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "tanker",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "tanker"
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "spawn",
+      "id": "rxA",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "tanker",
+          "offset": [
+            60,
+            40,
+            300
+          ]
+        }
+      },
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "rxB",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "tanker",
+          "offset": [
+            -60,
+            40,
+            450
+          ]
+        }
+      },
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "rxC",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "tanker",
+          "offset": [
+            120,
+            -20,
+            600
+          ]
+        }
+      },
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "rxD",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "tanker",
+          "offset": [
+            -120,
+            -20,
+            750
+          ]
+        }
+      },
+      "speed": 130,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "rxA",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "rxB",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "rxC",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "rxD",
+      "program": [
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "tanker",
+        "rxA",
+        "rxB",
+        "rxC",
+        "rxD"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "equip",
+        "norx": 1
+      },
+      "store": "equip"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pitarm",
+        "rx": "rxA"
+      },
+      "store": "armA"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pitarm",
+        "rx": "rxB"
+      },
+      "store": "armB"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pitarm",
+        "rx": "rxC"
+      },
+      "store": "armC"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pitarm",
+        "rx": "rxD"
+      },
+      "store": "armD"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "drain",
+        "rx": "rxA",
+        "fuel": 0.3,
+        "stations": 1
+      },
+      "store": "drainA"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "drain",
+        "rx": "rxB",
+        "fuel": 0.3,
+        "stations": 0
+      },
+      "store": "drainB"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "drain",
+        "rx": "rxC",
+        "fuel": 0.3,
+        "stations": 2
+      },
+      "store": "drainC"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "drain",
+        "rx": "rxD",
+        "fuel": 0.5,
+        "stations": 3
+      },
+      "store": "drainD"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pit",
+        "rx": "rxA",
+        "order": "munitions"
+      },
+      "store": "pitA"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pit",
+        "rx": "rxB",
+        "order": "fuel"
+      },
+      "store": "pitB"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pit",
+        "rx": "rxC",
+        "order": "both",
+        "station": "last"
+      },
+      "store": "pitC"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "pit",
+        "rx": "rxD",
+        "order": "both"
+      },
+      "store": "pitD"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "threatwhen",
+        "rx": "rxD",
+        "delay": 4,
+        "range": 3000,
+        "seeker": "ARH",
+        "climb": 0
+      },
+      "store": "armThreat"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      },
+      "store": "view"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s000"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s005"
+    },
+    {
+      "op": "capture",
+      "name": "pit-005-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s010"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s015"
+    },
+    {
+      "op": "capture",
+      "name": "pit-015-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s020"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s025"
+    },
+    {
+      "op": "capture",
+      "name": "pit-025-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s030"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s035"
+    },
+    {
+      "op": "capture",
+      "name": "pit-035-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s040"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s045"
+    },
+    {
+      "op": "capture",
+      "name": "pit-045-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s050"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s055"
+    },
+    {
+      "op": "capture",
+      "name": "pit-055-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s060"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s065"
+    },
+    {
+      "op": "capture",
+      "name": "pit-065-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s070"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s075"
+    },
+    {
+      "op": "capture",
+      "name": "pit-075-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s080"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s085"
+    },
+    {
+      "op": "capture",
+      "name": "pit-085-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s090"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s095"
+    },
+    {
+      "op": "capture",
+      "name": "pit-095-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s100"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s105"
+    },
+    {
+      "op": "capture",
+      "name": "pit-105-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s110"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s115"
+    },
+    {
+      "op": "capture",
+      "name": "pit-115-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s120"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s125"
+    },
+    {
+      "op": "capture",
+      "name": "pit-125-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s130"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s135"
+    },
+    {
+      "op": "capture",
+      "name": "pit-135-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s140"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s145"
+    },
+    {
+      "op": "capture",
+      "name": "pit-145-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s150"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s155"
+    },
+    {
+      "op": "capture",
+      "name": "pit-155-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s160"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s165"
+    },
+    {
+      "op": "capture",
+      "name": "pit-165-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s170"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s175"
+    },
+    {
+      "op": "capture",
+      "name": "pit-175-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s180"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s185"
+    },
+    {
+      "op": "capture",
+      "name": "pit-185-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s190"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s195"
+    },
+    {
+      "op": "capture",
+      "name": "pit-195-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s200"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s205"
+    },
+    {
+      "op": "capture",
+      "name": "pit-205-side",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "below"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s210"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s215"
+    },
+    {
+      "op": "capture",
+      "name": "pit-215-below",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s220"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s225"
+    },
+    {
+      "op": "capture",
+      "name": "pit-225-close",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "rear"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s230"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s235"
+    },
+    {
+      "op": "capture",
+      "name": "pit-235-rear",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "side"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "skyview",
+        "angle": "off"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "rxstatus",
+        "rx": "rxA"
+      },
+      "store": "a"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "rxstatus",
+        "rx": "rxB"
+      },
+      "store": "b"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "rxstatus",
+        "rx": "rxC"
+      },
+      "store": "c"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "rxstatus",
+        "rx": "rxD"
+      },
+      "store": "d"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "final"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "equip.kit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "drainA.shots",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "drainC.shots",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "drainD.shots",
+      "min": 2.5
+    },
+    {
+      "check": "result_above",
+      "path": "pitC.pitPriority",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "pitC.pitAccepted",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a.rxHandoffs",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxFuelJobs",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxMissing",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxFuel",
+      "max": 0.45
+    },
+    {
+      "check": "result_above",
+      "path": "a.rxPitSeconds",
+      "min": 2.0
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxPitSeconds",
+      "max": 30.0
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxStops",
+      "max": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "a.rxAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "a.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "b.rxFuelJobs",
+      "min": 0.99
+    },
+    {
+      "check": "result_below",
+      "path": "b.rxHandoffs",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "b.rxFuel",
+      "min": 0.85
+    },
+    {
+      "check": "result_below",
+      "path": "b.rxLeaks",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "b.rxStops",
+      "max": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "b.rxAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "b.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxHandoffs",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxFuelJobs",
+      "min": 0.99
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxPriorityFirst",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxMissing",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxFuel",
+      "min": 0.85
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxPitSeconds",
+      "min": 5.0
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxPitSeconds",
+      "max": 30.0
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxStops",
+      "max": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "c.rxDrainedServed",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "c.rxDrainedMissed",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitBreaks",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitBreakHandoffs",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "final.pitBreakFuelJobs",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitBreakJobIndex",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitStops",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitHandoffs",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "final.pitFuelJobs",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "final.skywellRoundsN",
+      "max": 2.5
+    },
+    {
+      "check": "result_below",
+      "path": "final.skywellFuelKg",
+      "max": 7999
+    },
+    {
+      "check": "result_below",
+      "path": "final.pitZoneLost",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "final.pitTimeouts",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.tankerAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "final.tankerLeaks",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "final.tankerDetached",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.rigJoints",
+      "min": 26.5
+    },
+    {
+      "check": "result_above",
+      "path": "final.wingSpreadMax",
+      "min": 0.99
+    },
+    {
+      "check": "result_above",
+      "path": "final.armReachMax",
+      "min": 0.9
+    },
+    {
+      "check": "result_above",
+      "path": "final.boomPlugMax",
+      "min": 0.9
+    },
+    {
+      "check": "result_below",
+      "path": "final.tetherMax",
+      "max": 151.0
+    },
+    {
+      "check": "result_above",
+      "path": "final.serveGapSamples",
+      "min": 20
+    },
+    {
+      "check": "result_below",
+      "path": "final.serveGapMax",
+      "max": 6.0
+    },
+    {
+      "check": "result_above",
+      "path": "final.serveGapMin",
+      "min": 1.2
+    },
+    {
+      "check": "result_above",
+      "path": "final.minSeparation",
+      "min": 15.0
+    }
+  ]
+}

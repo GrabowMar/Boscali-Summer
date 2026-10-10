@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> PilotBodyEnabled { get; }
         public ConfigEntry<bool> PilotControlMotionEnabled { get; }
         public ConfigEntry<bool> PilotReflectionEnabled { get; }
+        public ConfigEntry<int> KneeboardCard { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -78,6 +79,8 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Enable rudder foot movement, restrained breathing and G-load bracing. Hand attachment stays active; Comfort Motion reduces body motion.");
             PilotReflectionEnabled = config.Bind(section, "PilotReflectionEnabled", true,
                 "Faint pilot and helmet reflection on verified windscreen glass. Pilot-only 128/256 pixel capture capped at 10 Hz; works independently of body visibility.");
+            KneeboardCard = config.Bind(section, "KneeboardCard", 0,
+                "Cockpit kneeboard card: 0 writes the mission card, 1 and up pick a picture card. Choose it in SQD > STUDIO.");
         }
     }
 }

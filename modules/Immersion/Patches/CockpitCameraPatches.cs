@@ -46,7 +46,8 @@ namespace BoscaliSummer.Modules.Immersion.Patches
     }
 
     /// <summary>
-    /// Hits on the followed aircraft raise pilot stress (faster breathing). The client body of the
+    /// Hits on the followed aircraft raise pilot stress (faster breathing); the blast amount tells a warhead
+    /// from gunfire. The client body of the
     /// Mirage RPC is Aircraft.UserCode_RpcDamage_&lt;hash&gt;; the hash changes per game build, so it is
     /// resolved by prefix. Missing target: Harmony skips the patch and hits are simply not counted.
     /// </summary>
@@ -68,10 +69,11 @@ namespace BoscaliSummer.Modules.Immersion.Patches
 
         private static bool Prepare() => TargetMethod() != null;
 
-        private static void Postfix(Aircraft __instance)
+        // __1 is the DamageInfo argument, taken by position so a renamed parameter cannot break the patch.
+        private static void Postfix(Aircraft __instance, DamageInfo __1)
         {
             if (ImmersionManager.IsCockpitActive && ReferenceEquals(__instance, ImmersionManager.FollowingUnit))
-                ImmersionManager.Live?.OnPlayerHit();
+                ImmersionManager.Live?.OnPlayerHit(__1.pierceDamage.Decompress(), __1.blastDamage.Decompress());
         }
     }
 }

@@ -56,7 +56,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             icon.rectTransform.sizeDelta = new Vector2(size, size);
             icon.color = Color.white;
             label.enabled = true;
-            if (label.text != card.TitleLine) label.text = card.TitleLine;
+            string titleText = card.TitleLine;
+            if (label.text != titleText) label.text = titleText;
             label.rectTransform.anchoredPosition = new Vector2(0f, size);
             label.color = labelColour;
         }

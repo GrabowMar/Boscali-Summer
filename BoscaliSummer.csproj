@@ -192,9 +192,25 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Tail-fin insignia bake shader bundle">
+    <!-- Built by tools/Compile-EmblemAssets.ps1. Optional: without it the STUDIO PAINT setting stays inert. -->
+    <EmbeddedResource Include="modules\Progression\Assets\emblem.bundle" Condition="Exists('modules\Progression\Assets\emblem.bundle')">
+      <LogicalName>BoscaliSummer.Progression.emblem.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Cockpit pilot shader bundle">
     <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
       <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Immersion\Assets\Kneeboard\*.png">
+      <LogicalName>BoscaliSummer.Immersion.Kneeboard.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Immersion\Assets\Voice\*.wav">
+      <LogicalName>BoscaliSummer.Immersion.Voice.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Core\Fx\Sfx\*.wav">
+      <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

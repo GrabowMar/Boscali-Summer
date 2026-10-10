@@ -21,10 +21,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WingIdCard : AvPart
     {
         private const float PadX = 10f, PortraitW = 72f, PortraitH = 96f, HeadH = 40f, FieldsX = 96f, KeyW = 62f, RowH = 16f, Pitch = 20f;
+        private const float InsigniaW = 28f, InsigniaH = 32f;
         private static readonly string[] Keys = { "CALLSIGN", "NAME", "RANK", "RADIO" };
         private readonly AvFrame frame, portraitBox;
         private readonly Image portrait;
         private readonly AvVector art;
+        private readonly WingInsigniaImage mark;
         private readonly TMP_Text title, subtitle, number, bio;
         private readonly TMP_Text[] key = new TMP_Text[4], value = new TMP_Text[4];
         private readonly IdCardFace face = new IdCardFace();
@@ -37,6 +39,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             art = AvVector.Create(Rect, "Art", 200);
+            mark = new WingInsigniaImage(Rect);
             title = AvText.Make(Rect, "Title", AvTextRole.Label, SquadronWords.SquadronTitle);
             AvText.Fit(title, false);
             subtitle = AvText.Make(Rect, "Subtitle", AvTextRole.Micro, "AIRCREW IDENTIFICATION · NOT TRANSFERABLE");
@@ -94,6 +97,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvLay.Place(title.rectTransform, PadX + 40f, 6f, s.W - PadX - 40f - 96f, 16f);
             AvLay.Place(subtitle.rectTransform, PadX + 40f, 22f, s.W - PadX - 40f - 10f, 16f);
             AvLay.Place(number.rectTransform, s.W - PadX - 90f, 6f, 90f, 16f);
+            mark.Place(PadX, 4f, InsigniaW, InsigniaH);
             float py = HeadH + 4f;
             AvLay.Place(portraitBox.rectTransform, PadX, py, PortraitW, PortraitH);
             AvLay.Place(portrait.rectTransform, PadX + 1f, py + 1f, PortraitW - 2f, PortraitH - 2f);
@@ -118,7 +122,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             b.Clear();
             float h = Measure(width);
             var ink = new WingInk(b, h);
-            ink.Insignia(PadX, 4f, 28f, 32f, AvStyleHost.FuiColor("frame", AvTheme.Frame), WmcState.Color("warn"));
+            if (!mark.Show()) ink.Insignia(PadX, 4f, InsigniaW, InsigniaH, AvStyleHost.FuiColor("frame", AvTheme.Frame), WmcState.Color("warn"));
             ink.Rect(PadX, HeadH - 2f, width - 2f * PadX, 1f, AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
             float py = HeadH + 4f;
             ink.Rank(FieldsX + KeyW + 8f, py + 2 * Pitch + RowH * 0.5f, 14f, face.Rank, WingRankColor.Of(face.Rank));

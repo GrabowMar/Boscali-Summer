@@ -47,21 +47,18 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return true;
         }
 
-        public static bool CanShowExternalHud(bool settingEnabled, bool viewingOwnExternally) =>
-            settingEnabled && viewingOwnExternally && !Application.isBatchMode &&
-            !DynamicMap.mapMaximized && !GameplayUI.GameIsPaused && !PlayerSettings.cinematicMode;
+        public static bool CanShowExternalHud(bool viewingOwnExternally) =>
+            viewingOwnExternally && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
 
         /// <summary>
-        /// Re-evaluate this tick. <paramref name="settingEnabled"/> is the pilot's
-        /// <c>Hud.ExternalHud</c> preference ANDed with the board being enabled;
-        /// <paramref name="viewingOwnExternally"/> is <see cref="IsOwnAircraftExternalView"/>,
+        /// Re-evaluate this tick. <paramref name="viewingOwnExternally"/> is <see cref="IsOwnAircraftExternalView"/>,
         /// computed once per tick by the caller so the status panel's camera inset can share the
         /// same read. The map and pause/cinematic/batch gates are ours: vanilla itself decides
         /// nothing about them for this purpose.
         /// </summary>
-        public void Tick(bool settingEnabled, bool viewingOwnExternally)
+        public void Tick(bool viewingOwnExternally)
         {
-            if (!CanShowExternalHud(settingEnabled, viewingOwnExternally))
+            if (!CanShowExternalHud(viewingOwnExternally))
             {
                 Release();
                 return;

@@ -26,11 +26,17 @@ Shader "Boscali/FlightCloud"
         // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
         float _CloudFlash;
         float4 _CloudFlashA, _CloudFlashB;
-        // Cloud genera: low-deck depth/smoothness, middle and high layers.
-        float _LayerDepth, _LayerSmooth, _MidCover, _MidSheet, _HighCover, _HighVeil;
-        // Low-cloud genus, already resolved (CloudShape.Resolve). Smoothness fades lobes into a sheet.
+        // The weather tape (BakedTape, uploaded by TapeTexture): every per-sample low genus and thin layer column comes from it.
+        // RGBAFloat, _TapeInfo.x texels by 11 rows, point sampled and lerped by hand along s (TapeRow). Rows 0-2 hold the low
+        // genus, 3-6 the middle layer, 7-10 the high layer; SkyColumns.GpuRow / GpuChannel say which column sits where.
         // ShapeProfile / ShapeFootprint / BaseGate match CloudShape.cs. Change both together.
-        float _PuffScale, _PuffDepth, _BaseSharp, _BaseWobble, _Dome, _Billow, _Anvil;
+        sampler2D _TapeTex;
+        float4 _TapeInfo;   // x = texel count, y = 1 / texel count, z = 1 / texel metres
+        float4 _TapeFrame;  // xy = tape axis u (unit, toward upwind), z = meander amplitude (m), w = meander wavelength (m)
+        float4 _TapeFrame2; // x = meander phase, y = D, the tape offset at the map origin (m)
+        float4 _TapeChord;  // x,y = middle layer chord y0,y1 (m); z,w = high layer chord y0,y1
+        float4 _TapeFlags;  // x = a middle layer exists on the tape, y = a high layer exists, z = the tape is one texel (read _TapeConstLow)
+        float4 _TapeConstLow0, _TapeConstLow1, _TapeConstLow2; // rows 0-2 of a one-texel tape: live play reads these instead of the texture
         float2 _CloudWindDir;
         // Radians one screen pixel spans: sets the noise level of detail by footprint.
         float _CloudPixelAngle;
@@ -69,6 +75,10 @@ Shader "Boscali/FlightCloud"
         // Dominant density body's own normalized height. Capture after the primary sample;
         // subsequent shadow-density samples overwrite it. Empty samples always reset it.
         static float gLocalLightingHeight = 0.0;
+        // The low-genus row of the sample being shaded. A primary sample fetches its own; the sun taps of that march sample
+        // (gLowReuse, set by MarchSky) reuse it: they lie within 1.5 km and a ramp is at least 12 km wide.
+        static bool gLowValid = false;
+        static bool gLowReuse = false;
 
         // Near march limit: beyond it the far map's level of detail takes over.
         #define CLOUD_NEAR_LIMIT 45000.0
@@ -113,7 +123,8 @@ Shader "Boscali/FlightCloud"
         // Individual cloud bodies: cellular noise at non-integer scales (so the 64^3
         // tile never visibly repeats), in [0, 1]. Coverage thresholds it into separate
         // clouds with sky between them, the way broken and scattered decks really look.
-        float Bodies(float3 g, float scale, float lod)
+        // The raw weighted sum of the three lobe taps at one lobe size (mean about 0.5), before the remap.
+        float BodiesRaw(float3 g, float scale, float lod)
         {
             float period = scale * 4.0;
             float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / period, g.y / (period * 0.9), lod)).b;
@@ -121,7 +132,59 @@ Shader "Boscali/FlightCloud"
                 g.y / (period * 2.1), lod)).r;
             float c = tex3Dlod(_CloudNoiseTex, float4(g.xz / (period * 0.29) + float2(0.17, 0.61),
                 g.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
-            return saturate((a * 0.65 + b * 0.15 + c * 0.20 - 0.22) * 2.5);
+            return a * 0.65 + b * 0.15 + c * 0.20;
+        }
+
+        float BodiesRemap(float raw)
+        {
+            return saturate((raw - 0.22) * 2.5);
+        }
+
+        float Bodies(float3 g, float scale, float lod)
+        {
+            return BodiesRemap(BodiesRaw(g, scale, lod));
+        }
+
+        // The feature-size ladders (Ladder.cs): sqrt(2) steps, 700 m lobes and 250 m periods.
+        float LobeMetres(float rung) { return 700.0 * exp2(0.5 * rung); }
+        float PeriodMetres(float rung) { return 250.0 * exp2(0.5 * rung); }
+        // The edge texture follows the lobe: clamp(0.9 * lobe, 600, 2500) / 1250 (Ladder.EdgeScale).
+        float EdgeScale(float lobeMetres) { return clamp(0.9 * lobeMetres, 600.0, 2500.0) / 1250.0; }
+
+        // A fractional rung index to (lower rung, weight of the next one): w = smoothstep(0.35, 0.65, frac).
+        float2 LadderSplit(float index)
+        {
+            float r0 = floor(index);
+            return float2(r0, smoothstep(0.35, 0.65, index - r0));
+        }
+
+        // Two raw values mixed at w with the contrast kept (Ladder.Mix). Outside 0.02 < w < 0.98 one rung decides.
+        float LadderMix(float raw0, float raw1, float w, float mean)
+        {
+            if (w <= 0.02) return raw0;
+            if (w >= 0.98) return raw1;
+            return mean + (lerp(raw0, raw1, w) - mean) * rsqrt((1.0 - w) * (1.0 - w) + w * w);
+        }
+
+        // The body scale of a rung: a deck's lobe, or a frontal shield's larger lump (a sheet fades to a fixed 5.2 km).
+        // INTERIM(slice 4): the front parameters of LadderScale and BodiesLadder go with the frontal shield; its scale lerps with
+        // sheetBlend, the one scale that varies by design (CloudBodies.LadderScale is the twin).
+        float LadderScale(float rung, float front, float sheetBlend)
+        {
+            float lobe = LobeMetres(rung);
+            return front > 0.5 ? lerp(max(1800.0, lobe * 1.35), 5200.0, sheetBlend) : lobe;
+        }
+
+        // Bodies at a lobe rung index: one call in steady state, two inside a ramp (CloudBodies.BodiesLadder is the twin).
+        float BodiesLadder(float3 g, float rungIndex, float lod, float front, float sheetBlend)
+        {
+            float2 sp = LadderSplit(rungIndex);
+            // A sheet front is one fixed 5.2 km scale at every rung: no second tap, and no contrast boost of two identical fields.
+            if (front > 0.5 && sheetBlend >= 0.999) sp.y = 0.0;
+            float raw0 = 0.0, raw1 = 0.0;
+            if (sp.y < 0.98) raw0 = BodiesRaw(g, LadderScale(sp.x, front, sheetBlend), lod);
+            if (sp.y > 0.02) raw1 = BodiesRaw(g, LadderScale(sp.x + 1.0, front, sheetBlend), lod);
+            return BodiesRemap(LadderMix(raw0, raw1, sp.y, 0.5));
         }
 
         // Coverage remap: `cover` of the sky becomes cloud, the rest stays clear. Near full
@@ -144,6 +207,87 @@ Shader "Boscali/FlightCloud"
         float LayerOverlap(float y, float y0, float y1)
         {
             return max(0.0, min(y + gVert, y1) - max(y - gVert, y0)) / (2.0 * gVert);
+        }
+
+        // ---- the weather tape ---------------------------------------------------------------------
+        // Position along the tape of a map point: TapeFrame.S in BakedTape.cs is the twin.
+        float TapeS(float2 xz)
+        {
+            if (_TapeFrame.z == 0.0) return dot(xz, _TapeFrame.xy) + _TapeFrame2.y; // no meander: skip the sines
+            float across = -xz.x * _TapeFrame.y + xz.y * _TapeFrame.x;
+            float f = 6.2831853 * across / _TapeFrame.w + _TapeFrame2.x;
+            float meander = _TapeFrame.z * (sin(f) + 0.35 * sin(2.1 * f)) / 1.35;
+            return dot(xz, _TapeFrame.xy) + _TapeFrame2.y + meander;
+        }
+
+        // The one accessor to the tape texture: row `row` at position s, lerped by hand between the two nearest texels
+        // (TapeSampler.At on the CPU reads the same numbers). s clamps to the ends.
+        float4 TapeRow(float row, float s)
+        {
+            float u = s * _TapeInfo.z - 0.5;
+            float fl = floor(u);
+            float last = _TapeInfo.x - 1.0;
+            float i0 = clamp(fl, 0.0, last);
+            float i1 = clamp(fl + 1.0, 0.0, last);
+            float v = (row + 0.5) / 11.0;
+            float4 a = tex2Dlod(_TapeTex, float4((i0 + 0.5) * _TapeInfo.y, v, 0, 0));
+            if (i0 == i1) return a;
+            float4 b = tex2Dlod(_TapeTex, float4((i1 + 0.5) * _TapeInfo.y, v, 0, 0));
+            return lerp(a, b, u - fl);
+        }
+
+        struct LowRow
+        {
+            float lobeRung, puffDepth, baseSharp, baseWobble;
+            float dome, billow, anvil, deckDepth;
+            float deckSmooth, streets, horizonCover, horizonDepth;
+        };
+
+        // Rows 0-2: the low genus at position s. Smoothness fades lobes into a sheet; shape formulas match CloudShape.cs.
+        LowRow TapeLow(float s)
+        {
+            float4 r0, r1, r2;
+            if (_TapeFlags.z > 0.5) { r0 = _TapeConstLow0; r1 = _TapeConstLow1; r2 = _TapeConstLow2; }
+            else { r0 = TapeRow(0.0, s); r1 = TapeRow(1.0, s); r2 = TapeRow(2.0, s); }
+            LowRow o;
+            o.lobeRung = r0.x; o.puffDepth = r0.y; o.baseSharp = r0.z; o.baseWobble = r0.w;
+            o.dome = r1.x; o.billow = r1.y; o.anvil = r1.z; o.deckDepth = r1.w;
+            o.deckSmooth = r2.x; o.streets = r2.y; o.horizonCover = r2.z; o.horizonDepth = r2.w;
+            return o;
+        }
+
+        static LowRow gLow;
+
+        struct LayerRow
+        {
+            float baseY, thick, cover, periodRung;
+            float softness, detail, strength, cells;
+            float ripples, streaks, veil, curl;
+            float aspect, rippleWave;
+        };
+
+        // Rows 3-6 (layer 0, the middle layer) or 7-10 (layer 1, the high layer) at position s.
+        LayerRow TapeLayer(float s, float layer)
+        {
+            float first = layer < 0.5 ? 3.0 : 7.0;
+            float4 r0 = TapeRow(first, s), r1 = TapeRow(first + 1.0, s), r2 = TapeRow(first + 2.0, s), r3 = TapeRow(first + 3.0, s);
+            LayerRow o;
+            o.baseY = r0.x; o.thick = r0.y; o.cover = r0.z; o.periodRung = r0.w;
+            o.softness = r1.x; o.detail = r1.y; o.strength = r1.z; o.cells = r1.w;
+            o.ripples = r2.x; o.streaks = r2.y; o.veil = r2.z; o.curl = r2.w;
+            o.aspect = r3.x; o.rippleWave = r3.y;
+            return o;
+        }
+
+        // The console fog bank as a constant layer (-30..330 m): a veil with a little streaking.
+        LayerRow FogRow()
+        {
+            LayerRow o;
+            o.baseY = -30.0; o.thick = 360.0; o.cover = _FogBank; o.periodRung = 7.0;
+            o.softness = 0.5; o.detail = 0.7; o.strength = 0.55; o.cells = 0.0;
+            o.ripples = 0.0; o.streaks = 0.15; o.veil = 0.85; o.curl = 0.0;
+            o.aspect = 1.6; o.rippleWave = 0.0;
+            return o;
         }
 
         // Mirror of SkySplit.Share: 0 on the open side of the front, 1 behind it.
@@ -429,49 +573,77 @@ Shader "Boscali/FlightCloud"
                 smoothstep(1500.0, 2300.0, g.y);
         }
 
+        // Boundary erosion at edge scale k (1 = the 1250 m erosion and 340 / 300 m micro periods). CloudBodies.EdgeDetail is the twin.
+        float EdgeDetail(float3 g, float coarse, float k, float edge, float sheetBlend)
+        {
+            float lod = max(coarse, LodFor(gFoot, 1250.0 * k));
+            float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / (1250.0 * k), g.y / (1250.0 * k));
+            float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
+            float nearDetail = saturate(1.0 - lod);
+            // Cumulus edges take the rounded Worley lobes (B) for the near octave, so
+            // boundaries read as cauliflower billows; sheets keep the stringy erosion (G).
+            float2 d2n = nearDetail > 0.0
+                ? tex3Dlod(_CloudNoiseTex, float4(n2 * 3.1 + 0.21, lod)).gb : 0.5;
+            float d2 = lerp(d2n.y, d2n.x, sheetBlend);
+            float detail = lerp(d1, d1 * 0.72 + d2 * 0.28, nearDetail);
+            float close = saturate(1.0 - gFoot / 3.0);
+            if (close > 0.0 && edge > 0.35)
+            {
+                float micro = tex3Dlod(_CloudNoiseTex, float4(g.xz / (340.0 * k) + 0.19, g.y / (300.0 * k) + 0.83, 0.0)).g;
+                detail = lerp(detail, detail * 0.65 + micro * 0.35, close);
+            }
+            return detail;
+        }
+
         float Density(float3 world, float coarse)
         {
             gLocalLightingHeight = 0.0;
+            // A primary sample fetches its own genus row; the sun taps of one march sample reuse it.
+            if (!gLowReuse) gLowValid = false;
             float3 g = world + _CloudWorldOffset;
             // Filter the 1250 m detail to what one pixel and one step can resolve.
             float lod = max(coarse, LodFor(gFoot, 1250.0));
             float bodyLod = max(coarse, LodFor(gFoot, 24000.0));
-            float puffLod = max(coarse, LodFor(gFoot, max(1200.0, _PuffScale * 4.0)));
             float hero = gHeroMask != 0u ? Heroes(g, max(lod, 1.0)) : 0.0;
             float heroHeight = gLocalLightingHeight;
             if (gHeroOnly) return hero;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
             float3 n1 = float3((g.xz - _CloudWindOffset) / 24000.0, 0.37);
-            float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / 1250.0, g.y / 1250.0);
             float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, bodyLod)).rg;
             // Warp the meteorological boundary at cloud scale; otherwise a smooth
             // front map reads as a vertical polygon even when its rain band is curved.
+            float2 warped = g.xz + (broad.rg - 0.5) * 2800.0;
             float4 weather, profile;
             float farShare;
-            if (!SampleWeather(g.xz + (broad.rg - 0.5) * 2800.0, weather, profile, farShare)) return hero;
+            if (!SampleWeather(warped, weather, profile, farShare)) return hero;
             float layer = weather.r, front = weather.g, cell = weather.b;
             if (max(layer, max(front, cell)) < 0.025) return hero;
+            // The low genus of this sample, read from the tape at the warped position: one s serves cover and genus (spec 7.3).
+            if (!gLowValid) { gLow = TapeLow(_TapeFlags.z > 0.5 ? 0.0 : TapeS(warped)); gLowValid = true; }
+            LowRow row = gLow;
+            float2 lobe = LadderSplit(row.lobeRung);
+            float puffLod = max(coarse, LodFor(gFoot, max(1200.0, LobeMetres(lobe.x) * 4.0)));
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
             float baseY = profile.b * 16000.0 + _CloudHeightShift;
             float topY = max(baseY + 280.0, weather.a * 16000.0 + _CloudHeightShift);
             float frontBase = profile.r * 16000.0 + _CloudHeightShift;
             float frontCrown = max(frontBase + 300.0, profile.g * 16000.0 + _CloudHeightShift);
-            float towerBlend = smoothstep(0.18, 0.60, _Anvil);
-            float capTop = baseY + max(280.0, max(_PuffDepth, _LayerDepth)) * 1.15;
+            float towerBlend = smoothstep(0.18, 0.60, row.anvil);
+            float capTop = baseY + max(280.0, max(row.puffDepth, row.deckDepth)) * 1.15;
             float columnTop = max(baseY + 280.0, lerp(min(topY, capTop), topY, towerBlend));
-            float deckTop = baseY + max(_PuffDepth, _LayerDepth) + _BaseWobble * 0.5;
+            float deckTop = baseY + max(row.puffDepth, row.deckDepth) + row.baseWobble * 0.5;
             float lowFloor = front > 0.02 ? min(baseY, frontBase) : baseY;
             if (g.y < lowFloor - 700.0 - gVert || g.y > max(deckTop, max(columnTop, frontCrown)) + 600.0 + gVert) return hero;
 
-            float smooth = saturate(_LayerSmooth);
+            float smooth = saturate(row.deckSmooth);
             float sheetBlend = smoothstep(0.45, 0.85, smooth);
             bool sheet = sheetBlend >= 0.999;
             float3 gw = g + float3((broad.r - 0.5) * 1400.0, 0.0, (broad.g - 0.5) * 1400.0);
             float puffBody = 0.72;
-            if (!sheet) puffBody = lerp(Bodies(gw, _PuffScale, puffLod), 0.72, sheetBlend);
+            if (!sheet) puffBody = lerp(BodiesLadder(gw, row.lobeRung, puffLod, 0.0, sheetBlend), 0.72, sheetBlend);
             float relief = lerp(0.55, 1.0, smoothstep(0.2, 0.85, puffBody));
-            float localAnvil = LocalAnvil(columnTop - baseY, _Anvil);
+            float localAnvil = LocalAnvil(columnTop - baseY, row.anvil);
             float localTowerBlend = smoothstep(0.18, 0.60, localAnvil);
             columnTop = lerp(baseY + (columnTop - baseY) * relief, columnTop, max(sheetBlend, localTowerBlend));
 
@@ -482,10 +654,10 @@ Shader "Boscali/FlightCloud"
             {
                 float deckBody = lerp(puffBody, 0.72 + 0.28 * puffBody, smooth);
                 float mask = CoverMask(deckBody, saturate(layer * 1.2));
-                float thick = max(280.0, lerp(_PuffDepth, max(_PuffDepth, _LayerDepth), sheetBlend));
+                float thick = max(280.0, lerp(row.puffDepth, max(row.puffDepth, row.deckDepth), sheetBlend));
                 thick *= lerp(0.75 + 0.10 * sheetBlend, 1.0, broad.r);
                 thick *= lerp(relief, 1.0, sheetBlend);
-                float layerBase = baseY + (puffBody - 0.5) * lerp(_BaseWobble, _BaseWobble * 0.3, smooth);
+                float layerBase = baseY + (puffBody - 0.5) * lerp(row.baseWobble, row.baseWobble * 0.3, smooth);
                 float layerTop = layerBase + thick;
                 layerHeight = saturate((g.y - layerBase) / max(1.0, thick));
                 if (gVert > 40.0)
@@ -493,9 +665,9 @@ Shader "Boscali/FlightCloud"
                 else
                 {
                     float hl = (g.y - layerBase) / max(1.0, thick);
-                    float deckAnvil = LocalAnvil(thick, _Anvil) * (1.0 - smooth);
-                    layerShape = ShapeMass(mask, ShapeProfile(hl, LocalDome(lerp(_Dome, _Dome * 0.25, smooth), deckAnvil), deckAnvil)) *
-                        BaseGate(g.y, layerBase, lerp(_BaseSharp, _BaseSharp * 2.2, smooth));
+                    float deckAnvil = LocalAnvil(thick, row.anvil) * (1.0 - smooth);
+                    layerShape = ShapeMass(mask, ShapeProfile(hl, LocalDome(lerp(row.dome, row.dome * 0.25, smooth), deckAnvil), deckAnvil)) *
+                        BaseGate(g.y, layerBase, lerp(row.baseSharp, row.baseSharp * 2.2, smooth));
                 }
             }
 
@@ -505,10 +677,9 @@ Shader "Boscali/FlightCloud"
             float frontDepth = frontCrown - frontBase;
             if (front > 0.02)
             {
-                float fScale = lerp(max(1800.0, _PuffScale * 1.35), 5200.0, sheetBlend);
-                float frontBody = Bodies(gw + 5311.0, fScale, sheet ? bodyLod : puffLod);
+                float frontBody = BodiesLadder(gw + 5311.0, row.lobeRung, sheet ? bodyLod : puffLod, 1.0, sheetBlend);
                 float fm = CoverMask(frontBody, saturate(front * 1.05));
-                float frontFloor = frontBase + (frontBody - 0.5) * min(220.0, _BaseWobble + 40.0);
+                float frontFloor = frontBase + (frontBody - 0.5) * min(220.0, row.baseWobble + 40.0);
                 float frontTop = frontCrown + (broad.r - 0.5) * min(1200.0, frontDepth * 0.25) -
                     (1.0 - fm) * min(frontDepth * 0.25, 900.0);
                 frontHeight = saturate((g.y - frontFloor) / max(1.0, frontTop - frontFloor));
@@ -519,9 +690,9 @@ Shader "Boscali/FlightCloud"
                 else
                 {
                     float fh = (g.y - frontFloor) / max(1.0, frontTop - frontFloor);
-                    float frontAnvil = LocalAnvil(frontDepth, _Anvil);
-                    frontShape = ShapeMass(fm, ShapeProfile(fh, LocalDome(lerp(0.25, _Dome, uplift), frontAnvil), frontAnvil)) *
-                        BaseGate(g.y, frontFloor, max(_BaseSharp, 80.0)) * thin;
+                    float frontAnvil = LocalAnvil(frontDepth, row.anvil);
+                    frontShape = ShapeMass(fm, ShapeProfile(fh, LocalDome(lerp(0.25, row.dome, uplift), frontAnvil), frontAnvil)) *
+                        BaseGate(g.y, frontFloor, max(row.baseSharp, 80.0)) * thin;
                 }
             }
 
@@ -536,35 +707,27 @@ Shader "Boscali/FlightCloud"
             float inside = smoothstep(need - 0.12, need + 0.12, wide);
             float carved = lerp(CoverMask(puffBody, saturate(0.45 + 0.35 * cell)),
                 lerp(0.55 + 0.45 * puffBody, 1.0, sheetBlend), max(sheetBlend, localTowerBlend));
-            float towerShape = inside * ShapeMass(carved, ShapeProfile(height01, LocalDome(_Dome, localAnvil), localAnvil)) *
-                BaseGate(g.y, baseY, _BaseSharp) * smoothstep(0.04, 0.20, wide);
+            float towerShape = inside * ShapeMass(carved, ShapeProfile(height01, LocalDome(row.dome, localAnvil), localAnvil)) *
+                BaseGate(g.y, baseY, row.baseSharp) * smoothstep(0.04, 0.20, wide);
 
             // Detail noise only on the boundary. The interior of a deck is one mass, and an
             // empty sample never pays for the 3D taps.
             float coarseShape = max(layerShape, max(frontShape, towerShape));
             float edge = saturate(1.0 - abs(coarseShape - 0.42) * 2.4);
             float detail = 0.5;
-            if (coarse < 1.0 && _Billow > 0.01 && edge > 0.08)
+            if (coarse < 1.0 && row.billow > 0.01 && edge > 0.08)
             {
-                float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
-                float nearDetail = saturate(1.0 - lod);
-                // Cumulus edges take the rounded Worley lobes (B) for the near octave, so
-                // boundaries read as cauliflower billows; sheets keep the stringy erosion (G).
-                float2 d2n = nearDetail > 0.0
-                    ? tex3Dlod(_CloudNoiseTex, float4(n2 * 3.1 + 0.21, lod)).gb : 0.5;
-                float d2 = lerp(d2n.y, d2n.x, sheetBlend);
-                detail = lerp(d1, d1 * 0.72 + d2 * 0.28, nearDetail);
-                float close = saturate(1.0 - gFoot / 3.0);
-                if (close > 0.0 && edge > 0.35)
-                {
-                    float micro = tex3Dlod(_CloudNoiseTex, float4(g.xz / 340.0 + 0.19, g.y / 300.0 + 0.83, 0.0)).g;
-                    detail = lerp(detail, detail * 0.65 + micro * 0.35, close);
-                }
+                // The edge texture follows the lobe (spec 4.2): the erosion periods scale with the rung's lobe, and inside a
+                // ramp the two rungs' textures mix by the weight of their bodies.
+                if (lobe.y < 0.98) detail = EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x)), edge, sheetBlend);
+                if (lobe.y > 0.02)
+                    detail = lerp(detail, EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x + 1.0)), edge, sheetBlend),
+                        lobe.y < 0.98 ? lobe.y : 1.0);
             }
             // Erosion only removes the boundary; signed noise used to create detached wisps.
             // Heaped cloud is nibbled harder than sheets: crisp lobes instead of soft blobs.
             // GPU only; CloudBodies is the shape without boundary erosion.
-            float nibble = max(0.0, lerp(0.72, 0.65, sheetBlend) - detail) * _Billow * edge * lerp(0.70, 0.45, sheetBlend);
+            float nibble = max(0.0, lerp(0.72, 0.65, sheetBlend) - detail) * row.billow * edge * lerp(0.70, 0.45, sheetBlend);
             layerShape = saturate(layerShape - nibble);
             frontShape = saturate(frontShape - nibble);
             towerShape = saturate(towerShape - nibble);
@@ -581,11 +744,13 @@ Shader "Boscali/FlightCloud"
             float scud = 0.0;
             float rain = profile.a;
             float floorY = lowFloor;
-            if (rain > 0.02 && g.y < floorY && g.y > floorY - 700.0)
+            // Bounded (Task 13): with rain everywhere (skies 35, 36, 39, 40) the band lay under the whole view and cost up to +50 %. It fades out
+            // from a pixel footprint of 30 m and is skipped from 60 m. gFoot is 0 in the density check and the cookie, so the CPU twin is unchanged.
+            if (rain > 0.02 && gFoot < 60.0 && g.y < floorY && g.y > floorY - 700.0)
             {
                 float frag = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.29, g.y / 420.0 + 0.61, lod)).r;
                 float band = smoothstep(floorY - 700.0, floorY - 450.0, g.y) * (1.0 - smoothstep(floorY - 180.0, floorY, g.y));
-                scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0);
+                scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0) * (1.0 - smoothstep(30.0, 60.0, gFoot));
             }
             float keep = EyeCloudKeep(g);
             float field = hero;
@@ -637,61 +802,151 @@ Shader "Boscali/FlightCloud"
             return exp(-distanceToSample * extinction);
         }
 
-        // A thin layer between y0 and y1: the middle (alto-) and high (cirro-) clouds, as a
-        // 2D field at the layer's mid altitude. stretch > 1 draws streaks along the wind
-        // (cirrus); ripple swaps in rounded cells (altocumulus, cirrocumulus); sheet
-        // flattens it into a veil (-stratus). Two octaves at non-integer scales and a slow
-        // warp keep any tile from repeating visibly.
-        float Slab(float3 g, float cover, float sheet, float scale,
-            float stretch, float ripple, float foot, float2 splitMul)
+        // The thin layers (middle alto-, high cirro-) as a 2D field at the layer's mid altitude, from the tape row at the
+        // sample: four weighted morphologies (cells, ripples, streaks, veil), each at the row's period rung (CloudBodies.Slab2D
+        // is the twin at footprint zero). Two octaves at non-integer scales and a slow warp keep any tile from repeating visibly.
+        // SlabCoverMask (SlabMath.SlabCoverMask): sharp below cover 0.15, the old CoverMask from 0.30. Softness 0.5 is the spec's edge.
+        float SlabCoverMask(float body, float cover, float softness)
         {
-            cover *= EyeCloudKeep(g);
-            if (cover <= 0.005) return 0;
-            // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
-            // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
-            float2 low = tex3Dlod(_CloudNoiseTex, float4(g.xz / 27000.0 + 0.27, 0.71, 1.5)).rg;
-            float patch = low.g;
+            float edge = max(0.02, 0.5 * cover) * lerp(0.5, 1.5, softness);
+            float sharp = saturate((body - (1.0 - cover)) / edge);
+            return lerp(sharp, CoverMask(body, cover), smoothstep(0.15, 0.30, cover));
+        }
+
+        // The four morphology weights, normalised, any under 0.05 dropped and the rest renormalised (SlabMath.Weights).
+        float4 SlabWeights(LayerRow row)
+        {
+            float sum = row.cells + row.ripples + row.streaks + row.veil;
+            if (sum <= 0.0) return float4(0.0, 0.0, 0.0, 1.0);
+            float4 w = float4(row.cells, row.ripples, row.streaks, row.veil) / sum;
+            w *= step(0.05, w);
+            return w / (w.x + w.y + w.z + w.w);
+        }
+
+        // The thin layers filter one step coarser than a pixel (Task 13): at the pixel's own footprint the cellular noise still held
+        // detail near the pixel grid, and cirrocumulus beat against it as concentric arcs (moire). The extra step rises with the
+        // footprint (none at zero, so the CPU twins are untouched).
+        float SlabLod(float foot, float period)
+        {
+            float l = LodFor(foot, period);
+            return min(5.0, l + saturate(l));
+        }
+
+        // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
+        // once filtered past what the pixel resolves; a morphology with no weight is not fetched.
+        float SlabPattern(float3 g, LayerRow row, float scale, float2 low, float foot, float3 wts)
+        {
+            if (wts.x + wts.y + wts.z <= 0.0) return 0.52;
             float2 warp = (low - 0.5) * scale * 1.6;
             float2 p = g.xz + warp;
             float2 w = float2(dot(p, _CloudWindDir), dot(p, float2(-_CloudWindDir.y, _CloudWindDir.x)));
-            float along = scale * stretch;
-            // Each pattern has two octaves; the finer one fades to its mean (0.52) once it is
-            // filtered past what the pixel resolves, and is not fetched at all beyond that.
-            // A pattern the layer does not use (ripple 0 or 1) is not fetched either.
             float streak = 0.52, cells = 0.52;
-            if (ripple < 0.98)
+            float2 bend = float2(0.0, 0.0);
+            if (wts.z > 0.0)
             {
-                float lod1 = LodFor(foot, scale), lod2 = LodFor(foot, scale * 1.73);
-                float s1 = tex3Dlod(_CloudNoiseTex, float4(w.x / along, w.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
-                float2 w2 = float2(w.x * 0.982 - w.y * 0.191, w.x * 0.191 + w.y * 0.982);
+                float2 sw = w;
+                if (row.curl > 0.01)
+                {
+                    // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
+                    float2 bend = tex3Dlod(_CloudNoiseTex, float4(p / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
+                    sw += bend * scale * 2.0 * row.curl;
+                }
+                float along = scale * row.aspect;
+                float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
+                float s1 = tex3Dlod(_CloudNoiseTex, float4(sw.x / along, sw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
+                float2 w2 = float2(sw.x * 0.982 - sw.y * 0.191, sw.x * 0.191 + sw.y * 0.982);
                 float fine2 = saturate(4.0 - lod2);
                 float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(w2.x / (along * 1.73) + 0.53,
                     w2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
                 streak = s1 * 0.6 + s2 * 0.4;
             }
-            if (ripple > 0.02)
+            if (wts.x + wts.y > 0.0)
             {
-                // Rounded cells from the smooth base channel, also at two scales.
+                // Rounded cells from the smooth base channel, also at two scales. The cell tile repeats every cs metres and read as a lattice
+                // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
-                float lodC = LodFor(foot, cs);
-                float c1 = tex3Dlod(_CloudNoiseTex, float4(p / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
+                bend = tex3Dlod(_CloudNoiseTex, float4(p / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
+                float2 pc = p + bend * cs * 2.2;
+                float lodC = SlabLod(foot, cs);
+                float c1 = tex3Dlod(_CloudNoiseTex, float4(pc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
-                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(p.y, -p.x) / (cs * 2.37) + 0.13,
-                    g.y / (cs * 1.9) + 0.77, LodFor(foot, cs * 2.37))).r, fineC) : 0.52;
+                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(pc.y, -pc.x) / (cs * 2.37) + 0.13,
+                    g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
                 cells = c1 * 0.62 + c2 * 0.38;
             }
-            // Cloud streets: cumuliform rows along the wind over ascending air.
-            float street = 0.55 + 0.45 * sin(w.y / (scale * 0.85) * 6.2831853 + warp.x / scale * 2.0);
-            float streetKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, scale * 0.85));
-            cells *= lerp(1.0, street, 0.8 * streetKeep);
-            float raw = lerp(streak, cells, ripple);
-            float body = saturate(0.5 + (raw - 0.52) * 3.16);
-            body = lerp(body, 0.7 + 0.3 * body, sheet);
-            // Ahead of the front (share 0) and behind it (share 1) the layer differs.
+            float ripples = cells;
+            if (wts.y > 0.0)
+            {
+                // Parallel rows (altocumulus undulatus, cirrocumulus ripples): their amplitude fades once the row spacing
+                // is filtered past what the pixel resolves, so the horizon never moires.
+                float wavelength = max(1.0, row.rippleWave);
+                float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
+                // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
+                float rows = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 2.0 + bend.x * 6.0);
+                float rowKeep = saturate(0.8 + bend.y * 3.5);
+                // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).
+                ripples = cells * lerp(1.0, rows / 0.55, 0.8 * rippleKeep * rowKeep);
+            }
+            return dot(wts, float3(cells, ripples, streak)) / (wts.x + wts.y + wts.z);
+        }
+
+        // One thin layer's 2D field at a map point: pattern, flattening from the veil weight, the legacy front thinning, the
+        // edge from SlabCoverMask (with the Detail-independent rank, the covered area follows Cover) and the interior density
+        // from Detail. No altitude profile and no strength.
+        float Slab2D(float3 g, LayerRow row, float foot, float2 splitMul)
+        {
+            float cover = row.cover * EyeCloudKeep(g);
+            if (cover <= 0.005) return 0.0;
+            // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
+            // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
+            float2 low = tex3Dlod(_CloudNoiseTex, float4(g.xz / 27000.0 + 0.27, 0.71, 1.5)).rg;
+            float patch = low.g;
+            float4 wts = SlabWeights(row);
+            float2 sp = LadderSplit(row.periodRung);
+            float pat0 = 0.0, pat1 = 0.0;
+            if (sp.y < 0.98) pat0 = SlabPattern(g, row, PeriodMetres(sp.x), low, foot, wts.xyz);
+            if (sp.y > 0.02) pat1 = SlabPattern(g, row, PeriodMetres(sp.x + 1.0), low, foot, wts.xyz);
+            float pattern = LadderMix(pat0, pat1, sp.y, 0.52);
+            // The cover law (SlabMath.RankGain): the rank does not depend on Detail, so a layer covers about its Cover however crisp or
+            // flat it is; Detail only scales the density inside the cover (the return below).
+            float rank = saturate(0.5 + (pattern - 0.52) * 4.5);
+            float body = lerp(rank, 0.7 + 0.3 * rank, wts.w);
+            // Ahead of the front (share 0) and behind it (share 1) the layer differs. INTERIM(slice 4): the split goes with the front.
             cover *= lerp(splitMul.x, splitMul.y, SplitShare(g.xz));
             float c = saturate(cover * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)));
-            // 0.77: the layer's dome profile averaged through its depth.
-            return CoverMask(body, c) * 0.77;
+            return SlabCoverMask(body, c, row.softness) * lerp(1.0, body, row.detail);
+        }
+
+        // The layer's vertical profile saturate(5.2 h (1 - h)) and its integral (SlabMath.Profile / Integral).
+        float SlabProfile(float h)
+        {
+            return (h <= 0.0 || h >= 1.0) ? 0.0 : min(1.0, 5.2 * h * (1.0 - h));
+        }
+
+        float SlabRise(float h) { return 5.2 * (0.5 * h * h - h * h * h / 3.0); }
+
+        float SlabF(float h)
+        {
+            const float h1 = 0.2598076; // (1 - sqrt(1 - 4 / 5.2)) / 2: where the profile reaches 1
+            h = saturate(h);
+            float f = SlabRise(min(h, h1));
+            if (h > h1) f += min(h, 1.0 - h1) - h1;
+            if (h > 1.0 - h1) f += SlabRise(h1) - SlabRise(1.0 - h);
+            return f;
+        }
+
+        // The optical weight of a ray sample spanning altitudes [lo, hi] through a layer [baseY, topY]: the mean of the profile
+        // over the sample (SlabMath.Overlap). Length x overlap x density is the sample's optical depth whatever the slant.
+        float SlabOverlap(float lo, float hi, float baseY, float topY)
+        {
+            if (hi < lo) { float t = lo; lo = hi; hi = t; }
+            float thick = topY - baseY;
+            if (thick <= 0.0) return 0.0;
+            float span = hi - lo;
+            if (span < 40.0) return SlabProfile(((lo + hi) * 0.5 - baseY) / thick);
+            float ha = saturate((lo - baseY) / thick), hb = saturate((hi - baseY) / thick);
+            if (hb <= ha) return 0.0;
+            return thick * (SlabF(hb) - SlabF(ha)) / span;
         }
 
         struct SlabLayer
@@ -734,45 +989,61 @@ Shader "Boscali/FlightCloud"
             nearLayer.opacity += transmit * farLayer.opacity;
         }
 
-        // March one chord, split around the opaque cloud's representative distance.
-        // Camera altitude alone cannot order a nearby storm against an oblique layer.
-        // Each sample stands for the whole depth of the layer
-        // over its stretch of chord, so grazing rays never slice it into bands; long chords
-        // get more samples and blur the pattern to their step instead of aliasing.
-        SlabLayers MarchSlab(float3 ro, float3 ray, float limit, float splitDistance, float y0, float y1, float cover,
-            float sheet, float scale, float stretch, float ripple, float strength, float phase, float jitter,
-            float2 splitMul)
+        // March one chord (layer 0 = middle, 1 = high, 2 = the console fog bank), split around the opaque cloud's representative
+        // distance. Camera altitude alone cannot order a nearby storm against an oblique layer. The chord [y0, y1] is the
+        // tape-wide range of the layer; each sample reads its own row, so a base that changes along the tape is followed, and is
+        // weighed by the part of the local layer its piece of chord crosses (SlabOverlap). Long chords get more samples and blur
+        // the pattern to their step instead of aliasing.
+        SlabLayers MarchSlab(float3 ro, float3 ray, float limit, float splitDistance, float layer, float y0, float y1,
+            float phase, float jitter)
         {
             SlabLayers result = (SlabLayers)0;
+            // A tape with no such layer costs nothing (spec 7.4).
+            bool present = layer < 0.5 ? _TapeFlags.x > 0.5 : layer < 1.5 ? _TapeFlags.y > 0.5 : _FogBank > 0.005;
+            if (!present || y1 <= y0) return result;
             // Inside the layer a level ray must not be skipped (a one-pixel gap at the
             // horizon) nor stretched to the horizon limit (ten samples over 1200 km drew a
             // bright speckled line); 60 km of layer is already opaque.
             bool insideSlab = ro.y > y0 && ro.y < y1;
-            if (cover <= 0.005 || (!insideSlab && abs(ray.y) < 0.0005)) return result;
+            if (!insideSlab && abs(ray.y) < 0.0005) return result;
             float slope = abs(ray.y) < 0.0005 ? (ray.y < 0.0 ? -0.0005 : 0.0005) : ray.y;
             float ta = (y0 - ro.y) / slope, tb = (y1 - ro.y) / slope;
             float t0 = max(0.0, min(ta, tb)), t1 = min(max(ta, tb), insideSlab ? min(limit, 60000.0) : limit);
             if (t1 <= t0) return result;
             float span = t1 - t0;
             // A steep chord through a thin layer is one sample (a 2D texture, in effect);
-            // grazing chords get up to ten.
-            float samples = clamp(ceil(span / 6000.0), 1.0, 10.0);
+            // grazing chords get up to 24.
+            float samples = clamp(ceil(span / 6000.0), 1.0, 24.0);
             float stepLength = span / samples;
             float slant = length(ray.xz);
-            float patternFoot = stepLength * 0.5 * slant;
-            float yMid = (y0 + y1) * 0.5;
-            float toSun = (y1 - y0) * 0.5 / max(0.12, _CloudSunDirection.y);
+            // A one-sample chord is a 2D texture in effect (Task 13): it is read at the middle of the chord and filtered by the pixel
+            // footprint only. Blurring it by the chord's own horizontal extent (1 km at 10 degrees through a 400 m layer) averaged every cell
+            // under about 1 km to its mean, so cirrocumulus and altocumulus cells (periods 250-1000 m) drew nothing. Chords of several samples
+            // keep the blur to their step: the samples are that far apart.
+            bool single = samples < 1.5;
+            float patternFoot = single ? 0.0 : stepLength * 0.5 * slant;
+            // INTERIM(slice 4): the legacy front thins the middle layer ahead of it and thickens the high one.
+            float2 splitMul = layer < 0.5 ? float2(1.0 - 0.75 * _SplitB.x, 1.0)
+                : layer < 1.5 ? float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x) : float2(1.0, 1.0);
             [loop]
-            for (int n = 0; n < 10; n++)
+            for (int n = 0; n < 24; n++)
             {
                 if (n >= samples) break;
-                float t = t0 + (n + jitter) * stepLength;
+                float t = t0 + (n + (single ? 0.5 : jitter)) * stepLength;
                 float3 g = ro + ray * t;
-                g.y = yMid;
-                float d = Slab(g, cover, sheet, scale, stretch, ripple,
-                    max(t * _CloudPixelAngle, patternFoot), splitMul) * strength;
+                // (HLSL has no ?: on structs.)
+                LayerRow row;
+                if (layer > 1.5) row = FogRow(); else row = TapeLayer(TapeS(g.xz), layer);
+                if (row.cover <= 0.005) continue;
+                // The altitudes this sample's piece of the chord spans, against the local layer.
+                float yA = ro.y + ray.y * (t0 + n * stepLength), yB = ro.y + ray.y * (t0 + (n + 1.0) * stepLength);
+                float overlap = SlabOverlap(yA, yB, row.baseY, row.baseY + row.thick);
+                if (overlap <= 0.002) continue;
+                g.y = row.baseY + 0.5 * row.thick;
+                float d = Slab2D(g, row, max(t * _CloudPixelAngle, patternFoot), splitMul) * row.strength;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
+                float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
                 float direct = exp(-d * toSun * 0.003);
                 float3 light = _CloudAmbientColor * 0.8 * 0.8 +
                     _CloudSunColor * (direct * phase * 0.6 + 0.22);
@@ -780,10 +1051,10 @@ Shader "Boscali/FlightCloud"
                 float frontLength = clamp(splitDistance - segmentStart, 0.0, stepLength);
                 float backLength = stepLength - frontLength;
                 if (frontLength > 0.0)
-                    AddSlabSample(result.front, d * frontLength * 0.003, light,
+                    AddSlabSample(result.front, d * overlap * frontLength * 0.003, light,
                         segmentStart + frontLength * jitter);
                 if (backLength > 0.0)
-                    AddSlabSample(result.back, d * backLength * 0.003, light,
+                    AddSlabSample(result.back, d * overlap * backLength * 0.003, light,
                         segmentStart + frontLength + backLength * jitter);
             }
             FinishSlab(result.front, ro, ray);
@@ -1138,6 +1409,7 @@ Shader "Boscali/FlightCloud"
                         float optical = 0.0, above = 0.0;
                         bool coarseSun = farSeg || sunOpen < 0.06;
                         int taps = coarseSun ? 1 : 3;
+                        gLowReuse = true; // the sun taps reuse this sample's genus row
                         [loop]
                         for (int k = 0; k < taps; k++)
                         {
@@ -1148,6 +1420,7 @@ Shader "Boscali/FlightCloud"
                             if (k == 2) above = tap;
                             else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
                         }
+                        gLowReuse = false;
                         optical *= 0.0021;
                         float h = saturate(localLightingHeight);
                         float direct = exp(-optical);
@@ -1292,19 +1565,9 @@ Shader "Boscali/FlightCloud"
             // that order. Reuse each density sample; no second slab march is needed.
             float slabLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
             if (opacity > 0.996) slabLimit = min(slabLimit, cloudDistance);
-            float midBase = lerp(4200.0, 3300.0, _MidSheet);
-            float midTop = midBase + lerp(400.0, 1700.0, _MidSheet);
-            float highBase = 8600.0;
-            float highTop = highBase + lerp(500.0, 900.0, _HighVeil);
-            SlabLayers fog = MarchSlab(ro, ray, slabLimit, cloudDistance, -30.0, 330.0, _FogBank,
-                0.85, 3200.0, 1.6, 0.0, 0.55, phase, jitter, float2(1.0, 1.0));
-            SlabLayers middle = MarchSlab(ro, ray, slabLimit, cloudDistance, midBase, midTop, _MidCover,
-                smoothstep(0.4, 1.0, _MidSheet), 2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.42, phase, jitter,
-                float2(1.0 - 0.75 * _SplitB.x, 1.0));
-            SlabLayers high = MarchSlab(ro, ray, slabLimit, cloudDistance, highBase, highTop, _HighCover,
-                smoothstep(0.6, 1.0, _HighVeil), 5000.0, lerp(7.0, 1.0, _HighVeil),
-                4.0 * _HighVeil * (1.0 - _HighVeil), 0.12, phase, jitter,
-                float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x));
+            SlabLayers fog = MarchSlab(ro, ray, slabLimit, cloudDistance, 2.0, -30.0, 330.0, phase, jitter);
+            SlabLayers middle = MarchSlab(ro, ray, slabLimit, cloudDistance, 0.0, _TapeChord.x, _TapeChord.y, phase, jitter);
+            SlabLayers high = MarchSlab(ro, ray, slabLimit, cloudDistance, 1.0, _TapeChord.z, _TapeChord.w, phase, jitter);
             SlabLayer front = fog.front;
             SlabLayer back = fog.back;
             if (ray.y < 0.0) { front = high.front; back = high.back; }

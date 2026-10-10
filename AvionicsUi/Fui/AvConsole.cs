@@ -26,7 +26,6 @@ namespace NOAvionics
         private readonly AvDecorGraphic decor;
         private readonly TMP_Text serial;
         private string baseTitle;
-        private bool cursorOn;
         private AvFx scanFx;
         private AvChip[] chips = new AvChip[0];
         private AvMetric[] metrics = new AvMetric[0];
@@ -105,7 +104,7 @@ namespace NOAvionics
 
         private void ShowTitle()
         {
-            string t = baseTitle + (cursorOn && AvText.Width(titleText) + 16f < titleText.rectTransform.rect.width ? "_" : "");
+            string t = baseTitle;
             if (titleText.text != t) titleText.text = t;
         }
 

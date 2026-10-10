@@ -1,0 +1,26 @@
+Recorded effect clips: sources and licences
+===========================================
+
+Every clip in this folder is cut from a Creative Commons 0 (public domain) recording by tools/Build-SoundClips.py.
+Licences were checked on the source pages on 2026-10-10. CC0 needs no credit; the authors are named here as
+thanks and so the clips can be rebuilt. The source downloads are not kept in the repository.
+
+hull-thud.wav          "Metal Sheet Hit" by Stereo Surgeon (slowed)
+hit-ping-0.wav         https://freesound.org/people/Stereo%20Surgeon/sounds/262516/      CC0
+hit-ping-1..3.wav      "bullet ricochet.wav" by aust_paul
+                       https://freesound.org/people/aust_paul/sounds/30932/               CC0
+harness-creak-0..2.wav "Leather Creak / Stretching" by IENBA
+                       https://freesound.org/people/IENBA/sounds/536187/                  CC0
+page-flip.wav          "Page Turn" by davidbain
+                       https://freesound.org/people/davidbain/sounds/136778/              CC0
+building-collapse.wav  "building collapse / demolition" by greyfeather
+                       https://freesound.org/people/greyfeather/sounds/712918/            CC0
+radio-tail-0.wav       "End radio transmission" by ReadeOnly
+                       https://freesound.org/people/ReadeOnly/sounds/47646/               CC0
+radio-tail-1.wav       "Radio Sign Off / Squelch" by JovianSounds
+                       https://freesound.org/people/JovianSounds/sounds/524205/           CC0
+
+Processing: mono, 22050 Hz, 16-bit, rumble below 40 Hz removed, levelled to -3 dBFS.
+
+Decoded but not shipped: "Tire.ogg" by egomassive (https://freesound.org/people/egomassive/sounds/536769/, CC0).
+The game's own skid loop already squeals at touchdown, so a second chirp would double it.

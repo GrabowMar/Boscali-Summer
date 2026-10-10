@@ -1,0 +1,24 @@
+BOUNDED MODEL POLISH / 2026-10-08
+
+Four spacecraft: cleaner textured cell laminates with real frames/fold hinges,
+restrained irregular foil, smooth round equipment, one mesh per moving pivot.
+No subdivisions, new shaders, larger textures or runtime scripts.
+
+LOD0 triangles before -> after:
+ OpticalSatellite    5744 -> 2512; LOD1 1004; LOD2 280
+ SarSatellite        5420 -> 2188; LOD1  874; LOD2 258
+ RelaySatellite      6264 -> 3032; LOD1 1210; LOD2 362
+ OrbitalServiceTug   6452 -> 3220; LOD1 1288; LOD2 374
+
+Rig mesh renderers before -> after:
+ Optical 360 -> 3; SAR 365 -> 4; Relay 360 -> 5; Tug 379 -> 3.
+Material passes: 360/365/360/379 -> 11/13/17/11. These are authored renderer
+and material counts, not measured game frame timings. Solar span is retained at
+all three LODs and solar surface coverage remains approximately 99%.
+
+Jammer, crash site, aid station, camp, FOB, trenches, sandbags, radar, fuel depot
+and checkpoint round/sandbag shading polished without adding geometry.
+Coarse static collision meshes and native cargo bundle are unchanged.
+Both asset libraries rebuilt and reopened/rendered in scratch Unity. Geometry,
+UVs, packed/assigned PBR textures, pivots and LOD validation passed.
+No deployment, gameplay changes, live-game or multiplayer acceptance in this pass.

@@ -2,7 +2,7 @@ param(
     [string]$SourceDir = (Join-Path $PSScriptRoot "../modules/Weather/Assets/Source"),
     [string]$OutputDir = (Join-Path $PSScriptRoot "../modules/Weather/Assets"),
     [string]$BundleName = "weatherrain.bundle",
-    [string]$Unity = "C:/Program Files/Unity/Hub/Editor/2022.3.62f2/Editor/Unity.exe"
+    [string]$Unity = "C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,7 +19,7 @@ $tempProject = Join-Path $env:TEMP ("WeatherBundleBuild-" + [guid]::NewGuid().To
 Write-Host "Creating temporary Unity project at: $tempProject"
 
 New-Item -ItemType Directory -Force -Path "$tempProject/Assets/WeatherShader", "$tempProject/Assets/Editor", "$tempProject/ProjectSettings", "$tempProject/Packages", "$tempProject/BundleOutput" | Out-Null
-$editorVer = if ($Unity -like "*62f3*") { "2022.3.62f3" } else { "2022.3.62f2" }
+$editorVer = if ($Unity -like "*62f2*") { "2022.3.62f2" } else { "2022.3.62f3" }
 Set-Content -LiteralPath "$tempProject/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVer"
 Set-Content -LiteralPath "$tempProject/Packages/manifest.json" -Value '{"dependencies":{"com.unity.modules.assetbundle":"1.0.0"}}'
 

@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             LenticularSet = 16, FogBankSet = 32;
         public const byte AllSets = SquallLineSet | SupercellSet | DistantCellSet | StormEyeSet | LenticularSet | FogBankSet;
 
-        public static int Fill(Superstructure[] into, uint layout, StateParams convection,
+        public static int Fill(Superstructure[] into, uint layout, SkyParams convection,
             float halfX, float halfZ, float prevailingHeading, byte forced = 0,
             bool hasAnchor = false, float anchorX = 0f, float anchorZ = 0f)
         {

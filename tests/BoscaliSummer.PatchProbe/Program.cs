@@ -60,6 +60,18 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MapBuilding", "Destruct"),
     ("MapBuildingSet", "UserCode_CmdDestroyBuilding_1002795805"),
     ("Missile", "UserCode_RpcDetonate_897349600"),
+    ("Missile", "StartMissile"),
+    ("Missile", "GetSeekerType"),
+    ("Countermeasure", "GetThreatTypes"),
+    ("Aircraft", "GetFuelLevel"),
+    ("Aircraft", "GetFuelTanks"),
+    ("PartDamageTracker", "GetDetachedRatio"),
+    // TAC BOARD SYSTEMS page (HUD v8): lost parts by side, the jammer's charge.
+    ("UnitPart", "IsDetached"),
+    ("Aircraft", "GetPowerSupply"),
+    ("PowerSupply", "GetCharge"),
+    ("FlareEjector", "GetMaxAmmo"),
+    ("ChaffEjector", "GetMaxAmmo"),
     ("Missile", "Detonate"),
     ("Missile", "OnStartClient"),
     ("MusicManager", "PlayMusic"),
@@ -107,6 +119,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("RadialMenuMain", "SetupMain"),
     ("RadialMenuMain", "OpenMenu"),
     ("RadialMenuMain", "OnDestroy"),
+    ("RadialMenuMain", "Update"),
     ("RadialMenuAction", "AllowedOnAircraft"),
     ("RadialMenuAction", "TriggerAction"),
     ("PilotPlayerState", "FixedUpdateState"),
@@ -221,7 +234,12 @@ foreach ((string typeName, string methodName) in targets)
     ("WeaponInfo", "muzzleVelocity"),
     ("CombatHUD", "iconLayer"),
     ("CombatHUD", "topRightPanel"),
-    ("CombatHUD", "weaponStatus")
+    ("CombatHUD", "weaponStatus"),
+    // TAC BOARD seeker cones and the countermeasure bank (ShotBook, MenuGame.Aircraft): private members read by name through AccessTools.
+    ("ARHSeeker", "maxTrackingAngle"),
+    ("ARHSeeker", "terminalRange"),
+    ("SARHSeeker", "seekerAngle"),
+    ("CountermeasureManager", "countermeasureStations")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -262,6 +280,39 @@ foreach ((string typeName, string fieldName) in fields)
     ("UnitPart", "hitPoints", "System.Single"),
     ("Unit", "disabled", "System.Boolean"),
     ("WeaponStatus", "nameText", "TMPro.TextMeshProUGUI"),
+    // Tactical HUD (2026-10-07): StatusPanel reads the native label font and safety lamp, ThreatWatch and MissileTracker the warning systems.
+    ("WeaponStatus", "safetyImage", "UnityEngine.UI.Image"),
+    // Corner takeover (2026-10-10): NativeCorner hides the three boxes of the native TopRightPanel (weaponPanel, countermeasuresBackground, PowerPanel) behind owned CanvasGroups; the stores
+    // feed reads the guns' LINK (WeaponManager.gunsLinked, pinned below), the reload times of guns and missile launchers and the capacitor's full charge.
+    ("WeaponStatus", "weaponPanel", "UnityEngine.GameObject"),
+    ("CombatHUD", "weaponStatus", "WeaponStatus"),
+    ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
+    ("Gun", "reloadTime", "System.Single"),
+    ("MissileLauncher", "reloadTime", "System.Single"),
+    ("PowerSupply", "maxCharge", "System.Single"),
+    ("Missile", "target", "Unit"),
+    ("Unit", "onRegisterMissile", "System.Action`1<Missile>"),
+    ("MissileWarning", "onMissileWarning", "System.Action`1<MissileWarning+OnMissileWarning>"),
+    ("MissileWarning", "offMissileWarning", "System.Action`1<MissileWarning+OffMissileWarning>"),
+    ("Missile", "seekerMode", "Missile+SeekerMode"),
+    ("Countermeasure", "displayName", "System.String"),
+    ("Countermeasure", "ammo", "System.Int32"),
+    ("Countermeasure", "chargeable", "System.Boolean"),
+    ("FuelTank", "isLeaking", "System.Boolean"),
+    ("FuelTank", "ruptured", "System.Boolean"),
+    ("FuelTank", "onFire", "System.Boolean"),
+    // TAC BOARD SYSTEMS page: the jammer's "jamming now" (CountermeasureWatch).
+    ("RadarJammer", "jammingIntensity", "System.Single"),
+    ("Aircraft", "engineStates", "System.Collections.Generic.List`1<IEngine>"),
+    ("Aircraft", "partDamageTracker", "PartDamageTracker"),
+    ("AircraftParameters", "aircraftGLimit", "System.Single"),
+    ("AircraftParameters", "PIDReferenceAirspeed", "System.Single"),
+    ("AircraftParameters", "maxSpeed", "System.Single"),
+    ("WeaponInfo", "blastDamage", "System.Single"),
+    ("WeaponInfo", "jammer", "System.Boolean"),
+    ("Unit", "onDeregisterMissile", "System.Action`1<Missile>"),
+    ("MissileWarning", "knownMissiles", "System.Collections.Generic.List`1<Missile>"),
+    ("Aircraft", "onRadarWarning", "System.Action`1<Aircraft+OnRadarWarning>"),
     ("FlightHud", "canvas", "UnityEngine.Canvas"),
     ("RadialMenuMain", "actionsMain", "RadialMenuAction[]"),
     ("RadialMenuMain", "aircraft", "Aircraft"),
@@ -402,6 +453,7 @@ if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnTy
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
     ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
+    ("Missile", "UserCode_RpcDetonate_897349600", new[] { "hitArmor", "useUnit", "hitTerrain" }),
     ("Hangar", "TrySpawnAircraft", new[] { "player", "definition" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
@@ -567,6 +619,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Comms.Patches.CommsMapControlsPatch"
     ,"BoscaliSummer.Modules.Trenches.Runtime.TrenchWorksDetectionPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -659,6 +712,10 @@ using (Stream pilotResource = pluginAssembly.GetManifestResourceStream("BoscaliS
     ,("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", "MaximumPoints", typeof(byte))
     ,("BoscaliSummer.Modules.Progression.Networking.PlaneTuneRequest", "AircraftId", typeof(uint))
     ,("BoscaliSummer.Modules.Progression.Networking.PlaneTuneState", "AircraftId", typeof(uint))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", "Paint", typeof(byte))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestState", "Owner", typeof(ulong))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestState", "Paint", typeof(byte))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
@@ -887,6 +944,8 @@ foreach (var seam in intelMethods)
 };
 foreach (var seam in intelFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+// TAC BOARD SYSTEMS page: a helicopter is told by its rotor shaft (DamageWatch).
+if (gameAssembly.GetType("RotorShaft", false) == null) throw new TypeLoadException("RotorShaft");
 if (gameAssembly.GetType("Radar", true)!.BaseType?.FullName != "TargetDetector")
     throw new TypeLoadException("Radar no longer derives from TargetDetector; Intel reads Unit.radar as a Radar");
 foreach (string type in new[] {
@@ -911,7 +970,54 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.IHudLine",
     "BoscaliSummer.Core.Contracts.HudLayout",
     "BoscaliSummer.Modules.Hud.Presentation.HudBoard",
-    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel" })
+    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel",
+    // TAC BOARD (HUD v8): the offline check reaches these by name; the page groups' feeds register through them.
+    "BoscaliSummer.Core.Contracts.ScopeFeeds",
+    "BoscaliSummer.Core.Contracts.ScopeGauges",
+    "BoscaliSummer.Core.Contracts.GaugeSpec",
+    "BoscaliSummer.Modules.Hud.Domain.SystemsScope",
+    // Corner takeover: the stores header's feed structs are filled by name in the offline fixtures; NativeCorner is the one class that hides native objects.
+    "BoscaliSummer.Modules.Hud.Domain.StoresScope",
+    "BoscaliSummer.Modules.Hud.Domain.StoreStation",
+    "BoscaliSummer.Modules.Hud.Domain.StoreClass",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatScope",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatMissile",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatEmitter",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatSeeker",
+    "BoscaliSummer.Modules.Hud.Presentation.StoresHeader",
+    "BoscaliSummer.Modules.Hud.Presentation.ThreatPage",
+    "BoscaliSummer.Modules.Hud.Runtime.StoresFeed",
+    "BoscaliSummer.Modules.Hud.Runtime.NativeCorner",
+    "BoscaliSummer.Modules.Hud.Presentation.ScopePages",
+    "BoscaliSummer.Modules.Hud.Presentation.SystemsPage",
+    // APPROACH, WING and DOCK (tb-flight): their feed structs and enums are filled by name in the offline fixtures.
+    "BoscaliSummer.Core.Contracts.ApproachScope",
+    "BoscaliSummer.Core.Contracts.ApproachStage",
+    "BoscaliSummer.Core.Contracts.WingBoardScope",
+    "BoscaliSummer.Core.Contracts.WingBoardMember",
+    "BoscaliSummer.Core.Contracts.WingBoardAck",
+    "BoscaliSummer.Core.Contracts.WingState",
+    "BoscaliSummer.Core.Contracts.DockScope",
+    "BoscaliSummer.Core.Contracts.DockPhase",
+    "BoscaliSummer.Modules.Hud.Presentation.ApproachPage",
+    "BoscaliSummer.Modules.Hud.Presentation.WingPage",
+    "BoscaliSummer.Modules.Hud.Presentation.DockPage",
+    "BoscaliSummer.Modules.Autopilot.Runtime.ApproachScopeFeed",
+    "BoscaliSummer.Modules.Wing.Runtime.WingScopeFeed",
+    "BoscaliSummer.Modules.Vanguard.Presentation.SkywellScopeFeed",
+    // STRIKE and OBJECTIVE (tb-ops): their feed structs and enums are filled by name in the offline fixtures.
+    "BoscaliSummer.Core.Contracts.StrikeScope",
+    "BoscaliSummer.Core.Contracts.StrikeTrack",
+    "BoscaliSummer.Core.Contracts.PerkTile",
+    "BoscaliSummer.Core.Contracts.StrikeKind",
+    "BoscaliSummer.Core.Contracts.PerkFront",
+    "BoscaliSummer.Core.Contracts.PerkPhase",
+    "BoscaliSummer.Core.Contracts.ChainNodeKind",
+    "BoscaliSummer.Core.Contracts.ObjectiveScope",
+    "BoscaliSummer.Modules.Hud.Presentation.StrikePage",
+    "BoscaliSummer.Modules.Hud.Presentation.ObjectivePage",
+    "BoscaliSummer.Modules.Support.Runtime.StrikeScopeFeed",
+    "BoscaliSummer.Modules.DynamicOperations.Runtime.ObjectiveScopeFeed" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandManager",
@@ -950,8 +1056,9 @@ Type highCommandNet = pluginAssembly.GetType("BoscaliSummer.Modules.HighCommand.
     if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
     throw new InvalidOperationException("High command protocol changed without updating its probe");
 Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherNet", true)!;
-// Version 7 retains the wire layout and pins the front-aligned generator/independent cloud ceilings.
-if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 7)
+// Version 8 carries the whole weather-tape key (seed, story, pin, salt, class, opening base, heading, epoch,
+// offset, speed, dynamic, sets, anchor, set origins) and drops the stepping timeline's fields.
+if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 8)
     throw new InvalidOperationException("Weather protocol changed without updating its probe");
 foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
@@ -964,6 +1071,8 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", new[] { "Protocol:System.Byte", "PerkMask:System.UInt32", "Score:System.Int32", "EarnedPoints:System.Byte", "Rank:System.Byte", "Result:System.Byte", "Generation:System.Int32", "Scene:System.UInt32", "Token:System.UInt32", "ScorePerPoint:System.Int32", "MaximumPoints:System.Byte", "PlaneId:System.UInt32", "EngineMap:System.Byte" }),
     ("BoscaliSummer.Modules.Progression.Networking.PlaneTuneRequest", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte" }),
     ("BoscaliSummer.Modules.Progression.Networking.PlaneTuneState", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte", "Accepted:System.Byte" }),
+    ("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", new[] { "Protocol:System.Byte", "Shape:System.Byte", "Division:System.Byte", "Charge:System.Byte", "Accent:System.Byte", "Field:System.Byte", "Second:System.Byte", "Ink:System.Byte", "Number:System.Byte", "Paint:System.Byte" }),
+    ("BoscaliSummer.Modules.Progression.Networking.CrestState", new[] { "Protocol:System.Byte", "Owner:System.UInt64", "Shape:System.Byte", "Division:System.Byte", "Charge:System.Byte", "Accent:System.Byte", "Field:System.Byte", "Second:System.Byte", "Ink:System.Byte", "Number:System.Byte", "Paint:System.Byte" }),
     ("BoscaliSummer.Modules.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Revision:System.UInt32" }),
     ("BoscaliSummer.Modules.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Core.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Core.Contracts.EnemyWingView[]", "Revision:System.UInt32", "Unchanged:System.Boolean" }),
     ("BoscaliSummer.Modules.Command.Networking.FactionMoraleChanged", new[] { "Protocol:System.Byte", "FactionHash:System.Int32", "Morale:System.Single" }),
@@ -981,7 +1090,7 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "HasSnapshot:System.Boolean", "Session:System.Int32", "HostEpoch:System.Int32", "Faction:System.String", "Fronts:BoscaliSummer.Core.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Core.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Core.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
-    ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "TransitionProgress:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldEpoch:System.Single", "FieldStartRegime:System.Byte", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "HoldMinutes:System.Single", "BlendMinutes:System.Single", "FieldSets:System.Byte", "FieldSalt:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldFrontTurn:System.Byte" }),
+    ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldStory:System.Byte", "FieldSkyPin:System.Byte", "FieldSalt:System.Byte", "FieldMissionClass:System.Byte", "FieldOpeningBase:System.Single", "FieldHeading:System.Single", "FieldEpoch:System.Single", "FieldOffset:System.Single", "FieldSystemSpeed:System.Single", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "FieldSets:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldSetOriginSquall:System.Single", "FieldSetOriginSupercell:System.Single", "FieldSetOriginCell:System.Single" }),
     ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityState", new[] { "Protocol:System.Byte", "Active:System.Byte", "Faction:System.String", "Key:System.String", "Label:System.String", "X:System.Single", "Y:System.Single", "Z:System.Single" }) })
 {
     Type type = pluginAssembly.GetType(contract.Item1, true)!;
@@ -996,6 +1105,8 @@ ProbeEventsSerialization(pluginAssembly, mirageAssembly);
 ProbeFactionMoraleSerialization(pluginAssembly, mirageAssembly);
 ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
+ProbeWeatherSerialization(pluginAssembly, mirageAssembly);
+ProbeWeatherConfig(pluginAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 // Wing integration is optional and the supported contract is compiled in-tree. A hard
 // external dependency prevents BepInEx from loading the entire plugin when Wing is absent.
@@ -1283,7 +1394,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Squad protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type progression = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionNet", true)!;
-    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 5)
+    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 6)
         throw new InvalidOperationException("Progression protocol changed without updating its probe");
     progression.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1383,7 +1494,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Reject(excessiveCount);
     Type progressType = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", true)!;
     object progress = Activator.CreateInstance(progressType)!;
-    Set(progress, "Protocol", (byte)5); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
+    Set(progress, "Protocol", (byte)6); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
     Set(progress, "Score", 70000); Set(progress, "Scene", 456u); Set(progress, "Token", 789u);
     Set(progress, "ScorePerPoint", 10000); Set(progress, "MaximumPoints", (byte)20);
     object progressResult = Decode(progressType, Encode(progressType, progress));
@@ -1393,7 +1504,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Progression generation roundtrip failed");
     Type submitType = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionSubmit", true)!;
     object submit = Activator.CreateInstance(submitType)!;
-    Set(submit, "Protocol", (byte)5); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
+    Set(submit, "Protocol", (byte)6); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
     object submitResult = Decode(submitType, Encode(submitType, submit));
     foreach (FieldInfo field in submitType.GetFields(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(field.GetValue(submit), field.GetValue(submitResult))) throw new InvalidOperationException("Progression intent roundtrip changed " + field.Name);
@@ -1401,7 +1512,24 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     object oldProgress = Decode(progressType, Encode(progressType, progress));
     if ((byte)Get(oldProgress, "Protocol") != 4 || (int)Get(oldProgress, "Generation") != 0)
         throw new InvalidOperationException("Progression reader must keep only the header of a foreign protocol");
-    Console.WriteLine("  Squad protocol-3 serializers: pilot/wing/query/revision roundtrip, header-only unchanged reply, 8-wing/192-char bounds, invalid strength/tier/return/header/count read as protocol 0; progression v5 foreign-header drop");
+    string[] crestLayers = { "Shape", "Division", "Charge", "Accent", "Field", "Second", "Ink", "Number" };
+    foreach (string crestType in new[] { "CrestSubmit", "CrestState" })
+    {
+        Type crest = plugin.GetType("BoscaliSummer.Modules.Progression.Networking." + crestType, true)!;
+        object sent = Activator.CreateInstance(crest)!;
+        Set(sent, "Protocol", (byte)6); Set(sent, "Paint", (byte)2);
+        for (int i = 0; i < crestLayers.Length; i++) Set(sent, crestLayers[i], (byte)(i + 3));
+        if (crestType == "CrestState") Set(sent, "Owner", 76561198000000000UL);
+        object received = Decode(crest, Encode(crest, sent));
+        foreach (FieldInfo field in crest.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            if (!Equals(field.GetValue(sent), field.GetValue(received)))
+                throw new InvalidOperationException(crestType + " roundtrip changed " + field.Name);
+        Set(sent, "Protocol", (byte)5);
+        object foreignCrest = Decode(crest, Encode(crest, sent));
+        if ((byte)Get(foreignCrest, "Protocol") != 5 || (byte)Get(foreignCrest, "Paint") != 0 || (byte)Get(foreignCrest, "Shape") != 0)
+            throw new InvalidOperationException(crestType + " reader must keep only the header of a foreign protocol");
+    }
+    Console.WriteLine("  Squad protocol-3 serializers: pilot/wing/query/revision roundtrip, header-only unchanged reply, 8-wing/192-char bounds, invalid strength/tier/return/header/count read as protocol 0; progression v6 foreign-header drop, crest submit/state roundtrip");
 }
 
 static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
@@ -1719,6 +1847,89 @@ static void ProbeSessionSerialization(Assembly plugin, Assembly mirage)
     if ((byte)message.GetField("Protocol")!.GetValue(foreign)! != 9 || message.GetField("Keys")!.GetValue(foreign) != null)
         throw new InvalidOperationException("Host settings reader must stop at a foreign protocol header");
     Console.WriteLine("  Session protocol-1 host settings roundtrip");
+}
+
+static void ProbeWeatherSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Type net = plugin.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherNet", true)!;
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 8)
+        throw new InvalidOperationException("Weather protocol changed without updating its probe");
+    net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type message = plugin.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", true)!;
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+    var write = (Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(message)
+        .GetProperty("Write", flags)!.GetValue(null)!;
+    var read = (Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(message)
+        .GetProperty("Read", flags)!.GetValue(null)!;
+
+    object Roundtrip(byte[] bytes)
+    {
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            return read.DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+
+    // One distinct value per field, so a swapped or dropped field cannot pass.
+    var expected = new (string Name, object Value)[]
+    {
+        ("Protocol", (byte)8), ("TargetConditions", 0.31f), ("TargetCloudHeight", 1850f), ("TargetWindX", -7.5f),
+        ("TargetWindZ", 12.25f), ("TargetTurbulence", 0.4f), ("MissionTimeSeconds", 4321u), ("ForcedRain", 0.65f),
+        ("FieldSeed", 4000000007u), ("FieldStory", (byte)3), ("FieldSkyPin", (byte)46), ("FieldSalt", (byte)201),
+        ("FieldMissionClass", (byte)5), ("FieldOpeningBase", 2410f), ("FieldHeading", 271.5f), ("FieldEpoch", 123.5f),
+        ("FieldOffset", -45000.25f), ("FieldSystemSpeed", 31.5f), ("FieldDynamic", true), ("FieldManual", true),
+        ("FieldSets", (byte)37), ("FieldHasAnchor", true), ("FieldAnchorX", 1111f), ("FieldAnchorZ", -2222f),
+        ("FieldSetOriginSquall", 3333f), ("FieldSetOriginSupercell", 4444f), ("FieldSetOriginCell", 5555f),
+    };
+    if (message.GetFields(BindingFlags.Public | BindingFlags.Instance).Length != expected.Length)
+        throw new InvalidOperationException("Weather sync probe sample does not cover every message field");
+    object sample = Activator.CreateInstance(message)!;
+    foreach (var (name, value) in expected) message.GetField(name)!.SetValue(sample, value);
+    object writer = Activator.CreateInstance(writerType, 256)!;
+    write.DynamicInvoke(writer, sample);
+    object copy = Roundtrip((byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!);
+    foreach (var (name, value) in expected)
+        if (!Equals(message.GetField(name)!.GetValue(copy), value))
+            throw new InvalidOperationException("Weather sync field " + name + " changed in the roundtrip: " +
+                message.GetField(name)!.GetValue(copy) + " != " + value);
+    object foreign = Roundtrip(new byte[] { 7 });
+    if ((byte)message.GetField("Protocol")!.GetValue(foreign)! != 7 || (uint)message.GetField("FieldSeed")!.GetValue(foreign)! != 0u)
+        throw new InvalidOperationException("Weather sync reader must stop at a foreign protocol header");
+    Console.WriteLine("  Weather protocol-8 sync roundtrip: every field, foreign-protocol rejection");
+}
+
+static void ProbeWeatherConfig(Assembly plugin)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Assembly bepInEx = Assembly.Load("BepInEx");
+    Type configFile = bepInEx.GetType("BepInEx.Configuration.ConfigFile", true)!;
+    string path = Path.Combine(Path.GetTempPath(), "boscali-weather-config-probe-" + Environment.ProcessId + ".cfg");
+    try
+    {
+        // A player's file from before the tape: the old switch is off and the old step timing is customised.
+        File.WriteAllText(path, "[Weather]\n\nDynamicWeatherEnabled = false\nStateIntervalMinutes = 9\nStateFadeSeconds = 120\n");
+        object config = Activator.CreateInstance(configFile, path, true)!;
+        Type settingsType = plugin.GetType("BoscaliSummer.Modules.Weather.Configuration.WeatherSettings", true)!;
+        object settings = Activator.CreateInstance(settingsType, config)!;
+        plugin.GetType("BoscaliSummer.Core.Config.LegacyConfigMigration", true)!
+            .GetMethod("RemoveEntries", flags)!.Invoke(null, new[] { config });
+        configFile.GetMethod("Save")!.Invoke(config, null);
+        string text = File.ReadAllText(path);
+        foreach (string gone in new[] { "DynamicWeatherEnabled", "StateIntervalMinutes", "StateFadeSeconds" })
+            if (text.Contains(gone + " ="))
+                throw new InvalidOperationException("Weather config key " + gone + " survived the migration:\n" + text);
+        // The stored false is deliberately not carried over: TapeMoves starts at its default.
+        foreach (string kept in new[] { "TapeMoves = true", "Pace = 3", "SeedMode = Random", "FixedSeed = 0" })
+            if (!text.Contains(kept))
+                throw new InvalidOperationException("Weather config is missing '" + kept + "':\n" + text);
+        Console.WriteLine("  Weather config: old keys purged, TapeMoves on, Pace 3, SeedMode Random, FixedSeed 0");
+    }
+    finally { File.Delete(path); }
 }
 
 static void ProbeFactionMoraleSerialization(Assembly plugin, Assembly mirage)

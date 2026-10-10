@@ -8,7 +8,7 @@ Output: modules/Immersion/Assets/Source/pilot-first-person.json (same schema, sa
 
 What it adds, all with zero extra runtime systems (one skinned mesh, one material):
   * leg silhouettes rounded by volume-preserving Taubin smoothing (no extra triangles);
-  * harness leg straps, lap belt, three quick-release buckles, oxygen hose down the chest, G-suit hose stub;
+  * harness leg straps, lap belt, three quick-release buckles and an oxygen hose down the chest;
     every accessory vertex copies the skin weights of its nearest body vertex, so it follows the native animation;
   * accessories are UV-mapped into atlas space the first-person mesh no longer uses (removed helmet/hose islands);
   * owned textures: the native albedo with accessories painted in, the native normal map with its
@@ -154,8 +154,13 @@ def build(textures: Path, preview: Path | None) -> None:
         k = pool[int(d.argmin())]
         return bi[k], bw[k]
 
-    def add_vertex(p, normal, coord, pool):
-        i, w = nearest_weights(p, pool)
+    def rigid(b):
+        return np.array([b, 0, 0, 0]), np.array([1.0, 0.0, 0.0, 0.0])
+
+    # Accessories are skinned rigidly (or one weight set per hose ring): per-vertex nearest-skin weights tore
+    # straps and buckles apart in the seated pose, where hip and thigh rotate 90 degrees against each other.
+    def add_vertex(p, normal, coord, pool, weights=None):
+        i, w = weights if weights is not None else nearest_weights(p, pool)
         nv.append(p); nn.append(normal / np.linalg.norm(normal)); nuv.append(coord); nbi.append(i); nbw.append(w)
         return body_count + len(nv) - 1
 
@@ -186,7 +191,7 @@ def build(textures: Path, preview: Path | None) -> None:
             r = (np.roll(r, 1) + 2 * r + np.roll(r, -1)) / 4
         return r
 
-    def band(origin, axis, ref, h0, width, members, gap, thick, rect, start=0.0, sweep=2 * np.pi, bins=28):
+    def band(origin, axis, ref, h0, width, members, gap, thick, rect, start=0.0, sweep=2 * np.pi, bins=28, weights=None):
         """A strap of `width` around `axis` at height h0, hugging the body profile, optionally partial."""
         axis, e1, e2 = frame(axis, ref)
         r = profile(origin, axis, e1, e2, h0, width, members, 72)
@@ -202,19 +207,19 @@ def build(textures: Path, preview: Path | None) -> None:
             ru, rv, rw, rh = rect
             u = ru + rw * s
             rows.append([
-                add_vertex(lo + dirn * inn, -axis, (u, rv), members),
-                add_vertex(lo + dirn * out, -axis, (u, rv + rh * .08), members),
-                add_vertex(lo + dirn * out, dirn, (u, rv + rh * .1), members),
-                add_vertex(hi + dirn * out, dirn, (u, rv + rh * .9), members),
-                add_vertex(hi + dirn * out, axis, (u, rv + rh * .92), members),
-                add_vertex(hi + dirn * inn, axis, (u, rv + rh), members)])
+                add_vertex(lo + dirn * inn, -axis, (u, rv), members, weights),
+                add_vertex(lo + dirn * out, -axis, (u, rv + rh * .08), members, weights),
+                add_vertex(lo + dirn * out, dirn, (u, rv + rh * .1), members, weights),
+                add_vertex(hi + dirn * out, dirn, (u, rv + rh * .9), members, weights),
+                add_vertex(hi + dirn * out, axis, (u, rv + rh * .92), members, weights),
+                add_vertex(hi + dirn * inn, axis, (u, rv + rh), members, weights)])
         for c in range(bins):
             a, b = rows[c], rows[c + 1]
             quad(a[0], b[0], b[1], a[1]); quad(a[2], b[2], b[3], a[3]); quad(a[4], b[4], b[5], a[5])
         mid = start + sweep / 2
         return origin + axis * h0, e1 * np.cos(mid) + e2 * np.sin(mid), axis, r, e1, e2
 
-    def box(centre, outward, along, size, members, rect):
+    def box(centre, outward, along, size, members, rect, weights=None):
         """A buckle: size = (along, side, outward), sitting on `centre` and growing outward."""
         outward = outward / np.linalg.norm(outward)
         along = along - outward * np.dot(along, outward); along /= np.linalg.norm(along)
@@ -228,11 +233,11 @@ def build(textures: Path, preview: Path | None) -> None:
                 a1, a2 = axes[(k + 1) % 3], axes[(k + 2) % 3]
                 h1, h2 = half[(k + 1) % 3], half[(k + 2) % 3]
                 fc = mid + normal * half[k]
-                q = [add_vertex(fc + a1 * h1 * x + a2 * h2 * y, normal, (ru + rw * (x + 1) / 2, rv + rh * (y + 1) / 2), members)
+                q = [add_vertex(fc + a1 * h1 * x + a2 * h2 * y, normal, (ru + rw * (x + 1) / 2, rv + rh * (y + 1) / 2), members, weights)
                      for x, y in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
                 quad(*q)
 
-    def tube(points, radius, sides, members, rect, ribs=0.0):
+    def tube(points, radius, sides, members, rect, ribs=0.0, weights=None):
         pts = np.asarray(points)
         ru, rv, rw, rh = rect
         tangent = np.gradient(pts, axis=0); tangent /= np.linalg.norm(tangent, axis=1)[:, None]
@@ -241,11 +246,12 @@ def build(textures: Path, preview: Path | None) -> None:
         for k, (p, t) in enumerate(zip(pts, tangent)):
             e1 = ref - t * np.dot(ref, t); e1 /= np.linalg.norm(e1); e2 = np.cross(t, e1)
             rad = radius * (1 + ribs * (1 if k % 2 else -1))
+            ring_weights = weights if weights is not None else nearest_weights(p, members)  # a ring moves as one
             ring = []
             for s in range(sides + 1):
                 a = 2 * np.pi * s / sides
                 d = e1 * np.cos(a) + e2 * np.sin(a)
-                ring.append(add_vertex(p + d * rad, d, (ru + rw * k / (len(pts) - 1), rv + rh * s / sides), members))
+                ring.append(add_vertex(p + d * rad, d, (ru + rw * k / (len(pts) - 1), rv + rh * s / sides), members, ring_weights))
             rings.append(ring)
         for k in range(len(rings) - 1):
             for s in range(sides):
@@ -261,26 +267,28 @@ def build(textures: Path, preview: Path | None) -> None:
     hips = np.flatnonzero(np.isin(dominant, [PELVIS, THIGH_R, THIGH_L]))
     torso = np.flatnonzero(np.isin(dominant, [PELVIS, CHEST]))
 
-    # ---- 3. harness leg straps (upper thigh, by the groin) with quick-release buckles on the front
+    # ---- 3. harness leg straps with quick-release buckles on the front. They sit at 32 % of the thigh:
+    #         above that the skin still blends to the pelvis (up to 38 % at the hip crease).
     buckles = []
     for thigh, shin, pool in ((THIGH_R, SHIN_R, leg_r), (THIGH_L, SHIN_L, leg_l)):
         axis = bone[shin] - bone[thigh]
         L = np.linalg.norm(axis)
-        centre, front_dir, ax, _, _, _ = band(bone[thigh], axis, FRONT, .22 * L, 45 * MM,
-            np.flatnonzero(np.isin(dominant, [thigh])), 4 * MM, 3 * MM, STRAP, start=-np.pi, sweep=2 * np.pi)
-        buckles.append((bone[thigh] + ax * .22 * L, ax, pool, thigh))
+        centre, front_dir, ax, _, _, _ = band(bone[thigh], axis, FRONT, .32 * L, 45 * MM,
+            np.flatnonzero(np.isin(dominant, [thigh])), 4 * MM, 3 * MM, STRAP, start=-np.pi, sweep=2 * np.pi, weights=rigid(thigh))
+        buckles.append((bone[thigh] + ax * .32 * L, ax, pool, thigh))
     # ---- lap belt across the hips (front half only)
-    lap_h = -0.02 * np.linalg.norm(bone[SHIN_R] - bone[THIGH_R])
-    band(bone[PELVIS], UP, FRONT, lap_h, 50 * MM, hips, 6 * MM, 3 * MM, BELT,
-         start=-np.radians(95), sweep=np.radians(190), bins=20)
+    lap_h = 0.06 * np.linalg.norm(bone[SHIN_R] - bone[THIGH_R])   # low on the belly: rides the pelvis, clear of the lap
+    band(bone[PELVIS], UP, FRONT, lap_h, 50 * MM, np.flatnonzero(dominant == PELVIS), 6 * MM, 3 * MM, BELT,
+         start=-np.radians(95), sweep=np.radians(190), bins=20, weights=rigid(PELVIS))
     # Buckles sit on the outermost front point of each band.
     for origin, ax, pool, thigh in buckles:
         _, e1, e2 = frame(ax, FRONT)
         r = profile(origin, ax, e1, e2, 0.0, 45 * MM, np.flatnonzero(dominant == thigh), 72)
-        box(origin + e1 * (r[0] + 7 * MM), e1, np.cross(ax, e1), (36 * MM, 26 * MM, 7 * MM), pool, METAL)
+        box(origin + e1 * (r[0] + 7 * MM), e1, np.cross(ax, e1), (36 * MM, 26 * MM, 7 * MM), pool, METAL, weights=rigid(thigh))
     pe, pe1, pe2 = frame(UP, FRONT)
-    rp = profile(bone[PELVIS], pe, pe1, pe2, lap_h, 50 * MM, hips, 72)
-    box(bone[PELVIS] + pe * lap_h + pe1 * (rp[0] + 9 * MM), pe1, np.cross(pe, pe1), (60 * MM, 45 * MM, 9 * MM), hips, METAL)
+    rp = profile(bone[PELVIS], pe, pe1, pe2, lap_h, 50 * MM, np.flatnonzero(dominant == PELVIS), 72)
+    box(bone[PELVIS] + pe * lap_h + pe1 * (rp[0] + 9 * MM), pe1, np.cross(pe, pe1), (60 * MM, 45 * MM, 9 * MM), hips, METAL,
+        weights=rigid(PELVIS))
 
     # ---- 4. oxygen hose: emerges from under the vest (the compressed upper chest stays clear of the camera),
     #         runs down the left chest to the left hip connector
@@ -302,11 +310,6 @@ def build(textures: Path, preview: Path | None) -> None:
     for _ in range(4):
         path[1:-1, 1] = np.minimum(path[1:-1, 1], (path[:-2, 1] + 2 * path[1:-1, 1] + path[2:, 1]) / 4)
     tube(path, radius, 10, torso, HOSE, ribs=.06)
-    # ---- G-suit hose stub from the left hip toward the seat connector
-    hip = bone[THIGH_L] + np.array([-.6, -.2, -.1]) * 1e-3
-    stub = np.array([hip + np.array([-.25 * k, .05 * k, -.18 * k]) * 1e-3 for k in range(6)])
-    tube(stub, 12 * MM, 8, hips, GHOSE)
-
     # ---- 5. assemble, tangents for the new vertices, validate
     add_v = np.asarray(nv); add_n = np.asarray(nn); add_uv = np.asarray(nuv)
     all_v = np.vstack([v, add_v]); all_n = np.vstack([n, add_n]); all_uv = np.vstack([uv, add_uv])

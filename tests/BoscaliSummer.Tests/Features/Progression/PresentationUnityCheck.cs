@@ -154,20 +154,18 @@ public static class PresentationUnityCheck
         Gate(console, root, "SQD skills populated");
         ValidateSkillNodes(panel);
         CaptureConsole(canvasObject, height, "sqd-skills-" + height);
-        // Real node selection, including locked and held grades: inspection must never issue an unlock.
+        // Real node selection: a tap arms an open grade (3) and nothing else. A held (0) or capped (12) grade
+        // answers on hover, so its tap must leave the selection empty and unlock disabled.
         foreach (byte id in new byte[] { 0, 3, 12 })
         {
-            ScrollRect skillScroll = console.Page(1).Content.GetComponentInParent<ScrollRect>();
-            skillScroll.verticalNormalizedPosition = 0f;
+            Set(panel, "skillAwaitingConfirmation", null);
             Call(panel, "SelectSkill", id);
-            Settle(console);
-            Check((byte?)Get(panel, "skillAwaitingConfirmation") == id, "any grade must be inspectable");
-            Check(skillScroll.content.rect.height <= skillScroll.viewport.rect.height + .5f ||
-                skillScroll.verticalNormalizedPosition > .99f,
-                "grade selection must bring its detail into view");
+            Call(panel, "RefreshSkillsPage");
+            Check((byte?)Get(panel, "skillAwaitingConfirmation") == (id == 3 ? id : (byte?)null),
+                "only an open grade may be armed");
             AvControl unlock = (AvControl)Get(panel, "skillConfirmButton");
-            Check(unlock.Interactable == (id == 3), "held or capped grade inspection must keep unlock disabled");
-            Gate(console, root, "SQD skill inspection " + id);
+            Check(unlock.Interactable == (id == 3), "a held or capped grade must never arm unlock");
+            Gate(console, root, "SQD skill selection " + id);
             CaptureConsole(canvasObject, height, "sqd-skills-inspect-" + id + "-" + height);
         }
         Set(panel, "skillAwaitingConfirmation", null);
@@ -330,10 +328,15 @@ public static class PresentationUnityCheck
     private static void SeedStudio(object panel, Sprite portrait, Sprite crest)
     {
         Call(Get(panel, "studioLauncher"), "Set", "WING COMMAND NOT CONNECTED", "The Wing feature is not installed.");
-        Call(Get(panel, "studioEmblem"), "Set", crest);
+        // The populated capture shows the real generator: the shipped default insignia, drawn by production code.
+        Type design = TypeOf("BoscaliSummer.Modules.Progression.Runtime.EmblemDesign");
+        object canvas = Activator.CreateInstance(TypeOf("BoscaliSummer.Modules.Progression.Presentation.EmblemCanvas"));
+        Call(Get(panel, "studioEmblem"), "Set",
+            canvas.GetType().GetMethod("Draw", All).Invoke(canvas, new[] { design.GetProperty("Default", All).GetValue(null) }));
         Call(Get(panel, "studioSquadronField"), "set_Text", "BOSCALI SUMMER");
         Call(Get(panel, "studioMessageText"), "SetShown", true);
-        Call(Get(panel, "studioMessageText"), "Set", "Rolled a new emblem.");
+        // AvNote.Set is overloaded; the property setter is the unambiguous reflection target.
+        Call(Get(panel, "studioMessageText"), "set_Text", "Four fresh proofs printed. Tap one to adopt it.");
     }
 
     private static void SeedPlane(object panel)
@@ -341,8 +344,9 @@ public static class PresentationUnityCheck
         Call(panel, "SetPlaneLive", true);
         Call(Get(panel, "planeIdentity"), "Set", "SAF-22 CHICANE", "AIRBORNE", AvState.Ready, .36f, .82f);
         ((TMP_Text)Get(Get(panel, "planeDamage"), "state")).text = "NATIVE PREVIEW OFFLINE";
-        Call(Get(panel, "planeTuneName"), "Set", "RANGE");
-        Call(Get(panel, "planeTuneState"), "Set", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
+        // AvNote again: set_Text, not the overloaded Set.
+        Call(Get(panel, "planeTuneName"), "set_Text", "RANGE");
+        Call(Get(panel, "planeTuneState"), "set_Text", "RANGE: 10% less fuel draw; 85% throttle ceiling.");
         string[] flight = { "940 km/h", "870 km/h", "6,120m", "+18.2m/s", "287°", "3.4 G" };
         Array tiles = (Array)Get(panel, "planeFlight");
         for (int i = 0; i < tiles.Length; i++) Call(tiles.GetValue(i), "Set", flight[i], AvState.Inert);

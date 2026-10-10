@@ -517,6 +517,65 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     }
 
     /// <summary>
+    /// A sheet of emblem proofs side by side: each a framed sprite that reports its index when
+    /// tapped. The frame, not the picture, takes the pointer, so a proof is one hit target.
+    /// </summary>
+    internal sealed class SqdProofStrip : AvPart
+    {
+        private const float Height = 92f, Inset = 6f;
+        private readonly AvFrame[] frames;
+        private readonly Image[] images;
+        private readonly bool[] hover;
+
+        public SqdProofStrip(RectTransform parent, int count, Action<int> onPick, string help)
+        {
+            Rect = AvLay.Child(parent, "Proofs");
+            frames = new AvFrame[count]; images = new Image[count]; hover = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                int index = i;
+                frames[i] = AvFrame.Add(Rect, "Proof " + i, AvChamfer.Diagonal(4f));
+                var go = new GameObject("Image", typeof(RectTransform), typeof(CanvasRenderer));
+                go.transform.SetParent(frames[i].rectTransform, false);
+                images[i] = go.AddComponent<Image>();
+                images[i].preserveAspect = true;
+                images[i].raycastTarget = false;
+                images[i].enabled = false;
+                AvLay.Fill((RectTransform)go.transform, Inset);
+                AvHit hit = AvHit.On(frames[i]);
+                hit.Hover = h => { hover[index] = h; Restyle(); };
+                hit.Click = e => onPick?.Invoke(index);
+                AvHelpTip.Attach(frames[i].gameObject, help);
+            }
+            Restyle();
+        }
+
+        public void Set(int index, Sprite sprite)
+        {
+            if (index < 0 || index >= images.Length || images[index].sprite == sprite) return;
+            images[index].sprite = sprite;
+            images[index].enabled = sprite != null;
+        }
+
+        public override float Measure(float width) => Height;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float cell = AvFlowMath.ColumnWidth(s.W, frames.Length, AvGridTokens.Gap);
+            for (int i = 0; i < frames.Length; i++)
+                AvLay.Place(frames[i].rectTransform, i * (cell + AvGridTokens.Gap), 0f, cell, s.H);
+        }
+
+        public override void Restyle()
+        {
+            Color fill = AvStyleHost.FuiFill("card inert", AvTheme.SurfaceInert);
+            for (int i = 0; i < frames.Length; i++)
+                frames[i].Paint(fill, hover[i] ? SqdTone.Select : AvStyleHost.FuiBorder("card inert", AvTheme.Hairline));
+        }
+    }
+
+    /// <summary>
     /// The PILOT page's skills summary: one row per qualification lane, its grades as pips (held /
     /// not yet), the lane name at the left and the count at the right. Rows share the part's height
     /// (within a cap), so the part can take a page's leftover height without stretching one giant cell.

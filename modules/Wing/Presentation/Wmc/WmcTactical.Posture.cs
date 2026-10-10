@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvSegmented powerRow;
         private int powerValue = -1;
         private AvControl pWinch, pBingo, pFallBack;
-        private string profileShown, winchShown, bingoShown, fallBackShown;
+        private string winchShown, bingoShown, fallBackShown;
         private bool posturePickersOn = true;
         private static readonly string[] PowerTips = { WholeWing + "full power, no afterburner.", WholeWing + "afterburner allowed." };
 

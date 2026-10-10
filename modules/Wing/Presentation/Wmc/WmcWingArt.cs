@@ -1,6 +1,9 @@
 using NOAvionics;
 using UnityEngine;
+using UnityEngine.UI;
 
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
@@ -96,6 +99,46 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 cx += (widths[i] + 1) * unit;
             }
             return cx - x;
+        }
+    }
+
+    /// <summary>The player's generated insignia on a card: an image over the card's vector shield. <see cref="Show"/> says whether there is
+    /// one, and the card draws its shield only when there is not. The service is looked up once, and again every few seconds while it is missing.</summary>
+    internal sealed class WingInsigniaImage
+    {
+        private const float RetrySeconds = 5f;
+        private readonly Image image;
+        private ISquadronInsignia source;
+        private float retryAt;
+
+        public WingInsigniaImage(RectTransform parent)
+        {
+            image = AvLay.Solid(parent, "Insignia", Color.white);
+            image.preserveAspect = true;
+            image.enabled = false;
+        }
+
+        /// <summary>Centred on its rectangle (the kit's corner pivot would pin the fitted sprite to the top-left).</summary>
+        public void Place(float x, float y, float w, float h)
+        {
+            RectTransform t = image.rectTransform;
+            AvLay.Place(t, x, y, w, h);
+            t.pivot = new Vector2(0.5f, 0.5f);
+            t.anchoredPosition = new Vector2(x + w * 0.5f, -(y + h * 0.5f));
+        }
+
+        /// <summary>Shows the current insignia; false when there is none, so the card draws its shield.</summary>
+        public bool Show()
+        {
+            if (source == null && Time.unscaledTime >= retryAt)
+            {
+                retryAt = Time.unscaledTime + RetrySeconds;
+                ModuleServices.TryGet(out source);
+            }
+            Sprite sprite = source?.Current;
+            if (image.sprite != sprite) image.sprite = sprite;
+            image.enabled = sprite != null;
+            return sprite != null;
         }
     }
 

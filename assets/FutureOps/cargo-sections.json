@@ -1,0 +1,207 @@
+{
+  "parts": [
+    {
+      "name": "HullSternPort",
+      "center_unity": {
+        "x": -5.150000095367432,
+        "y": 0.375,
+        "z": -48.5
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullSternStarboard",
+      "center_unity": {
+        "x": 5.150000095367432,
+        "y": 0.375,
+        "z": -48.5
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullAftPort",
+      "center_unity": {
+        "x": -5.150000095367432,
+        "y": 0.15000009536743164,
+        "z": -22.0
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullAftStarboard",
+      "center_unity": {
+        "x": 5.150000095367432,
+        "y": 0.15000009536743164,
+        "z": -22.0
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullMidPort",
+      "center_unity": {
+        "x": -5.150000095367432,
+        "y": 0.15000009536743164,
+        "z": 5.0
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullMidStarboard",
+      "center_unity": {
+        "x": 5.150000095367432,
+        "y": 0.15000009536743164,
+        "z": 5.0
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullBowPort",
+      "center_unity": {
+        "x": -4.233031809329987,
+        "y": 0.9500000476837158,
+        "z": 41.79999923706055
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "HullBowStarboard",
+      "center_unity": {
+        "x": 5.08303165435791,
+        "y": 0.9500000476837158,
+        "z": 40.5
+      },
+      "hull": true,
+      "rotor": false
+    },
+    {
+      "name": "WeatherDeck",
+      "center_unity": {
+        "x": 0.0,
+        "y": 6.400000333786011,
+        "z": -7.999998092651367
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "CargoBay0",
+      "center_unity": {
+        "x": 0.0,
+        "y": 10.389999389648438,
+        "z": -22.21250057220459
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "CargoBay1",
+      "center_unity": {
+        "x": 0.0,
+        "y": 10.389999389648438,
+        "z": -7.212500333786011
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "CargoBay2",
+      "center_unity": {
+        "x": 0.0,
+        "y": 10.389999389648438,
+        "z": 7.787499666213989
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "CargoBay3",
+      "center_unity": {
+        "x": 0.0,
+        "y": 9.079999923706055,
+        "z": 22.78749942779541
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "CargoBay4",
+      "center_unity": {
+        "x": 0.0,
+        "y": 9.079999923706055,
+        "z": 35.787498474121094
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "Accommodation",
+      "center_unity": {
+        "x": 0.0,
+        "y": 16.102500438690186,
+        "z": -44.0
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "Forecastle",
+      "center_unity": {
+        "x": 0.0,
+        "y": 7.102617502212524,
+        "z": 52.397233963012695
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "PropulsionVisuals",
+      "center_unity": {
+        "x": -1.1920928955078125e-07,
+        "y": -3.0,
+        "z": -56.20000076293945
+      },
+      "hull": false,
+      "rotor": false
+    },
+    {
+      "name": "PropellerPort",
+      "center_unity": {
+        "x": -3.3,
+        "y": -3.4,
+        "z": -58.5
+      },
+      "hull": false,
+      "rotor": true
+    },
+    {
+      "name": "PropellerStarboard",
+      "center_unity": {
+        "x": 3.3,
+        "y": -3.4,
+        "z": -58.5
+      },
+      "hull": false,
+      "rotor": true
+    },
+    {
+      "name": "SternEquipment",
+      "center_unity": {
+        "x": -4.76837158203125e-07,
+        "y": 7.400000095367432,
+        "z": -56.920000076293945
+      },
+      "hull": false,
+      "rotor": false
+    }
+  ],
+  "waterline": 0,
+  "length": 124,
+  "beam": 20.6
+}

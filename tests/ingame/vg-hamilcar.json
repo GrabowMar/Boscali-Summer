@@ -1,0 +1,569 @@
+{
+  "name": "vg-hamilcar",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 2400,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          -24500,
+          -17400
+        ]
+      },
+      "altitude": 3000,
+      "speed": 180,
+      "heading": 150
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          300000
+        ]
+      },
+      "altitude": 6000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 8
+        },
+        {
+          "turn": {
+            "heading": 240,
+            "bank": 45
+          }
+        },
+        {
+          "level": 1500
+        }
+      ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 11,
+      "conditions": 0.05,
+      "cloud_height": 6000,
+      "wind_speed": 0,
+      "wind_turbulence": 0,
+      "wind_heading": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "perf_window",
+      "store": "perf0",
+      "seconds": 4,
+      "warmup": 1
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "ground",
+        "range": 11000,
+        "type": "HLT-L"
+      },
+      "store": "target"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "tune",
+        "husk": 600,
+        "hold": 1
+      },
+      "store": "tune"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Hamilcar",
+        "at": "ground"
+      },
+      "store": "launch"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "chase"
+      },
+      "store": "view0"
+    },
+    {
+      "op": "capture",
+      "name": "ham-0-stowed",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "start"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "chase"
+      },
+      "store": "view1"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "capture",
+      "name": "ham-1-unfolded-chase",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "front"
+      },
+      "store": "view2"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "ham-2-glide-front",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 13
+    },
+    {
+      "op": "perf_window",
+      "store": "perf1",
+      "seconds": 8,
+      "warmup": 1
+    },
+    {
+      "op": "wait",
+      "seconds": 80
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "chase"
+      },
+      "store": "view3"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "ham-3-approach-chase",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "front"
+      },
+      "store": "view4"
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-00",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-01",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-02",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-03",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-04",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 11
+    },
+    {
+      "op": "capture",
+      "name": "ham-land-05",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "landed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "view",
+        "angle": "chase"
+      },
+      "store": "view5"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "ham-4-landed-chase",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "settled"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "tune",
+        "husk": 5
+      },
+      "store": "shorten"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "gone"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Hamilcar",
+        "at": "point",
+        "x": -5000,
+        "z": -52000
+      },
+      "store": "sea"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "seaStatus"
+    },
+    {
+      "op": "wait",
+      "seconds": 400
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "hamilcar",
+        "do": "status"
+      },
+      "store": "end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "target.range",
+      "min": 11000
+    },
+    {
+      "check": "result_below",
+      "path": "target.range",
+      "max": 17000
+    },
+    {
+      "check": "result_above",
+      "path": "start.hamilcar.released",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "start.hamilcar.gliderAlive",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "start.hamilcar.phase",
+      "max": 1
+    },
+    {
+      "check": "result_below",
+      "path": "start.hamilcar.noLz",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "start.hamilcar.short",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "start.hamilcar.payloadRenderers",
+      "min": 5
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar.landed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar_landed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar.landDist",
+      "min": 60
+    },
+    {
+      "check": "result_below",
+      "path": "landed.hamilcar.landDist",
+      "max": 500
+    },
+    {
+      "check": "result_below",
+      "path": "landed.hamilcar.touchSink",
+      "max": 3
+    },
+    {
+      "check": "result_below",
+      "path": "landed.hamilcar.touchSpeed",
+      "max": 45
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar.unloaded",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "landed.ugvsSpawned",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar.phase",
+      "min": 6
+    },
+    {
+      "check": "result_below",
+      "path": "landed.hamilcar.phase",
+      "max": 6
+    },
+    {
+      "check": "result_above",
+      "path": "landed.hamilcar.payloadHidden",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "landed.hamilcar.lost",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "settled.hamilcar.gliderAlive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "settled.hamilcar.vehicleAlive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "settled.hamilcar.vehicleDist",
+      "min": 4
+    },
+    {
+      "check": "result_below",
+      "path": "settled.hamilcar.vehicleDist",
+      "max": 9
+    },
+    {
+      "check": "result_below",
+      "path": "settled.hamilcar.restDrift",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "gone.hamilcar.huskRemoved",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "gone.hamilcar.gliderAlive",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "gone.hamilcar.lost",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "gone.hamilcar.vehicleAlive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sea.pointAimed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "seaStatus.hamilcar.noLz",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "seaStatus.hamilcar.released",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "end.hamilcar.lost",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "end.hamilcar.unloaded",
+      "max": 1
+    },
+    {
+      "check": "result_below",
+      "path": "end.ugvsSpawned",
+      "max": 1
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    }
+  ]
+}

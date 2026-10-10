@@ -1,0 +1,222 @@
+{
+  "name": "vg-lance-hud",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "lead",
+      "aircraft": "FS-12 Revoker",
+      "faction": "Boscali",
+      "altitude": 3000,
+      "speed": 230,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          80000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "equip",
+        "pylon": "wing"
+      },
+      "store": "fit"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "select"
+      },
+      "store": "sel"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "idle"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "hold",
+        "seconds": 2.6,
+        "full": true
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "mid"
+    },
+    {
+      "op": "capture",
+      "name": "lance-charge-cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "fire"
+    },
+    {
+      "op": "wait",
+      "seconds": 16
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.LanceStep",
+      "args": {
+        "action": "status"
+      },
+      "store": "calm"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "fit.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sel.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sel.selected",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "sel.ammo",
+      "min": 24
+    },
+    {
+      "check": "result_below",
+      "path": "sel.ammo",
+      "max": 24
+    },
+    {
+      "check": "result_below",
+      "path": "idle.lanceHudLines",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceCharge",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceHudLines",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceFlicker",
+      "min": 0.2
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceJam",
+      "min": 0.05
+    },
+    {
+      "check": "result_above",
+      "path": "mid.lanceAbCut",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "fire.lancePowerLast",
+      "min": 0.99
+    },
+    {
+      "check": "result_above",
+      "path": "fire.lance_shots",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "fire.lance_shots",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "fire.lanceHudLines",
+      "min": 2
+    },
+    {
+      "check": "result_below",
+      "path": "calm.lanceHudLines",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "calm.lanceAbCut",
+      "max": 0
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    }
+  ]
+}

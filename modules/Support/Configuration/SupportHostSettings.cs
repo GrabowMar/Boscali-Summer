@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Ui;
+using NOAvionics;
 
 namespace BoscaliSummer.Modules.Support.Configuration
 {
@@ -46,7 +47,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     0.05f, v => v.ToString("0.00") + "x")
                 .Number(22, settings.FrontShare, "FRONT SHARE",
                     "The share of each faction's funds that flows into its three fronts every minute. 0 % leaves fronts to donations only.",
-                    0.005f, v => (v * 100f).ToString("0.0") + " %")
+                    0.005f, v => AvNum.Percent(v, 1))
                 .Number(24, settings.FrontShareCap, "FRONT SHARE CAP",
                     "The most funds per minute a faction's fronts take, however large its treasury. 250 raises a front from READINESS 1 to 5 in about 40 minutes.",
                     25f, v => v.ToString("0") + " / MIN")

@@ -11,7 +11,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         public static void Run()
         {
             byte[] noise = CloudNoise3D.Generate(64, 47);
-            var bodies = new CloudBodies(noise, 64, new StateParams { LayerDepth = 1200f });
+            var bodies = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, DeckDepth = 1200f });
             float scattered = CloudFraction(bodies, 0.35f);
             float broken = CloudFraction(bodies, 0.65f);
             float overcast = CloudFraction(bodies, 0.95f);
@@ -23,11 +23,11 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "cover thresholds bodies into separate clouds");
 
             // Stratus: a smooth deck at the same cover closes more of the sky than lumpy bodies.
-            var stratus = new CloudBodies(noise, 64, new StateParams { LayerDepth = 1200f, LayerSmooth = 1f });
+            var stratus = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, DeckDepth = 1200f, DeckSmooth = 1f });
             TestAssert.That(CloudFraction(stratus, 0.65f) > broken, "a smooth stratus deck is more continuous");
 
             // The middle layer exists on its own: altostratus at 4 km with no low cloud.
-            var alto = new CloudBodies(noise, 64, new StateParams { MidCover = 0.9f, MidSheet = 1f });
+            var alto = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, Mid = SkyLayer.LegacyMid(0.9f, 1f) });
             int inside = 0;
             for (int i = 0; i < 40; i++) if (alto.MidLayer(i * 1500f, 4100f, i * 900f) > 0.02f) inside++;
             TestAssert.That(inside > 25, "altostratus is a near-continuous middle sheet, got " + inside + "/40");
@@ -37,8 +37,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             // Set-pieces are mirrored as smooth envelopes: each formation reads as cloud on
             // the CPU where the shader draws it, with no effect far away. An empty weather
             // point isolates the hero contribution (no low deck, below the middle layer).
-            var key = new WeatherKey(12345u, 0f, false, (byte)WeatherRegimeType.Storm, 5f, 60f,
-                (byte)(Superstructures.StormEyeSet | Superstructures.LenticularSet), 0, true, 0f, 25000f, 0);
+            var key = new WeatherKey(12345u, 0f, false, (byte)WeatherRegimeType.Storm,
+                (byte)(Superstructures.StormEyeSet | Superstructures.LenticularSet), 0, true, 0f, 25000f);
             var field = new WeatherField();
             field.Build(key, 900f, 60000f, 60000f, 13f);
             TestAssert.That(field.SuperstructureCount >= 2, "a storm holds set-pieces, got " + field.SuperstructureCount);

@@ -62,14 +62,11 @@ namespace BoscaliSummer.Modules.Weather
 
             WeatherSettings weather = context.Settings.Weather;
             context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)
-                .Toggle(1, weather.DynamicWeatherEnabled, "CHANGING WEATHER",
-                    "Step the weather one state at a time over mission time. Off holds the mission's weather.")
-                .Number(2, weather.StateIntervalMinutes, "STATE INTERVAL",
-                    "Mission minutes each weather state holds before the next step.",
-                    1.0f, v => $"{v:F0} MIN")
-                .Number(3, weather.StateFadeSeconds, "STATE FADE",
-                    "Seconds a change fades the sky, fog and wind. Storm cells always grow over a few minutes.",
-                    10f, v => $"{v:F0} S")
+                .Toggle(1, weather.TapeMoves, "CHANGING WEATHER",
+                    "Weather systems cross the map over mission time. Off holds the sky where it is.")
+                .Number(2, weather.Pace, "WEATHER PACE",
+                    "How fast weather systems cross the map, 1 slow to 6 fast. A stronger mission wind speeds them up.",
+                    1, v => "PACE " + v)
                 .Number(4, weather.MinConditions, "CLEAREST SKY",
                     "Lowest cloud cover the game's own fog and light may fall to.",
                     0.05f, v => v.ToString("P0"))

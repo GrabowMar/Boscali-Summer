@@ -36,6 +36,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             {
                 texture.Release();
                 Object.Destroy(texture);
+                texture = null;
             }
             output.texture = texture;
 

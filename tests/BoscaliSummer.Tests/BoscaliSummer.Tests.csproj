@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>BoscaliSummer.Tests</AssemblyName>
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
+    <!-- The isolated runner links telemetry DTOs and native stubs without their game/runtime writers.
+         Keep other diagnostics enabled, including the production dead-code tripwire. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
   </PropertyGroup>
@@ -45,11 +48,7 @@
     <Compile Include="..\..\modules\Autopilot\Domain\CarrierPattern.cs" Link="Features\Autopilot\CarrierPattern.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMath.cs" Link="Features\Autopilot\AceRadialMath.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialAction.cs" Link="Features\Autopilot\AceRadialAction.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialStyle.cs" Link="Features\Autopilot\AceRadialStyle.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMenuTree.cs" Link="Features\Autopilot\AceRadialMenuTree.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\Menu\*.cs" LinkBase="Features\Autopilot\Menu" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\StrongpointHitPolicy.cs" Link="Features\UrbanCombat\StrongpointHitPolicy.cs" />
@@ -68,6 +67,7 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractSelection.cs" Link="Features\DynamicOperations\ContractSelection.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ObjectiveScopeRules.cs" Link="Features\DynamicOperations\ObjectiveScopeRules.cs" />
     <Compile Include="..\..\Core\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Core\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
     <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
@@ -88,6 +88,8 @@
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
     <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
+    <Compile Include="..\..\Core\Math\FlightLoad.cs" Link="Core\Math\FlightLoad.cs" />
+    <Compile Include="..\..\Core\Game\MissionClock.cs" Link="Framework\MissionClock.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />
@@ -103,12 +105,16 @@
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
     <Compile Include="..\..\modules\Squad\Domain\SnapshotRevision.cs" Link="Features\Squad\SnapshotRevision.cs" />
     <Compile Include="..\..\Core\Util\PngSprites.cs" Link="Core\PngSprites.cs" />
+    <Compile Include="..\..\Core\Util\PcmWav.cs" Link="Core\PcmWav.cs" />
     <Compile Include="..\..\Core\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\Core\Contracts\IProgressionView.cs" Link="Framework\IProgressionView.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />
     <Compile Include="..\..\modules\Progression\Presentation\SkillBoardLayout.cs" Link="Features\Progression\SkillBoardLayout.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\AceSkillCatalog.cs" Link="Features\Progression\AceSkillCatalog.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\EmblemDesign.cs" Link="Features\Progression\EmblemDesign.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\CrestBoard.cs" Link="Features\Progression\CrestBoard.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\EmblemRaster.cs" Link="Features\Progression\EmblemRaster.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\LiveryCodec.cs" Link="Features\Progression\LiveryCodec.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
     <Compile Include="..\..\modules\Support\Runtime\StrikeBallistics.cs" Link="Features\Support\StrikeBallistics.cs" />
@@ -160,16 +166,10 @@
     <Compile Include="..\..\Core\Contracts\HudLayout.cs" Link="Framework\HudLayout.cs" />
     <Compile Include="..\..\Core\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
     <Compile Include="..\..\Core\Contracts\IHudBoard.cs" Link="Framework\IHudBoard.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudFeedStore.cs" Link="Features\Hud\HudFeedStore.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudNoticeQueue.cs" Link="Features\Hud\HudNoticeQueue.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
-    <Compile Include="..\..\modules\QoL\Domain\FuelHudCopy.cs" Link="Features\QoL\FuelHudCopy.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\WingviewMath.cs" Link="Features\Hud\WingviewMath.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudSymbols.cs" Link="Features\Hud\HudSymbols.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudLamps.cs" Link="Features\Hud\HudLamps.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudTactical.cs" Link="Features\Hud\HudTactical.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\MissileTracks.cs" Link="Features\Hud\MissileTracks.cs" />
+    <!-- Everything under modules/Hud/Domain and Core/Contracts/Scope is pure and compiles into the tests by wildcard: a page group adds files without touching this project. -->
+    <Compile Include="..\..\modules\Hud\Domain\**\*.cs" LinkBase="Features\Hud" />
+    <Compile Include="..\..\Core\Contracts\Scope\**\*.cs" LinkBase="Framework\Scope" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\RecoveryRules.cs" Link="Features\Wing\RecoveryRules.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />

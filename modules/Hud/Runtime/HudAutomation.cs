@@ -4,8 +4,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Modules.Autopilot.Domain;
-using BoscaliSummer.Modules.Autopilot.Runtime;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Presentation;
 using NOAvionics;
@@ -17,7 +15,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// <summary>
     /// Explicit nomodkit single-player test hook (tests/ingame/missile-hud.json); inert outside a
     /// sim run. Fires the seated player's own missiles through the game's own
-    /// <c>WeaponStation.Fire</c> and reports the tracker, the C-menu entries and the follow view
+    /// <c>WeaponStation.Fire</c> and reports the tracker and the follow view
     /// through the same seams the HUD and the menu use.
     /// </summary>
     public static class HudAutomation
@@ -70,7 +68,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             if (!Guard(out Dictionary<string, object> failure)) return failure;
             GameManager.GetLocalAircraft(out Aircraft a);
-            var tracker = new MissileTracker();
+            MissileTracker tracker = HudBoard.Instance != null ? HudBoard.Instance.Tracker : null;
+            if (tracker == null) return Failure("HudAutomation", "Missiles", "no HudBoard");
             var tracks = new List<MissileTrack>(MissileTracks.MaxShown);
             tracker.Read(a, tracks);
             AvUnits units = PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Metric ? AvUnits.Metric : AvUnits.Imperial;
@@ -97,40 +96,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 { "following", cam != null && cam.followingUnit != null ? cam.followingUnit.GetType().Name : "none" },
             };
             Debug.Log("[HudAutomation] Missiles: " + Describe(result));
-            return result;
-        }
-
-        /// <summary>C-menu missile entries: visibility/enabled/status of the four VIEW leaves.</summary>
-        public static Dictionary<string, object> Menu(Dictionary<string, object> args)
-        {
-            if (!Guard(out Dictionary<string, object> failure)) return failure;
-            AceRadialNode root;
-            try { root = AceRadialNode.Collect(AceRadialCatalog.Build(), AceRadialMenuTree.MaxNodes, AceRadialMenuTree.MaxDepth); }
-            catch (Exception e) { return Failure("HudAutomation", "Menu", "catalog threw: " + e.Message); }
-            AceRadialNode view = null;
-            if (root != null)
-                foreach (AceRadialNode child in root.Children)
-                    if (child.Action != null && child.Action.Id == "view") view = child;
-            var entries = new List<object>();
-            if (view != null)
-                foreach (AceRadialNode leaf in view.Children)
-                {
-                    if (leaf.Action == null || !leaf.Action.Id.StartsWith("msl-", StringComparison.Ordinal)) continue;
-                    entries.Add(new Dictionary<string, object>
-                    {
-                        { "id", leaf.Action.Id },
-                        { "label", leaf.Action.Label },
-                        { "enabled", leaf.Enabled },
-                        { "status", leaf.Status.Text ?? "" },
-                    });
-                }
-            var result = new Dictionary<string, object>
-            {
-                { "ok", true },
-                { "view_found", view != null },
-                { "entries", entries },
-            };
-            Debug.Log("[HudAutomation] Menu: view=" + (view != null) + " msl_entries=" + entries.Count);
             return result;
         }
 

@@ -19,30 +19,66 @@ namespace BoscaliSummer.Modules.Vanguard
         public Type[] PatchTypes => new[]
         {
             typeof(Patches.VanguardArticulationPatch),
+            typeof(Patches.MaldjShadowPatch),
             typeof(Patches.VanguardInitializePatch),
             typeof(Patches.VanguardSeekPatch),
+            typeof(Patches.HawcxGlowPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.GlaiveSuspendedPhysicsPatch),
             typeof(Patches.AegisLockPatch),
+            typeof(Patches.AegisSnapPatch),
+            typeof(Patches.AegisDoorsPatch),
+            typeof(Patches.AegisFinsPatch),
             typeof(Patches.TorpedoCollisionsPatch),
             typeof(Patches.LanceFirePatch),
+            typeof(Patches.LanceAttachPatch),
+            typeof(Patches.LanceRemoteShotPatch),
+            typeof(Patches.LanceArmorPenetratePatch),
+            typeof(Patches.LanceTurbineThrottlePatch),
             typeof(Patches.SkywellLaunchPatch),
-            typeof(Patches.SkywellFirePatch)
+            typeof(Patches.SkywellFirePatch),
+            typeof(Patches.SkywellHoldPatch),
+            typeof(Patches.SkywellFilterPatch),
+            typeof(Patches.AlexPressPatch),
+            typeof(Patches.AlexLaunchPatch),
+            typeof(Patches.AlexDeflectArhPatch),
+            typeof(Patches.AlexDeflectSarhPatch),
+            typeof(Patches.AlexSuppressPatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);
 
         public void Install(ModuleContext context)
         {
+            context.AddSceneService<Presentation.VanguardHudFeeds>(60);
             context.AddSceneService<AegisService>(60);
+            context.AddSceneService<Networking.AegisNet>(60);
+            context.AddSceneService<Presentation.AegisHud>(60);
             context.AddSceneService<Networking.GlaiveNet>(60);
+            context.AddSceneService<Networking.KestrelNet>(60);
+            context.AddSceneService<Networking.OrcaNet>(60);
+            context.AddSceneService<Networking.SentinelNet>(60);
             context.AddSceneService<LanceService>(60);
+            context.AddSceneService<MaldxService>(60);
+            context.AddSceneService<Networking.MaldxNet>(60);
+            context.AddSceneService<Networking.LanceNet>(60);
+            context.AddSceneService<Presentation.LanceFxPlayer>(60);
+            context.AddSceneService<LanceEngineDraw>(60);
             context.AddSceneService<Presentation.TowCable>(60);
+            context.AddSceneService<Presentation.MaldjHud>(60);
             context.AddSceneService<SkywellService>(60);
             context.AddSceneService<Networking.SkywellNet>(60);
             context.AddSceneService<Presentation.SkywellVisuals>(60);
             context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));
-            context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
+            context.AddSceneService<Networking.RemoraNet>(60);
+            context.AddSceneService<Presentation.RemoraHud>(60);
+            context.AddSceneService<AlexService>(60);
+            context.AddSceneService<Networking.AlexNet>(60);
+            context.AddSceneService<Presentation.AlexHud>(60);
+            context.AddSceneService<Presentation.SkywellScopeFeed>(60);
+            Networking.VanguardNet drones = context.AddSceneService<Networking.VanguardNet>(60);
+            context.AddService<IDroneCommand>(drones);
+            new VanguardScopeGauges(drones).Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
+            context.AddSceneService<HamilcarService>(60);
         }
     }
 }

@@ -234,7 +234,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Light flashLight, glowLight;
         private AudioSource audioSource;
         private Vector3 ground;
-        private float born, nextStem, nextCrater, shakeAt, shakeStrength, ringStart;
+        private float born, nextStem, nextCrater, shakeAt, shakeStrength;
         private bool capDone;
         private float day;
 

@@ -29,7 +29,14 @@ namespace BoscaliSummer.Fire
         {
             surface = null;
             BeginLoad();
-            if (!loading.IsCompleted) loading.Wait(); // Only if a hit lands before scene warm-up finished.
+            // Only if a hit lands before scene warm-up finished. A failed load must read as
+            // missing meshes, never as an AggregateException on the main thread.
+            if (!loading.IsCompleted)
+            {
+                try { loading.Wait(); }
+                catch (System.AggregateException) { return false; }
+            }
+            if (loading.IsFaulted) return false;
             return map != null && map.TryGetValue(name, out surface);
         }
 

@@ -49,7 +49,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CruiseTasking cruiseTasking;
         private readonly Dictionary<int, CruiseLegMirror> cruiseLegs = new Dictionary<int, CruiseLegMirror>();
         private int pendingWaypoint = -1;
-        private float pendingWaypointUntil;
 
         /// <summary>The live manager, or null; set in Configure, cleared only on destroy (survives scene resets).</summary>
         internal static SupportManager Active { get; private set; }
@@ -120,6 +119,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             return label != null;
         }
+        /// <summary>The local pilot's own strikes in the air or just landed (what the map overlay reads), for the TAC BOARD's STRIKE page.</summary>
+        internal IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
+
+        /// <summary>How many waypoint legs the pilot's own cruise strike <paramref name="requestId"/> has confirmed (0 when none are known).</summary>
+        internal int CruiseLegCount(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs.Count : 0;
+
         public SupportSettings Settings => settings;
 
         /// <summary>Latest accepted radar scan of the local player, for the imager.</summary>
@@ -130,6 +135,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Latest accepted SAT CAMERA of the local player: where the optical bird last looked.</summary>
         public int CameraSerial { get; private set; }
         public GlobalPosition CameraTarget { get; private set; }
+        /// <summary>How many contacts that SAT CAMERA revealed.</summary>
+        public int CameraContacts { get; private set; }
 
         public float GetEffectRadius(SupportActionId action, FactionHQ owner)
         {
@@ -170,11 +177,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float impact = now + etaSeconds;
             float linger = duration;
             float expiry = impact + linger;
+            float start = now;
 
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
             {
                 if (activeStrikes[i].RequestId == requestId)
                 {
+                    start = activeStrikes[i].StartTime;
                     activeStrikes.RemoveAt(i);
                 }
             }
@@ -184,7 +193,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 activeStrikes.RemoveAt(0);
             }
 
-            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, impact, expiry));
+            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, impact, expiry, start));
             RegisterInboundStrike(name, etaSeconds);
         }
 
@@ -299,7 +308,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void ResetForScene()
         {
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
-            Clock.Reset();
+            MissionTimeSource.Reset();
             space?.ResetForScene();
             cyber?.ResetForScene();
             sof?.ResetForScene();
@@ -348,8 +357,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportMapMode.GestureArmed = false;
         }
 
-        private static readonly MissionClock Clock = new MissionClock();
-        private static float nextClockWarning;
 
         /// <summary>
         /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a multiplayer
@@ -357,29 +364,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// value is lobby time) keeps the last good value; the result is finite, never decreases within a scene, and
         /// re-baselines if a transient ever latched high.
         /// </summary>
-        internal static float MissionNow()
-        {
-            float raw = 0f;
-            bool valid = false;
-            try
-            {
-                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (GameManager.gameState != GameState.Multiplayer)
-                { raw = mission != null ? mission.MissionTime : Time.timeSinceLevelLoad; valid = true; }
-                else if (mission != null && mission.multiplayerStartTime > 0d)
-                { raw = mission.MissionTime; valid = true; }
-            }
-            catch (Exception e)
-            {
-                valid = false;
-                if (Time.unscaledTime >= nextClockWarning)
-                {
-                    nextClockWarning = Time.unscaledTime + 30f;
-                    Plugin.Logger?.LogWarning("[Support] Mission clock read failed; holding the last good time: " + e.Message);
-                }
-            }
-            return Clock.Read(raw, valid, Time.frameCount);
-        }
+        internal static float MissionNow() => MissionTimeSource.Now();
 
         private void Update()
         {
@@ -414,11 +399,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             mapGesture.Advance(Time.frameCount);
             // Transport timeouts run on wall time: a frozen or paused MP mission clock must not hold a request pending forever.
             float wall = Time.unscaledTime;
-            if (pendingWaypoint != -1 && wall > pendingWaypointUntil)
-            {
-                pendingWaypoint = -1;
-                Status = "No response from host.";
-            }
             if (pending && wall - pendingSince > ReplyTimeout)
             {
                 pending = false;
@@ -807,6 +787,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (action != null && action.Id == SupportActionId.SatCamera && float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
+                    CameraContacts = Mathf.Max(0, message.Contacts);
                     CameraSerial++;
                     Status = name + " accepted: imaging, " + Mathf.Max(0, message.Contacts) + " contact(s) revealed.";
                 }

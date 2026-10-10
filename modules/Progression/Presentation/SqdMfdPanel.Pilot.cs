@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 bool disabled = playerAircraft.disabled;
                 sortieGrid.Set(sortieCondition, disabled ? "DISABLED" : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE",
                     disabled ? AvState.Danger : AvState.Ready);
-                float fuel = Mathf.Clamp01(playerAircraft.fuelLevel);
+                float fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(playerAircraft);
                 tileFuel.Set(AvNum.Percent(fuel), fuel <= .15f ? AvState.Caution : AvState.Inert);
                 tileSortie.Set(AvNum.Thousands(playerAircraft.sortieScore));
             }
@@ -137,14 +137,16 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 pilot.Respawns ? AvState.Info : AvState.Caution);
             sortieGrid.Set(sortieMission, AvNum.Thousands(view.Score));
 
-            int perPoint = Math.Max(1, view.ScorePerPoint);
-            int toNext = perPoint - (pilotScore % perPoint);
+            // The host's ramp (grade n costs n × the interval), never a score modulo; -1 once the ladder is spent.
+            int toNext = PerkPoints.RemainingToNext(pilotScore, view.ScorePerPoint);
+            float price = Math.Max(1f, view.ScorePerPoint) *
+                (PerkPoints.Earned(pilotScore, view.ScorePerPoint, PerkCatalog.MaximumDepth) + 1);
             int earned = view.EarnedPoints;
             int available = view.AvailablePoints;
             int ceiling = Math.Max(1, view.MaximumPoints);
-            bool complete = earned >= view.MaximumPoints;
+            bool complete = earned >= view.MaximumPoints || toNext < 0;
 
-            ringScore.Set(bypass || complete ? 1f : 1f - toNext / (float)perPoint,
+            ringScore.Set(bypass || complete ? 1f : 1f - toNext / price,
                 bypass ? "DBG" : complete ? "MAX" : AvNum.Thousands(toNext), bypass ? AvState.Caution : AvState.Info);
             ringBonus.Set(Mathf.Clamp01(bonus / (float)AceBonusCeiling), "+" + AvNum.Thousands(bonus),
                 bonus > 0 ? AvState.Ready : AvState.Inert);

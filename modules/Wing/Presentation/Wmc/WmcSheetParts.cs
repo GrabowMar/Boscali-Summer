@@ -376,7 +376,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Fit(Row r)
         {
             float w = width > 0f ? width : 400f;
-            const float priceW = 66f, reasonW = 84f;
+            const float priceW = 66f;
             AvText.Set(r.Code, r.CodeFull);
             float codeW = Mathf.Clamp(AvText.Width(r.Code) + 4f, 46f, 90f);
             float x = 32f;
@@ -806,7 +806,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly bool[] canClear = new bool[MaxStations], enabled = new bool[MaxStations];
         private readonly StationMapMath.Spot[] spots = new StationMapMath.Spot[MaxStations * 2];
         private int count, page, selected = -1;
-        private float width, mapW, mapH, tableH;
+        private float mapW, mapH;
 
         public WmcStationBoard(RectTransform parent, WmcControls ids, Action<int> onSelect, Action<int> onClear, Action<int> onPage)
         {
@@ -863,7 +863,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Pages => Mathf.Max(1, (count + RowsPerPage - 1) / RowsPerPage);
 
-        public int Shown
+        public new int Shown
         {
             get
             {
@@ -984,7 +984,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            width = s.W;
             mapW = Mathf.Clamp(s.W * 0.31f, 112f, 150f);
             mapH = Mathf.Max(150f, TableHeight(s.W));
             AvLay.Place(mapRoot, 0f, 0f, mapW, mapH);
@@ -1141,7 +1140,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public int Shown => shown;
+        public new int Shown => shown;
 
         public int Page => page;
 

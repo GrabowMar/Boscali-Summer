@@ -220,7 +220,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public int Shown => shown;
+        public new int Shown => shown;
 
         public void Show(in MemberDetail d)
         {

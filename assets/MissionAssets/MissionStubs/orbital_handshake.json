@@ -1,0 +1,64 @@
+{
+  "id": "orbital_handshake",
+  "title": "Orbital Handshake",
+  "kind": "Recon",
+  "modules": [
+    "Support",
+    "DynamicOperations"
+  ],
+  "assets": [
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_OrbitalServiceTug",
+      "anchor": "CapturePort",
+      "purpose": "service-operation presentation"
+    },
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_RelaySatellite",
+      "anchor": "Downlink",
+      "purpose": "relay presentation"
+    },
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_RadioRelay",
+      "anchor": "Uplink",
+      "purpose": "ground authorization site"
+    }
+  ],
+  "briefing": "Recover control of a relay by securing its ground uplink and completing an authorized servicing task.",
+  "phases": [
+    {
+      "id": "1",
+      "label": "Ground link",
+      "completion_observation": "Observe and secure the bound native ground objective."
+    },
+    {
+      "id": "2",
+      "label": "Authorize",
+      "completion_observation": "Host validates ownership, faction, cost and current SPACE state."
+    },
+    {
+      "id": "3",
+      "label": "Service",
+      "completion_observation": "Future servicing adapter confirms capture/alignment; presentation does not decide success."
+    }
+  ],
+  "native_binding": "New orbital servicing gameplay is deliberately unimplemented; this is a design stub.",
+  "schema_version": 1,
+  "status": "design_stub",
+  "enabled": false,
+  "automatic_registration": false,
+  "authority": "host",
+  "reward_policy": "existing accepted reward; one completion award",
+  "visibility": "faction-known contacts only; no hidden enemy coordinates",
+  "limits": {
+    "board_cards": 3,
+    "accepted_per_faction": 2,
+    "poll_hz": 1,
+    "max_scene_assets": 12,
+    "max_tracked_units": 8,
+    "max_chain_depth": 2
+  },
+  "reset": "cancel on scene generation change; release presentation objects"
+}

@@ -75,12 +75,29 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             float cloud = Mathf.Clamp(Number(args, "cloudHeight", 4500f), 500f, 12000f);
             float? rain = args != null && args.ContainsKey("rain")
                 ? Mathf.Clamp01(Number(args, "rain", 1f)) : (float?)null;
-            manager.SetManualOverride(conditions, cloud, null, rain, snapImmediate: true);
+            if (!manager.SetManualOverride(conditions, cloud, null, rain, snapImmediate: true))
+                return Fail("ForceWeather", "no valid mission clock yet; the weather has not started");
             if (args != null && (args.ContainsKey("seed") || args.ContainsKey("modelAge") || fixtureRegime.HasValue))
                 manager.SetFixtureField((uint)Mathf.Clamp(Number(args, "seed", 1337f), 1f, 16000000f),
                     Mathf.Clamp(Number(args, "modelAge", 0f), 0f, 14400f), fixtureRegime);
             string followed = Follow(args);
             manager.LogAutomation($"ForceWeather: conditions {conditions:F2}, cloud {cloud:F0} m, rain {(rain.HasValue ? rain.Value.ToString("F2") : "AUTO")}, follow {followed ?? "-"}");
+            return Readout(manager);
+        }
+
+        /// <summary>Pin the whole sky to one of the 47 library skies: <c>sky</c> is 1-47, or 0 to unpin and resume the changing
+        /// weather. Host only; it goes through the same key path as the console, so clients receive the pin.</summary>
+        public static Dictionary<string, object> PinSky(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("PinSky", "no weather manager in this scene");
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer()) return Fail("PinSky", "pinning a sky is host-only");
+            float number = Number(args, "sky", 0f);
+            if (!(number >= 0f && number <= SkyLibrary.Count)) return Fail("PinSky", "sky must be 0 (unpin) or 1.." + SkyLibrary.Count);
+            int sky = Mathf.RoundToInt(number);
+            if (!manager.PinSky(sky == 0 ? WeatherKey.None : (byte)(sky - 1)))
+                return Fail("PinSky", "the weather has not started or has no valid mission clock yet");
+            manager.LogAutomation("PinSky: " + sky);
             return Readout(manager);
         }
 
@@ -93,7 +110,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!Enum.TryParse(Text(args, "scenario"), true, out WeatherScenario scenario) ||
                 !Enum.IsDefined(typeof(WeatherScenario), scenario))
                 return Fail("ApplyScenario", "unknown console weather preset");
-            manager.ApplyScenario(scenario);
+            if (!manager.ApplyScenario(scenario))
+                return Fail("ApplyScenario", "the weather has not started or has no valid mission clock yet");
             manager.LogAutomation("ApplyScenario: " + scenario);
             return Readout(manager);
         }

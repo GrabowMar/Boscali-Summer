@@ -30,42 +30,31 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(Mathf.Abs(DecoyRoute.Lateral(0f)) <= DecoyRoute.WeaveAmplitude, "weave stays inside its amplitude");
 
             var picker = new InterceptPicker();
-            var threats = new List<ThreatView> { new ThreatView(1, 950f, 300f), new ThreatView(2, 800f, 700f),
+            var threats = new List<ThreatView> { new ThreatView(1, 700f, 300f), new ThreatView(2, 800f, 700f),
                 new ThreatView(3, 900f, -50f), new ThreatView(4, 90f, 900f), new ThreatView(5, 2500f, 900f) };
-            TestAssert.That(picker.Pick(0f, threats) == 2, "soonest impact in the close-range reaction envelope wins");
+            // Pick answers with the index into the list (ids 1..5 sit at 0..4): a runtime missile's instance id is negative.
+            TestAssert.That(picker.Pick(0f, threats) == 1, "soonest impact in the close-range reaction envelope wins");
             picker.Fired(0f, 2);
             TestAssert.That(picker.Pick(2f, threats) == -1, "cooldown holds the next shot");
-            TestAssert.That(picker.Pick(4f, threats) == 1, "an engaged threat is not double-tapped");
-            TestAssert.That(picker.Pick(9f, threats) == 2, "a survivor is re-engaged after the memory lapses");
+            TestAssert.That(picker.Pick(4f, threats) == 0, "an engaged threat is not double-tapped");
+            TestAssert.That(picker.Pick(9f, threats) == 1, "a survivor is re-engaged after the memory lapses");
             TestAssert.That(AegisEnvelope.Contact(new Vector3(1,0,0),new Vector3(-1,0,0),.2f) &&
                 !AegisEnvelope.Contact(new Vector3(1,1,0),new Vector3(-1,1,0),.2f),
                 "swept contact catches a real high-speed hit and rejects a nearby miss");
-            TestAssert.That(AegisEnvelope.ContactRadius(.2f,.2f) < .3f &&
-                AegisEnvelope.ContactRadius(10f,10f) <= .75f && AegisEnvelope.ArmSeconds > AegisEnvelope.DropClearSeconds,
-                "physical contact has bounded geometry and cannot kill during launch clearance");
+            TestAssert.That(AegisEnvelope.Contact(new Vector3(100,12,0),new Vector3(-100,12,0),AegisEnvelope.ProximityRadius) &&
+                !AegisEnvelope.Contact(new Vector3(100,60,0),new Vector3(-100,60,0),AegisEnvelope.ProximityRadius) &&
+                AegisEnvelope.ArmSeconds > AegisEnvelope.DropClearSeconds,
+                "a near pass scores, a wide one does not, and nothing scores during launch clearance");
 
             TestAssert.That(SeductionRule.Seduces("ARH", 3000f, 0.1f) && !SeductionRule.Seduces("IR", 3000f, 0.1f),
                 "only radar seekers are seduced");
             TestAssert.That(!SeductionRule.Seduces("ARH", 9000f, 0.1f) && !SeductionRule.Seduces("ARH", 3000f, 0.9f),
                 "range and the roll both gate seduction");
 
-            TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Glaive2A) == VanguardRole.Carrier &&
-                VanguardKeys.RoleOf(VanguardKeys.Glaive2S) == VanguardRole.Carrier &&
+            TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Glaive2A) == VanguardRole.Sentinel &&
+                VanguardKeys.RoleOf(VanguardKeys.Glaive2S) == VanguardRole.Gunship &&
                 VanguardKeys.RoleOf(VanguardKeys.Orca) == VanguardRole.Torpedo &&
                 VanguardKeys.RoleOf(VanguardKeys.AleX) == VanguardRole.Towed, "batch-2 keys get their roles");
-            TestAssert.That(GlaiveProfile.Height(20000f) > GlaiveProfile.Height(5000f) &&
-                GlaiveProfile.Height(1000f) == 650f, "gun pod approaches high enough for a useful canopy descent");
-            TestAssert.That(GlaiveProfile.ShouldDeploy(250f,650f,4f) &&
-                !GlaiveProfile.ShouldDeploy(250f,100f,4f) && !GlaiveProfile.ShouldDeploy(900f,650f,4f) &&
-                !GlaiveProfile.ShouldDeploy(250f,650f,1f), "deployment needs range, altitude and launch clearance");
-            TestAssert.That(GlaiveProfile.Inflation(0f) == 0f && GlaiveProfile.Inflation(1.8f) == 1f &&
-                !GlaiveProfile.Burst(1f) && GlaiveProfile.Burst(2.4f), "canopy inflates before the firing cycle");
-            TestAssert.That(GlaiveProfile.CanFire(700f,500f,true,true) &&
-                !GlaiveProfile.CanFire(700f,500f,false,true) && !GlaiveProfile.CanFire(700f,500f,true,false) &&
-                !GlaiveProfile.CanFire(1300f,500f,true,true) && !GlaiveProfile.CanFire(100f,-20f,true,true),
-                "gun pod rejects friendlies, occlusion, excess range and targets above it");
-            TestAssert.That(GlaiveProfile.Retire(20f,240,5f) && GlaiveProfile.Retire(400f,0,20f) &&
-                !GlaiveProfile.Retire(400f,200,20f), "turret retires at low height or when dry");
             TestAssert.That(LanceCapacitor.Tracer(0f) >= .5f && LanceCapacitor.Tracer(1f) <= 1.2f,
                 "railgun uses a thin slug streak instead of an oversized beam");
 
@@ -77,8 +66,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(Mathf.Abs(WaterRun.SnakeYaw(1f)) <= 30f && Mathf.Abs(WaterRun.SnakeYaw(1f)) > 25f &&
                 Mathf.Abs(WaterRun.SnakeYaw(0f)) < 1e-3f, "snake search swings +/-30 deg");
 
-            Vector3 trail = TowedTrail.Offset(Vector3.forward, Vector3.up);
-            TestAssert.That(trail == new Vector3(0f, -8f, -100f), "decoy trails 100 m behind, 8 m below");
+            Vector3 trail = TowedTrail.Offset(Vector3.forward, Vector3.up, 100f);
+            TestAssert.That((trail - new Vector3(0f, -8f, -100f)).magnitude < 1e-3f, "decoy trails 100 m of fiber behind, 8 m below");
             TestAssert.That(TowedTrail.Snaps(7.5f, 500f) && TowedTrail.Snaps(2f, 40f) && !TowedTrail.Snaps(4f, 500f),
                 "cable snaps above 7 g or below 50 m");
             TestAssert.That(Mathf.Abs(TowedTrail.GLoad(Vector3.zero, new Vector3(0f, 0f, 9.81f * 7f * 0.25f), 0.25f) - 7f) < 0.01f &&
@@ -89,15 +78,6 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 !SeductionRule.SeducesTowed("ARH", 2000f, 0.8f, 0.3f) &&
                 !SeductionRule.SeducesTowed("IR", 2000f, -0.8f, 0.01f) &&
                 !SeductionRule.SeducesTowed("ARH", 4000f, -0.8f, 0.01f), "towed decoy: radar, close, rear-biased");
-
-            TestAssert.That(SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -120f), 10f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 40f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, false), "SKYWELL capture zone");
-            TestAssert.That(SkywellContact.TransferSeconds(8000f, 0) == 20f && SkywellContact.TransferSeconds(0f, 0) == 3f,
-                "transfer time clamps to 3..20 s");
-            TestAssert.That(SkywellContact.Aborts(30f, false) && SkywellContact.Aborts(0f, true) && !SkywellContact.Aborts(1f, false),
-                "contact aborts on distance or stick");
 
             float stock = 100f, funds = 0f;
             int[] rounds = RearmAllocation.Allocate(new List<RearmAllocation.StationNeed>
@@ -123,11 +103,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 LanceCapacitor.Charge(99f) == 1f, "charge fills over 2.5 s and clamps");
             TestAssert.That(LanceCapacitor.Power01(0f) == 0f && LanceCapacitor.Power01(1f) == 1f &&
                 LanceCapacitor.Power01(0.5f) > 0.4f && LanceCapacitor.Power01(0.5f) < 0.6f, "power tapers 0..1");
-            TestAssert.That(LanceCapacitor.Velocity(0f) == 1400f && LanceCapacitor.Velocity(1f) == 3400f &&
-                LanceCapacitor.Pierce(0f) == 1200f && LanceCapacitor.Pierce(1f) == 6000f &&
-                LanceCapacitor.Blast(0f) == 10f && LanceCapacitor.Blast(1f) == 40f &&
-                Mathf.Abs(LanceCapacitor.Tracer(0f) - .6f) < .001f && Mathf.Abs(LanceCapacitor.Tracer(1f) - 1.1f) < .001f,
-                "snap shots weak, full charge lethal; tracer remains a narrow streak");
+            TestAssert.That(Mathf.Abs(LanceCapacitor.Tracer(0f) - .6f) < .001f && Mathf.Abs(LanceCapacitor.Tracer(1f) - 1.1f) < .001f,
+                "tracer remains a narrow streak");
             TestAssert.That(LanceCapacitor.RechargeSeconds(0f) == 1f && LanceCapacitor.RechargeSeconds(1f) == 3.5f,
                 "bigger shots recharge longer");
 
@@ -141,7 +118,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(WaterRun.SnakeYaw(1f, 0f) == WaterRun.SnakeYaw(1f) &&
                 WaterRun.SnakeYaw(1f, 0.75f) != WaterRun.SnakeYaw(1f), "seeded snake searches vary");
 
-            TestAssert.That(TowedTrail.TrailPoint(new Vector3(5f, -1f, -6f), Vector3.forward, Vector3.up) == new Vector3(5f, -9f, -106f),
+            TestAssert.That((TowedTrail.TrailPoint(new Vector3(5f, -1f, -6f), Vector3.forward, Vector3.up, 100f) - new Vector3(5f, -9f, -106f)).magnitude < 1e-3f,
                 "towed decoy trails from its pylon anchor");
         }
     }

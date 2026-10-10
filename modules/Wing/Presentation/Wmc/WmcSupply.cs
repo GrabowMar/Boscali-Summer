@@ -18,8 +18,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private readonly WmcControls ids;
         private AvFlow flow;
-        private AvTicker ticker;
-        private int pageIndex;
         private bool relayout;
 
         // This refresh's snapshot: Metrics takes it first, Refresh reuses it.
@@ -46,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
             flow = pageFlow;
-            ticker = pageTicker;
-            pageIndex = index;
             BuildPin(flow);
             BuildInbound();
             BuildAdopt();

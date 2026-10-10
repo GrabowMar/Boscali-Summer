@@ -151,102 +151,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     }
 
     /// <summary>
-    /// The numbers one weather state means. Everything downstream reads these; a fade between
-    /// states lerps them, so clouds grow and shrink in place instead of rearranging.
-    /// </summary>
-    internal struct StateParams
-    {
-        /// <summary>Stratiform sheet coverage 0..1 (the continuous deck under OVERCAST).</summary>
-        public float Overcast;
-        public float CloudBase;
-        /// <summary>Multiplier on the mission wind speed.</summary>
-        public float WindFactor;
-        public float Turbulence;
-        /// <summary>Widespread light rain under the sheet, mm/h.</summary>
-        public float AreaRain;
-        /// <summary>Fair-weather cumulus groups, 0..1: how many are out and how big.</summary>
-        public float Cumulus;
-        /// <summary>Convective cells, 0..1: how many are active and how deep.</summary>
-        public float Convective;
-        /// <summary>Share of cells that are severe (hail, strong lightning), 0..1.</summary>
-        public float Severity;
-        /// <summary>Frontal bands, 0..1: first band from ~0.1 (OVERCAST up), second from ~0.85.</summary>
-        public float Frontal;
-        public float HazeKm;
-        public float Qnh;
-        public float Temperature;
-
-        // Cloud genera beyond the low deck and the convective cells (see the WMO chart:
-        // low stratus/stratocumulus/nimbostratus, middle alto-, high cirro-).
-
-        /// <summary>Low deck depth in metres: ~500 stratocumulus sheet, ~2500 nimbostratus.</summary>
-        public float LayerDepth;
-        /// <summary>0 lumpy stratocumulus bodies .. 1 flat, uniform stratus.</summary>
-        public float LayerSmooth;
-        /// <summary>Middle layer (3.5-5 km) coverage, 0..1.</summary>
-        public float MidCover;
-        /// <summary>0 altocumulus puffs .. 1 altostratus sheet.</summary>
-        public float MidSheet;
-        /// <summary>High layer (8-9.5 km) coverage, 0..1.</summary>
-        public float HighCover;
-        /// <summary>0 cirrus streaks .. ~0.5 cirrocumulus ripples .. 1 cirrostratus veil.</summary>
-        public float HighVeil;
-        /// <summary>0 uniform sky .. 1 a frontal boundary with an open sky ahead of it (<see cref="SkySplit"/>).</summary>
-        public float Split;
-
-        // Low-cloud genus. Zero means "derive" (see CloudShape.Resolve) except Anvil, where zero means none.
-        // Lerped, so a fade grows one kind of cloud into the next instead of swapping shapes.
-
-        /// <summary>Metres across one puff. Zero with a smooth deck is a sheet, not a field of cumulus.</summary>
-        public float PuffScale;
-        /// <summary>Typical thickness of one puff, metres.</summary>
-        public float PuffDepth;
-        /// <summary>Metres of the base transition. Small is a flat cumulus base.</summary>
-        public float BaseSharp;
-        /// <summary>How far each puff's base rises and falls, metres.</summary>
-        public float BaseWobble;
-        /// <summary>0 flat top, 1 round cumulus, above 1 a pinched tower.</summary>
-        public float Dome;
-        /// <summary>Detail-noise erosion at the boundary.</summary>
-        public float Billow;
-        /// <summary>0 none .. 1 a spreading anvil on convective tops.</summary>
-        public float Anvil;
-
-        public static StateParams Lerp(StateParams a, StateParams b, float t)
-        {
-            return new StateParams
-            {
-                Overcast = WeatherMath.Lerp(a.Overcast, b.Overcast, t),
-                CloudBase = WeatherMath.Lerp(a.CloudBase, b.CloudBase, t),
-                WindFactor = WeatherMath.Lerp(a.WindFactor, b.WindFactor, t),
-                Turbulence = WeatherMath.Lerp(a.Turbulence, b.Turbulence, t),
-                AreaRain = WeatherMath.Lerp(a.AreaRain, b.AreaRain, t),
-                Cumulus = WeatherMath.Lerp(a.Cumulus, b.Cumulus, t),
-                Convective = WeatherMath.Lerp(a.Convective, b.Convective, t),
-                Severity = WeatherMath.Lerp(a.Severity, b.Severity, t),
-                Frontal = WeatherMath.Lerp(a.Frontal, b.Frontal, t),
-                HazeKm = WeatherMath.Lerp(a.HazeKm, b.HazeKm, t),
-                Qnh = WeatherMath.Lerp(a.Qnh, b.Qnh, t),
-                Temperature = WeatherMath.Lerp(a.Temperature, b.Temperature, t),
-                LayerDepth = WeatherMath.Lerp(a.LayerDepth, b.LayerDepth, t),
-                LayerSmooth = WeatherMath.Lerp(a.LayerSmooth, b.LayerSmooth, t),
-                MidCover = WeatherMath.Lerp(a.MidCover, b.MidCover, t),
-                MidSheet = WeatherMath.Lerp(a.MidSheet, b.MidSheet, t),
-                HighCover = WeatherMath.Lerp(a.HighCover, b.HighCover, t),
-                HighVeil = WeatherMath.Lerp(a.HighVeil, b.HighVeil, t),
-                Split = WeatherMath.Lerp(a.Split, b.Split, t),
-                PuffScale = WeatherMath.Lerp(a.PuffScale, b.PuffScale, t),
-                PuffDepth = WeatherMath.Lerp(a.PuffDepth, b.PuffDepth, t),
-                BaseSharp = WeatherMath.Lerp(a.BaseSharp, b.BaseSharp, t),
-                BaseWobble = WeatherMath.Lerp(a.BaseWobble, b.BaseWobble, t),
-                Dome = WeatherMath.Lerp(a.Dome, b.Dome, t),
-                Billow = WeatherMath.Lerp(a.Billow, b.Billow, t),
-                Anvil = WeatherMath.Lerp(a.Anvil, b.Anvil, t),
-            };
-        }
-    }
-
-    /// <summary>
     /// The seven weather states and how the timeline moves between them. Uncompiled
     /// configuration: every peer derives the same sky, so these are constants, never settings.
     /// </summary>
@@ -254,7 +158,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         public const int Count = 7;
 
-        private static readonly StateParams[] Table =
+        private static readonly SkyParams[] Table =
         {
             // sheet, base, wind, turb, rain, cu, conv, sev, front, haze, qnh, temp,
             // deck depth / smooth, middle cover / sheet, high cover / veil, split,
@@ -282,15 +186,18 @@ namespace BoscaliSummer.Modules.Weather.Domain
                  4600f, 2000f, 65f, 80f, 1.35f, 0.75f, 0.90f),
         };
 
-        public static StateParams Get(WeatherRegimeType state) => Table[Index((int)state)];
+        public static SkyParams Get(WeatherRegimeType state) => Table[Index((int)state)];
 
         /// <summary>Parameters at a fractional ladder position (a fade between neighbours).</summary>
-        public static StateParams At(float level)
+        public static SkyParams At(float level)
         {
             if (level <= 0f) return Table[0];
             if (level >= Count - 1) return Table[Count - 1];
             int i = (int)level;
-            return StateParams.Lerp(Table[i], Table[i + 1], level - i);
+            // INTERIM(slice 4): holdScales false keeps today's smooth fade of the high layer's streak length between two class skies.
+            SkyParams sky = SkyParams.Lerp(Table[i], Table[i + 1], level - i, holdScales: false);
+            InterimHorizon(ref sky);
+            return sky;
         }
 
         public static WeatherRegimeType Clamp(int value) => (WeatherRegimeType)Index(value);
@@ -320,21 +227,38 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         private static int Index(int i) => i < 0 ? 0 : i >= Count ? Count - 1 : i;
 
-        private static StateParams Make(float overcast, float cloudBase, float wind, float turbulence, float rain,
+        /// <summary>
+        /// The old row layout as a designated class sky (INTERIM, slices 2-4): the layer columns are back-derived from the old
+        /// middle and high cover / sheet / veil so the existing scenes stay recognisable; the low-cloud lobe size snaps to the
+        /// nearest ladder rung; the legacy dry-cumulus level, frontal and split columns ride along for the legacy machinery.
+        /// </summary>
+        private static SkyParams Make(float overcast, float cloudBase, float wind, float turbulence, float rain,
             float cumulus, float convective, float severity, float frontal, float haze, float qnh, float temperature,
             float layerDepth, float layerSmooth, float midCover, float midSheet, float highCover, float highVeil, float split,
             float puffScale, float puffDepth, float baseSharp, float baseWobble, float dome, float billow, float anvil)
         {
-            return new StateParams
+            float lobe = puffScale > 0f ? Math.Max(1000f, puffScale) : 1800f; // the old CloudShape.Resolve floor and default
+            var sky = new SkyParams
             {
-                Overcast = overcast, CloudBase = cloudBase, WindFactor = wind, Turbulence = turbulence,
-                AreaRain = rain, Cumulus = cumulus, Convective = convective, Severity = severity,
-                Frontal = frontal, HazeKm = haze, Qnh = qnh, Temperature = temperature,
-                LayerDepth = layerDepth, LayerSmooth = layerSmooth, MidCover = midCover, MidSheet = midSheet,
-                HighCover = highCover, HighVeil = highVeil, Split = split,
-                PuffScale = puffScale, PuffDepth = puffDepth, BaseSharp = baseSharp, BaseWobble = baseWobble,
-                Dome = dome, Billow = billow, Anvil = anvil,
+                CloudBase = cloudBase, SheetCover = overcast, CumulusCover = cumulus * 0.5f, Convective = convective,
+                Severity = severity, StratRain = rain, WindFactor = wind, Turbulence = turbulence, Haze = haze, Qnh = qnh,
+                Temperature = temperature, OpacityMid = 0.7f, OpacityHigh = 0.15f,
+                LobeRung = Ladder.NearestLobeRung(lobe), PuffDepth = puffDepth, BaseSharp = baseSharp, BaseWobble = baseWobble,
+                Dome = dome, Billow = billow, Anvil = anvil, DeckDepth = layerDepth, DeckSmooth = layerSmooth,
+                Mid = SkyLayer.LegacyMid(midCover, midSheet), High = SkyLayer.LegacyHigh(highCover, highVeil),
+                Cumulus = cumulus, Frontal = frontal, Split = split,
             };
+            SkyDerived.Apply(ref sky);
+            InterimHorizon(ref sky);
+            return sky;
         }
+
+        /// <summary>
+        /// INTERIM(slice 4): the horizon deck's cover as today's uniform computes it, max(0.9 * Overcast, 0.3 * Cumulus + 0.2 * Convective) on
+        /// the row (re-applied after a fade, because the max of a lerp is not the lerp of a max), instead of the baked library formula. Unpinned
+        /// play keeps its horizon until slice 4 rewrites the deck; library skies use the baked column.
+        /// </summary>
+        private static void InterimHorizon(ref SkyParams sky) =>
+            sky.HorizonCover = Math.Max(0.9f * sky.SheetCover, 0.3f * sky.Cumulus + 0.2f * sky.Convective);
     }
 }

@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly bool[] victimDone = new bool[MaxVictims];
         private int victimCount, flickerCursor;
         private Vector3 point, ground;
-        private float born, radius, nextCockpit, nextSky;
+        private float born, radius, nextCockpit;
 
         public static void Trigger(Vector3 point, float radiusMeters)
         {
@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void Begin(Vector3 burst, float range)
         {
             Build();
-            point = burst; radius = range; born = Time.time; nextCockpit = 0f; nextSky = 0.7f; flickerCursor = 0;
+            point = burst; radius = range; born = Time.time; nextCockpit = 0f; flickerCursor = 0;
             ground = point;
             if (Physics.Raycast(point, Vector3.down, out RaycastHit hit, 60000f, PhysicsLayers.StaticsMask)) ground = hit.point; else ground.y = Datum.LocalSeaY;
             foreach (var ps in new[] { star, airglow, shell, groundRing, sparks, puffs }) { ps.Clear(); ps.Play(); }

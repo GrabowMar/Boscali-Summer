@@ -736,7 +736,7 @@ namespace BoscaliSummer.Fire
                 for (int i = 0; i < flashes.Length; i++)
                 {
                     if (!flashes[i].enabled) continue;
-                    float age = (now - flashAt[i]) / 0.3f;
+                    float age = Mathf.Clamp01((now - flashAt[i]) / 0.3f);
                     flashes[i].intensity = flashPeak[i] * (1f - age) * (1f - age);
                     if (age >= 1f) flashes[i].enabled = false;
                 }

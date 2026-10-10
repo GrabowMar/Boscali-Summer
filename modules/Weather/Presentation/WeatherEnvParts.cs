@@ -139,7 +139,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected const float Pad = 12f;
         private readonly AvFrame frame;
         private readonly string variant;
-        private readonly bool brackets;
         private readonly List<KeyValuePair<TMP_Text, string>> tints = new List<KeyValuePair<TMP_Text, string>>(16);
         protected EnvGraphic Art;
         protected float PlacedW, PlacedH;
@@ -148,7 +147,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             Rect = AvLay.Child(parent, name);
             variant = cardVariant;
-            brackets = hasBrackets;
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             frame.Bracket = hasBrackets ? 8f : 0f;
@@ -208,7 +206,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// <summary>Everything the hero condition card shows.</summary>
     internal sealed class EnvSky
     {
-        public string Code = "", Word = "", Category = "";
+        public string Code = "", Word = "", Category = "", Metar = "";
         public WeatherRegimeType Regime;
         public float Cover;
         public AvState State = AvState.Info, CategoryState = AvState.Info;
@@ -245,7 +243,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             AvText.Set(code, d.Code);
             AvText.Set(word, (d.State == AvState.Caution || d.State == AvState.Danger ? AvStates.Glyph(d.State) : "") + d.Word);
-            AvText.Set(cover, AvNum.Percent(d.Cover) + " COVER");
+            // The METAR line (oktas and bases of the active layers, then the weather) replaces the percent when known; the header metric keeps the percent.
+            AvText.Set(cover, d.Metar.Length > 0 ? d.Metar : AvNum.Percent(d.Cover) + " COVER");
             AvText.Set(catValue, (d.CategoryState == AvState.Caution || d.CategoryState == AvState.Danger ? AvStates.Glyph(d.CategoryState) : "") + d.Category);
             glyph.SetKind(d.Regime);
             coverFrac = Mathf.Clamp01(d.Cover);

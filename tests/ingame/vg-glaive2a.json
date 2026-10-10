@@ -1,0 +1,252 @@
+{
+  "name": "vg-glaive2a",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 720,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1500,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "helo",
+      "type": "UH-90 Ibis",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          7000
+        ]
+      },
+      "altitude": 120,
+      "speed": 30,
+      "heading": 90
+    },
+    {
+      "op": "fly",
+      "id": "helo",
+      "program": [
+        {
+          "orbit": {
+            "bank": 20,
+            "seconds": 400
+          }
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 12,
+      "conditions": 0.05,
+      "cloud_height": 6000,
+      "wind_speed": 0,
+      "wind_turbulence": 0,
+      "wind_heading": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Glaive2A"
+      },
+      "store": "launch"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "strike"
+      },
+      "store": "designate"
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "turn": {
+            "heading": 180,
+            "bank": 50
+          }
+        },
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "ingress"
+    },
+    {
+      "op": "wait",
+      "seconds": 70
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "station"
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "engaged"
+    },
+    {
+      "op": "wait",
+      "seconds": 120
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "ingress.glaive2a_launched",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ingress.VG_Glaive2A_guided",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ingress.VG_Glaive2A_sentinelPhase",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.glaive2a_onStation",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "station.VG_Glaive2A_sentinelPhase",
+      "min": 3
+    },
+    {
+      "check": "result_below",
+      "path": "station.VG_Glaive2A_sentinelPhase",
+      "max": 3
+    },
+    {
+      "check": "result_above",
+      "path": "station.VG_Glaive2A_arms",
+      "min": 0.99
+    },
+    {
+      "check": "result_above",
+      "path": "station.VG_Glaive2A_spin",
+      "min": 0.9
+    },
+    {
+      "check": "result_above",
+      "path": "station.VG_Glaive2A_agl",
+      "min": 150
+    },
+    {
+      "check": "result_below",
+      "path": "station.VG_Glaive2A_agl",
+      "max": 300
+    },
+    {
+      "check": "result_below",
+      "path": "station.VG_Glaive2A_holdError",
+      "max": 200
+    },
+    {
+      "check": "result_below",
+      "path": "station.VG_Glaive2A_speed",
+      "max": 45
+    },
+    {
+      "check": "result_above",
+      "path": "engaged.glaive2a_engagements",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "engaged.glaive2a_shots",
+      "min": 12
+    },
+    {
+      "check": "result_below",
+      "path": "engaged.glaive2a_shots",
+      "max": 300
+    },
+    {
+      "check": "result_above",
+      "path": "engaged.turretsDeployed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "end.glaive2a_dropped",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "end.VG_Glaive2A_alive",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "end.VG_Glaive2A_deathAge",
+      "max": 300
+    }
+  ]
+}

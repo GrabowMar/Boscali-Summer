@@ -12,8 +12,14 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         private static void Postfix(Missile __instance)
         {
             if (__instance == null || __instance.definition == null) return;
-            GlaiveTurret.Attach(__instance); // Cache deployed wing bases before launch presentation folds them.
+            if (SentinelDrone.Attach(__instance) == null) GlaiveDrone.Attach(__instance); // GLAIVE-2A gets its own rig
             WeaponArticulation.Attach(__instance);
+            OrcaVisuals.Attach(__instance);
+            RemoraVisuals.Attach(__instance);
+            MaldjEmitter.Attach(__instance);
+            HawcxVisuals.Attach(__instance);
+            KestrelDrone.Attach(__instance);
+            HamilcarVisuals.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }
@@ -55,17 +61,6 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
-    [HarmonyPatch(typeof(Missile), "ServerFixedUpdate")]
-    internal static class GlaiveSuspendedPhysicsPatch
-    {
-        private static bool Prefix(Missile __instance)
-        {
-            if (!VanguardRegistry.TryGet(__instance,out VanguardFlight flight) || !flight.GunDeployed) return true;
-            flight.TickGun();
-            return false;
-        }
-    }
-
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.LockedByMissile))]
     internal static class AegisLockPatch
     {
@@ -102,6 +97,21 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
+    // SKYWELL: an AI receiver the kit is serving (or the sim's seated jet) holds the service box on its own autopilot target. Pilot states
+    // write their inputs from this call, so the hold goes in a postfix and is the last writer of the step.
+    [HarmonyPatch(typeof(Pilot), nameof(Pilot.Pilot_OnAeroInputsApplied))]
+    internal static class SkywellHoldPatch
+    {
+        private static void Postfix(Pilot __instance) => Presentation.SkywellVisuals.SteerAfterPilot(__instance);
+    }
+
+    // SKYWELL: the pilot state's own fly-by-wire pass is skipped for a steered receiver; the hold runs the only one (SkywellVisuals.MayFilter).
+    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.FilterInputs))]
+    internal static class SkywellFilterPatch
+    {
+        private static bool Prefix(Aircraft __instance) => Presentation.SkywellVisuals.MayFilter(__instance);
+    }
+
     // LANCE: the trigger charges the capacitor instead of firing; LanceService fires on release.
     [HarmonyPatch(typeof(Gun), nameof(Gun.Fire))]
     internal static class LanceFirePatch
@@ -116,14 +126,14 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     }
 
     // ORCA underwater: skip vanilla water drag/detonation and run the torpedo instead (server-side flights only).
+    // HAMILCAR from the final approach on: the flight lands it itself, so the vanilla ground hit is skipped.
     [HarmonyPatch(typeof(Missile), "DetectCollisions")]
     internal static class TorpedoCollisionsPatch
     {
         private static bool Prefix(Missile __instance)
         {
-            if (__instance == null || !VanguardRegistry.TryGet(__instance, out VanguardFlight flight) ||
-                flight.Role != VanguardRole.Torpedo) return true;
-            return !flight.SwimTick();
+            if (__instance == null || !VanguardRegistry.TryGet(__instance, out VanguardFlight flight)) return true;
+            return flight.Role == VanguardRole.Torpedo ? !flight.SwimTick() : !flight.OwnsGroundContact;
         }
     }
 }

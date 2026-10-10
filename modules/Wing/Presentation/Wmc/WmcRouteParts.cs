@@ -101,9 +101,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             // Fit the points, where the flight starts from and where it is.
             float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
-            for (int i = 0; i < d.Count; i++) Grow(d.X[i], d.Z[i], ref minX, ref maxX, ref minZ, ref maxZ);
-            if (d.HaveFrom) Grow(d.FromX, d.FromZ, ref minX, ref maxX, ref minZ, ref maxZ);
-            if (d.HaveLead) Grow(d.LeadX, d.LeadZ, ref minX, ref maxX, ref minZ, ref maxZ);
+            for (int i = 0; i < d.Count; i++) Expand(d.X[i], d.Z[i], ref minX, ref maxX, ref minZ, ref maxZ);
+            if (d.HaveFrom) Expand(d.FromX, d.FromZ, ref minX, ref maxX, ref minZ, ref maxZ);
+            if (d.HaveLead) Expand(d.LeadX, d.LeadZ, ref minX, ref maxX, ref minZ, ref maxZ);
             float spanX = Math.Max(maxX - minX, 2000f), spanZ = Math.Max(maxZ - minZ, 2000f);
             float scale = Math.Min((w - 2f * Margin) / spanX, (h - 2f * Margin - 8f) / spanZ);
             float ox = w * 0.5f - (minX + maxX) * 0.5f * scale, oz = h * 0.5f - 4f - (minZ + maxZ) * 0.5f * scale;
@@ -159,7 +159,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             vector.Commit();
         }
 
-        private static void Grow(float x, float z, ref float minX, ref float maxX, ref float minZ, ref float maxZ)
+        private static void Expand(float x, float z, ref float minX, ref float maxX, ref float minZ, ref float maxZ)
         {
             minX = Math.Min(minX, x);
             maxX = Math.Max(maxX, x);

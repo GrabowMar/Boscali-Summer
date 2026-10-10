@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Hud.Domain;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -16,10 +17,11 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// <c>git show HEAD~:modules/Hud/Runtime/NativeHudPresentation.cs</c>). Stall and overspeed
     /// warning texts are never touched -- they are not in the hide list below.
     ///
-    /// Discovery (walking the native hierarchy for the leaf graphics) runs only on an ownship
-    /// change or a new <see cref="HUDAppManager"/> instance (HUDExtras spawn late); every other
-    /// tick just flips already-found <see cref="CanvasGroup"/>s. <see cref="Tick"/> is driven
-    /// from <c>HudBoard.LateUpdate</c> at the same cadence as everything else there.
+    /// Discovery (walking the native hierarchy for the leaf graphics) runs only for a NEW aircraft
+    /// or a new <see cref="HUDAppManager"/> instance (HUDExtras spawn late) -- see
+    /// <see cref="DiscoveryGate"/>; a cockpit/orbit flip hands this class no aircraft and is not new.
+    /// Every other tick just flips already-found <see cref="CanvasGroup"/>s. <see cref="Tick"/> is
+    /// driven from <c>HudBoard.LateUpdate</c> at the same cadence as everything else there.
     /// </summary>
     internal sealed class NativeFlightNumberHider
     {
@@ -33,7 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private static readonly FieldInfo HmdBearingField = AccessTools.Field(typeof(HeadMountedDisplay), "bearing");
         private static readonly FieldInfo HmdHorizonField = AccessTools.Field(typeof(HeadMountedDisplay), "horizon");
 
-        private const int Capacity = 32;
+        private const int Capacity = 96;
 
         private struct Hidden
         {
@@ -45,20 +47,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private readonly List<Hidden> hidden = new List<Hidden>(Capacity);
 
         private bool active;
-        private bool discovered;
-        private Aircraft lastAircraft;
-        private HUDAppManager lastAppManager;
+        private bool capacityWarned;
+        private DiscoveryGate gate;
 
         /// <summary>Hide while <paramref name="wantActive"/> and an aircraft is present; restore
         /// (without destroying) the instant either goes false.</summary>
         public void Tick(bool wantActive, Aircraft aircraft)
         {
-            HUDAppManager appManager = SceneSingleton<HUDAppManager>.i;
-            if (aircraft != lastAircraft) discovered = false;
-            if (appManager != lastAppManager && appManager != null) discovered = false;
-            lastAircraft = aircraft;
-            lastAppManager = appManager;
-
             if (!wantActive || aircraft == null)
             {
                 if (active) Restore();
@@ -66,11 +61,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 return;
             }
 
-            if (!discovered)
-            {
-                Discover();
-                discovered = true;
-            }
+            HUDAppManager appManager = SceneSingleton<HUDAppManager>.i;
+            if (gate.Needs(aircraft.GetInstanceID(), appManager != null ? appManager.GetInstanceID() : 0)) Discover();
 
             active = true;
             for (int i = 0; i < hidden.Count; i++)
@@ -82,6 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private void Discover()
         {
+            // Entries whose graphic was destroyed (a respawned HUD) are dead weight: free their slots first.
+            hidden.RemoveAll(h => h.Group == null);
             FlightHud hud = SceneSingleton<FlightHud>.i;
             if (hud != null)
             {
@@ -129,7 +123,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private void Hide(GameObject target)
         {
-            if (target == null || hidden.Count >= Capacity) return;
+            if (target == null) return;
+            if (hidden.Count >= Capacity)
+            {
+                if (!capacityWarned) Plugin.Logger?.LogWarning("[Hud] NativeFlightNumberHider is full (" + Capacity + "); some native numbers will stay visible in third person.");
+                capacityWarned = true;
+                return;
+            }
             for (int i = 0; i < hidden.Count; i++)
                 if (hidden[i].Group != null && hidden[i].Group.gameObject == target) return;
 
@@ -158,10 +158,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = 0; i < hidden.Count; i++)
                 if (hidden[i].Added && hidden[i].Group != null) Object.Destroy(hidden[i].Group);
             hidden.Clear();
-            discovered = false;
+            gate.Reset();
+            capacityWarned = false;
             active = false;
-            lastAircraft = null;
-            lastAppManager = null;
         }
     }
 }

@@ -1,19 +1,32 @@
 using NOAvionics;
 using System;
 using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
-    /// STUDIO tab: the local squadron emblem editor, plus a launcher for the Wing Command studio
+    /// STUDIO tab: the squadron insignia generator (a proof sheet of fresh rolls over eight
+    /// hand-set layers), the kneeboard card picker, and a launcher for the Wing Command studio
     /// (WMC WING > STUDIO), which owns custom-pilot editing.
     /// </summary>
     internal sealed partial class SqdMfdPanel
     {
-        private const float StudioEmblemHeight = 96f;
-        private const string StudioQuietLine = "The emblem and squadron name are local cosmetics; nothing is uploaded.";
+        private const float StudioEmblemHeight = 136f;
+        private const float StudioKneeboardHeight = 96f;
+        private const int ProofCount = 4;
+        private const string StudioQuietLine = "The insignia and squadron name are local cosmetics; nothing is uploaded.";
+
+        private static readonly string[] LayerLabels = { "SHAPE", "SPLIT", "MARK", "TRIM", "FIELD", "SECOND", "INK", "NUMBER" };
+        private static readonly string[] LayerHelp =
+        {
+            "outer shape", "field split", "centre mark", "trim around the mark", "field colour",
+            "second field colour (used by a split field)", "mark and rim colour", "squadron number (NONE leaves it off)",
+        };
+        private static readonly string[] PaintNames = { "OFF", "COLOUR", "LOW-VIS" };
 
         /// <summary>How a studio message reads: a success, a caution, or a refusal.</summary>
         private enum StudioTone : byte { Info, Ok, Warn, Bad }
@@ -26,10 +39,17 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private float studioMessageUntil;
 
         private SqdEmptyCard studioLauncher;
-        private AvNote studioMessageText;
-        private AvStepper studioShape, studioCharge, studioPalette, studioArt;
+        private AvNote studioMessageText, studioBlazon, studioContrast;
+        private AvStepper[] studioLayers;
+        private AvStepper studioArt, studioPaint;
         private AvPortrait studioEmblem;
         private AvField studioSquadronField;
+        private SqdProofStrip studioProofs;
+        private readonly EmblemDesign[] proofDesigns = new EmblemDesign[ProofCount];
+        private readonly EmblemCanvas[] proofCanvases = new EmblemCanvas[ProofCount];
+        private AvStepper studioKneeboard;
+        private AvPortrait studioKneeboardArt;
+        private IKneeboardGallery kneeboardGallery;
 
         private void ResetStudioPage()
         {
@@ -40,10 +60,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;
             studioLauncher = null;
-            studioMessageText = null;
-            studioShape = studioCharge = studioPalette = studioArt = null;
+            studioMessageText = studioBlazon = studioContrast = null;
+            studioLayers = null;
+            studioArt = studioPaint = null;
             studioEmblem = null;
             studioSquadronField = null;
+            studioProofs = null;
+            studioKneeboard = null; studioKneeboardArt = null; kneeboardGallery = null;
         }
 
         // ---- STUDIO page -------------------------------------------------------------------
@@ -52,42 +75,71 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
 
-            p.Section(AvIcon.UsersGroup, "CUSTOM PILOTS", "WING COMMAND");
-            studioLauncher = p.Add(new SqdEmptyCard(p.Content, AvIcon.Pencil, "PILOTS ARE EDITED IN WING COMMAND",
-                "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots.",
-                "OPEN WMC STUDIO", OpenWmcStudio, AvIcon.Pencil));
-
-            p.Section(AvIcon.Flag, "SQUADRON IDENTITY", "LOCAL COSMETIC");
+            p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", "LOCAL COSMETIC");
             studioEmblem = new AvPortrait(p.Content, "Emblem", "NO ART", StudioEmblemHeight);
+            studioEmblem.Help = "Your squadron insignia, shown on the pilot card. Local cosmetic only; nothing is uploaded.";
             AvCard squadronCard = new AvCard(p.Content, console.Ticker, half);
             studioSquadronField = squadronCard.Flow.Add(new AvField(squadronCard.Flow.Content, "SQUADRON NAME", 24,
                 value => settings.SquadronName.Value = value ?? string.Empty));
             studioSquadronField.Text = squadronName;
             FieldHelp(studioSquadronField, "Local squadron name shown on the pilot status page.");
+            studioBlazon = squadronCard.Flow.Add(new AvNote(squadronCard.Flow.Content, AvTextRole.ProseSmall));
+            studioBlazon.Set(emblem.Blazon());
+            studioContrast = squadronCard.Flow.Add(new AvNote(squadronCard.Flow.Content, AvTextRole.Micro));
             AvButtons emblemButtons = squadronCard.Flow.Buttons(
-                new AvControl.Spec("ROLL", RandomizeEmblem, AvButtonStyle.Quiet, AvIcon.Refresh),
+                new AvControl.Spec("ROLL", RollProofs, AvButtonStyle.Quiet, AvIcon.Refresh),
                 new AvControl.Spec("NO ART", ClearArtFile, AvButtonStyle.Quiet));
-            emblemButtons.Controls[0].Help = "Roll a new local emblem: shape, mark and palette together.";
-            emblemButtons.Controls[1].Help = "Use the procedural emblem instead of a PNG.";
-            studioEmblem.Help = "Your squadron emblem, shown on the pilot card. Local cosmetic only; nothing is uploaded.";
+            emblemButtons.Controls[0].Help = "Print four fresh proofs below. Your insignia stays as it is until you tap one.";
+            emblemButtons.Controls[1].Help = "Use the generated insignia instead of a PNG.";
             p.Row(studioEmblem, squadronCard);
 
-            studioShape = new AvStepper(p.Content, "SHAPE", () => EmblemDesign.ShapeNames[emblem.Shape],
-                () => CycleEmblem(-1, 0, 0), () => CycleEmblem(1, 0, 0));
-            studioCharge = new AvStepper(p.Content, "MARK", () => EmblemDesign.ChargeNames[emblem.Charge],
-                () => CycleEmblem(0, -1, 0), () => CycleEmblem(0, 1, 0));
-            studioPalette = new AvStepper(p.Content, "COLOR",
-                () => "PALETTE " + AvNum.Thousands(emblem.Palette + 1) + "/" + AvNum.Thousands(EmblemDesign.PaletteCount),
-                () => CycleEmblem(0, 0, -1), () => CycleEmblem(0, 0, 1));
+            p.Section(AvIcon.Sticker, "PROOF SHEET", "TAP A PROOF TO ADOPT IT");
+            studioProofs = p.Add(new SqdProofStrip(p.Content, ProofCount, AdoptProof,
+                "Tap to adopt this proof. The insignia you had takes its place on the sheet, so a swap can always be undone."));
+            int seed = NextSeed();
+            for (int i = 0; i < ProofCount; i++)
+            {
+                if (proofCanvases[i] == null) proofCanvases[i] = new EmblemCanvas();
+                proofDesigns[i] = EmblemDesign.Random(seed + i * 7919);
+            }
+
+            p.Section(AvIcon.Stack2, "LAYERS", "SET BY HAND");
+            studioLayers = new AvStepper[EmblemDesign.LayerCount];
+            for (int i = 0; i < studioLayers.Length; i++)
+            {
+                var layer = (EmblemLayer)i;
+                studioLayers[i] = new AvStepper(p.Content, LayerLabels[i], () => emblem.Name(layer),
+                    () => StepLayer(layer, -1), () => StepLayer(layer, 1));
+                StepperHelp(studioLayers[i], LayerHelp[i]);
+                if ((i & 1) == 1) p.Row(studioLayers[i - 1], studioLayers[i]);
+            }
+
             studioArt = new AvStepper(p.Content, "ART",
                 () => emblemFileIndex >= 0 && emblemFileIndex < emblemFiles.Length
                     ? System.IO.Path.GetFileNameWithoutExtension(emblemFiles[emblemFileIndex])
-                    : "NONE · PROCEDURAL",
+                    : "GENERATED",
                 () => CycleArtFile(-1), () => CycleArtFile(1));
-            StepperHelp(studioShape, "emblem shape"); StepperHelp(studioCharge, "emblem mark"); StepperHelp(studioPalette, "palette");
-            StepperHelp(studioArt, "PNG in the emblem folder (NONE keeps the procedural emblem)");
-            p.Row(studioShape, studioCharge);
-            p.Row(studioPalette, studioArt);
+            studioPaint = new AvStepper(p.Content, "PAINT", () => PaintNames[(int)settings.EmblemPaint.Value],
+                () => CyclePaint(-1), () => CyclePaint(1));
+            StepperHelp(studioArt, "PNG in the emblem folder (GENERATED keeps the insignia above)");
+            StepperHelp(studioPaint, "tail-fin paint: OFF, full COLOUR, or two-grey LOW-VIS. Only you see it, on your own aircraft");
+            p.Row(studioArt, studioPaint);
+
+            if (ModuleServices.TryGet(out kneeboardGallery))
+            {
+                p.Section(AvIcon.Pencil, "KNEEBOARD", "COCKPIT THIGH CARD");
+                studioKneeboardArt = new AvPortrait(p.Content, "Kneeboard", "WRITTEN", StudioKneeboardHeight);
+                studioKneeboard = new AvStepper(p.Content, "CARD", () => kneeboardGallery.Name(kneeboardGallery.Selected),
+                    () => kneeboardGallery.Selected--, () => kneeboardGallery.Selected++);
+                StepperHelp(studioKneeboard, "kneeboard card. MISSION CARD writes your sortie; the others are pictures strapped to your thigh");
+                studioKneeboardArt.Help = "The card on your cockpit kneeboard (look down at your free-hand thigh). Local cosmetic.";
+                p.Row(studioKneeboardArt, studioKneeboard);
+            }
+
+            p.Section(AvIcon.UsersGroup, "CUSTOM PILOTS", "WING COMMAND");
+            studioLauncher = p.Add(new SqdEmptyCard(p.Content, AvIcon.Pencil, "PILOTS ARE EDITED IN WING COMMAND",
+                "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots.",
+                "OPEN WMC STUDIO", OpenWmcStudio, AvIcon.Pencil));
 
             studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true }, 1f);
             studioMessageText.Set(StudioQuietLine);
@@ -119,7 +171,17 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     ? "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots."
                     : WingLink.SquadUnavailableReason);
             studioEmblem.Set(emblemSprite);
-            studioShape.Refresh(); studioCharge.Refresh(); studioPalette.Refresh(); studioArt.Refresh();
+            studioBlazon.Set(emblem.Blazon());
+            studioContrast.Set(emblem.Legible ? "CONTRAST OK · READS AT DISTANCE" : "CONTRAST LOW · MARK MAY NOT READ",
+                emblem.Legible ? AvState.Ready : AvState.Caution);
+            for (int i = 0; i < studioLayers.Length; i++) studioLayers[i].Refresh();
+            studioArt.Refresh(); studioPaint.Refresh();
+            for (int i = 0; i < ProofCount; i++) studioProofs.Set(i, proofCanvases[i].Draw(proofDesigns[i]));
+            if (studioKneeboard != null && kneeboardGallery != null)
+            {
+                studioKneeboard.Refresh();
+                studioKneeboardArt.Set(kneeboardGallery.Preview(kneeboardGallery.Selected));
+            }
 
             bool quiet = string.IsNullOrEmpty(studioMessage);
             studioMessageText.Set(quiet ? StudioQuietLine : studioMessage);
@@ -139,21 +201,48 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             nextRefresh = 0f;
         }
 
-        private void CycleEmblem(int shape, int charge, int palette)
+        private void StepLayer(EmblemLayer layer, int delta)
         {
-            emblem = emblem.Cycle(shape, charge, palette);
+            SetEmblem(emblem.With(layer, delta));
+            string set = LayerLabels[(int)layer] + ": " + emblem.Name(layer) + ".";
+            if (emblem.Legible) NextMessage(set, StudioTone.Ok);
+            else NextMessage(set + " The mark is close in tone to its field and may not read at distance.", StudioTone.Warn);
+        }
+
+        private void SetEmblem(EmblemDesign design)
+        {
+            emblem = design;
             settings.Emblem.Value = emblem.Encode();
-            NextMessage("Emblem updated: " + EmblemDesign.ShapeNames[emblem.Shape] + " / " +
-                EmblemDesign.ChargeNames[emblem.Charge] + ".", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
-        private void RandomizeEmblem()
+        private void RollProofs()
         {
-            emblem = EmblemDesign.Random(NextSeed());
-            settings.Emblem.Value = emblem.Encode();
+            int seed = NextSeed();
+            for (int i = 0; i < ProofCount; i++) proofDesigns[i] = EmblemDesign.Random(seed + i * 7919);
+            NextMessage("Four fresh proofs printed. Tap one to adopt it.", StudioTone.Ok);
+            nextRefresh = 0f;
+        }
+
+        /// <summary>The adopted proof and the current insignia trade places, so the sheet doubles as undo.</summary>
+        private void AdoptProof(int index)
+        {
+            if (index < 0 || index >= ProofCount) return;
+            EmblemDesign previous = emblem;
+            SetEmblem(proofDesigns[index]);
+            proofDesigns[index] = previous;
             settings.EmblemFile.Value = string.Empty;
-            NextMessage("Rolled a new emblem.", StudioTone.Ok);
+            NextMessage("Adopted. The insignia you had is on the sheet in its place.", StudioTone.Ok);
+        }
+
+        private void CyclePaint(int direction)
+        {
+            int count = PaintNames.Length;
+            var next = (EmblemPaint)((((int)settings.EmblemPaint.Value + direction) % count + count) % count);
+            settings.EmblemPaint.Value = next;
+            NextMessage(next == EmblemPaint.Off ? "Tail-fin paint off."
+                : "Tail-fin paint: " + PaintNames[(int)next] + ". Only you see it, on your own aircraft.",
+                StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -175,7 +264,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void ClearArtFile()
         {
             settings.EmblemFile.Value = string.Empty;
-            NextMessage("Using the procedural emblem.", StudioTone.Ok);
+            NextMessage("Using the generated insignia.", StudioTone.Ok);
             nextRefresh = 0f;
         }
 
@@ -190,8 +279,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             if (!string.IsNullOrEmpty(studioMessage) && Time.unscaledTime < studioMessageUntil)
                 return studioMessage;
+            // While the paint shop is on, its own words say whether the fin really carries the insignia.
+            if (settings != null && settings.EmblemPaint.Value != EmblemPaint.Off && Visuals.TailPaint.Status.Length > 0)
+                return Visuals.TailPaint.Status + ". Only you see it.";
             return WingLink.SquadAvailable
-                ? "Pilot editing lives in Wing Command; the emblem is edited here."
+                ? "Pilot editing lives in Wing Command; the insignia is designed here."
                 : WingLink.SquadUnavailableReason;
         }
 

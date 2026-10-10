@@ -11,6 +11,7 @@ namespace BoscaliSummer.Modules.Progression.Configuration
         public ConfigEntry<string> SquadronName { get; }
         public ConfigEntry<string> Emblem { get; }
         public ConfigEntry<string> EmblemFile { get; }
+        public ConfigEntry<Runtime.EmblemPaint> EmblemPaint { get; }
         public ConfigEntry<string> PilotProfile { get; }
 
         public ProgressionSettings(ConfigFile config)
@@ -53,12 +54,19 @@ namespace BoscaliSummer.Modules.Progression.Configuration
                 "Local squadron name shown on the SQD pilot dossier. Cosmetic and client-local; " +
                 "it is never sent to other players.");
             Emblem = config.Bind("Squadron", "Emblem", Runtime.EmblemDesign.DefaultText,
-                "Local procedural emblem, encoded as shape.charge.palette. Edit it in SQD's " +
-                "STUDIO tab. Cosmetic and client-local.");
+                "Local generated insignia, encoded as shape.division.charge.accent.field.second.ink.number " +
+                "(the older shape.charge.palette form is still read). Design it in PILOT's STUDIO tab. " +
+                "Cosmetic and client-local.");
             EmblemFile = config.Bind("Squadron", "EmblemFile", "",
                 "Optional PNG path used instead of the procedural emblem. Only files inside " +
                 "BepInEx/config/BoscaliSummer/Emblems are offered; the mod never downloads or " +
                 "bundles art. Cosmetic and client-local.");
+            EmblemPaint = config.Bind("Squadron", "EmblemPaint", Runtime.EmblemPaint.Colour,
+                "Paint insignia on tail fins: your own on your aircraft and your wingmen, and each " +
+                "enemy ace wing's crest on that wing. Off, Colour, or LowVis (two greys). A marking is " +
+                "baked once into a copy of the livery texture, which is then packed to the livery's " +
+                "own format, so it costs nothing per frame and about as much memory as one more " +
+                "livery. Cosmetic and client-local.");
             PilotProfile = config.Bind("Squadron", "PilotProfile", "",
                 "Callsign of a Wing Command custom pilot used as your local SQD profile " +
                 "(name, callsign, background and portrait). Leave blank to show the " +

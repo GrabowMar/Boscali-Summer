@@ -10,7 +10,10 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         GSuitInflate = 32, GSuitVent = 64, Heartbeat = 128
     }
 
-    /// <summary>One frame of the pilot's body: vanilla GLOC fields when available, plus threat/hit pulses.</summary>
+    /// <summary>
+    /// One frame of the pilot's body: vanilla GLOC fields when available, plus threat/hit pulses.
+    /// Blast = a warhead went off on the airframe this frame; Critical = the aircraft is badly damaged.
+    /// </summary>
     internal struct PilotVitalsSample
     {
         public float G;
@@ -18,6 +21,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public float BloodPressure, Stamina;
         public bool Conscious;
         public int Threats, Hits;
+        public bool Blast, Critical;
     }
 
     // Presentation pacing, not medicine. Vanilla GLOC owns vision, controls and blackout;
@@ -26,6 +30,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
     {
         public const float RestRate = 12f, MaxRate = 30f, InhaleShare = .4f;
         public const float AgsmHold = 2.6f, AgsmKeh = .35f, AgsmInhale = .45f;
+        public const float PanicSeconds = 6f; // how long a warhead hit holds stress at its ceiling
         private const float PumpRate = .28f, DrainPerG = .04f, StaminaRecovery = .18f;
 
         public float BloodPressure { get; private set; } = 1f;
@@ -40,9 +45,11 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public float Greyout01 => Scalar.Clamp01((.6f - BloodPressure) / .4f);
         public bool Ragged => Straining && Stamina < .25f;
         public float BreathsPerMinute => RestRate + (MaxRate - RestRate) * Exertion01;
-        public float HeartRate => 110f + 50f * Greyout01;
+        public float HeartRate => 110f + 50f * Math.Max(Greyout01, Stress01);
+        /// <summary>How loudly the pilot hears their own heart: greyout, a crippled aircraft, or stress near its ceiling.</summary>
+        public float Pulse01 { get; private set; }
 
-        private float phase, agsm, recovery, heart, blackout;
+        private float phase, agsm, recovery, heart, blackout, panic;
         private bool suit;
 
         public PilotCue Step(in PilotVitalsSample s, float dt)
@@ -66,6 +73,9 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             Stress01 *= (float)Math.Exp(-dt / 10f);
             if (s.Threats > 0) Stress01 = Math.Max(Stress01, .6f);
             if (s.Hits > 0) Stress01 = Math.Min(1f, Stress01 + .35f * s.Hits);
+            if (s.Blast) panic = PanicSeconds;
+            if (panic > 0f) { panic -= dt; Stress01 = 1f; }
+            else if (s.Critical) Stress01 = Math.Max(Stress01, .8f);
             recovery *= (float)Math.Exp(-dt / 6f);
             float load = Scalar.Clamp01((LoadG - 1.5f) / 4.5f);
             Exertion01 = Math.Max(Math.Max(load, 1f - Stamina), Math.Max(Stress01, recovery));
@@ -73,7 +83,8 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             if (!suit && LoadG > 2.5f) { suit = true; cues |= PilotCue.GSuitInflate; }
             else if (suit && LoadG < 1.5f) { suit = false; cues |= PilotCue.GSuitVent; }
 
-            if (Greyout01 > 0f)
+            Pulse01 = Math.Max(Greyout01, Math.Max(s.Critical ? .7f : 0f, Scalar.Clamp01((Stress01 - .7f) / .3f)));
+            if (Pulse01 > 0f)
             {
                 heart += dt * HeartRate / 60f;
                 if (heart >= 1f) { heart -= 1f; cues |= PilotCue.Heartbeat; }
@@ -151,7 +162,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         {
             BloodPressure = Stamina = LoadG = 1f;
             Conscious = true;
-            Stress01 = Exertion01 = ChestLift01 = phase = agsm = recovery = heart = blackout = 0f;
+            Stress01 = Exertion01 = ChestLift01 = Pulse01 = phase = agsm = recovery = heart = blackout = panic = 0f;
             SegmentSeconds = 2f;
             Straining = suit = false;
         }

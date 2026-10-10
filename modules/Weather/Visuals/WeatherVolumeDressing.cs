@@ -91,7 +91,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private float nativeSkyClouds;
         private readonly WeatherCloudShadows shadows;
         private readonly Func<float, float, WeatherPoint> displayedWeather;
-        private StateParams displayedSky;
+        private TapeSampler displayedTape;
+        private TapeFrame displayedFrame;
         private SkySplit displayedSplit;
         private float displayedHeading;
 
@@ -103,7 +104,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int ShadowUpdates => shadows.UpdateCount;
         internal string ShadowFailure => shadows.FailureReason ?? string.Empty;
         internal bool Active => renderer != null && renderer.enabled && near.Current != null && noise != null;
-        internal bool DeckActive => Active && activeField.Params.Overcast > 0.75f &&
+        internal bool DeckActive => Active && activeField.Params.SheetCover > 0.75f &&
             activeField.Params.Convective < 0.25f;
         /// <summary>True while the reduced-resolution pass draws the sky.</summary>
         internal bool HalfResolution => Active && halfResolution;
@@ -272,7 +273,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 DeltaTime = Time.deltaTime,
             };
             uniforms.Apply(material, field, frame, noise);
-            displayedSky = field.Params;
+            displayedTape = field.Tape;
+            displayedFrame = field.Frame;
             displayedSplit = field.Split;
             displayedHeading = field.PrevailingHeading;
             renderer.enabled = !wantHalfResolution || halfResolution;
@@ -366,7 +368,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (!Active || activeField == null) return 0f;
             byte[] data = NoiseData;
             if (data == null || data.Length != NoiseTexels * 4) return 0f;
-            var bodies = new CloudBodies(data, NoiseSize, displayedSky, displayedHeading,
+            var bodies = new CloudBodies(data, NoiseSize, displayedTape, displayedFrame, displayedHeading,
                 displayedSplit, uniforms.FogShown, activeField, uniforms.HeroStrengths, true, displayedWeather);
             return Mathf.Clamp01(bodies.Density(SampleDisplayedWeather(x, z), x, y, z, cloudShift));
         }
@@ -469,7 +471,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             volumeTop = result.Top;
             fadeStart = missionTime;
             // Finish together with the weather: the map shows the settled state.
-            fadeLength = first ? 0f : Mathf.Max(mapKey != null ? mapKey.FadeSeconds * 0.5f : 5f,
+            fadeLength = first ? 0f : Mathf.Max(WeatherTimeline.FadeSeconds * 0.5f,
                 result.SettledAt - missionTime);
             nextBlend = 0f;
             blendedAt = -1f;
@@ -550,6 +552,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool Prepare()
         {
             if (failed) return false;
+            if (!TapeTexture.Supported)
+            {
+                // The tape is a float texture: without the format the volume cannot read its rows. Native clouds stay.
+                logger?.LogWarning("[Weather] RGBAFloat textures unsupported; native clouds remain visible.");
+                failed = true;
+                return false;
+            }
             if (material == null)
             {
                 Shader shader = CanopyShaderBundle.GetFlightCloudShader();

@@ -29,6 +29,12 @@ namespace BoscaliSummer.Modules.Autopilot.Patches
             catch (Exception e) { Plugin.Logger?.LogError("Autopilot: radial injection failed while opening: " + e); }
         }
 
+        /// <summary>While the C-key menu is open the native wheel stays frozen: the pad press the menu reads is the wheel's own button, and a
+        /// press held past the wheel's delay would otherwise open the wheel over the menu.</summary>
+        [HarmonyPatch("Update")]
+        [HarmonyPrefix]
+        private static bool Update_Prefix() => !Presentation.AceRadialMenuUi.IsOpenNow;
+
         [HarmonyPatch("OnDestroy")]
         [HarmonyPostfix]
         private static void OnDestroy_Postfix() => BoscaliRadialMenu.Reset();

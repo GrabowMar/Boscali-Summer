@@ -76,6 +76,7 @@ namespace NOAvionics
                 if (AvBundle.Noise != null) m.SetTexture("_NoiseTex", AvBundle.Noise);
                 m.SetFloat("_Frost", 1f); m.SetFloat("_Reflection", 0.4f);
                 frost.material = m;
+                go.AddComponent<FrostReaper>().Material = m;
             }
             else frost.enabled = false;
 
@@ -175,6 +176,13 @@ namespace NOAvionics
         {
             public GameObject Host;
             private void OnDestroy() { if (Host != null) Destroy(Host); }
+        }
+
+        /// <summary>Destroys the window-owned frost material together with the window.</summary>
+        private sealed class FrostReaper : MonoBehaviour
+        {
+            public Material Material;
+            private void OnDestroy() { if (Material != null) Destroy(Material); }
         }
     }
 }
