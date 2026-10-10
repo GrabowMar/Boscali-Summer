@@ -31,8 +31,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
         private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
 
-        /// <summary>|G| at or above this lights the SPD box (over-G caution).</summary>
-        private const float OverG = 7f;
         /// <summary>Fuel fraction below this lights the fuel bar.</summary>
         private const float LowFuel = 0.2f;
         /// <summary>Text on a lit (ink-filled) tag.</summary>
@@ -41,7 +39,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>One tick of own-aircraft flight data.</summary>
         internal struct Flight
         {
-            public float SpeedMps, AltitudeM, RadarAltM, ClimbMps, HeadingDeg, Mach, G, Fuel, Throttle, BankDeg, SlipDeg;
+            public float SpeedMps, AltitudeM, RadarAltM, ClimbMps, HeadingDeg, Mach, G, GLimit, Fuel, Throttle, BankDeg, SlipDeg;
         }
 
         private readonly char[] buf = new char[48];
@@ -64,7 +62,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             public RectTransform Root;
             public Image Backing;
-            public Image Frame;
             public TextMeshProUGUI Caption;
             public TextMeshProUGUI Value;
             public TextMeshProUGUI SubLine;
@@ -83,7 +80,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             public RectTransform Root;
             public Image Backing;
-            public Image Frame;
             public Image Tag;
             public TextMeshProUGUI TagText;
             public TextMeshProUGUI Header;
@@ -166,7 +162,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             backing.raycastTarget = false;
             backing.sprite = AvSprites.White;
             backing.color = Color.clear;
-            Image frame = null;
 
             bool hasSub = caption != null;
             TextMeshProUGUI captionText = null;
@@ -219,7 +214,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             return new Box
             {
-                Root = rect, Backing = backing, Frame = frame, Caption = captionText, Value = value, SubLine = sub,
+                Root = rect, Backing = backing, Caption = captionText, Value = value, SubLine = sub,
                 Track = track, TrackImage = trackImage, Bar = bar, BarLabel = barLabel,
                 LastValue = float.NaN, LastSub = float.NaN, LastCaption = float.NaN, LastBar = float.NaN
             };
@@ -266,8 +261,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI closure = Label(feedRect, "Closure", TextAlignmentOptions.BottomRight, 12f,
                 new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 4f), new Vector2(-6f, 20f));
 
-            Image frame = null;
-
             // Outlined "TGT" tag (outline drawn in PaintSymbols), then the target name, then its range right-aligned.
             var tagObject = new GameObject("Tag", typeof(RectTransform), typeof(Image));
             RectTransform tagRect = (RectTransform)tagObject.transform;
@@ -301,7 +294,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cardObject.SetActive(false);
             return new TargetCardWidgets
             {
-                Root = rect, Backing = backing, Frame = frame, Tag = tag, TagText = tagText, Header = title, Range = range,
+                Root = rect, Backing = backing, Tag = tag, TagText = tagText, Header = title, Range = range,
                 Closure = closure, Feed = feed, Reticle = reticle, Active = false, LastRange = float.NaN, LastClosure = float.NaN
             };
         }
@@ -341,7 +334,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             PositionRect(spd.Track, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true));
             PositionRect(alt.Track, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false));
 
-            bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= OverG;
+            bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= BoscaliSummer.Core.Math.FlightLoad.CautionAt(f.GLimit);
             TerrainCue terrain = HudCues.Terrain(f.RadarAltM, f.ClimbMps);
             bool lowFuel = f.Fuel < LowFuel;
             Color? spdLit = overG ? caution : (Color?)null;
@@ -399,8 +392,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintSymbols(float screenW, float screenH, Color ink, Color? spdLit, Color? altLit, Color fuel,
             bool cardShown, bool flash, float bankDeg, float slipDeg)
         {
-            int key = (int)screenW * 7919 + (int)screenH * 31 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) +
-                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg) * 104729 + Mathf.RoundToInt(slipDeg * 2f) * 7;
+            // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
+            int key = (int)screenW * 7919 + (int)screenH * 31 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
+                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7;
             if (key == lastSymbols) return;
             lastSymbols = key;
 
@@ -424,6 +418,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 AvStrokes.Line(b, card.Left, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f,
                     card.Right, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f, 1f, line.WithAlpha(0.5f));
             }
+            BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
         }
 
@@ -454,7 +449,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private static int Code(Color? c) => c.HasValue ? Code(c.Value) : 0;
-        private static int Code(Color c) => (int)(c.r * 50f) * 3 + (int)(c.g * 50f);
+        private static int Code(Color c)
+        {
+            Color32 p = c;
+            return (p.r << 24) | (p.g << 16) | (p.b << 8) | p.a;
+        }
 
         /// <summary>The native HUD's corner-bracket frame: open sides, short arms top and bottom.</summary>
         private static void Brackets(AvQuadBuffer b, RectF r, Rgba c)

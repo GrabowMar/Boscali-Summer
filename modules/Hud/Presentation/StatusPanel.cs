@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float StripTextHeight = 20f;
         private const float PipSize = 11f;
         private const float FlashSeconds = 1.6f;
+        /// <summary>One text line is about this many times its point size tall.</summary>
+        private const float LineShare = 1.35f;
         private const int VectorCapacity = 4000;
         // Green-glass ground (AvTokens.Ground) at HUD transparency: the MFD plate hue, see-through.
         private static readonly Color PlateColor = new Color(0.020f, 0.039f, 0.059f, 0.88f);
@@ -79,6 +81,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Lamp[] threatLamps = new Lamp[HudThreats.Count];
         private readonly int[] lampOrder = new int[HudLamps.Count];
         private readonly Vector3[] corners = new Vector3[4];
+        private readonly System.Collections.Generic.Dictionary<int, bool> graphicCache = new System.Collections.Generic.Dictionary<int, bool>();
 
         private struct Cell
         {
@@ -86,6 +89,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public TextMeshProUGUI Label;
             public HudTone LastTone;
             public string LastText;
+            public int LastBarPct;
             public float FlashUntil;
         }
 
@@ -158,6 +162,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 cells[i].Value = Text("Value" + i, TextAlignmentOptions.TopLeft, valueSize, TextOverflowModes.Overflow);
                 cells[i].Label = Text("Label" + i, TextAlignmentOptions.Bottom, labelSize, TextOverflowModes.Ellipsis);
+                Shrink(cells[i].Label, labelSize);
                 cells[i].Value.gameObject.SetActive(false);
                 cells[i].Label.gameObject.SetActive(false);
             }
@@ -185,7 +190,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             barFill.rectTransform.offsetMin = new Vector2(1.5f, 1.5f);
             stripLabel = Text("Detail", TextAlignmentOptions.Center, detailSize, TextOverflowModes.Ellipsis);
             stripLabel.characterSpacing = 4f;
+            Shrink(stripLabel, detailSize);
             lastSignature = 0;
+            graphicCache.Clear();
         }
 
         /// <summary>Native weapon cell height over the design reference: how big one design unit is here.</summary>
@@ -198,6 +205,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static float Share(TMP_Text native, float share, float fallback) =>
             native != null && native.fontSize > 1f ? native.fontSize * share : fallback;
+
+        /// <summary>Let a text that is too wide shrink to 70 % of its size before it elides.</summary>
+        private static void Shrink(TextMeshProUGUI t, float size)
+        {
+            t.enableAutoSizing = true;
+            t.fontSizeMax = size;
+            t.fontSizeMin = size * 0.7f;
+        }
 
         private TextMeshProUGUI Text(string name, TextAlignmentOptions alignment, float size, TextOverflowModes overflow)
         {
@@ -247,12 +262,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bottom = dock.rect.yMin;
             float cMinX = float.MaxValue, cMaxX = float.MinValue, cMinY = float.MaxValue;
             float dockArea = Mathf.Max(1f, dock.rect.width * dock.rect.height);
-            var corners = new Vector3[4];
             for (int i = 0; i < dock.childCount; i++)
             {
                 var child = dock.GetChild(i) as RectTransform;
                 if (child == null || child == root || !child.gameObject.activeInHierarchy) continue;
-                if (child.GetComponentInChildren<Graphic>() == null) continue;
+                if (!HasGraphic(child)) continue;
                 child.GetWorldCorners(corners);
                 float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
                 for (int k = 0; k < 4; k++)
@@ -320,8 +334,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
             f.LampW = f.LampCount > 0 ? (f.Width - pad * 2f - LampGap * u * (f.LampCount - 1)) / f.LampCount : 0f;
 
-            int signature = (int)f.Width * 31 + f.Count * 7 + f.LampCount + (strip ? 3 : 0) + (f.FlashOn ? 1 : 0) +
-                (f.Booting ? (int)(bootAge * 20f) * 101 : 0) + shots.Version * 7919;
+            int signature = (int)f.Width * 31 + f.Count * 7 + f.LampCount + (strip ? 3 : 0) +
+                (f.Booting ? (int)(bootAge * 20f) * 101 : 0) + shots.Version * 7919 + ThemeKey();
+            bool beat = false;   // something on the board blinks, so the flash phase is part of what it draws
 
             // Systems row.
             int total = f.LampCount + HudThreats.Count;
@@ -333,6 +348,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Lamp lamp = lamps[lampOrder[i]];
                 if (legends[i].text != lamp.Legend) legends[i].text = lamp.Legend;
                 legends[i].color = LampInk(lamp, LampOn(f, lamp, i, total), f.Booting);
+                beat |= Blinks(lamp);
                 Place(legends[i].rectTransform, pad + i * (f.LampW + LampGap * u), f.LampsY, f.LampW, LampHeight * u);
                 signature = signature * 13 + (int)lamp.State * 5 + lampOrder[i];
             }
@@ -345,6 +361,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Lamp lamp = threatLamps[i];
                 if (threatLegends[i].text != lamp.Legend) threatLegends[i].text = lamp.Legend;
                 threatLegends[i].color = LampInk(lamp, LampOn(f, lamp, f.LampCount + i, total), f.Booting);
+                beat |= Blinks(lamp);
                 Place(threatLegends[i].rectTransform, pad + i * (f.LampW + LampGap * u), f.ThreatY, f.LampW, LampHeight * u);
                 signature = signature * 13 + (int)lamp.State * 5 + lamp.Legend.Length;
             }
@@ -371,23 +388,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 HudMessage m = snapshot[i];
                 if (m.Tone == HudTone.Warning && (cells[i].LastTone != HudTone.Warning || cells[i].LastText != m.Text))
                     cells[i].FlashUntil = f.Now + FlashSeconds;
-                if (cells[i].LastText != m.Text || cells[i].LastTone != m.Tone)
+                // The figure follows the bar every tick: a constant text ("ILS", "LANCE") must not freeze it.
+                int barPct = Mathf.RoundToInt(Mathf.Clamp01(m.Bar) * 100f);
+                if (cells[i].LastText != m.Text || cells[i].LastBarPct != barPct)
                 {
-                    HudCellText.Split(m.Text, out string label, out string value);
-                    if (value.Length == 0 && m.Bar > 0f) value = Mathf.RoundToInt(m.Bar * 100f) + "%";
+                    HudCellText.Resolve(m.Text, m.Bar, out string label, out string value);
                     cells[i].Value.text = value;
                     cells[i].Label.text = label;
                     cells[i].LastText = m.Text;
-                    cells[i].LastTone = m.Tone;
+                    cells[i].LastBarPct = barPct;
                 }
+                cells[i].LastTone = m.Tone;
                 Color tone = ToneColor(m.Tone);
                 cells[i].Value.color = tone;
                 cells[i].Label.color = tone;
                 float x = pad + i * (f.CellW + CellGap * u);
-                Place(cells[i].Value.rectTransform, x + 5f * u, f.CellsY + 2f * u, f.CellW - 8f * u, 24f * u);
-                Place(cells[i].Label.rectTransform, x + 3f * u, f.CellsY + (CellHeight - 19f) * u, f.CellW - 6f * u, 17f * u);
+                // Boxes are at least one line of their own font tall: a box shorter than its line elides the whole text.
+                float valueH = Mathf.Max(24f * u, cells[i].Value.fontSize * LineShare);
+                float labelH = Mathf.Max(17f * u, cells[i].Label.fontSize * LineShare);
+                Place(cells[i].Value.rectTransform, x + 5f * u, f.CellsY + 2f * u, f.CellW - 8f * u, valueH);
+                Place(cells[i].Label.rectTransform, x + 3f * u, f.CellsY + (CellHeight - 2f) * u - labelH, f.CellW - 6f * u, labelH);
 
                 bool flashing = f.Now < cells[i].FlashUntil;
+                beat |= flashing;
                 signature = signature * 17 + (m.Text?.GetHashCode() ?? 0) + (int)m.Tone * 3 + (m.Notice ? 1 : 0)
                     + (m.Channel?.GetHashCode() ?? 0) + (flashing ? 5 : 0);
             }
@@ -411,9 +434,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 stripLabel.color = tone;
             }
 
+            if (beat) signature = signature * 3 + (f.FlashOn ? 1 : 2);
             if (signature == lastSignature) return;
             lastSignature = signature;
             Paint(snapshot, f, threat, shots);
+        }
+
+        /// <summary>A lit lamp that flashes (state in transition, or a warning) needs the beat in the mesh key.</summary>
+        private static bool Blinks(Lamp lamp) => lamp.State != LampState.Dark && (lamp.Flash || lamp.State == LampState.Warning);
+
+        /// <summary>Changes when the player's HUD theme (ink, caution, alert) does, so the mesh recolours.</summary>
+        private static int ThemeKey()
+        {
+            unchecked { return Ink.GetHashCode() * 31 + ThemeManager.Active.ColorTheme.Warning.GetHashCode() * 7 + Alert.GetHashCode(); }
+        }
+
+        /// <summary>Whether a dock child draws anything, looked up once per child instead of every tick.</summary>
+        private bool HasGraphic(RectTransform child)
+        {
+            int id = child.GetInstanceID();
+            if (!graphicCache.TryGetValue(id, out bool has)) graphicCache[id] = has = child.GetComponentInChildren<Graphic>() != null;
+            return has;
         }
 
         private float DialX(in Frame f) => Pad * unit + 3f * (f.LampW + LampGap * unit) + LampHeight * unit * 0.5f + 2f * unit;
@@ -496,6 +537,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         AvStrokes.Line(b, gx + poly[p] * size, gy + poly[p + 1] * size,
                             gx + poly[p + 2] * size, gy + poly[p + 3] * size, 1.75f * u, ink, 0.6f * u);
             }
+            BufferGuard.Check(b, "status board");
             vector.Commit();
         }
 
@@ -581,6 +623,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             nativeCell = null;
             nativeSafety = null;
             lastSignature = 0;
+            graphicCache.Clear();
             for (int i = 0; i < cells.Length; i++) cells[i] = default;
             for (int i = 0; i < legends.Length; i++) legends[i] = null;
             for (int i = 0; i < threatLegends.Length; i++) threatLegends[i] = null;

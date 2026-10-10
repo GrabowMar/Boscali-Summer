@@ -30,13 +30,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Blind (no target) past this age reads as caution, not routine.</summary>
         public const float BlindCautionAgeS = 5f;
 
+        // Main-thread scratch for the readings below: a new char[48] per missile per tick was the board's biggest churn.
+        private static readonly char[] Scratch = new char[64];
+
         public static HudTone ToneFor(in MissileTrack t) =>
             !t.HasTarget && t.AgeS > BlindCautionAgeS ? HudTone.Caution : HudTone.Info;
 
         /// <summary>"MSL 0.8KM · TGT 2.1KM" (head splits to value 0.8KM + label MSL).</summary>
         public static string LineText(in MissileTrack t, AvUnits units)
         {
-            var buf = new char[48];
+            char[] buf = Scratch;
             int len = AvNumFormat.Append(buf, 0, "MSL ");
             len = AvUnitTable.DistanceReading(buf, len, t.OwnM, units);
             if (t.HasTarget)
@@ -72,11 +75,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static string Status(int count, float closestOwnM, AvUnits units)
         {
             if (count <= 0) return string.Empty;
-            var buf = new char[48];
+            char[] buf = Scratch;
             int len = AvNumFormat.Write(buf, 0, count, 0);
             len = AvNumFormat.Append(buf, len, count == 1 ? " MSL · " : " MSL · CLOSEST ");
-            if (count > 1) len = AvUnitTable.DistanceReading(buf, len, closestOwnM, units);
-            else len = AvUnitTable.DistanceReading(buf, len, closestOwnM, units);
+            len = AvUnitTable.DistanceReading(buf, len, closestOwnM, units);
             return new string(buf, 0, len);
         }
 
@@ -88,6 +90,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (next < 0) next += count;
             return next;
         }
+
+        /// <summary>
+        /// Which slot to follow after the followed missile at <paramref name="vanishedIndex"/> left a list that now holds
+        /// <paramref name="count"/>: the missile that slid into its slot, else the first; -1 when nothing is left.
+        /// </summary>
+        public static int Successor(int vanishedIndex, int count) =>
+            count <= 0 ? -1 : vanishedIndex >= 0 && vanishedIndex < count ? vanishedIndex : 0;
 
         private static string Clip(string value, int max)
         {

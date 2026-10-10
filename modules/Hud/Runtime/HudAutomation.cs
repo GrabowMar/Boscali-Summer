@@ -70,7 +70,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             if (!Guard(out Dictionary<string, object> failure)) return failure;
             GameManager.GetLocalAircraft(out Aircraft a);
-            var tracker = new MissileTracker();
+            MissileTracker tracker = HudBoard.Instance != null ? HudBoard.Instance.Tracker : null;
+            if (tracker == null) return Failure("HudAutomation", "Missiles", "no HudBoard");
             var tracks = new List<MissileTrack>(MissileTracks.MaxShown);
             tracker.Read(a, tracks);
             AvUnits units = PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Metric ? AvUnits.Metric : AvUnits.Imperial;

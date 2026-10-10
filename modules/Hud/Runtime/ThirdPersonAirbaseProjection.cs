@@ -1,5 +1,5 @@
 using System;
-using System.Reflection;
+using TMPro;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
@@ -10,15 +10,15 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     // choice without advancing taxi/landing registration, reachedRunway or takeoff state.
     internal static class ThirdPersonAirbaseProjection
     {
-        private static readonly FieldInfo Nearest = AccessTools.Field(typeof(AirbaseOverlay), "nearestAirbase");
-        private static readonly FieldInfo Usage = AccessTools.Field(typeof(AirbaseOverlay), "runwayUsage");
-        private static readonly FieldInfo Landing = AccessTools.Field(typeof(AirbaseOverlay), "landing");
-        private static readonly FieldInfo Taxiing = AccessTools.Field(typeof(AirbaseOverlay), "taxiingToRunway");
-        private static readonly FieldInfo Reached = AccessTools.Field(typeof(AirbaseOverlay), "reachedRunway");
-        private static readonly FieldInfo Marker = AccessTools.Field(typeof(AirbaseOverlay), "airbaseMarker");
-        private static readonly FieldInfo Label = AccessTools.Field(typeof(AirbaseOverlay), "airbaseLabel");
-        private static readonly FieldInfo Glideslope = AccessTools.Field(typeof(AirbaseOverlay), "glideslope");
-        private static readonly FieldInfo GlideslopeAim = AccessTools.Field(typeof(AirbaseOverlay), "glideslopeAimPoint");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, Airbase> Nearest = NativeRefs.Field<AirbaseOverlay, Airbase>("nearestAirbase");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, Airbase.Runway.RunwayUsage?> Usage = NativeRefs.Field<AirbaseOverlay, Airbase.Runway.RunwayUsage?>("runwayUsage");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, bool> Landing = NativeRefs.Field<AirbaseOverlay, bool>("landing");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, bool> Taxiing = NativeRefs.Field<AirbaseOverlay, bool>("taxiingToRunway");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, bool> Reached = NativeRefs.Field<AirbaseOverlay, bool>("reachedRunway");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, Image> Marker = NativeRefs.Field<AirbaseOverlay, Image>("airbaseMarker");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, TextMeshProUGUI> Label = NativeRefs.Field<AirbaseOverlay, TextMeshProUGUI>("airbaseLabel");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, Image> Glideslope = NativeRefs.Field<AirbaseOverlay, Image>("glideslope");
+        private static readonly AccessTools.FieldRef<AirbaseOverlay, Image> GlideslopeAim = NativeRefs.Field<AirbaseOverlay, Image>("glideslopeAimPoint");
         private static readonly Action<AirbaseOverlay, Airbase.Runway> DrawBorders =
             AccessTools.MethodDelegate<Action<AirbaseOverlay, Airbase.Runway>>(
                 AccessTools.Method(typeof(AirbaseOverlay), "DrawRunwayBorders"));
@@ -29,16 +29,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public static void Refresh(AirbaseOverlay overlay, Aircraft aircraft, Camera camera)
         {
             if (overlay == null || !overlay.isActiveAndEnabled || aircraft == null || camera == null) return;
-            bool landing = Landing?.GetValue(overlay) is bool isLanding && isLanding;
-            object cachedUsage = Usage?.GetValue(overlay);
-            Airbase.Runway.RunwayUsage? usage = cachedUsage is Airbase.Runway.RunwayUsage value ? value :
-                (Airbase.Runway.RunwayUsage?)null;
+            bool landing = NativeRefs.Get(Landing, overlay);
+            Airbase.Runway.RunwayUsage? usage = NativeRefs.Get(Usage, overlay);
             RefreshMarker(overlay, aircraft, camera, landing, usage);
 
             if (landing && usage.HasValue && usage.Value.Runway != null)
                 DrawBorders(overlay, usage.Value.Runway);
-            var glide = Glideslope?.GetValue(overlay) as Image;
-            var aim = GlideslopeAim?.GetValue(overlay) as Image;
+            Image glide = NativeRefs.Get(Glideslope, overlay);
+            Image aim = NativeRefs.Get(GlideslopeAim, overlay);
             if (glide == null || aim == null) return;
             // GetGlideslopeAimpoint is pure geometry; unlike native PositionMarkers and
             // UpdateNearestAirbase, these draw methods never advance runway/flight state.
@@ -50,18 +48,18 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private static void RefreshMarker(AirbaseOverlay overlay, Aircraft aircraft, Camera camera,
             bool landing, Airbase.Runway.RunwayUsage? usage)
         {
-            var marker = Marker?.GetValue(overlay) as Image;
-            var label = Label?.GetValue(overlay) as Graphic;
+            Image marker = NativeRefs.Get(Marker, overlay);
+            Graphic label = NativeRefs.Get(Label, overlay);
             if (marker == null || label == null) return;
-            var nearest = Nearest?.GetValue(overlay) as Airbase;
-            bool taxiing = Taxiing?.GetValue(overlay) is bool isTaxiing && isTaxiing;
+            Airbase nearest = NativeRefs.Get(Nearest, overlay);
+            bool taxiing = NativeRefs.Get(Taxiing, overlay);
             bool show = nearest != null && nearest.center != null && !landing &&
                 (aircraft.radarAlt >= 1f || taxiing);
             Vector3 world = show ? nearest.center.position : Vector3.zero;
             if (show && aircraft.pilots != null && aircraft.pilots.Length > 0 && aircraft.pilots[0] != null &&
                 aircraft.pilots[0].flightInfo != null && !aircraft.pilots[0].flightInfo.HasTakenOff)
             {
-                bool reached = Reached?.GetValue(overlay) is bool hasReached && hasReached;
+                bool reached = NativeRefs.Get(Reached, overlay);
                 Transform start = usage.HasValue && usage.Value.Runway != null ? usage.Value.GetStart() : null;
                 show = taxiing && !reached && start != null;
                 if (show) world = start.position;

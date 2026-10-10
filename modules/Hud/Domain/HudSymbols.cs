@@ -157,6 +157,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         private static readonly string[] Separators = { " · ", " / ", " | " };
 
+        /// <summary>
+        /// <see cref="Split"/> plus the bar fallback: a line whose text carries no figure (a constant "ILS", "LANCE",
+        /// "RADIO") shows its progress as the figure, and that figure follows the bar every tick.
+        /// </summary>
+        public static void Resolve(string text, float bar, out string label, out string value)
+        {
+            Split(text, out label, out value);
+            if (value.Length == 0 && bar > 0f) value = Percent(bar);
+        }
+
+        /// <summary>A 0..1 bar as a whole percent ("40%"), clamped.</summary>
+        public static string Percent(float bar) =>
+            ((int)Math.Round((bar < 0f ? 0f : bar > 1f ? 1f : bar) * 100f, MidpointRounding.AwayFromZero)).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+
         public static void Split(string text, out string label, out string value)
         {
             label = value = "";

@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal sealed class HudFeedStore
     {
         public const int Capacity = 16;
-        private const float StaleSeconds = 1.5f;
+        private const float StaleSeconds = 2.5f;
         private readonly Func<float> clock;
         private readonly List<Line> lines = new List<Line>(Capacity);
         private readonly HudNoticeQueue notices = new HudNoticeQueue();
@@ -29,7 +29,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
             foreach (Line line in lines) if (line.Owner == owner && line.Key == key) return line;
             if (lines.Count == Capacity)
             {
-                int stale = lines.FindIndex(l => !l.Live(clock()));
+                int stale = -1;
+                float now = clock();
+                for (int i = 0; i < lines.Count && stale < 0; i++) if (!lines[i].Live(now)) stale = i;
                 if (stale < 0) return null;
                 lines[stale].Valid = false; lines.RemoveAt(stale);
             }

@@ -70,7 +70,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Time.unscaledTime < next) return;
             next = Time.unscaledTime + Refresh;
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "SKYWELL");
             if (!Local(out Aircraft me) || !(SkywellBoard.KitStation(me) != null ? Tanker(me) : Receiver(me)))
             {
                 line?.Release();

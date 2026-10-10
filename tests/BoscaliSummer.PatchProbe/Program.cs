@@ -60,6 +60,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MapBuilding", "Destruct"),
     ("MapBuildingSet", "UserCode_CmdDestroyBuilding_1002795805"),
     ("Missile", "UserCode_RpcDetonate_897349600"),
+    ("Missile", "StartMissile"),
     ("Missile", "Detonate"),
     ("Missile", "OnStartClient"),
     ("MusicManager", "PlayMusic"),
@@ -262,6 +263,15 @@ foreach ((string typeName, string fieldName) in fields)
     ("UnitPart", "hitPoints", "System.Single"),
     ("Unit", "disabled", "System.Boolean"),
     ("WeaponStatus", "nameText", "TMPro.TextMeshProUGUI"),
+    // Tactical HUD (2026-10-07): StatusPanel reads the native cell and safety lamp, ThreatWatch and MissileTracker the warning systems.
+    ("WeaponStatus", "safetyImage", "UnityEngine.UI.Image"),
+    ("WeaponStatus", "ammoText", "TMPro.TextMeshProUGUI"),
+    ("WeaponStatus", "panel", "UnityEngine.RectTransform"),
+    ("Missile", "target", "Unit"),
+    ("Unit", "onRegisterMissile", "System.Action`1<Missile>"),
+    ("Unit", "onDeregisterMissile", "System.Action`1<Missile>"),
+    ("MissileWarning", "knownMissiles", "System.Collections.Generic.List`1<Missile>"),
+    ("Aircraft", "onRadarWarning", "System.Action`1<Aircraft+OnRadarWarning>"),
     ("FlightHud", "canvas", "UnityEngine.Canvas"),
     ("RadialMenuMain", "actionsMain", "RadialMenuAction[]"),
     ("RadialMenuMain", "aircraft", "Aircraft"),
@@ -402,6 +412,7 @@ if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnTy
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
     ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
+    ("Missile", "UserCode_RpcDetonate_897349600", new[] { "hitArmor", "useUnit", "hitTerrain" }),
     ("Hangar", "TrySpawnAircraft", new[] { "player", "definition" }),
     ("Aircraft", "UseFuel", new[] { "fuelDrawn" }),
     ("FactionHQ", "RewardPlayer", new[] { "player", "rewardAllocation", "missionType" })
@@ -567,6 +578,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Comms.Patches.CommsMapControlsPatch"
     ,"BoscaliSummer.Modules.Trenches.Runtime.TrenchWorksDetectionPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
 };
 
 foreach (string patchType in patchTypes)

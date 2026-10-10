@@ -43,7 +43,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public const float BoxWidth = 120f, BoxHeight = 56f;
         public const float HdgWidth = 100f, HdgHeight = 32f;
-        public const float SubLineHeight = 14f;
         public const float BarWidth = 6f, BarHeight = 56f, BarGap = 5f;
 
         public const float BoxOffsetXFraction = 0.17f;
@@ -58,8 +57,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float TargetCardWidth = 240f;
         public const float TargetCardAspect = 16f / 9f;
         public const float TargetCardHeaderHeight = 22f;
-
-        public static RectF Screen(float width, float height) => new RectF(0f, 0f, width, height);
 
         /// <summary>Screen-centre-bottom box the vanilla aircraft model occupies in the Wingview
         /// composition; bottom-anchored, centred horizontally.</summary>
@@ -78,9 +75,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static RectF HeadingBox(float width, float height) =>
             KeepClear(new RectF(0f, HdgOffsetYFraction * height, HdgWidth, HdgHeight), AircraftFrame(width, height));
-
-        /// <summary>The thin sub-line under a box (e.g. "M .46  G 1.0" under SPD).</summary>
-        public static RectF SubLine(RectF box) => new RectF(box.CenterX, box.Bottom - SubLineHeight * 0.5f - 2f, box.Width, SubLineHeight);
 
         /// <summary>Slim vertical bar beside a box, on its outward side (away from screen centre).</summary>
         public static RectF SideBar(RectF box, bool outwardIsLeft)
@@ -103,10 +97,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static bool Overlaps(RectF a, RectF b) =>
             a.Left < b.Right && a.Right > b.Left && a.Bottom < b.Top && a.Top > b.Bottom;
-
-        public static bool Inside(RectF r, RectF screen) =>
-            r.Left >= screen.Left - 0.01f && r.Right <= screen.Right + 0.01f &&
-            r.Bottom >= screen.Bottom - 0.01f && r.Top <= screen.Top + 0.01f;
 
         /// <summary>
         /// Nudges <paramref name="r"/> straight up, clear of <paramref name="frame"/>'s top edge

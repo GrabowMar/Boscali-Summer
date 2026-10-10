@@ -21,7 +21,6 @@ namespace BoscaliSummer.Modules.QoL.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "fuel";
-        protected override string ChannelLabel => "Fuel and divert";
         protected override float RefreshSeconds => 1f;
 
         protected override bool WantsLine()

@@ -11,30 +11,31 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     // None of those methods may be replayed during rendering.
     internal static class ThirdPersonWeaponProjection
     {
-        private static readonly FieldInfo WeaponState = AccessTools.Field(typeof(CombatHUD), "weaponState");
-        private static readonly FieldInfo GunDirection = AccessTools.Field(typeof(HUDBoresightState), "gunDirectionRelative");
-        private static readonly FieldInfo Boresight = AccessTools.Field(typeof(HUDBoresightState), "boresight");
-        private static readonly FieldInfo Lead = AccessTools.Field(typeof(HUDBoresightState), "projectedPosition");
-        private static readonly FieldInfo LeadTarget = AccessTools.Field(typeof(HUDBoresightState), "targetPosition");
-        private static readonly FieldInfo LeadLine = AccessTools.Field(typeof(HUDBoresightState), "line");
+        private static readonly AccessTools.FieldRef<CombatHUD, HUDWeaponState> WeaponState = NativeRefs.Field<CombatHUD, HUDWeaponState>("weaponState");
+        private static readonly AccessTools.FieldRef<HUDBoresightState, Vector3> GunDirection = NativeRefs.Field<HUDBoresightState, Vector3>("gunDirectionRelative");
+        private static readonly AccessTools.FieldRef<HUDBoresightState, Image> Boresight = NativeRefs.Field<HUDBoresightState, Image>("boresight");
+        private static readonly AccessTools.FieldRef<HUDBoresightState, Image> Lead = NativeRefs.Field<HUDBoresightState, Image>("projectedPosition");
+        private static readonly AccessTools.FieldRef<HUDBoresightState, Image> LeadTarget = NativeRefs.Field<HUDBoresightState, Image>("targetPosition");
+        private static readonly AccessTools.FieldRef<HUDBoresightState, Image> LeadLine = NativeRefs.Field<HUDBoresightState, Image>("line");
+        // ControlsFilter.aimAssist is a protected nested class the mod cannot name, so the gun-lead chain stays reflected.
         private static readonly FieldInfo Controls = AccessTools.Field(typeof(HUDBoresightState), "controlsFilter");
         private static readonly FieldInfo AimAssist = AccessTools.Field(typeof(ControlsFilter), "aimAssist");
         private static readonly FieldInfo AimPoint = AccessTools.Field(AimAssist?.FieldType, "accurateAimpoint");
-        private static readonly FieldInfo TurretCrosshairs = AccessTools.Field(typeof(HUDTurretState), "crosshairs");
-        private static readonly FieldInfo BombImpact = AccessTools.Field(typeof(HUDBombingState), "ccipImpactPointSmoothed");
-        private static readonly FieldInfo BombPipper = AccessTools.Field(typeof(HUDBombingState), "ccipPipper");
-        private static readonly FieldInfo BombLine = AccessTools.Field(typeof(HUDBombingState), "ccipLine");
-        private static readonly FieldInfo BombFallTime = AccessTools.Field(typeof(HUDBombingState), "ccipFallTime");
-        private static readonly FieldInfo BombTarget = AccessTools.Field(typeof(HUDBombingState), "averageTargetPosition");
-        private static readonly FieldInfo BombAlignment = AccessTools.Field(typeof(HUDBombingState), "alignmentBar");
+        private static readonly AccessTools.FieldRef<HUDTurretState, HUDTurretCrosshair[]> TurretCrosshairs = NativeRefs.Field<HUDTurretState, HUDTurretCrosshair[]>("crosshairs");
+        private static readonly AccessTools.FieldRef<HUDBombingState, Vector3> BombImpact = NativeRefs.Field<HUDBombingState, Vector3>("ccipImpactPointSmoothed");
+        private static readonly AccessTools.FieldRef<HUDBombingState, Image> BombPipper = NativeRefs.Field<HUDBombingState, Image>("ccipPipper");
+        private static readonly AccessTools.FieldRef<HUDBombingState, Image> BombLine = NativeRefs.Field<HUDBombingState, Image>("ccipLine");
+        private static readonly AccessTools.FieldRef<HUDBombingState, TextMeshProUGUI> BombFallTime = NativeRefs.Field<HUDBombingState, TextMeshProUGUI>("ccipFallTime");
+        private static readonly AccessTools.FieldRef<HUDBombingState, GlobalPosition> BombTarget = NativeRefs.Field<HUDBombingState, GlobalPosition>("averageTargetPosition");
+        private static readonly AccessTools.FieldRef<HUDBombingState, Image> BombAlignment = NativeRefs.Field<HUDBombingState, Image>("alignmentBar");
 
         public static void Refresh(CombatHUD hud, Aircraft aircraft, Camera camera)
         {
-            var state = WeaponState?.GetValue(hud) as HUDWeaponState;
+            HUDWeaponState state = NativeRefs.Get(WeaponState, hud);
             if (state is HUDBoresightState gun) RefreshGun(gun, hud, aircraft, camera);
             else if (state is HUDTurretState turret)
             {
-                if (TurretCrosshairs?.GetValue(turret) is HUDTurretCrosshair[] crosshairs)
+                if (NativeRefs.Get(TurretCrosshairs, turret) is HUDTurretCrosshair[] crosshairs)
                     foreach (HUDTurretCrosshair crosshair in crosshairs)
                         if (crosshair != null) crosshair.Refresh(camera, out _);
             }
@@ -50,15 +51,16 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private static void RefreshGun(HUDBoresightState state, CombatHUD hud, Aircraft aircraft, Camera camera)
         {
-            var boresight = Boresight?.GetValue(state) as Image;
-            if (boresight == null || !(GunDirection?.GetValue(state) is Vector3 relativeDirection)) return;
+            Image boresight = NativeRefs.Get(Boresight, state);
+            if (boresight == null || GunDirection == null) return;
+            Vector3 relativeDirection = GunDirection(state);
             Vector3 direction = aircraft.transform.TransformDirection(relativeDirection);
             boresight.transform.position = ScreenPoint(camera, aircraft.transform.position + direction * 3000f);
             boresight.enabled = !aircraft.gearDeployed && Vector3.Dot(camera.transform.forward, direction) > 0f;
 
-            var lead = Lead?.GetValue(state) as Image;
-            var target = LeadTarget?.GetValue(state) as Image;
-            var line = LeadLine?.GetValue(state) as Image;
+            Image lead = NativeRefs.Get(Lead, state);
+            Image target = NativeRefs.Get(LeadTarget, state);
+            Image line = NativeRefs.Get(LeadLine, state);
             var targets = hud.GetTargetList();
             if (lead == null || !lead.enabled || target == null || line == null ||
                 targets == null || targets.Count == 0 || targets[0] == null) return;
@@ -83,9 +85,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private static void RefreshBomb(HUDBombingState state, Aircraft aircraft, Camera camera)
         {
-            var alignment = BombAlignment?.GetValue(state) as Image;
-            if (alignment != null && alignment.gameObject.activeSelf && BombTarget?.GetValue(state) is GlobalPosition target)
+            Image alignment = NativeRefs.Get(BombAlignment, state);
+            if (alignment != null && alignment.gameObject.activeSelf && BombTarget != null)
             {
+                GlobalPosition target = BombTarget(state);
                 Vector3 delta = target - aircraft.GlobalPosition();
                 Vector3 horizontal = delta;
                 horizontal.y = 0f;
@@ -97,10 +100,11 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 alignment.transform.eulerAngles = new Vector3(0f, 0f, -Mathf.Atan2(screenDelta.x, screenDelta.y) * Mathf.Rad2Deg + 180f);
             }
 
-            var pipper = BombPipper?.GetValue(state) as Image;
-            var line = BombLine?.GetValue(state) as Image;
-            var fallTime = BombFallTime?.GetValue(state) as TextMeshProUGUI;
-            if (pipper == null || line == null || fallTime == null || !(BombImpact?.GetValue(state) is Vector3 impact)) return;
+            Image pipper = NativeRefs.Get(BombPipper, state);
+            Image line = NativeRefs.Get(BombLine, state);
+            TextMeshProUGUI fallTime = NativeRefs.Get(BombFallTime, state);
+            if (pipper == null || line == null || fallTime == null || BombImpact == null) return;
+            Vector3 impact = BombImpact(state);
             // Native trajectory/weapon validity survives a camera-only pipper hide. Its time
             // readout is cleared for invalid/disabled CCIP; visibility must use the final view.
             if (!fallTime.enabled) { pipper.enabled = line.enabled = false; return; }

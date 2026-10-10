@@ -1433,7 +1433,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             if (ModuleServices.TryGet(out IHudBoard hud) && hud != null)
             {
-                hud.DeclareChannel("weather", "Weather");
                 hud.Notice("weather", HudTone.Info, $"ENV: {title.ToUpper()}", detail);
             }
         }

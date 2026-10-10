@@ -22,13 +22,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "radio";
-        protected override string ChannelLabel => "Radio now playing";
         protected override float RefreshSeconds => 0.5f;
 
         internal void Configure(RadioManager source)
         {
             manager = source;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

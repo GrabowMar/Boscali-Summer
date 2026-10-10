@@ -7,7 +7,8 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Patches
 {
-    /// <summary>The shot tracker's one ledger (client-local, presentation only), fed by the two postfixes below.</summary>
+    /// <summary>The shot tracker's one ledger (client-local, presentation only): launches arrive from
+    /// <c>MissileTracker.Launched</c>, outcomes from the detonation postfix below.</summary>
     internal static class ShotFeed
     {
         public static readonly ShotLedger Ledger = new ShotLedger();
@@ -20,31 +21,10 @@ namespace BoscaliSummer.Modules.Hud.Patches
     }
 
     /// <summary>
-    /// Records each weapon the local player releases (missile or bomb), the same hook NO_Tactitools' delivery checker
-    /// uses. Read-only: never changes the missile.
-    /// </summary>
-    [HarmonyPatch(typeof(Missile), "StartMissile")]
-    internal static class ShotLaunchPatch
-    {
-        private static void Postfix(Missile __instance)
-        {
-            try
-            {
-                if (!ShotFeed.IsOwn(__instance)) return;
-                WeaponInfo info = __instance.GetWeaponInfo();
-                ShotFeed.Ledger.Launch(__instance.GetInstanceID(), info != null && info.bomb, Time.unscaledTime);
-            }
-            catch (Exception e)
-            {
-                PatchGuard.Report("Hud.ShotLaunch", e);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Resolves a pip when the weapon detonates on this client: the Mirage RPC body <c>UserCode_RpcDetonate_*</c>,
-    /// whose second argument says whether it struck armour. Found by name prefix so a regenerated hash suffix does not
-    /// break it.
+    /// Resolves a pip when the weapon detonates on this client: the Mirage RPC body <c>UserCode_RpcDetonate_*</c>
+    /// (<c>relativeUnit, useUnit, pos, armed, hitArmor, hitTerrain, normal</c>). The flags are bound by NAME, not position:
+    /// the old <c>__1</c> was <c>useUnit</c>, which is only true within 200 m of a target, so dumb bombs always read MISS.
+    /// Found by name prefix so a regenerated hash suffix does not break it; tests/BoscaliSummer.PatchProbe pins the names.
     /// </summary>
     [HarmonyPatch]
     internal static class ShotDetonatePatch
@@ -56,11 +36,12 @@ namespace BoscaliSummer.Modules.Hud.Patches
             return null;
         }
 
-        private static void Postfix(Missile __instance, bool __1)
+        private static void Postfix(Missile __instance, bool hitArmor, bool useUnit, bool hitTerrain)
         {
             try
             {
-                if (ShotFeed.IsOwn(__instance)) ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), __1, Time.unscaledTime);
+                if (ShotFeed.IsOwn(__instance))
+                    ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), ShotRules.Hit(hitArmor, useUnit, hitTerrain), Time.unscaledTime);
             }
             catch (Exception e)
             {

@@ -31,6 +31,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(MissileTracks.Cycle(0, -1, 3) == 2, "Cycle wraps before the start");
             TestAssert.That(MissileTracks.Cycle(0, 1, 0) == -1, "Cycle with nothing is -1");
 
+            TestAssert.That(MissileTracks.Successor(1, 2) == 1, "The missile that slid into the vanished slot is next");
+            TestAssert.That(MissileTracks.Successor(2, 2) == 0, "A vanished last slot wraps to the first");
+            TestAssert.That(MissileTracks.Successor(0, 0) == -1 && MissileTracks.Successor(-1, 3) == 0, "Nothing left is -1; no slot starts at the first");
+
             string status = MissileTracks.Status(2, 800f, AvUnits.Metric);
             TestAssert.That(status == "2 MSL · CLOSEST 800m", "C-menu status counts and ranges: " + status);
             TestAssert.That(MissileTracks.Status(0, 0f, AvUnits.Metric) == string.Empty, "No missiles, no status");

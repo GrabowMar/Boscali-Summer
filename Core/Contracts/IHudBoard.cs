@@ -25,9 +25,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IHudBoard
     {
-        /// <summary>Name a feed. Kept so publishers stay unchanged; the board shows every feed.</summary>
-        void DeclareChannel(string key, string label);
-
         /// <summary>
         /// The line for (owner, key), created on first call and the same line every call after,
         /// so a feature may call this every tick. Returns null once the board is at its ceiling

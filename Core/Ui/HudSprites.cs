@@ -13,19 +13,10 @@ namespace BoscaliSummer.Core.Ui
     {
         private const float Radius = 5f;
 
-        private static Sprite plate, frame, dot, ring;
+        private static Sprite plate;
 
         /// <summary>Filled rounded rectangle, 9-sliced; apply with <see cref="Slice"/>.</summary>
         public static Sprite Plate => plate != null ? plate : (plate = Bake("BoscaliHud_Plate", 24, Radius, 0f, true));
-
-        /// <summary>1.5 px rounded outline matching <see cref="Plate"/>, 9-sliced.</summary>
-        public static Sprite Frame => frame != null ? frame : (frame = Bake("BoscaliHud_Frame", 24, Radius, 1.5f, true));
-
-        /// <summary>Filled circle for status lamps; use <c>Image.Type.Simple</c>.</summary>
-        public static Sprite Dot => dot != null ? dot : (dot = Bake("BoscaliHud_Dot", 16, 8f, 0f, false));
-
-        /// <summary>Hollow circle — a lamp for something transient rather than held.</summary>
-        public static Sprite Ring => ring != null ? ring : (ring = Bake("BoscaliHud_Ring", 16, 8f, 2.5f, false));
 
         private static Sprite chamfer;
 

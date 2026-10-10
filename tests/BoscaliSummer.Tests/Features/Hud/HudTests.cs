@@ -18,6 +18,8 @@ namespace BoscaliSummer.Tests.Features.Hud
                 "Routine notices cannot displace warnings, including in a one-row layout");
             TestAssert.That(store.Snapshot(output, 4, _ => false, false) == 0, "Muted feeds must disappear");
             now = 2;
+            TestAssert.That(store.Snapshot(output, 4, _ => true, false) == 1, "A line survives a one second hitch in its refresh");
+            now = 3;
             TestAssert.That(store.Snapshot(output, 4, _ => true, false) == 0, "Stale lines expire without Unity objects");
             for (int i = 0; i < HudFeedStore.Capacity; i++) store.Acquire("pool", "info", i.ToString())?.Set(HudTone.Info, "Live", null, 0);
             TestAssert.That(store.Acquire("over", "info", "ceiling") == null, "Pool capacity is hard bounded");

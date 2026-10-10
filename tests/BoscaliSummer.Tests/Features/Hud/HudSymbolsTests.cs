@@ -19,6 +19,20 @@ namespace BoscaliSummer.Tests.Features.Hud
             Split("CONTACT 9.4 KM", "CONTACT", "9.4 KM");
             Split("SINK -12 M/S", "SINK M/S", "-12");
             Split("", "", "");
+
+            Resolve("ILS", 0.4f, "ILS", "40%");
+            Resolve("ILS", 0.55f, "ILS", "55%");
+            Resolve("FUEL 38%", 0.9f, "FUEL", "38%");
+            Resolve("LANCE", 0f, "LANCE", "");
+            Resolve("RADIO · AGRAPOL FM", 1.4f, "RADIO", "100%");
+            TestAssert.That(HudCellText.Percent(-1f) == "0%" && HudCellText.Percent(0.005f) == "1%", "Percent is clamped and rounded");
+        }
+
+        /// <summary>A constant text keeps its label while the figure follows the bar: the board used to freeze it.</summary>
+        private static void Resolve(string text, float bar, string label, string value)
+        {
+            HudCellText.Resolve(text, bar, out string l, out string v);
+            TestAssert.That(l == label && v == value, "Resolve '" + text + "' at " + bar + " -> '" + l + "' + '" + v + "'");
         }
 
         private static void Drawable(string channel)

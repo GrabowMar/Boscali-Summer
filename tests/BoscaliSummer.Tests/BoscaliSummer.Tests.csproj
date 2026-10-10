@@ -88,6 +88,7 @@
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
     <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
+    <Compile Include="..\..\Core\Math\FlightLoad.cs" Link="Core\Math\FlightLoad.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />
@@ -170,6 +171,7 @@
     <Compile Include="..\..\modules\Hud\Domain\HudLamps.cs" Link="Features\Hud\HudLamps.cs" />
     <Compile Include="..\..\modules\Hud\Domain\HudTactical.cs" Link="Features\Hud\HudTactical.cs" />
     <Compile Include="..\..\modules\Hud\Domain\MissileTracks.cs" Link="Features\Hud\MissileTracks.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\DiscoveryGate.cs" Link="Features\Hud\DiscoveryGate.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
