@@ -1,37 +1,56 @@
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Ui;
+using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Services;
+using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Presentation
 {
     /// <summary>
-    /// A compact view of the same host-authored operation and staff choices shown on STR.
+    /// A compact view of the same host-authored operation and staff choices shown on STR. The TAC BOARD draws no held lines, so the staff line is a notice on its ticker, pushed once
+    /// each time the words (or their tone) change and not again while they hold.
     /// </summary>
-    internal sealed class TheaterOpsHudLine : HudLineWidget
+    internal sealed class TheaterOpsHudLine : MonoBehaviour, ISceneService
     {
-        private const string WidgetOwner = "theater-effort";
+        private const float RefreshSeconds = 1f;
 
         private ITheaterWarView war;
+        private IHudBoard board;
+        private float nextRefresh;
 
         private string text;
         private string detail;
-        private float bar;
         private HudTone tone;
-
-        protected override string Owner => WidgetOwner;
-        protected override string ChannelKey => "theater";
-        protected override float RefreshSeconds => 1f;
+        private string sentText;
+        private HudTone sentTone;
 
         internal void Configure(ITheaterWarView view)
         {
             war = view;
         }
 
-        protected override bool WantsLine()
+        public void ResetForScene()
+        {
+            sentText = null;
+            nextRefresh = 0f;
+        }
+
+        private void Update()
+        {
+            if (Time.unscaledTime < nextRefresh) return;
+            nextRefresh = Time.unscaledTime + RefreshSeconds;
+            if (!ModuleServices.TryGet(out board)) return;
+            if (!Read()) { sentText = null; return; }
+            if (text == sentText && tone == sentTone) return;
+            sentText = text;
+            sentTone = tone;
+            board.Notice("theater", tone, text, detail);
+        }
+
+        private bool Read()
         {
             text = null;
             if (war == null || !war.Available) return false;
             war.Refresh();
-            bar = 0f;
             if (!war.HasSnapshot)
             {
                 bool unconfirmed = (war.CommandStatus ?? "").StartsWith("UNCONFIRMED", System.StringComparison.OrdinalIgnoreCase);
@@ -59,20 +78,16 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             {
                 text = operation.Kind + " · " + operation.Label;
                 detail = operation.Phase + " · " + operation.Summary;
-                bar = 0f;
                 tone = operation.Phase == "IN CONTACT" ? HudTone.Caution : HudTone.Info;
             }
             else if (war.Proposals.Count > 0)
             {
                 text = "STAFF OPTIONS READY";
                 detail = war.Proposals.Count + " choices on STR";
-                bar = 0f;
                 tone = HudTone.Info;
             }
             else return false;
             return true;
         }
-
-        protected override void Write(IHudLine line) => line.Set(tone, text, detail, bar);
     }
 }
