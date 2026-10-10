@@ -295,7 +295,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (off) g.Ring(px, py, 5f, Amber); else g.Ring(px, py, 4f, dn, 1f, 1f, dn, 1f);
                 g.Ring(px, py, 8f + (edge ? 2f * ScopeCanvas.Pulse(t, 3f) : 0f), dn, bad || edge ? 0.9f : 0.5f);
                 if (bad) g.Text("OUT", px + (px > Cx ? -12f : 12f), py + 15f, Amber, 12f, px > Cx ? ScopeAlign.Right : ScopeAlign.Left, true);
-                if (r > 0f) g.Text(ScopeStr.Cat("FUNNEL ", Len(cone), LenUnit()), Cx, Cy + rho + 11f, ft, 12f, ScopeAlign.Center, false, 0.9f);
+                if (r > 0f) g.Text(ScopeStr.Cat(d.ServiceZone ? "ZONE " : "FUNNEL ", Len(cone), LenUnit()), Cx, Cy + rho + 11f, ft, 12f, ScopeAlign.Center, false, 0.9f);
             }
             else TransferRing(g, t);
 
@@ -377,16 +377,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int phase = (int)d.Phase;
             float r = d.RangeM, c = d.ClosureMps, err = Err, cone = Cone;
             bool fast = TooFast, bad = Bad, edge = Edge, contact = phase >= 3;
-            float ttc = DockMath.TtcS(r, c);
+            float ttc = d.ServiceZone ? 0f : DockMath.TtcS(r, c);
             g.FitText(d.Tanker ?? "SKYWELL", X0, 42f, 100f, Hi, 12f, 12f, ScopeAlign.Left, true);
             g.Text(Words[phase], X0 + W, 42f, phase == 0 ? Ink : Hi, 12f, ScopeAlign.Right, phase > 0);
             g.Line(X0, 54f, X0 + W, 54f, Faint);
 
             // Range and time to contact.
-            g.Text("RANGE", X0, 66f, Dim); g.Text("TTC", X0 + W, 66f, Dim, 12f, ScopeAlign.Right);
+            g.Text("RANGE", X0, 66f, Dim); g.Text(d.ServiceZone ? "ZONE" : "TTC", X0 + W, 66f, Dim, 12f, ScopeAlign.Right);
             float rw = g.Text(ScopeStr.Cat("", Len(r), null), X0, 86f, Hi, 22f, ScopeAlign.Left, true);
             g.Text(units == AvUnits.Imperial ? "FT" : "M", X0 + rw + 4f, 88f, Dim);
-            if (ttc > 0f)
+            if (d.ServiceZone) g.Text(d.ZoneReady ? "READY" : "JOIN", X0 + W, 86f, d.ZoneReady ? Hi : Dim, 16f, ScopeAlign.Right, d.ZoneReady);
+            else if (ttc > 0f)
             {
                 float tw = g.Text("S", X0 + W, 88f, Dim, 12f, ScopeAlign.Right);
                 g.Text(ScopeStr.Int((int)Math.Round(ttc)), X0 + W - tw - 3f, 86f, Hi, 22f, ScopeAlign.Right, true);
@@ -397,9 +398,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float ry = 118f, mx = X0 + 2f + (W - 4f) * DockMath.RibbonAt(r);
             g.Line(X0 + 2f, ry, X0 + W - 2f, ry, Faint);
             g.Line(X0 + 2f, ry, mx, ry, Ink, 1f, 2f);
-            Gate(g, DockMath.RibbonMarkM, r, ry, null);
-            Gate(g, d.CaptureM, r, ry, "CAPT");
-            Gate(g, d.EngageM, r, ry, "ENG");
+            if (d.ServiceZone) Gate(g, d.CaptureM, r, ry, "ZONE");
+            else
+            {
+                Gate(g, DockMath.RibbonMarkM, r, ry, null);
+                Gate(g, d.CaptureM, r, ry, "CAPT");
+                Gate(g, d.EngageM, r, ry, "ENG");
+            }
             g.Diamond(X0 + W - 3f, ry, 4f, Hi, contact);
             g.Chevron(mx, ry, 90f, 6f, Hi, true);
 

@@ -70,6 +70,7 @@ public static partial class HudLogUnityCheck
         else if (phase == 2) text = "ENGAGED - HOLD BRAKE - CONTACT " + Mathf.Max(1, Mathf.RoundToInt(ttc)) + " S";
         else if ((err > 0.75f * cone && r > 30f) || err > cone) { tone = "Caution"; text = "NEAR FUNNEL EDGE - " + (ex < 0f ? "RIGHT " : "LEFT ") + Mathf.RoundToInt(Mathf.Abs(ex)) + " M"; }
         else text = "SKYWELL 2 - " + word[phase] + " - " + Mathf.RoundToInt(r) + " M";
+        if (s.Variant == "service-zone") text = t < 11f ? "SERVICE ZONE - HOLD STEADY" : t < 13.8f ? "SKYWELL - HANDOFF STA 5" : "SKYWELL - SERVICE COMPLETE";
         s.SetFrame("Ticker", s.Fill(s.Domain("TickerLine"), "Tone", s.ContractEnum("HudTone", tone), "Channel", "skywell", "Text", text, "Count", 1, "Age", 2f));
         s.SetFrame("HasTicker", true);
 
