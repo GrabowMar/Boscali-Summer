@@ -107,6 +107,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("RadialMenuMain", "SetupMain"),
     ("RadialMenuMain", "OpenMenu"),
     ("RadialMenuMain", "OnDestroy"),
+    ("RadialMenuMain", "Update"),
     ("RadialMenuAction", "AllowedOnAircraft"),
     ("RadialMenuAction", "TriggerAction"),
     ("PilotPlayerState", "FixedUpdateState"),

@@ -3,6 +3,8 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
+    internal enum LandingLightMode : byte { Off, On, Auto }
+
     /// <summary>
     /// A switchable nose landing light on the local player's own aircraft: one forward-down
     /// spotlight parented to the airframe, so it rides floating-origin shifts with it. Purely
@@ -24,17 +26,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         public static LandingLight Instance { get; private set; }
 
-        public bool On { get; private set; }
-        public bool Auto { get; private set; }
+        public LandingLightMode Mode { get; private set; }
         public bool Lit => lamp != null && lamp.enabled;
 
-        public void Toggle() => On = !On;
-
-        public void ToggleAuto() => Auto = !Auto;
+        /// <summary>The menu's one 3-state row: OFF, ON, AUTO, back to OFF.</summary>
+        public void Cycle() => Mode = (LandingLightMode)(((int)Mode + 1) % 3);
 
         public void ResetForScene()
         {
-            On = false;
+            if (Mode == LandingLightMode.On) Mode = LandingLightMode.Off;
             Drop();
         }
 
@@ -48,14 +48,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         private void LateUpdate()
         {
-            if (!On && !Auto)
+            if (Mode == LandingLightMode.Off)
             {
                 if (lamp != null && lamp.enabled) lamp.enabled = false;
                 return;
             }
 
             bool haveAircraft = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null && !aircraft.disabled;
-            bool want = haveAircraft && (On || (Auto && GearDown(aircraft)));
+            bool want = haveAircraft && (Mode == LandingLightMode.On || (Mode == LandingLightMode.Auto && GearDown(aircraft)));
             if (!want)
             {
                 if (lamp != null && lamp.enabled) lamp.enabled = false;
