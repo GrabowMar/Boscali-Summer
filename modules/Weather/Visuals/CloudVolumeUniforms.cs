@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal void Apply(Material material, WeatherField field, in CloudFrame frame, Texture noise)
         {
-            StateParams sky = field.Params;
+            SkyParams sky = field.Params;
             material.SetTexture(NoiseId, noise);
             material.SetFloat(BaseId, sky.CloudBase + frame.CloudShift);
             material.SetFloat(ShiftId, frame.CloudShift);
@@ -190,12 +190,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetFloat(StormId, sky.Severity);
             material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // Cloud genera for the current state (they fade with it).
-            material.SetFloat(LayerDepthId, sky.LayerDepth);
-            material.SetFloat(LayerSmoothId, sky.LayerSmooth);
-            material.SetFloat(MidCoverId, sky.MidCover);
-            material.SetFloat(MidSheetId, sky.MidSheet);
-            material.SetFloat(HighCoverId, sky.HighCover);
-            material.SetFloat(HighVeilId, sky.HighVeil);
+            material.SetFloat(LayerDepthId, sky.DeckDepth);
+            material.SetFloat(LayerSmoothId, sky.DeckSmooth);
+            // INTERIM(until the shader reads the tape): the old uniforms, read back from the class sky's back-derived layer columns
+            // (SkyLayer.LegacyMid / LegacyHigh: base = 4200 - 900 * sheet, thickness = 500 + 400 * veil).
+            material.SetFloat(MidCoverId, sky.Mid.Cover);
+            material.SetFloat(MidSheetId, Mathf.Clamp01((4200f - sky.Mid.Base) / 900f));
+            material.SetFloat(HighCoverId, sky.High.Cover);
+            material.SetFloat(HighVeilId, Mathf.Clamp01((sky.High.Thick - 500f) / 400f));
             CloudGenus genus = CloudShape.Resolve(sky);
             material.SetFloat(PuffScaleId, genus.PuffScale);
             material.SetFloat(PuffDepthId, genus.PuffDepth);
@@ -211,9 +213,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
             // The shader still opens it ahead of a frontal boundary (SplitShare).
             material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover,
-                Mathf.Max(sky.Cumulus * 0.3f + sky.Convective * 0.2f, sky.Overcast * 0.9f))));
-            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + Mathf.Max(300f, sky.LayerDepth) * 0.4f);
-            material.SetFloat(HorizonDepthId, Mathf.Max(300f, sky.LayerDepth));
+                Mathf.Max(sky.Cumulus * 0.3f + sky.Convective * 0.2f, sky.SheetCover * 0.9f))));
+            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + Mathf.Max(300f, sky.DeckDepth) * 0.4f);
+            material.SetFloat(HorizonDepthId, Mathf.Max(300f, sky.DeckDepth));
             // The frontal boundary: one side of the map under the deck, the other opening up.
             SkySplit split = field.Split;
             material.SetVector(SplitAId, new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));

@@ -11,10 +11,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal readonly struct CloudGenus
     {
-        public CloudGenus(float puffScale, float puffDepth, float baseSharp, float baseWobble,
+        public CloudGenus(float lobeRung, float puffDepth, float baseSharp, float baseWobble,
             float dome, float billow, float anvil, float sheetBlend)
         {
-            PuffScale = puffScale;
+            LobeRung = lobeRung;
+            PuffScale = Ladder.LobeMetres(lobeRung);
             PuffDepth = puffDepth;
             BaseSharp = baseSharp;
             BaseWobble = baseWobble;
@@ -24,7 +25,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SheetBlend = sheetBlend;
         }
 
-        /// <summary>Metres across one primary lobe, not the repeating noise tile.</summary>
+        /// <summary>Lobe size on the ladder (Ladder.LobeMetres); fractional only inside a ramp, where the shader blends two rungs.</summary>
+        public float LobeRung { get; }
+        /// <summary>INTERIM(until Task 9 removes the _PuffScale uniform and this property): metres of the lobe rung (the ladder formula at a fractional
+        /// index, not the lower rung's size). Nothing on the CPU reads it any more; the field and the shader use <see cref="LobeRung"/>.</summary>
         public float PuffScale { get; }
         public float PuffDepth { get; }
         /// <summary>Metres of the base transition. Small is a flat cumulus base.</summary>
@@ -56,12 +60,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 WeatherMath.Smoothstep(1500f, 2300f, y);
         }
 
-        public static CloudGenus Resolve(StateParams sky)
+        /// <summary>
+        /// The genus of one sky row. Library and class skies are complete, so only a hand-built row (a test) meets the old
+        /// derive-from-zero rules below; the lobe is always a ladder rung (the 700 m minimum replaces the old 1000 m floor).
+        /// </summary>
+        public static CloudGenus Resolve(in SkyParams sky)
         {
-            float smooth = Scalar.Clamp01(sky.LayerSmooth);
+            float smooth = Scalar.Clamp01(sky.DeckSmooth);
             // Do not shrink lobes to zero on the way to a sheet. Fade their relief instead.
-            float scale = sky.PuffScale > 0f ? Math.Max(1000f, sky.PuffScale) : 1800f;
-            float depth = sky.PuffDepth >= 200f ? sky.PuffDepth : Math.Max(300f, sky.LayerDepth > 0f ? sky.LayerDepth : 900f);
+            float scale = sky.LobeRung;
+            float depth = sky.PuffDepth >= 200f ? sky.PuffDepth : Math.Max(300f, sky.DeckDepth > 0f ? sky.DeckDepth : 900f);
             float sharp = sky.BaseSharp >= 10f ? sky.BaseSharp : WeatherMath.Lerp(50f, 180f, smooth);
             float wobble = sky.BaseWobble >= 1f ? sky.BaseWobble : WeatherMath.Lerp(140f, 40f, smooth);
             float dome = sky.Dome > 0f ? sky.Dome : WeatherMath.Lerp(0.9f, 0.2f, smooth);

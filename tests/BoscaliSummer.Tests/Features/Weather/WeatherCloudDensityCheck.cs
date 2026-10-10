@@ -390,9 +390,9 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             int probes = 0, positive = 0;
             foreach (float sheet in new[] { 0f, 1f })
             {
-                var sky = new StateParams { MidCover = .6f, MidSheet = sheet };
+                var sky = new SkyParams { Mid = SkyLayer.LegacyMid(.6f, sheet) };
                 var cpu = new CloudBodies(bytes, 4, sky);
-                material.SetFloat("_MidCover", sky.MidCover); material.SetFloat("_MidSheet", sky.MidSheet);
+                material.SetFloat("_MidCover", sky.Mid.Cover); material.SetFloat("_MidSheet", sheet);
                 float height = Mathf.Lerp(4200f, 3300f, sheet) + Mathf.Lerp(400f, 1700f, sheet) * .5f;
                 var inputs = new Color[count]; int at = 0;
                 for (int z = -12000; z <= 12000; z += 12000)
@@ -555,7 +555,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             var readback = new Texture2D(positions.Length, 1, TextureFormat.RGBAFloat, false, true); owned.Add(readback);
             RenderTexture.active = rt; readback.ReadPixels(new Rect(0, 0, positions.Length, 1), 0, 0); readback.Apply();
             Color[] gpu = readback.GetPixels();
-            StateParams sky = field.Params; sky.MidCover = 0f; sky.HighCover = 0f;
+            SkyParams sky = field.Params; sky.Mid.Cover = 0f; sky.High.Cover = 0f;
             WeatherPoint Sample(float x, float z)
             {
                 CloudBodies.MapWeights(x, z, 50000f, 220000f, out float weight, out float fade);

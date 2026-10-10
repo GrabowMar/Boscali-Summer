@@ -1083,7 +1083,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             targetCloudHeight = field.Regional().CloudBase;
             // Each state freshens or calms the mission wind (never reverses it) and adds
             // its own turbulence on top of the authored loads.
-            StateParams sky = field.Params;
+            SkyParams sky = field.Params;
             targetTurbulence = Mathf.Max(baselineWindTurbulence, sky.Turbulence) * settings.TurbulenceMultiplier.Value;
             float windFactor = Mathf.Lerp(1f, sky.WindFactor, settings.WindVariability.Value);
             targetWind = new Vector3(baselineWindVelocity.x * windFactor, baselineWindVelocity.y,

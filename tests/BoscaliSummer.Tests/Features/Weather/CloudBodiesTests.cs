@@ -11,7 +11,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         public static void Run()
         {
             byte[] noise = CloudNoise3D.Generate(64, 47);
-            var bodies = new CloudBodies(noise, 64, new StateParams { LayerDepth = 1200f });
+            var bodies = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, DeckDepth = 1200f });
             float scattered = CloudFraction(bodies, 0.35f);
             float broken = CloudFraction(bodies, 0.65f);
             float overcast = CloudFraction(bodies, 0.95f);
@@ -23,11 +23,11 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "cover thresholds bodies into separate clouds");
 
             // Stratus: a smooth deck at the same cover closes more of the sky than lumpy bodies.
-            var stratus = new CloudBodies(noise, 64, new StateParams { LayerDepth = 1200f, LayerSmooth = 1f });
+            var stratus = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, DeckDepth = 1200f, DeckSmooth = 1f });
             TestAssert.That(CloudFraction(stratus, 0.65f) > broken, "a smooth stratus deck is more continuous");
 
             // The middle layer exists on its own: altostratus at 4 km with no low cloud.
-            var alto = new CloudBodies(noise, 64, new StateParams { MidCover = 0.9f, MidSheet = 1f });
+            var alto = new CloudBodies(noise, 64, new SkyParams { LobeRung = 3f, Mid = SkyLayer.LegacyMid(0.9f, 1f) });
             int inside = 0;
             for (int i = 0; i < 40; i++) if (alto.MidLayer(i * 1500f, 4100f, i * 900f) > 0.02f) inside++;
             TestAssert.That(inside > 25, "altostratus is a near-continuous middle sheet, got " + inside + "/40");

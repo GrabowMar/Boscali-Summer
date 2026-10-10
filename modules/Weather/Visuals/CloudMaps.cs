@@ -34,10 +34,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private CloudMaps(float settledAt) { SettledAt = settledAt; }
 
         internal static CloudMaps Build(WeatherKey key, float settledAt, float halfX, float halfZ, float hour,
-            float nearHalf, float farHalf)
+            float nearHalf, float farHalf, TapeFixture fixture = null)
         {
             var snapshot = new WeatherField();
             snapshot.Build(key, settledAt, halfX, halfZ, hour);
+            if (fixture != null) snapshot.UseFixtureTape(fixture.Sampler, fixture.Frame);
             var result = new CloudMaps(settledAt);
             float bottom = VolumeTop, top = 0f;
             Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
@@ -52,17 +53,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static void Fill(WeatherField snapshot, float half, int size, byte[] pixels, byte[] profiles,
             ref float bottom, ref float top, ref float rainMaximum)
         {
-            CloudGenus genus = CloudShape.Resolve(snapshot.Params);
-            float deckDepth = Math.Max(genus.PuffDepth, snapshot.Params.LayerDepth) + genus.BaseWobble * 0.5f;
             for (int z = 0; z < size; z++)
             for (int x = 0; x < size; x++)
             {
                 float worldX = ((x + 0.5f) / size * 2f - 1f) * half;
                 float worldZ = ((z + 0.5f) / size * 2f - 1f) * half;
                 WeatherPoint p = snapshot.Sample(worldX, worldZ);
-                // The deck's geometry has its own thickness, independent of cell coverage.
-                // Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
-                float visualTop = Math.Max(p.LowTop, p.CloudBase + deckDepth);
+                // The deck's geometry has its own thickness, independent of cell coverage; the local tape row gives it
+                // (DeckTop). Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
+                float visualTop = Math.Max(p.LowTop, p.DeckTop);
                 int i = (z * size + x) * 4;
                 pixels[i] = Byte(p.BackgroundCover);
                 pixels[i + 1] = Byte(p.FrontCover);

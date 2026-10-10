@@ -88,7 +88,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         }
 
         /// <summary>The one place the thin-layer tests build a CloudBodies: Task 5 switches it to the new row type.</summary>
-        private static CloudBodies MakeBodies(byte[] noise, int size) => new CloudBodies(noise, size, new StateParams());
+        private static CloudBodies MakeBodies(byte[] noise, int size) => new CloudBodies(noise, size, new SkyParams { LobeRung = 3f });
 
         private static void SlabFieldMorphologies()
         {

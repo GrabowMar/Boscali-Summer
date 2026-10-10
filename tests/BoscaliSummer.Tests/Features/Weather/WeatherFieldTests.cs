@@ -364,8 +364,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(StateTable.FromConditions(0.05f) == WeatherRegimeType.Clear, "clear band");
             TestAssert.That(StateTable.FromConditions(0.7f) == WeatherRegimeType.Overcast, "overcast band");
             TestAssert.That(StateTable.FromConditions(1f) == WeatherRegimeType.Storm, "storm band");
-            TestAssert.That(StateTable.At(2.5f).Overcast > StateTable.Get(WeatherRegimeType.Scattered).Overcast &&
-                StateTable.At(2.5f).Overcast < StateTable.Get(WeatherRegimeType.Broken).Overcast,
+            TestAssert.That(StateTable.At(2.5f).SheetCover > StateTable.Get(WeatherRegimeType.Scattered).SheetCover &&
+                StateTable.At(2.5f).SheetCover < StateTable.Get(WeatherRegimeType.Broken).SheetCover,
                 "a fade sits between its neighbours");
         }
 
