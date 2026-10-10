@@ -31,13 +31,14 @@ namespace BoscaliSummer.Tests.Features.Hud
                     TestAssert.Near(row.Y, previous + HudBoardLayout.Gap * u, "Rows stack top to bottom with one gap");
                     previous = row.Bottom;
                 }
-                TestAssert.Near(g.Height, previous + HudBoardLayout.Pad * u, "The board ends one pad below its last row");
+                TestAssert.Near(g.Height, previous + HudBoardLayout.BottomPad(u), "The board ends one bottom margin below its last row");
+                TestAssert.That(HudBoardLayout.BottomPad(u) + HudBoardLayout.Pad * u >= 15f - 0.01f, "...which clears the plate's 14 px chamfer at the first row's left edge, at scale " + u);
                 TestAssert.Near(g.Detail.H, 2f * HudBoardLayout.DetailRowH * u, "Two threat lines take two line heights");
             }
 
             BoardGeometry cellsOnly = HudBoardLayout.Compute(new BoardRows { Cells = true }, 440f, 1f);
             TestAssert.Near(cellsOnly.Cells.Y, HudBoardLayout.Pad, "A lone row starts at the top pad");
-            TestAssert.Near(cellsOnly.Height, 2f * HudBoardLayout.Pad + HudBoardLayout.CellH, "...and the board wraps it exactly");
+            TestAssert.Near(cellsOnly.Height, HudBoardLayout.Pad + HudBoardLayout.CellH + HudBoardLayout.BottomPad(1f), "...and the board wraps it exactly");
             TestAssert.That(cellsOnly.Systems.H == 0f && cellsOnly.Ticker.H == 0f, "Absent rows take no room");
             TestAssert.Near(HudBoardLayout.Compute(new BoardRows { DetailRows = 9, Threat = true }, 440f, 1f).Detail.H,
                 HudBoardLayout.MaxDetailRows * HudBoardLayout.DetailRowH, "More than the maximum detail lines is clamped");

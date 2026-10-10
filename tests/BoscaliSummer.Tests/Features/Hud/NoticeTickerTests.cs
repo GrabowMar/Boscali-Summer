@@ -144,6 +144,38 @@ namespace BoscaliSummer.Tests.Features.Hud
                 NoticeTicker.Tag(null) == "INFO" && NoticeTicker.Tag("a-very-long-channel") == "A VERY ", "Channel tags are short and upper case");
             line.Detail = null; line.Age = 4f;
             TestAssert.That(NoticeTicker.Words(line) == "ENTERING AREA" && NoticeTicker.Phase(line) == 0, "Without a detail it never alternates");
+            Paging();
+        }
+
+        /// <summary>A 90-character notice is read in full: pages cut at spaces, each in turn, and the dwell covers them all.</summary>
+        private static void Paging()
+        {
+            string longText = "SESSION HOST: THE MISSION WILL RESTART IN FIVE MINUTES FOR A SCHEDULED MAINTENANCE WINDOW";
+            TestAssert.That(longText.Length > 80 && NoticeTicker.PageCount(longText) == 3 && NoticeTicker.PageCount("SHORT") == 1 && NoticeTicker.PageCount(null) == 1 && NoticeTicker.PageCount("") == 1,
+                "Only a long line takes more than one page: " + NoticeTicker.PageCount(longText));
+            string rejoined = "";
+            for (int i = 0; i < NoticeTicker.PageCount(longText); i++)
+            {
+                string page = NoticeTicker.Page(longText, i);
+                TestAssert.That(page.Length > 0 && page.Length <= NoticeTicker.PageChars && !page.StartsWith(" ") && !page.EndsWith(" "), "Page " + i + " fits and is trimmed: [" + page + "]");
+                rejoined += (i > 0 ? " " : "") + page;
+            }
+            TestAssert.That(rejoined == longText, "...and the pages put back together are the whole notice: " + rejoined);
+            TestAssert.That(NoticeTicker.Page("ABCDEFGHIJ".PadRight(60, 'X'), 1).Length == 20 && NoticeTicker.PageCount("ABCDEFGHIJ".PadRight(60, 'X')) == 2, "A word longer than a page is cut where it falls");
+
+            var line = new TickerLine { Tone = HudTone.Info, Text = longText, Detail = "AREA 4 EAST", Count = 1, Age = 0f };
+            TestAssert.That(NoticeTicker.Words(line) == NoticeTicker.Page(longText, 0), "It opens on the first page");
+            line.Age = NoticeTicker.PhaseSeconds * 2.1f;
+            TestAssert.That(NoticeTicker.Words(line) == NoticeTicker.Page(longText, 2), "...turns the pages...");
+            line.Age = NoticeTicker.PhaseSeconds * 3.1f;
+            TestAssert.That(NoticeTicker.Words(line) == "AREA 4 EAST", "...then the detail...");
+            line.Age = NoticeTicker.PhaseSeconds * 4.1f;
+            TestAssert.That(NoticeTicker.Words(line) == NoticeTicker.Page(longText, 0), "...and round again");
+
+            var t = new NoticeTicker();
+            t.Push("session", HudTone.Info, longText, "AREA 4 EAST", 0f);
+            t.Peek(0f, out _);
+            TestAssert.That(t.Peek(11.9f, out _) && !t.Peek(12.1f, out _), "An Info with four pages stays 12 s, not 6: every page gets its turn");
         }
     }
 }

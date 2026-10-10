@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// when it has something to say (<see cref="HudBoardLayout"/> places them):
     /// <list type="bullet">
     /// <item>systems: always-on annunciator lamps of the aircraft's switches (<see cref="HudLamps"/>);</item>
-    /// <item>threat: LOCK / SPKE / MSL lamps (<see cref="HudThreats"/>), a threat dial with a chevron at the nearest inbound
+    /// <item>threat: LOCK / SPKE / MSL lamps (<see cref="HudThreats"/>), a threat dial with a blip at the nearest inbound
     /// missile (else the locking emitter) and HI/LO, and the shot tracker's pips (<see cref="ShotLedger"/>);</item>
     /// <item>feed cells: one outlined cell per live feed, figure, line-art symbol (<see cref="HudGlyphs"/>), label;</item>
     /// <item>cue strip: a capacitor-style bar carrying the most relevant line's detail and progress.</item>
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly Color PlateColor = new Color(0.020f, 0.039f, 0.059f, 0.88f);
 
         // Text sizes as a share of the native labels' own point sizes; fixed fallbacks when there is no native label.
-        private const float ValueShare = 0.72f, LabelShare = 0.62f, LegendShare = 0.56f, DetailShare = 0.56f;
+        private const float ValueShare = 0.66f, LabelShare = 0.62f, LegendShare = 0.56f, DetailShare = 0.56f;
         private const float FallbackValue = 17f, FallbackLabel = 12f, FallbackLegend = 11f, FallbackDetail = 12f;
 
         private static readonly FieldInfo TopRightPanelField = AccessTools.Field(typeof(CombatHUD), "topRightPanel");
@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private TextMeshProUGUI stripLabel, dialLabel, shotLegend;
         private TMP_FontAsset font;
         private Material fontMaterial;
-        private float legendSize;
+        private float legendSize, labelSizeMax;
         private RectTransform nativeCell;
         private Image nativeSafety;
         private float unit = 1f;
@@ -131,15 +131,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Build(CombatHUD hud, RectTransform panelRect)
         {
+            WeaponStatus weaponStatus = WeaponStatusField?.GetValue(hud) as WeaponStatus;
+            Build(panelRect,
+                weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null,
+                weaponStatus != null ? AmmoTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null,
+                weaponStatus != null ? CellPanelField?.GetValue(weaponStatus) as RectTransform : null,
+                weaponStatus != null ? SafetyField?.GetValue(weaponStatus) as Image : null);
+        }
+
+        /// <summary>The native pieces the board is sized and fonted from are parameters, so an offline render can stand in for them.</summary>
+        private void Build(RectTransform panelRect, TextMeshProUGUI nameLabel, TextMeshProUGUI ammoLabel, RectTransform cell, Image safety)
+        {
             dock = panelRect;
             Canvas canvas = dock.GetComponentInParent<Canvas>();
             canvasRect = canvas != null ? canvas.rootCanvas.transform as RectTransform : null;
 
-            WeaponStatus weaponStatus = WeaponStatusField?.GetValue(hud) as WeaponStatus;
-            TextMeshProUGUI nameLabel = weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
-            TextMeshProUGUI ammoLabel = weaponStatus != null ? AmmoTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
-            nativeCell = weaponStatus != null ? CellPanelField?.GetValue(weaponStatus) as RectTransform : null;
-            nativeSafety = weaponStatus != null ? SafetyField?.GetValue(weaponStatus) as Image : null;
+            nativeCell = cell;
+            nativeSafety = safety;
             font = nameLabel != null ? nameLabel.font : null;
             fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
             unit = MeasureUnit();

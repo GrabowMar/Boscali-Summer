@@ -63,7 +63,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float Pad = 4f, Gap = 4f;
         public const float LampH = 24f, LampGap = 3f;
         public const float DetailRowH = 18f, TileH = 22f;
-        public const float CellH = 68f, CellGap = 4f;
+        public const float CellH = 72f, CellGap = 4f;
+        /// <summary>A cell's symbol: its bottom edge this far above the cell's, at most this tall (design units), between the figure above and the label below.</summary>
+        public const float GlyphLift = 21f, GlyphMax = 18f;
         public const float BarH = 6f, StripTextH = 20f;
         public const float TickerH = 20f;
         public const int SystemSlots = 7, Tiles = 4, MaxCells = 4, MaxDetailRows = 2;
@@ -86,9 +88,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
             g.Cells = Take(rows.Cells, CellH, u, ref y, ref any);
             g.Strip = Take(rows.Strip, BarH + StripTextH, u, ref y, ref any);
             g.Ticker = Take(rows.Ticker, TickerH, u, ref y, ref any);
-            g.Height = any ? y - Gap * u + Pad * u : 0f;
+            g.Height = any ? y - Gap * u + BottomPad(u) : 0f;
             return g;
         }
+
+        /// <summary>The board's bottom margin: at least the pad, and enough to clear the plate's 14 px lower-left chamfer (the last row starts at x = pad).</summary>
+        public static float BottomPad(float u) => Math.Max(Pad * u, 15f - Pad * u);
 
         private static RowBox Take(bool on, float h, float u, ref float y, ref bool any)
         {
@@ -120,9 +125,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float CellX(float width, float u, int index) =>
             Pad * u + index * (CellWidth(width, u) + CellGap * u);
 
+        /// <summary>The side of a cell's symbol box: <see cref="GlyphMax"/> unless the cell is too narrow for it.</summary>
+        public static float GlyphSize(float width, float u) => Math.Min(CellWidth(width, u) - 26f * u, GlyphMax * u);
+
         /// <summary>
         /// The threat row: three lamps on the system grid, the dial after them, HI / LO beside the dial's rim (clear of the
-        /// chevron that rides it), then the SHOT legend and the pips. The pip step shrinks to fit eight at any width.
+        /// blip that rides it), then the SHOT legend and the pips. The pip step shrinks to fit eight at any width.
         /// </summary>
         public static ThreatRowBox ThreatRow(float width, float u)
         {
@@ -131,7 +139,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             t.DialX = Pad * u + 3f * (SystemSlotWidth(width, u) + LampGap * u) + LampH * u * 0.5f + 2f * u;
             t.HiLoX = t.DialX + t.DialR + 9f * u;
             t.LegendX = t.HiLoX + 26f * u;
-            t.PipX = t.LegendX + 32f * u;
+            t.PipX = t.LegendX + 40f * u;
             float span = Math.Max(1f, width - Pad * u - t.PipX);
             t.PipStep = Math.Min(14f * u, span / Pips);
             t.PipSize = Math.Max(t.PipStep - 3f * u, 4f * u);

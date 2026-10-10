@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Color tone = ToneColor(line.Tone);
             float y1 = f.G.Height - f.G.Ticker.Y, y0 = y1 - h;
             bool fresh = NoticeTicker.IsFresh(line);
-            AvStrokes.Fill(b, pad, y0, chipW, h, tone.ToRgba().WithAlpha(fresh ? (f.FlashOn ? 0.5f : 0.15f) : line.Tone == HudTone.Info ? 0.12f : 0.25f));
+            AvStrokes.Fill(b, pad, y0, chipW, h, tone.ToRgba().WithAlpha(fresh ? (f.FlashOn ? 0.30f : 0.12f) : line.Tone == HudTone.Info ? 0.12f : 0.25f));
             Rect4(b, pad, y0, pad + chipW, y1, (line.Tone == HudTone.Warning ? 1.75f : 1.25f) * u, tone.ToRgba());
         }
     }

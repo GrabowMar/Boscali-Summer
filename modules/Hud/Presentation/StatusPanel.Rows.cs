@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Create the text widgets of every row. Called once from Build.</summary>
         private void BuildRows(float valueSize, float labelSize, float detailSize)
         {
+            labelSizeMax = labelSize;
             for (int i = 0; i < cells.Length; i++)
             {
                 cells[i].Value = Text("Value" + i, TextAlignmentOptions.TopLeft, valueSize, TextOverflowModes.Overflow);
@@ -139,7 +140,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (shotLegend.text != legend) shotLegend.text = legend;
                 Color c = legend == "MISS" ? Alert : Ink;
                 shotLegend.color = new Color(c.r, c.g, c.b, legend == "SHOT" ? 0.7f : 1f);
-                Place(shotLegend.rectTransform, t.LegendX, f.G.Threat.Y, 32f * u, HudBoardLayout.LampH * u);
+                Place(shotLegend.rectTransform, t.LegendX, f.G.Threat.Y, 38f * u, HudBoardLayout.LampH * u);
                 signature = signature * 11 + legend.Length;
             }
         }
@@ -154,7 +155,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     HudBoardLayout.SystemSlotX(f.G.Width, u, i), rowTop, slotW, HudBoardLayout.LampH * u);
 
             // Threat dial: own aircraft at the centre (a nose-up chevron, not a plus: a plus reads as an add button),
-            // compass ticks on the rim, and a chevron riding the rim at the threat's bearing.
+            // compass ticks on the rim, and a bold radial blip across the rim at the threat's bearing.
             ThreatRowBox t = HudBoardLayout.ThreatRow(f.G.Width, u);
             ThreatPicture threat = board.Threat;
             float cx = t.DialX, r = t.DialR;
@@ -168,9 +169,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             AvStrokes.Chevron(b, cx, rowMid - r * 0.1f, r * 0.55f, 90f, 1.25f * u, dim);
             if (threat.HasBearing)
             {
-                float a = threat.BearingDeg * Mathf.Deg2Rad;
-                float px = cx + Mathf.Sin(a) * r, py = rowMid + Mathf.Cos(a) * r;
-                AvStrokes.Chevron(b, px, py, 7f * u, 270f - threat.BearingDeg, 1.75f * u, ThreatColor(threat).ToRgba()); // tip inward
+                float a = threat.BearingDeg * Mathf.Deg2Rad, ux = Mathf.Sin(a), uy = Mathf.Cos(a);
+                AvStrokes.Line(b, cx + ux * (r - 4f * u), rowMid + uy * (r - 4f * u), cx + ux * (r + 3f * u), rowMid + uy * (r + 3f * u), 3f * u, ThreatColor(threat).ToRgba());
             }
 
             // Shot pips: diamonds for missiles, circles for bombs; hollow in flight, filled hit, crossed miss.
@@ -183,7 +183,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float x = t.PipX + slot * t.PipStep + t.PipStep * 0.5f;
                 Rgba ink = (state == ShotState.Miss ? Alert : Ink).ToRgba();
                 if (shots.IsBomb(i)) AvStrokes.Ring(b, x, rowMid, s * 0.8f, 12, (state == ShotState.Hit ? s * 0.8f : 1.25f * u), ink);
-                else if (state == ShotState.Hit) AvStrokes.Fill(b, x - s * 0.55f, rowMid - s * 0.55f, s * 1.1f, s * 1.1f, ink);
+                else if (state == ShotState.Hit) b.Add(x + s, rowMid, x, rowMid + s, x - s, rowMid, x, rowMid - s, ink, ink, ink, ink);   // the diamond, filled
                 else AvStrokes.Diamond(b, x, rowMid, s, 1.25f * u, ink);
                 if (state == ShotState.Miss)
                 {
@@ -226,7 +226,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float x = HudBoardLayout.CellX(f.G.Width, u, i);
                 // Boxes are at least one line of their own font tall: a box shorter than its line elides the whole text.
                 float valueH = Mathf.Max(24f * u, cells[i].Value.fontSize * LineShare);
-                float labelH = Mathf.Max(17f * u, cells[i].Label.fontSize * LineShare);
+                float labelH = Mathf.Max(17f * u, labelSizeMax * LineShare);   // from the build size: the autosized one would feed back
                 Place(cells[i].Value.rectTransform, x + 5f * u, f.G.Cells.Y + 2f * u, cw - 8f * u, valueH);
                 Place(cells[i].Label.rectTransform, x + 3f * u, f.G.Cells.Y + (HudBoardLayout.CellH - 2f) * u - labelH, cw - 6f * u, labelH);
 
@@ -258,8 +258,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 AvStrokes.Fill(b, x0, y1 - 2f * u, cw, 2f * u, ink);
 
                 // The symbol sits between the figure above and the label below, as in the native cells: it never runs under the figure.
-                float size = Mathf.Min(cw - 26f * u, 20f * u);
-                float gx = x0 + (cw - size) * 0.5f, gy = y0 + 21f * u;
+                float size = HudBoardLayout.GlyphSize(f.G.Width, u);
+                float gx = x0 + (cw - size) * 0.5f, gy = y0 + HudBoardLayout.GlyphLift * u;
                 foreach (float[] poly in HudGlyphs.For(m.Channel))
                     for (int p = 0; p + 3 < poly.Length; p += 2)
                         AvStrokes.Line(b, gx + poly[p] * size, gy + poly[p + 1] * size,

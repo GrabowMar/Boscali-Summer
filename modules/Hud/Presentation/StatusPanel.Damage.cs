@@ -30,8 +30,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             damageCount = 0;
         }
 
-        /// <summary>A damage lamp that flashes (FIRE, any warning) is off on the dark beat; the rest stay lit.</summary>
-        private bool DamageLit(Lamp lamp) => !((lamp.Flash || lamp.State == LampState.Warning) && !f.FlashOn);
+        /// <summary>Only a lamp that flashes (FIRE) goes off on the dark beat; a warning that merely persists (ENG OUT, STR) stays lit.</summary>
+        private bool DamageLit(Lamp lamp) => !(lamp.Flash && !f.FlashOn);
 
         private void PresentDamage()
         {
@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (damageText[i].text != lamp.Legend) damageText[i].text = lamp.Legend;
                 damageText[i].color = LampInk(lamp, DamageLit(lamp), false);
                 Place(damageText[i].rectTransform, HudBoardLayout.TileX(f.G.Width, u, i), f.G.Damage.Y, tileW, HudBoardLayout.TileH * u);
-                beat |= Blinks(lamp);
+                beat |= lamp.Flash;
                 signature = signature * 31 + (int)lamp.State * 5 + lamp.Legend.GetHashCode();
             }
         }

@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Place(detailText[i].rectTransform, textX, y, f.G.Width - HudBoardLayout.Pad * u - textX, rowH);
                 bool pulse = ThreatRank.IsNew(c);
                 beat |= pulse;
-                signature = signature * 19 + (int)c.Kind * 7 + row.GetHashCode() + (pulse ? 3 : 0) + (c.Locked ? 1 : 0);
+                signature = signature * 19 + (int)c.Kind * 7 + (pulse ? 3 : 0) + (c.Locked ? 1 : 0);   // the mesh; the row words change every tick and are written on change
             }
         }
 

@@ -25,6 +25,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// louder one ends, unless its own time ran out meanwhile.</item>
     /// <item><b>Sticky warnings</b>: a Warning stays <see cref="WarningSeconds"/> (an Info only <see cref="InfoSeconds"/>) and
     /// every repeat extends it, so a warning is not gone before the pilot could read it.</item>
+    /// <item><b>Paging</b>: the line is one row wide, so a longer text or detail is cut at spaces into pages of at most
+    /// <see cref="PageChars"/> characters that follow each other every <see cref="PhaseSeconds"/>; the dwell grows to give every
+    /// page its turn, so a long notice is read in full instead of elided.</item>
     /// <item>A notice waits at most <see cref="QueueSeconds"/> for the ticker; bounded at <see cref="Capacity"/> entries,
     /// the quietest, oldest one makes room.</item>
     /// </list>
@@ -39,6 +42,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float FreshSeconds = 1.2f;
         /// <summary>A notice with a detail line shows its text, then its detail, each for this long, alternating.</summary>
         public const float PhaseSeconds = 3f;
+        /// <summary>The longest page of a long text or detail: the row holds about 42 characters of the mono face at full size (about 60 shrunk to 70 %), and a warning's prefix takes ten.</summary>
+        public const int PageChars = 40;
         public const int MaxCount = 99;
 
         private struct Entry
@@ -67,6 +72,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float Dwell(HudTone tone) =>
             tone == HudTone.Warning ? WarningSeconds : tone == HudTone.Caution ? CautionSeconds : InfoSeconds;
 
+        /// <summary>How long a notice stays once shown: its tone's dwell, or every page of its text and detail for <see cref="PhaseSeconds"/>, whichever is longer.</summary>
+        private static float Hold(HudTone tone, string text, string detail) =>
+            Math.Max(Dwell(tone), (PageCount(text) + (string.IsNullOrEmpty(detail) ? 0 : PageCount(detail))) * PhaseSeconds);
+
         public void Push(string channel, HudTone tone, string text, string detail, float now)
         {
             if (string.IsNullOrEmpty(text)) return;
@@ -78,7 +87,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 entries[i].Detail = detail;
                 if (tone > entries[i].Tone) entries[i].Tone = tone;
                 entries[i].Seq = ++seq;
-                entries[i].Expires = now + (entries[i].Shown ? Dwell(entries[i].Tone) : QueueSeconds);
+                entries[i].Expires = now + (entries[i].Shown ? Hold(entries[i].Tone, entries[i].Text, entries[i].Detail) : QueueSeconds);
                 return;
             }
 
@@ -119,7 +128,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             {
                 entries[best].Shown = true;
                 entries[best].ShownAt = now;
-                entries[best].Expires = now + Dwell(entries[best].Tone);
+                entries[best].Expires = now + Hold(entries[best].Tone, entries[best].Text, entries[best].Detail);
             }
             line = new TickerLine
             {
@@ -134,13 +143,55 @@ namespace BoscaliSummer.Modules.Hud.Domain
             for (int i = 0; i < Capacity; i++) entries[i] = default;
         }
 
-        /// <summary>Which of a line's two phases shows now: 0 its text (with "xN"), 1 its detail. Always 0 without a detail.</summary>
-        public static int Phase(in TickerLine line) =>
-            string.IsNullOrEmpty(line.Detail) ? 0 : (int)(line.Age / PhaseSeconds) % 2;
+        private static string TextWords(in TickerLine line) => line.Count > 1 ? line.Text + " x" + line.Count : line.Text;
 
-        /// <summary>The words on the ticker now: the text and its count, then (every other phase) the detail.</summary>
-        public static string Words(in TickerLine line) =>
-            Phase(line) == 1 ? line.Detail : line.Count > 1 ? line.Text + " x" + line.Count : line.Text;
+        /// <summary>
+        /// Which page shows now: the pages of the text (with "xN") first, then those of the detail, each for
+        /// <see cref="PhaseSeconds"/>, then round again. Always 0 for a short text without a detail.
+        /// </summary>
+        public static int Phase(in TickerLine line)
+        {
+            int pages = PageCount(TextWords(line)) + (string.IsNullOrEmpty(line.Detail) ? 0 : PageCount(line.Detail));
+            return pages <= 1 ? 0 : (int)(line.Age / PhaseSeconds) % pages;
+        }
+
+        /// <summary>The words on the ticker now: a page of the text and its count, then a page of the detail.</summary>
+        public static string Words(in TickerLine line)
+        {
+            string text = TextWords(line);
+            int phase = Phase(line), textPages = PageCount(text);
+            return phase < textPages ? Page(text, phase) : Page(line.Detail, phase - textPages);
+        }
+
+        /// <summary>How many pages <paramref name="s"/> needs (at least 1).</summary>
+        public static int PageCount(string s)
+        {
+            int n = 0;
+            for (int at = 0; s != null && at < s.Length; at = SkipSpaces(s, Cut(s, at))) n++;
+            return Math.Max(1, n);
+        }
+
+        /// <summary>Page <paramref name="index"/> of <paramref name="s"/>: cut at the last space within <see cref="PageChars"/> (a longer word is cut where it falls).</summary>
+        public static string Page(string s, int index)
+        {
+            int n = 0;
+            for (int at = 0; s != null && at < s.Length; at = SkipSpaces(s, Cut(s, at)), n++)
+                if (n == index) return s.Substring(at, Cut(s, at) - at);
+            return "";
+        }
+
+        private static int Cut(string s, int at)
+        {
+            if (s.Length - at <= PageChars) return s.Length;
+            int cut = at + PageChars, space = s.LastIndexOf(' ', cut);
+            return space > at ? space : cut;
+        }
+
+        private static int SkipSpaces(string s, int at)
+        {
+            while (at < s.Length && s[at] == ' ') at++;
+            return at;
+        }
 
         public static bool IsFresh(in TickerLine line) => line.Age < FreshSeconds;
 
